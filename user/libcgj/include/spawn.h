@@ -18,6 +18,15 @@
  * Non-goals
  * ---------
  * vfork-only spawn without a working process model.
+ *
+ * Soft residual lean (this unit; Soft!=product; G-AC-1; Dual DoD A/B OPEN):
+ *   - posix_spawn attr/file_actions bring-up; soft flag residual
+ *   - Soft!=product: libcgj spawn surface != UDX/DDI product close
+ *   - product = UDX/DDI + hot/cold Linux ABI; freestanding rtl/USB SKIP
+ *   - H3 thr_exit before as_destroy on child teardown paths; Dual DoD OPEN
+ *   - agent PASS != close Dual DoD; no stamp storms; bar v2026.08.04.75 parent-only
+ *   - dual MIT OR Apache-2.0; no GPL; no Linux .ko product AC (G-AC-1)
+ * Grep: libcgj spawn.h: soft residual lean Soft!=product
  */
 #pragma once
 

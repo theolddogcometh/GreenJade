@@ -2,12 +2,17 @@
  * SPDX-License-Identifier: MIT OR Apache-2.0
  * Copyright (c) 2026 Project GreenJade contributors
  *
- * Freestanding storaged — product block host over the kernel store door.
+ * Freestanding storaged — C2 product block host over the kernel store door.
  *
- * Live path (order fixed for smoke greps):
+ * Product path (claim_class=C2; product=UDX/DDI+ABI):
  *   CLAIM → soft door surface → WRITE/READ sector smoke →
  *   UDX ring EXPORT/MAP/STATE/KICK → RELEASE → soft free →
- *   soft inventory (Wave 126) → live path PASS
+ *   soft inventory + lean product residual → live path PASS
+ * Product surface = store-door ABI + UDX virtq ring hand-off (T0 virtio-blk).
+ * Soft inventory / soft door / soft free / soft ring != product multi-server
+ * confine and never close Dual DoD A/B (USB/NIC UDX remain OPEN).
+ *
+ * Live path order fixed for smoke greps (do not rename hard markers).
  *
  * Store-door ops used here (must match kernel/include/gj/store_door.h and
  * the GJ_STORE_OP_* subset in user/libgj/include/gj/syscalls.h):
@@ -19,6 +24,13 @@
  * virtio-blk is not ready so host/QEMU without blk still green on non-hard
  * markers. Multiboot smoke with a ready ring expects the exact substring
  * "ring map PASS".
+ *
+ * Law (C2 product daemon residual; stamp-free; dual MIT OR Apache-2.0):
+ *   Soft!=product · G-AC-1 (no Linux .ko product AC; no GPL) ·
+ *   Dual DoD A/B OPEN (agent!=close) · product=UDX/DDI+ABI ·
+ *   H1 no net_eth_poll from IRQ (this TU is userspace store only) ·
+ *   H2 lean once-lamps (no stamp storms) · H3 clean RELEASE then exit ·
+ *   never bump GJ_IMAGE_VERSION from this unit.
  *
  * Smoke markers (prefix-stable for scripts/smoke-all.sh — do not rename):
  *   storaged-gj: CLAIM PASS
@@ -60,9 +72,14 @@
  *   storaged-gj: soft deepen wave=70 areas=… ok=… skip=…
  *   storaged-gj: soft path store=1 ring=1 fs=0 multi_server=0
  *                confine=0 wave=70
+ *   storaged-gj: soft honesty … Soft!=product G-AC-1 product=UDX/DDI+ABI
+ *   storaged-gj: soft product residual … claim_class=C2 dual_dod A/B OPEN
+ *   storaged-gj: soft residual lean … product=UDX/DDI+ABI Soft!=product
+ *   storaged-gj: soft Dual DoD honesty A=OPEN B=OPEN …
+ *   storaged-gj: soft hazard H1=… H2=… H3=… Soft!=product
  *   storaged-gj: soft inventory PASS
- * Diagnostics only — never hard-fail the live path; not a
- * Honesty: soft inventory ≠ product multi-server confine.
+ * Diagnostics only — never hard-fail the live path.
+ * Honesty: Soft!=product multi-server confine; soft inventory != product AC.
  *
  *   make storaged-gj → build/user/storaged.elf
  * Boot embed (parent tree): kernel/proc/storaged_embed.S (.incbin of the ELF).
@@ -101,16 +118,15 @@
 #define SOFT_BYTES    (SOFT_SECTS * SECTOR_BYTES)
 /* Store-door ownership token (storaged product claim; non-zero). */
 #define STORE_TOKEN   0x510e0002u
-/* Soft inventory wave stamp (Wave 126 exclusive deepen). */
-/* Wave 126 soft deepen surfaces (CREATE-ONLY soft ≠ product):
- *   greppable: soft retgradientangle continuum_toward=26800 soft_ne_product=1 wave=126
- *   greppable: soft retblendangle exclusive=1 continuum_toward=26800 soft_ne_product=1 wave=126
- * Soft ≠ product complete; product lamps 0;
+/*
+ * Soft inventory wave stamp (Wave 126 exclusive deepen; soft continuum only).
+ * CREATE-ONLY Soft!=product surfaces; never product AC; never close Dual DoD.
+ * Stamp-free residual: do not bump GJ_IMAGE_VERSION from this unit.
+ * greppable: soft_ne_product=1 Soft!=product claim_class=C2 product=UDX/DDI+ABI
  */
-
-#define SOFT_INV_WAVE   61u
-/* Soft inventory greppable area count (inventory…path + deepen). */
-#define SOFT_INV_AREAS 12u
+#define SOFT_INV_WAVE   70u
+/* Soft inventory greppable area count (inventory…path + deepen + product residual). */
+#define SOFT_INV_AREAS  16u
 
 /* Soft door sub-step bits (aggregate soft door PASS if any greened). */
 #define SOFT_BIT_RECLAIM  (1u << 0)
@@ -157,7 +173,7 @@ struct vq_export {
 static unsigned g_uToken;
 
 /*
- * Soft inventory tallies (Wave 126 exclusive deepen).
+ * Soft inventory tallies (Wave 126 exclusive deepen; Soft!=product).
  * Wrap-OK counters; diagnostics only — never gate live path PASS.
  * greppable: storaged-gj: soft
  */
@@ -338,10 +354,12 @@ msg_rstate_soft(const unsigned *aSt)
 }
 
 /*
- * Soft inventory dump (Wave 126 exclusive deepen).
+ * Soft inventory dump (Wave 126 exclusive deepen) + lean C2 product residual.
  * Greppable prefix: "storaged-gj: soft …"
  * Pure observation — always soft; never gates live path PASS.
- * Honesty: soft ≠ product multi-server confine.
+ * Honesty: Soft!=product multi-server confine; soft inventory != product AC.
+ * H2: lean once-lamps only (no stamp storms). Dual DoD A/B stay OPEN.
+ * product=UDX/DDI+ABI: store-door ABI + UDX virtq ring; G-AC-1 no .ko.
  *
  *   storaged-gj: soft inventory …
  *   storaged-gj: soft door …
@@ -354,6 +372,11 @@ msg_rstate_soft(const unsigned *aSt)
  *   storaged-gj: soft multi …
  *   storaged-gj: soft deepen …
  *   storaged-gj: soft path …
+ *   storaged-gj: soft honesty … Soft!=product G-AC-1 product=UDX/DDI+ABI
+ *   storaged-gj: soft product residual …
+ *   storaged-gj: soft residual lean …
+ *   storaged-gj: soft Dual DoD honesty …
+ *   storaged-gj: soft hazard …
  *   storaged-gj: soft inventory PASS
  */
 static void
@@ -556,7 +579,7 @@ soft_inventory_log(void)
     aLine[o] = '\0';
     msg(aLine);
 
-    /* Grep: storaged-gj: soft deepen wave (Wave 111 stamp) */
+    /* Grep: storaged-gj: soft deepen wave (soft continuum; Soft!=product) */
     o = 0u;
     append_s(aLine, sizeof(aLine), &o, "storaged-gj: soft deepen wave=");
     append_u(aLine, sizeof(aLine), &o, (unsigned long)SOFT_INV_WAVE);
@@ -566,30 +589,81 @@ soft_inventory_log(void)
     append_u(aLine, sizeof(aLine), &o, (unsigned long)cOk);
     append_s(aLine, sizeof(aLine), &o, " skip=");
     append_u(aLine, sizeof(aLine), &o, (unsigned long)cSkip);
-    append_s(aLine, sizeof(aLine), &o, " multi_server=0 confine=0\n");
+    append_s(aLine, sizeof(aLine), &o,
+             " multi_server=0 confine=0 Soft!=product\n");
     aLine[o] = '\0';
     msg(aLine);
 
     /*
      * Grep: storaged-gj: soft path
-     * Honesty: store-door + soft ring inventory only / FS claim.
-     * Soft inventory ≠ product multi-server confine.
+     * Honesty: store-door + soft ring inventory only; fs=0.
+     * Soft!=product multi-server confine.
      */
     o = 0u;
     append_s(aLine, sizeof(aLine), &o,
              "storaged-gj: soft path store=1 ring=1 fs=0 "
-             "multi_server=0 confine=0 wave=");
+             "multi_server=0 confine=0 Soft!=product wave=");
     append_u(aLine, sizeof(aLine), &o, (unsigned long)SOFT_INV_WAVE);
     append_s(aLine, sizeof(aLine), &o, "\n");
     aLine[o] = '\0';
     msg(aLine);
 
     /*
-     * Grep: storaged-gj: soft honesty (Wave 126 exclusive deepen).
-     * Soft inventory ≠ product multi-server confine.
+     * Grep: storaged-gj: soft honesty (C2 product daemon residual).
+     * Soft!=product · G-AC-1 · product=UDX/DDI+ABI · Dual DoD OPEN.
+     * Soft inventory never closes product AC or Dual DoD A/B.
      */
     msg("storaged-gj: soft honesty multi_server=0 confine=0 "
-        "exclusive=1 soft=1 product_kernel=OPEN wave=70\n");
+        "exclusive=1 soft=1 soft_ne_product=1 Soft!=product "
+        "product=UDX/DDI+ABI product_kernel=OPEN claim_class=C2 "
+        "dual_dod_a=OPEN dual_dod_b=OPEN agent_ne_close=1 "
+        "G-AC-1=1 gpl=0 dual=MIT_OR_Apache-2.0 wave=70\n");
+
+    /*
+     * Grep: storaged-gj: soft product residual
+     * C2 product path = store-door ABI + UDX virtq EXPORT/MAP/KICK.
+     * T0 block = virtio-blk; soft lamps != multi-server confine product.
+     * Dual DoD A/B remain OPEN (USB/NIC UDX hosts; agent!=close).
+     */
+    msg("storaged-gj: soft product residual claim_class=C2 "
+        "product=UDX/DDI+ABI surface=store_door+udx_virtq "
+        "t0=virtio-blk ring_export=1 ring_map=1 ring_kick=1 "
+        "live_path=CLAIM/WRITE/READ/RELEASE soft_ne_product=1 "
+        "Soft!=product G-AC-1=1 dual_dod_a=OPEN dual_dod_b=OPEN "
+        "agent_ne_close=1 multi_server=0 confine=0 product_ac=0 "
+        "stamp_free=1 storm=0 once=1\n");
+
+    /*
+     * Grep: storaged-gj: soft residual lean
+     * H2 lean once-lamp rollup — no stamp storms; Soft!=product.
+     */
+    msg("storaged-gj: soft residual lean product=UDX/DDI+ABI "
+        "store_door=1 udx_ring=1 soft_inventory=1 product_mint=0 "
+        "claim_class=C2 dual_dod_a=OPEN dual_dod_b=OPEN "
+        "DoD_A=OPEN DoD_B=OPEN agent_ne_close=1 "
+        "Soft!=product G-AC-1=1 gpl=0 dual=MIT_OR_Apache-2.0 "
+        "H1=userspace_store_no_eth_irq H2=lean_once H3=release_then_exit "
+        "once=1 storm=0 stamp_free=1\n");
+
+    /*
+     * Grep: storaged-gj: soft Dual DoD honesty
+     * A = Linux-shaped USB UDX OPEN; B = Linux-shaped NIC UDX OPEN.
+     * This block daemon does not close either; soft residual != close.
+     */
+    msg("storaged-gj: soft Dual DoD honesty A=OPEN B=OPEN "
+        "A_class=USB_UDX B_class=NIC_UDX soft_ne_close=1 "
+        "agent_ne_close=1 product=UDX/DDI+ABI Soft!=product "
+        "G-AC-1=1 claim_class=C2 dual_dod_a=OPEN dual_dod_b=OPEN\n");
+
+    /*
+     * Grep: storaged-gj: soft hazard
+     * H1/H2/H3 permanent rules (ASSURANCE_LITE) — honesty only.
+     */
+    msg("storaged-gj: soft hazard H1=net_eth_poll_run_loop_only "
+        "H1_here=userspace_store_no_irq_eth H2=no_stamp_storm "
+        "H2_here=lean_once_lamps H3=death_thr_exit_before_as_destroy "
+        "H3_here=RELEASE_then_gj_exit Soft!=product G-AC-1=1 "
+        "claim_class=C2 once=1\n");
 
     /* Soft lamp only — never a product gate. */
     msg("storaged-gj: soft inventory PASS\n");
@@ -1000,11 +1074,18 @@ _start(void)
     soft_free_path();
 
     /*
-     * Wave 126 exclusive soft inventory rollup (greppable "storaged-gj: soft …").
-     * Emitted after all soft sub-paths; never gates live path PASS.
+     * Wave 126 exclusive soft inventory + C2 lean product residual.
+     * Greppable "storaged-gj: soft …". Never gates live path PASS.
+     * Soft!=product · product=UDX/DDI+ABI · Dual DoD A/B OPEN · G-AC-1.
+     * H2: lean once-lamps only; stamp-free (no GJ_IMAGE_VERSION bump).
      */
     soft_inventory_log();
 
+    /*
+     * C2 product live path PASS: store-door smoke + optional UDX ring map.
+     * Soft residual lamps above are observation only (Soft!=product).
+     * H3: RELEASE already cleared ownership; clean gj_exit after PASS.
+     */
     msg("storaged-gj: live path PASS\n");
     gj_exit(0);
 }

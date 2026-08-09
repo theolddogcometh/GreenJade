@@ -21,6 +21,14 @@
  * ---------
  * Full POSIX/Linux completeness; stubs and soft fills may return ENOSYS
  * until the hybrid ABI path is wired. See docs/GLIBC_COMPAT.md.
+ *
+ * Soft residual (C2 libcgj fts.h; Soft!=product; G-AC-1; Dual DoD A/B OPEN):
+ *   soft     = FTS/FTSENT + fts_open/read/close/set + FTS_* option/info catalog
+ *   product  = VFS door path for real trees; not freestanding class; not .ko AC
+ *   honesty  = FTS walk soft != product FS walk completeness; agent PASS != Dual
+ *              DoD close; stamp-free bar honesty (no version stamp)
+ *   law      = dual MIT OR Apache-2.0; no GPL; H2 no stamp storms
+ * greppable: libcgj: fts soft residual Soft!=product
  */
 #pragma once
 

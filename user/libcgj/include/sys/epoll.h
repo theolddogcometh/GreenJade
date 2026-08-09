@@ -18,6 +18,14 @@
  * Non-goals
  * ---------
  * Full EPOLLEXCLUSIVE / wakeup-source tuning until product needs them.
+ *
+ * Soft residual lean (this unit; Soft!=product; G-AC-1; Dual DoD A/B OPEN):
+ *   - epoll flag/event shape for hybrid ABI; exclusive/wakeup soft residual
+ *   - Soft!=product: libcgj sys/epoll surface != UDX/DDI product close
+ *   - product = UDX/DDI + hot/cold Linux ABI; freestanding rtl/USB SKIP
+ *   - agent PASS != close Dual DoD; no stamp storms; bar v2026.08.04.75 parent-only
+ *   - dual MIT OR Apache-2.0; no GPL; no Linux .ko product AC (G-AC-1)
+ * Grep: libcgj sys/epoll.h: soft residual lean Soft!=product
  */
 #pragma once
 

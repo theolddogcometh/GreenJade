@@ -24,6 +24,16 @@
  * all failure modes, and complete cancelation cleanup stacks.
  *
  * See docs/GLIBC_COMPAT.md (pthread / TLS bar).
+ *
+ * Soft residual (C2 libcgj pthread.h; Soft!=product; G-AC-1; Dual DoD A/B OPEN):
+ *   soft     = create/join/detach + mutex/cond/once/keys/rwlock/spin/barrier +
+ *              affinity/atfork/cancel/setname_np + __tls_get_addr; futex-backed
+ *              where hybrid path provides; libcgj layouts != host NPTL bit-identity
+ *   product  = thr path for UDX hosts; H3 thr_exit before as_destroy (process law)
+ *   honesty  = bring-up pthread != full NPTL product; agent PASS != Dual DoD close;
+ *              stamp-free bar honesty (no version stamp); G-AC-1 no .ko AC
+ *   law      = dual MIT OR Apache-2.0; no GPL; H2 no stamp storms; H3 thr_exit
+ * greppable: libcgj: pthread soft residual Soft!=product
  */
 #pragma once
 

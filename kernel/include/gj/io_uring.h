@@ -4,13 +4,21 @@
  *
  * io_uring product surface: setup / enter / register + SQE I/O + SQ/CQ mmap.
  * Clean-room public Linux ABI opcode numbers and mmap offsets. No GPL source.
+ * Dual MIT OR Apache-2.0. Soft!=product. G-AC-1 (no .ko product AC).
  *
- * Status (soft ship — vfs_ram / kernel smoke, not game/title I/O):
- *   setup/enter/register  — greppable `linux: io_uring min rings PASS`
- *   package mmap + fill   — greppable `linux: io_uring mmap PASS`
- *   SQE path (RW/fs/path) — greppable `linux: io_uring SQE I/O PASS`
- *   fixed files+bufs      — greppable `linux: io_uring register depth PASS`
- *   more opcodes          — greppable `linux: io_uring more opcodes PASS`
+ * Exclusive residual pair with kernel/syscall/io_uring_min.c:
+ *   greppable: io_uring: soft residual lean
+ *   greppable: io_uring: soft residual lean PASS
+ *   greppable: io_uring: soft inventory | pool | honesty | path | PASS
+ * Lean Linux-shaped async I/O eng scaffold (vfs_ram / kernel smoke).
+ * Soft residual != async title I/O / Deck Top-50 / full game I/O product.
+ *
+ * Status (soft ship - vfs_ram / kernel smoke, not game/title I/O):
+ *   setup/enter/register  - greppable `linux: io_uring min rings PASS`
+ *   package mmap + fill   - greppable `linux: io_uring mmap PASS`
+ *   SQE path (RW/fs/path) - greppable `linux: io_uring SQE I/O PASS`
+ *   fixed files+bufs      - greppable `linux: io_uring register depth PASS`
+ *   more opcodes          - greppable `linux: io_uring more opcodes PASS`
  * Grep: io_uring: setup, kernel/syscall/io_uring_min.c
  *
  * IORING_FEAT_SINGLE_MMAP-shaped package (page-aligned, 3 pages):
@@ -18,13 +26,13 @@
  *            (array advertised at offset 64 within SQ page)
  *   +0x1000  CQ control: head,tail,mask,entries,overflow,flags + cqes[]
  *            (cqes advertised at offset 64 within CQ page)
- *   +0x2000  SQEs[entries]  (64-byte SQE × power-of-two entries, max 64)
+ *   +0x2000  SQEs[entries]  (64-byte SQE x power-of-two entries, max 64)
  *
  * Userspace flow:
- *   1. gj_io_uring_setup → ring fd + params (sq/cq entries, sq_off/cq_off)
+ *   1. gj_io_uring_setup -> ring fd + params (sq/cq entries, sq_off/cq_off)
  *   2. mmap(fd, OFF_SQ_RING|0) or gj_io_uring_mmap_package (kernel smoke)
  *   3. fill SQE slots, set SQ array[], advance sq.tail
- *   4. gj_io_uring_enter(to_submit, min_complete) → drain SQ, post CQEs
+ *   4. gj_io_uring_enter(to_submit, min_complete) -> drain SQ, post CQEs
  *   5. peek/advance CQ (or walk cqes[head..tail] after mmap)
  *
  * Soft inject path (kernel smokes without userspace fill):
@@ -32,17 +40,17 @@
  *   gj_io_uring_sqe_inject writes one SQE and array[idx]=idx.
  *
  * Limits (implementation, not Linux upper bounds):
- *   rings pool ≤ 4; SQ entries power-of-two clamp ≤ 64; CQ = 2×SQ (≤ 128);
- *   reg files ≤ 16; reg buffers ≤ 8; per-op bounce I/O ≤ 4096 bytes.
+ *   rings pool <= 4; SQ entries power-of-two clamp <= 64; CQ = 2xSQ (<= 128);
+ *   reg files <= 16; reg buffers <= 8; per-op bounce I/O <= 4096 bytes.
  *   Accept/connect and true net/title I/O remain open (-ENOSYS soft).
  *
- * docs/IMPLEMENTATION.md · docs/STEAM_HWTEST.md · TODO io_uring soft PASS
+ * docs/IMPLEMENTATION.md / docs/STEAM_HWTEST.md / TODO io_uring soft PASS
  */
 #pragma once
 
 #include <gj/types.h>
 
-/* ---- SQE opcodes (Linux uapi subset — public numbers) ------------------- */
+/* ---- SQE opcodes (Linux uapi subset - public numbers) ------------------- */
 /*
  * Soft exec depth (io_uring_min.c): NOP, FSYNC, CLOSE, READ/WRITE/OPENAT
  * path ops, POLL soft-immediate, timeouts/cancel soft-0, fixed-file index,
@@ -118,9 +126,9 @@
 /* ---- Public mmap offsets (Linux uapi) ----------------------------------- */
 /*
  * With SINGLE_MMAP, all three offsets resolve into one package:
- *   OFF_SQ_RING / 0  → SQ page base
- *   OFF_CQ_RING      → CQ page base (+0x1000 in package)
- *   OFF_SQES         → SQE array page (+0x2000 in package)
+ *   OFF_SQ_RING / 0  -> SQ page base
+ *   OFF_CQ_RING      -> CQ page base (+0x1000 in package)
+ *   OFF_SQES         -> SQE array page (+0x2000 in package)
  * Params returned by setup describe field offsets relative to package base.
  */
 #define GJ_IORING_OFF_SQ_RING  0ull
@@ -130,24 +138,24 @@
 /* ---- Lifecycle / syscalls ----------------------------------------------- */
 
 /**
- * Create a ring: clamp entries to power-of-two ≤ 64 (default 8 if 0).
- * CQ entries = 2×SQ (capped). Allocates a fixed pool slot (max 4 rings).
+ * Create a ring: clamp entries to power-of-two <= 64 (default 8 if 0).
+ * CQ entries = 2xSQ (capped). Allocates a fixed pool slot (max 4 rings).
  * Opens a vfs_ram io_uring fd. When u64ParamsUser != 0, writes Linux-shaped
  * io_uring_params (sq/cq entries, IORING_FEAT_SINGLE_MMAP, sq_off/cq_off).
  *
- * Returns ring fd (≥0) or -errno: -ENOMEM pool full, -EFAULT bad user params.
+ * Returns ring fd (>=0) or -errno: -ENOMEM pool full, -EFAULT bad user params.
  * Grep: io_uring: setup
  */
 i64 gj_io_uring_setup(u32 u32Entries, u64 u64ParamsUser);
 
 /**
  * Submit and optionally wait for completions.
- * Drains up to u32ToSubmit pending SQ entries (sq.tail − sq.head). Soft inject
+ * Drains up to u32ToSubmit pending SQ entries (sq.tail - sq.head). Soft inject
  * path: if SQ empty and u32ToSubmit>0, synthetic-advances tail so inject slots
  * run. u32Flags currently ignored (no IOPOLL / GETEVENTS product bits).
  *
  * If u32MinComplete>0 and CQ pending < min, returns -EAGAIN after submit.
- * Returns number of SQEs submitted (≥0) or -EBADF.
+ * Returns number of SQEs submitted (>=0) or -EBADF.
  */
 i64 gj_io_uring_enter(i64 i64Fd, u32 u32ToSubmit, u32 u32MinComplete,
                       u32 u32Flags);
@@ -162,12 +170,12 @@ i64 gj_io_uring_register(i64 i64Fd, u32 u32Opcode, u64 u64Arg, u32 u32NrArgs);
 /**
  * Map ring package (or a slice) for userspace fill.
  * u64Offset = GJ_IORING_OFF_* or 0 for SQ/full base; also accepts raw
- * package-relative offsets < package size. u64Len 0 ⇒ remainder of package.
+ * package-relative offsets < package size. u64Len 0 => remainder of package.
  *
  * With active linux process AS: maps 3 package pages USER|RW at a high-band
  * VA and returns the requested slice VA. Without process (kernel smoke):
  * returns identity VA of the package slice.
- * Returns VA (≥0) or -errno (-EBADF, -EINVAL, -ENOMEM).
+ * Returns VA (>=0) or -errno (-EBADF, -EINVAL, -ENOMEM).
  */
 i64 gj_io_uring_mmap(i64 i64Fd, u64 u64Offset, u64 u64Len);
 
@@ -179,8 +187,8 @@ void *gj_io_uring_mmap_package(i64 i64Fd);
 
 /**
  * Kernel inject helper: write one SQE at index u32Idx and set array[idx]=idx.
- * Does not advance tail — enter(to_submit) does (or soft empty-SQ advance).
- * Returns 0 or -errno (-EBADF, -EINVAL if idx ≥ sq_entries).
+ * Does not advance tail - enter(to_submit) does (or soft empty-SQ advance).
+ * Returns 0 or -errno (-EBADF, -EINVAL if idx >= sq_entries).
  */
 i64 gj_io_uring_sqe_inject(i64 i64Fd, u32 u32Idx, u8 u8Opcode, i32 i32Fd,
                            u64 u64Off, u64 u64Addr, u32 u32Len,

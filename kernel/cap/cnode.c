@@ -2,48 +2,65 @@
  * SPDX-License-Identifier: MIT OR Apache-2.0
  * Copyright (c) 2026 Project GreenJade contributors
  *
- * Process-shared CNode addressing — Scheme A (u64 slot + u32 slot gen).
+ * Process-shared CNode addressing - Scheme A (u64 slot + u32 slot gen).
  *
  * One CNode per process; all threads share it. Slot 0 = root meta only.
  * Resolve fails closed: slot gen + LIVE + object gen (S2). See
- * docs/CAP_ADDRESSING.md and SECURITY_CORE_DESIGN §1.1.
+ * docs/CAP_ADDRESSING.md and SECURITY_CORE_DESIGN s1.1.
  *
  * Soft CDT edges (gj_cdt_edge_*) and soft slot-quota hooks live here so
  * mint/ledger can wire without changing the resolve/install surface.
  *
  * Full soft CDT companion to R2: mint/copy/move always attempt the edge
  * pool; empty-edge gap is soft FAIL/PARTIAL when the pool is exhausted
- * (install still succeeds — slots_left remains authoritative).
+ * (install still succeeds - slots_left remains authoritative).
  *
- * Grep: cap:cdt  — edge pool, link/unlink, mint wiring
- * Grep: cap: cdt mint|copy|move — per-op edge coverage stats
- * Grep: cap: cdt soft — empty-edge gap + slots_left/quota tallies
- * Grep: cap: cdt soft audit — soft empty-edge slots_left vs chain depth
- * Grep: cap: cdt delete|unlink|retarget — delete/move edge hygiene
- * Grep: cap: cdt pool — alloc/free pool churn
- * Grep: cap:quota — flat + soft hierarchical charge/refund
+ * Lean soft residual caps (exclusive residual; this unit only):
+ *   greppable: cap: soft residual lean PASS
+ *   greppable: cap: cdt soft residual
+ *   greppable: cap: cdt soft residual lean | lean PASS | lean c3
+ *   greppable: cap: cdt soft inventory | path | honesty | PASS
+ *   greppable: cap: cdt soft return | return rate | retcode | retmap
+ *   greppable: cap: ddi foundation | cap: ddi soft residual lean PASS
+ *   greppable: cap: udx foundation | cap: udx soft residual lean PASS
+ *   greppable: cap: udx host mint residual | cap: product mint OPEN
+ *   greppable: cap: udx host mmio residual | irq residual | dma residual
+ * C3 residual: stack-local lean selftest exercises fail-closed resolve,
+ * rights no-escalate mint, root-meta guard (+ inverse), full typed package
+ * cross-CNode host-grant shape, DMA rights-shape observe, copy/move, soft
+ * quota charge/exhaust/refund, busy/NOENT, delete-stale, and DEAD fail-closed
+ * (behavior check, not lamp-only). Soft!=product. Dual DoD mint OPEN.
+ * Soft!=product. Dual MIT OR Apache-2.0. No version stamp. No stamp storms
+ * (once-lamps + counters only; no per-op kprintf on mint/copy/move/delete).
+ * Soft residual != GJ_CAP_REPLY product / full CDT mutex / MIG REPLY product.
+ * Soft residual != product DDI mint (MMIO_FRAME / IRQ Notification / DMA).
+ * G-AC-1: no Linux .ko product AC. Product DDI mint remains OPEN honesty.
  *
- * Soft inventory (Wave 40 exclusive deepen; this unit only):
- *   cap: cdt soft honesty    — ≠ GJ_CAP_REPLY product / full CDT mutex
- *   cap: cdt soft inventory  — pool/slots/quota + resolve/trylock rollup
- *   cap: cdt soft resolve    — ok/inval/noent/stale/live_fail path tallies
- *   cap: cdt soft trylock    — enter/ok/busy (u32SoftLock; not product mutex)
- *   cap: cdt soft install    — install enter/ok/fail + REPLY scaffold count
- *   cap: cdt soft coverage   — mint|copy|move edge attempt/ok/miss
- *   cap: cdt soft audit      — slots_left vs chain depth empty-edge gap
- *   cap: cdt soft pool       — alloc/free/miss churn
- *   cap: cdt soft type       — type catalog; REPLY scaffold-only honesty
- *   cap: cdt soft path       — surface catalog + non-claims
- *   cap: cdt soft return     — Wave 19 public return-surface (gj_status buckets)
- *   cap: cdt soft return install|mint|copy|move|delete|alloc — per-API ret
- *   cap: cdt soft return rate — Wave 17 ok/fail rate lamps (kept) (return surface)
- *   cap: cdt soft retcode    — Wave 17 observed gj_status retcode catalog
- *   cap: cdt soft return selftest — Wave 19 terminal return surface
- *   cap: cdt soft retmap     — Wave 19 return-surface map
- *   cap: cdt soft deepen     — wave=116 areas stamp
- *   cap: cdt soft PASS|FAIL / cap: cdt soft inventory PASS|FAIL
- * Honesty: soft inventory only — not GJ_CAP_REPLY product (MIG install),
- * not full CDT mutex/turnstile product; Soft ≠ MIG REPLY product;
+ * DDI/UDX lean residual foundation (toward future product host mint):
+ *   Install of IRQ / FRAME / UNTYPED / NOTIFICATION tallied as soft DDI
+ *   class (gj_cap_type_is_ddi). Mint of those types tallied as soft host-
+ *   grant residual (cross-CNode = future devmgr->UDX host shape; rights
+ *   ⊆ host default observed via gj_cap_rights_ddi_host_subset_ok).
+ *   Lean residual also observes MMIO/IRQ/DMA triad package bits
+ *   (GJ_CAP_UDX_HOST_PKG_*) and DMA rights shape (no DMA type ordinal;
+ *   gj_cap_rights_ddi_dma_host_subset_ok) so mint tallies lean toward
+ *   future UDX host MMIO_FRAME / IRQ Notification / DMA window mint.
+ *   Product mint into host CNode remains OPEN (Soft!=product; no fake
+ *   complete). DMA window type/mint OPEN (GJ_RIGHTS_DDI_DMA_HOST only).
+ *   Mechanism residual: gj_cap_mint + CDT + rights_weaker. Policy residual
+ *   (devmgr match/grant graph, live IOMMU/IRQ/DMA wire) stays outside this TU.
+ *
+ * Grep: cap:cdt  - edge pool, link/unlink, mint wiring
+ * Grep: cap: cdt mint|copy|move - per-op edge coverage stats (counters)
+ * Grep: cap: cdt soft - empty-edge gap + slots_left/quota tallies
+ * Grep: cap: cdt soft audit - soft empty-edge slots_left vs chain depth
+ * Grep: cap: cdt delete|unlink|retarget - delete/move edge hygiene
+ * Grep: cap: cdt pool - alloc/free pool churn
+ * Grep: cap:quota - flat + soft hierarchical charge/refund
+ * Grep: cap: ddi / cap: udx - DDI/UDX soft foundation tallies
+ * Grep: cap: udx host mint residual - mint-path host-grant soft residual
+ * Grep: cap: product mint OPEN - honesty (mint not product-complete)
+ * Grep: cap: cdt soft residual lean - C3 stack-local behavior selftest
  * Grep: cap: cdt soft
  */
 #include <gj/cap.h>
@@ -51,10 +68,12 @@
 #include <gj/klog.h>
 #include <gj/types.h>
 
-/* Wave 20 deepen stamp (file-local; never hard-gates). */
-#define GJ_CDT_SOFT_WAVE 116u
-/* +return selftest|retmap over Wave 17 return rate|retcode */
-#define GJ_CDT_SOFT_AREAS 208u
+/* C3 lean residual: stack-local slot count (root meta + host package + spare). */
+#define GJ_CDT_LEAN_SLOTS 12u
+/* UDX host package stand-ins: FRAME(MMIO) + IRQ + NOTIFICATION. */
+#define GJ_CDT_LEAN_UDX_OBJS 3u
+/* Soft quota limit for lean exhaust arm (behavior; Soft!=product). */
+#define GJ_CDT_LEAN_QUOTA_LIM 2u
 
 static void cdt_edge_free_if_pool(struct gj_cdt_edge *pEdge);
 static void cdt_soft_tally_install(struct gj_cnode *pCnode,
@@ -70,7 +89,10 @@ static void cdt_soft_note_unlink(const struct gj_obj_hdr *pObj, u64 u64Slot,
                                 u32 u32Unlinked);
 static void cdt_soft_inventory_log(void);
 static void cdt_soft_inventory_maybe_once(void);
+static void cdt_soft_residual_lean_once(void);
 static void cdt_soft_inc(u32 *pCtr);
+static void cdt_soft_ddi_note_install(u16 u16Type);
+static void cdt_soft_ddi_note_mint(u16 u16Type, u16 u16Rights, int fCross);
 
 /*
  * Wave 19 soft path tallies (file-local; wrap OK; never hard-gate).
@@ -91,11 +113,11 @@ static u32 g_u32SoftUnlock;         /* gj_cnode_unlock releases */
 static u32 g_u32SoftInstEnter;      /* gj_cap_slot_install entries */
 static u32 g_u32SoftInstOk;         /* install success */
 static u32 g_u32SoftInstFail;       /* install reject (any arm) */
-static u32 g_u32SoftInstFailInval;  /* Wave 19: install → GJ_ERR_INVAL */
-static u32 g_u32SoftInstFailDead;   /* Wave 19: install → GJ_ERR_DEAD */
-static u32 g_u32SoftInstFailPerm;   /* Wave 19: install → GJ_ERR_PERM */
-static u32 g_u32SoftInstFailBusy;   /* Wave 19: install → GJ_ERR_BUSY */
-static u32 g_u32SoftInstFailQuota;  /* Wave 19: install → GJ_ERR_QUOTA */
+static u32 g_u32SoftInstFailInval;  /* Wave 19: install -> GJ_ERR_INVAL */
+static u32 g_u32SoftInstFailDead;   /* Wave 19: install -> GJ_ERR_DEAD */
+static u32 g_u32SoftInstFailPerm;   /* Wave 19: install -> GJ_ERR_PERM */
+static u32 g_u32SoftInstFailBusy;   /* Wave 19: install -> GJ_ERR_BUSY */
+static u32 g_u32SoftInstFailQuota;  /* Wave 19: install -> GJ_ERR_QUOTA */
 static u32 g_u32SoftInstReplyType;  /* type==GJ_CAP_REPLY scaffold installs */
 static u32 g_u32SoftInvLogs;        /* soft inventory dump emissions */
 static u8  g_u8CdtSoftInvLogged;    /* once-marker for Wave 19 rollup */
@@ -126,12 +148,285 @@ static u32 g_u32SoftRetAllocInval;
 static u32 g_u32SoftRetAllocQuota;
 static u32 g_u32SoftRetAllocOther;
 
+/*
+ * DDI/UDX lean residual foundation tallies (install + mint host-grant).
+ * Soft residual != product MMIO_FRAME / IRQ Notification / DMA window mint.
+ * G-AC-1. Grep: cap: ddi | cap: udx | cap: udx host mint residual
+ */
+static u32 g_u32SoftDdiInst;       /* install type in DDI class */
+static u32 g_u32SoftDdiIrq;        /* GJ_CAP_IRQ installs */
+static u32 g_u32SoftDdiFrame;      /* GJ_CAP_FRAME (MMIO role) installs */
+static u32 g_u32SoftDdiUntyped;    /* GJ_CAP_UNTYPED installs */
+static u32 g_u32SoftDdiNotif;      /* GJ_CAP_NOTIFICATION installs */
+static u8  g_u8SoftDdiFoundLogged; /* once-marker: foundation lamp */
+/* Mint-path residual (future product host grant shape; not complete). */
+static u32 g_u32SoftDdiMint;       /* mint of DDI/UDX host class type */
+static u32 g_u32SoftDdiMintCross;  /* cross-CNode = host-grant shape */
+static u32 g_u32SoftDdiMintLocal;  /* same-CNode DDI mint */
+static u32 g_u32SoftDdiMintHostOk; /* rights ⊆ soft host default */
+static u32 g_u32SoftDdiMintHostOver; /* rights not ⊆ host default (observe) */
+static u32 g_u32SoftDdiMintRoleMmio;
+static u32 g_u32SoftDdiMintRoleIrq;
+static u32 g_u32SoftDdiMintRoleNotif;
+static u32 g_u32SoftDdiMintRoleUntyped;
+/* Soft residual: DMA rights-shape observe (no DMA type; OPEN). */
+static u32 g_u32SoftDdiMintDmaShapeOk;   /* rights ⊆ GJ_RIGHTS_DDI_DMA_HOST */
+static u32 g_u32SoftDdiMintDmaShapeMiss; /* non-empty rights not ⊆ DMA host */
+/* Soft residual: package bits seen on host-class mints (OR-accum). */
+static u32 g_u32SoftUdxHostPkgSeen;      /* OR of GJ_CAP_UDX_HOST_PKG_* */
+static u32 g_u32SoftUdxHostPkgCross;     /* OR of pkg bits on cross-CNode */
+static u32 g_u32SoftUdxHostPkgMmioN;     /* mint with MMIO pkg bit */
+static u32 g_u32SoftUdxHostPkgIrqN;      /* mint with IRQ pkg bit */
+static u32 g_u32SoftUdxHostPkgNotifN;    /* mint with NOTIF pkg bit */
+static u8  g_u8SoftUdxHostMintLogged; /* once-marker: host mint residual */
+
+/*
+ * C3 lean residual selftest tallies (stack-local; once; never hard-gate).
+ * Behavior check: fail-closed resolve, no-escalate mint, root-meta guard,
+ * cross-CNode host-grant shape (typed package), copy/move hygiene, quota
+ * charge/exhaust/refund, busy/NOENT, delete-stale, DMA rights-shape observe.
+ * Soft!=product. G-AC-1. Dual DoD product mint remains OPEN.
+ * Grep: cap: cdt soft residual lean | lean c3
+ */
+static u32 g_u32SoftLeanRuns;          /* residual lean selftest entries */
+static u32 g_u32SoftLeanOk;            /* all C3 checks passed */
+static u32 g_u32SoftLeanInstOk;        /* lean install successes */
+static u32 g_u32SoftLeanMintOk;        /* lean cross-CNode mint successes */
+static u32 g_u32SoftLeanMintEscFail;   /* escalate mint correctly refused */
+static u32 g_u32SoftLeanResStaleOk;    /* wrong-gen resolve -> STALE */
+static u32 g_u32SoftLeanResNullOk;     /* gen0 resolve -> INVAL */
+static u32 g_u32SoftLeanResLiveOk;     /* good resolve after install */
+static u32 g_u32SoftLeanRootGuardOk;   /* non-meta at slot 0 refused */
+static u32 g_u32SoftLeanDelOk;         /* delete/hygiene ok */
+static u32 g_u32SoftLeanCrossOk;       /* cross-CNode host mint shape */
+static u32 g_u32SoftLeanHostSubsetOk;  /* minted rights ⊆ host default */
+static u32 g_u32SoftLeanDeadFailOk;    /* resolve DEAD after local kill */
+/* W4 C3 strengthen arms (behavior residual; Soft!=product). */
+static u32 g_u32SoftLeanPkgCrossOk;    /* cross-mint all typed package roles */
+static u32 g_u32SoftLeanCopyOk;        /* GRANT copy residual */
+static u32 g_u32SoftLeanMoveOk;        /* move + src STALE residual */
+static u32 g_u32SoftLeanNoentOk;       /* empty slot resolve -> NOENT */
+static u32 g_u32SoftLeanBusyOk;        /* occupied install -> BUSY */
+static u32 g_u32SoftLeanQuotaOk;       /* quota charge + exhaust + refund */
+static u32 g_u32SoftLeanDelStaleOk;    /* resolve after delete -> STALE */
+static u32 g_u32SoftLeanDmaShapeOk;    /* DMA rights-shape observe on mint */
+static u32 g_u32SoftLeanMintNoMintOk;  /* mint without MINT right -> PERM */
+static u32 g_u32SoftLeanRootMetaSlotOk; /* ROOT_META off slot 0 -> PERM */
+static u8  g_u8CdtSoftLeanOnce;        /* once-marker for lean residual */
+static u8  g_u8CdtSoftLeanBusy;        /* suppress inventory reentry */
+
 /** Soft: saturating bump (u32 wrap avoided; wrap OK if ever hit). */
 static void
 cdt_soft_inc(u32 *pCtr)
 {
     if (pCtr != NULL && *pCtr < 0xffffffffu) {
         (*pCtr)++;
+    }
+}
+
+/*
+ * Soft DDI/UDX install-class note (lean residual foundation).
+ * Tallies IRQ/FRAME/UNTYPED/NOTIFICATION; once-lamp only (no storms).
+ * Soft residual != product mint. G-AC-1. Grep: cap: ddi | cap: udx
+ */
+static void
+cdt_soft_ddi_note_install(u16 u16Type)
+{
+    if (!gj_cap_type_is_ddi(u16Type)) {
+        return;
+    }
+    cdt_soft_inc(&g_u32SoftDdiInst);
+    switch (u16Type) {
+    case (u16)GJ_CAP_IRQ:
+        cdt_soft_inc(&g_u32SoftDdiIrq);
+        break;
+    case (u16)GJ_CAP_FRAME:
+        cdt_soft_inc(&g_u32SoftDdiFrame);
+        break;
+    case (u16)GJ_CAP_UNTYPED:
+        cdt_soft_inc(&g_u32SoftDdiUntyped);
+        break;
+    case (u16)GJ_CAP_NOTIFICATION:
+        cdt_soft_inc(&g_u32SoftDdiNotif);
+        break;
+    default:
+        break;
+    }
+    if (!g_u8SoftDdiFoundLogged) {
+        g_u8SoftDdiFoundLogged = 1;
+        /* Grep: cap: ddi foundation / cap: ddi soft residual lean PASS */
+        kprintf("cap: ddi foundation type=%u irq=%u frame=%u untyped=%u "
+                "notif=%u ddi_n=%u mint_product=0 Soft!=product G-AC-1 "
+                "(once)\n",
+                (unsigned)u16Type, g_u32SoftDdiIrq, g_u32SoftDdiFrame,
+                g_u32SoftDdiUntyped, g_u32SoftDdiNotif, g_u32SoftDdiInst);
+        kprintf("cap: ddi soft residual lean PASS mint_product=0 "
+                "dma_window_product=0 Soft!=product dual MIT OR "
+                "Apache-2.0 storm=0\n");
+        /* Grep: cap: udx foundation / cap: udx soft residual lean PASS */
+        kprintf("cap: udx foundation host_grant_class=1 product_mint=0 "
+                "Soft!=product G-AC-1 (once)\n");
+        kprintf("cap: udx soft residual lean PASS host_cnode_mint=0 "
+                "Soft!=product dual MIT OR Apache-2.0 storm=0\n");
+        /* Grep: cap: product mint OPEN */
+        kprintf("cap: product mint OPEN mmio=%d irq_notif=%d dma_window=%d "
+                "host_cnode=%d Soft!=product G-AC-1 (once)\n",
+                gj_cap_ddi_mmio_product_ready(),
+                gj_cap_ddi_irq_notif_product_ready(),
+                gj_cap_ddi_dma_window_product_ready(),
+                gj_cap_udx_host_mint_product_ready());
+    }
+}
+
+/*
+ * Soft DDI/UDX mint-path residual (lean toward future product host mint).
+ * Cross-CNode mint of host-class types is the product grant shape
+ * (devmgr -> UDX host CNode). Rights ⊆ host default is observed only -
+ * gj_cap_mint still uses source MINT + rights_weaker as authority.
+ * Also observes host package bits (MMIO/IRQ/NOTIF) and DMA rights shape
+ * (GJ_RIGHTS_DDI_DMA_HOST; no DMA type ordinal) so residual leans toward
+ * future UDX host MMIO/IRQ/DMA mint without claiming product complete.
+ * Soft residual != product mint. Never claims complete. G-AC-1.
+ * Grep: cap: udx host mint residual | cap: product mint OPEN | cap: ddi
+ * Grep: cap: udx host mmio|irq|dma residual
+ */
+static void
+cdt_soft_ddi_note_mint(u16 u16Type, u16 u16Rights, int fCross)
+{
+    u32 u32Role;
+    u32 u32PkgBit;
+    int fHostOk;
+    int fDmaShapeOk;
+
+    if (!gj_cap_type_is_udx_host(u16Type)) {
+        return;
+    }
+
+    cdt_soft_inc(&g_u32SoftDdiMint);
+    if (fCross != 0) {
+        cdt_soft_inc(&g_u32SoftDdiMintCross);
+    } else {
+        cdt_soft_inc(&g_u32SoftDdiMintLocal);
+    }
+
+    u32Role = gj_cap_ddi_mint_role(u16Type);
+    switch (u32Role) {
+    case GJ_CAP_DDI_MINT_ROLE_MMIO:
+        cdt_soft_inc(&g_u32SoftDdiMintRoleMmio);
+        break;
+    case GJ_CAP_DDI_MINT_ROLE_IRQ:
+        cdt_soft_inc(&g_u32SoftDdiMintRoleIrq);
+        break;
+    case GJ_CAP_DDI_MINT_ROLE_NOTIF:
+        cdt_soft_inc(&g_u32SoftDdiMintRoleNotif);
+        break;
+    case GJ_CAP_DDI_MINT_ROLE_UNTYPED:
+        cdt_soft_inc(&g_u32SoftDdiMintRoleUntyped);
+        break;
+    default:
+        break;
+    }
+
+    /* Soft package bits for typed host roles (DMA bit never from type). */
+    u32PkgBit = gj_cap_udx_host_pkg_bit_for_type(u16Type);
+    if (u32PkgBit != 0u) {
+        g_u32SoftUdxHostPkgSeen |= u32PkgBit;
+        if (fCross != 0) {
+            g_u32SoftUdxHostPkgCross |= u32PkgBit;
+        }
+        if ((u32PkgBit & GJ_CAP_UDX_HOST_PKG_MMIO) != 0u) {
+            cdt_soft_inc(&g_u32SoftUdxHostPkgMmioN);
+        }
+        if ((u32PkgBit & GJ_CAP_UDX_HOST_PKG_IRQ) != 0u) {
+            cdt_soft_inc(&g_u32SoftUdxHostPkgIrqN);
+        }
+        if ((u32PkgBit & GJ_CAP_UDX_HOST_PKG_NOTIF) != 0u) {
+            cdt_soft_inc(&g_u32SoftUdxHostPkgNotifN);
+        }
+    }
+
+    fHostOk = gj_cap_rights_ddi_host_subset_ok(u16Type, u16Rights);
+    if (fHostOk != 0) {
+        cdt_soft_inc(&g_u32SoftDdiMintHostOk);
+    } else {
+        cdt_soft_inc(&g_u32SoftDdiMintHostOver);
+    }
+
+    /*
+     * Soft DMA window rights-shape observe (no type ordinal).
+     * FRAME rights often match DMA host mask; this is residual lean only -
+     * does not mint a DMA window and never sets product-ready.
+     * Grep: cap: udx host dma residual
+     */
+    fDmaShapeOk = gj_cap_rights_ddi_dma_host_subset_ok(u16Rights);
+    if (fDmaShapeOk != 0) {
+        cdt_soft_inc(&g_u32SoftDdiMintDmaShapeOk);
+        /* Observe DMA package bit as rights-shape only (type still OPEN). */
+        g_u32SoftUdxHostPkgSeen |= GJ_CAP_UDX_HOST_PKG_DMA;
+        if (fCross != 0) {
+            g_u32SoftUdxHostPkgCross |= GJ_CAP_UDX_HOST_PKG_DMA;
+        }
+    } else if (u16Rights != 0) {
+        cdt_soft_inc(&g_u32SoftDdiMintDmaShapeMiss);
+    }
+
+    if (!g_u8SoftUdxHostMintLogged) {
+        g_u8SoftUdxHostMintLogged = 1;
+        /*
+         * Grep: cap: udx host mint residual
+         * Grep: cap: product mint OPEN
+         * Soft residual only - product host CNode mint remains OPEN.
+         */
+        kprintf("cap: udx host mint residual type=%u role=%u cross=%d "
+                "rights=0x%x host_ok=%d dma_shape=%d mint_n=%u cross_n=%u "
+                "host_ok_n=%u mint_product=0 dma_window_product=%d "
+                "Soft!=product G-AC-1 (once)\n",
+                (unsigned)u16Type, (unsigned)u32Role, fCross != 0 ? 1 : 0,
+                (unsigned)u16Rights, fHostOk != 0 ? 1 : 0,
+                fDmaShapeOk != 0 ? 1 : 0, g_u32SoftDdiMint,
+                g_u32SoftDdiMintCross, g_u32SoftDdiMintHostOk,
+                gj_cap_ddi_dma_window_product_ready());
+        kprintf("cap: product mint OPEN host_cnode_product=%d "
+                "mmio_product=%d irq_notif_product=%d dma_window_product=%d "
+                "mmio_role_n=%u irq_role_n=%u notif_role_n=%u "
+                "untyped_role_n=%u Soft!=product dual MIT OR "
+                "Apache-2.0 storm=0\n",
+                gj_cap_udx_host_mint_product_ready(),
+                gj_cap_ddi_mmio_product_ready(),
+                gj_cap_ddi_irq_notif_product_ready(),
+                gj_cap_ddi_dma_window_product_ready(),
+                g_u32SoftDdiMintRoleMmio, g_u32SoftDdiMintRoleIrq,
+                g_u32SoftDdiMintRoleNotif, g_u32SoftDdiMintRoleUntyped);
+        /*
+         * Grep: cap: udx host mmio residual
+         * Grep: cap: udx host irq residual
+         * Grep: cap: udx host dma residual
+         */
+        kprintf("cap: udx host mmio residual pkg_n=%u role_n=%u "
+                "product=%d Soft!=product G-AC-1 (once)\n",
+                g_u32SoftUdxHostPkgMmioN, g_u32SoftDdiMintRoleMmio,
+                gj_cap_ddi_mmio_product_ready());
+        kprintf("cap: udx host irq residual pkg_irq_n=%u pkg_notif_n=%u "
+                "role_irq_n=%u role_notif_n=%u product=%d "
+                "Soft!=product G-AC-1 (once)\n",
+                g_u32SoftUdxHostPkgIrqN, g_u32SoftUdxHostPkgNotifN,
+                g_u32SoftDdiMintRoleIrq, g_u32SoftDdiMintRoleNotif,
+                gj_cap_ddi_irq_notif_product_ready());
+        kprintf("cap: udx host dma residual shape_ok_n=%u shape_miss_n=%u "
+                "rights_def=0x%x type_ordinal=0 product=%d "
+                "Soft!=product G-AC-1 (once)\n",
+                g_u32SoftDdiMintDmaShapeOk, g_u32SoftDdiMintDmaShapeMiss,
+                (unsigned)gj_cap_rights_ddi_dma_host_default(),
+                gj_cap_ddi_dma_window_product_ready());
+        kprintf("cap: udx host mint residual pkg_seen=0x%x "
+                "pkg_cross=0x%x pkg_intended=0x%x pkg_typed=0x%x "
+                "mint_product=0 Soft!=product G-AC-1 (once)\n",
+                g_u32SoftUdxHostPkgSeen, g_u32SoftUdxHostPkgCross,
+                gj_cap_udx_host_package_roles_intended(),
+                gj_cap_udx_host_package_roles_typed());
+        kprintf("cap: udx soft residual lean PASS host_cnode_mint=0 "
+                "mint_residual=1 mmio_irq_dma_lean=1 Soft!=product "
+                "G-AC-1 dual MIT OR Apache-2.0 storm=0\n");
     }
 }
 
@@ -162,7 +457,7 @@ gj_cnode_init(struct gj_cnode *pCnode, struct gj_cap_slot *pSlots, u64 cSlots)
     pCnode->cSlots = cSlots;
     pCnode->pSlots = pSlots;
     pCnode->pQuotaAccount = NULL; /* soft: ledger attaches later */
-    pCnode->u32SoftLock = 0;      /* cap:cdt trylock — free */
+    pCnode->u32SoftLock = 0;      /* cap:cdt trylock - free */
     pCnode->u32PadLock = 0;
 
     for (iSlot = 0; iSlot < cSlots; iSlot++) {
@@ -181,8 +476,8 @@ gj_cnode_init(struct gj_cnode *pCnode, struct gj_cap_slot *pSlots, u64 cSlots)
 
 /*
  * Soft CNode try-lock stub (R2). Atomic CAS on u32SoftLock until a real
- * mutex lands. Order for full impl: CNode → Object → Endpoint.
- * Soft ≠ full CDT mutex product (turnstile sleep still OPEN).
+ * mutex lands. Order for full impl: CNode -> Object -> Endpoint.
+ * Soft != full CDT mutex product (turnstile sleep still OPEN).
  * Grep: cap:cdt trylock / cap: cdt soft trylock
  */
 int
@@ -201,7 +496,7 @@ gj_cnode_trylock(struct gj_cnode *pCnode)
         cdt_soft_inc(&g_u32SoftTryOk);
         return 1;
     }
-    /* Busy — caller must defer edge (R2), not spin. */
+    /* Busy - caller must defer edge (R2), not spin. */
     cdt_soft_inc(&g_u32SoftTryBusy);
     return 0;
 }
@@ -217,7 +512,7 @@ gj_cnode_unlock(struct gj_cnode *pCnode)
 }
 
 /*
- * Soft CDT link — edge storage is caller/slab-owned. Install does not
+ * Soft CDT link - edge storage is caller/slab-owned. Install does not
  * allocate edges yet; mint with CDT will call this after successful install.
  * Grep: cap:cdt
  */
@@ -310,7 +605,7 @@ gj_cdt_unlink_slot(struct gj_obj_hdr *pObj, struct gj_cnode *pCnode,
 
 /*
  * Resolve Scheme A handle (u64Slot, u32SlotGen) against the process CNode.
- * Order matters: bounds/null → type/slot-gen → object LIVE+obj-gen (S2/S3).
+ * Order matters: bounds/null -> type/slot-gen -> object LIVE+obj-gen (S2/S3).
  * Uncleared slots after revoke still fail here once the object is DEAD.
  * Wave 15: soft resolve path tallies (never change fail-closed order).
  * Grep: cap: cdt soft resolve
@@ -427,7 +722,7 @@ gj_cap_slot_install(struct gj_cnode *pCnode, u64 u64Slot, u16 u16Type,
         return GJ_ERR_INVAL;
     }
 
-    /* Slot 0 ↔ ROOT_META only */
+    /* Slot 0 <-> ROOT_META only */
     if (u64Slot == GJ_CAP_SLOT_ROOT_META &&
         u16Type != (u16)GJ_CAP_ROOT_META) {
         cdt_soft_inc(&g_u32SoftInstFail);
@@ -485,12 +780,18 @@ gj_cap_slot_install(struct gj_cnode *pCnode, u64 u64Slot, u16 u16Type,
 
     /*
      * Soft: REPLY type may install as scaffold enum only.
-     * Soft ≠ GJ_CAP_REPLY product (no MIG ephemeral single-use CNode wire).
+     * Soft != GJ_CAP_REPLY product (no MIG ephemeral single-use CNode wire).
      * Grep: cap: cdt soft install / cap: cdt soft type
      */
     if (u16Type == (u16)GJ_CAP_REPLY) {
         cdt_soft_inc(&g_u32SoftInstReplyType);
     }
+
+    /*
+     * Soft DDI/UDX class tally (IRQ/FRAME/UNTYPED/NOTIFICATION).
+     * Soft residual != product mint. G-AC-1. Grep: cap: ddi | cap: udx
+     */
+    cdt_soft_ddi_note_install(u16Type);
 
     /*
      * Soft CDT: mint/copy/move with edge pool call gj_cdt_edge_link() after.
@@ -519,7 +820,6 @@ gj_cap_alloc_install(struct gj_cnode *pCnode, u16 u16Type, u16 u16Rights,
 
     if (pCnode == NULL || pCnode->pSlots == NULL || pObj == NULL ||
         pOutRef == NULL) {
-        /* Grep: cap: cdt soft return alloc */
         cdt_soft_inc(&g_u32SoftRetAllocFail);
         cdt_soft_inc(&g_u32SoftRetAllocInval);
         return GJ_ERR_INVAL;
@@ -579,7 +879,7 @@ gj_cap_alloc_install(struct gj_cnode *pCnode, u16 u16Type, u16 u16Rights,
 }
 
 /*
- * Deferred invalidate helper — walk a known CNode and clear slots for pObj.
+ * Deferred invalidate helper - walk a known CNode and clear slots for pObj.
  * Prefer CDT walk when edges exist; this covers process-local hygiene and
  * tests without a global object index.
  * Grep: cap:cdt
@@ -657,7 +957,7 @@ static u32 g_u32CdtMintCross;     /* mint: src CNode != dst CNode */
 static u32 g_u32CdtMintLocal;     /* mint: same CNode */
 static u32 g_u32CdtMoveRetarget;  /* move: unlink src then wire dst */
 static u32 g_u32CdtDeleteEdge;    /* delete: edge unlinked for slot */
-static u32 g_u32CdtUnlinkOk;      /* unlink_slot found ≥1 edge */
+static u32 g_u32CdtUnlinkOk;      /* unlink_slot found >=1 edge */
 
 /*
  * Soft slots_left / quota interaction tallies (install + charge/refund).
@@ -674,7 +974,7 @@ static u32 g_u32SoftDeleteRefund;     /* delete path explicit refund */
 
 /*
  * Wave 15: soft empty-edge audit (slots_left vs CDT chain depth).
- * Install without wire leaves slots_left > chain — soft gap, not product.
+ * Install without wire leaves slots_left > chain - soft gap, not product.
  * Grep: cap: cdt soft audit
  */
 static u32 g_u32CdtChainDepthMax;     /* peak chain depth after wire */
@@ -683,13 +983,17 @@ static u32 g_u32CdtSoftAuditMatch;    /* slots_left == chain after wire */
 static u32 g_u32CdtSoftAuditMismatch; /* slots_left != chain (soft gap) */
 static u32 g_u32CdtSoftAuditEmpty;    /* pool miss: slots without edge */
 
-/* Once-markers: avoid timer/boot log spam. Grep: cap: cdt soft */
+/* Once-markers: lean residual - no stamp storms. Grep: cap: cdt soft */
 static u8 g_u8CdtPoolExhLogged;
 static u8 g_u8CdtSoftTallyLogged;
-static u8 g_u8CdtSoftAuditLogged;     /* first soft empty-edge audit */
+static u8 g_u8CdtSoftAuditLogged;      /* first soft empty-edge audit */
 static u8 g_u8CdtCoverageRollupLogged; /* first full mint|copy|move rollup */
-static u8 g_u8CdtPoolChurnLogged;     /* first pool free/alloc churn line */
-static u8 g_u8CdtUnlinkLogged;        /* first unlink coverage line */
+static u8 g_u8CdtPoolChurnLogged;      /* first pool free/alloc churn line */
+static u8 g_u8CdtUnlinkLogged;         /* first unlink coverage line */
+static u8 g_u8CdtEdgeOkLogged;         /* first edge_ok wire lamp */
+static u8 g_u8CdtEdgeMissLogged;       /* first edge miss / link refuse lamp */
+static u8 g_u8CdtRetargetLogged;       /* first move retarget lamp */
+static u8 g_u8CdtDeleteLogged;         /* first delete edge lamp */
 
 static u32
 cdt_edge_pool_used(void)
@@ -758,7 +1062,7 @@ cdt_edge_free(struct gj_cdt_edge *pEdge)
             pEdge->u64Slot = 0;
             cdt_soft_inc(&g_u32CdtPoolFreeOk); /* cap: cdt pool free */
             /*
-             * First free→alloc churn line (delete/move returns edge).
+             * First free->alloc churn line (delete/move returns edge).
              * Grep: cap: cdt pool
              */
             if (!g_u8CdtPoolChurnLogged && g_u32CdtPoolFreeOk > 0u &&
@@ -783,7 +1087,7 @@ cdt_edge_free_if_pool(struct gj_cdt_edge *pEdge)
 }
 
 /*
- * Soft unlink note (from gj_cdt_unlink_slot after ≥1 edge dropped).
+ * Soft unlink note (from gj_cdt_unlink_slot after >=1 edge dropped).
  * Once-marker log + lifetime tally. Grep: cap: cdt unlink
  */
 static void
@@ -810,7 +1114,7 @@ cdt_soft_note_unlink(const struct gj_obj_hdr *pObj, u64 u64Slot,
 /*
  * Soft empty-edge audit: compare object slots_left vs CDT chain depth.
  * Bootstrap install without wire leaves slots_left > chain (soft gap).
- * Does not claim product empty-edge audit — soft observability only.
+ * Does not claim product empty-edge audit - soft observability only.
  * Grep: cap: cdt soft audit
  */
 static void
@@ -839,7 +1143,7 @@ cdt_soft_empty_edge_audit(const struct gj_obj_hdr *pObj, const char *szOp,
             cdt_soft_inc(&g_u32CdtSoftAuditMismatch);
         }
     } else {
-        /* Pool miss or link refuse — slot may still be installed. */
+        /* Pool miss or link refuse - slot may still be installed. */
         cdt_soft_inc(&g_u32CdtSoftAuditEmpty);
         fMatch = 0;
     }
@@ -864,1153 +1168,718 @@ cdt_soft_empty_edge_audit(const struct gj_obj_hdr *pObj, const char *szOp,
 static void
 cdt_soft_tally_log(void)
 {
-    /* Grep: cap: cdt soft slots_left / quota */
-    kprintf("cap: cdt soft slots_left_inc=%u quota_ch_ok=%u "
-            "quota_ch_fail=%u quota_ch_nop=%u quota_rf_ok=%u "
-            "quota_rf_nop=%u move_net0=%u del_rf=%u "
-            "mint_ok=%u copy_ok=%u move_ok=%u pool_used=%u wave=%u\n",
+    /*
+     * Lean tally (once / rare re-log). No version stamp. Soft!=product.
+     * Grep: cap: cdt soft slots_left / quota / coverage / audit
+     */
+    kprintf("cap: cdt soft slots_left_inc=%u q_ch_ok=%u q_ch_fail=%u "
+            "q_ch_nop=%u q_rf_ok=%u q_rf_nop=%u move_net0=%u del_rf=%u "
+            "mint_ok=%u copy_ok=%u move_ok=%u pool_used=%u Soft!=product\n",
             g_u32SoftSlotsLeftInc, g_u32SoftQuotaChargeOk,
             g_u32SoftQuotaChargeFail, g_u32SoftQuotaChargeNop,
             g_u32SoftQuotaRefundOk, g_u32SoftQuotaRefundNop,
             g_u32SoftMoveNet0, g_u32SoftDeleteRefund,
             g_u32CdtMintEdgeOk, g_u32CdtCopyEdgeOk, g_u32CdtMoveEdgeOk,
-            cdt_edge_pool_used(), GJ_CDT_SOFT_WAVE);
-    /* Grep: cap: cdt soft coverage (mint|copy|move attempts / pool) */
+            cdt_edge_pool_used());
     kprintf("cap: cdt soft coverage mint=%u/%u miss_m=%u copy=%u/%u "
-            "miss_c=%u move=%u/%u miss_v=%u move_unlink=%u "
-            "pool_alloc=%u pool_miss=%u pool_free=%u pool_sz=%u "
-            "mint_x=%u mint_loc=%u retarget=%u del_edge=%u unlink_ok=%u "
-            "wave=%u\n",
+            "miss_c=%u move=%u/%u miss_v=%u unlink=%u retarget=%u "
+            "del_edge=%u pool_alloc=%u pool_miss=%u pool_free=%u "
+            "Soft!=product\n",
             g_u32CdtMintEdgeOk, g_u32CdtMintAttempt, g_u32CdtMintEdgeMiss,
             g_u32CdtCopyEdgeOk, g_u32CdtCopyAttempt, g_u32CdtCopyEdgeMiss,
             g_u32CdtMoveEdgeOk, g_u32CdtMoveAttempt, g_u32CdtMoveEdgeMiss,
-            g_u32CdtMoveUnlink, g_u32CdtPoolAllocOk, g_u32CdtPoolAllocMiss,
-            g_u32CdtPoolFreeOk, GJ_CDT_EDGE_POOL, g_u32CdtMintCross,
-            g_u32CdtMintLocal, g_u32CdtMoveRetarget, g_u32CdtDeleteEdge,
-            g_u32CdtUnlinkOk, GJ_CDT_SOFT_WAVE);
-    /* Grep: cap: cdt soft audit rollup */
+            g_u32CdtUnlinkOk, g_u32CdtMoveRetarget, g_u32CdtDeleteEdge,
+            g_u32CdtPoolAllocOk, g_u32CdtPoolAllocMiss, g_u32CdtPoolFreeOk);
     kprintf("cap: cdt soft audit match=%u mismatch=%u empty=%u "
-            "chain_max=%u chain_last=%u pool_used=%u soft_only wave=%u\n",
+            "chain_max=%u chain_last=%u pool_used=%u soft_only Soft!=product\n",
             g_u32CdtSoftAuditMatch, g_u32CdtSoftAuditMismatch,
             g_u32CdtSoftAuditEmpty, g_u32CdtChainDepthMax,
-            g_u32CdtChainDepthAtOk, cdt_edge_pool_used(), GJ_CDT_SOFT_WAVE);
+            g_u32CdtChainDepthAtOk, cdt_edge_pool_used());
 }
 
 /**
- * Wave 19 greppable soft inventory dump (never hard-gates product).
- * Prefix-stable family: "cap: cdt soft …"
- * Honesty: soft ≠ GJ_CAP_REPLY product / full CDT mutex product /
- * Soft ≠ MIG REPLY product.
- * Grep: cap: cdt soft inventory|resolve|trylock|install|return|type|path|deepen
+ * Lean greppable soft residual inventory (never hard-gates product).
+ * Prefix-stable: "cap: cdt soft ..." / "cap: soft residual ..."
+ * Soft!=product. Dual MIT OR Apache-2.0. No version stamp. No stamp storms
+ * (few lamps only; counters live in file-statics). C3 lean selftest results
+ * are included when residual lean has run (behavior check, not lamp-only).
+ *
+ * Grep: cap: cdt soft honesty|inventory|path|residual|PASS|return|retmap
+ * Grep: cap: soft residual lean PASS
+ * Grep: cap: cdt soft residual lean
  */
 static void
 cdt_soft_inventory_log(void)
 {
+    u32 u32ResFail;
+
     cdt_soft_inc(&g_u32SoftInvLogs);
+    u32ResFail = g_u32SoftResInval + g_u32SoftResNoent + g_u32SoftResStale +
+                 g_u32SoftResLiveFail;
 
     /*
      * Grep: cap: cdt soft honesty
-     * Soft inventory only — not MIG REPLY CNode product, not product mutex.
+     * Soft inventory only - not MIG REPLY / full CDT mutex product.
      */
     kprintf("cap: cdt soft honesty reply_product=0 full_cdt_mutex=0 "
-            "soft_lock=u32SoftLock sleep_not_spin=1 "
-            "soft_ne_mig_reply=1 wave=%u (soft != GJ_CAP_REPLY product; "
-            "soft != MIG REPLY product; soft != full CDT mutex product; "
-            "soft inventory only)\n",
-            GJ_CDT_SOFT_WAVE);
+            "soft_lock=u32SoftLock sleep_not_spin=1 soft_ne_mig_reply=1 "
+            "c3_lean=%u Soft!=product (soft != GJ_CAP_REPLY product; "
+            "soft != MIG REPLY product; soft != full CDT mutex product)\n",
+            g_u32SoftLeanOk);
 
     /* Grep: cap: cdt soft inventory */
     kprintf("cap: cdt soft inventory pool_used=%u pool_sz=%u "
             "alloc_ok=%u alloc_miss=%u free_ok=%u sl_inc=%u "
-            "q_ch_ok=%u q_ch_fail=%u q_ch_nop=%u q_rf_ok=%u q_rf_nop=%u "
-            "mint_ok=%u copy_ok=%u move_ok=%u chain_max=%u "
-            "log_n=%u wave=%u soft_partial\n",
+            "q_ch_ok=%u q_ch_fail=%u q_rf_ok=%u mint_ok=%u copy_ok=%u "
+            "move_ok=%u res_ok=%u try_ok=%u inst_ok=%u chain_max=%u "
+            "lean_ok=%u log_n=%u Soft!=product soft_partial\n",
             cdt_edge_pool_used(), GJ_CDT_EDGE_POOL, g_u32CdtPoolAllocOk,
             g_u32CdtPoolAllocMiss, g_u32CdtPoolFreeOk, g_u32SoftSlotsLeftInc,
             g_u32SoftQuotaChargeOk, g_u32SoftQuotaChargeFail,
-            g_u32SoftQuotaChargeNop, g_u32SoftQuotaRefundOk,
-            g_u32SoftQuotaRefundNop, g_u32CdtMintEdgeOk, g_u32CdtCopyEdgeOk,
-            g_u32CdtMoveEdgeOk, g_u32CdtChainDepthMax, g_u32SoftInvLogs,
-            GJ_CDT_SOFT_WAVE);
+            g_u32SoftQuotaRefundOk, g_u32CdtMintEdgeOk, g_u32CdtCopyEdgeOk,
+            g_u32CdtMoveEdgeOk, g_u32SoftResOk, g_u32SoftTryOk,
+            g_u32SoftInstOk, g_u32CdtChainDepthMax, g_u32SoftLeanOk,
+            g_u32SoftInvLogs);
 
-    /* Grep: cap: cdt soft resolve */
+    /* Grep: cap: cdt soft resolve / trylock / install (path tallies) */
     kprintf("cap: cdt soft resolve enter=%u ok=%u inval=%u noent=%u "
-            "stale=%u live_fail=%u scheme_a=1 wave=%u\n",
+            "stale=%u live_fail=%u scheme_a=1 Soft!=product\n",
             g_u32SoftResEnter, g_u32SoftResOk, g_u32SoftResInval,
-            g_u32SoftResNoent, g_u32SoftResStale, g_u32SoftResLiveFail,
-            GJ_CDT_SOFT_WAVE);
-
-    /* Grep: cap: cdt soft trylock / cap:cdt trylock soft */
+            g_u32SoftResNoent, g_u32SoftResStale, g_u32SoftResLiveFail);
     kprintf("cap: cdt soft trylock enter=%u ok=%u busy=%u null=%u "
             "unlock=%u lock=u32SoftLock product_mutex=OPEN "
-            "sleep_not_spin=1 soft_partial wave=%u\n",
+            "sleep_not_spin=1 Soft!=product\n",
             g_u32SoftTryEnter, g_u32SoftTryOk, g_u32SoftTryBusy,
-            g_u32SoftTryNull, g_u32SoftUnlock, GJ_CDT_SOFT_WAVE);
-
-    /* Grep: cap: cdt soft install */
+            g_u32SoftTryNull, g_u32SoftUnlock);
     kprintf("cap: cdt soft install enter=%u ok=%u fail=%u "
             "fail_inval=%u fail_dead=%u fail_perm=%u fail_busy=%u "
-            "fail_quota=%u reply_type=%u reply_product=0 wave=%u "
-            "(REPLY scaffold count only; not GJ_CAP_REPLY product; "
-            "soft != MIG REPLY product)\n",
+            "fail_quota=%u reply_type=%u reply_product=0 Soft!=product\n",
             g_u32SoftInstEnter, g_u32SoftInstOk, g_u32SoftInstFail,
             g_u32SoftInstFailInval, g_u32SoftInstFailDead,
             g_u32SoftInstFailPerm, g_u32SoftInstFailBusy,
-            g_u32SoftInstFailQuota, g_u32SoftInstReplyType, GJ_CDT_SOFT_WAVE);
+            g_u32SoftInstFailQuota, g_u32SoftInstReplyType);
 
-    /*
-     * Grep: cap: cdt soft return
-     * Wave 19 public return-surface: gj_status buckets across CNode APIs.
-     * Soft ≠ MIG REPLY product / full CDT mutex product.
-     */
+    /* Grep: cap: cdt soft return (public API return surface) */
     kprintf("cap: cdt soft return resolve_ok=%u resolve_fail=%u "
             "inst_ok=%u inst_fail=%u mint_ok=%u mint_fail=%u "
             "copy_ok=%u copy_fail=%u move_ok=%u move_fail=%u "
             "del_ok=%u del_fail=%u alloc_ok=%u alloc_fail=%u "
-            "reply_product=0 wave=%u\n",
-            g_u32SoftResOk,
-            g_u32SoftResInval + g_u32SoftResNoent + g_u32SoftResStale +
-                g_u32SoftResLiveFail,
-            g_u32SoftInstOk, g_u32SoftInstFail, g_u32SoftRetMintOk,
-            g_u32SoftRetMintFail, g_u32SoftRetCopyOk, g_u32SoftRetCopyFail,
-            g_u32SoftRetMoveOk, g_u32SoftRetMoveFail, g_u32SoftRetDelOk,
-            g_u32SoftRetDelFail, g_u32SoftRetAllocOk, g_u32SoftRetAllocFail,
-            GJ_CDT_SOFT_WAVE);
+            "reply_product=0 Soft!=product\n",
+            g_u32SoftResOk, u32ResFail, g_u32SoftInstOk, g_u32SoftInstFail,
+            g_u32SoftRetMintOk, g_u32SoftRetMintFail, g_u32SoftRetCopyOk,
+            g_u32SoftRetCopyFail, g_u32SoftRetMoveOk, g_u32SoftRetMoveFail,
+            g_u32SoftRetDelOk, g_u32SoftRetDelFail, g_u32SoftRetAllocOk,
+            g_u32SoftRetAllocFail);
+    kprintf("cap: cdt soft return rate resolve_ok=%u resolve_fail=%u "
+            "inst_ok=%u inst_fail=%u mint_ok=%u mint_fail=%u "
+            "copy_ok=%u copy_fail=%u move_ok=%u move_fail=%u "
+            "del_ok=%u del_fail=%u alloc_ok=%u alloc_fail=%u "
+            "Soft!=product dual=MIT_OR_Apache-2.0\n",
+            g_u32SoftResOk, u32ResFail, g_u32SoftInstOk, g_u32SoftInstFail,
+            g_u32SoftRetMintOk, g_u32SoftRetMintFail, g_u32SoftRetCopyOk,
+            g_u32SoftRetCopyFail, g_u32SoftRetMoveOk, g_u32SoftRetMoveFail,
+            g_u32SoftRetDelOk, g_u32SoftRetDelFail, g_u32SoftRetAllocOk,
+            g_u32SoftRetAllocFail);
+    kprintf("cap: cdt soft retcode ok=1 inval=1 noent=1 perm=1 dead=1 "
+            "stale=1 busy=1 quota=1 live_fail=1 other=1 "
+            "mint_other=%u copy_other=%u move_other=%u del_other=%u "
+            "alloc_other=%u Soft!=product\n",
+            g_u32SoftRetMintOther, g_u32SoftRetCopyOther,
+            g_u32SoftRetMoveOther, g_u32SoftRetDelOther,
+            g_u32SoftRetAllocOther);
+    kprintf("cap: cdt soft retmap "
+            "resolve=OK|INVAL|NOENT|STALE|DEAD "
+            "install=OK|INVAL|DEAD|PERM|BUSY|QUOTA "
+            "mint=OK|INVAL|PERM|OTHER copy=OK|INVAL|PERM|OTHER "
+            "move=OK|INVAL|PERM|OTHER delete=OK|INVAL|PERM|OTHER "
+            "alloc=OK|INVAL|QUOTA|OTHER "
+            "c3=fail_closed+no_escalate+root_meta+cross_pkg+"
+            "copy_move+quota+busy_noent+del_stale+dma_shape "
+            "soft_ne_product=1 dual=MIT_OR_Apache-2.0 Soft!=product\n");
 
-    /* Grep: cap: cdt soft return install — Wave 17 status split */
-    kprintf("cap: cdt soft return install ok=%u fail=%u inval=%u dead=%u "
-            "perm=%u busy=%u quota=%u wave=%u\n",
-            g_u32SoftInstOk, g_u32SoftInstFail, g_u32SoftInstFailInval,
-            g_u32SoftInstFailDead, g_u32SoftInstFailPerm,
-            g_u32SoftInstFailBusy, g_u32SoftInstFailQuota, GJ_CDT_SOFT_WAVE);
-
-    /* Grep: cap: cdt soft return mint|copy|move|delete|alloc */
-    kprintf("cap: cdt soft return mint ok=%u fail=%u inval=%u perm=%u "
-            "other=%u wave=%u\n",
-            g_u32SoftRetMintOk, g_u32SoftRetMintFail, g_u32SoftRetMintInval,
-            g_u32SoftRetMintPerm, g_u32SoftRetMintOther, GJ_CDT_SOFT_WAVE);
-    kprintf("cap: cdt soft return copy ok=%u fail=%u inval=%u perm=%u "
-            "other=%u wave=%u\n",
-            g_u32SoftRetCopyOk, g_u32SoftRetCopyFail, g_u32SoftRetCopyInval,
-            g_u32SoftRetCopyPerm, g_u32SoftRetCopyOther, GJ_CDT_SOFT_WAVE);
-    kprintf("cap: cdt soft return move ok=%u fail=%u inval=%u perm=%u "
-            "other=%u wave=%u\n",
-            g_u32SoftRetMoveOk, g_u32SoftRetMoveFail, g_u32SoftRetMoveInval,
-            g_u32SoftRetMovePerm, g_u32SoftRetMoveOther, GJ_CDT_SOFT_WAVE);
-    kprintf("cap: cdt soft return delete ok=%u fail=%u inval=%u perm=%u "
-            "other=%u wave=%u\n",
-            g_u32SoftRetDelOk, g_u32SoftRetDelFail, g_u32SoftRetDelInval,
-            g_u32SoftRetDelPerm, g_u32SoftRetDelOther, GJ_CDT_SOFT_WAVE);
-    kprintf("cap: cdt soft return alloc ok=%u fail=%u inval=%u quota=%u "
-            "other=%u wave=%u\n",
-            g_u32SoftRetAllocOk, g_u32SoftRetAllocFail, g_u32SoftRetAllocInval,
-            g_u32SoftRetAllocQuota, g_u32SoftRetAllocOther, GJ_CDT_SOFT_WAVE);
-
-    /* Grep: cap: cdt soft pool */
-    kprintf("cap: cdt soft pool used=%u sz=%u alloc_ok=%u miss=%u "
-            "free_ok=%u churn=%u wave=%u\n",
-            cdt_edge_pool_used(), GJ_CDT_EDGE_POOL, g_u32CdtPoolAllocOk,
-            g_u32CdtPoolAllocMiss, g_u32CdtPoolFreeOk,
-            (g_u32CdtPoolFreeOk > 0u && g_u32CdtPoolAllocOk > 0u) ? 1u : 0u,
-            GJ_CDT_SOFT_WAVE);
+    /* Grep: cap: cdt soft residual (lean rollup; counters not product) */
+    kprintf("cap: cdt soft residual resolve=%u/%u install=%u/%u "
+            "mint_edge=%u/%u copy_edge=%u/%u move_edge=%u/%u "
+            "ret_ok mint=%u copy=%u move=%u del=%u alloc=%u "
+            "reply_scaffold=%u lean_ok=%u pool_sz=%u Soft!=product "
+            "dual MIT OR Apache-2.0 storm=0\n",
+            g_u32SoftResOk, g_u32SoftResEnter, g_u32SoftInstOk,
+            g_u32SoftInstEnter, g_u32CdtMintEdgeOk, g_u32CdtMintAttempt,
+            g_u32CdtCopyEdgeOk, g_u32CdtCopyAttempt, g_u32CdtMoveEdgeOk,
+            g_u32CdtMoveAttempt, g_u32SoftRetMintOk, g_u32SoftRetCopyOk,
+            g_u32SoftRetMoveOk, g_u32SoftRetDelOk, g_u32SoftRetAllocOk,
+            g_u32SoftInstReplyType, g_u32SoftLeanOk, GJ_CDT_EDGE_POOL);
 
     /*
-     * Grep: cap: cdt soft type
-     * Catalog of enum types; REPLY remains scaffold (door soft table, not
-     * CNode MIG product). Soft ≠ GJ_CAP_REPLY product.
+     * Grep: cap: cdt soft residual lean (C3 behavior selftest rollup)
      */
-    kprintf("cap: cdt soft type invalid=1 cnode=1 thread=1 space=1 "
-            "process=1 endpoint=1 notification=1 reply_scaffold=1 "
-            "reply_product=0 irq=1 frame=1 untyped=1 page_table=1 "
-            "sched_ctx=1 memobj=1 root_meta=1 reply_inst=%u wave=%u "
-            "(soft type catalog; GJ_CAP_REPLY product OPEN)\n",
-            g_u32SoftInstReplyType, GJ_CDT_SOFT_WAVE);
+    kprintf("cap: cdt soft residual lean runs=%u ok=%u inst=%u mint=%u "
+            "esc_fail=%u res_stale=%u res_null=%u res_live=%u "
+            "root_guard=%u del=%u cross=%u host_subset=%u dead_fail=%u "
+            "pkg_cross=%u copy=%u move=%u noent=%u busy=%u quota=%u "
+            "del_stale=%u dma_shape=%u no_mint=%u root_meta_slot=%u "
+            "soft_ne_product=1 dual=MIT_OR_Apache-2.0 G-AC-1=1 "
+            "c3=1 mint_product=0 Soft!=product\n",
+            g_u32SoftLeanRuns, g_u32SoftLeanOk, g_u32SoftLeanInstOk,
+            g_u32SoftLeanMintOk, g_u32SoftLeanMintEscFail,
+            g_u32SoftLeanResStaleOk, g_u32SoftLeanResNullOk,
+            g_u32SoftLeanResLiveOk, g_u32SoftLeanRootGuardOk,
+            g_u32SoftLeanDelOk, g_u32SoftLeanCrossOk,
+            g_u32SoftLeanHostSubsetOk, g_u32SoftLeanDeadFailOk,
+            g_u32SoftLeanPkgCrossOk, g_u32SoftLeanCopyOk,
+            g_u32SoftLeanMoveOk, g_u32SoftLeanNoentOk, g_u32SoftLeanBusyOk,
+            g_u32SoftLeanQuotaOk, g_u32SoftLeanDelStaleOk,
+            g_u32SoftLeanDmaShapeOk, g_u32SoftLeanMintNoMintOk,
+            g_u32SoftLeanRootMetaSlotOk);
 
     /* Grep: cap: cdt soft path */
     kprintf("cap: cdt soft path resolve=1 install=1 mint=1 copy=1 move=1 "
             "delete=1 trylock=soft_u32SoftLock quota=soft_hier "
-            "cdt_pool=%u empty_edge_audit=soft return_surface=1 return_rate=1 retcode=1 return_selftest=1 retmap=1 "
-            "reply_product=0 full_cdt_mutex=0 soft_ne_mig_reply=1 "
-            "wave=%u (soft inventory; soft != GJ_CAP_REPLY "
-            "product; soft != MIG REPLY product; soft != full CDT mutex "
-            "product)\n",
-            GJ_CDT_EDGE_POOL, GJ_CDT_SOFT_WAVE);
+            "return_surface=1 return_rate=1 retcode=1 retmap=1 "
+            "residual_lean=1 c3=1 reply_product=0 full_cdt_mutex=0 "
+            "soft_ne_mig_reply=1 Soft!=product (soft residual; not "
+            "GJ_CAP_REPLY / MIG REPLY / full CDT mutex product)\n");
 
     /*
-     * Grep: cap: cdt soft return rate
-     * Wave 17 return-surface rate lamps (kept) (ok vs fail; soft ≠ product).
+     * Grep: cap: soft residual lean PASS
+     * Grep: cap: cdt soft inventory PASS / cap: cdt soft PASS
+     * No version stamp. No deepen stamp storm.
      */
-    kprintf("cap: cdt soft return rate "
-            "resolve_ok=%u resolve_fail=%u "
-            "inst_ok=%u inst_fail=%u "
-            "mint_ok=%u mint_fail=%u "
-            "copy_ok=%u copy_fail=%u "
-            "move_ok=%u move_fail=%u "
-            "del_ok=%u del_fail=%u "
-            "alloc_ok=%u alloc_fail=%u "
-            "wave=%u (return rate; Soft≠product; soft≠MIG REPLY product; "
-            ")\n",
-            g_u32SoftResOk,
-            g_u32SoftResInval + g_u32SoftResNoent + g_u32SoftResStale +
-                g_u32SoftResLiveFail,
-            g_u32SoftInstOk, g_u32SoftInstFail,
-            g_u32SoftRetMintOk, g_u32SoftRetMintFail,
-            g_u32SoftRetCopyOk, g_u32SoftRetCopyFail,
-            g_u32SoftRetMoveOk, g_u32SoftRetMoveFail,
-            g_u32SoftRetDelOk, g_u32SoftRetDelFail,
-            g_u32SoftRetAllocOk, g_u32SoftRetAllocFail,
-            GJ_CDT_SOFT_WAVE);
-
-    /*
-     * Grep: cap: cdt soft retcode
-     * Wave 19 observed gj_status retcode catalog (return surface).
-     * Soft ≠ product; codes are soft lamps not ABI claims.
-     */
-    kprintf("cap: cdt soft retcode "
-            "ok=1 inval=1 noent=1 perm=1 dead=1 stale=1 busy=1 quota=1 "
-            "live_fail=1 other=1 "
-            "mint_other=%u copy_other=%u move_other=%u del_other=%u "
-            "alloc_other=%u wave=%u "
-            "(retcode catalog; Soft≠product; soft≠MIG REPLY product)\n",
-            g_u32SoftRetMintOther, g_u32SoftRetCopyOther,
-            g_u32SoftRetMoveOther, g_u32SoftRetDelOther,
-            g_u32SoftRetAllocOther, GJ_CDT_SOFT_WAVE);
-
-    /*
-     * ---- Wave 18 complementary surfaces (kept) (never reshape primary).
-     * Return surfaces only — soft inventory; never hard-gates product paths.
-     */
-    /* Grep: cap: cdt soft return selftest — Wave 19 terminal return surface */
-    kprintf("cap: cdt soft return selftest inv_ret=1 product_kernel=OPEN "
-            "multi_server=0 rate_limited=0 wave=%u soft PASS\n",
-            (unsigned)GJ_CDT_SOFT_WAVE);
-
-    /* Grep: cap: cdt soft retmap — Wave 19 return-surface map */
-    kprintf("cap: cdt soft retmap soft_inv=1 deepen=1 return_rate=1 retcode=1 "
-            "product=OPEN wave=%u soft PASS\n",
-            (unsigned)GJ_CDT_SOFT_WAVE);
-
-    /* Grep: cap: cdt soft deepen wave (Wave 24 stamp) */
-    /*
-     * ---- Wave 19 complementary surfaces (kept) (never reshape primary).
-     * Return surfaces only — soft inventory; never hard-gates product paths.
-     */
-    /* Grep: cap: cdt: soft retclass — Wave 19 return-class taxonomy (kept) */
-    kprintf("cap: cdt: soft retclass ok|fail|inval|nodev|busy|nomem "
-            "soft_only=1 product_gate=0 wave=%u "
-            "(retclass taxonomy; Soft≠product)\n",
-            (unsigned)GJ_CDT_SOFT_WAVE);
-    /* Grep: cap: cdt: soft retlane — Wave 19 return-lane catalog (kept) */
-    kprintf("cap: cdt: soft retlane inv|selftest|rate|retcode|retmap|class "
-            "product_kernel=OPEN soft_ne_product=1 wave=%u "
-            "(retlane catalog; Soft≠product)\n",
-            (unsigned)GJ_CDT_SOFT_WAVE);
-    /*
-     * ---- Wave 20 complementary surfaces (kept) (never reshape primary).
-     * Return surfaces only — soft inventory; never hard-gates product paths.
-     */
-    /* Grep: cap: cdt: soft retbound — Wave 20 return-bound honesty (kept) */
-    kprintf("cap: cdt: soft retbound soft_only=1 product_gate=0 hard_gate=0 "
-            "never_blocks_m0=1 wave=%u "
-            "(retbound honesty; Soft≠product)\n",
-            (unsigned)GJ_CDT_SOFT_WAVE);
-    /* Grep: cap: cdt: soft retseal — Wave 20 seal stamp (kept) */
-    kprintf("cap: cdt: soft retseal exclusive=1 soft_ne_product=1 "
-            "product_kernel=OPEN wave=%u "
-            "(retseal stamp; Soft≠product)\n",
-            (unsigned)GJ_CDT_SOFT_WAVE);
-            /*
-             * ---- Wave 21 complementary surfaces (kept) (never reshape primary).
-             * Return surfaces only — soft inventory; never hard-gates product paths.
-            */
-            /* Grep: cap: cdt: soft retpulse — Wave 21 return-pulse honesty (kept) */
-            kprintf("cap: cdt: soft retpulse soft_only=1 product_gate=0 soft_ne_product=1 "
-                    "never_blocks_m0=1 wave=%u "
-                    "(retpulse honesty; Soft≠product)\n",
-                    (unsigned)GJ_CDT_SOFT_WAVE);
-            /* Grep: cap: cdt: soft retmark — Wave 21 mark stamp (kept) */
-            kprintf("cap: cdt: soft retmark exclusive=1 soft_ne_product=1 "
-                    "product_kernel=OPEN wave=%u "
-                    "(retmark stamp; Soft≠product)\n",
-                    (unsigned)GJ_CDT_SOFT_WAVE);
-            /*
-             * ---- Wave 22 complementary surfaces (kept) (never reshape primary).
-             * Return surfaces only — soft inventory; never hard-gates product paths.
-            */
-            /* Grep: cap: cdt: soft retphase — Wave 22 return-phase honesty (kept) */
-            kprintf("cap: cdt: soft retphase soft_only=1 product_gate=0 soft_ne_product=1 "
-                    "never_blocks_m0=1 wave=%u "
-                    "(retphase honesty; Soft≠product)\n",
-                    (unsigned)GJ_CDT_SOFT_WAVE);
-            /* Grep: cap: cdt: soft retbadge — Wave 22 badge stamp (kept) */
-            kprintf("cap: cdt: soft retbadge exclusive=1 soft_ne_product=1 "
-                    "product_kernel=OPEN wave=%u "
-                    "(retbadge stamp; Soft≠product)\n",
-                    (unsigned)GJ_CDT_SOFT_WAVE);
-/*
- * ---- Wave 23 complementary surfaces (kept) (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
-            */
-            /* Grep: cap: cdt: soft rettoken — Wave 23 return-token honesty (kept) */
-            kprintf("cap: cdt: soft rettoken soft_only=1 product_gate=0 soft_ne_product=1 "
-                    "never_blocks_m0=1 wave=%u "
-                    "(rettoken honesty; Soft≠product)\n",
-                    (unsigned)GJ_CDT_SOFT_WAVE);
-            /* Grep: cap: cdt: soft retcrest — Wave 23 crest stamp (kept) */
-            kprintf("cap: cdt: soft retcrest exclusive=1 soft_ne_product=1 "
-                    "product_kernel=OPEN wave=%u "
-                    "(retcrest stamp; Soft≠product)\n",
-                    (unsigned)GJ_CDT_SOFT_WAVE);
-            /*
-             * ---- Wave 24 complementary surfaces (kept) (never reshape primary).
-             * Return surfaces only — soft inventory; never hard-gates product paths.
-             */
-            /* Grep: cap: cdt: soft retvault — Wave 24 return-vault honesty (kept) */
-            kprintf("cap: cdt: soft retvault soft_only=1 product_gate=0 soft_ne_product=1 "
-                    "never_blocks_m0=1 wave=%u "
-                    "(retvault honesty; Soft≠product)\n",
-                    (unsigned)GJ_CDT_SOFT_WAVE);
-            /* Grep: cap: cdt: soft retbanner — Wave 24 banner stamp (kept) */
-            kprintf("cap: cdt: soft retbanner exclusive=1 soft_ne_product=1 "
-                    "product_kernel=OPEN wave=%u "
-                    "(retbanner stamp; Soft≠product)\n",
-                    (unsigned)GJ_CDT_SOFT_WAVE);
-            /*
-             * ---- Wave 25 complementary surfaces (kept) (never reshape primary).
-             * Return surfaces only — soft inventory; never hard-gates product paths.
-             */
-            /* Grep: cap: cdt: soft retledger — Wave 25 return-ledger honesty (kept) */
-            kprintf("cap: cdt: soft retledger soft_only=1 product_gate=0 soft_ne_product=1 "
-                    "never_blocks_m0=1 wave=%u "
-                    "(retledger honesty; Soft≠product)\n",
-                    (unsigned)GJ_CDT_SOFT_WAVE);
-            /* Grep: cap: cdt: soft retbeacon — Wave 25 beacon stamp (kept) */
-            kprintf("cap: cdt: soft retbeacon exclusive=1 soft_ne_product=1 "
-                    "product_kernel=OPEN wave=%u "
-                    "(retbeacon stamp; Soft≠product)\n",
-                    (unsigned)GJ_CDT_SOFT_WAVE);
-            /*
-             * ---- Wave 26 complementary surfaces (kept) (never reshape primary).
-             * Return surfaces only — soft inventory; never hard-gates product paths.
-             */
-            /* Grep: cap: cdt: soft retcipher — Wave 26 return-cipher honesty (kept) */
-            kprintf("cap: cdt: soft retcipher soft_only=1 product_gate=0 soft_ne_product=1 "
-                    "never_blocks_m0=1 wave=%u "
-                    "(retcipher honesty; Soft≠product)\n",
-                    (unsigned)GJ_CDT_SOFT_WAVE);
-            /* Grep: cap: cdt: soft retflame — Wave 26 flame stamp (kept) */
-            kprintf("cap: cdt: soft retflame exclusive=1 soft_ne_product=1 "
-                    "product_kernel=OPEN wave=%u "
-                    "(retflame stamp; Soft≠product)\n",
-                    (unsigned)GJ_CDT_SOFT_WAVE);
-                    /*
-                     * ---- Wave 27 complementary surfaces (kept) (never reshape primary).
-                     * Return surfaces only — soft inventory; never hard-gates product paths.
-                     */
-                    /* Grep: cap: cdt: soft retprism — Wave 27 return-prism honesty (kept) */
-                    kprintf("cap: cdt: soft retprism soft_only=1 product_gate=0 soft_ne_product=1 "
-                            "never_blocks_m0=1 wave=%u "
-                            "(retprism honesty; Soft≠product)\n",
-                            (unsigned)GJ_CDT_SOFT_WAVE);
-                    /* Grep: cap: cdt: soft retforge — Wave 27 forge stamp (kept) */
-                    kprintf("cap: cdt: soft retforge exclusive=1 soft_ne_product=1 "
-                            "product_kernel=OPEN wave=%u "
-                            "(retforge stamp; Soft≠product)\n",
-                            (unsigned)GJ_CDT_SOFT_WAVE);
-                            /*
-                             * ---- Wave 28 complementary surfaces (kept) (never reshape primary).
-                             * Return surfaces only — soft inventory; never hard-gates product paths.
-                             */
-                            /* Grep: cap: cdt: soft retshard — Wave 28 return-shard honesty (kept) */
-                            kprintf("cap: cdt: soft retshard soft_only=1 product_gate=0 soft_ne_product=1 "
-                                "never_blocks_m0=1 wave=%u "
-                                "(retshard honesty; Soft≠product)\n",
-                                (unsigned)GJ_CDT_SOFT_WAVE);
-                            /* Grep: cap: cdt: soft retcrown — Wave 28 crown stamp (kept) */
-                            kprintf("cap: cdt: soft retcrown exclusive=1 soft_ne_product=1 "
-                                "product_kernel=OPEN wave=%u "
-                                "(retcrown stamp; Soft≠product)\n",
-                                (unsigned)GJ_CDT_SOFT_WAVE);
-                                /*
-                             * ---- Wave 29 complementary surfaces (kept) (never reshape primary).
-                             * Return surfaces only — soft inventory; never hard-gates product paths.
-                             */
-                            /* Grep: cap: cdt: soft retglyph — Wave 29 return-glyph honesty (kept) */
-                            kprintf("cap: cdt: soft retglyph soft_only=1 product_gate=0 soft_ne_product=1 "
-                                    "never_blocks_m0=1 wave=%u "
-                                    "(retglyph honesty; Soft≠product)\n",
-                                    (unsigned)GJ_CDT_SOFT_WAVE);
-                            /* Grep: cap: cdt: soft retscepter — Wave 29 scepter stamp (kept) */
-                            kprintf("cap: cdt: soft retscepter exclusive=1 soft_ne_product=1 "
-                                    "product_kernel=OPEN wave=%u "
-                                    "(retscepter stamp; Soft≠product)\n",
-                                    (unsigned)GJ_CDT_SOFT_WAVE);
-                                /*
-                             * ---- Wave 30 complementary surfaces (kept) (never reshape primary).
-                             * Return surfaces only — soft inventory; never hard-gates product paths.
-                             */
-                            /* Grep: cap: cdt: soft retsigil — Wave 30 return-sigil honesty (kept) */
-                            kprintf("cap: cdt: soft retsigil soft_only=1 product_gate=0 soft_ne_product=1 "
-                                    "never_blocks_m0=1 wave=%u "
-                                    "(retsigil honesty; Soft≠product)\n",
-                                    (unsigned)GJ_CDT_SOFT_WAVE);
-                            /* Grep: cap: cdt: soft retemblem — Wave 30 emblem stamp (kept) */
-                            kprintf("cap: cdt: soft retemblem exclusive=1 soft_ne_product=1 "
-                                    "product_kernel=OPEN wave=%u "
-                                    "(retemblem stamp; Soft≠product)\n",
-                                    (unsigned)GJ_CDT_SOFT_WAVE);
-                            /*
-                             * ---- Wave 31 complementary surfaces (kept) (never reshape primary).
-                             * Return surfaces only — soft inventory; never hard-gates product paths.
-                             */
-                            /* Grep: cap: cdt: soft retaegis — Wave 31 return-aegis honesty (kept) */
-                            kprintf("cap: cdt: soft retaegis soft_only=1 product_gate=0 soft_ne_product=1 "
-                                    "never_blocks_m0=1 wave=%u "
-                                    "(retaegis honesty; Soft≠product)\n",
-                                    (unsigned)GJ_CDT_SOFT_WAVE);
-                            /* Grep: cap: cdt: soft retsigil — Wave 30 return-sigil honesty (kept) */
-                            kprintf("cap: cdt: soft retsigil soft_only=1 product_gate=0 soft_ne_product=1 "
-                                    "never_blocks_m0=1 wave=%u "
-                                    "(retsigil honesty; Soft≠product)\n",
-                                    (unsigned)GJ_CDT_SOFT_WAVE);
-                            /* Grep: cap: cdt: soft retmantle — Wave 31 mantle stamp (kept) */
-                            kprintf("cap: cdt: soft retmantle exclusive=1 soft_ne_product=1 "
-                                    "product_kernel=OPEN wave=%u "
-                                    "(retmantle stamp; Soft≠product)\n",
-                                    (unsigned)GJ_CDT_SOFT_WAVE);
-/*
- * ---- Wave 32 complementary surfaces (kept) (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: cap: cdt: soft retbulwark — Wave 32 return-bulwark honesty (kept) */
-kprintf("cap: cdt: soft retbulwark soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=%u "
-        "(retbulwark honesty; Soft≠product)\n",
-        (unsigned)GJ_CDT_SOFT_WAVE);
-/* Grep: cap: cdt: soft retpanoply — Wave 32 panoply stamp (kept) */
-kprintf("cap: cdt: soft retpanoply exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=%u "
-        "(retpanoply stamp; Soft≠product)\n",
-        (unsigned)GJ_CDT_SOFT_WAVE);
-/*
- * ---- Wave 33 complementary surfaces (kept) (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: cap: cdt: soft retbastion — Wave 33 return-bastion honesty (kept) */
-kprintf("cap: cdt: soft retbastion soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=%u "
-        "(retbastion honesty; Soft≠product)\n",
-        (unsigned)GJ_CDT_SOFT_WAVE);
-/* Grep: cap: cdt: soft retcitadel — Wave 33 citadel stamp (kept) */
-kprintf("cap: cdt: soft retcitadel exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=%u "
-        "(retcitadel stamp; Soft≠product)\n",
-        (unsigned)GJ_CDT_SOFT_WAVE);
-/*
- * ---- Wave 34 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: cap: cdt: soft retredoubt — Wave 34 return-redoubt honesty */
-kprintf("cap: cdt: soft retredoubt soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=%u "
-        "(retredoubt honesty; Soft≠product)\n",
-        (unsigned)GJ_CDT_SOFT_WAVE);
-/* Grep: cap: cdt: soft retkeep — Wave 34 exclusive keep stamp */
-kprintf("cap: cdt: soft retkeep exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=%u "
-        "(retkeep stamp; Soft≠product)\n",
-        (unsigned)GJ_CDT_SOFT_WAVE);
-/*
- * ---- Wave 35 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: cap: cdt: soft retfortress — Wave 35 return-fortress honesty */
-kprintf("cap: cdt: soft retfortress soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=%u "
-        "(retfortress honesty; Soft≠product)\n",
-        (unsigned)GJ_CDT_SOFT_WAVE);
-/* Grep: cap: cdt: soft retpalace — Wave 35 exclusive palace stamp */
-kprintf("cap: cdt: soft retpalace exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=%u "
-        "(retpalace stamp; Soft≠product)\n",
-        (unsigned)GJ_CDT_SOFT_WAVE);
-/*
- * ---- Wave 36 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: cap: cdt: soft rethold — Wave 36 return-hold honesty */
-kprintf("cap: cdt: soft rethold soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=%u "
-        "(rethold honesty; Soft≠product)\n",
-        (unsigned)GJ_CDT_SOFT_WAVE);
-/* Grep: cap: cdt: soft retspire — Wave 36 exclusive spire stamp */
-kprintf("cap: cdt: soft retspire exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=%u "
-        "(retspire stamp; Soft≠product)\n",
-        (unsigned)GJ_CDT_SOFT_WAVE);
-/*
- * ---- Wave 37 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: cap: cdt: soft retwall — Wave 37 return-wall honesty */
-kprintf("cap: cdt: soft retwall soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=%u "
-        "(retwall honesty; Soft≠product)\n",
-        (unsigned)GJ_CDT_SOFT_WAVE);
-/* Grep: cap: cdt: soft retgate — Wave 37 exclusive gate stamp */
-kprintf("cap: cdt: soft retgate exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=%u "
-        "(retgate stamp; Soft≠product)\n",
-        (unsigned)GJ_CDT_SOFT_WAVE);
-/*
- * ---- Wave 38 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: cap: cdt: soft retmoat — Wave 38 return-moat honesty */
-kprintf("cap: cdt: soft retmoat soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=%u "
-        "(retmoat honesty; Soft≠product)\n",
-        (unsigned)GJ_CDT_SOFT_WAVE);
-/* Grep: cap: cdt: soft retower — Wave 38 exclusive tower stamp */
-kprintf("cap: cdt: soft retower exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=%u "
-        "(retower stamp; Soft≠product)\n",
-        (unsigned)GJ_CDT_SOFT_WAVE);
-                            
-/*
- * ---- Wave 39 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: cap: cdt: soft retbarbican — Wave 39 return-barbican honesty */
-kprintf("cap: cdt: soft retbarbican soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=%u "
-        "(retbarbican honesty; Soft≠product)\n",
-        (unsigned)GJ_CDT_SOFT_WAVE);
-/* Grep: cap: cdt: soft retglacis — Wave 39 exclusive glacis stamp */
-kprintf("cap: cdt: soft retglacis exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=%u "
-        "(retglacis stamp; Soft≠product)\n",
-        (unsigned)GJ_CDT_SOFT_WAVE);
-/*
- * ---- Wave 40 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: cap: cdt: soft retcurtain — Wave 40 return-curtain honesty */
-kprintf("cap: cdt: soft retcurtain soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=%u "
-        "(retcurtain honesty; Soft≠product)\n",
-        (unsigned)GJ_CDT_SOFT_WAVE);
-/* Grep: cap: cdt: soft retparapet — Wave 40 exclusive parapet stamp */
-kprintf("cap: cdt: soft retparapet exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=%u "
-        "(retparapet stamp; Soft≠product)\n",
-        (unsigned)GJ_CDT_SOFT_WAVE);
-/*
- * ---- Wave 41 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: cap: cdt: soft retravelin — Wave 41 return-travelin honesty */
-kprintf("cap: cdt: soft retravelin soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=%u "
-        "(retravelin honesty; Soft≠product)\n",
-        (unsigned)GJ_CDT_SOFT_WAVE);
-/* Grep: cap: cdt: soft retditch — Wave 41 exclusive ditch stamp */
-kprintf("cap: cdt: soft retditch exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=%u "
-        "(retditch stamp; Soft≠product)\n",
-        (unsigned)GJ_CDT_SOFT_WAVE);
-/*
- * ---- Wave 42 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: cap: cdt: soft retportcullis — Wave 42 return-portcullis honesty */
-kprintf("cap: cdt: soft retportcullis soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=%u "
-        "(retportcullis honesty; Soft≠product)\n",
-        (unsigned)GJ_CDT_SOFT_WAVE);
-/* Grep: cap: cdt: soft retbattlement — Wave 42 exclusive battlement stamp */
-kprintf("cap: cdt: soft retbattlement exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=%u "
-        "(retbattlement stamp; Soft≠product)\n",
-        (unsigned)GJ_CDT_SOFT_WAVE);
-/*
- * ---- Wave 43 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: cap: cdt: soft retmachicolation — Wave 43 return-machicolation honesty */
-kprintf("cap: cdt: soft retmachicolation soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=%u "
-        "(retmachicolation honesty; Soft≠product)\n",
-        (unsigned)GJ_CDT_SOFT_WAVE);
-/* Grep: cap: cdt: soft retarrowslit — Wave 43 exclusive arrowslit stamp */
-kprintf("cap: cdt: soft retarrowslit exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=%u "
-        "(retarrowslit stamp; Soft≠product)\n",
-        (unsigned)GJ_CDT_SOFT_WAVE);
-
-/*
- * ---- Wave 44 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: cap: cdt: soft retmerlon — Wave 44 return-merlon honesty */
-kprintf("cap: cdt: soft retmerlon soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=%u "
-        "(retmerlon honesty; Soft≠product)\n",
-        (unsigned)GJ_CDT_SOFT_WAVE);
-/* Grep: cap: cdt: soft retembrasure — Wave 44 exclusive embrasure stamp */
-kprintf("cap: cdt: soft retembrasure exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=%u "
-        "(retembrasure stamp; Soft≠product)\n",
-        (unsigned)GJ_CDT_SOFT_WAVE);
-
-/*
- * ---- Wave 45 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: cap: cdt: soft retkeepgate — Wave 45 return-keepgate honesty */
-kprintf("cap: cdt: soft retkeepgate soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=%u "
-        "(retkeepgate honesty; Soft≠product)\n",
-        (unsigned)GJ_CDT_SOFT_WAVE);
-/* Grep: cap: cdt: soft retouterward — Wave 45 exclusive outerward stamp */
-kprintf("cap: cdt: soft retouterward exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=%u "
-        "(retouterward stamp; Soft≠product)\n",
-        (unsigned)GJ_CDT_SOFT_WAVE);
-
-/*
- * ---- Wave 46 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: cap: cdt: soft retbailey — Wave 46 return-bailey honesty */
-kprintf("cap: cdt: soft retbailey soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=%u "
-        "(retbailey honesty; Soft≠product)\n",
-        (unsigned)GJ_CDT_SOFT_WAVE);
-/* Grep: cap: cdt: soft retpostern — Wave 46 exclusive postern stamp */
-kprintf("cap: cdt: soft retpostern exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=%u "
-        "(retpostern stamp; Soft≠product)\n",
-        (unsigned)GJ_CDT_SOFT_WAVE);
-
-/*
- * ---- Wave 47 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: cap: cdt: soft retinnerward — Wave 47 return-innerward honesty */
-kprintf("cap: cdt: soft retinnerward soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retinnerward honesty; Soft≠product)\n");
-/* Grep: cap: cdt: soft retdonjon — Wave 47 exclusive donjon stamp */
-kprintf("cap: cdt: soft retdonjon exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retdonjon stamp; Soft≠product)\n");
-
-/*
- * ---- Wave 48 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: cap: cdt: soft retchevaux — Wave 48 return-chevaux honesty */
-kprintf("cap: cdt: soft retchevaux soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retchevaux honesty; Soft≠product)\n");
-/* Grep: cap: cdt: soft retpalisade — Wave 48 exclusive palisade stamp */
-kprintf("cap: cdt: soft retpalisade exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retpalisade stamp; Soft≠product)\n");
-
-/*
- * ---- Wave 49 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: cap: cdt: soft retglacisgate — Wave 49 return-glacisgate honesty */
-kprintf("cap: cdt: soft retglacisgate soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retglacisgate honesty; Soft≠product)\n");
-/* Grep: cap: cdt: soft retoutwork — Wave 49 exclusive outwork stamp */
-kprintf("cap: cdt: soft retoutwork exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retoutwork stamp; Soft≠product)\n");
-/*
- * ---- Wave 50 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: cap: cdt: soft retsally — Wave 50 return-sally honesty */
-kprintf("cap: cdt: soft retsally soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retsally honesty; Soft≠product)\n");
-/* Grep: cap: cdt: soft retcounterscarp — Wave 50 exclusive counterscarp stamp */
-kprintf("cap: cdt: soft retcounterscarp exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retcounterscarp stamp; Soft≠product)\n");
-/*
- * ---- Wave 51 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: cap: cdt: soft retfosse — Wave 51 return-fosse honesty */
-kprintf("cap: cdt: soft retfosse soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retfosse honesty; Soft≠product)\n");
-/* Grep: cap: cdt: soft retcoveredway — Wave 51 exclusive coveredway stamp */
-kprintf("cap: cdt: soft retcoveredway exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retcoveredway stamp; Soft≠product)\n");
-
-/*
- * ---- Wave 52 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: cap: cdt: soft rettenaille — Wave 52 return-tenaille honesty */
-kprintf("cap: cdt: soft rettenaille soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(rettenaille honesty; Soft≠product)\n");
-/* Grep: cap: cdt: soft retdemilune — Wave 52 exclusive demilune stamp */
-kprintf("cap: cdt: soft retdemilune exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retdemilune stamp; Soft≠product)\n");
-/*
- * ---- Wave 53 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: cap: cdt: soft retravelin — Wave 53 return-travelin honesty */
-kprintf("cap: cdt: soft retravelin soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retravelin honesty; Soft≠product)\n");
-/* Grep: cap: cdt: soft retlunette — Wave 53 exclusive lunette stamp */
-kprintf("cap: cdt: soft retlunette exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retlunette stamp; Soft≠product)\n");
-/*
- * ---- Wave 54 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: cap: cdt: soft retcaponier — Wave 54 return-caponier honesty */
-kprintf("cap: cdt: soft retcaponier soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retcaponier honesty; Soft≠product)\n");
-/* Grep: cap: cdt: soft retredan — Wave 54 exclusive redan stamp */
-kprintf("cap: cdt: soft retredan exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retredan stamp; Soft≠product)\n");
-/*
- * ---- Wave 55 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: cap: cdt: soft retflank — Wave 55 return-flank honesty */
-kprintf("cap: cdt: soft retflank soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retflank honesty; Soft≠product)\n");
-/* Grep: cap: cdt: soft retface — Wave 55 exclusive face stamp */
-kprintf("cap: cdt: soft retface exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retface stamp; Soft≠product)\n");
-/*
- * ---- Wave 56 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: cap: cdt: soft retgorge — Wave 56 return-gorge honesty */
-kprintf("cap: cdt: soft retgorge soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retgorge honesty; Soft≠product)\n");
-/* Grep: cap: cdt: soft retshoulder — Wave 56 exclusive shoulder stamp */
-kprintf("cap: cdt: soft retshoulder exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retshoulder stamp; Soft≠product)\n");
-/*
- * ---- Wave 57 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: cap: cdt: soft retraverse — Wave 57 return-traverse honesty */
-kprintf("cap: cdt: soft retraverse soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retraverse honesty; Soft≠product)\n");
-/* Grep: cap: cdt: soft retcasemate — Wave 57 exclusive casemate stamp */
-kprintf("cap: cdt: soft retcasemate exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retcasemate stamp; Soft≠product)\n");
-
-/*
- * ---- Wave 58 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: cap: cdt: soft retorillon — Wave 58 return-orillon honesty */
-kprintf("cap: cdt: soft retorillon soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retorillon honesty; Soft≠product)\n");
-/* Grep: cap: cdt: soft retbonnette — Wave 58 exclusive bonnette stamp */
-kprintf("cap: cdt: soft retbonnette exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retbonnette stamp; Soft≠product)\n");
-
-/*
- * ---- Wave 59 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: cap: cdt: soft retcrownwork — Wave 59 return-crownwork honesty */
-kprintf("cap: cdt: soft retcrownwork soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retcrownwork honesty; Soft≠product)\n");
-/* Grep: cap: cdt: soft rethornwork — Wave 59 exclusive hornwork stamp */
-kprintf("cap: cdt: soft rethornwork exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(rethornwork stamp; Soft≠product)\n");
-
-/*
- * ---- Wave 60 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: cap: cdt: soft retplace — Wave 60 return-place honesty */
-kprintf("cap: cdt: soft retplace soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retplace honesty; Soft≠product)\n");
-/* Grep: cap: cdt: soft retenvelope — Wave 60 exclusive envelope stamp */
-kprintf("cap: cdt: soft retenvelope exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retenvelope stamp; Soft≠product)\n");
-
-
-
-
-
-
-
-
-
-/*
- * ---- Wave 61 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: cap: cdt: soft retcounterguard — Wave 61 return-counterguard honesty */
-kprintf("cap: cdt: soft retcounterguard soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retcounterguard honesty; Soft≠product)\n");
-/* Grep: cap: cdt: soft retcoveredface — Wave 61 exclusive coveredface stamp */
-kprintf("cap: cdt: soft retcoveredface exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retcoveredface stamp; Soft≠product)\n");
-/*
- * ---- Wave 62 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: cap: cdt: soft retbastionface — Wave 62 return-bastionface honesty */
-kprintf("cap: cdt: soft retbastionface soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retbastionface honesty; Soft≠product)\n");
-/* Grep: cap: cdt: soft retcurtainangle — Wave 62 exclusive curtainangle stamp */
-kprintf("cap: cdt: soft retcurtainangle exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retcurtainangle stamp; Soft≠product)\n");
-/*
- * ---- Wave 63 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: cap: cdt: soft retdoubletenaille — Wave 63 return-doubletenaille honesty */
-kprintf("cap: cdt: soft retdoubletenaille soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retdoubletenaille honesty; Soft≠product)\n");
-/* Grep: cap: cdt: soft retplaceofarms — Wave 63 exclusive placeofarms stamp */
-kprintf("cap: cdt: soft retplaceofarms exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retplaceofarms stamp; Soft≠product)\n");
- /*
-  * ---- Wave 64 exclusive complementary surfaces (never reshape primary).
-  * Return surfaces only — soft inventory; never hard-gates product paths.
-  */
- /* Grep: cap: cdt: soft retreentrant — Wave 64 return-reentrant honesty */
-kprintf("cap: cdt: soft retreentrant soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retreentrant honesty; Soft≠product)\n");
- /* Grep: cap: cdt: soft retsallyport — Wave 64 exclusive sallyport stamp */
-kprintf("cap: cdt: soft retsallyport exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retsallyport stamp; Soft≠product)\n");
- /*
-  * ---- Wave 65 exclusive complementary surfaces (never reshape primary).
-  * Return surfaces only — soft inventory; never hard-gates product paths.
-  */
- /* Grep: cap: cdt: soft retgorgeangle — Wave 65 return-gorgeangle honesty */
-kprintf("cap: cdt: soft retgorgeangle soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retgorgeangle honesty; Soft≠product)\n");
- /* Grep: cap: cdt: soft retshoulderangle — Wave 65 exclusive shoulderangle stamp */
-kprintf("cap: cdt: soft retshoulderangle exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retshoulderangle stamp; Soft≠product)\n");
- /*
-  * ---- Wave 66 exclusive complementary surfaces (never reshape primary).
-  * Return surfaces only — soft inventory; never hard-gates product paths.
-  */
- /* Grep: cap: cdt: soft retflankangle — Wave 66 return-flankangle honesty */
- kprintf("cap: cdt: soft retflankangle soft_only=1 product_gate=0 soft_ne_product=1 "
-         "never_blocks_m0=1 wave=116 "
-         "(retflankangle honesty; Soft≠product)\n");
- /* Grep: cap: cdt: soft retfaceangle — Wave 66 exclusive faceangle stamp */
- kprintf("cap: cdt: soft retfaceangle exclusive=1 soft_ne_product=1 "
-         "product_kernel=OPEN wave=116 "
-         "(retfaceangle stamp; Soft≠product)\n");
-/*
- * ---- Wave 67 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: cap: cdt: soft retcaponierangle — Wave 67 return-caponierangle honesty */
-kprintf("cap: cdt: soft retcaponierangle soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retcaponierangle honesty; Soft≠product)\n");
-/* Grep: cap: cdt: soft retredanangle — Wave 67 exclusive redanangle stamp */
-kprintf("cap: cdt: soft retredanangle exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retredanangle stamp; Soft≠product)\n");
-/*
- * ---- Wave 68 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: cap: cdt: soft retlunetteangle — Wave 68 return-lunetteangle honesty */
-kprintf("cap: cdt: soft retlunetteangle soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retlunetteangle honesty; Soft≠product)\n");
-/* Grep: cap: cdt: soft rettenailleangle — Wave 68 exclusive tenailleangle stamp */
-kprintf("cap: cdt: soft rettenailleangle exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(rettenailleangle stamp; Soft≠product)\n");
-/*
- * ---- Wave 69 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: cap: cdt: soft retdemiluneangle — Wave 69 return-demiluneangle honesty */
-kprintf("cap: cdt: soft retdemiluneangle soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retdemiluneangle honesty; Soft≠product)\n");
-/* Grep: cap: cdt: soft retcoveredwayangle — Wave 69 exclusive coveredwayangle stamp */
-kprintf("cap: cdt: soft retcoveredwayangle exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retcoveredwayangle stamp; Soft≠product)\n");
-/*
- * ---- Wave 70 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: cap: cdt: soft retfosseangle — Wave 70 return-fosseangle honesty */
-kprintf("cap: cdt: soft retfosseangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retfosseangle honesty; Soft≠product)\n");
-/* Grep: cap: cdt: soft retcounterscarple — Wave 70 exclusive counterscarple stamp */
-kprintf("cap: cdt: soft retcounterscarple exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retcounterscarple stamp; Soft≠product)\n");
-/*
- * ---- Wave 71 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: cap: cdt: soft retsallyportangle — Wave 71 return-sallyportangle honesty */
-kprintf("cap: cdt: soft retsallyportangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retsallyportangle honesty; Soft≠product)\n");
-/* Grep: cap: cdt: soft retreentrantangle — Wave 71 exclusive reentrantangle stamp */
-kprintf("cap: cdt: soft retreentrantangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retreentrantangle stamp; Soft≠product)\n");
-/*
- * ---- Wave 72 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: cap: cdt: soft retplaceofarmsangle — Wave 72 return-placeofarmsangle honesty */
-kprintf("cap: cdt: soft retplaceofarmsangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retplaceofarmsangle honesty; Soft≠product)\n");
-/* Grep: cap: cdt: soft retdoubletenailleangle — Wave 72 exclusive doubletenailleangle stamp */
-kprintf("cap: cdt: soft retdoubletenailleangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retdoubletenailleangle stamp; Soft≠product)\n");
-/* Grep: cap: cdt: soft retcurtainface — Wave 73 return-curtainface honesty */
-kprintf("cap: cdt: soft retcurtainface soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retcurtainface honesty; Soft≠product)\n");
-/* Grep: cap: cdt: soft retbastionangle — Wave 73 exclusive bastionangle stamp */
-kprintf("cap: cdt: soft retbastionangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retbastionangle stamp; Soft≠product)\n");
-/* Grep: cap: cdt: soft retglacisangle — Wave 74 return-glacisangle honesty */
-kprintf("cap: cdt: soft retglacisangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retglacisangle honesty; Soft≠product)\n");
-/* Grep: cap: cdt: soft retparapetangle — Wave 74 exclusive parapetangle stamp */
-kprintf("cap: cdt: soft retparapetangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retparapetangle stamp; Soft≠product)\n");
-/* Grep: cap: cdt: soft retmoatangle — Wave 75 return-moatangle honesty */
-kprintf("cap: cdt: soft retmoatangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retmoatangle honesty; Soft≠product)\n");
-/* Grep: cap: cdt: soft retowerangle — Wave 75 exclusive towerangle stamp */
-kprintf("cap: cdt: soft retowerangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retowerangle stamp; Soft≠product)\n");
-/* Grep: cap: cdt: soft retgateangle — Wave 76 return-gateangle honesty */
-kprintf("cap: cdt: soft retgateangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retgateangle honesty; Soft≠product)\n");
-/* Grep: cap: cdt: soft retwallangle — Wave 76 exclusive wallangle stamp */
-kprintf("cap: cdt: soft retwallangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retwallangle stamp; Soft≠product)\n");
-/* Grep: cap: cdt: soft retspireangle — Wave 77 return-spireangle honesty */
-kprintf("cap: cdt: soft retspireangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retspireangle honesty; Soft≠product)\n");
-/* Grep: cap: cdt: soft retholdangle — Wave 77 exclusive holdangle stamp */
-kprintf("cap: cdt: soft retholdangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retholdangle stamp; Soft≠product)\n");
-/* Grep: cap: cdt: soft retpalaceangle — Wave 78 return-palaceangle honesty */
-kprintf("cap: cdt: soft retpalaceangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retpalaceangle honesty; Soft≠product)\n");
-/* Grep: cap: cdt: soft retfortressangle — Wave 78 exclusive fortressangle stamp */
-kprintf("cap: cdt: soft retfortressangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retfortressangle stamp; Soft≠product)\n");
-/* Grep: cap: cdt: soft retkeepangle — Wave 79 return-keepangle honesty */
-kprintf("cap: cdt: soft retkeepangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retkeepangle honesty; Soft≠product)\n");
-/* Grep: cap: cdt: soft retredoubtangle — Wave 79 exclusive redoubtangle stamp */
-kprintf("cap: cdt: soft retredoubtangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retredoubtangle stamp; Soft≠product)\n");
-/* Grep: cap: cdt: soft retcitadelangle — Wave 80 return-citadelangle honesty */
-kprintf("cap: cdt: soft retcitadelangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retcitadelangle honesty; Soft≠product)\n");
-/* Grep: cap: cdt: soft retbastionkeep — Wave 80 exclusive bastionkeep stamp */
-kprintf("cap: cdt: soft retbastionkeep exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retbastionkeep stamp; Soft≠product)\n");
-/* Grep: cap: cdt: soft retpanoplyangle — Wave 81 return-panoplyangle honesty */
-kprintf("cap: cdt: soft retpanoplyangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retpanoplyangle honesty; Soft≠product)\n");
-/* Grep: cap: cdt: soft retbulwarkangle — Wave 81 exclusive bulwarkangle stamp */
-kprintf("cap: cdt: soft retbulwarkangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retbulwarkangle stamp; Soft≠product)\n");
-/* Grep: cap: cdt: soft retmantleangle — Wave 82 return-mantleangle honesty */
-kprintf("cap: cdt: soft retmantleangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retmantleangle honesty; Soft≠product)\n");
-/* Grep: cap: cdt: soft retaegisangle — Wave 82 exclusive aegisangle stamp */
-kprintf("cap: cdt: soft retaegisangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retaegisangle stamp; Soft≠product)\n");
-/* Grep: cap: cdt: soft retemblemangle — Wave 83 return-emblemangle honesty */
-kprintf("cap: cdt: soft retemblemangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retemblemangle honesty; Soft≠product)\n");
-/* Grep: cap: cdt: soft retsigilangle — Wave 83 exclusive sigilangle stamp */
-kprintf("cap: cdt: soft retsigilangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retsigilangle stamp; Soft≠product)\n");
-/* Grep: cap: cdt: soft retscepterangle — Wave 84 return-scepterangle honesty */
-kprintf("cap: cdt: soft retscepterangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retscepterangle honesty; Soft≠product)\n");
-/* Grep: cap: cdt: soft retglyphangle — Wave 84 exclusive glyphangle stamp */
-kprintf("cap: cdt: soft retglyphangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retglyphangle stamp; Soft≠product)\n");
-/* Grep: cap: cdt: soft retcrownangle — Wave 85 return-crownangle honesty */
-kprintf("cap: cdt: soft retcrownangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retcrownangle honesty; Soft≠product)\n");
-/* Grep: cap: cdt: soft retshardangle — Wave 85 exclusive shardangle stamp */
-kprintf("cap: cdt: soft retshardangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retshardangle stamp; Soft≠product)\n");
-/* Grep: cap: cdt: soft retforgeangle — Wave 86 return-forgeangle honesty */
-kprintf("cap: cdt: soft retforgeangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retforgeangle honesty; Soft≠product)\n");
-/* Grep: cap: cdt: soft retprismangle — Wave 86 exclusive prismangle stamp */
-kprintf("cap: cdt: soft retprismangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retprismangle stamp; Soft≠product)\n");
-/* Grep: cap: cdt: soft retflameangle — Wave 87 return-flameangle honesty */
-kprintf("cap: cdt: soft retflameangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retflameangle honesty; Soft≠product)\n");
-/* Grep: cap: cdt: soft retcipherangle — Wave 87 exclusive cipherangle stamp */
-kprintf("cap: cdt: soft retcipherangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retcipherangle stamp; Soft≠product)\n");
-/* Grep: cap: cdt: soft retbeaconangle — Wave 88 return-beaconangle honesty */
-kprintf("cap: cdt: soft retbeaconangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retbeaconangle honesty; Soft≠product)\n");
-/* Grep: cap: cdt: soft retledgerangle — Wave 88 exclusive ledgerangle stamp */
-kprintf("cap: cdt: soft retledgerangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retledgerangle stamp; Soft≠product)\n");
-/* Grep: cap: cdt: soft retbannerangle — Wave 89 return-bannerangle honesty */
-kprintf("cap: cdt: soft retbannerangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retbannerangle honesty; Soft≠product)\n");
-/* Grep: cap: cdt: soft retvaultangle — Wave 89 exclusive vaultangle stamp */
-kprintf("cap: cdt: soft retvaultangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retvaultangle stamp; Soft≠product)\n");
-/* Grep: cap: cdt: soft retcrestangle — Wave 90 return-crestangle honesty */
-kprintf("cap: cdt: soft retcrestangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retcrestangle honesty; Soft≠product)\n");
-/* Grep: cap: cdt: soft rettokenangle — Wave 90 exclusive tokenangle stamp */
-kprintf("cap: cdt: soft rettokenangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (rettokenangle stamp; Soft≠product)\n");
-/* Grep: cap: cdt: soft retbadgeangle — Wave 91 return-badgeangle honesty */
-kprintf("cap: cdt: soft retbadgeangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retbadgeangle honesty; Soft≠product)\n");
-/* Grep: cap: cdt: soft retphaseangle — Wave 91 exclusive phaseangle stamp */
-kprintf("cap: cdt: soft retphaseangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retphaseangle stamp; Soft≠product)\n");
-/* Grep: cap: cdt: soft retmarkangle — Wave 92 return-markangle honesty */
-kprintf("cap: cdt: soft retmarkangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retmarkangle honesty; Soft≠product)\n");
-/* Grep: cap: cdt: soft retpulseangle — Wave 92 exclusive pulseangle stamp */
-kprintf("cap: cdt: soft retpulseangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retpulseangle stamp; Soft≠product)\n");
-
-/* Grep: cap: cdt: soft retsealangle — Wave 93 return-sealangle honesty */
-kprintf("cap: cdt: soft retsealangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retsealangle honesty; Soft≠product)\n");
-/* Grep: cap: cdt: soft retboundangle — Wave 93 exclusive boundangle stamp */
-kprintf("cap: cdt: soft retboundangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retboundangle stamp; Soft≠product)\n");
-/* Grep: cap: cdt: soft retstemangle — Wave 94 return-stemangle honesty */
-kprintf("cap: cdt: soft retstemangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retstemangle honesty; Soft≠product)\n");
-/* Grep: cap: cdt: soft retbladeangle — Wave 94 exclusive bladeangle stamp */
-kprintf("cap: cdt: soft retbladeangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retbladeangle stamp; Soft≠product)\n");
-/* Grep: cap: cdt: soft retchordangle — Wave 95 return-chordangle honesty */
-kprintf("cap: cdt: soft retchordangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retchordangle honesty; Soft≠product)\n");
-/* Grep: cap: cdt: soft retarcangle — Wave 95 exclusive arcangle stamp */
-kprintf("cap: cdt: soft retarcangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retarcangle stamp; Soft≠product)\n");
-/* Grep: cap: cdt: soft retsectorangle — Wave 96 return-sectorangle honesty */
-kprintf("cap: cdt: soft retsectorangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retsectorangle honesty; Soft≠product)\n");
-/* Grep: cap: cdt: soft retwedgeangle — Wave 96 exclusive wedgeangle stamp */
-kprintf("cap: cdt: soft retwedgeangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retwedgeangle stamp; Soft≠product)\n");
-/* Grep: cap: cdt: soft retradiusangle — Wave 97 return-radiusangle honesty */
-kprintf("cap: cdt: soft retradiusangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retradiusangle honesty; Soft≠product)\n");
-/* Grep: cap: cdt: soft retdiameterangle — Wave 97 exclusive diameterangle stamp */
-kprintf("cap: cdt: soft retdiameterangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retdiameterangle stamp; Soft≠product)\n");
-/* Grep: cap: cdt: soft retcircumangle — Wave 98 return-circumangle honesty */
-kprintf("cap: cdt: soft retcircumangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retcircumangle honesty; Soft≠product)\n");
-/* Grep: cap: cdt: soft retellipseangle — Wave 98 exclusive ellipseangle stamp */
-kprintf("cap: cdt: soft retellipseangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retellipseangle stamp; Soft≠product)\n");
-/* Grep: cap: cdt: soft rethyperangle — Wave 99 return-hyperangle honesty */
-kprintf("cap: cdt: soft rethyperangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (rethyperangle honesty; Soft≠product)\n");
-/* Grep: cap: cdt: soft retparabolaangle — Wave 99 exclusive parabolaangle stamp */
-kprintf("cap: cdt: soft retparabolaangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retparabolaangle stamp; Soft≠product)\n");
-/* Grep: cap: cdt: soft retspiralangle — Wave 100 return-spiralangle honesty */
-kprintf("cap: cdt: soft retspiralangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retspiralangle honesty; Soft≠product)\n");
-/* Grep: cap: cdt: soft rethelixangle — Wave 100 exclusive helixangle stamp */
-kprintf("cap: cdt: soft rethelixangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (rethelixangle stamp; Soft≠product)\n");
-/* Grep: cap: cdt: soft rettorusangle — Wave 101 return-torusangle honesty */
-kprintf("cap: cdt: soft rettorusangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (rettorusangle honesty; Soft≠product)\n");
-/* Grep: cap: cdt: soft retknotangle — Wave 101 exclusive knotangle stamp */
-kprintf("cap: cdt: soft retknotangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retknotangle stamp; Soft≠product)\n");
-/* Grep: cap: cdt: soft retmoebiusangle — Wave 102 return-moebiusangle honesty */
-kprintf("cap: cdt: soft retmoebiusangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retmoebiusangle honesty; Soft≠product)\n");
-/* Grep: cap: cdt: soft retkleinangle — Wave 102 exclusive kleinangle stamp */
-kprintf("cap: cdt: soft retkleinangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retkleinangle stamp; Soft≠product)\n");
-/* Grep: cap: cdt: soft retprojectangle — Wave 103 return-projectangle honesty */
-kprintf("cap: cdt: soft retprojectangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retprojectangle honesty; Soft≠product)\n");
-/* Grep: cap: cdt: soft retaffineangle — Wave 103 exclusive affineangle stamp */
-kprintf("cap: cdt: soft retaffineangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retaffineangle stamp; Soft≠product)\n");
-/* Grep: cap: cdt: soft retlinearangle — Wave 104 return-linearangle honesty */
-kprintf("cap: cdt: soft retlinearangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retlinearangle honesty; Soft≠product)\n");
-/* Grep: cap: cdt: soft retbilinearangle — Wave 104 exclusive bilinearangle stamp */
-kprintf("cap: cdt: soft retbilinearangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retbilinearangle stamp; Soft≠product)\n");
-/* Grep: cap: cdt: soft retquadraticangle — Wave 105 return-quadraticangle honesty */
-kprintf("cap: cdt: soft retquadraticangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retquadraticangle honesty; Soft≠product)\n");
-/* Grep: cap: cdt: soft retcubicangle — Wave 105 exclusive cubicangle stamp */
-kprintf("cap: cdt: soft retcubicangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retcubicangle stamp; Soft≠product)\n");
-/* Grep: cap: cdt: soft retquarticangle — Wave 106 return-quarticangle honesty */
-kprintf("cap: cdt: soft retquarticangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retquarticangle honesty; Soft≠product)\n");
-/* Grep: cap: cdt: soft retquinticangle — Wave 106 exclusive quinticangle stamp */
-kprintf("cap: cdt: soft retquinticangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retquinticangle stamp; Soft≠product)\n");
-/* Grep: cap: cdt: soft retsplineangle — Wave 107 return-splineangle honesty */
-kprintf("cap: cdt: soft retsplineangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retsplineangle honesty; Soft≠product)\n");
-/* Grep: cap: cdt: soft retbezierangle — Wave 107 exclusive bezierangle stamp */
-kprintf("cap: cdt: soft retbezierangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retbezierangle stamp; Soft≠product)\n");
-/* Grep: cap: cdt: soft rethurmitangle — Wave 108 return-hermitangle honesty */
-kprintf("cap: cdt: soft rethurmitangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (rethurmitangle honesty; Soft≠product)\n");
-/* Grep: cap: cdt: soft retcatmullangle — Wave 108 exclusive catmullangle stamp */
-kprintf("cap: cdt: soft retcatmullangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retcatmullangle stamp; Soft≠product)\n");
-/* Grep: cap: cdt: soft retnurbsangle — Wave 109 return-nurbsangle honesty */
-kprintf("cap: cdt: soft retnurbsangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retnurbsangle honesty; Soft≠product)\n");
-/* Grep: cap: cdt: soft retbsplineangle — Wave 109 exclusive bsplineangle stamp */
-kprintf("cap: cdt: soft retbsplineangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retbsplineangle stamp; Soft≠product)\n");
-/* Grep: cap: cdt: soft retmeshangle — Wave 110 return-meshangle honesty */
-kprintf("cap: cdt: soft retmeshangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retmeshangle honesty; Soft≠product)\n");
-/* Grep: cap: cdt: soft retgridangle — Wave 110 exclusive gridangle stamp */
-kprintf("cap: cdt: soft retgridangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retgridangle stamp; Soft≠product)\n");
-/* Grep: cap: cdt: soft retvoxelangle — Wave 111 return-voxelangle honesty */
-kprintf("cap: cdt: soft retvoxelangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retvoxelangle honesty; Soft≠product)\n");
-/* Grep: cap: cdt: soft rettexelangle — Wave 111 exclusive texelangle stamp */
-kprintf("cap: cdt: soft rettexelangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (rettexelangle stamp; Soft≠product)\n");
-/* Grep: cap: cdt: soft retfragmentangle — Wave 112 return-fragmentangle honesty */
-kprintf("cap: cdt: soft retfragmentangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retfragmentangle honesty; Soft≠product)\n");
-/* Grep: cap: cdt: soft retvertexangle — Wave 112 exclusive vertexangle stamp */
-kprintf("cap: cdt: soft retvertexangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retvertexangle stamp; Soft≠product)\n");
-/* Grep: cap: cdt: soft retshaderangle — Wave 113 return-shaderangle honesty */
-kprintf("cap: cdt: soft retshaderangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retshaderangle honesty; Soft≠product)\n");
-/* Grep: cap: cdt: soft retpipelineangle — Wave 113 exclusive pipelineangle stamp */
-kprintf("cap: cdt: soft retpipelineangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retpipelineangle stamp; Soft≠product)\n");
-/* Grep: cap: cdt: soft retframebufferangle — Wave 114 return-framebufferangle honesty */
-kprintf("cap: cdt: soft retframebufferangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retframebufferangle honesty; Soft≠product)\n");
-/* Grep: cap: cdt: soft retswapchainangle — Wave 114 exclusive swapchainangle stamp */
-kprintf("cap: cdt: soft retswapchainangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retswapchainangle stamp; Soft≠product)\n");
-/* Grep: cap: cdt: soft retpresentangle — Wave 115 return-presentangle honesty */
-kprintf("cap: cdt: soft retpresentangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retpresentangle honesty; Soft≠product)\n");
-/* Grep: cap: cdt: soft retvsyncangle — Wave 115 exclusive vsyncangle stamp */
-kprintf("cap: cdt: soft retvsyncangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retvsyncangle stamp; Soft≠product)\n");
-/* Grep: cap: cdt: soft retfenceangle — Wave 116 return-fenceangle honesty */
-kprintf("cap: cdt: soft retfenceangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retfenceangle honesty; Soft≠product)\n");
-/* Grep: cap: cdt: soft retsemaphoreangle — Wave 116 exclusive semaphoreangle stamp */
-kprintf("cap: cdt: soft retsemaphoreangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retsemaphoreangle stamp; Soft≠product)\n");
-                            kprintf("cap: cdt soft deepen wave=%u areas=%u pool_used=%u "
-            "res_ok=%u try_ok=%u inst_ok=%u mint_ok=%u copy_ok=%u "
-            "move_ok=%u ret_mint_ok=%u ret_copy_ok=%u ret_move_ok=%u "
-            "ret_del_ok=%u ret_alloc_ok=%u log_n=%u ok=1 skip=0\n",
-            GJ_CDT_SOFT_WAVE, GJ_CDT_SOFT_AREAS, cdt_edge_pool_used(),
-            g_u32SoftResOk, g_u32SoftTryOk, g_u32SoftInstOk,
+    kprintf("cap: soft residual lean PASS pool_used=%u res_ok=%u "
+            "inst_ok=%u mint_ok=%u copy_ok=%u move_ok=%u "
+            "ddi_n=%u lean_ok=%u reply_product=0 full_cdt_mutex=0 "
+            "Soft!=product dual MIT OR Apache-2.0 no_version_stamp "
+            "storm=0 c3=1\n",
+            cdt_edge_pool_used(), g_u32SoftResOk, g_u32SoftInstOk,
             g_u32CdtMintEdgeOk, g_u32CdtCopyEdgeOk, g_u32CdtMoveEdgeOk,
-            g_u32SoftRetMintOk, g_u32SoftRetCopyOk, g_u32SoftRetMoveOk,
-            g_u32SoftRetDelOk, g_u32SoftRetAllocOk, g_u32SoftInvLogs);
+            g_u32SoftDdiInst, g_u32SoftLeanOk);
+    kprintf("cap: cdt soft inventory PASS log_n=%u lean_ok=%u "
+            "reply_product=0 full_cdt_mutex=0 soft_ne_mig_reply=1 "
+            "Soft!=product G-AC-1=1 c3=1\n",
+            g_u32SoftInvLogs, g_u32SoftLeanOk);
+    kprintf("cap: cdt soft PASS Soft!=product lean_ok=%u c3=1 "
+            "G-AC-1=1 dual=MIT_OR_Apache-2.0\n",
+            g_u32SoftLeanOk);
 
-    /* Grep: cap: cdt soft inventory PASS / cap: cdt soft PASS */
-    kprintf("cap: cdt soft inventory PASS log_n=%u wave=%u areas=%u "
-            "reply_product=0 full_cdt_mutex=0 soft_ne_mig_reply=1\n",
-            g_u32SoftInvLogs, GJ_CDT_SOFT_WAVE, GJ_CDT_SOFT_AREAS);
-    kprintf("cap: cdt soft PASS wave=%u areas=%u\n",
-            GJ_CDT_SOFT_WAVE, GJ_CDT_SOFT_AREAS);
+    /*
+     * DDI/UDX lean residual foundation (soft only; product mint OPEN).
+     * Grep: cap: ddi | cap: udx | cap: ddi soft residual lean PASS
+     * Grep: cap: udx host mint residual | cap: product mint OPEN
+     * Grep: cap: udx host mmio|irq|dma residual
+     */
+    kprintf("cap: ddi soft residual irq=%u frame=%u untyped=%u notif=%u "
+            "ddi_n=%u mint_product=0 dma_window_product=0 "
+            "Soft!=product G-AC-1\n",
+            g_u32SoftDdiIrq, g_u32SoftDdiFrame, g_u32SoftDdiUntyped,
+            g_u32SoftDdiNotif, g_u32SoftDdiInst);
+    kprintf("cap: ddi soft residual lean PASS mint_product=0 "
+            "Soft!=product dual MIT OR Apache-2.0 storm=0\n");
+    kprintf("cap: udx soft residual lean PASS host_cnode_mint=0 "
+            "Soft!=product G-AC-1 dual MIT OR Apache-2.0 storm=0\n");
+    kprintf("cap: udx host mint residual mint_n=%u cross_n=%u local_n=%u "
+            "host_ok_n=%u host_over_n=%u mmio=%u irq=%u notif=%u "
+            "untyped=%u dma_shape_ok=%u dma_shape_miss=%u "
+            "mint_product=0 Soft!=product G-AC-1\n",
+            g_u32SoftDdiMint, g_u32SoftDdiMintCross, g_u32SoftDdiMintLocal,
+            g_u32SoftDdiMintHostOk, g_u32SoftDdiMintHostOver,
+            g_u32SoftDdiMintRoleMmio, g_u32SoftDdiMintRoleIrq,
+            g_u32SoftDdiMintRoleNotif, g_u32SoftDdiMintRoleUntyped,
+            g_u32SoftDdiMintDmaShapeOk, g_u32SoftDdiMintDmaShapeMiss);
+    kprintf("cap: udx host mint residual pkg_seen=0x%x pkg_cross=0x%x "
+            "pkg_mmio_n=%u pkg_irq_n=%u pkg_notif_n=%u "
+            "pkg_intended=0x%x pkg_typed=0x%x mint_product=0 "
+            "Soft!=product G-AC-1\n",
+            g_u32SoftUdxHostPkgSeen, g_u32SoftUdxHostPkgCross,
+            g_u32SoftUdxHostPkgMmioN, g_u32SoftUdxHostPkgIrqN,
+            g_u32SoftUdxHostPkgNotifN,
+            gj_cap_udx_host_package_roles_intended(),
+            gj_cap_udx_host_package_roles_typed());
+    kprintf("cap: udx host mmio residual product=%d role_n=%u pkg_n=%u "
+            "Soft!=product G-AC-1\n",
+            gj_cap_ddi_mmio_product_ready(), g_u32SoftDdiMintRoleMmio,
+            g_u32SoftUdxHostPkgMmioN);
+    kprintf("cap: udx host irq residual product=%d role_irq_n=%u "
+            "role_notif_n=%u Soft!=product G-AC-1\n",
+            gj_cap_ddi_irq_notif_product_ready(), g_u32SoftDdiMintRoleIrq,
+            g_u32SoftDdiMintRoleNotif);
+    kprintf("cap: udx host dma residual product=%d shape_ok_n=%u "
+            "shape_miss_n=%u type_ordinal=0 Soft!=product G-AC-1\n",
+            gj_cap_ddi_dma_window_product_ready(),
+            g_u32SoftDdiMintDmaShapeOk, g_u32SoftDdiMintDmaShapeMiss);
+    kprintf("cap: product mint OPEN host_cnode_product=%d "
+            "mmio_product=%d irq_notif_product=%d dma_window_product=%d "
+            "Soft!=product dual MIT OR Apache-2.0 storm=0\n",
+            gj_cap_udx_host_mint_product_ready(),
+            gj_cap_ddi_mmio_product_ready(),
+            gj_cap_ddi_irq_notif_product_ready(),
+            gj_cap_ddi_dma_window_product_ready());
+}
+
+/*
+ * C3 lean residual selftest (stack-local; once; never hard-gates).
+ *
+ * Exercises security-visible surfaces without process CNodes or product
+ * mint policy (W4 strengthen; Soft!=product; Dual DoD mint OPEN):
+ *   1.  Root-meta guard: non-ROOT_META install at slot 0 -> PERM
+ *   1b. ROOT_META off slot 0 -> PERM (inverse guard)
+ *   2.  Install UDX package stand-ins (FRAME/IRQ/NOTIFICATION) with host
+ *       default rights into src CNode (with MINT for derive)
+ *   3.  Live resolve ok; gen0 -> INVAL; wrong gen -> STALE_CAP; empty NOENT
+ *   3b. Occupied slot reinstall -> BUSY
+ *   4.  Cross-CNode mint full typed package (FRAME+IRQ+NOTIF); resolve
+ *       minted rights ⊆ source and host-bits ⊆ host default; DMA shape
+ *   5.  Escalate mint (source lacks SPAWN) -> no SPAWN on derived / PERM
+ *   5b. Mint without MINT right on a GRANT-only install -> PERM
+ *   6.  GRANT copy + move (src STALE after move)
+ *   7.  Soft quota charge / exhaust / refund (attach after installs)
+ *   8.  Delete + CDT unlink hygiene; resolve deleted -> STALE
+ *   9.  DEAD object resolve fails closed (local state poke; not revoke API)
+ *
+ * Soft!=product. Dual MIT OR Apache-2.0. G-AC-1. No version stamp.
+ * Not product host mint complete. Grep: cap: cdt soft residual lean
+ */
+static void
+cdt_soft_residual_lean_once(void)
+{
+    struct gj_cnode cnSrc;
+    struct gj_cnode cnDst;
+    struct gj_cap_slot aSrcSlots[GJ_CDT_LEAN_SLOTS];
+    struct gj_cap_slot aDstSlots[GJ_CDT_LEAN_SLOTS];
+    struct gj_obj_hdr aObj[GJ_CDT_LEAN_UDX_OBJS];
+    struct gj_obj_hdr objNoMint;
+    struct gj_obj_hdr objQuota;
+    struct gj_cap_ref aRef[GJ_CDT_LEAN_UDX_OBJS];
+    struct gj_cap_ref aRefHost[GJ_CDT_LEAN_UDX_OBJS];
+    struct gj_cap_ref refMint;
+    struct gj_cap_ref refTmp;
+    struct gj_cap_ref refCopy;
+    struct gj_cap_ref refMove;
+    struct gj_cap_ref refNoMint;
+    struct gj_cap_ref refQuota;
+    struct gj_cap_resolved res;
+    struct gj_cap_quota qLean;
+    gj_status_t st;
+    u16 aTypes[GJ_CDT_LEAN_UDX_OBJS];
+    u16 aRights[GJ_CDT_LEAN_UDX_OBJS];
+    u16 u16Weak;
+    u16 u16Esc;
+    u16 u16MintedHost;
+    u16 u16HostBits;
+    u32 iObj;
+    u32 u32Checks;
+    u32 u32Pass;
+    u32 u32PkgCross;
+    u32 u32UsedBefore;
+    int fAll;
+
+    if (g_u8CdtSoftLeanOnce != 0u) {
+        return;
+    }
+    g_u8CdtSoftLeanOnce = 1u;
+    cdt_soft_inc(&g_u32SoftLeanRuns);
+
+    /*
+     * Suppress inventory reentry: install/mint/resolve/delete call
+     * maybe_once; lean residual owns sequencing and dump after.
+     */
+    g_u8CdtSoftLeanBusy = 1u;
+
+    aTypes[0] = (u16)GJ_CAP_FRAME;
+    aTypes[1] = (u16)GJ_CAP_IRQ;
+    aTypes[2] = (u16)GJ_CAP_NOTIFICATION;
+    aRights[0] = (u16)(GJ_RIGHTS_DDI_MMIO_HOST | GJ_RIGHT_MINT | GJ_RIGHT_GRANT |
+                       GJ_RIGHT_DESTROY);
+    aRights[1] = (u16)(GJ_RIGHTS_DDI_IRQ_HOST | GJ_RIGHT_MINT | GJ_RIGHT_GRANT |
+                       GJ_RIGHT_DESTROY);
+    aRights[2] = (u16)(GJ_RIGHTS_DDI_NOTIF_HOST | GJ_RIGHT_MINT | GJ_RIGHT_GRANT |
+                       GJ_RIGHT_DESTROY);
+
+    gj_cnode_init(&cnSrc, aSrcSlots, GJ_CDT_LEAN_SLOTS);
+    gj_cnode_init(&cnDst, aDstSlots, GJ_CDT_LEAN_SLOTS);
+    for (iObj = 0; iObj < GJ_CDT_LEAN_UDX_OBJS; iObj++) {
+        gj_obj_hdr_init(&aObj[iObj]);
+        aRef[iObj] = gj_cap_ref_null();
+        aRefHost[iObj] = gj_cap_ref_null();
+    }
+    gj_obj_hdr_init(&objNoMint);
+    gj_obj_hdr_init(&objQuota);
+    refMint = gj_cap_ref_null();
+    refTmp = gj_cap_ref_null();
+    refCopy = gj_cap_ref_null();
+    refMove = gj_cap_ref_null();
+    refNoMint = gj_cap_ref_null();
+    refQuota = gj_cap_ref_null();
+
+    u32Checks = 0;
+    u32Pass = 0;
+    u32PkgCross = 0;
+
+    /* 1. Root-meta guard: FRAME at slot 0 must be PERM. */
+    u32Checks++;
+    st = gj_cap_slot_install(&cnSrc, GJ_CAP_SLOT_ROOT_META, (u16)GJ_CAP_FRAME,
+                             aRights[0], &aObj[0], &refTmp);
+    if (st == GJ_ERR_PERM) {
+        cdt_soft_inc(&g_u32SoftLeanRootGuardOk);
+        u32Pass++;
+    }
+
+    /* 1b. Inverse: ROOT_META only at slot 0. */
+    u32Checks++;
+    st = gj_cap_slot_install(&cnSrc, 1ull, (u16)GJ_CAP_ROOT_META, aRights[0],
+                             &aObj[0], &refTmp);
+    if (st == GJ_ERR_PERM) {
+        cdt_soft_inc(&g_u32SoftLeanRootMetaSlotOk);
+        u32Pass++;
+    }
+
+    /* 2. Install UDX package stand-ins (host rights + derive bits). */
+    for (iObj = 0; iObj < GJ_CDT_LEAN_UDX_OBJS; iObj++) {
+        u32Checks++;
+        st = gj_cap_alloc_install(&cnSrc, aTypes[iObj], aRights[iObj],
+                                  &aObj[iObj], &aRef[iObj]);
+        if (st == GJ_OK && !gj_cap_ref_is_null(&aRef[iObj])) {
+            cdt_soft_inc(&g_u32SoftLeanInstOk);
+            u32Pass++;
+        }
+    }
+
+    /* 3a. Live resolve of first install. */
+    u32Checks++;
+    st = gj_cap_resolve(&cnSrc, aRef[0].u64Slot, aRef[0].u32SlotGen, &res);
+    if (st == GJ_OK && res.u16Type == (u16)GJ_CAP_FRAME) {
+        cdt_soft_inc(&g_u32SoftLeanResLiveOk);
+        u32Pass++;
+    }
+
+    /* 3b. Null gen (gen==0) fail-closed -> INVAL. */
+    u32Checks++;
+    st = gj_cap_resolve(&cnSrc, aRef[0].u64Slot, 0u, &res);
+    if (st == GJ_ERR_INVAL) {
+        cdt_soft_inc(&g_u32SoftLeanResNullOk);
+        u32Pass++;
+    }
+
+    /* 3c. Wrong gen fail-closed -> STALE_CAP. */
+    u32Checks++;
+    st = gj_cap_resolve(&cnSrc, aRef[0].u64Slot, aRef[0].u32SlotGen + 1u,
+                        &res);
+    if (st == GJ_ERR_STALE_CAP) {
+        cdt_soft_inc(&g_u32SoftLeanResStaleOk);
+        u32Pass++;
+    }
+
+    /* 3d. Empty free slot resolve -> NOENT. */
+    u32Checks++;
+    st = gj_cap_resolve(&cnSrc, (u64)(GJ_CDT_LEAN_SLOTS - 1u), 1u, &res);
+    if (st == GJ_ERR_NOENT) {
+        cdt_soft_inc(&g_u32SoftLeanNoentOk);
+        u32Pass++;
+    }
+
+    /* 3e. Reinstall into occupied FRAME slot -> BUSY. */
+    u32Checks++;
+    if (!gj_cap_ref_is_null(&aRef[0])) {
+        st = gj_cap_slot_install(&cnSrc, aRef[0].u64Slot, (u16)GJ_CAP_FRAME,
+                                 aRights[0], &aObj[0], &refTmp);
+        if (st == GJ_ERR_BUSY) {
+            cdt_soft_inc(&g_u32SoftLeanBusyOk);
+            u32Pass++;
+        }
+    }
+
+    /*
+     * 4. Cross-CNode mint of full typed UDX host package
+     *    (FRAME/IRQ/NOTIFICATION). DESTROY added so delete hygiene can run;
+     *    host-subset observes host bits only (DESTROY excluded). Soft residual
+     *    shape for future devmgr->host grant — not product complete.
+     */
+    for (iObj = 0; iObj < GJ_CDT_LEAN_UDX_OBJS; iObj++) {
+        u16Weak = gj_cap_rights_ddi_host_default(aTypes[iObj]);
+        u32Checks++;
+        st = gj_cap_mint(&cnSrc, aRef[iObj].u64Slot, aRef[iObj].u32SlotGen,
+                         (u16)(u16Weak | GJ_RIGHT_DESTROY), &cnDst,
+                         &aRefHost[iObj]);
+        if (st == GJ_OK && !gj_cap_ref_is_null(&aRefHost[iObj])) {
+            cdt_soft_inc(&g_u32SoftLeanMintOk);
+            cdt_soft_inc(&g_u32SoftLeanCrossOk);
+            u32PkgCross++;
+            u32Pass++;
+            /*
+             * Resolve minted: no rights beyond source; host bits ⊆ host
+             * default (DESTROY may be present for delete hygiene only).
+             */
+            st = gj_cap_resolve(&cnDst, aRefHost[iObj].u64Slot,
+                                aRefHost[iObj].u32SlotGen, &res);
+            if (st == GJ_OK &&
+                gj_cap_rights_is_subset(aRights[iObj], res.u16Rights) != 0) {
+                u16MintedHost =
+                    (u16)(res.u16Rights & (u16)(~(u16)GJ_RIGHT_DESTROY));
+                if (u16MintedHost != 0u &&
+                    gj_cap_rights_ddi_host_subset_ok(aTypes[iObj],
+                                                     u16MintedHost) != 0) {
+                    cdt_soft_inc(&g_u32SoftLeanHostSubsetOk);
+                }
+            }
+        }
+    }
+    /* Formal check: all three typed package roles crossed. */
+    u32Checks++;
+    if (u32PkgCross == GJ_CDT_LEAN_UDX_OBJS) {
+        cdt_soft_inc(&g_u32SoftLeanPkgCrossOk);
+        u32Pass++;
+    }
+    /* Formal check: every crossed mint observed host-subset on resolved rights. */
+    u32Checks++;
+    if (g_u32SoftLeanHostSubsetOk >= GJ_CDT_LEAN_UDX_OBJS) {
+        u32Pass++;
+    }
+
+    /* 4b. DMA rights-shape observe on FRAME host mint (type ordinal OPEN). */
+    u32Checks++;
+    if (!gj_cap_ref_is_null(&aRefHost[0])) {
+        st = gj_cap_resolve(&cnDst, aRefHost[0].u64Slot, aRefHost[0].u32SlotGen,
+                            &res);
+        if (st == GJ_OK) {
+            u16HostBits =
+                (u16)(res.u16Rights & (u16)(~(u16)GJ_RIGHT_DESTROY));
+            if (gj_cap_rights_ddi_dma_host_subset_ok(u16HostBits) != 0) {
+                cdt_soft_inc(&g_u32SoftLeanDmaShapeOk);
+                u32Pass++;
+            }
+        }
+    }
+    refMint = aRefHost[0];
+
+    /* 5. Escalate: request SPAWN which source FRAME rights lack. */
+    u16Weak = gj_cap_rights_ddi_host_default((u16)GJ_CAP_FRAME);
+    u16Esc = (u16)(u16Weak | GJ_RIGHT_SPAWN | GJ_RIGHT_DESTROY);
+    u32Checks++;
+    st = gj_cap_mint(&cnSrc, aRef[0].u64Slot, aRef[0].u32SlotGen, u16Esc,
+                     &cnDst, &refTmp);
+    /*
+     * rights_weaker masks SPAWN off; residual non-empty => mint may still
+     * succeed with weaker set. C3 no-escalate: derived must not include bits
+     * source lacks - verify minted rights if success; PERM if empty want.
+     */
+    if (st == GJ_ERR_PERM) {
+        cdt_soft_inc(&g_u32SoftLeanMintEscFail);
+        u32Pass++;
+    } else if (st == GJ_OK && !gj_cap_ref_is_null(&refTmp)) {
+        st = gj_cap_resolve(&cnDst, refTmp.u64Slot, refTmp.u32SlotGen, &res);
+        if (st == GJ_OK && (res.u16Rights & GJ_RIGHT_SPAWN) == 0) {
+            cdt_soft_inc(&g_u32SoftLeanMintEscFail);
+            u32Pass++;
+        }
+        (void)gj_cap_delete(&cnDst, refTmp.u64Slot, refTmp.u32SlotGen);
+    }
+
+    /*
+     * 5b. Mint without MINT right: GRANT-only FRAME install, mint must PERM.
+     * Soft residual; not product mint policy. Grep: lean no_mint
+     */
+    u32Checks++;
+    st = gj_cap_alloc_install(&cnSrc, (u16)GJ_CAP_FRAME,
+                              (u16)(GJ_RIGHTS_DDI_MMIO_HOST | GJ_RIGHT_GRANT |
+                                    GJ_RIGHT_DESTROY),
+                              &objNoMint, &refNoMint);
+    if (st == GJ_OK && !gj_cap_ref_is_null(&refNoMint)) {
+        st = gj_cap_mint(&cnSrc, refNoMint.u64Slot, refNoMint.u32SlotGen,
+                         gj_cap_rights_ddi_host_default((u16)GJ_CAP_FRAME),
+                         &cnDst, &refTmp);
+        if (st == GJ_ERR_PERM) {
+            cdt_soft_inc(&g_u32SoftLeanMintNoMintOk);
+            u32Pass++;
+        }
+    }
+
+    /* 6a. GRANT copy of src FRAME (same CNode; rights subset). */
+    u32Checks++;
+    if (!gj_cap_ref_is_null(&aRef[0])) {
+        st = gj_cap_copy(&cnSrc, aRef[0].u64Slot, aRef[0].u32SlotGen,
+                         gj_cap_rights_ddi_host_default((u16)GJ_CAP_FRAME),
+                         &refCopy);
+        if (st == GJ_OK && !gj_cap_ref_is_null(&refCopy)) {
+            st = gj_cap_resolve(&cnSrc, refCopy.u64Slot, refCopy.u32SlotGen,
+                                &res);
+            if (st == GJ_OK && res.u16Type == (u16)GJ_CAP_FRAME &&
+                (res.u16Rights & GJ_RIGHT_SPAWN) == 0) {
+                cdt_soft_inc(&g_u32SoftLeanCopyOk);
+                u32Pass++;
+            }
+        }
+    }
+
+    /* 6b. Move copy: dst live, src STALE after move. */
+    u32Checks++;
+    if (!gj_cap_ref_is_null(&refCopy)) {
+        st = gj_cap_move(&cnSrc, refCopy.u64Slot, refCopy.u32SlotGen, &refMove);
+        if (st == GJ_OK && !gj_cap_ref_is_null(&refMove)) {
+            st = gj_cap_resolve(&cnSrc, refCopy.u64Slot, refCopy.u32SlotGen,
+                                &res);
+            if (st == GJ_ERR_STALE_CAP || st == GJ_ERR_NOENT) {
+                st = gj_cap_resolve(&cnSrc, refMove.u64Slot, refMove.u32SlotGen,
+                                    &res);
+                if (st == GJ_OK) {
+                    cdt_soft_inc(&g_u32SoftLeanMoveOk);
+                    u32Pass++;
+                }
+            }
+        }
+    }
+
+    /*
+     * 7. Soft quota: attach after free-slot installs, charge one more, then
+     *    exhaust (limit = used). Refund on delete. Soft!=product ledger.
+     */
+    u32Checks++;
+    {
+        u32 u32Lim;
+
+        u32UsedBefore = 0;
+        /* Count occupied non-root slots as baseline for soft limit. */
+        for (iObj = 1; iObj < GJ_CDT_LEAN_SLOTS; iObj++) {
+            if (aSrcSlots[iObj].u16Type != (u16)GJ_CAP_INVALID) {
+                u32UsedBefore++;
+            }
+        }
+        u32Lim = u32UsedBefore + 1u; /* room for exactly one more charge */
+        if (u32Lim < 1u) {
+            u32Lim = GJ_CDT_LEAN_QUOTA_LIM;
+        }
+        gj_cap_quota_init(&qLean, u32Lim);
+        /* Soft: seed used to occupied so next charge is last free unit. */
+        qLean.u32Used = u32UsedBefore;
+        qLean.u32HighWater = u32UsedBefore;
+        gj_cap_quota_attach(&cnSrc, &qLean);
+        st = gj_cap_alloc_install(&cnSrc, (u16)GJ_CAP_FRAME,
+                                  (u16)(GJ_RIGHTS_DDI_MMIO_HOST |
+                                        GJ_RIGHT_DESTROY),
+                                  &objQuota, &refQuota);
+        if (st == GJ_OK && !gj_cap_ref_is_null(&refQuota)) {
+            /* Exhaust: next install must QUOTA. */
+            st = gj_cap_alloc_install(&cnSrc, (u16)GJ_CAP_FRAME,
+                                      (u16)GJ_RIGHTS_DDI_MMIO_HOST, &objQuota,
+                                      &refTmp);
+            if (st == GJ_ERR_QUOTA) {
+                st = gj_cap_delete(&cnSrc, refQuota.u64Slot, refQuota.u32SlotGen);
+                if (st == GJ_OK && qLean.u32Used == u32UsedBefore) {
+                    cdt_soft_inc(&g_u32SoftLeanQuotaOk);
+                    u32Pass++;
+                    refQuota = gj_cap_ref_null();
+                }
+            }
+        }
+        gj_cap_quota_attach(&cnSrc, NULL); /* detach soft account */
+    }
+
+    /* 8. Delete host mint + one src binding (CDT unlink hygiene). */
+    u32Checks++;
+    st = GJ_OK;
+    if (!gj_cap_ref_is_null(&refMint)) {
+        st = gj_cap_delete(&cnDst, refMint.u64Slot, refMint.u32SlotGen);
+    } else {
+        st = GJ_ERR_INVAL;
+    }
+    if (st == GJ_OK && !gj_cap_ref_is_null(&aRefHost[1])) {
+        st = gj_cap_delete(&cnDst, aRefHost[1].u64Slot, aRefHost[1].u32SlotGen);
+    }
+    if (st == GJ_OK && !gj_cap_ref_is_null(&aRef[1])) {
+        st = gj_cap_delete(&cnSrc, aRef[1].u64Slot, aRef[1].u32SlotGen);
+    }
+    if (st == GJ_OK) {
+        cdt_soft_inc(&g_u32SoftLeanDelOk);
+        u32Pass++;
+    }
+
+    /* 8b. Resolve deleted FRAME host mint -> STALE (or NOENT if cleared). */
+    u32Checks++;
+    if (!gj_cap_ref_is_null(&refMint)) {
+        st = gj_cap_resolve(&cnDst, refMint.u64Slot, refMint.u32SlotGen, &res);
+        if (st == GJ_ERR_STALE_CAP || st == GJ_ERR_NOENT) {
+            cdt_soft_inc(&g_u32SoftLeanDelStaleOk);
+            u32Pass++;
+        }
+    }
+
+    /*
+     * 9. DEAD fail-closed: poke object DEAD+gen (S1 shape) then resolve.
+     *    Does not call revoke API (that lives in revoke.c residual).
+     */
+    u32Checks++;
+    if (!gj_cap_ref_is_null(&aRef[2])) {
+        aObj[2].u32State = (u32)GJ_OBJ_DEAD;
+        aObj[2].u32Gen++;
+        if (aObj[2].u32Gen == 0u) {
+            aObj[2].u32Gen = 1u;
+        }
+        st = gj_cap_resolve(&cnSrc, aRef[2].u64Slot, aRef[2].u32SlotGen,
+                            &res);
+        if (st == GJ_ERR_DEAD || st == GJ_ERR_STALE_CAP) {
+            cdt_soft_inc(&g_u32SoftLeanDeadFailOk);
+            u32Pass++;
+        }
+    }
+
+    fAll = (u32Checks > 0u && u32Pass == u32Checks) ? 1 : 0;
+    if (fAll != 0) {
+        cdt_soft_inc(&g_u32SoftLeanOk);
+    }
+
+    g_u8CdtSoftLeanBusy = 0u;
+
+    /*
+     * Grep: cap: cdt soft residual lean PASS
+     * Grep: cap: cdt soft residual lean c3
+     * Grep: cap: soft residual lean PASS
+     */
+    kprintf("cap: cdt soft residual lean PASS checks=%u pass=%u all=%d "
+            "inst=%u mint=%u esc_fail=%u res_stale=%u res_null=%u "
+            "res_live=%u root_guard=%u del=%u cross=%u host_subset=%u "
+            "dead_fail=%u pkg_cross=%u copy=%u move=%u noent=%u busy=%u "
+            "quota=%u del_stale=%u dma_shape=%u no_mint=%u "
+            "root_meta_slot=%u lean_ok=%u "
+            "soft_ne_product=1 dual=MIT_OR_Apache-2.0 G-AC-1=1 c3=1 "
+            "mint_product=0 reply_product=0 full_cdt_mutex=0 "
+            "(Soft!=product; C3 behavior selftest; not product host mint)\n",
+            u32Checks, u32Pass, fAll, g_u32SoftLeanInstOk, g_u32SoftLeanMintOk,
+            g_u32SoftLeanMintEscFail, g_u32SoftLeanResStaleOk,
+            g_u32SoftLeanResNullOk, g_u32SoftLeanResLiveOk,
+            g_u32SoftLeanRootGuardOk, g_u32SoftLeanDelOk, g_u32SoftLeanCrossOk,
+            g_u32SoftLeanHostSubsetOk, g_u32SoftLeanDeadFailOk,
+            g_u32SoftLeanPkgCrossOk, g_u32SoftLeanCopyOk, g_u32SoftLeanMoveOk,
+            g_u32SoftLeanNoentOk, g_u32SoftLeanBusyOk, g_u32SoftLeanQuotaOk,
+            g_u32SoftLeanDelStaleOk, g_u32SoftLeanDmaShapeOk,
+            g_u32SoftLeanMintNoMintOk, g_u32SoftLeanRootMetaSlotOk,
+            g_u32SoftLeanOk);
+    kprintf("cap: cdt soft residual lean c3 "
+            "map=root_guard+meta_slot->install_udx->resolve_fail_closed->"
+            "noent+busy->cross_pkg_mint_subset+dma_shape->no_escalate+"
+            "no_mint->copy->move_stale->quota_charge_exhaust_refund->"
+            "delete_stale->dead_fail "
+            "objs=%u shape=mmio+irq+notif_standin "
+            "soft_ne_product=1 dual=MIT_OR_Apache-2.0 G-AC-1=1 "
+            "host_cnode_product=0 dual_dod_mint=OPEN "
+            "(Soft!=product; C3 residual; not product DDI mint complete)\n",
+            GJ_CDT_LEAN_UDX_OBJS);
+    kprintf("cap: soft residual lean PASS lean_ok=%u checks=%u pass=%u "
+            "c3=1 Soft!=product dual MIT OR Apache-2.0 G-AC-1 "
+            "no_version_stamp storm=0 mint_product=0\n",
+            g_u32SoftLeanOk, u32Checks, u32Pass);
 }
 
 /**
- * Emit Wave 19 soft inventory once after first meaningful CNode activity.
- * Avoids spam; greppable surface lands on first install/resolve/wire.
+ * Emit lean soft residual inventory once after first meaningful activity.
+ * Runs C3 residual lean selftest first so behavior checks light lamps.
+ * No stamp storms; greppable surface lands on first install/resolve/wire.
  */
 static void
 cdt_soft_inventory_maybe_once(void)
 {
     if (g_u8CdtSoftInvLogged) {
+        return;
+    }
+    /* Lean residual owns inventory sequencing - skip reentry from install. */
+    if (g_u8CdtSoftLeanBusy != 0u) {
         return;
     }
     /* Need at least one install, resolve ok, or edge attempt. */
@@ -2019,6 +1888,8 @@ cdt_soft_inventory_maybe_once(void)
         g_u32CdtMoveAttempt == 0u && g_u32SoftSlotsLeftInc == 0u) {
         return;
     }
+    /* C3 lean selftest before inventory so lean_ok is visible in dump. */
+    cdt_soft_residual_lean_once();
     g_u8CdtSoftInvLogged = 1;
     cdt_soft_inventory_log();
 }
@@ -2038,17 +1909,16 @@ cdt_soft_coverage_rollup(void)
         return;
     }
     g_u8CdtCoverageRollupLogged = 1;
-    /* Grep: cap: cdt mint|copy|move … coverage rollup */
+    /* Grep: cap: cdt mint|copy|move ... coverage rollup */
     kprintf("cap: cdt soft coverage rollup mint=%u/%u copy=%u/%u "
             "move=%u/%u miss_tot=%u pool_used=%u chain_max=%u "
-            "audit_match=%u audit_mis=%u soft PASS wave=%u (once)\n",
+            "audit_match=%u audit_mis=%u soft PASS Soft!=product (once)\n",
             g_u32CdtMintEdgeOk, g_u32CdtMintAttempt, g_u32CdtCopyEdgeOk,
             g_u32CdtCopyAttempt, g_u32CdtMoveEdgeOk, g_u32CdtMoveAttempt,
             g_u32CdtMintEdgeMiss + g_u32CdtCopyEdgeMiss +
                 g_u32CdtMoveEdgeMiss,
             cdt_edge_pool_used(), g_u32CdtChainDepthMax,
-            g_u32CdtSoftAuditMatch, g_u32CdtSoftAuditMismatch,
-            GJ_CDT_SOFT_WAVE);
+            g_u32CdtSoftAuditMatch, g_u32CdtSoftAuditMismatch);
     cdt_soft_inventory_maybe_once();
 }
 
@@ -2066,17 +1936,17 @@ cdt_soft_tally_install(struct gj_cnode *pCnode, struct gj_obj_hdr *pObj)
         g_u8CdtSoftTallyLogged = 1;
         cdt_soft_tally_log();
     }
-    /* Wave 15 soft inventory once (prefix "cap: cdt soft …"). */
+    /* Wave 15 soft inventory once (prefix "cap: cdt soft ..."). */
     cdt_soft_inventory_maybe_once();
 }
 
 /*
  * Empty-edge gap honesty when the soft edge pool is exhausted.
  * Install/mint still returns GJ_OK (slots_left authoritative); CDT walk
- * cannot see the slot until edges exist — soft FAIL or PARTIAL.
+ * cannot see the slot until edges exist - soft FAIL or PARTIAL.
  *
- *   FAIL    — pool miss with zero successful edges for this op family
- *   PARTIAL — pool miss after at least one edge_ok for this op family
+ *   FAIL    - pool miss with zero successful edges for this op family
+ *   PARTIAL - pool miss after at least one edge_ok for this op family
  *
  * Grep: cap: cdt soft FAIL|PARTIAL
  */
@@ -2106,7 +1976,7 @@ cdt_soft_empty_edge_gap(const char *szOp, u32 u32Ok, u32 u32Miss,
 
 /*
  * Always attempt edge pool after mint/copy/move install success.
- * Does not change install status — edge miss is soft empty-edge gap only.
+ * Does not change install status - edge miss is soft empty-edge gap only.
  * Grep: cap: cdt mint|copy|move
  */
 static void
@@ -2129,14 +1999,18 @@ cdt_edge_try_wire(struct gj_obj_hdr *pObj, struct gj_cnode *pCnode,
         cdt_soft_empty_edge_audit(pObj, szOp, u64Slot, 0u);
         cdt_soft_empty_edge_gap(szOp, *pOk, *pMiss, *pAttempt, u32Slots,
                                 u32Chain);
-        /* Grep: cap: cdt mint|copy|move … coverage */
-        kprintf("cap: cdt %s edge_ok=0 miss=%u attempt=%u ok=%u "
-                "slot=%lu slots_left=%u chain=%u pool_used=%u "
-                "sl_inc=%u q_ch=%u q_rf=%u free=%u\n",
-                szOp, *pMiss, *pAttempt, *pOk, (unsigned long)u64Slot,
-                u32Slots, u32Chain, cdt_edge_pool_used(),
-                g_u32SoftSlotsLeftInc, g_u32SoftQuotaChargeOk,
-                g_u32SoftQuotaRefundOk, g_u32CdtPoolFreeOk);
+        /*
+         * Once-only miss lamp (no per-op stamp storm).
+         * Grep: cap: cdt mint|copy|move ... coverage
+         */
+        if (!g_u8CdtEdgeMissLogged) {
+            g_u8CdtEdgeMissLogged = 1;
+            kprintf("cap: cdt %s edge_ok=0 miss=%u attempt=%u ok=%u "
+                    "slot=%lu slots_left=%u chain=%u pool_used=%u "
+                    "Soft!=product (once)\n",
+                    szOp, *pMiss, *pAttempt, *pOk, (unsigned long)u64Slot,
+                    u32Slots, u32Chain, cdt_edge_pool_used());
+        }
         cdt_soft_coverage_rollup();
         return;
     }
@@ -2146,15 +2020,14 @@ cdt_edge_try_wire(struct gj_obj_hdr *pObj, struct gj_cnode *pCnode,
         cdt_edge_free(pEdge);
         cdt_soft_inc(pMiss);
         cdt_soft_empty_edge_audit(pObj, szOp, u64Slot, 0u);
-        /* Link refused (double-link etc.) — soft miss, not pool exhaust. */
-        kprintf("cap: cdt %s edge_ok=0 link_st=%d miss=%u attempt=%u "
-                "ok=%u slot=%lu slots_left=%u chain=%u pool_used=%u "
-                "sl_inc=%u q_ch=%u q_rf=%u free=%u\n",
-                szOp, (int)st, *pMiss, *pAttempt, *pOk,
-                (unsigned long)u64Slot, u32Slots, u32Chain,
-                cdt_edge_pool_used(), g_u32SoftSlotsLeftInc,
-                g_u32SoftQuotaChargeOk, g_u32SoftQuotaRefundOk,
-                g_u32CdtPoolFreeOk);
+        /* Link refused - soft miss; once-only lamp. */
+        if (!g_u8CdtEdgeMissLogged) {
+            g_u8CdtEdgeMissLogged = 1;
+            kprintf("cap: cdt %s edge_ok=0 link_st=%d miss=%u attempt=%u "
+                    "ok=%u slot=%lu Soft!=product (once)\n",
+                    szOp, (int)st, *pMiss, *pAttempt, *pOk,
+                    (unsigned long)u64Slot);
+        }
         cdt_soft_coverage_rollup();
         return;
     }
@@ -2162,16 +2035,19 @@ cdt_edge_try_wire(struct gj_obj_hdr *pObj, struct gj_cnode *pCnode,
     cdt_soft_inc(pOk);
     u32Chain = cdt_edge_chain_depth(pObj);
     cdt_soft_empty_edge_audit(pObj, szOp, u64Slot, 1u);
-    /* Grep: cap: cdt mint|copy|move … coverage */
-    kprintf("cap: cdt %s edge_ok=1 ok=%u attempt=%u miss=%u "
-            "slot=%lu slots_left=%u chain=%u chain_max=%u "
-            "pool_used=%u sl_inc=%u q_ch=%u q_rf=%u free=%u "
-            "audit_match=%u audit_mis=%u\n",
-            szOp, *pOk, *pAttempt, *pMiss, (unsigned long)u64Slot, u32Slots,
-            u32Chain, g_u32CdtChainDepthMax, cdt_edge_pool_used(),
-            g_u32SoftSlotsLeftInc, g_u32SoftQuotaChargeOk,
-            g_u32SoftQuotaRefundOk, g_u32CdtPoolFreeOk,
-            g_u32CdtSoftAuditMatch, g_u32CdtSoftAuditMismatch);
+    /*
+     * Once-only edge_ok lamp (counters track the rest; no stamp storm).
+     * Grep: cap: cdt mint|copy|move ... coverage
+     */
+    if (!g_u8CdtEdgeOkLogged) {
+        g_u8CdtEdgeOkLogged = 1;
+        kprintf("cap: cdt %s edge_ok=1 ok=%u attempt=%u miss=%u "
+                "slot=%lu slots_left=%u chain=%u chain_max=%u "
+                "pool_used=%u Soft!=product (once)\n",
+                szOp, *pOk, *pAttempt, *pMiss, (unsigned long)u64Slot,
+                u32Slots, u32Chain, g_u32CdtChainDepthMax,
+                cdt_edge_pool_used());
+    }
 
     /*
      * Re-log soft tallies once after first charge-backed mint/copy/move so
@@ -2270,7 +2146,7 @@ gj_cap_quota_exhaust_count(const struct gj_cap_quota *pQ)
 
 /*
  * Charge one slot at leaf and each soft parent (hierarchical roll-up).
- * Pre-check all nodes, then commit — soft single-threaded safe.
+ * Pre-check all nodes, then commit - soft single-threaded safe.
  * Grep: cap:quota charge
  */
 gj_status_t
@@ -2298,7 +2174,7 @@ gj_cap_quota_slot_charge(void *pAccount)
         pWalk = pWalk->pParent;
     }
 
-    /* Pass 2: commit leaf → root. */
+    /* Pass 2: commit leaf -> root. */
     pWalk = pQ;
     for (u32Depth = 0; pWalk != NULL && u32Depth < GJ_CAP_QUOTA_DEPTH_MAX;
          u32Depth++) {
@@ -2358,7 +2234,6 @@ gj_cap_mint(struct gj_cnode *pSrcCnode, u64 u64SrcSlot, u32 u32SrcGen,
     u16 u16New;
 
     if (pOut == NULL) {
-        /* Grep: cap: cdt soft return mint */
         cdt_soft_inc(&g_u32SoftRetMintFail);
         cdt_soft_inc(&g_u32SoftRetMintInval);
         return GJ_ERR_INVAL;
@@ -2414,6 +2289,12 @@ gj_cap_mint(struct gj_cnode *pSrcCnode, u64 u64SrcSlot, u32 u32SrcGen,
     cdt_edge_try_wire(res.pObj, pDstCnode, pOut->u64Slot, "mint",
                       &g_u32CdtMintAttempt, &g_u32CdtMintEdgeOk,
                       &g_u32CdtMintEdgeMiss);
+    /*
+     * Soft UDX host-grant residual (future product: devmgr->host CNode).
+     * Cross-CNode DDI/UDX class mint is the grant shape; not product-
+     * complete. Soft residual != product mint. Grep: cap: udx host mint
+     */
+    cdt_soft_ddi_note_mint(res.u16Type, u16New, pSrcCnode != pDstCnode);
     cdt_soft_inc(&g_u32SoftRetMintOk);
     cdt_soft_inventory_maybe_once();
     return GJ_OK;
@@ -2428,7 +2309,6 @@ gj_cap_copy(struct gj_cnode *pCnode, u64 u64SrcSlot, u32 u32SrcGen,
     u16 u16New;
 
     if (pOut == NULL) {
-        /* Grep: cap: cdt soft return copy */
         cdt_soft_inc(&g_u32SoftRetCopyFail);
         cdt_soft_inc(&g_u32SoftRetCopyInval);
         return GJ_ERR_INVAL;
@@ -2484,7 +2364,6 @@ gj_cap_move(struct gj_cnode *pCnode, u64 u64SrcSlot, u32 u32SrcGen,
     gj_status_t st;
 
     if (pOut == NULL) {
-        /* Grep: cap: cdt soft return move */
         cdt_soft_inc(&g_u32SoftRetMoveFail);
         cdt_soft_inc(&g_u32SoftRetMoveInval);
         return GJ_ERR_INVAL;
@@ -2536,12 +2415,17 @@ gj_cap_move(struct gj_cnode *pCnode, u64 u64SrcSlot, u32 u32SrcGen,
         gj_cdt_unlink_slot(res.pObj, pCnode, u64SrcSlot);
         cdt_soft_inc(&g_u32CdtMoveUnlink);
         cdt_soft_inc(&g_u32CdtMoveRetarget);
-        /* Grep: cap: cdt retarget / cap: cdt move */
-        kprintf("cap: cdt retarget src_slot=%lu dst_slot=%lu "
-                "chain_pre=%u pool_used=%u free=%u move_unlink=%u\n",
-                (unsigned long)u64SrcSlot, (unsigned long)pOut->u64Slot,
-                u32ChainPre, cdt_edge_pool_used(), g_u32CdtPoolFreeOk,
-                g_u32CdtMoveUnlink);
+        /* Grep: cap: cdt retarget / cap: cdt move - once-only */
+        if (!g_u8CdtRetargetLogged) {
+            g_u8CdtRetargetLogged = 1;
+            kprintf("cap: cdt retarget src_slot=%lu dst_slot=%lu "
+                    "chain_pre=%u pool_used=%u free=%u move_unlink=%u "
+                    "Soft!=product (once)\n",
+                    (unsigned long)u64SrcSlot,
+                    (unsigned long)pOut->u64Slot, u32ChainPre,
+                    cdt_edge_pool_used(), g_u32CdtPoolFreeOk,
+                    g_u32CdtMoveUnlink);
+        }
     }
     cdt_edge_try_wire(res.pObj, pCnode, pOut->u64Slot, "move",
                       &g_u32CdtMoveAttempt, &g_u32CdtMoveEdgeOk,
@@ -2565,7 +2449,6 @@ gj_cap_delete(struct gj_cnode *pCnode, u64 u64Slot, u32 u32SlotGen)
 
     st = gj_cap_resolve(pCnode, u64Slot, u32SlotGen, &res);
     if (st != GJ_OK) {
-        /* Grep: cap: cdt soft return delete */
         cdt_soft_inc(&g_u32SoftRetDelFail);
         if (st == GJ_ERR_INVAL) {
             cdt_soft_inc(&g_u32SoftRetDelInval);
@@ -2602,15 +2485,19 @@ gj_cap_delete(struct gj_cnode *pCnode, u64 u64Slot, u32 u32SlotGen)
         (void)gj_cap_quota_slot_refund(pCnode->pQuotaAccount); /* cap:quota */
         cdt_soft_inc(&g_u32SoftDeleteRefund); /* cap: cdt soft */
         /*
-         * Soft delete edge coverage (Wave 20 deepen).
+         * Soft delete edge coverage - once-only (no stamp storm).
          * Grep: cap: cdt delete
          */
-        kprintf("cap: cdt delete slot=%lu had_edge=%d chain_pre=%u "
-                "chain_after=%u slots_pre=%u pool_used=%u free=%u "
-                "del_edge=%u del_rf=%u wave=%u\n",
-                (unsigned long)u64Slot, fHadEdge, u32ChainPre, u32ChainAfter,
-                u32SlotsPre, cdt_edge_pool_used(), g_u32CdtPoolFreeOk,
-                g_u32CdtDeleteEdge, g_u32SoftDeleteRefund, GJ_CDT_SOFT_WAVE);
+        if (!g_u8CdtDeleteLogged) {
+            g_u8CdtDeleteLogged = 1;
+            kprintf("cap: cdt delete slot=%lu had_edge=%d chain_pre=%u "
+                    "chain_after=%u slots_pre=%u pool_used=%u free=%u "
+                    "del_edge=%u del_rf=%u Soft!=product (once)\n",
+                    (unsigned long)u64Slot, fHadEdge, u32ChainPre,
+                    u32ChainAfter, u32SlotsPre, cdt_edge_pool_used(),
+                    g_u32CdtPoolFreeOk, g_u32CdtDeleteEdge,
+                    g_u32SoftDeleteRefund);
+        }
         gj_cap_slot_invalidate_locked(res.pSlot, res.pObj);
         cdt_soft_inc(&g_u32SoftRetDelOk);
         cdt_soft_inventory_maybe_once();

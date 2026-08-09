@@ -9,6 +9,17 @@
  * Built with host libc (not freestanding).
  * RTLD_DEEPBIND: product-internal calls (e.g. drand48 → seed48) must not
  * interpose onto host glibc when soft gates invoke product symbols.
+ *
+ * Soft residual (C0 libcgj soft test; Soft!=product; G-AC-1; Dual DoD A/B OPEN):
+ *   soft path  = host dlopen product libc.so.6 + dlsym export catalog KATs
+ *   product    = UDX/DDI + hot/cold Linux ABI Dual DoD (OPEN; agent!=close)
+ *   honesty    = Soft!=product; dyn PASS != close Dual DoD A/B; no .ko AC
+ *   catalog    = glibc helpers + desktop batches + continuum soft lamps
+ *   hazard     = H1 N/A; H2 once-lamp spirit; H3 thr_exit residual OPEN
+ *   Bar honesty v2026.08.04.75. NEVER bump GJ_IMAGE_VERSION from this unit.
+ * greppable: libcgj: soft residual dyn_smoke
+ * greppable: libcgj: soft residual dyn_smoke Soft!=product
+ * Dual MIT OR Apache-2.0. No GPL. G-AC-1. Dual DoD A/B OPEN.
  */
 #define _GNU_SOURCE
 #include <dlfcn.h>
@@ -1851,6 +1862,9 @@ main(void)
     /* printf from libcgj would use our write() SYSCALL — fine on host */
     (void)pPrintf("libcgj: dyn smoke PASS path=%s marker=0x%llx\n", szPath,
                   (unsigned long long)*pMark);
+    /* Soft residual lean lamp (Soft!=product; Dual DoD A/B remain OPEN) */
+    (void)pPrintf("libcgj: soft residual dyn_smoke Soft!=product "
+                  "dual_dod=OPEN G-AC-1 agent!=close bar=v2026.08.04.75\n");
     (void)dlclose(h);
     return 0;
 }

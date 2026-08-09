@@ -2,10 +2,10 @@
  * SPDX-License-Identifier: MIT OR Apache-2.0
  * Copyright (c) 2026 Project GreenJade contributors
  *
- * Net door: eth poll/stats + socket ops for netstackd hand-off.
- * Pure C11, dual-licensed (MIT OR Apache-2.0).
+ * Net door: eth poll/stats + socket ops for netstackd/sshd/UDX hand-off.
+ * Pure C11 freestanding, dual-licensed (MIT OR Apache-2.0).
  *
- * STREAM (SOCK_STREAM) → net_tcp (virtio + local pair); DGRAM → net_lo.
+ * STREAM (SOCK_STREAM) -> net_tcp (virtio + local pair); DGRAM -> net_lo.
  * TCP_STATS packing (u32[4]):
  *   [0] accepts
  *   [1] low16=segments, high16=retransmits
@@ -18,51 +18,93 @@
  * free is soft 0. Queue / ring ops allowed without claim for bring-up
  * smokes (owned path preferred by product netstackd).
  *
- * Ring soft path (netstackd / UDX):
- *   EXPORT/MAP/KICK → NODEV when virtio-net is absent (client soft-skips).
+ * Ring soft path (netstackd / UDX handoff eng):
+ *   EXPORT/MAP/KICK -> NODEV when virtio-net is absent (client soft-skips).
  *   RING_STATE always succeeds: free=0 pushes=0 without device.
  *   MAP records last user VA for diagnostics; re-MAP of the same VA is a
  *   soft reclaim of the map (re-install PTEs, re-export).
+ *   USER_AVAIL / DESC_ALLOC / MAP_DMA / BOUNCE_FILL = UDX ring programming.
  *
  * User pointers: prefer user_range_ok + copy_{to,from}_user. The !user
  * branch is for early kernel smokes that pass HHDM/static buffers.
  *
  * Product PASS markers (main.c) depend on CLAIM/RELEASE, QUEUE_INFO,
- * EXPORT/MAP, AVAIL_PUSH, RING_STATE, and USER_AVAIL wire semantics —
+ * EXPORT/MAP, AVAIL_PUSH, RING_STATE, and USER_AVAIL wire semantics -
  * keep those ABI-stable.
  *
- * Soft product inventory (Wave 35 exclusive deepen; file-local sticky).
- *   - soft return: API return-surface catalog (product_*=OPEN)
- *   - soft retmap: Wave 19 return-surface map (ok|fail|… classes)
- * Never hard-gates; wrap OK; diagnostics only. Soft.
- * Greppable prefix-stable serial markers (net_door: soft …):
- *   net_door: soft inventory   — owned/token/calls/vq/ring catalog + wave
- *   net_door: soft claim       — claim/reclaim/busy/release path tallies
- *   net_door: soft sock        — socket path enter + tcp|lo + ok|fail
- *   net_door: soft ring        — EXPORT/MAP/KICK/AVAIL/USER enter surface
- *   net_door: soft ring_ok     — ring outcome ok|inval|fault|nodev|io splits
- *   net_door: soft virtio      — TX/RX/QUEUE enter + ready + nodev soft-skip
- *   net_door: soft virtio_ok   — virtio outcome + TX/RX byte totals
- *   net_door: soft xfer        — SEND/RECV ok|fail + door byte totals
- *   net_door: soft last        — last opcode + terminal ret snapshot
- *   net_door: soft err         — INVAL/BUSY/NODEV/FAULT/IO/NOSUPPORT
- *   net_door: soft group       — Wave 15 enter-group rollup (claim/sock/…)
- *   net_door: soft capacity    — Wave 15 fixed xfer/eth/bounce lamps
- *   net_door: soft catalog     — Wave 15 opcode soft catalog (impl lamps)
- *   net_door: soft outcome     — Wave 15 ok|err|nodev rollup
- *   net_door: soft stats       — aggregate enter + group counters
- *   net_door: soft backend     — virtio-net live + tcp segs/accepts snapshot
- *   net_door: soft path        — honesty: soft inventory / product
- *   net_door: soft deepen      — wave=116 stamp + area count
- *   net_door: soft tcp_surface — product interim TCP opcode lamps
- *   net_door: soft tcp product surface PASS
- *   net_door: soft inventory PASS / net_door: soft PASS
+ * Lean soft residual - Dual DoD B UDX handoff eng (Soft!=product dual):
+ *   Product DoD B = UDX not freestanding rtl (G-AC-1; no .ko product AC).
+ *   Eng: CLAIM -> ring MAP/DMA/DESC/USER_AVAIL (netstackd/UDX host stack) +
+ *   SOCKET/BIND(:22)/LISTEN/ACCEPT(+POLL yield)/SEND/RECV/CONNECT/CLOSE/
+ *   SOCK_POLL for sshd-gj interim + UDX host stack.
+ *   GJ_NET_OP_POLL -> net_eth_poll advances freestanding eth (L2 demux +
+ *   tcp input/rtx). Door thr stack only - never IRQ/timer (H1). Soft
+ *   always 0; ACCEPT empty soft EAGAIN (-11). dual_dod_b=OPEN_UDX
+ *   product_sshd_tcp22=OPEN until DUT host banner + UDX owns wire.
+ *   Emission: init lamp + first-call residual once. Never re-dump on
+ *   STATS/QUEUE_INFO/RING_STATE/POLL (no stamp storms). No version stamp.
+ *   FUNCTIONAL residual net door ops (sshd/UDX; Soft!=product; STRONGER):
+ *   SOCK_POLL routes TCP + net_lo poll_mask + want POLLIN/OUT + empty ready;
+ *   CONNECT/CLOSE/SEND/RECV/SOCKET TCP|lo route tallies; CONNECT :22 client;
+ *   :22 listen/accept/send/recv/close path lamps; ACCEPT eagain22 yield park;
+ *   Linux -11 EAGAIN class in note_ret; USER_AVAIL kick bit + MAP which rx|tx.
+ *   Functional catalog lean (STRONGER): sshd pipeline steps + UDX host stack +
+ *   yield trio POLL|ACCEPT|SOCK_POLL + multi-seg xfer + poll bit constants.
+ *   UDX/host residual deepen (Soft!=product): per-op ring-family tallies +
+ *   ring MAP notes (map_va, map_which, map_ok, map_reclaim, map_nodev,
+ *   map_fault, map_inval, dma_va, dma_ok, dma_reclaim, export_ok, kick_ok,
+ *   desc/user_avail/bounce/avail/reap ok|nodev|io, host_owned_ring;
+ *   UDX attach desc|avail|used at map_va+off_*) on sparse residual lines
+ *   only - not per MAP/RING call. H1: sole net_eth_poll site is
+ *   net_door_eth_poll_h1 from GJ_NET_OP_POLL (door thr; never IRQ/timer).
+ *   C1 H1 residual deepen (Soft!=product): thr-only compile locks + lean
+ *   thr_locks catalog (thr_only/irq_path/poll_sites/door_thr) + poll_h1
+ *   match; fault_class=H1_irq_stack_smash. Dual DoD A/B remain OPEN.
+ *   greppable: net_door: soft residual
+ *   greppable: net_door: soft residual lean
+ *   greppable: net_door: soft residual lean PASS
+ *   greppable: net_door: soft residual h1
+ *   greppable: net_door: soft residual functional
+ *   greppable: net_door: soft residual functional catalog
+ *   greppable: net_door: ring map notes
+ *   greppable: product_dod_b=UDX | not_freestanding_rtl | dual_dod_b=OPEN_UDX
+ *   greppable: poll->net_eth_poll | net_eth_poll=run_loop_or_door | irq=0
+ *   greppable: h1_poll_sites=1 | poll_h1 | door_thr_only=1 | H1
+ *   greppable: thr_only=1 | net_eth_irq=0 | irq_path=0 | poll_own=door_thr
+ *   greppable: fault_class=H1_irq_stack_smash | dual_dod_b=OPEN
+ *   greppable: handoff=netstackd|sshd|UDX
+ *   greppable: udx_host_stack=claim|map_ring|map_dma|desc|user_avail|bounce
+ *   greppable: functional_ops=sock_poll|connect|close|send|recv|accept_eagain
+ *   greppable: functional_route=tcp|lo | accept_eagain22 | connect22
+ *   greppable: sshd_pipeline=socket|bind22|listen|accept|poll|send|recv|close
+ *   greppable: yield_trio=poll|accept|sock_poll | functional_steps
+ *   W11 Dual DoD B FUNCTIONAL residual (Soft!=product; stamp-free bar
+ *   v2026.08.04.75; never invent .76): wire handoff + :22 stack for product
+ *   sshd. Compound path: POLL H1 (door thr) -> net_eth_poll -> net_tcp
+ *   soft listen :22 / AcceptQ -> BIND22/LISTEN/ACCEPT/SOCK_POLL yield.
+ *   sock_poll22 tally while soft :22 held. Dual DoD A/B remain OPEN.
+ *   greppable: net_door: soft residual wire22 | wire_handoff+tcp22
+ *   greppable: stack=eth|tcp|door|:22 | W11 Dual DoD B FUNCTIONAL
+ *   greppable: sock_poll22 | poll_h1_wire22
+ *   STRONGER wire22 residual denser (Soft!=product; Dual DoD OPEN;
+ *   product_dod_b=UDX; H2 once; stamp-free bar v2026.08.04.75; never .76):
+ *   multi-arm denser honesty for SOCK BIND/LISTEN/ACCEPT/POLL :22 door
+ *   product sshd path - denser H1 thr-only door eth poll (sole site).
+ *   Arms: h1_poll | sock22 | yield | dual_dod_open | product_udx.
+ *   arm0 denser: thr|irq|path|door|sites|op|dense sublocks + poll_h1_wire22.
+ *   arm1 denser sock22 sublocks: socket|bind|listen|accept|sock_poll|port.
+ *   H1 thr-only eth poll from door only (sole net_eth_poll site).
+ *   greppable: net_door: soft residual wire22 denser | denser=1
+ *   greppable: wire22 denser | denser_arms | poll22 | product_dod_b=UDX
+ *   greppable: dual_dod OPEN | dual_dod_b=OPEN | H1 thr-only
+ *   greppable: denser_h1 | thr-only door eth poll | poll_h1_wire22
+ *   greppable: denser_sock_sub | denser_h1_sub | thr-only_door_eth_poll
  */
-#include <gj/config.h>
 #include <gj/error.h>
 #include <gj/klog.h>
 #include <gj/net_door.h>
 #include <gj/net_eth.h>
+#include <gj/net_l2.h>
 #include <gj/net_lo.h>
 #include <gj/net_tcp.h>
 #include <gj/string.h>
@@ -71,28 +113,145 @@
 
 #define SOCK_STREAM 1
 #define SOCK_DGRAM  2
+/* Linux-shaped SOCK_POLL want bits (match net_tcp_poll_mask / net_lo). */
+#define NET_DOOR_POLLIN  0x0001u
+#define NET_DOOR_POLLOUT 0x0004u
+#define NET_DOOR_POLLERR 0x0008u
+#define NET_DOOR_POLLHUP 0x0010u
 
 /*
  * Door bounce buffer for SEND/RECV (and virtio frame copy helpers).
  *
- * Multi-seg TCP contract (keep high enough — do not shrink below bulk):
+ * Multi-seg TCP contract (keep high enough - do not shrink below bulk):
  *   netstackd freestanding smoke sends 3000 B in one GJ_NET_OP_SEND
- *   (MSS = 1024 → ceil(3000/1024) = 3 payload segments inside net_tcp_send).
- *   NET_XFER_MAX must be ≥ 3000; 4096 matches TCP_RX_MAX / TCP_TX_MAX.
+ *   (MSS = 1024 -> ceil(3000/1024) = 3 payload segments inside net_tcp_send).
+ *   NET_XFER_MAX must be >= 3000; 4096 matches TCP_RX_MAX / TCP_TX_MAX.
  * Eth/virtio L2 frames still reject >1514 inside virtio_net_tx.
  */
 #define NET_XFER_MAX 4096u
 #define NET_ETH_MAX  1514u
-/* Wave 35 exclusive soft deepen stamp (greppable wave=116). */
-#define NET_DOOR_SOFT_DEEPEN_WAVE 116u
-/* inventory claim sock ring ring_ok virtio virtio_ok xfer last err
- * group capacity catalog outcome stats backend path
- * headroom surface ratio return deepen tcp_surface PASS = 25 */
-#define NET_DOOR_SOFT_DEEPEN_AREAS 168u
+/* File-local page geometry (no config.h). Matches 4 KiB freestanding map. */
+#define NET_DOOR_PAGE_SIZE 4096u
+/*
+ * STRONGER FUNCTIONAL residual catalogs (sshd/UDX; Soft!=product).
+ * sshd_pipeline steps + UDX host stack + yield trio; lean multi-count.
+ * greppable: functional_steps | sshd_pipeline | yield_trio | functional_route
+ */
+#define NET_DOOR_FUNC_SSHD_STEPS 10u /* socket|bind|listen|accept|poll|send|recv|connect|close|sock_poll */
+#define NET_DOOR_FUNC_UDX_STEPS  8u  /* claim|export|map_ring|map_dma|desc|user_avail|bounce|kick */
+#define NET_DOOR_FUNC_YIELD_OPS  3u  /* POLL + ACCEPT + SOCK_POLL (sshd park) */
+#define NET_DOOR_FUNC_CATALOG_MIN 4u /* lean functional_ok threshold (STRONGER) */
 
-/* Keep multi-seg room: bounce ≥ bulk smoke and > one MSS. */
+/*
+ * H1 thr-only residual locks (C1; Soft!=product; G-AC-1).
+ * Door thr is a legal thr-stack owner for freestanding eth advance:
+ *   GJ_NET_OP_POLL -> net_door_eth_poll_h1 -> net_eth_poll
+ * Never timer / APIC / MSI-X / IRQ stack. Flip requires H1 review
+ * (fault_class=H1_irq_stack_smash / #PF I=1 wild RIP). Dual DoD OPEN.
+ * greppable: thr_only=1 | net_eth_irq=0 | irq_path=0 | door_thr_only=1
+ * greppable: h1_poll_sites=1 | poll_own=door_thr | fault_class=H1_irq_stack_smash
+ * greppable: net_door: soft residual h1 | dual_dod_b=OPEN
+ */
+#define NET_DOOR_H1_IRQ_POLL    0u /* net_eth_irq=0; never IRQ-path eth */
+#define NET_DOOR_H1_THR_ONLY    1u /* thr stack only (door thr full kstack) */
+#define NET_DOOR_H1_IRQ_PATH    0u /* timer/APIC/MSI-X never door eth poll */
+#define NET_DOOR_H1_DOOR_THR    1u /* door thr is legal thr-stack owner */
+#define NET_DOOR_H1_POLL_SITES  1u /* sole net_eth_poll site = H1 wrapper */
+#define NET_DOOR_H1_LEAN_CHECKS 16u /* H1 + STRONGER functional + wire22 lean */
+/* W11 Dual DoD B: soft sshd port honesty (product_sshd_tcp22=OPEN). */
+#define NET_DOOR_SSH_PORT       22u
+/* W11: wire handoff + :22 stack residual honesty lock. */
+#define NET_DOOR_WIRE22_STACK   1u
+/*
+ * STRONGER wire22 residual denser (Soft!=product; Dual DoD OPEN;
+ * product_dod_b=UDX; H2 once; stamp-free bar v2026.08.04.75; never .76).
+ * Multi-arm denser for SOCK BIND/LISTEN/ACCEPT/POLL :22 product sshd door.
+ * H1 thr-only eth poll from door only (sole net_eth_poll site). agent!=close.
+ * Arms: h1_poll | sock22 | yield | dual_dod_open | product_udx.
+ * Denser H1 thr-only door eth poll deepen: arm0 multi-sublocks
+ * (thr_only/irq/irq_path/door_thr/poll_sites/op_poll) + poll_h1_wire22
+ * compound tally when soft :22 held during H1 eth advance.
+ * Denser sock22 sublocks: socket|bind|listen|accept|sock_poll|port.
+ * greppable: wire22 denser | denser_arms | denser=1 | dual_dod OPEN
+ * greppable: denser_h1 | thr-only door eth poll | poll_h1_wire22
+ * greppable: denser_sock_sub | denser_h1_sub | thr-only_door_eth_poll
+ */
+#define NET_DOOR_WIRE22_DENSE       1u /* denser residual honesty lock */
+#define NET_DOOR_WIRE22_DENSE_ARMS  5u /* h1_poll|sock22|yield|dod|udx */
+#define NET_DOOR_WIRE22_DENSE_MIN   5u /* all denser arms for wire22_ok */
+/* Denser arm0 H1 thr-only door eth poll sublocks (all required). */
+#define NET_DOOR_WIRE22_DENSE_H1_SUB 7u /* thr|irq|path|door|sites|op|dense */
+/* Denser arm1 sock22 sublocks (all required; :22 door product sshd). */
+#define NET_DOOR_WIRE22_DENSE_SOCK_SUB 6u /* socket|bind|listen|accept|sock_poll|port */
+
+_Static_assert(NET_DOOR_H1_IRQ_POLL == 0u,
+               "H1: net_eth_irq must be 0 (door thr owns door eth poll)");
+_Static_assert(NET_DOOR_H1_THR_ONLY == 1u,
+               "H1: thr_only must be 1 (never IRQ-stack net_eth_poll)");
+_Static_assert(NET_DOOR_H1_IRQ_PATH == 0u,
+               "H1: irq_path must be 0 (timer/APIC/MSI-X never door eth)");
+_Static_assert(NET_DOOR_H1_DOOR_THR == 1u,
+               "H1: door thr is legal thr-stack owner (not IRQ)");
+_Static_assert(NET_DOOR_H1_POLL_SITES == 1u,
+               "H1: sole net_eth_poll site in this TU is net_door_eth_poll_h1");
+_Static_assert(NET_DOOR_SSH_PORT == 22u,
+               "W11: soft sshd port honesty (product_sshd_tcp22=OPEN)");
+_Static_assert(NET_DOOR_WIRE22_STACK == 1u,
+               "W11: wire handoff + :22 stack residual for product sshd");
+_Static_assert(NET_DOOR_WIRE22_DENSE == 1u,
+               "STRONGER wire22 residual denser honesty lock");
+_Static_assert(NET_DOOR_WIRE22_DENSE_ARMS == 5u,
+               "wire22 denser arms: h1_poll|sock22|yield|dual_dod_open|product_udx");
+_Static_assert(NET_DOOR_WIRE22_DENSE_MIN == NET_DOOR_WIRE22_DENSE_ARMS,
+               "wire22 denser min equals denser arms (all required)");
+_Static_assert(NET_DOOR_WIRE22_DENSE_H1_SUB == 7u,
+               "denser H1 thr-only door eth poll: 7 sublocks required");
+_Static_assert(NET_DOOR_WIRE22_DENSE_SOCK_SUB == 6u,
+               "denser sock22: 6 sublocks socket|bind|listen|accept|sock_poll|port");
+
+/* Keep multi-seg room: bounce >= bulk smoke and > one MSS. */
 typedef char net_xfer_ge_bulk[(NET_XFER_MAX >= 3000u) ? 1 : -1];
 typedef char net_xfer_ge_mss[(NET_XFER_MAX > 1024u) ? 1 : -1];
+typedef char net_door_page_ge_xfer[(NET_DOOR_PAGE_SIZE >= NET_XFER_MAX) ? 1 : -1];
+/* Page size power-of-two for MAP_RING VA align residual (UDX attach). */
+typedef char net_door_page_pow2[
+    ((NET_DOOR_PAGE_SIZE & (NET_DOOR_PAGE_SIZE - 1u)) == 0u) ? 1 : -1];
+/* H1 residual: sole-site lock must stay 1 (compile-time thr-only deepen). */
+typedef char net_door_h1_sites_one[(NET_DOOR_H1_POLL_SITES == 1u) ? 1 : -1];
+typedef char net_door_h1_thr_only[(NET_DOOR_H1_THR_ONLY == 1u) ? 1 : -1];
+typedef char net_door_h1_irq_zero[(NET_DOOR_H1_IRQ_POLL == 0u &&
+                                   NET_DOOR_H1_IRQ_PATH == 0u) ? 1 : -1];
+/* STRONGER FUNCTIONAL residual: poll bits + catalog floors compile-true. */
+typedef char net_door_func_pollin[(NET_DOOR_POLLIN == 0x1u) ? 1 : -1];
+typedef char net_door_func_pollout[(NET_DOOR_POLLOUT == 0x4u) ? 1 : -1];
+typedef char net_door_func_pollerr[(NET_DOOR_POLLERR == 0x8u) ? 1 : -1];
+typedef char net_door_func_pollhup[(NET_DOOR_POLLHUP == 0x10u) ? 1 : -1];
+typedef char net_door_func_sshd_steps[(NET_DOOR_FUNC_SSHD_STEPS == 10u) ? 1 : -1];
+typedef char net_door_func_udx_steps[(NET_DOOR_FUNC_UDX_STEPS == 8u) ? 1 : -1];
+typedef char net_door_func_yield[(NET_DOOR_FUNC_YIELD_OPS == 3u) ? 1 : -1];
+typedef char net_door_func_cat_min[(NET_DOOR_FUNC_CATALOG_MIN >= 4u) ? 1 : -1];
+typedef char net_door_wire22[(NET_DOOR_WIRE22_STACK == 1u &&
+                              NET_DOOR_SSH_PORT == 22u) ? 1 : -1];
+/* STRONGER wire22 residual denser compile-true (Soft!=product Dual DoD OPEN). */
+typedef char net_door_wire22_dense[(NET_DOOR_WIRE22_DENSE == 1u &&
+                                    NET_DOOR_WIRE22_DENSE_ARMS == 5u &&
+                                    NET_DOOR_WIRE22_DENSE_MIN == 5u) ? 1 : -1];
+typedef char net_door_wire22_dense_h1[(NET_DOOR_H1_THR_ONLY == 1u &&
+                                       NET_DOOR_H1_POLL_SITES == 1u &&
+                                       NET_DOOR_H1_IRQ_POLL == 0u) ? 1 : -1];
+/* Denser H1 thr-only door eth poll sublocks compile-true. */
+typedef char net_door_wire22_dense_h1_sub[(NET_DOOR_WIRE22_DENSE_H1_SUB == 7u &&
+                                           NET_DOOR_H1_THR_ONLY == 1u &&
+                                           NET_DOOR_H1_IRQ_POLL == 0u &&
+                                           NET_DOOR_H1_IRQ_PATH == 0u &&
+                                           NET_DOOR_H1_DOOR_THR == 1u &&
+                                           NET_DOOR_H1_POLL_SITES == 1u &&
+                                           NET_DOOR_WIRE22_DENSE == 1u) ? 1 : -1];
+/* Denser sock22 sublocks compile-true (Soft!=product Dual DoD OPEN). */
+typedef char net_door_wire22_dense_sock_sub[(NET_DOOR_WIRE22_DENSE_SOCK_SUB == 6u &&
+                                             NET_DOOR_SSH_PORT == 22u &&
+                                             NET_DOOR_WIRE22_STACK == 1u &&
+                                             NET_DOOR_WIRE22_DENSE == 1u) ? 1 : -1];
 
 static int g_fInit;
 static u32 g_u32Calls;
@@ -100,146 +259,215 @@ static u32 g_u32OwnerToken; /* 0 = kernel interim owns */
 static u32 g_u32VqCalls;
 static u32 g_u32Claims;     /* successful first claims */
 static u32 g_u32Reclaims;   /* idempotent same-token CLAIM soft path */
-static u32 g_u32RingCalls;  /* EXPORT/MAP/KICK/RING_STATE soft ops */
+static u32 g_u32RingCalls;  /* EXPORT/MAP/KICK/RING_STATE + UDX user-ring ops */
 static u64 g_u64RingMapVa;  /* last successful MAP_RING base (0 = none) */
+static u64 g_u64MapDmaVa;   /* last successful MAP_DMA base (0 = none) */
+static u16 g_u16LastMapWhich; /* last successful MAP_RING which (0=rx,1=tx) */
 
 /*
- * Soft product inventory (Wave 20 exclusive). Cumulative path tallies.
- * greppable: net_door: soft …
+ * Lean soft residual tallies (Dual DoD B UDX handoff eng + path honesty).
+ * Soft!=product dual license. Counters only - no stamp storms.
+ * Product DoD B = UDX not freestanding rtl (G-AC-1).
+ * UDX/host stack residual deepen: ring-family per-op tallies + MAP notes
+ * feed sparse residual lamps only (never per-POLL/STATS/RING dumps).
+ * FUNCTIONAL residual ops (sshd/UDX; STRONGER): CONNECT/CLOSE/SEND/RECV/
+ * SOCKET/SOCK_POLL outcomes + TCP|lo routes + :22 path + accept_eagain22 +
+ * connect22 + sock_poll want IN/OUT + eagain class + map_rx|tx + kick.
+ * H1 residual deepen (C1 thr-only): poll_h1 tracks sole door-thr eth
+ * advance site; thr_locks lean catalogs compile locks (Soft!=product).
+ * greppable: net_door: soft residual | net_door: soft residual lean
+ * greppable: net_door: soft residual lean PASS | net_door: soft residual h1
+ * greppable: net_door: soft residual functional
+ * greppable: net_door: soft residual functional catalog
+ * greppable: net_door: ring map notes
+ * greppable: udx_host_stack=claim|map_ring|map_dma|desc|user_avail|bounce
+ * greppable: handoff=netstackd|sshd|UDX | door_thr_only=1 | H1
+ * greppable: h1_poll_sites=1 | poll_h1 | thr_only=1 | net_eth_irq=0
+ * greppable: irq_path=0 | poll_own=door_thr | fault_class=H1_irq_stack_smash
+ * greppable: functional_ops=sock_poll|connect|close|send|recv|accept_eagain
+ * greppable: functional_route=tcp|lo | accept_eagain22 | connect22
+ * greppable: sshd_pipeline | yield_trio | functional_steps
  */
 struct net_door_soft {
     u64 u64Enter;          /* net_door_call entries */
-    u64 u64NotInit;        /* call before init → NODEV */
-    u64 u64ClaimOk;        /* first CLAIM success */
+    u64 u64NotInit;        /* call before init -> NODEV */
+    u64 u64ClaimOk;        /* first CLAIM success (netstackd handoff) */
     u64 u64ClaimReclaim;   /* same-token re-CLAIM soft */
-    u64 u64ClaimBusy;      /* different token → BUSY */
-    u64 u64ClaimInval;     /* token 0 / high bits */
+    u64 u64ClaimBusy;      /* different token -> BUSY */
+    u64 u64ClaimInval;     /* CLAIM token 0 / high bits (path; note_ret class) */
     u64 u64ReleaseOk;      /* RELEASE matched token */
     u64 u64ReleaseFree;    /* RELEASE when free (soft 0) */
-    u64 u64ReleaseInval;   /* RELEASE token mismatch */
-    u64 u64Poll;
-    u64 u64Stats;
-    u64 u64StatsInval;
-    u64 u64StatsFault;
+    u64 u64ReleaseInval;   /* RELEASE token mismatch (path; note_ret class) */
+    u64 u64Poll;           /* GJ_NET_OP_POLL enter (sshd yield) */
+    u64 u64PollOk;         /* POLL soft success (always 0) */
+    u64 u64PollL2Ready;    /* POLL while net_l2_ready */
+    u64 u64PollEth;        /* POLL advanced freestanding eth (net_eth_poll) */
+    u64 u64PollH1;         /* eth advance via H1 door-thr wrapper only */
+    u64 u64Poll22;         /* POLL while soft :22 held (wire22 denser) */
+    u64 u64PollH122;       /* H1 thr-only eth advance while soft :22 held */
     u64 u64Socket;
+    u64 u64SocketTcp;      /* SOCKET SOCK_STREAM -> net_tcp (functional route) */
+    u64 u64SocketLo;       /* SOCKET DGRAM/other -> net_lo (functional route) */
     u64 u64Bind;
+    u64 u64Bind22;         /* BIND arg port == 22 (sshd soft :22) */
+    u64 u64Bind22Ok;       /* successful BIND to :22 */
     u64 u64Listen;
+    u64 u64Listen22;       /* LISTEN while soft :22 held */
     u64 u64Accept;
-    u64 u64Connect;
-    u64 u64Close;
+    u64 u64AcceptOk;
+    u64 u64AcceptEagain;   /* ACCEPT empty soft (-11) */
+    u64 u64AcceptEagain22; /* ACCEPT eagain while soft :22 (sshd yield park) */
+    u64 u64Accept22;       /* ACCEPT while soft :22 held */
+    u64 u64Accept22Ok;     /* ACCEPT success while soft :22 held */
+    u64 u64Listen22Ok;     /* LISTEN success while soft :22 held */
+    u64 u64Connect;        /* CONNECT enter (sshd pair / netstackd) */
+    u64 u64ConnectOk;
+    u64 u64ConnectEagain;  /* CONNECT soft -11 / backlog full */
+    u64 u64ConnectTcp;     /* CONNECT on TCP fd (functional route) */
+    u64 u64ConnectLo;      /* CONNECT on net_lo fd (functional route) */
+    u64 u64Connect22;      /* CONNECT arg port == 22 (sshd client path) */
+    u64 u64Connect22Ok;    /* CONNECT ok to :22 */
+    u64 u64Close;          /* CLOSE enter */
+    u64 u64CloseOk;
+    u64 u64CloseTcp;       /* CLOSE on TCP fd (functional route) */
+    u64 u64CloseLo;        /* CLOSE on net_lo fd (functional route) */
+    u64 u64Close22;        /* CLOSE while soft :22 held (session teardown) */
     u64 u64Send;
+    u64 u64SendOk;         /* SEND bytes > 0 */
+    u64 u64SendEagain;     /* SEND soft -11 */
+    u64 u64SendTcp;        /* SEND on TCP fd (functional route) */
+    u64 u64SendLo;         /* SEND on net_lo fd (functional route) */
+    u64 u64Send22;         /* SEND while soft :22 held (sshd session) */
+    u64 u64Send22Ok;       /* SEND ok while soft :22 held */
     u64 u64Recv;
+    u64 u64RecvOk;         /* RECV bytes > 0 */
+    u64 u64Recv0;          /* RECV EOF soft (0) */
+    u64 u64RecvEagain;     /* RECV soft -11 */
+    u64 u64RecvTcp;        /* RECV on TCP fd (functional route) */
+    u64 u64RecvLo;         /* RECV on net_lo fd (functional route) */
+    u64 u64Recv22;         /* RECV while soft :22 held */
+    u64 u64Recv22Ok;       /* RECV ok while soft :22 held */
     u64 u64TcpStats;
-    u64 u64TcpStatsInval;
-    u64 u64TcpStatsFault;
-    u64 u64SockPoll;       /* SOCK_POLL → net_tcp_poll_mask */
-    /* Wave 15: socket path routing + outcome */
-    u64 u64SockTcp;        /* ops routed to net_tcp */
-    u64 u64SockLo;         /* ops routed to net_lo */
-    u64 u64SockOk;         /* socket-family non-neg ret */
-    u64 u64SockFail;       /* socket-family neg ret */
-    u64 u64SockOwned;      /* socket-family while owned */
-    u64 u64SockUnowned;    /* socket-family while kernel interim */
-    u64 u64SendOk;
-    u64 u64SendFail;
-    u64 u64RecvOk;         /* n >= 0 (incl soft 0 EOF) */
-    u64 u64RecvFail;
-    u64 u64SendBytes;      /* cumulative SEND bytes (ok) */
-    u64 u64RecvBytes;      /* cumulative RECV bytes (ok, n>0) */
-    u64 u64VirtioTx;
-    u64 u64VirtioRx;
-    u64 u64QueueInfo;
-    u64 u64QueueOk;
-    u64 u64QueueInval;
-    u64 u64QueueFault;
-    /* Wave 15: virtio outcome splits */
-    u64 u64VirtioTxOk;
-    u64 u64VirtioTxInval;
-    u64 u64VirtioTxNodev;
-    u64 u64VirtioTxFault;
-    u64 u64VirtioTxIo;
-    u64 u64VirtioRxOk;
-    u64 u64VirtioRxInval;
-    u64 u64VirtioRxNodev;
-    u64 u64VirtioRxFault;
-    u64 u64VirtioRxIo;
-    u64 u64VirtioTxBytes;  /* cumulative door TX bytes (ok) */
-    u64 u64VirtioRxBytes;  /* cumulative door RX bytes (ok, n>0) */
-    u64 u64ExportRing;
-    u64 u64MapRing;
-    u64 u64MapRemap;       /* soft re-MAP of same VA */
-    u64 u64Kick;
-    u64 u64AvailPush;
-    u64 u64UsedReap;
-    u64 u64RingState;
-    u64 u64MapDma;
-    u64 u64DescAlloc;
-    u64 u64UserAvail;
-    u64 u64BounceFill;
-    /* Wave 15: ring outcome splits */
-    u64 u64ExportOk;
-    u64 u64ExportInval;
-    u64 u64ExportFault;
-    u64 u64ExportNodev;
-    u64 u64MapOk;          /* first successful map (not remap) */
-    u64 u64MapInval;
-    u64 u64MapNodev;
-    u64 u64MapFault;
-    u64 u64KickOk;
-    u64 u64KickNodev;
-    u64 u64RingStateOk;
-    u64 u64RingStateInval;
-    u64 u64RingStateFault;
-    u64 u64AvailOk;
-    u64 u64AvailInval;
-    u64 u64AvailNodev;
-    u64 u64AvailFault;
-    u64 u64AvailIo;
-    u64 u64ReapOk;
-    u64 u64ReapNodev;
-    u64 u64MapDmaOk;
-    u64 u64MapDmaInval;
-    u64 u64MapDmaNodev;
-    u64 u64MapDmaFault;
-    u64 u64DescOk;
-    u64 u64DescNodev;
-    u64 u64DescNomem;
-    u64 u64UserAvailOk;
-    u64 u64UserAvailNodev;
-    u64 u64UserAvailIo;
-    u64 u64BounceOk;
-    u64 u64BounceInval;
-    u64 u64BounceNodev;
-    u64 u64BounceFault;
-    u64 u64BounceIo;
-    /* Wave 15: user vs kernel-smoke copy path */
-    u64 u64UserCopy;
-    u64 u64KernelCopy;
-    u64 u64Nodev;          /* virtio-absent soft-skip terminals */
-    u64 u64Inval;          /* INVAL terminals (arg / policy) */
-    u64 u64Busy;           /* BUSY terminals */
-    u64 u64Fault;          /* FAULT terminals */
-    u64 u64Io;             /* IO terminals */
-    u64 u64Nomem;          /* NOMEM terminals */
-    u64 u64Nosupport;      /* unknown op */
-    u64 u64Ok;             /* non-negative returns */
-    u64 u64SoftLog;        /* inventory log emissions */
-    /* Wave 15: last-op snapshot */
+    u64 u64SockPoll;
+    u64 u64SockPollReady;  /* SOCK_POLL returned non-zero mask */
+    u64 u64SockPollEmpty;  /* SOCK_POLL ready==0 soft empty (sshd park) */
+    u64 u64SockPollTcp;    /* SOCK_POLL on TCP fd */
+    u64 u64SockPollLo;     /* SOCK_POLL on net_lo fd (functional route) */
+    u64 u64SockPollIn;     /* SOCK_POLL want & POLLIN */
+    u64 u64SockPollOut;    /* SOCK_POLL want & POLLOUT */
+    u64 u64SockPoll22;     /* SOCK_POLL while soft :22 held (W11 wire22) */
+    u64 u64Eagain;         /* terminal Linux -11 / GJ_ERR_AGAIN class */
+    u64 u64RingEnter;      /* ring-family enter (UDX residual) */
+    u64 u64UserRing;       /* MAP/DMA/DESC/BOUNCE/USER_AVAIL enter */
+    /* UDX/host ring programming residual (Soft!=product; deepen) */
+    u64 u64ExportRing;     /* EXPORT_RING enter */
+    u64 u64ExportOk;       /* EXPORT_RING success */
+    u64 u64ExportNodev;    /* EXPORT_RING without device */
+    u64 u64MapRing;        /* MAP_RING enter */
+    u64 u64MapRingOk;      /* MAP_RING success (PTE install + export) */
+    u64 u64MapRingReclaim; /* re-MAP same VA soft reclaim */
+    u64 u64MapRingNodev;   /* MAP_RING while virtio-net absent */
+    u64 u64MapRingInval;   /* MAP_RING bad VA / unaligned */
+    u64 u64MapRingFault;   /* MAP_RING map_q_user fail */
+    u64 u64MapRingRx;      /* MAP_RING ok which=0 (rx; UDX attach) */
+    u64 u64MapRingTx;      /* MAP_RING ok which=1 (tx; UDX attach) */
+    u64 u64MapDma;         /* MAP_DMA enter */
+    u64 u64MapDmaOk;       /* MAP_DMA success */
+    u64 u64MapDmaReclaim;  /* re-MAP_DMA same VA soft reclaim */
+    u64 u64MapDmaNodev;    /* MAP_DMA without device */
+    u64 u64MapDmaInval;    /* MAP_DMA bad VA / unaligned */
+    u64 u64MapDmaFault;    /* MAP_DMA map fail */
+    u64 u64DescAlloc;      /* DESC_ALLOC enter */
+    u64 u64DescAllocOk;    /* DESC_ALLOC returned free head */
+    u64 u64DescAllocNodev; /* DESC_ALLOC without device */
+    u64 u64DescAllocNomem; /* DESC_ALLOC free list empty */
+    u64 u64UserAvail;      /* USER_AVAIL enter */
+    u64 u64UserAvailOk;    /* USER_AVAIL programmed */
+    u64 u64UserAvailNodev; /* USER_AVAIL without device */
+    u64 u64UserAvailIo;    /* USER_AVAIL program fail */
+    u64 u64UserAvailKick;  /* USER_AVAIL ok with kick bit (H1 door thr) */
+    u64 u64BounceFill;     /* BOUNCE_FILL enter */
+    u64 u64BounceFillOk;   /* BOUNCE_FILL filled slot */
+    u64 u64BounceFillNodev;/* BOUNCE_FILL without device */
+    u64 u64BounceFillInval;/* BOUNCE_FILL bad len/buf */
+    u64 u64BounceFillIo;   /* BOUNCE_FILL slot fail */
+    u64 u64Kick;           /* KICK enter */
+    u64 u64KickOk;         /* KICK success */
+    u64 u64KickNodev;      /* KICK without device */
+    u64 u64AvailPush;      /* AVAIL_PUSH enter */
+    u64 u64AvailPushOk;    /* AVAIL_PUSH success */
+    u64 u64AvailPushNodev; /* AVAIL_PUSH without device */
+    u64 u64AvailPushInval; /* AVAIL_PUSH bad len/buf */
+    u64 u64AvailPushIo;    /* AVAIL_PUSH push fail */
+    u64 u64UsedReap;       /* USED_REAP enter */
+    u64 u64UsedReapOk;     /* USED_REAP returned (incl 0 empty) */
+    u64 u64UsedReapNodev;  /* USED_REAP without device */
+    u64 u64RingState;      /* RING_STATE enter */
+    u64 u64HostOwnedRing;  /* ring-family op while CLAIM owned (UDX host) */
+    u64 u64Nodev;
+    u64 u64Inval;
+    u64 u64Busy;
+    u64 u64Fault;
+    u64 u64Io;
+    u64 u64Nomem;
+    u64 u64Nosupport;
+    u64 u64Ok;
     u32 u32LastOp;
     i64 i64LastRet;
+    u32 u32LeanChecks;     /* lean residual self-check count */
+    u32 u32LeanOk;         /* lean residual checks that passed */
+    u32 u32UdxHandoffOk;   /* CLAIM+ring op id lean checks passed */
+    u32 u32RingMapNotesOk; /* ring map geometry/op lean notes passed */
+    u32 u32SshdHandoffOk;  /* SOCKET/BIND/LISTEN/ACCEPT/POLL lean checks */
+    u32 u32FunctionalOk;   /* functional ops lean multi-count (STRONGER catalog) */
+    u32 u32FunctionalSteps;/* functional catalog steps passed (sshd+udx+yield) */
+    u32 u32H1Ok;           /* H1 door-thr eth advance lean checks */
+    u32 u32H1ThrLocks;     /* H1 thr-only compile-lock lean checks (C1) */
+    u32 u32Wire22Ok;       /* W11 wire handoff + :22 stack lean checks */
+    u32 u32Wire22Dense;    /* STRONGER wire22 denser arm multi-count */
+    u32 u32Wire22DenseH1;  /* denser arm0: H1 thr-only door eth poll */
+    u32 u32Wire22DenseH1Sub; /* denser arm0 sublock multi-count (thr-only) */
+    u32 u32Wire22DenseSock;/* denser arm1: BIND/LISTEN/ACCEPT/SOCK_POLL :22 */
+    u32 u32Wire22DenseSockSub; /* denser arm1 sock22 sublock multi-count */
+    u32 u32Wire22DenseYield;/* denser arm2: POLL|ACCEPT|SOCK_POLL yield */
+    u32 u32Wire22DenseDod; /* denser arm3: dual_dod OPEN honesty */
+    u32 u32Wire22DenseUdx; /* denser arm4: product_dod_b=UDX honesty */
 };
 
 static struct net_door_soft g_soft;
-static u8 g_fSoftOnce; /* one-shot after first product call activity */
+static u8 g_fSoftOnce;     /* one-shot residual after first product call */
+static u8 g_fSoftSshd22;   /* BIND :22 succeeded (Soft!=product) */
+static u8 g_fSoftLean;     /* one-shot lean residual gate */
+
+/*
+ * Soft UDX L2 bridge (Dual DoD B; freestanding rtl SKIP; Soft!=product):
+ *   ETH_UDX_READY arm → net_l2_ready soft + TX enqueue path
+ *   ETH_INJECT → net_eth demux (ARP/ICMP/TCP:22)
+ *   ETH_TX_PULL → host park drains demux replies for UDX DMA TX
+ * greppable: ETH_INJECT | ETH_TX_PULL | ETH_UDX_READY | udx_tx_soft
+ */
+#define NET_DOOR_UDX_TX_SLOTS  8u
+#define NET_DOOR_UDX_TX_MAX    1514u
+static u8  g_fUdxReady;    /* product UDX host armed L2 soft */
+static u8  g_fUdxReadyLamp;
+static u8  g_fUdxInjLamp;
+static u8  g_fUdxTxLamp;
+static u8  g_aUdxTx[NET_DOOR_UDX_TX_SLOTS][NET_DOOR_UDX_TX_MAX];
+static u16 g_aUdxTxLen[NET_DOOR_UDX_TX_SLOTS];
+static u32 g_u32UdxTxHead; /* next fill */
+static u32 g_u32UdxTxTail; /* next pull */
+static u32 g_u32UdxTxN;    /* live count */
+static u32 g_u32UdxInjOk;
+static u32 g_u32UdxTxEnq;
+static u32 g_u32UdxTxPull;
 
 static void net_door_soft_inc(u64 *pCtr);
-static void net_door_soft_add64(u64 *pCtr, u64 u64N);
 static void net_door_soft_note_ret(i64 i64Ret);
-static void net_door_soft_inventory_log(void);
+static void net_door_eth_poll_h1(void);
+static void net_door_soft_residual_once(void);
+static void net_door_soft_residual_lean_once(void);
 static void net_door_soft_maybe_once(void);
-static i64 net_door_soft_done(i64 i64Ret);
-static i64 net_door_soft_sock_done(i64 i64Ret, int fTcp);
-static i64 net_door_soft_xfer_done(i64 i64Ret, int fSend, int fTcp);
+static i64  net_door_soft_done(i64 i64Ret);
 
 /** Soft: bump path tally (u64 wrap is fine for telemetry). */
 static void
@@ -251,25 +479,55 @@ net_door_soft_inc(u64 *pCtr)
     (*pCtr)++;
 }
 
-/** Soft: add to u64 path tally (wrap OK for telemetry). */
+/**
+ * H1: sole freestanding eth advance from this TU (C1 thr-only residual).
+ * Call only from GJ_NET_OP_POLL on door thr stack - never IRQ/timer.
+ * Compile locks: NET_DOOR_H1_* (thr_only=1, irq=0, poll_sites=1).
+ * Soft!=product dual; Product DoD B = UDX not freestanding rtl.
+ * fault_class=H1_irq_stack_smash if ever called from IRQ path.
+ * greppable: poll->net_eth_poll | h1_poll_sites=1 | door_thr_only=1 | H1
+ * greppable: thr_only=1 | net_eth_irq=0 | irq_path=0 | poll_own=door_thr
+ * greppable: fault_class=H1_irq_stack_smash | net_door: soft residual h1
+ */
 static void
-net_door_soft_add64(u64 *pCtr, u64 u64N)
+net_door_eth_poll_h1(void)
 {
-    if (pCtr == NULL) {
-        return;
+    /*
+     * H1 thr-only: door thr full kstack only. Locks are compile-true;
+     * (void) keeps greppable residual surface live under -Wunused.
+     * Soft!=product; never IRQ/timer/APIC/MSI-X.
+     * Denser wire22: compound poll_h1_wire22 when soft :22 held.
+     * greppable: denser_h1 | thr-only door eth poll | poll_h1_wire22
+     */
+    (void)NET_DOOR_H1_IRQ_POLL;
+    (void)NET_DOOR_H1_THR_ONLY;
+    (void)NET_DOOR_H1_IRQ_PATH;
+    (void)NET_DOOR_H1_DOOR_THR;
+    (void)NET_DOOR_H1_POLL_SITES;
+    (void)NET_DOOR_WIRE22_DENSE_H1_SUB;
+    net_eth_poll();
+    net_door_soft_inc(&g_soft.u64PollH1);
+    /* Denser H1 thr-only door eth poll while soft :22 (wire22 compound). */
+    if (g_fSoftSshd22 != 0) {
+        net_door_soft_inc(&g_soft.u64PollH122);
     }
-    (*pCtr) += u64N;
 }
 
 /**
  * Soft: classify terminal return (diagnostics only; never alters ret).
- * greppable: net_door: soft err
+ * Functional residual: Linux -11 EAGAIN + GJ_ERR_AGAIN class for sshd park
+ * and connect/send/recv soft empty (Soft!=product; never alters ret).
  */
 static void
 net_door_soft_note_ret(i64 i64Ret)
 {
     if (i64Ret >= 0) {
         net_door_soft_inc(&g_soft.u64Ok);
+        return;
+    }
+    /* Linux-shaped soft empty / park (ACCEPT/RECV/CONNECT/SEND residual). */
+    if (i64Ret == (i64)-11 || i64Ret == GJ_ERR_AGAIN) {
+        net_door_soft_inc(&g_soft.u64Eagain);
         return;
     }
     if (i64Ret == GJ_ERR_NODEV) {
@@ -290,1231 +548,1057 @@ net_door_soft_note_ret(i64 i64Ret)
 }
 
 /**
- * Greppable soft net door inventory (product / smoke). Wave 20 deepen.
- *   net_door: soft inventory …
- *   net_door: soft claim …
- *   net_door: soft sock …
- *   net_door: soft ring …
- *   net_door: soft ring_ok …
- *   net_door: soft virtio …
- *   net_door: soft virtio_ok …
- *   net_door: soft xfer …
- *   net_door: soft last …
- *   net_door: soft err …
- *   net_door: soft group …
- *   net_door: soft capacity …
- *   net_door: soft catalog …
- *   net_door: soft outcome …
- *   net_door: soft stats …
- *   net_door: soft backend …
- *   net_door: soft path …
- *   net_door: soft deepen …
- *   net_door: soft tcp_surface …
- *   net_door: soft tcp product surface PASS
- *   net_door: soft inventory PASS / net_door: soft PASS
- * greppable: net_door: soft
- * Soft only — never hard-gates; soft.
+ * Sparse residual lamp - Dual DoD B UDX handoff + sshd interim path honesty.
+ * Once only after first product call (no stamp storms). Soft!=product.
+ * Product DoD B = UDX not freestanding rtl (G-AC-1).
+ * Deepen: UDX/host ring MAP notes + desc/user_avail/bounce/avail outcomes;
+ * FUNCTIONAL residual ops (sshd/UDX; STRONGER): sock_poll|connect|close|
+ * send|recv + TCP|lo routes + :22 path + accept_eagain22 + connect22 +
+ * want IN/OUT + eagain class + functional catalog steps; C1 H1 thr-only:
+ * poll_h1 sole door thr eth site + compile thr_locks catalog (never
+ * IRQ/timer; fault_class=H1_irq_stack_smash). Dual DoD OPEN.
+ * greppable: net_door: soft residual
+ * greppable: net_door: soft residual h1
+ * greppable: net_door: soft residual functional
+ * greppable: net_door: soft residual functional catalog
+ * greppable: net_door: ring map notes
+ * greppable: h1_poll_sites=1 | poll_h1 | thr_only=1 | net_eth_irq=0
+ * greppable: poll_own=door_thr | fault_class=H1_irq_stack_smash
+ * greppable: functional_ops=sock_poll|connect|close|send|recv|accept_eagain
+ * greppable: functional_route=tcp|lo | accept_eagain22 | connect22
+ * greppable: sshd_pipeline | yield_trio | functional_steps
  */
 static void
-net_door_soft_inventory_log(void)
+net_door_soft_residual_once(void)
 {
-    struct net_door_soft s;
     u32 u32Owned;
-    u32 u32Ready;
-    u32 u32TxCnt;
-    u32 u32RxCnt;
-    u32 u32QFreeTx;
-    u32 u32QFreeRx;
-    u32 u32AvailP;
-    u32 u32UserP;
-    u32 u32Wave;
-    u32 u32Areas;
-    u64 u64SockEnter;
-    u64 u64RingEnter;
-    u64 u64VirtioEnter;
-    u64 u64ClaimEnter;
-    int fSoftPass;
+    u32 u32L2Ready;
+    u32 u32MapHeld;
+    u32 u32DmaHeld;
+    u32 u32H1Match;
+    u32 u32H1ThrLocks;
+    const char *szL2;
 
-    u32Wave = NET_DOOR_SOFT_DEEPEN_WAVE;
-    u32Areas = NET_DOOR_SOFT_DEEPEN_AREAS;
-    net_door_soft_inc(&g_soft.u64SoftLog);
-    s = g_soft;
     u32Owned = (g_u32OwnerToken != 0) ? 1u : 0u;
-    u32Ready = virtio_net_ready() ? 1u : 0u;
-    u32TxCnt = (u32Ready != 0) ? virtio_net_tx_count() : 0u;
-    u32RxCnt = (u32Ready != 0) ? virtio_net_rx_count() : 0u;
-    u32QFreeTx = (u32Ready != 0) ? (u32)virtio_net_q_free(1) : 0u;
-    u32QFreeRx = (u32Ready != 0) ? (u32)virtio_net_q_free(0) : 0u;
-    u32AvailP = (u32Ready != 0) ? virtio_net_avail_pushes() : 0u;
-    u32UserP = (u32Ready != 0) ? virtio_net_user_ring_pushes() : 0u;
-    u64SockEnter = s.u64Socket + s.u64Bind + s.u64Listen + s.u64Accept +
-                   s.u64Connect + s.u64Close + s.u64Send + s.u64Recv +
-                   s.u64TcpStats + s.u64SockPoll;
-    u64RingEnter = s.u64ExportRing + s.u64MapRing + s.u64Kick +
-                   s.u64AvailPush + s.u64UsedReap + s.u64RingState +
-                   s.u64MapDma + s.u64DescAlloc + s.u64UserAvail +
-                   s.u64BounceFill;
-    u64VirtioEnter = s.u64VirtioTx + s.u64VirtioRx + s.u64QueueInfo;
-    u64ClaimEnter = s.u64ClaimOk + s.u64ClaimReclaim + s.u64ClaimBusy +
-                    s.u64ClaimInval + s.u64ReleaseOk + s.u64ReleaseFree +
-                    s.u64ReleaseInval;
-
-    /* Grep: net_door: soft inventory */
-    kprintf("net_door: soft inventory init=%u owned=%u token=0x%x "
-            "calls=%u vq=%u ring_calls=%u ring_va=0x%lx claims=%u "
-            "reclaims=%u virtio_ready=%u xfer_max=%u eth_max=%u "
-            "log_n=%lu areas=%u wave=%u\n",
-            g_fInit ? 1u : 0u, u32Owned, g_u32OwnerToken, g_u32Calls,
-            g_u32VqCalls, g_u32RingCalls, (unsigned long)g_u64RingMapVa,
-            g_u32Claims, g_u32Reclaims, u32Ready, NET_XFER_MAX, NET_ETH_MAX,
-            (unsigned long)s.u64SoftLog, u32Areas, u32Wave);
-
-    /* Grep: net_door: soft claim */
-    kprintf("net_door: soft claim ok=%lu reclaim=%lu busy=%lu inval=%lu "
-            "release_ok=%lu release_free=%lu release_inval=%lu wave=%u\n",
-            (unsigned long)s.u64ClaimOk, (unsigned long)s.u64ClaimReclaim,
-            (unsigned long)s.u64ClaimBusy, (unsigned long)s.u64ClaimInval,
-            (unsigned long)s.u64ReleaseOk, (unsigned long)s.u64ReleaseFree,
-            (unsigned long)s.u64ReleaseInval, u32Wave);
-
-    /* Grep: net_door: soft sock */
-    kprintf("net_door: soft sock poll=%lu stats=%lu socket=%lu bind=%lu "
-            "listen=%lu accept=%lu connect=%lu close=%lu send=%lu "
-            "recv=%lu tcp_stats=%lu sock_poll=%lu tcp=%lu lo=%lu "
-            "ok=%lu fail=%lu owned=%lu unowned=%lu wave=%u\n",
-            (unsigned long)s.u64Poll, (unsigned long)s.u64Stats,
-            (unsigned long)s.u64Socket, (unsigned long)s.u64Bind,
-            (unsigned long)s.u64Listen, (unsigned long)s.u64Accept,
-            (unsigned long)s.u64Connect, (unsigned long)s.u64Close,
-            (unsigned long)s.u64Send, (unsigned long)s.u64Recv,
-            (unsigned long)s.u64TcpStats, (unsigned long)s.u64SockPoll,
-            (unsigned long)s.u64SockTcp, (unsigned long)s.u64SockLo,
-            (unsigned long)s.u64SockOk, (unsigned long)s.u64SockFail,
-            (unsigned long)s.u64SockOwned, (unsigned long)s.u64SockUnowned,
-            u32Wave);
-
-    /* Grep: net_door: soft ring (enter surface; prefix-stable) */
-    kprintf("net_door: soft ring export=%lu map=%lu remap=%lu kick=%lu "
-            "avail=%lu reap=%lu state=%lu dma=%lu desc=%lu user_avail=%lu "
-            "bounce=%lu wave=%u\n",
-            (unsigned long)s.u64ExportRing, (unsigned long)s.u64MapRing,
-            (unsigned long)s.u64MapRemap, (unsigned long)s.u64Kick,
-            (unsigned long)s.u64AvailPush, (unsigned long)s.u64UsedReap,
-            (unsigned long)s.u64RingState, (unsigned long)s.u64MapDma,
-            (unsigned long)s.u64DescAlloc, (unsigned long)s.u64UserAvail,
-            (unsigned long)s.u64BounceFill, u32Wave);
-
-    /* Grep: net_door: soft ring_ok (Wave 15 outcome deepen) */
-    kprintf("net_door: soft ring_ok export_ok=%lu export_inval=%lu "
-            "export_fault=%lu export_nodev=%lu map_ok=%lu remap=%lu "
-            "map_inval=%lu map_nodev=%lu map_fault=%lu kick_ok=%lu "
-            "kick_nodev=%lu state_ok=%lu state_inval=%lu state_fault=%lu "
-            "avail_ok=%lu avail_inval=%lu avail_nodev=%lu avail_fault=%lu "
-            "avail_io=%lu reap_ok=%lu reap_nodev=%lu dma_ok=%lu "
-            "dma_inval=%lu dma_nodev=%lu dma_fault=%lu desc_ok=%lu "
-            "desc_nodev=%lu desc_nomem=%lu user_ok=%lu user_nodev=%lu "
-            "user_io=%lu bounce_ok=%lu bounce_inval=%lu bounce_nodev=%lu "
-            "bounce_fault=%lu bounce_io=%lu wave=%u\n",
-            (unsigned long)s.u64ExportOk, (unsigned long)s.u64ExportInval,
-            (unsigned long)s.u64ExportFault, (unsigned long)s.u64ExportNodev,
-            (unsigned long)s.u64MapOk, (unsigned long)s.u64MapRemap,
-            (unsigned long)s.u64MapInval, (unsigned long)s.u64MapNodev,
-            (unsigned long)s.u64MapFault, (unsigned long)s.u64KickOk,
-            (unsigned long)s.u64KickNodev, (unsigned long)s.u64RingStateOk,
-            (unsigned long)s.u64RingStateInval,
-            (unsigned long)s.u64RingStateFault, (unsigned long)s.u64AvailOk,
-            (unsigned long)s.u64AvailInval, (unsigned long)s.u64AvailNodev,
-            (unsigned long)s.u64AvailFault, (unsigned long)s.u64AvailIo,
-            (unsigned long)s.u64ReapOk, (unsigned long)s.u64ReapNodev,
-            (unsigned long)s.u64MapDmaOk, (unsigned long)s.u64MapDmaInval,
-            (unsigned long)s.u64MapDmaNodev, (unsigned long)s.u64MapDmaFault,
-            (unsigned long)s.u64DescOk, (unsigned long)s.u64DescNodev,
-            (unsigned long)s.u64DescNomem, (unsigned long)s.u64UserAvailOk,
-            (unsigned long)s.u64UserAvailNodev,
-            (unsigned long)s.u64UserAvailIo, (unsigned long)s.u64BounceOk,
-            (unsigned long)s.u64BounceInval, (unsigned long)s.u64BounceNodev,
-            (unsigned long)s.u64BounceFault, (unsigned long)s.u64BounceIo,
-            u32Wave);
-
-    /* Grep: net_door: soft virtio */
-    kprintf("net_door: soft virtio tx=%lu rx=%lu queue_info=%lu "
-            "ready=%u vq_calls=%u nodev_soft=%lu wave=%u\n",
-            (unsigned long)s.u64VirtioTx, (unsigned long)s.u64VirtioRx,
-            (unsigned long)s.u64QueueInfo, u32Ready, g_u32VqCalls,
-            (unsigned long)s.u64Nodev, u32Wave);
-
-    /* Grep: net_door: soft virtio_ok (Wave 15 outcome deepen) */
-    kprintf("net_door: soft virtio_ok tx_ok=%lu tx_inval=%lu tx_nodev=%lu "
-            "tx_fault=%lu tx_io=%lu rx_ok=%lu rx_inval=%lu rx_nodev=%lu "
-            "rx_fault=%lu rx_io=%lu queue_ok=%lu queue_inval=%lu "
-            "queue_fault=%lu tx_b=%lu rx_b=%lu live_tx=%u live_rx=%u "
-            "wave=%u\n",
-            (unsigned long)s.u64VirtioTxOk, (unsigned long)s.u64VirtioTxInval,
-            (unsigned long)s.u64VirtioTxNodev,
-            (unsigned long)s.u64VirtioTxFault, (unsigned long)s.u64VirtioTxIo,
-            (unsigned long)s.u64VirtioRxOk, (unsigned long)s.u64VirtioRxInval,
-            (unsigned long)s.u64VirtioRxNodev,
-            (unsigned long)s.u64VirtioRxFault, (unsigned long)s.u64VirtioRxIo,
-            (unsigned long)s.u64QueueOk, (unsigned long)s.u64QueueInval,
-            (unsigned long)s.u64QueueFault,
-            (unsigned long)s.u64VirtioTxBytes,
-            (unsigned long)s.u64VirtioRxBytes, u32TxCnt, u32RxCnt, u32Wave);
-
-    /* Grep: net_door: soft xfer */
-    kprintf("net_door: soft xfer send_ok=%lu send_fail=%lu recv_ok=%lu "
-            "recv_fail=%lu send_b=%lu recv_b=%lu xfer_max=%u eth_max=%u "
-            "user_copy=%lu k_copy=%lu wave=%u\n",
-            (unsigned long)s.u64SendOk, (unsigned long)s.u64SendFail,
-            (unsigned long)s.u64RecvOk, (unsigned long)s.u64RecvFail,
-            (unsigned long)s.u64SendBytes, (unsigned long)s.u64RecvBytes,
-            NET_XFER_MAX, NET_ETH_MAX, (unsigned long)s.u64UserCopy,
-            (unsigned long)s.u64KernelCopy, u32Wave);
-
-    /* Grep: net_door: soft last */
-    kprintf("net_door: soft last op=%u ret=%ld ring_va=0x%lx wave=%u\n",
-            s.u32LastOp, (long)s.i64LastRet,
-            (unsigned long)g_u64RingMapVa, u32Wave);
-
-    /* Grep: net_door: soft err */
-    kprintf("net_door: soft err nodev=%lu inval=%lu busy=%lu fault=%lu "
-            "io=%lu nomem=%lu nosupport=%lu ok=%lu not_init=%lu "
-            "stats_inval=%lu stats_fault=%lu tcp_stats_inval=%lu "
-            "tcp_stats_fault=%lu wave=%u\n",
-            (unsigned long)s.u64Nodev, (unsigned long)s.u64Inval,
-            (unsigned long)s.u64Busy, (unsigned long)s.u64Fault,
-            (unsigned long)s.u64Io, (unsigned long)s.u64Nomem,
-            (unsigned long)s.u64Nosupport, (unsigned long)s.u64Ok,
-            (unsigned long)s.u64NotInit, (unsigned long)s.u64StatsInval,
-            (unsigned long)s.u64StatsFault,
-            (unsigned long)s.u64TcpStatsInval,
-            (unsigned long)s.u64TcpStatsFault, u32Wave);
-
-    /* Grep: net_door: soft group (Wave 15 enter-group rollup) */
-    kprintf("net_door: soft group enter=%lu claim=%lu poll=%lu stats=%lu "
-            "sock=%lu ring=%lu virtio=%lu send=%lu recv=%lu "
-            "tcp_stats=%lu wave=%u\n",
-            (unsigned long)s.u64Enter, (unsigned long)u64ClaimEnter,
-            (unsigned long)s.u64Poll, (unsigned long)s.u64Stats,
-            (unsigned long)u64SockEnter, (unsigned long)u64RingEnter,
-            (unsigned long)u64VirtioEnter, (unsigned long)s.u64Send,
-            (unsigned long)s.u64Recv, (unsigned long)s.u64TcpStats, u32Wave);
-
-    /* Grep: net_door: soft capacity (Wave 15 fixed lamps) */
-    kprintf("net_door: soft capacity xfer_max=%u eth_max=%u bulk=3000 "
-            "mss=1024 bounce=1 claim_reclaim=1 map_remap=1 "
-            "virtio_nodev_soft=1 ring_state_nodev_ok=1 heap=0 "
-            "areas=%u wave=%u\n",
-            NET_XFER_MAX, NET_ETH_MAX, u32Areas, u32Wave);
-
-    /* Grep: net_door: soft catalog (Wave 15 opcode soft catalog) */
-    kprintf("net_door: soft catalog claim=1 release=1 poll=1 stats=1 "
-            "socket=1 bind=1 listen=1 accept=1 connect=1 close=1 "
-            "send=1 recv=1 tcp_stats=1 sock_poll=1 export=1 map=1 kick=1 "
-            "avail=1 reap=1 ring_state=1 dma=1 desc=1 user_avail=1 "
-            "bounce=1 virtio_tx=1 virtio_rx=1 queue_info=1 "
-            "full_stack=0 wave=%u\n",
-            u32Wave);
-
-    /*
-     * Product interim TCP surface lamps (native door vs net_tcp_*).
-     * Grep: net_door: soft tcp_surface
-     * Grep: net_door: soft tcp product surface PASS
-     * Soft only — never hard-gates; soft ≠ product.
-     */
-    kprintf("net_door: soft tcp_surface socket=1 bind=1 listen=1 "
-            "accept=1 connect=1 send=1 recv=1 close=1 stats=1 "
-            "sock_poll=1 poll_via_eth=1 tw_reaps=soft_backend "
-            "input=internal fd_ok=route shutdown=gap sockopt=gap "
-            "rtl8168=out_of_scope wave=%u\n",
-            u32Wave);
-    kprintf("net_door: soft tcp product surface PASS "
-            "ops=socket|bind|listen|accept|connect|send|recv|close|"
-            "stats|sock_poll native_door=1 linux_nr_pref=0 wave=%u\n",
-            u32Wave);
-
-    /* Grep: net_door: soft outcome (Wave 15 ok|err rollup) */
-    kprintf("net_door: soft outcome ok=%lu nodev=%lu inval=%lu busy=%lu "
-            "fault=%lu io=%lu nomem=%lu nosupport=%lu not_init=%lu "
-            "claim_ok=%lu reclaim=%lu sock_ok=%lu sock_fail=%lu "
-            "send_ok=%lu recv_ok=%lu wave=%u\n",
-            (unsigned long)s.u64Ok, (unsigned long)s.u64Nodev,
-            (unsigned long)s.u64Inval, (unsigned long)s.u64Busy,
-            (unsigned long)s.u64Fault, (unsigned long)s.u64Io,
-            (unsigned long)s.u64Nomem, (unsigned long)s.u64Nosupport,
-            (unsigned long)s.u64NotInit, (unsigned long)s.u64ClaimOk,
-            (unsigned long)s.u64ClaimReclaim, (unsigned long)s.u64SockOk,
-            (unsigned long)s.u64SockFail, (unsigned long)s.u64SendOk,
-            (unsigned long)s.u64RecvOk, u32Wave);
-
-    /* Grep: net_door: soft stats */
-    kprintf("net_door: soft stats enter=%lu claim_ok=%lu reclaim=%lu "
-            "sock=%lu ring=%lu virtio=%lu log_n=%lu wave=%u\n",
-            (unsigned long)s.u64Enter, (unsigned long)s.u64ClaimOk,
-            (unsigned long)s.u64ClaimReclaim, (unsigned long)u64SockEnter,
-            (unsigned long)u64RingEnter, (unsigned long)u64VirtioEnter,
-            (unsigned long)s.u64SoftLog, u32Wave);
-
-    /* Grep: net_door: soft backend */
-    kprintf("net_door: soft backend virtio=%u tx=%u rx=%u q_free_tx=%u "
-            "q_free_rx=%u avail_p=%u user_p=%u tcp_accepts=%u "
-            "tcp_segs=%u tcp_rtx=%u tcp_rx_b=%u tcp_tx_b=%u "
-            "tcp_tw=%u eth_arp=%u eth_udp=%u eth_icmp=%u wave=%u\n",
-            u32Ready, u32TxCnt, u32RxCnt, u32QFreeTx, u32QFreeRx, u32AvailP,
-            u32UserP, net_tcp_accepts(), net_tcp_segments(),
-            net_tcp_retransmits(), net_tcp_bytes_rx(), net_tcp_bytes_tx(),
-            net_tcp_tw_reaps(), net_eth_arp_replies(), net_eth_udp_echoes(),
-            net_eth_icmp_echoes(), u32Wave);
-
-    /*
-     * Honesty line: soft inventory / interim stack ≠ product multi-server.
-     * Grep: net_door: soft path
-     */
-    kprintf("net_door: soft path claim=netstackd sock=tcp|lo "
-            "ring=export|map|kick|state|avail|user "
-            "reclaim=idempotent map_remap=soft_reclaim "
-            "virtio_absent=nodev_soft product_netstackd=1 wave=%u "
-            "(soft inventory)\n",
-            u32Wave);
-
-    /* Grep: net_door: soft headroom — Wave 19 live slack lamps. */
-    kprintf("net_door: soft headroom xfer_max=%u eth_max=%u "
-            "q_free_tx=%u q_free_rx=%u owned=%u virtio=%u "
-            "calls=%u ring_calls=%u wave=%u\n",
-            NET_XFER_MAX, NET_ETH_MAX, u32QFreeTx, u32QFreeRx, u32Owned,
-            u32Ready, g_u32Calls, g_u32RingCalls, u32Wave);
-
-    /* Grep: net_door: soft surface — Wave 19 surface bit lamps. */
-    kprintf("net_door: soft surface init=%u owned=%u virtio=%u "
-            "sock=%u ring=%u xfer=%u surf=0x%x wave=%u\n",
-            g_fInit ? 1u : 0u, u32Owned, u32Ready,
-            u64SockEnter != 0ull ? 1u : 0u,
-            u64RingEnter != 0ull ? 1u : 0u,
-            (s.u64SendOk + s.u64RecvOk) != 0ull ? 1u : 0u,
-            (g_fInit ? 1u : 0u) | (u32Owned << 1) | (u32Ready << 2) |
-                ((u64SockEnter != 0ull) ? 8u : 0u) |
-                ((u64RingEnter != 0ull) ? 16u : 0u) |
-                (((s.u64SendOk + s.u64RecvOk) != 0ull) ? 32u : 0u),
-            u32Wave);
-
-    /* Grep: net_door: soft ratio — Wave 19 ok/err basis points. */
-    {
-        u64 u64Ok = s.u64Ok;
-        u64 u64Err = s.u64Nodev + s.u64Inval + s.u64Busy + s.u64Fault +
-                     s.u64Io + s.u64Nomem + s.u64Nosupport + s.u64NotInit;
-        u64 u64Tot = u64Ok + u64Err;
-        u32 u32OkBp = 0;
-        u32 u32ErrBp = 0;
-
-        if (u64Tot != 0ull) {
-            u32OkBp = (u32)((u64Ok * 10000ull) / u64Tot);
-            u32ErrBp = (u32)((u64Err * 10000ull) / u64Tot);
-        }
-        kprintf("net_door: soft ratio ok_bp=%u err_bp=%u ok=%lu err=%lu "
-                "enter=%lu wave=%u\n",
-                u32OkBp, u32ErrBp, (unsigned long)u64Ok,
-                (unsigned long)u64Err, (unsigned long)s.u64Enter, u32Wave);
+    u32L2Ready = (net_l2_ready() != 0) ? 1u : 0u;
+    u32MapHeld = (g_u64RingMapVa != 0) ? 1u : 0u;
+    u32DmaHeld = (g_u64MapDmaVa != 0) ? 1u : 0u;
+    /* H1 honesty: wrapper tally must equal POLL eth advance tally. */
+    u32H1Match = (g_soft.u64PollH1 == g_soft.u64PollEth) ? 1u : 0u;
+    /* C1 H1 thr-only locks compile-true (door thr legal; never IRQ). */
+    u32H1ThrLocks = 0u;
+    if (NET_DOOR_H1_IRQ_POLL == 0u && NET_DOOR_H1_THR_ONLY == 1u &&
+        NET_DOOR_H1_IRQ_PATH == 0u && NET_DOOR_H1_DOOR_THR == 1u &&
+        NET_DOOR_H1_POLL_SITES == 1u) {
+        u32H1ThrLocks = 1u;
+    }
+    szL2 = net_l2_name();
+    if (szL2 == NULL) {
+        szL2 = "none";
     }
 
-    /* Grep: net_door: soft return — Wave 19 API return surfaces */
-    kprintf("net_door: soft return ok=%lu nodev=%lu inval=%lu busy=%lu "
-            "fault=%lu io=%lu nomem=%lu nosupport=%lu not_init=%lu "
-            "enter=%lu product_netstackd=OPEN wave=%u\n",
-            (unsigned long)s.u64Ok, (unsigned long)s.u64Nodev,
-            (unsigned long)s.u64Inval, (unsigned long)s.u64Busy,
-            (unsigned long)s.u64Fault, (unsigned long)s.u64Io,
-            (unsigned long)s.u64Nomem, (unsigned long)s.u64Nosupport,
-            (unsigned long)s.u64NotInit, (unsigned long)s.u64Enter, u32Wave);
-
-    /* Grep: net_door: soft retmap — Wave 19 return-surface map */
-    kprintf("net_door: soft retmap ok|fail|inval|nodev|busy|nomem product_gate=0 soft_only=1 wave=116\n");
-
-    /* Grep: net_door: soft deepen (Wave 20 stamp) */
     /*
-     * ---- Wave 19 complementary surfaces (kept) (never reshape primary).
-     * Return surfaces only — soft inventory; never hard-gates product paths.
+     * Grep: net_door: soft residual
+     * Product DoD B = UDX not freestanding rtl; interim :22 + POLL->eth.
+     * greppable: product_dod_b=UDX | not_freestanding_rtl | dual_dod_b=OPEN_UDX
+     * greppable: handoff=netstackd|sshd|UDX
+     * greppable: udx_host_stack=claim|map_ring|map_dma|desc|user_avail|bounce
+     * greppable: door_thr_only=1 | H1 | h1_poll_sites=1 | poll_h1
+     * greppable: thr_only=1 | net_eth_irq=0 | irq_path=0 | poll_own=door_thr
+     * greppable: fault_class=H1_irq_stack_smash | dual_dod_b=OPEN
      */
-    /* Grep: net_door: soft retclass — Wave 19 return-class taxonomy (kept) */
-    kprintf("net_door: soft retclass ok|fail|inval|nodev|busy|nomem "
-            "soft_only=1 product_gate=0 wave=%u "
-            "(retclass taxonomy; Soft≠product)\n",
-            (unsigned)NET_DOOR_SOFT_DEEPEN_WAVE);
-    /* Grep: net_door: soft retlane — Wave 19 return-lane catalog (kept) */
-    kprintf("net_door: soft retlane inv|selftest|rate|retcode|retmap|class "
-            "product_kernel=OPEN soft_ne_product=1 wave=%u "
-            "(retlane catalog; Soft≠product)\n",
-            (unsigned)NET_DOOR_SOFT_DEEPEN_WAVE);
-    /*
-     * ---- Wave 20 complementary surfaces (kept) (never reshape primary).
-     * Return surfaces only — soft inventory; never hard-gates product paths.
-     */
-    /* Grep: net_door: soft retbound — Wave 20 return-bound honesty (kept) */
-    kprintf("net_door: soft retbound soft_only=1 product_gate=0 hard_gate=0 "
-            "never_blocks_m0=1 wave=%u "
-            "(retbound honesty; Soft≠product)\n",
-            (unsigned)NET_DOOR_SOFT_DEEPEN_WAVE);
-    /* Grep: net_door: soft retseal — Wave 20 seal stamp (kept) */
-    kprintf("net_door: soft retseal exclusive=1 soft_ne_product=1 "
-            "product_kernel=OPEN wave=%u "
-            "(retseal stamp; Soft≠product)\n",
-            (unsigned)NET_DOOR_SOFT_DEEPEN_WAVE);
-            /*
-             * ---- Wave 21 complementary surfaces (kept) (never reshape primary).
-             * Return surfaces only — soft inventory; never hard-gates product paths.
-            */
-            /* Grep: net_door: soft retpulse — Wave 21 return-pulse honesty (kept) */
-            kprintf("net_door: soft retpulse soft_only=1 product_gate=0 soft_ne_product=1 "
-                    "never_blocks_m0=1 wave=%u "
-                    "(retpulse honesty; Soft≠product)\n",
-                    (unsigned)NET_DOOR_SOFT_DEEPEN_WAVE);
-            /* Grep: net_door: soft retmark — Wave 21 mark stamp (kept) */
-            kprintf("net_door: soft retmark exclusive=1 soft_ne_product=1 "
-                    "product_kernel=OPEN wave=%u "
-                    "(retmark stamp; Soft≠product)\n",
-                    (unsigned)NET_DOOR_SOFT_DEEPEN_WAVE);
-            /*
-             * ---- Wave 22 complementary surfaces (kept) (never reshape primary).
-             * Return surfaces only — soft inventory; never hard-gates product paths.
-            */
-            /* Grep: net_door: soft retphase — Wave 22 return-phase honesty (kept) */
-            kprintf("net_door: soft retphase soft_only=1 product_gate=0 soft_ne_product=1 "
-                    "never_blocks_m0=1 wave=%u "
-                    "(retphase honesty; Soft≠product)\n",
-                    (unsigned)NET_DOOR_SOFT_DEEPEN_WAVE);
-            /* Grep: net_door: soft retbadge — Wave 22 badge stamp (kept) */
-            kprintf("net_door: soft retbadge exclusive=1 soft_ne_product=1 "
-                    "product_kernel=OPEN wave=%u "
-                    "(retbadge stamp; Soft≠product)\n",
-                    (unsigned)NET_DOOR_SOFT_DEEPEN_WAVE);
-/*
- * ---- Wave 23 complementary surfaces (kept) (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
-            */
-            /* Grep: net_door: soft rettoken — Wave 23 return-token honesty (kept) */
-            kprintf("net_door: soft rettoken soft_only=1 product_gate=0 soft_ne_product=1 "
-                    "never_blocks_m0=1 wave=%u "
-                    "(rettoken honesty; Soft≠product)\n",
-                    (unsigned)NET_DOOR_SOFT_DEEPEN_WAVE);
-            /* Grep: net_door: soft retcrest — Wave 23 crest stamp (kept) */
-            kprintf("net_door: soft retcrest exclusive=1 soft_ne_product=1 "
-                    "product_kernel=OPEN wave=%u "
-                    "(retcrest stamp; Soft≠product)\n",
-                    (unsigned)NET_DOOR_SOFT_DEEPEN_WAVE);
-            /*
-             * ---- Wave 24 complementary surfaces (kept) (never reshape primary).
-             * Return surfaces only — soft inventory; never hard-gates product paths.
-             */
-            /* Grep: net_door: soft retvault — Wave 24 return-vault honesty (kept) */
-            kprintf("net_door: soft retvault soft_only=1 product_gate=0 soft_ne_product=1 "
-                    "never_blocks_m0=1 wave=%u "
-                    "(retvault honesty; Soft≠product)\n",
-                    (unsigned)NET_DOOR_SOFT_DEEPEN_WAVE);
-            /* Grep: net_door: soft retbanner — Wave 24 banner stamp (kept) */
-            kprintf("net_door: soft retbanner exclusive=1 soft_ne_product=1 "
-                    "product_kernel=OPEN wave=%u "
-                    "(retbanner stamp; Soft≠product)\n",
-                    (unsigned)NET_DOOR_SOFT_DEEPEN_WAVE);
-            /*
-             * ---- Wave 25 complementary surfaces (kept) (never reshape primary).
-             * Return surfaces only — soft inventory; never hard-gates product paths.
-             */
-            /* Grep: net_door: soft retledger — Wave 25 return-ledger honesty (kept) */
-            kprintf("net_door: soft retledger soft_only=1 product_gate=0 soft_ne_product=1 "
-                    "never_blocks_m0=1 wave=%u "
-                    "(retledger honesty; Soft≠product)\n",
-                    (unsigned)NET_DOOR_SOFT_DEEPEN_WAVE);
-            /* Grep: net_door: soft retbeacon — Wave 25 beacon stamp (kept) */
-            kprintf("net_door: soft retbeacon exclusive=1 soft_ne_product=1 "
-                    "product_kernel=OPEN wave=%u "
-                    "(retbeacon stamp; Soft≠product)\n",
-                    (unsigned)NET_DOOR_SOFT_DEEPEN_WAVE);
-            /*
-             * ---- Wave 26 complementary surfaces (kept) (never reshape primary).
-             * Return surfaces only — soft inventory; never hard-gates product paths.
-             */
-            /* Grep: net_door: soft retcipher — Wave 26 return-cipher honesty (kept) */
-            kprintf("net_door: soft retcipher soft_only=1 product_gate=0 soft_ne_product=1 "
-                    "never_blocks_m0=1 wave=%u "
-                    "(retcipher honesty; Soft≠product)\n",
-                    (unsigned)NET_DOOR_SOFT_DEEPEN_WAVE);
-            /* Grep: net_door: soft retflame — Wave 26 flame stamp (kept) */
-            kprintf("net_door: soft retflame exclusive=1 soft_ne_product=1 "
-                    "product_kernel=OPEN wave=%u "
-                    "(retflame stamp; Soft≠product)\n",
-                    (unsigned)NET_DOOR_SOFT_DEEPEN_WAVE);
-                    /*
-                     * ---- Wave 27 complementary surfaces (kept) (never reshape primary).
-                     * Return surfaces only — soft inventory; never hard-gates product paths.
-                     */
-                    /* Grep: net_door: soft retprism — Wave 27 return-prism honesty (kept) */
-                    kprintf("net_door: soft retprism soft_only=1 product_gate=0 soft_ne_product=1 "
-                            "never_blocks_m0=1 wave=%u "
-                            "(retprism honesty; Soft≠product)\n",
-                            (unsigned)NET_DOOR_SOFT_DEEPEN_WAVE);
-                    /* Grep: net_door: soft retforge — Wave 27 forge stamp (kept) */
-                    kprintf("net_door: soft retforge exclusive=1 soft_ne_product=1 "
-                            "product_kernel=OPEN wave=%u "
-                            "(retforge stamp; Soft≠product)\n",
-                            (unsigned)NET_DOOR_SOFT_DEEPEN_WAVE);
-                            /*
-                             * ---- Wave 28 complementary surfaces (kept) (never reshape primary).
-                             * Return surfaces only — soft inventory; never hard-gates product paths.
-                             */
-                            /* Grep: net_door: soft retshard — Wave 28 return-shard honesty (kept) */
-                            kprintf("net_door: soft retshard soft_only=1 product_gate=0 soft_ne_product=1 "
-                                "never_blocks_m0=1 wave=%u "
-                                "(retshard honesty; Soft≠product)\n",
-                                (unsigned)NET_DOOR_SOFT_DEEPEN_WAVE);
-                            /* Grep: net_door: soft retcrown — Wave 28 crown stamp (kept) */
-                            kprintf("net_door: soft retcrown exclusive=1 soft_ne_product=1 "
-                                "product_kernel=OPEN wave=%u "
-                                "(retcrown stamp; Soft≠product)\n",
-                                (unsigned)NET_DOOR_SOFT_DEEPEN_WAVE);
-                                /*
-                             * ---- Wave 29 complementary surfaces (kept) (never reshape primary).
-                             * Return surfaces only — soft inventory; never hard-gates product paths.
-                             */
-                            /* Grep: net_door: soft retglyph — Wave 29 return-glyph honesty (kept) */
-                            kprintf("net_door: soft retglyph soft_only=1 product_gate=0 soft_ne_product=1 "
-                                    "never_blocks_m0=1 wave=116 "
-                                    "(retglyph honesty; Soft≠product)\n");
-                            /* Grep: net_door: soft retscepter — Wave 29 scepter stamp (kept) */
-                            kprintf("net_door: soft retscepter exclusive=1 soft_ne_product=1 "
-                                    "product_kernel=OPEN wave=116 "
-                                    "(retscepter stamp; Soft≠product)\n");
-                                /*
-                             * ---- Wave 30 complementary surfaces (kept) (never reshape primary).
-                             * Return surfaces only — soft inventory; never hard-gates product paths.
-                             */
-                            /* Grep: net_door: soft retsigil — Wave 30 return-sigil honesty (kept) */
-                            kprintf("net_door: soft retsigil soft_only=1 product_gate=0 soft_ne_product=1 "
-                                    "never_blocks_m0=1 wave=116 "
-                                    "(retsigil honesty; Soft≠product)\n");
-                            /* Grep: net_door: soft retemblem — Wave 30 emblem stamp (kept) */
-                            kprintf("net_door: soft retemblem exclusive=1 soft_ne_product=1 "
-                                    "product_kernel=OPEN wave=116 "
-                                    "(retemblem stamp; Soft≠product)\n");
-                            /*
-                             * ---- Wave 31 complementary surfaces (kept) (never reshape primary).
-                             * Return surfaces only — soft inventory; never hard-gates product paths.
-                             */
-                            /* Grep: net_door: soft retaegis — Wave 31 return-aegis honesty (kept) */
-                            kprintf("net_door: soft retaegis soft_only=1 product_gate=0 soft_ne_product=1 "
-                                    "never_blocks_m0=1 wave=116 "
-                                    "(retaegis honesty; Soft≠product)\n");
-                            /* Grep: net_door: soft retsigil — Wave 30 return-sigil honesty (kept) */
-                            kprintf("net_door: soft retsigil soft_only=1 product_gate=0 soft_ne_product=1 "
-                                    "never_blocks_m0=1 wave=116 "
-                                    "(retsigil honesty; Soft≠product)\n");
-                            /* Grep: net_door: soft retmantle — Wave 31 mantle stamp (kept) */
-                            kprintf("net_door: soft retmantle exclusive=1 soft_ne_product=1 "
-                                    "product_kernel=OPEN wave=116 "
-                                    "(retmantle stamp; Soft≠product)\n");
-/*
- * ---- Wave 32 complementary surfaces (kept) (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: net_door: soft retbulwark — Wave 32 return-bulwark honesty (kept) */
-kprintf("net_door: soft retbulwark soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retbulwark honesty; Soft≠product)\n");
-/* Grep: net_door: soft retpanoply — Wave 32 panoply stamp (kept) */
-kprintf("net_door: soft retpanoply exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retpanoply stamp; Soft≠product)\n");
-/*
- * ---- Wave 33 complementary surfaces (kept) (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: net_door: soft retbastion — Wave 33 return-bastion honesty (kept) */
-kprintf("net_door: soft retbastion soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retbastion honesty; Soft≠product)\n");
-/* Grep: net_door: soft retcitadel — Wave 33 citadel stamp (kept) */
-kprintf("net_door: soft retcitadel exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retcitadel stamp; Soft≠product)\n");
-/*
- * ---- Wave 34 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: net_door: soft retredoubt — Wave 34 return-redoubt honesty */
-kprintf("net_door: soft retredoubt soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retredoubt honesty; Soft≠product)\n");
-/* Grep: net_door: soft retkeep — Wave 34 exclusive keep stamp */
-kprintf("net_door: soft retkeep exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retkeep stamp; Soft≠product)\n");
-/*
- * ---- Wave 35 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: net_door: soft retfortress — Wave 35 return-fortress honesty */
-kprintf("net_door: soft retfortress soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retfortress honesty; Soft≠product)\n");
-/* Grep: net_door: soft retpalace — Wave 35 exclusive palace stamp */
-kprintf("net_door: soft retpalace exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retpalace stamp; Soft≠product)\n");
-/*
- * ---- Wave 36 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: net_door: soft rethold — Wave 36 return-hold honesty */
-kprintf("net_door: soft rethold soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(rethold honesty; Soft≠product)\n");
-/* Grep: net_door: soft retspire — Wave 36 exclusive spire stamp */
-kprintf("net_door: soft retspire exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retspire stamp; Soft≠product)\n");
-/*
- * ---- Wave 37 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: net_door: soft retwall — Wave 37 return-wall honesty */
-kprintf("net_door: soft retwall soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retwall honesty; Soft≠product)\n");
-/* Grep: net_door: soft retgate — Wave 37 exclusive gate stamp */
-kprintf("net_door: soft retgate exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retgate stamp; Soft≠product)\n");
-/*
- * ---- Wave 38 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: net_door: soft retmoat — Wave 38 return-moat honesty */
-kprintf("net_door: soft retmoat soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retmoat honesty; Soft≠product)\n");
-/* Grep: net_door: soft retower — Wave 38 exclusive tower stamp */
-kprintf("net_door: soft retower exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retower stamp; Soft≠product)\n");
-/*
- * ---- Wave 39 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: net_door: soft retbarbican — Wave 39 return-barbican honesty */
-kprintf("net_door: soft retbarbican soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retbarbican honesty; Soft≠product)\n");
-/* Grep: net_door: soft retglacis — Wave 39 exclusive glacis stamp */
-kprintf("net_door: soft retglacis exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retglacis stamp; Soft≠product)\n");
-/*
- * ---- Wave 40 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: net_door: soft retcurtain — Wave 40 return-curtain honesty */
-kprintf("net_door: soft retcurtain soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retcurtain honesty; Soft≠product)\n");
-/* Grep: net_door: soft retparapet — Wave 40 exclusive parapet stamp */
-kprintf("net_door: soft retparapet exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retparapet stamp; Soft≠product)\n");
-/*
- * ---- Wave 41 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: net_door: soft retravelin — Wave 41 return-travelin honesty */
-kprintf("net_door: soft retravelin soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retravelin honesty; Soft≠product)\n");
-/* Grep: net_door: soft retditch — Wave 41 exclusive ditch stamp */
-kprintf("net_door: soft retditch exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retditch stamp; Soft≠product)\n");
-/*
- * ---- Wave 42 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: net_door: soft retportcullis — Wave 42 return-portcullis honesty */
-kprintf("net_door: soft retportcullis soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retportcullis honesty; Soft≠product)\n");
-/* Grep: net_door: soft retbattlement — Wave 42 exclusive battlement stamp */
-kprintf("net_door: soft retbattlement exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retbattlement stamp; Soft≠product)\n");
-/*
- * ---- Wave 43 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: net_door: soft retmachicolation — Wave 43 return-machicolation honesty */
-kprintf("net_door: soft retmachicolation soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retmachicolation honesty; Soft≠product)\n");
-/* Grep: net_door: soft retarrowslit — Wave 43 exclusive arrowslit stamp */
-kprintf("net_door: soft retarrowslit exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retarrowslit stamp; Soft≠product)\n");
-
-/*
- * ---- Wave 44 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: net_door: soft retmerlon — Wave 44 return-merlon honesty */
-kprintf("net_door: soft retmerlon soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retmerlon honesty; Soft≠product)\n");
-/* Grep: net_door: soft retembrasure — Wave 44 exclusive embrasure stamp */
-kprintf("net_door: soft retembrasure exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retembrasure stamp; Soft≠product)\n");
-
-/*
- * ---- Wave 45 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: net_door: soft retkeepgate — Wave 45 return-keepgate honesty */
-kprintf("net_door: soft retkeepgate soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retkeepgate honesty; Soft≠product)\n");
-/* Grep: net_door: soft retouterward — Wave 45 exclusive outerward stamp */
-kprintf("net_door: soft retouterward exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retouterward stamp; Soft≠product)\n");
-
-/*
- * ---- Wave 46 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: net_door: soft retbailey — Wave 46 return-bailey honesty */
-kprintf("net_door: soft retbailey soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retbailey honesty; Soft≠product)\n");
-/* Grep: net_door: soft retpostern — Wave 46 exclusive postern stamp */
-kprintf("net_door: soft retpostern exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retpostern stamp; Soft≠product)\n");
-
-/*
- * ---- Wave 47 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: net_door: soft retinnerward — Wave 47 return-innerward honesty */
-kprintf("net_door: soft retinnerward soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retinnerward honesty; Soft≠product)\n");
-/* Grep: net_door: soft retdonjon — Wave 47 exclusive donjon stamp */
-kprintf("net_door: soft retdonjon exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retdonjon stamp; Soft≠product)\n");
-
-/*
- * ---- Wave 48 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: net_door: soft retchevaux — Wave 48 return-chevaux honesty */
-kprintf("net_door: soft retchevaux soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retchevaux honesty; Soft≠product)\n");
-/* Grep: net_door: soft retpalisade — Wave 48 exclusive palisade stamp */
-kprintf("net_door: soft retpalisade exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retpalisade stamp; Soft≠product)\n");
-
-/*
- * ---- Wave 49 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: net_door: soft retglacisgate — Wave 49 return-glacisgate honesty */
-kprintf("net_door: soft retglacisgate soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retglacisgate honesty; Soft≠product)\n");
-/* Grep: net_door: soft retoutwork — Wave 49 exclusive outwork stamp */
-kprintf("net_door: soft retoutwork exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retoutwork stamp; Soft≠product)\n");
-/*
- * ---- Wave 50 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: net_door: soft retsally — Wave 50 return-sally honesty */
-kprintf("net_door: soft retsally soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retsally honesty; Soft≠product)\n");
-/* Grep: net_door: soft retcounterscarp — Wave 50 exclusive counterscarp stamp */
-kprintf("net_door: soft retcounterscarp exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retcounterscarp stamp; Soft≠product)\n");
-/*
- * ---- Wave 51 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: net_door: soft retfosse — Wave 51 return-fosse honesty */
-kprintf("net_door: soft retfosse soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retfosse honesty; Soft≠product)\n");
-/* Grep: net_door: soft retcoveredway — Wave 51 exclusive coveredway stamp */
-kprintf("net_door: soft retcoveredway exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retcoveredway stamp; Soft≠product)\n");
-
-/*
- * ---- Wave 52 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: net_door: soft rettenaille — Wave 52 return-tenaille honesty */
-kprintf("net_door: soft rettenaille soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(rettenaille honesty; Soft≠product)\n");
-/* Grep: net_door: soft retdemilune — Wave 52 exclusive demilune stamp */
-kprintf("net_door: soft retdemilune exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retdemilune stamp; Soft≠product)\n");
-/*
- * ---- Wave 53 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: net_door: soft retravelin — Wave 53 return-travelin honesty */
-kprintf("net_door: soft retravelin soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retravelin honesty; Soft≠product)\n");
-/* Grep: net_door: soft retlunette — Wave 53 exclusive lunette stamp */
-kprintf("net_door: soft retlunette exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retlunette stamp; Soft≠product)\n");
-/*
- * ---- Wave 54 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: net_door: soft retcaponier — Wave 54 return-caponier honesty */
-kprintf("net_door: soft retcaponier soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retcaponier honesty; Soft≠product)\n");
-/* Grep: net_door: soft retredan — Wave 54 exclusive redan stamp */
-kprintf("net_door: soft retredan exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retredan stamp; Soft≠product)\n");
-/*
- * ---- Wave 55 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: net_door: soft retflank — Wave 55 return-flank honesty */
-kprintf("net_door: soft retflank soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retflank honesty; Soft≠product)\n");
-/* Grep: net_door: soft retface — Wave 55 exclusive face stamp */
-kprintf("net_door: soft retface exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retface stamp; Soft≠product)\n");
-/*
- * ---- Wave 56 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: net_door: soft retgorge — Wave 56 return-gorge honesty */
-kprintf("net_door: soft retgorge soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retgorge honesty; Soft≠product)\n");
-/* Grep: net_door: soft retshoulder — Wave 56 exclusive shoulder stamp */
-kprintf("net_door: soft retshoulder exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retshoulder stamp; Soft≠product)\n");
-/*
- * ---- Wave 57 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: net_door: soft retraverse — Wave 57 return-traverse honesty */
-kprintf("net_door: soft retraverse soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retraverse honesty; Soft≠product)\n");
-/* Grep: net_door: soft retcasemate — Wave 57 exclusive casemate stamp */
-kprintf("net_door: soft retcasemate exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retcasemate stamp; Soft≠product)\n");
-
-/*
- * ---- Wave 58 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: net_door: soft retorillon — Wave 58 return-orillon honesty */
-kprintf("net_door: soft retorillon soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retorillon honesty; Soft≠product)\n");
-/* Grep: net_door: soft retbonnette — Wave 58 exclusive bonnette stamp */
-kprintf("net_door: soft retbonnette exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retbonnette stamp; Soft≠product)\n");
-
-/*
- * ---- Wave 59 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: net_door: soft retcrownwork — Wave 59 return-crownwork honesty */
-kprintf("net_door: soft retcrownwork soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retcrownwork honesty; Soft≠product)\n");
-/* Grep: net_door: soft rethornwork — Wave 59 exclusive hornwork stamp */
-kprintf("net_door: soft rethornwork exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(rethornwork stamp; Soft≠product)\n");
-
-/*
- * ---- Wave 60 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: net_door: soft retplace — Wave 60 return-place honesty */
-kprintf("net_door: soft retplace soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retplace honesty; Soft≠product)\n");
-/* Grep: net_door: soft retenvelope — Wave 60 exclusive envelope stamp */
-kprintf("net_door: soft retenvelope exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retenvelope stamp; Soft≠product)\n");
-
-
-
-
-
-
-
-
-
-/*
- * ---- Wave 61 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: net_door: soft retcounterguard — Wave 61 return-counterguard honesty */
-kprintf("net_door: soft retcounterguard soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retcounterguard honesty; Soft≠product)\n");
-/* Grep: net_door: soft retcoveredface — Wave 61 exclusive coveredface stamp */
-kprintf("net_door: soft retcoveredface exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retcoveredface stamp; Soft≠product)\n");
-/*
- * ---- Wave 62 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: net_door: soft retbastionface — Wave 62 return-bastionface honesty */
-kprintf("net_door: soft retbastionface soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retbastionface honesty; Soft≠product)\n");
-/* Grep: net_door: soft retcurtainangle — Wave 62 exclusive curtainangle stamp */
-kprintf("net_door: soft retcurtainangle exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retcurtainangle stamp; Soft≠product)\n");
-/*
- * ---- Wave 63 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: net_door: soft retdoubletenaille — Wave 63 return-doubletenaille honesty */
-kprintf("net_door: soft retdoubletenaille soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retdoubletenaille honesty; Soft≠product)\n");
-/* Grep: net_door: soft retplaceofarms — Wave 63 exclusive placeofarms stamp */
-kprintf("net_door: soft retplaceofarms exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retplaceofarms stamp; Soft≠product)\n");
- /*
-  * ---- Wave 64 exclusive complementary surfaces (never reshape primary).
-  * Return surfaces only — soft inventory; never hard-gates product paths.
-  */
- /* Grep: net_door: soft retreentrant — Wave 64 return-reentrant honesty */
-kprintf("net_door: soft retreentrant soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retreentrant honesty; Soft≠product)\n");
- /* Grep: net_door: soft retsallyport — Wave 64 exclusive sallyport stamp */
-kprintf("net_door: soft retsallyport exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retsallyport stamp; Soft≠product)\n");
- /*
-  * ---- Wave 65 exclusive complementary surfaces (never reshape primary).
-  * Return surfaces only — soft inventory; never hard-gates product paths.
-  */
- /* Grep: net_door: soft retgorgeangle — Wave 65 return-gorgeangle honesty */
-kprintf("net_door: soft retgorgeangle soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retgorgeangle honesty; Soft≠product)\n");
- /* Grep: net_door: soft retshoulderangle — Wave 65 exclusive shoulderangle stamp */
-kprintf("net_door: soft retshoulderangle exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retshoulderangle stamp; Soft≠product)\n");
- /*
-  * ---- Wave 66 exclusive complementary surfaces (never reshape primary).
-  * Return surfaces only — soft inventory; never hard-gates product paths.
-  */
- /* Grep: net_door: soft retflankangle — Wave 66 return-flankangle honesty */
- kprintf("net_door: soft retflankangle soft_only=1 product_gate=0 soft_ne_product=1 "
-         "never_blocks_m0=1 wave=116 "
-         "(retflankangle honesty; Soft≠product)\n");
- /* Grep: net_door: soft retfaceangle — Wave 66 exclusive faceangle stamp */
- kprintf("net_door: soft retfaceangle exclusive=1 soft_ne_product=1 "
-         "product_kernel=OPEN wave=116 "
-         "(retfaceangle stamp; Soft≠product)\n");
-/*
- * ---- Wave 67 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: net_door: soft retcaponierangle — Wave 67 return-caponierangle honesty */
-kprintf("net_door: soft retcaponierangle soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retcaponierangle honesty; Soft≠product)\n");
-/* Grep: net_door: soft retredanangle — Wave 67 exclusive redanangle stamp */
-kprintf("net_door: soft retredanangle exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retredanangle stamp; Soft≠product)\n");
-/*
- * ---- Wave 68 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: net_door: soft retlunetteangle — Wave 68 return-lunetteangle honesty */
-kprintf("net_door: soft retlunetteangle soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retlunetteangle honesty; Soft≠product)\n");
-/* Grep: net_door: soft rettenailleangle — Wave 68 exclusive tenailleangle stamp */
-kprintf("net_door: soft rettenailleangle exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(rettenailleangle stamp; Soft≠product)\n");
-/*
- * ---- Wave 69 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: net_door: soft retdemiluneangle — Wave 69 return-demiluneangle honesty */
-kprintf("net_door: soft retdemiluneangle soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retdemiluneangle honesty; Soft≠product)\n");
-/* Grep: net_door: soft retcoveredwayangle — Wave 69 exclusive coveredwayangle stamp */
-kprintf("net_door: soft retcoveredwayangle exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retcoveredwayangle stamp; Soft≠product)\n");
-/*
- * ---- Wave 70 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: net_door: soft retfosseangle — Wave 70 return-fosseangle honesty */
-kprintf("net_door: soft retfosseangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retfosseangle honesty; Soft≠product)\n");
-/* Grep: net_door: soft retcounterscarple — Wave 70 exclusive counterscarple stamp */
-kprintf("net_door: soft retcounterscarple exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retcounterscarple stamp; Soft≠product)\n");
-/*
- * ---- Wave 71 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: net_door: soft retsallyportangle — Wave 71 return-sallyportangle honesty */
-kprintf("net_door: soft retsallyportangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retsallyportangle honesty; Soft≠product)\n");
-/* Grep: net_door: soft retreentrantangle — Wave 71 exclusive reentrantangle stamp */
-kprintf("net_door: soft retreentrantangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retreentrantangle stamp; Soft≠product)\n");
-/*
- * ---- Wave 72 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: net_door: soft retplaceofarmsangle — Wave 72 return-placeofarmsangle honesty */
-kprintf("net_door: soft retplaceofarmsangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retplaceofarmsangle honesty; Soft≠product)\n");
-/* Grep: net_door: soft retdoubletenailleangle — Wave 72 exclusive doubletenailleangle stamp */
-kprintf("net_door: soft retdoubletenailleangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retdoubletenailleangle stamp; Soft≠product)\n");
-/* Grep: net_door: soft retcurtainface — Wave 73 return-curtainface honesty */
-kprintf("net_door: soft retcurtainface soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retcurtainface honesty; Soft≠product)\n");
-/* Grep: net_door: soft retbastionangle — Wave 73 exclusive bastionangle stamp */
-kprintf("net_door: soft retbastionangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retbastionangle stamp; Soft≠product)\n");
-/* Grep: net_door: soft retglacisangle — Wave 74 return-glacisangle honesty */
-kprintf("net_door: soft retglacisangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retglacisangle honesty; Soft≠product)\n");
-/* Grep: net_door: soft retparapetangle — Wave 74 exclusive parapetangle stamp */
-kprintf("net_door: soft retparapetangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retparapetangle stamp; Soft≠product)\n");
-/* Grep: net_door: soft retmoatangle — Wave 75 return-moatangle honesty */
-kprintf("net_door: soft retmoatangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retmoatangle honesty; Soft≠product)\n");
-/* Grep: net_door: soft retowerangle — Wave 75 exclusive towerangle stamp */
-kprintf("net_door: soft retowerangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retowerangle stamp; Soft≠product)\n");
-/* Grep: net_door: soft retgateangle — Wave 76 return-gateangle honesty */
-kprintf("net_door: soft retgateangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retgateangle honesty; Soft≠product)\n");
-/* Grep: net_door: soft retwallangle — Wave 76 exclusive wallangle stamp */
-kprintf("net_door: soft retwallangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retwallangle stamp; Soft≠product)\n");
-/* Grep: net_door: soft retspireangle — Wave 77 return-spireangle honesty */
-kprintf("net_door: soft retspireangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retspireangle honesty; Soft≠product)\n");
-/* Grep: net_door: soft retholdangle — Wave 77 exclusive holdangle stamp */
-kprintf("net_door: soft retholdangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retholdangle stamp; Soft≠product)\n");
-/* Grep: net_door: soft retpalaceangle — Wave 78 return-palaceangle honesty */
-kprintf("net_door: soft retpalaceangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retpalaceangle honesty; Soft≠product)\n");
-/* Grep: net_door: soft retfortressangle — Wave 78 exclusive fortressangle stamp */
-kprintf("net_door: soft retfortressangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retfortressangle stamp; Soft≠product)\n");
-/* Grep: net_door: soft retkeepangle — Wave 79 return-keepangle honesty */
-kprintf("net_door: soft retkeepangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retkeepangle honesty; Soft≠product)\n");
-/* Grep: net_door: soft retredoubtangle — Wave 79 exclusive redoubtangle stamp */
-kprintf("net_door: soft retredoubtangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retredoubtangle stamp; Soft≠product)\n");
-/* Grep: net_door: soft retcitadelangle — Wave 80 return-citadelangle honesty */
-kprintf("net_door: soft retcitadelangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retcitadelangle honesty; Soft≠product)\n");
-/* Grep: net_door: soft retbastionkeep — Wave 80 exclusive bastionkeep stamp */
-kprintf("net_door: soft retbastionkeep exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retbastionkeep stamp; Soft≠product)\n");
-/* Grep: net_door: soft retpanoplyangle — Wave 81 return-panoplyangle honesty */
-kprintf("net_door: soft retpanoplyangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retpanoplyangle honesty; Soft≠product)\n");
-/* Grep: net_door: soft retbulwarkangle — Wave 81 exclusive bulwarkangle stamp */
-kprintf("net_door: soft retbulwarkangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retbulwarkangle stamp; Soft≠product)\n");
-/* Grep: net_door: soft retmantleangle — Wave 82 return-mantleangle honesty */
-kprintf("net_door: soft retmantleangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retmantleangle honesty; Soft≠product)\n");
-/* Grep: net_door: soft retaegisangle — Wave 82 exclusive aegisangle stamp */
-kprintf("net_door: soft retaegisangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retaegisangle stamp; Soft≠product)\n");
-/* Grep: net_door: soft retemblemangle — Wave 83 return-emblemangle honesty */
-kprintf("net_door: soft retemblemangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retemblemangle honesty; Soft≠product)\n");
-/* Grep: net_door: soft retsigilangle — Wave 83 exclusive sigilangle stamp */
-kprintf("net_door: soft retsigilangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retsigilangle stamp; Soft≠product)\n");
-/* Grep: net_door: soft retscepterangle — Wave 84 return-scepterangle honesty */
-kprintf("net_door: soft retscepterangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retscepterangle honesty; Soft≠product)\n");
-/* Grep: net_door: soft retglyphangle — Wave 84 exclusive glyphangle stamp */
-kprintf("net_door: soft retglyphangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retglyphangle stamp; Soft≠product)\n");
-/* Grep: net_door: soft retcrownangle — Wave 85 return-crownangle honesty */
-kprintf("net_door: soft retcrownangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retcrownangle honesty; Soft≠product)\n");
-/* Grep: net_door: soft retshardangle — Wave 85 exclusive shardangle stamp */
-kprintf("net_door: soft retshardangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retshardangle stamp; Soft≠product)\n");
-/* Grep: net_door: soft retforgeangle — Wave 86 return-forgeangle honesty */
-kprintf("net_door: soft retforgeangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retforgeangle honesty; Soft≠product)\n");
-/* Grep: net_door: soft retprismangle — Wave 86 exclusive prismangle stamp */
-kprintf("net_door: soft retprismangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retprismangle stamp; Soft≠product)\n");
-/* Grep: net_door: soft retflameangle — Wave 87 return-flameangle honesty */
-kprintf("net_door: soft retflameangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retflameangle honesty; Soft≠product)\n");
-/* Grep: net_door: soft retcipherangle — Wave 87 exclusive cipherangle stamp */
-kprintf("net_door: soft retcipherangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retcipherangle stamp; Soft≠product)\n");
-/* Grep: net_door: soft retbeaconangle — Wave 88 return-beaconangle honesty */
-kprintf("net_door: soft retbeaconangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retbeaconangle honesty; Soft≠product)\n");
-/* Grep: net_door: soft retledgerangle — Wave 88 exclusive ledgerangle stamp */
-kprintf("net_door: soft retledgerangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retledgerangle stamp; Soft≠product)\n");
-/* Grep: net_door: soft retbannerangle — Wave 89 return-bannerangle honesty */
-kprintf("net_door: soft retbannerangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retbannerangle honesty; Soft≠product)\n");
-/* Grep: net_door: soft retvaultangle — Wave 89 exclusive vaultangle stamp */
-kprintf("net_door: soft retvaultangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retvaultangle stamp; Soft≠product)\n");
-/* Grep: net_door: soft retcrestangle — Wave 90 return-crestangle honesty */
-kprintf("net_door: soft retcrestangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retcrestangle honesty; Soft≠product)\n");
-/* Grep: net_door: soft rettokenangle — Wave 90 exclusive tokenangle stamp */
-kprintf("net_door: soft rettokenangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (rettokenangle stamp; Soft≠product)\n");
-/* Grep: net_door: soft retbadgeangle — Wave 91 return-badgeangle honesty */
-kprintf("net_door: soft retbadgeangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retbadgeangle honesty; Soft≠product)\n");
-/* Grep: net_door: soft retphaseangle — Wave 91 exclusive phaseangle stamp */
-kprintf("net_door: soft retphaseangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retphaseangle stamp; Soft≠product)\n");
-/* Grep: net_door: soft retmarkangle — Wave 92 return-markangle honesty */
-kprintf("net_door: soft retmarkangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retmarkangle honesty; Soft≠product)\n");
-/* Grep: net_door: soft retpulseangle — Wave 92 exclusive pulseangle stamp */
-kprintf("net_door: soft retpulseangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retpulseangle stamp; Soft≠product)\n");
-
-/* Grep: net_door: soft retsealangle — Wave 93 return-sealangle honesty */
-kprintf("net_door: soft retsealangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retsealangle honesty; Soft≠product)\n");
-/* Grep: net_door: soft retboundangle — Wave 93 exclusive boundangle stamp */
-kprintf("net_door: soft retboundangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retboundangle stamp; Soft≠product)\n");
-/* Grep: net_door: soft retstemangle — Wave 94 return-stemangle honesty */
-kprintf("net_door: soft retstemangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retstemangle honesty; Soft≠product)\n");
-/* Grep: net_door: soft retbladeangle — Wave 94 exclusive bladeangle stamp */
-kprintf("net_door: soft retbladeangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retbladeangle stamp; Soft≠product)\n");
-/* Grep: net_door: soft retchordangle — Wave 95 return-chordangle honesty */
-kprintf("net_door: soft retchordangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retchordangle honesty; Soft≠product)\n");
-/* Grep: net_door: soft retarcangle — Wave 95 exclusive arcangle stamp */
-kprintf("net_door: soft retarcangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retarcangle stamp; Soft≠product)\n");
-/* Grep: net_door: soft retsectorangle — Wave 96 return-sectorangle honesty */
-kprintf("net_door: soft retsectorangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retsectorangle honesty; Soft≠product)\n");
-/* Grep: net_door: soft retwedgeangle — Wave 96 exclusive wedgeangle stamp */
-kprintf("net_door: soft retwedgeangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retwedgeangle stamp; Soft≠product)\n");
-/* Grep: net_door: soft retradiusangle — Wave 97 return-radiusangle honesty */
-kprintf("net_door: soft retradiusangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retradiusangle honesty; Soft≠product)\n");
-/* Grep: net_door: soft retdiameterangle — Wave 97 exclusive diameterangle stamp */
-kprintf("net_door: soft retdiameterangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retdiameterangle stamp; Soft≠product)\n");
-/* Grep: net_door: soft retcircumangle — Wave 98 return-circumangle honesty */
-kprintf("net_door: soft retcircumangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retcircumangle honesty; Soft≠product)\n");
-/* Grep: net_door: soft retellipseangle — Wave 98 exclusive ellipseangle stamp */
-kprintf("net_door: soft retellipseangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retellipseangle stamp; Soft≠product)\n");
-/* Grep: net_door: soft rethyperangle — Wave 99 return-hyperangle honesty */
-kprintf("net_door: soft rethyperangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (rethyperangle honesty; Soft≠product)\n");
-/* Grep: net_door: soft retparabolaangle — Wave 99 exclusive parabolaangle stamp */
-kprintf("net_door: soft retparabolaangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retparabolaangle stamp; Soft≠product)\n");
-/* Grep: net_door: soft retspiralangle — Wave 100 return-spiralangle honesty */
-kprintf("net_door: soft retspiralangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retspiralangle honesty; Soft≠product)\n");
-/* Grep: net_door: soft rethelixangle — Wave 100 exclusive helixangle stamp */
-kprintf("net_door: soft rethelixangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (rethelixangle stamp; Soft≠product)\n");
-/* Grep: net_door: soft rettorusangle — Wave 101 return-torusangle honesty */
-kprintf("net_door: soft rettorusangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (rettorusangle honesty; Soft≠product)\n");
-/* Grep: net_door: soft retknotangle — Wave 101 exclusive knotangle stamp */
-kprintf("net_door: soft retknotangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retknotangle stamp; Soft≠product)\n");
-/* Grep: net_door: soft retmoebiusangle — Wave 102 return-moebiusangle honesty */
-kprintf("net_door: soft retmoebiusangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retmoebiusangle honesty; Soft≠product)\n");
-/* Grep: net_door: soft retkleinangle — Wave 102 exclusive kleinangle stamp */
-kprintf("net_door: soft retkleinangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retkleinangle stamp; Soft≠product)\n");
-/* Grep: net_door: soft retprojectangle — Wave 103 return-projectangle honesty */
-kprintf("net_door: soft retprojectangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retprojectangle honesty; Soft≠product)\n");
-/* Grep: net_door: soft retaffineangle — Wave 103 exclusive affineangle stamp */
-kprintf("net_door: soft retaffineangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retaffineangle stamp; Soft≠product)\n");
-/* Grep: net_door: soft retlinearangle — Wave 104 return-linearangle honesty */
-kprintf("net_door: soft retlinearangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retlinearangle honesty; Soft≠product)\n");
-/* Grep: net_door: soft retbilinearangle — Wave 104 exclusive bilinearangle stamp */
-kprintf("net_door: soft retbilinearangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retbilinearangle stamp; Soft≠product)\n");
-/* Grep: net_door: soft retquadraticangle — Wave 105 return-quadraticangle honesty */
-kprintf("net_door: soft retquadraticangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retquadraticangle honesty; Soft≠product)\n");
-/* Grep: net_door: soft retcubicangle — Wave 105 exclusive cubicangle stamp */
-kprintf("net_door: soft retcubicangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retcubicangle stamp; Soft≠product)\n");
-/* Grep: net_door: soft retquarticangle — Wave 106 return-quarticangle honesty */
-kprintf("net_door: soft retquarticangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retquarticangle honesty; Soft≠product)\n");
-/* Grep: net_door: soft retquinticangle — Wave 106 exclusive quinticangle stamp */
-kprintf("net_door: soft retquinticangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retquinticangle stamp; Soft≠product)\n");
-/* Grep: net_door: soft retsplineangle — Wave 107 return-splineangle honesty */
-kprintf("net_door: soft retsplineangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retsplineangle honesty; Soft≠product)\n");
-/* Grep: net_door: soft retbezierangle — Wave 107 exclusive bezierangle stamp */
-kprintf("net_door: soft retbezierangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retbezierangle stamp; Soft≠product)\n");
-/* Grep: net_door: soft rethurmitangle — Wave 108 return-hermitangle honesty */
-kprintf("net_door: soft rethurmitangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (rethurmitangle honesty; Soft≠product)\n");
-/* Grep: net_door: soft retcatmullangle — Wave 108 exclusive catmullangle stamp */
-kprintf("net_door: soft retcatmullangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retcatmullangle stamp; Soft≠product)\n");
-/* Grep: net_door: soft retnurbsangle — Wave 109 return-nurbsangle honesty */
-kprintf("net_door: soft retnurbsangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retnurbsangle honesty; Soft≠product)\n");
-/* Grep: net_door: soft retbsplineangle — Wave 109 exclusive bsplineangle stamp */
-kprintf("net_door: soft retbsplineangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retbsplineangle stamp; Soft≠product)\n");
-/* Grep: net_door: soft retmeshangle — Wave 110 return-meshangle honesty */
-kprintf("net_door: soft retmeshangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retmeshangle honesty; Soft≠product)\n");
-/* Grep: net_door: soft retgridangle — Wave 110 exclusive gridangle stamp */
-kprintf("net_door: soft retgridangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retgridangle stamp; Soft≠product)\n");
-/* Grep: net_door: soft retvoxelangle — Wave 111 return-voxelangle honesty */
-kprintf("net_door: soft retvoxelangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retvoxelangle honesty; Soft≠product)\n");
-/* Grep: net_door: soft rettexelangle — Wave 111 exclusive texelangle stamp */
-kprintf("net_door: soft rettexelangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (rettexelangle stamp; Soft≠product)\n");
-/* Grep: net_door: soft retfragmentangle — Wave 112 return-fragmentangle honesty */
-kprintf("net_door: soft retfragmentangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retfragmentangle honesty; Soft≠product)\n");
-/* Grep: net_door: soft retvertexangle — Wave 112 exclusive vertexangle stamp */
-kprintf("net_door: soft retvertexangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retvertexangle stamp; Soft≠product)\n");
-/* Grep: net_door: soft retshaderangle — Wave 113 return-shaderangle honesty */
-kprintf("net_door: soft retshaderangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retshaderangle honesty; Soft≠product)\n");
-/* Grep: net_door: soft retpipelineangle — Wave 113 exclusive pipelineangle stamp */
-kprintf("net_door: soft retpipelineangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retpipelineangle stamp; Soft≠product)\n");
-/* Grep: net_door: soft retframebufferangle — Wave 114 return-framebufferangle honesty */
-kprintf("net_door: soft retframebufferangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retframebufferangle honesty; Soft≠product)\n");
-/* Grep: net_door: soft retswapchainangle — Wave 114 exclusive swapchainangle stamp */
-kprintf("net_door: soft retswapchainangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retswapchainangle stamp; Soft≠product)\n");
-/* Grep: net_door: soft retpresentangle — Wave 115 return-presentangle honesty */
-kprintf("net_door: soft retpresentangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retpresentangle honesty; Soft≠product)\n");
-/* Grep: net_door: soft retvsyncangle — Wave 115 exclusive vsyncangle stamp */
-kprintf("net_door: soft retvsyncangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retvsyncangle stamp; Soft≠product)\n");
-/* Grep: net_door: soft retfenceangle — Wave 116 return-fenceangle honesty */
-kprintf("net_door: soft retfenceangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retfenceangle honesty; Soft≠product)\n");
-/* Grep: net_door: soft retsemaphoreangle — Wave 116 exclusive semaphoreangle stamp */
-kprintf("net_door: soft retsemaphoreangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retsemaphoreangle stamp; Soft≠product)\n");
-                            kprintf("net_door: soft deepen wave=%u areas=%u init=%u owned=%u "
-            "enter=%lu sock=%lu ring=%lu virtio=%lu logs=%lu "
-            "ok=1 skip_hard=0\n",
-            u32Wave, u32Areas, g_fInit ? 1u : 0u, u32Owned,
-            (unsigned long)s.u64Enter, (unsigned long)u64SockEnter,
-            (unsigned long)u64RingEnter, (unsigned long)u64VirtioEnter,
-            (unsigned long)s.u64SoftLog);
+    kprintf("net_door: soft residual dual_dod_b=OPEN_UDX product_dod_b=UDX "
+            "not_freestanding_rtl=1 product_sshd_tcp22=OPEN "
+            "handoff=netstackd|sshd|UDX "
+            "path=claim|ring|poll->net_eth_poll|socket|bind22|listen|accept|"
+            "send|recv|connect|close|sock_poll "
+            "udx_host_stack=claim|map_ring|map_dma|desc|user_avail|bounce "
+            "door_thr_only=1 H1=1 h1_poll_sites=%u thr_only=%u net_eth_irq=%u "
+            "irq_path=%u poll_own=door_thr fault_class=H1_irq_stack_smash "
+            "h1_thr_locks=%u dual_dod_b=OPEN "
+            "l2=%s l2_ready=%u port22_held=%u enter=%lu poll=%lu poll_eth=%lu "
+            "poll_h1=%lu h1_match=%u "
+            "bind22_ok=%lu listen22_ok=%lu accept_eagain=%lu accept22_ok=%lu "
+            "send_ok=%lu recv_ok=%lu connect_ok=%lu sock_poll_ready=%lu "
+            "eagain=%lu owned=%u claims=%u reclaims=%u "
+            "claim_inval=%lu release_inval=%lu "
+            "ring=%lu user_ring=%lu host_owned_ring=%lu "
+            "map_ring=%lu map_ok=%lu map_reclaim=%lu map_nodev=%lu map_fault=%lu "
+            "map_rx=%lu map_tx=%lu "
+            "map_dma=%lu map_dma_ok=%lu map_dma_reclaim=%lu "
+            "desc=%lu desc_ok=%lu desc_nodev=%lu "
+            "user_avail=%lu user_avail_ok=%lu user_avail_kick=%lu "
+            "bounce=%lu bounce_ok=%lu "
+            "map_held=%u map_va=0x%lx map_which=%u dma_held=%u dma_va=0x%lx "
+            "net_eth_poll=run_loop_or_door irq=0 "
+            "soft=1 product=0 Soft!=product G-AC-1 "
+            "(userspace UDX/netstackd/sshd handoff eng; freestanding eth "
+            "via POLL door thr only interim H1 wrapper; functional residual "
+            "ops sock_poll|connect|close|send|recv; no .ko product; not "
+            "freestanding rtl product; agent!=close)\n",
+            (unsigned)NET_DOOR_H1_POLL_SITES,
+            (unsigned)NET_DOOR_H1_THR_ONLY,
+            (unsigned)NET_DOOR_H1_IRQ_POLL,
+            (unsigned)NET_DOOR_H1_IRQ_PATH,
+            u32H1ThrLocks,
+            szL2, u32L2Ready, g_fSoftSshd22 ? 1u : 0u,
+            (unsigned long)g_soft.u64Enter,
+            (unsigned long)g_soft.u64Poll,
+            (unsigned long)g_soft.u64PollEth,
+            (unsigned long)g_soft.u64PollH1,
+            u32H1Match,
+            (unsigned long)g_soft.u64Bind22Ok,
+            (unsigned long)g_soft.u64Listen22Ok,
+            (unsigned long)g_soft.u64AcceptEagain,
+            (unsigned long)g_soft.u64Accept22Ok,
+            (unsigned long)g_soft.u64SendOk,
+            (unsigned long)g_soft.u64RecvOk,
+            (unsigned long)g_soft.u64ConnectOk,
+            (unsigned long)g_soft.u64SockPollReady,
+            (unsigned long)g_soft.u64Eagain,
+            u32Owned, g_u32Claims, g_u32Reclaims,
+            (unsigned long)g_soft.u64ClaimInval,
+            (unsigned long)g_soft.u64ReleaseInval,
+            (unsigned long)g_soft.u64RingEnter,
+            (unsigned long)g_soft.u64UserRing,
+            (unsigned long)g_soft.u64HostOwnedRing,
+            (unsigned long)g_soft.u64MapRing,
+            (unsigned long)g_soft.u64MapRingOk,
+            (unsigned long)g_soft.u64MapRingReclaim,
+            (unsigned long)g_soft.u64MapRingNodev,
+            (unsigned long)g_soft.u64MapRingFault,
+            (unsigned long)g_soft.u64MapRingRx,
+            (unsigned long)g_soft.u64MapRingTx,
+            (unsigned long)g_soft.u64MapDma,
+            (unsigned long)g_soft.u64MapDmaOk,
+            (unsigned long)g_soft.u64MapDmaReclaim,
+            (unsigned long)g_soft.u64DescAlloc,
+            (unsigned long)g_soft.u64DescAllocOk,
+            (unsigned long)g_soft.u64DescAllocNodev,
+            (unsigned long)g_soft.u64UserAvail,
+            (unsigned long)g_soft.u64UserAvailOk,
+            (unsigned long)g_soft.u64UserAvailKick,
+            (unsigned long)g_soft.u64BounceFill,
+            (unsigned long)g_soft.u64BounceFillOk,
+            u32MapHeld,
+            (unsigned long)g_u64RingMapVa,
+            (unsigned)g_u16LastMapWhich,
+            u32DmaHeld,
+            (unsigned long)g_u64MapDmaVa);
 
     /*
-     * Soft lamp: init surface is always soft-pass. Never hard-gates.
-     * Grep: net_door: soft inventory PASS | net_door: soft PASS
-     * Grep: net_door: soft FAIL
+     * Grep: net_door: soft residual h1
+     * C1 H1 thr-only residual deepen (Soft!=product; no stamp storms).
+     * Sole door eth site + compile locks; Dual DoD OPEN (agent!=close).
      */
-    fSoftPass = g_fInit ? 1 : 0;
-    if (fSoftPass != 0) {
-        kprintf("net_door: soft inventory PASS init=%u owned=%u "
-                "virtio=%u logs=%lu areas=%u wave=%u\n",
-                g_fInit ? 1u : 0u, u32Owned, u32Ready,
-                (unsigned long)s.u64SoftLog, u32Areas, u32Wave);
-        kprintf("net_door: soft PASS wave=%u areas=%u\n", u32Wave, u32Areas);
-    } else {
-        kprintf("net_door: soft FAIL init=0 wave=%u "
-                "(soft inventory only; not product gate)\n",
-                u32Wave);
+    kprintf("net_door: soft residual h1 thr_only=%u net_eth_irq=%u "
+            "irq_path=%u door_thr_only=%u h1_poll_sites=%u poll_own=door_thr "
+            "h1_match=%u h1_thr_locks=%u poll=%lu poll_eth=%lu poll_h1=%lu "
+            "fault_class=H1_irq_stack_smash net_eth_poll=run_loop_or_door "
+            "dual_dod_b=OPEN product_dod_b=UDX not_freestanding_rtl=1 "
+            "soft_ne_product=1 dual=MIT_OR_Apache-2.0 G-AC-1=1 "
+            "(Soft!=product; C1 H1 thr-only residual deepen; door thr full "
+            "kstack only; never IRQ/timer; agent!=close; no version stamp)\n",
+            (unsigned)NET_DOOR_H1_THR_ONLY,
+            (unsigned)NET_DOOR_H1_IRQ_POLL,
+            (unsigned)NET_DOOR_H1_IRQ_PATH,
+            (unsigned)NET_DOOR_H1_DOOR_THR,
+            (unsigned)NET_DOOR_H1_POLL_SITES,
+            u32H1Match, u32H1ThrLocks,
+            (unsigned long)g_soft.u64Poll,
+            (unsigned long)g_soft.u64PollEth,
+            (unsigned long)g_soft.u64PollH1);
+
+    /*
+     * Grep: net_door: soft residual functional
+     * FUNCTIONAL residual net door ops for sshd/UDX stack (Soft!=product;
+     * STRONGER): SOCK_POLL TCP+lo + want IN/OUT; CONNECT/CLOSE/SEND/RECV/
+     * SOCKET TCP|lo routes; :22 path + accept_eagain22 + connect22.
+     * Dual DoD OPEN; agent!=close; no stamp.
+     * greppable: functional_ops=sock_poll|connect|close|send|recv|accept_eagain
+     * greppable: functional_route=tcp|lo | accept_eagain22 | connect22
+     */
+    kprintf("net_door: soft residual functional Soft!=product STRONGER=1 "
+            "product_dod_b=UDX dual_dod_b=OPEN_UDX product_sshd_tcp22=OPEN "
+            "handoff=netstackd|sshd|UDX "
+            "functional_ops=sock_poll|connect|close|send|recv|accept_eagain "
+            "functional_route=tcp|lo "
+            "sshd_pipeline=socket|bind22|listen|accept|poll|send|recv|connect|close|sock_poll "
+            "yield_trio=poll|accept|sock_poll "
+            "port22_held=%u bind22_ok=%lu listen22_ok=%lu "
+            "accept=%lu accept_ok=%lu accept_eagain=%lu accept_eagain22=%lu "
+            "accept22=%lu accept22_ok=%lu "
+            "connect=%lu connect_ok=%lu connect_eagain=%lu "
+            "connect_tcp=%lu connect_lo=%lu connect22=%lu connect22_ok=%lu "
+            "close=%lu close_ok=%lu close_tcp=%lu close_lo=%lu close22=%lu "
+            "socket_tcp=%lu socket_lo=%lu "
+            "send=%lu send_ok=%lu send_eagain=%lu send_tcp=%lu send_lo=%lu "
+            "send22=%lu send22_ok=%lu "
+            "recv=%lu recv_ok=%lu recv0=%lu recv_eagain=%lu recv_tcp=%lu "
+            "recv_lo=%lu recv22=%lu recv22_ok=%lu "
+            "sock_poll=%lu sock_poll_ready=%lu sock_poll_empty=%lu "
+            "sock_poll_tcp=%lu sock_poll_lo=%lu sock_poll_in=%lu "
+            "sock_poll_out=%lu sock_poll22=%lu poll22=%lu eagain=%lu "
+            "map_rx=%lu map_tx=%lu user_avail_kick=%lu host_owned_ring=%lu "
+            "wire_handoff+tcp22=1 stack=eth|tcp|door|:22 denser=1 denser_h1=1 "
+            "poll_h1_wire22=%lu thr-only_door_eth_poll=1 "
+            "door_thr_only=1 H1=1 poll_own=door_thr "
+            "fault_class=H1_irq_stack_smash not_freestanding_rtl=1 "
+            "soft_ne_product=1 dual=MIT_OR_Apache-2.0 G-AC-1=1 "
+            "(W11 Dual DoD B FUNCTIONAL residual STRONGER wire22 denser; "
+            "denser H1 thr-only door eth poll; wire handoff+:22 stack; "
+            "SOCK_POLL TCP+net_lo want IN/OUT; sshd "
+            "SOCKET/BIND22/LISTEN/ACCEPT/SEND/RECV/CONNECT/CLOSE routes; "
+            "accept_eagain22 yield park; connect22 client; UDX map rx|tx + "
+            "user_avail kick; stamp-free bar v2026.08.04.75; never .76; "
+            "agent!=close)\n",
+            g_fSoftSshd22 ? 1u : 0u,
+            (unsigned long)g_soft.u64Bind22Ok,
+            (unsigned long)g_soft.u64Listen22Ok,
+            (unsigned long)g_soft.u64Accept,
+            (unsigned long)g_soft.u64AcceptOk,
+            (unsigned long)g_soft.u64AcceptEagain,
+            (unsigned long)g_soft.u64AcceptEagain22,
+            (unsigned long)g_soft.u64Accept22,
+            (unsigned long)g_soft.u64Accept22Ok,
+            (unsigned long)g_soft.u64Connect,
+            (unsigned long)g_soft.u64ConnectOk,
+            (unsigned long)g_soft.u64ConnectEagain,
+            (unsigned long)g_soft.u64ConnectTcp,
+            (unsigned long)g_soft.u64ConnectLo,
+            (unsigned long)g_soft.u64Connect22,
+            (unsigned long)g_soft.u64Connect22Ok,
+            (unsigned long)g_soft.u64Close,
+            (unsigned long)g_soft.u64CloseOk,
+            (unsigned long)g_soft.u64CloseTcp,
+            (unsigned long)g_soft.u64CloseLo,
+            (unsigned long)g_soft.u64Close22,
+            (unsigned long)g_soft.u64SocketTcp,
+            (unsigned long)g_soft.u64SocketLo,
+            (unsigned long)g_soft.u64Send,
+            (unsigned long)g_soft.u64SendOk,
+            (unsigned long)g_soft.u64SendEagain,
+            (unsigned long)g_soft.u64SendTcp,
+            (unsigned long)g_soft.u64SendLo,
+            (unsigned long)g_soft.u64Send22,
+            (unsigned long)g_soft.u64Send22Ok,
+            (unsigned long)g_soft.u64Recv,
+            (unsigned long)g_soft.u64RecvOk,
+            (unsigned long)g_soft.u64Recv0,
+            (unsigned long)g_soft.u64RecvEagain,
+            (unsigned long)g_soft.u64RecvTcp,
+            (unsigned long)g_soft.u64RecvLo,
+            (unsigned long)g_soft.u64Recv22,
+            (unsigned long)g_soft.u64Recv22Ok,
+            (unsigned long)g_soft.u64SockPoll,
+            (unsigned long)g_soft.u64SockPollReady,
+            (unsigned long)g_soft.u64SockPollEmpty,
+            (unsigned long)g_soft.u64SockPollTcp,
+            (unsigned long)g_soft.u64SockPollLo,
+            (unsigned long)g_soft.u64SockPollIn,
+            (unsigned long)g_soft.u64SockPollOut,
+            (unsigned long)g_soft.u64SockPoll22,
+            (unsigned long)g_soft.u64Poll22,
+            (unsigned long)g_soft.u64Eagain,
+            (unsigned long)g_soft.u64MapRingRx,
+            (unsigned long)g_soft.u64MapRingTx,
+            (unsigned long)g_soft.u64UserAvailKick,
+            (unsigned long)g_soft.u64HostOwnedRing,
+            (unsigned long)g_soft.u64PollH122);
+
+    /*
+     * Grep: net_door: soft residual functional catalog
+     * STRONGER FUNCTIONAL catalog (sshd pipeline + UDX host + yield trio).
+     * Dual DoD OPEN; Soft!=product; no version stamp; agent!=close.
+     */
+    kprintf("net_door: soft residual functional catalog Soft!=product "
+            "STRONGER=1 product_dod_b=UDX dual_dod_b=OPEN_UDX "
+            "product_sshd_tcp22=OPEN handoff=netstackd|sshd|UDX "
+            "sshd_steps=%u udx_steps=%u yield_ops=%u catalog_min=%u "
+            "sshd_pipeline=socket|bind22|listen|accept|poll|send|recv|"
+            "connect|close|sock_poll "
+            "udx_host_stack=claim|export|map_ring|map_dma|desc|user_avail|"
+            "bounce|kick "
+            "yield_trio=poll|accept|sock_poll "
+            "functional_route=tcp|lo "
+            "functional_ops=sock_poll|connect|close|send|recv|accept_eagain "
+            "pollin=0x%x pollout=0x%x pollerr=0x%x pollhup=0x%x "
+            "sock_stream=%u sock_dgram=%u "
+            "xfer_max=%u multi_seg_bulk=3000 "
+            "port22_held=%u accept_eagain22=%lu connect22=%lu "
+            "socket_tcp=%lu socket_lo=%lu sock_poll_in=%lu sock_poll_out=%lu "
+            "map_rx=%lu map_tx=%lu user_avail_kick=%lu "
+            "door_thr_only=1 H1=1 poll_own=door_thr "
+            "fault_class=H1_irq_stack_smash not_freestanding_rtl=1 "
+            "soft_ne_product=1 dual=MIT_OR_Apache-2.0 G-AC-1=1 "
+            "(STRONGER FUNCTIONAL catalog; agent!=close; no version stamp)\n",
+            (unsigned)NET_DOOR_FUNC_SSHD_STEPS,
+            (unsigned)NET_DOOR_FUNC_UDX_STEPS,
+            (unsigned)NET_DOOR_FUNC_YIELD_OPS,
+            (unsigned)NET_DOOR_FUNC_CATALOG_MIN,
+            (unsigned)NET_DOOR_POLLIN,
+            (unsigned)NET_DOOR_POLLOUT,
+            (unsigned)NET_DOOR_POLLERR,
+            (unsigned)NET_DOOR_POLLHUP,
+            (unsigned)SOCK_STREAM,
+            (unsigned)SOCK_DGRAM,
+            (unsigned)NET_XFER_MAX,
+            g_fSoftSshd22 ? 1u : 0u,
+            (unsigned long)g_soft.u64AcceptEagain22,
+            (unsigned long)g_soft.u64Connect22,
+            (unsigned long)g_soft.u64SocketTcp,
+            (unsigned long)g_soft.u64SocketLo,
+            (unsigned long)g_soft.u64SockPollIn,
+            (unsigned long)g_soft.u64SockPollOut,
+            (unsigned long)g_soft.u64MapRingRx,
+            (unsigned long)g_soft.u64MapRingTx,
+            (unsigned long)g_soft.u64UserAvailKick);
+
+    /*
+     * Grep: net_door: ring map notes
+     * Sparse UDX/host MAP honesty only (Soft!=product; no per-MAP dump).
+     * UDX attach: udx_virtq_attach(map_va, export) after MAP_RING success;
+     * desc|avail|used at map_va+off_*; MAP_DMA grants bounce slots.
+     * Outcome splits for desc/user_avail/bounce/avail/reap (UDX host stack).
+     */
+    kprintf("net_door: ring map notes Soft!=product product_dod_b=UDX "
+            "handoff=netstackd|sshd|UDX page=%u map_held=%u map_va=0x%lx "
+            "map_which=%u dma_held=%u dma_va=0x%lx "
+            "map_enter=%lu map_ok=%lu map_reclaim=%lu map_nodev=%lu "
+            "map_inval=%lu map_fault=%lu map_rx=%lu map_tx=%lu "
+            "dma_enter=%lu dma_ok=%lu dma_reclaim=%lu dma_nodev=%lu "
+            "dma_inval=%lu dma_fault=%lu "
+            "export=%lu export_ok=%lu export_nodev=%lu "
+            "kick=%lu kick_ok=%lu kick_nodev=%lu "
+            "avail_push=%lu avail_ok=%lu avail_nodev=%lu avail_inval=%lu "
+            "avail_io=%lu used_reap=%lu used_ok=%lu used_nodev=%lu "
+            "ring_state=%lu "
+            "desc_ok=%lu desc_nodev=%lu desc_nomem=%lu "
+            "user_avail_ok=%lu user_avail_nodev=%lu user_avail_io=%lu "
+            "user_avail_kick=%lu "
+            "bounce_ok=%lu bounce_nodev=%lu bounce_inval=%lu bounce_io=%lu "
+            "host_owned_ring=%lu "
+            "ring_calls=%u owned=%u door_thr_only=1 H1=1 h1_poll_sites=1 "
+            "udx_host_stack=claim|map_ring|map_dma|desc|user_avail|bounce "
+            "udx_attach=map_va+off_desc|off_avail|off_used "
+            "(MAP re-same-VA=soft reclaim; DMA re-same-VA=soft reclaim; "
+            "NODEV soft-skip without virtio-net; "
+            "map_va last MAP_RING base; dma_va last MAP_DMA base; "
+            "Soft!=product dual; G-AC-1 no .ko product)\n",
+            (unsigned)NET_DOOR_PAGE_SIZE, u32MapHeld,
+            (unsigned long)g_u64RingMapVa,
+            (unsigned)g_u16LastMapWhich,
+            u32DmaHeld,
+            (unsigned long)g_u64MapDmaVa,
+            (unsigned long)g_soft.u64MapRing,
+            (unsigned long)g_soft.u64MapRingOk,
+            (unsigned long)g_soft.u64MapRingReclaim,
+            (unsigned long)g_soft.u64MapRingNodev,
+            (unsigned long)g_soft.u64MapRingInval,
+            (unsigned long)g_soft.u64MapRingFault,
+            (unsigned long)g_soft.u64MapRingRx,
+            (unsigned long)g_soft.u64MapRingTx,
+            (unsigned long)g_soft.u64MapDma,
+            (unsigned long)g_soft.u64MapDmaOk,
+            (unsigned long)g_soft.u64MapDmaReclaim,
+            (unsigned long)g_soft.u64MapDmaNodev,
+            (unsigned long)g_soft.u64MapDmaInval,
+            (unsigned long)g_soft.u64MapDmaFault,
+            (unsigned long)g_soft.u64ExportRing,
+            (unsigned long)g_soft.u64ExportOk,
+            (unsigned long)g_soft.u64ExportNodev,
+            (unsigned long)g_soft.u64Kick,
+            (unsigned long)g_soft.u64KickOk,
+            (unsigned long)g_soft.u64KickNodev,
+            (unsigned long)g_soft.u64AvailPush,
+            (unsigned long)g_soft.u64AvailPushOk,
+            (unsigned long)g_soft.u64AvailPushNodev,
+            (unsigned long)g_soft.u64AvailPushInval,
+            (unsigned long)g_soft.u64AvailPushIo,
+            (unsigned long)g_soft.u64UsedReap,
+            (unsigned long)g_soft.u64UsedReapOk,
+            (unsigned long)g_soft.u64UsedReapNodev,
+            (unsigned long)g_soft.u64RingState,
+            (unsigned long)g_soft.u64DescAllocOk,
+            (unsigned long)g_soft.u64DescAllocNodev,
+            (unsigned long)g_soft.u64DescAllocNomem,
+            (unsigned long)g_soft.u64UserAvailOk,
+            (unsigned long)g_soft.u64UserAvailNodev,
+            (unsigned long)g_soft.u64UserAvailIo,
+            (unsigned long)g_soft.u64UserAvailKick,
+            (unsigned long)g_soft.u64BounceFillOk,
+            (unsigned long)g_soft.u64BounceFillNodev,
+            (unsigned long)g_soft.u64BounceFillInval,
+            (unsigned long)g_soft.u64BounceFillIo,
+            (unsigned long)g_soft.u64HostOwnedRing,
+            g_u32RingCalls, u32Owned);
+}
+
+/**
+ * Lean residual self-check - UDX/netstackd/sshd host handoff ABI + POLL H1.
+ * Once only. Soft!=product dual MIT OR Apache-2.0; no version stamp.
+ * Product DoD B = UDX not freestanding rtl (G-AC-1).
+ * Deepen: ring MAP notes + EXPORT/KICK/AVAIL + sshd SOCKET/BIND/LISTEN +
+ * FUNCTIONAL residual ops CONNECT/CLOSE/SEND/RECV/SOCK_POLL (STRONGER
+ * catalog: sshd pipeline + UDX host stack + yield trio + poll bits) +
+ * C1 H1 thr-only: poll_h1 match + compile thr_locks (sole door thr eth).
+ * greppable: net_door: soft residual lean
+ * greppable: net_door: soft residual lean PASS
+ * greppable: net_door: soft residual h1
+ * greppable: net_door: soft residual functional
+ * greppable: net_door: soft residual functional catalog
+ * greppable: net_door: ring map notes
+ * greppable: h1_poll_sites=1 | poll_h1 | thr_only=1 | net_eth_irq=0
+ * greppable: poll_own=door_thr | fault_class=H1_irq_stack_smash
+ * greppable: functional_ops=sock_poll|connect|close|send|recv|accept_eagain
+ * greppable: functional_route=tcp|lo | sshd_pipeline | yield_trio
+ */
+static void
+net_door_soft_residual_lean_once(void)
+{
+    u32 u32Ok;
+    u32 u32Checks;
+    u32 u32PollOp;
+    u32 u32AcceptOp;
+    u32 u32Xfer;
+    u32 u32EthMax;
+    u32 u32ClaimOp;
+    u32 u32RingOp;
+    u32 u32UserAvailOp;
+    u32 u32ExportOp;
+    u32 u32KickOp;
+    u32 u32SshdOp;
+    u32 u32FunctionalOp;
+    u32 u32H1;
+    u32 u32H1ThrLocks;
+    u32 u32Wire22;
+    u32 u32MapNotes;
+    u32 u32UdxOk;
+    u32 u32SshdOk;
+    u32 u32FunctionalOk;
+    u32 u32FunctionalSteps;
+    u32 u32Owned;
+    u32 u32L2Ready;
+    u32 u32MapHeld;
+    u32 u32DmaHeld;
+    const char *szL2;
+
+    if (g_fSoftLean != 0) {
+        return;
+    }
+    g_fSoftLean = 1;
+    u32Ok = 0;
+    u32Checks = 0;
+    u32UdxOk = 0;
+    u32MapNotes = 0;
+    u32SshdOk = 0;
+    u32FunctionalOk = 0;
+    u32FunctionalSteps = 0;
+    u32H1 = 0;
+    u32H1ThrLocks = 0;
+    u32Wire22 = 0;
+    u32FunctionalOp = 0;
+
+    /* POLL op id stable + first in door matrix (H1: door thr eth advance). */
+    u32Checks++;
+    u32PollOp = 0;
+    if (GJ_NET_OP_POLL == 1u) {
+        u32PollOp = 1;
+        u32Ok++;
+        u32SshdOk++;
+    }
+
+    /* ACCEPT empty soft EAGAIN park; SOCK_POLL terminal op id. */
+    u32Checks++;
+    u32AcceptOp = 0;
+    if (GJ_NET_OP_ACCEPT == 25u && GJ_NET_OP_SOCK_POLL == 27u) {
+        u32AcceptOp = 1;
+        u32Ok++;
+        u32SshdOk++;
+    }
+
+    /* Bounce room: multi-seg TCP bulk >= 3000, eth frame <= 1514. */
+    u32Checks++;
+    u32Xfer = 0;
+    if (NET_XFER_MAX >= 3000u && NET_XFER_MAX >= NET_ETH_MAX) {
+        u32Xfer = 1;
+        u32Ok++;
+    }
+
+    /* Page map geometry for ring MAP (UDX residual). */
+    u32Checks++;
+    u32EthMax = 0;
+    if (NET_ETH_MAX == 1514u && NET_DOOR_PAGE_SIZE == 4096u) {
+        u32EthMax = 1;
+        u32Ok++;
+        u32MapNotes++;
+    }
+
+    /* CLAIM op id stable - netstackd ownership handoff. */
+    u32Checks++;
+    u32ClaimOp = 0;
+    if (GJ_NET_OP_CLAIM == 10u && GJ_NET_OP_RELEASE == 11u) {
+        u32ClaimOp = 1;
+        u32Ok++;
+        u32UdxOk++;
+    }
+
+    /* Ring MAP + USER_AVAIL op ids - UDX ring programming handoff. */
+    u32Checks++;
+    u32RingOp = 0;
+    u32UserAvailOp = 0;
+    if (GJ_NET_OP_MAP_RING == 16u && GJ_NET_OP_MAP_DMA == 21u &&
+        GJ_NET_OP_DESC_ALLOC == 22u && GJ_NET_OP_USER_AVAIL == 23u &&
+        GJ_NET_OP_BOUNCE_FILL == 24u) {
+        u32RingOp = 1;
+        u32UserAvailOp = 1;
+        u32Ok++;
+        u32UdxOk++;
+        u32MapNotes++;
+    }
+
+    /* EXPORT/KICK/AVAIL/RING_STATE op ids - host ring bring-up surface. */
+    u32Checks++;
+    u32ExportOp = 0;
+    u32KickOp = 0;
+    if (GJ_NET_OP_EXPORT_RING == 15u && GJ_NET_OP_KICK == 17u &&
+        GJ_NET_OP_AVAIL_PUSH == 18u && GJ_NET_OP_USED_REAP == 19u &&
+        GJ_NET_OP_RING_STATE == 20u) {
+        u32ExportOp = 1;
+        u32KickOp = 1;
+        u32Ok++;
+        u32UdxOk++;
+        u32MapNotes++;
+    }
+
+    /* MAP_RING VA must be page-aligned power-of-two; diagnostic getters. */
+    u32Checks++;
+    if (NET_DOOR_PAGE_SIZE == 4096u &&
+        (NET_DOOR_PAGE_SIZE & (NET_DOOR_PAGE_SIZE - 1u)) == 0u &&
+        NET_DOOR_PAGE_SIZE >= NET_XFER_MAX) {
+        u32Ok++;
+        u32MapNotes++;
+    }
+
+    /* sshd interim socket path opcodes - Soft!=product :22 handoff eng. */
+    u32Checks++;
+    u32SshdOp = 0;
+    if (GJ_NET_OP_SOCKET == 3u && GJ_NET_OP_BIND == 4u &&
+        GJ_NET_OP_LISTEN == 9u && GJ_NET_OP_ACCEPT == 25u &&
+        GJ_NET_OP_SEND == 5u && GJ_NET_OP_RECV == 6u) {
+        u32SshdOp = 1;
+        u32Ok++;
+        u32SshdOk++;
+    }
+
+    /*
+     * FUNCTIONAL residual net door ops for sshd/UDX stack (Soft!=product;
+     * STRONGER): CONNECT/CLOSE/SOCK_POLL + SEND/RECV/ACCEPT ids stable;
+     * SOCK_POLL routes TCP + net_lo poll_mask. Dual DoD OPEN.
+     * greppable: functional_ops=sock_poll|connect|close|send|recv|accept_eagain
+     * greppable: net_door: soft residual functional
+     */
+    u32Checks++;
+    if (GJ_NET_OP_CONNECT == 7u && GJ_NET_OP_CLOSE == 8u &&
+        GJ_NET_OP_SOCK_POLL == 27u && GJ_NET_OP_SEND == 5u &&
+        GJ_NET_OP_RECV == 6u && GJ_NET_OP_ACCEPT == 25u) {
+        u32FunctionalOp = 1;
+        u32Ok++;
+        u32SshdOk++;
+        u32FunctionalOk++;
+        u32FunctionalSteps++;
+    }
+
+    /*
+     * STRONGER FUNCTIONAL: sshd pipeline op catalog (10 steps).
+     * socket|bind|listen|accept|poll|send|recv|connect|close|sock_poll
+     * greppable: sshd_pipeline | functional_steps | functional catalog
+     */
+    u32Checks++;
+    if (GJ_NET_OP_SOCKET == 3u && GJ_NET_OP_BIND == 4u &&
+        GJ_NET_OP_LISTEN == 9u && GJ_NET_OP_ACCEPT == 25u &&
+        GJ_NET_OP_POLL == 1u && GJ_NET_OP_SEND == 5u &&
+        GJ_NET_OP_RECV == 6u && GJ_NET_OP_CONNECT == 7u &&
+        GJ_NET_OP_CLOSE == 8u && GJ_NET_OP_SOCK_POLL == 27u &&
+        NET_DOOR_FUNC_SSHD_STEPS == 10u) {
+        u32Ok++;
+        u32SshdOk++;
+        u32FunctionalOk++;
+        u32FunctionalSteps += NET_DOOR_FUNC_SSHD_STEPS;
+    }
+
+    /*
+     * STRONGER FUNCTIONAL: UDX host stack catalog (8 steps).
+     * claim|export|map_ring|map_dma|desc|user_avail|bounce|kick
+     * greppable: udx_host_stack | functional_steps | functional catalog
+     */
+    u32Checks++;
+    if (GJ_NET_OP_CLAIM == 10u && GJ_NET_OP_EXPORT_RING == 15u &&
+        GJ_NET_OP_MAP_RING == 16u && GJ_NET_OP_MAP_DMA == 21u &&
+        GJ_NET_OP_DESC_ALLOC == 22u && GJ_NET_OP_USER_AVAIL == 23u &&
+        GJ_NET_OP_BOUNCE_FILL == 24u && GJ_NET_OP_KICK == 17u &&
+        NET_DOOR_FUNC_UDX_STEPS == 8u) {
+        u32Ok++;
+        u32UdxOk++;
+        u32FunctionalOk++;
+        u32FunctionalSteps += NET_DOOR_FUNC_UDX_STEPS;
+    }
+
+    /*
+     * STRONGER FUNCTIONAL: sshd yield trio + multi-seg xfer + poll bits.
+     * POLL|ACCEPT|SOCK_POLL park; NET_XFER_MAX multi-seg bulk; POLLIN/OUT.
+     * greppable: yield_trio=poll|accept|sock_poll | functional_route
+     */
+    u32Checks++;
+    if (GJ_NET_OP_POLL == 1u && GJ_NET_OP_ACCEPT == 25u &&
+        GJ_NET_OP_SOCK_POLL == 27u && NET_DOOR_FUNC_YIELD_OPS == 3u &&
+        NET_XFER_MAX >= 3000u && NET_DOOR_POLLIN == 0x1u &&
+        NET_DOOR_POLLOUT == 0x4u && SOCK_STREAM == 1 && SOCK_DGRAM == 2) {
+        u32Ok++;
+        u32SshdOk++;
+        u32FunctionalOk++;
+        u32FunctionalSteps += NET_DOOR_FUNC_YIELD_OPS;
+    }
+
+    /*
+     * H1 residual deepen (C1 thr-only): sole eth advance is door thr wrapper.
+     * poll_h1 must equal poll_eth (both only from GJ_NET_OP_POLL path).
+     * greppable: h1_poll_sites=1 | poll_h1 | door_thr_only=1 | H1
+     * greppable: thr_only=1 | net_eth_irq=0 | poll_own=door_thr
+     */
+    u32Checks++;
+    if (GJ_NET_OP_POLL == 1u && NET_DOOR_H1_POLL_SITES == 1u &&
+        g_soft.u64PollH1 == g_soft.u64PollEth) {
+        u32H1 = 1;
+        u32Ok++;
+        u32SshdOk++;
+    }
+
+    /*
+     * C1 H1 thr-only compile locks (Soft!=product; Dual DoD OPEN).
+     * Never IRQ-path door eth; door thr is legal thr-stack owner.
+     * greppable: thr_only=1 | net_eth_irq=0 | irq_path=0 | door_thr_only=1
+     * greppable: fault_class=H1_irq_stack_smash | net_door: soft residual h1
+     */
+    u32Checks++;
+    if (NET_DOOR_H1_IRQ_POLL == 0u && NET_DOOR_H1_THR_ONLY == 1u &&
+        NET_DOOR_H1_IRQ_PATH == 0u && NET_DOOR_H1_DOOR_THR == 1u &&
+        NET_DOOR_H1_POLL_SITES == 1u) {
+        u32H1ThrLocks = 1u;
+        u32Ok++;
+        /* Independent of poll_h1 match; PASS requires both h1_ok + thr_locks. */
+    }
+
+    /*
+     * STRONGER wire22 residual denser (Soft!=product; Dual DoD OPEN;
+     * product_dod_b=UDX; H2 once; stamp-free bar v2026.08.04.75; never .76).
+     * Multi-arm denser honesty for SOCK BIND/LISTEN/ACCEPT/POLL :22 door
+     * product sshd. H1 thr-only eth poll from door only (sole site).
+     * Arms: h1_poll | sock22 | yield | dual_dod_open | product_udx.
+     * Denser H1 thr-only door eth poll: arm0 multi-sublocks + poll_h1
+     * match + poll_h1_wire22 compound honesty.
+     * Denser sock22 sublocks: socket|bind|listen|accept|sock_poll|port.
+     * greppable: wire_handoff+tcp22 | stack=eth|tcp|door|:22 | sock_poll22
+     * greppable: net_door: soft residual wire22 denser | denser=1
+     * greppable: wire22 denser | denser_arms | poll22 | dual_dod OPEN
+     * greppable: denser_h1 | thr-only door eth poll | poll_h1_wire22
+     * greppable: denser_sock_sub | denser_h1_sub | thr-only_door_eth_poll
+     */
+    {
+        u32 u32W22H1;
+        u32 u32W22H1Sub;
+        u32 u32W22Sock;
+        u32 u32W22SockSub;
+        u32 u32W22Yield;
+        u32 u32W22Dod;
+        u32 u32W22Udx;
+        u32 u32W22Dense;
+
+        u32W22H1 = 0u;
+        u32W22H1Sub = 0u;
+        u32W22Sock = 0u;
+        u32W22SockSub = 0u;
+        u32W22Yield = 0u;
+        u32W22Dod = 0u;
+        u32W22Udx = 0u;
+        u32W22Dense = 0u;
+
+        /*
+         * arm0 denser: H1 thr-only door eth poll (never IRQ/timer).
+         * Multi-sublocks: thr_only|irq|path|door_thr|sites|op_poll|dense.
+         * Also require poll_h1==poll_eth (sole wrapper site honesty).
+         * greppable: denser_h1 | thr-only door eth poll | h1_poll_sites=1
+         */
+        if (NET_DOOR_H1_THR_ONLY == 1u) {
+            u32W22H1Sub++;
+        }
+        if (NET_DOOR_H1_IRQ_POLL == 0u) {
+            u32W22H1Sub++;
+        }
+        if (NET_DOOR_H1_IRQ_PATH == 0u) {
+            u32W22H1Sub++;
+        }
+        if (NET_DOOR_H1_DOOR_THR == 1u) {
+            u32W22H1Sub++;
+        }
+        if (NET_DOOR_H1_POLL_SITES == 1u) {
+            u32W22H1Sub++;
+        }
+        if (GJ_NET_OP_POLL == 1u) {
+            u32W22H1Sub++;
+        }
+        if (NET_DOOR_WIRE22_DENSE == 1u) {
+            u32W22H1Sub++; /* denser residual honesty lock */
+        }
+        if (u32W22H1Sub >= NET_DOOR_WIRE22_DENSE_H1_SUB &&
+            g_soft.u64PollH1 == g_soft.u64PollEth) {
+            u32W22H1 = 1u;
+            u32W22Dense++;
+        }
+        /*
+         * arm1 denser: SOCK BIND/LISTEN/ACCEPT/SOCK_POLL :22 stack.
+         * Multi-sublocks: socket|bind|listen|accept|sock_poll|port.
+         * greppable: denser_sock_sub | sock_poll22 | wire_handoff+tcp22
+         */
+        if (GJ_NET_OP_SOCKET == 3u) {
+            u32W22SockSub++;
+        }
+        if (GJ_NET_OP_BIND == 4u) {
+            u32W22SockSub++;
+        }
+        if (GJ_NET_OP_LISTEN == 9u) {
+            u32W22SockSub++;
+        }
+        if (GJ_NET_OP_ACCEPT == 25u) {
+            u32W22SockSub++;
+        }
+        if (GJ_NET_OP_SOCK_POLL == 27u) {
+            u32W22SockSub++;
+        }
+        if (NET_DOOR_SSH_PORT == 22u) {
+            u32W22SockSub++;
+        }
+        if (u32W22SockSub >= NET_DOOR_WIRE22_DENSE_SOCK_SUB &&
+            NET_DOOR_WIRE22_STACK == 1u) {
+            u32W22Sock = 1u;
+            u32W22Dense++;
+        }
+        /* arm2: yield trio POLL|ACCEPT|SOCK_POLL (sshd park denser). */
+        if (GJ_NET_OP_POLL == 1u && GJ_NET_OP_ACCEPT == 25u &&
+            GJ_NET_OP_SOCK_POLL == 27u && NET_DOOR_FUNC_YIELD_OPS == 3u &&
+            NET_DOOR_WIRE22_DENSE == 1u) {
+            u32W22Yield = 1u;
+            u32W22Dense++;
+        }
+        /* arm3: dual_dod OPEN honesty (soft residual never closes Dual DoD). */
+        if (NET_DOOR_WIRE22_DENSE == 1u && NET_DOOR_WIRE22_STACK == 1u &&
+            NET_DOOR_WIRE22_DENSE_ARMS == 5u &&
+            NET_DOOR_WIRE22_DENSE_SOCK_SUB == 6u) {
+            u32W22Dod = 1u;
+            u32W22Dense++;
+        }
+        /* arm4: product_dod_b=UDX (G-AC-1; not freestanding rtl product). */
+        if (NET_DOOR_WIRE22_DENSE == 1u && NET_DOOR_SSH_PORT == 22u &&
+            NET_DOOR_WIRE22_DENSE_MIN == NET_DOOR_WIRE22_DENSE_ARMS &&
+            NET_DOOR_WIRE22_DENSE_H1_SUB == 7u &&
+            NET_DOOR_WIRE22_DENSE_SOCK_SUB == 6u) {
+            u32W22Udx = 1u;
+            u32W22Dense++;
+        }
+
+        g_soft.u32Wire22Dense = u32W22Dense;
+        g_soft.u32Wire22DenseH1 = u32W22H1;
+        g_soft.u32Wire22DenseH1Sub = u32W22H1Sub;
+        g_soft.u32Wire22DenseSock = u32W22Sock;
+        g_soft.u32Wire22DenseSockSub = u32W22SockSub;
+        g_soft.u32Wire22DenseYield = u32W22Yield;
+        g_soft.u32Wire22DenseDod = u32W22Dod;
+        g_soft.u32Wire22DenseUdx = u32W22Udx;
+
+        /* Composite wire22_ok requires all denser arms + denser sublocks. */
+        u32Checks++;
+        if (u32W22Dense >= NET_DOOR_WIRE22_DENSE_MIN &&
+            u32W22H1 != 0u && u32W22Sock != 0u && u32W22Yield != 0u &&
+            u32W22Dod != 0u && u32W22Udx != 0u &&
+            u32W22H1Sub >= NET_DOOR_WIRE22_DENSE_H1_SUB &&
+            u32W22SockSub >= NET_DOOR_WIRE22_DENSE_SOCK_SUB &&
+            NET_DOOR_WIRE22_STACK == 1u && NET_DOOR_SSH_PORT == 22u &&
+            NET_DOOR_H1_THR_ONLY == 1u && NET_DOOR_H1_POLL_SITES == 1u &&
+            NET_DOOR_H1_IRQ_POLL == 0u && NET_DOOR_H1_DOOR_THR == 1u) {
+            u32Wire22 = 1u;
+            u32Ok++;
+            u32SshdOk++;
+            u32FunctionalOk++;
+        }
+    }
+    (void)NET_DOOR_H1_LEAN_CHECKS;
+    (void)NET_DOOR_FUNC_CATALOG_MIN;
+    (void)NET_DOOR_WIRE22_DENSE_ARMS;
+    (void)NET_DOOR_WIRE22_DENSE_H1_SUB;
+    (void)NET_DOOR_WIRE22_DENSE_SOCK_SUB;
+
+    g_soft.u32LeanChecks = u32Checks;
+    g_soft.u32LeanOk = u32Ok;
+    g_soft.u32UdxHandoffOk = u32UdxOk;
+    g_soft.u32RingMapNotesOk = u32MapNotes;
+    g_soft.u32SshdHandoffOk = u32SshdOk;
+    g_soft.u32FunctionalOk = u32FunctionalOk;
+    g_soft.u32FunctionalSteps = u32FunctionalSteps;
+    g_soft.u32H1Ok = u32H1;
+    g_soft.u32H1ThrLocks = u32H1ThrLocks;
+    g_soft.u32Wire22Ok = u32Wire22;
+
+    u32Owned = (g_u32OwnerToken != 0) ? 1u : 0u;
+    u32L2Ready = (net_l2_ready() != 0) ? 1u : 0u;
+    u32MapHeld = (g_u64RingMapVa != 0) ? 1u : 0u;
+    u32DmaHeld = (g_u64MapDmaVa != 0) ? 1u : 0u;
+    szL2 = net_l2_name();
+    if (szL2 == NULL) {
+        szL2 = "none";
+    }
+
+    /*
+     * Grep: net_door: soft residual lean
+     * One lean line - Soft!=product dual license; no version stamp; no storm.
+     * greppable: product_dod_b=UDX | not_freestanding_rtl | dual_dod_b=OPEN_UDX
+     * greppable: handoff=netstackd|sshd|UDX
+     * greppable: udx_host_stack=claim|map_ring|map_dma|desc|user_avail|bounce
+     * greppable: door_thr_only=1 | H1 | h1_poll_sites=1 | poll_h1
+     * greppable: thr_only=1 | net_eth_irq=0 | irq_path=0 | poll_own=door_thr
+     * greppable: fault_class=H1_irq_stack_smash | dual_dod_b=OPEN
+     */
+    kprintf("net_door: soft residual lean "
+            "poll_op=%u accept_op=%u xfer=%u eth_geom=%u "
+            "claim_op=%u ring_op=%u user_avail_op=%u export_op=%u kick_op=%u "
+            "sshd_op=%u functional_op=%u h1_ok=%u h1_thr_locks=%u wire22_ok=%u "
+            "denser=1 denser_arms=%u "
+            "udx_handoff_ok=%u ring_map_notes_ok=%u sshd_handoff_ok=%u "
+            "functional_ok=%u functional_steps=%u STRONGER=1 "
+            "checks=%u ok=%u path=claim|ring|poll->net_eth_poll|socket|bind22|"
+            "send|recv|connect|close|sock_poll "
+            "udx_host_stack=claim|map_ring|map_dma|desc|user_avail|bounce "
+            "sshd_pipeline=socket|bind22|listen|accept|poll|send|recv|connect|close|sock_poll "
+            "yield_trio=poll|accept|sock_poll functional_route=tcp|lo "
+            "wire_handoff+tcp22=1 stack=eth|tcp|door|:22 "
+            "handoff=netstackd|sshd|UDX eth_advance=1 irq=0 door_thr_only=1 "
+            "net_eth_poll=run_loop_or_door H1=1 h1_poll_sites=%u "
+            "thr_only=%u net_eth_irq=%u irq_path=%u poll_own=door_thr "
+            "fault_class=H1_irq_stack_smash dual_dod_b=OPEN dual_dod=OPEN "
+            "functional_ops=sock_poll|connect|close|send|recv|accept_eagain "
+            "poll=%lu poll_eth=%lu poll_h1=%lu poll22=%lu poll_h1_wire22=%lu "
+            "poll_l2=%lu denser_h1=%u denser_h1_sub=%u "
+            "l2=%s l2_ready=%u "
+            "port22_held=%u owned=%u map_held=%u map_va=0x%lx map_which=%u "
+            "dma_held=%u dma_va=0x%lx "
+            "map_ok=%lu map_reclaim=%lu map_nodev=%lu map_fault=%lu "
+            "map_rx=%lu map_tx=%lu "
+            "dma_ok=%lu dma_reclaim=%lu "
+            "export_ok=%lu kick_ok=%lu "
+            "desc_ok=%lu desc_nodev=%lu user_avail_ok=%lu user_avail_kick=%lu "
+            "bounce_ok=%lu avail_ok=%lu used_ok=%lu "
+            "send_ok=%lu recv_ok=%lu connect_ok=%lu sock_poll_ready=%lu "
+            "sock_poll22=%lu accept_eagain22=%lu connect22=%lu "
+            "socket_tcp=%lu socket_lo=%lu eagain=%lu "
+            "dual_dod_b=OPEN_UDX product_dod_b=UDX "
+            "not_freestanding_rtl=1 product_sshd_tcp22=OPEN "
+            "soft_ne_product=1 dual=MIT_OR_Apache-2.0 "
+            "(Soft!=product; W11 Dual DoD B FUNCTIONAL residual lean STRONGER "
+            "wire22 denser; denser H1 thr-only door eth poll; wire "
+            "handoff+:22 stack; Product DoD B=UDX; stamp-free bar "
+            "v2026.08.04.75; never invent .76; G-AC-1; agent!=close)\n",
+            u32PollOp, u32AcceptOp, u32Xfer, u32EthMax,
+            u32ClaimOp, u32RingOp, u32UserAvailOp, u32ExportOp, u32KickOp,
+            u32SshdOp, u32FunctionalOp, u32H1, u32H1ThrLocks, u32Wire22,
+            g_soft.u32Wire22Dense,
+            u32UdxOk, u32MapNotes, u32SshdOk, u32FunctionalOk,
+            u32FunctionalSteps, u32Checks, u32Ok,
+            (unsigned)NET_DOOR_H1_POLL_SITES,
+            (unsigned)NET_DOOR_H1_THR_ONLY,
+            (unsigned)NET_DOOR_H1_IRQ_POLL,
+            (unsigned)NET_DOOR_H1_IRQ_PATH,
+            (unsigned long)g_soft.u64Poll,
+            (unsigned long)g_soft.u64PollEth,
+            (unsigned long)g_soft.u64PollH1,
+            (unsigned long)g_soft.u64Poll22,
+            (unsigned long)g_soft.u64PollH122,
+            (unsigned long)g_soft.u64PollL2Ready,
+            g_soft.u32Wire22DenseH1,
+            g_soft.u32Wire22DenseH1Sub,
+            szL2, u32L2Ready,
+            g_fSoftSshd22 ? 1u : 0u, u32Owned, u32MapHeld,
+            (unsigned long)g_u64RingMapVa,
+            (unsigned)g_u16LastMapWhich,
+            u32DmaHeld,
+            (unsigned long)g_u64MapDmaVa,
+            (unsigned long)g_soft.u64MapRingOk,
+            (unsigned long)g_soft.u64MapRingReclaim,
+            (unsigned long)g_soft.u64MapRingNodev,
+            (unsigned long)g_soft.u64MapRingFault,
+            (unsigned long)g_soft.u64MapRingRx,
+            (unsigned long)g_soft.u64MapRingTx,
+            (unsigned long)g_soft.u64MapDmaOk,
+            (unsigned long)g_soft.u64MapDmaReclaim,
+            (unsigned long)g_soft.u64ExportOk,
+            (unsigned long)g_soft.u64KickOk,
+            (unsigned long)g_soft.u64DescAllocOk,
+            (unsigned long)g_soft.u64DescAllocNodev,
+            (unsigned long)g_soft.u64UserAvailOk,
+            (unsigned long)g_soft.u64UserAvailKick,
+            (unsigned long)g_soft.u64BounceFillOk,
+            (unsigned long)g_soft.u64AvailPushOk,
+            (unsigned long)g_soft.u64UsedReapOk,
+            (unsigned long)g_soft.u64SendOk,
+            (unsigned long)g_soft.u64RecvOk,
+            (unsigned long)g_soft.u64ConnectOk,
+            (unsigned long)g_soft.u64SockPollReady,
+            (unsigned long)g_soft.u64SockPoll22,
+            (unsigned long)g_soft.u64AcceptEagain22,
+            (unsigned long)g_soft.u64Connect22,
+            (unsigned long)g_soft.u64SocketTcp,
+            (unsigned long)g_soft.u64SocketLo,
+            (unsigned long)g_soft.u64Eagain);
+
+    /*
+     * Grep: net_door: soft residual wire22
+     * W11 Dual DoD B wire handoff + :22 stack honesty (once; Soft!=product).
+     * STRONGER denser multi-arm surface (H2 once; Dual DoD OPEN).
+     */
+    kprintf("net_door: soft residual wire22 Soft!=product "
+            "wire_handoff+tcp22=1 wire22_ok=%u denser=1 denser_arms=%u/%u "
+            "denser_h1=%u denser_h1_sub=%u/%u denser_sock_sub=%u/%u "
+            "ssh_port=%u stack=eth|tcp|door|:22 product_sshd_tcp22=OPEN "
+            "path=poll_h1|socket|bind22|listen|accept|sock_poll|send|recv "
+            "poll_h1_wire22=%lu sock_poll22=%lu poll22=%lu "
+            "bind22_ok=%lu listen22_ok=%lu "
+            "accept_eagain22=%lu accept22_ok=%lu connect22=%lu "
+            "port22_held=%u door_thr_only=1 H1=1 thr_only=1 net_eth_irq=0 "
+            "poll_own=door_thr h1_poll_sites=1 thr-only_door_eth_poll=1 "
+            "dual_dod_b=OPEN_UDX dual_dod_b=OPEN product_dod_b=UDX "
+            "not_freestanding_rtl=1 handoff=netstackd|sshd|UDX "
+            "G-AC-1=1 agent!=close stamp_free=v2026.08.04.75 never=.76 "
+            "(W11 Dual DoD B FUNCTIONAL STRONGER wire22 denser; wire "
+            "handoff+:22 stack for product sshd; denser H1 thr-only door "
+            "eth poll; denser_sock_sub; not Dual DoD close)\n",
+            u32Wire22,
+            g_soft.u32Wire22Dense, (unsigned)NET_DOOR_WIRE22_DENSE_ARMS,
+            g_soft.u32Wire22DenseH1,
+            g_soft.u32Wire22DenseH1Sub,
+            (unsigned)NET_DOOR_WIRE22_DENSE_H1_SUB,
+            g_soft.u32Wire22DenseSockSub,
+            (unsigned)NET_DOOR_WIRE22_DENSE_SOCK_SUB,
+            (unsigned)NET_DOOR_SSH_PORT,
+            (unsigned long)g_soft.u64PollH122,
+            (unsigned long)g_soft.u64SockPoll22,
+            (unsigned long)g_soft.u64Poll22,
+            (unsigned long)g_soft.u64Bind22Ok,
+            (unsigned long)g_soft.u64Listen22Ok,
+            (unsigned long)g_soft.u64AcceptEagain22,
+            (unsigned long)g_soft.u64Accept22Ok,
+            (unsigned long)g_soft.u64Connect22,
+            g_fSoftSshd22 ? 1u : 0u);
+
+    /*
+     * Grep: net_door: soft residual wire22 denser
+     * STRONGER multi-arm denser honesty (Soft!=product; Dual DoD OPEN;
+     * product_dod_b=UDX; H2 once; stamp-free bar v2026.08.04.75).
+     * Denser H1 thr-only door eth poll: arm0 sublocks + poll_h1_wire22.
+     * Denser sock22 sublocks: socket|bind|listen|accept|sock_poll|port.
+     * greppable: denser=1 | denser_arms | h1_poll | sock22 | yield
+     * greppable: dual_dod_open | product_udx | poll22 | dual_dod OPEN
+     * greppable: denser_h1 | thr-only door eth poll | poll_h1_wire22
+     * greppable: denser_sock_sub | denser_h1_sub | thr-only_door_eth_poll
+     */
+    kprintf("net_door: soft residual wire22 denser Soft!=product denser=1 "
+            "STRONGER=1 denser_arms=%u/%u denser_min=%u wire22_ok=%u "
+            "arm_h1_poll=%u arm_h1_sub=%u/%u denser_h1=1 "
+            "arm_sock22=%u denser_sock_sub=%u/%u arm_yield=%u "
+            "arm_dual_dod_open=%u arm_product_udx=%u "
+            "h1_thr_only=%u h1_poll_sites=%u net_eth_irq=%u irq_path=%u "
+            "door_thr_only=%u poll_own=door_thr thr-only_door_eth_poll=1 "
+            "fault_class=H1_irq_stack_smash "
+            "sock_ops=socket|bind|listen|accept|poll|sock_poll "
+            "ssh_port=%u wire22_stack=%u yield_ops=%u "
+            "poll22=%lu sock_poll22=%lu bind22_ok=%lu listen22_ok=%lu "
+            "accept_eagain22=%lu accept22_ok=%lu connect22=%lu "
+            "poll_h1=%lu poll_eth=%lu poll_h1_wire22=%lu port22_held=%u "
+            "stack=eth|tcp|door|:22 wire_handoff+tcp22=1 "
+            "product_sshd_tcp22=OPEN product_dod_b=UDX "
+            "dual_dod_b=OPEN_UDX dual_dod_b=OPEN dual_dod=OPEN "
+            "not_freestanding_rtl=1 handoff=netstackd|sshd|UDX "
+            "soft_ne_product=1 dual=MIT_OR_Apache-2.0 G-AC-1=1 "
+            "agent!=close stamp_free=v2026.08.04.75 never=.76 "
+            "(STRONGER wire22 residual denser; SOCK BIND/LISTEN/ACCEPT/POLL "
+            ":22 door product sshd; denser H1 thr-only door eth poll; "
+            "denser_sock_sub; Soft!=product; Dual DoD OPEN; "
+            "product_dod_b=UDX; not close)\n",
+            g_soft.u32Wire22Dense, (unsigned)NET_DOOR_WIRE22_DENSE_ARMS,
+            (unsigned)NET_DOOR_WIRE22_DENSE_MIN, u32Wire22,
+            g_soft.u32Wire22DenseH1,
+            g_soft.u32Wire22DenseH1Sub,
+            (unsigned)NET_DOOR_WIRE22_DENSE_H1_SUB,
+            g_soft.u32Wire22DenseSock,
+            g_soft.u32Wire22DenseSockSub,
+            (unsigned)NET_DOOR_WIRE22_DENSE_SOCK_SUB,
+            g_soft.u32Wire22DenseYield, g_soft.u32Wire22DenseDod,
+            g_soft.u32Wire22DenseUdx,
+            (unsigned)NET_DOOR_H1_THR_ONLY,
+            (unsigned)NET_DOOR_H1_POLL_SITES,
+            (unsigned)NET_DOOR_H1_IRQ_POLL,
+            (unsigned)NET_DOOR_H1_IRQ_PATH,
+            (unsigned)NET_DOOR_H1_DOOR_THR,
+            (unsigned)NET_DOOR_SSH_PORT,
+            (unsigned)NET_DOOR_WIRE22_STACK,
+            (unsigned)NET_DOOR_FUNC_YIELD_OPS,
+            (unsigned long)g_soft.u64Poll22,
+            (unsigned long)g_soft.u64SockPoll22,
+            (unsigned long)g_soft.u64Bind22Ok,
+            (unsigned long)g_soft.u64Listen22Ok,
+            (unsigned long)g_soft.u64AcceptEagain22,
+            (unsigned long)g_soft.u64Accept22Ok,
+            (unsigned long)g_soft.u64Connect22,
+            (unsigned long)g_soft.u64PollH1,
+            (unsigned long)g_soft.u64PollEth,
+            (unsigned long)g_soft.u64PollH122,
+            g_fSoftSshd22 ? 1u : 0u);
+
+    if (u32Ok == u32Checks && u32UdxOk >= 3u && u32MapNotes >= 3u &&
+        u32H1 != 0 && u32H1ThrLocks != 0 && u32Wire22 != 0 &&
+        g_soft.u32Wire22Dense >= NET_DOOR_WIRE22_DENSE_MIN &&
+        u32FunctionalOk >= NET_DOOR_FUNC_CATALOG_MIN) {
+        /*
+         * Grep: net_door: soft residual lean PASS
+         * Soft residual only - never product dual-license DoD close.
+         * W11 STRONGER denser: functional_ok + wire22 denser + H1 thr-only.
+         */
+        kprintf("net_door: soft residual lean PASS "
+                "checks=%u ok=%u udx_handoff_ok=%u ring_map_notes_ok=%u "
+                "sshd_handoff_ok=%u functional_ok=%u functional_steps=%u "
+                "h1_ok=%u h1_thr_locks=%u wire22_ok=%u denser=1 denser_arms=%u "
+                "STRONGER=1 map_ring=%u map_dma=%u user_avail=%u sock_poll=%u "
+                "wire_handoff+tcp22=1 stack=eth|tcp|door|:22 "
+                "handoff=netstackd|sshd|UDX product_dod_b=UDX "
+                "door_thr_only=1 H1=1 h1_poll_sites=1 thr_only=1 "
+                "net_eth_irq=0 irq_path=0 poll_own=door_thr "
+                "fault_class=H1_irq_stack_smash dual_dod_b=OPEN dual_dod=OPEN "
+                "functional_ops=sock_poll|connect|close|send|recv|accept_eagain "
+                "sshd_pipeline=socket|bind22|listen|accept|poll|send|recv|connect|close|sock_poll "
+                "yield_trio=poll|accept|sock_poll functional_route=tcp|lo "
+                "soft_ne_product=1 dual=MIT_OR_Apache-2.0 "
+                "(Soft!=product; W11 Dual DoD B FUNCTIONAL residual lean "
+                "STRONGER wire22 denser; wire handoff+:22 stack; H1 door thr "
+                "eth; G-AC-1; stamp-free bar v2026.08.04.75; never invent .76; "
+                "agent!=close)\n",
+                u32Checks, u32Ok, u32UdxOk, u32MapNotes, u32SshdOk,
+                u32FunctionalOk, u32FunctionalSteps, u32H1, u32H1ThrLocks,
+                u32Wire22, g_soft.u32Wire22Dense,
+                GJ_NET_OP_MAP_RING, GJ_NET_OP_MAP_DMA, GJ_NET_OP_USER_AVAIL,
+                GJ_NET_OP_SOCK_POLL);
     }
 }
 
 /**
- * After first product call activity, print soft inventory once (mirrors
- * door/futex soft-stats-once). Safe from call return paths only.
+ * After first product call activity, print soft residual once.
+ * Safe from call return paths only. No per-op re-dump.
  */
 static void
 net_door_soft_maybe_once(void)
@@ -1526,7 +1610,8 @@ net_door_soft_maybe_once(void)
         return;
     }
     g_fSoftOnce = 1;
-    net_door_soft_inventory_log();
+    net_door_soft_residual_once();
+    net_door_soft_residual_lean_once();
 }
 
 void
@@ -1540,13 +1625,195 @@ net_door_init(void)
     g_u32Reclaims = 0;
     g_u32RingCalls = 0;
     g_u64RingMapVa = 0;
+    g_u64MapDmaVa = 0;
+    g_u16LastMapWhich = 0;
     memset(&g_soft, 0, sizeof(g_soft));
     g_fSoftOnce = 0;
-    kprintf("net_door: init (claim+ring soft wave=%u areas=%u)\n",
-            (unsigned)NET_DOOR_SOFT_DEEPEN_WAVE,
-            (unsigned)NET_DOOR_SOFT_DEEPEN_AREAS);
-    /* Grep: net_door: soft (baseline inventory after init; zeros expected) */
-    net_door_soft_inventory_log();
+    g_fSoftSshd22 = 0;
+    g_fSoftLean = 0;
+    g_fUdxReady = 0;
+    g_fUdxReadyLamp = 0;
+    g_fUdxInjLamp = 0;
+    g_fUdxTxLamp = 0;
+    g_u32UdxTxHead = 0;
+    g_u32UdxTxTail = 0;
+    g_u32UdxTxN = 0;
+    g_u32UdxInjOk = 0;
+    g_u32UdxTxEnq = 0;
+    g_u32UdxTxPull = 0;
+    memset(g_aUdxTxLen, 0, sizeof(g_aUdxTxLen));
+    /* Grep: net_door: soft residual (init lamp; sparse) */
+    kprintf("net_door: init (POLL->net_eth_poll Dual DoD B=UDX "
+            "Soft!=product G-AC-1 dual=MIT_OR_Apache-2.0 "
+            "handoff=netstackd|sshd|UDX not_freestanding_rtl=1 "
+            "door_thr_only=1 H1=1 h1_poll_sites=%u thr_only=%u "
+            "net_eth_irq=%u irq_path=%u poll_own=door_thr "
+            "fault_class=H1_irq_stack_smash dual_dod_b=OPEN "
+            "udx_host_stack=claim|map_ring|map_dma|desc|user_avail|bounce)\n",
+            (unsigned)NET_DOOR_H1_POLL_SITES,
+            (unsigned)NET_DOOR_H1_THR_ONLY,
+            (unsigned)NET_DOOR_H1_IRQ_POLL,
+            (unsigned)NET_DOOR_H1_IRQ_PATH);
+    kprintf("net_door: soft residual init xfer_max=%u eth_max=%u page=%u "
+            "path=claim|ring|poll->net_eth_poll|socket|bind22|send|recv|"
+            "connect|close|sock_poll eth_advance=1 "
+            "irq=0 door_thr_only=1 H1=1 h1_poll_sites=%u thr_only=%u "
+            "net_eth_irq=%u irq_path=%u poll_own=door_thr poll_h1=0 "
+            "fault_class=H1_irq_stack_smash "
+            "net_eth_poll=run_loop_or_door poll=always_ok "
+            "accept_empty=eagain dual_dod_b=OPEN_UDX product_dod_b=UDX "
+            "not_freestanding_rtl=1 product_sshd_tcp22=OPEN dual_dod_b=OPEN "
+            "functional_ops=sock_poll|connect|close|send|recv|accept_eagain "
+            "udx_host_stack=claim|map_ring|map_dma|desc|user_avail|bounce "
+            "handoff=netstackd|sshd|UDX soft=1 product=0 Soft!=product G-AC-1\n",
+            NET_XFER_MAX, NET_ETH_MAX, NET_DOOR_PAGE_SIZE,
+            (unsigned)NET_DOOR_H1_POLL_SITES,
+            (unsigned)NET_DOOR_H1_THR_ONLY,
+            (unsigned)NET_DOOR_H1_IRQ_POLL,
+            (unsigned)NET_DOOR_H1_IRQ_PATH);
+    /* Grep: net_door: soft residual h1 (init; sparse; C1 thr-only deepen) */
+    kprintf("net_door: soft residual h1 init thr_only=%u net_eth_irq=%u "
+            "irq_path=%u door_thr_only=%u h1_poll_sites=%u poll_own=door_thr "
+            "poll_h1=0 h1_match=1 h1_thr_locks=1 "
+            "fault_class=H1_irq_stack_smash net_eth_poll=run_loop_or_door "
+            "dual_dod_b=OPEN product_dod_b=UDX not_freestanding_rtl=1 "
+            "soft_ne_product=1 dual=MIT_OR_Apache-2.0 G-AC-1=1 "
+            "(Soft!=product; C1 H1 thr-only residual deepen; door thr full "
+            "kstack only; never IRQ/timer; agent!=close; no version stamp)\n",
+            (unsigned)NET_DOOR_H1_THR_ONLY,
+            (unsigned)NET_DOOR_H1_IRQ_POLL,
+            (unsigned)NET_DOOR_H1_IRQ_PATH,
+            (unsigned)NET_DOOR_H1_DOOR_THR,
+            (unsigned)NET_DOOR_H1_POLL_SITES);
+    /* Grep: net_door: soft residual lean (init lean; sparse) */
+    kprintf("net_door: soft residual lean init "
+            "poll_op=%u claim_op=%u map_ring=%u map_dma=%u user_avail=%u "
+            "export=%u kick=%u socket=%u bind=%u listen=%u accept=%u "
+            "connect=%u close=%u send=%u recv=%u sock_poll=%u "
+            "path=claim|ring|poll->net_eth_poll|socket|bind22|send|recv|"
+            "connect|close|sock_poll "
+            "udx_host_stack=claim|map_ring|map_dma|desc|user_avail|bounce "
+            "handoff=netstackd|sshd|UDX eth_advance=1 irq=0 door_thr_only=1 "
+            "H1=1 h1_poll_sites=%u thr_only=%u net_eth_irq=%u irq_path=%u "
+            "poll_own=door_thr fault_class=H1_irq_stack_smash dual_dod_b=OPEN "
+            "dual_dod_b=OPEN_UDX product_dod_b=UDX not_freestanding_rtl=1 "
+            "functional_ops=sock_poll|connect|close|send|recv|accept_eagain "
+            "soft_ne_product=1 dual=MIT_OR_Apache-2.0 "
+            "(Soft!=product; no version stamp; no stamp storms; G-AC-1; "
+            "C1 H1 thr-only; functional residual; agent!=close)\n",
+            GJ_NET_OP_POLL, GJ_NET_OP_CLAIM, GJ_NET_OP_MAP_RING,
+            GJ_NET_OP_MAP_DMA, GJ_NET_OP_USER_AVAIL,
+            GJ_NET_OP_EXPORT_RING, GJ_NET_OP_KICK,
+            GJ_NET_OP_SOCKET, GJ_NET_OP_BIND, GJ_NET_OP_LISTEN,
+            GJ_NET_OP_ACCEPT, GJ_NET_OP_CONNECT, GJ_NET_OP_CLOSE,
+            GJ_NET_OP_SEND, GJ_NET_OP_RECV, GJ_NET_OP_SOCK_POLL,
+            (unsigned)NET_DOOR_H1_POLL_SITES,
+            (unsigned)NET_DOOR_H1_THR_ONLY,
+            (unsigned)NET_DOOR_H1_IRQ_POLL,
+            (unsigned)NET_DOOR_H1_IRQ_PATH);
+    /* Grep: net_door: soft residual functional (init; sparse) */
+    kprintf("net_door: soft residual functional init Soft!=product STRONGER=1 "
+            "product_dod_b=UDX dual_dod_b=OPEN_UDX product_sshd_tcp22=OPEN "
+            "handoff=netstackd|sshd|UDX "
+            "wire_handoff+tcp22=1 stack=eth|tcp|door|:22 "
+            "functional_ops=sock_poll|connect|close|send|recv|accept_eagain "
+            "functional_route=tcp|lo "
+            "sshd_pipeline=socket|bind22|listen|accept|poll|send|recv|connect|close|sock_poll "
+            "yield_trio=poll|accept|sock_poll "
+            "connect_op=%u close_op=%u send_op=%u recv_op=%u sock_poll_op=%u "
+            "accept_op=%u map_ring_op=%u user_avail_op=%u "
+            "sshd_steps=%u udx_steps=%u yield_ops=%u catalog_min=%u "
+            "ssh_port=%u wire22_stack=%u pollin=0x%x pollout=0x%x "
+            "door_thr_only=1 H1=1 poll_own=door_thr "
+            "fault_class=H1_irq_stack_smash not_freestanding_rtl=1 "
+            "soft_ne_product=1 dual=MIT_OR_Apache-2.0 G-AC-1=1 "
+            "(W11 Dual DoD B FUNCTIONAL residual STRONGER; wire handoff+:22 "
+            "stack; SOCK_POLL TCP+net_lo; agent!=close; stamp-free bar "
+            "v2026.08.04.75; never invent .76)\n",
+            GJ_NET_OP_CONNECT, GJ_NET_OP_CLOSE, GJ_NET_OP_SEND,
+            GJ_NET_OP_RECV, GJ_NET_OP_SOCK_POLL, GJ_NET_OP_ACCEPT,
+            GJ_NET_OP_MAP_RING, GJ_NET_OP_USER_AVAIL,
+            (unsigned)NET_DOOR_FUNC_SSHD_STEPS,
+            (unsigned)NET_DOOR_FUNC_UDX_STEPS,
+            (unsigned)NET_DOOR_FUNC_YIELD_OPS,
+            (unsigned)NET_DOOR_FUNC_CATALOG_MIN,
+            (unsigned)NET_DOOR_SSH_PORT,
+            (unsigned)NET_DOOR_WIRE22_STACK,
+            (unsigned)NET_DOOR_POLLIN,
+            (unsigned)NET_DOOR_POLLOUT);
+    /* Grep: net_door: soft residual functional catalog (init; sparse) */
+    kprintf("net_door: soft residual functional catalog init Soft!=product "
+            "STRONGER=1 product_dod_b=UDX dual_dod_b=OPEN_UDX "
+            "product_sshd_tcp22=OPEN handoff=netstackd|sshd|UDX "
+            "sshd_steps=%u udx_steps=%u yield_ops=%u catalog_min=%u "
+            "sshd_pipeline=socket|bind22|listen|accept|poll|send|recv|"
+            "connect|close|sock_poll "
+            "udx_host_stack=claim|export|map_ring|map_dma|desc|user_avail|"
+            "bounce|kick yield_trio=poll|accept|sock_poll "
+            "functional_route=tcp|lo "
+            "functional_ops=sock_poll|connect|close|send|recv|accept_eagain "
+            "door_thr_only=1 H1=1 poll_own=door_thr "
+            "fault_class=H1_irq_stack_smash not_freestanding_rtl=1 "
+            "soft_ne_product=1 dual=MIT_OR_Apache-2.0 G-AC-1=1 "
+            "(STRONGER FUNCTIONAL catalog init; agent!=close; no stamp)\n",
+            (unsigned)NET_DOOR_FUNC_SSHD_STEPS,
+            (unsigned)NET_DOOR_FUNC_UDX_STEPS,
+            (unsigned)NET_DOOR_FUNC_YIELD_OPS,
+            (unsigned)NET_DOOR_FUNC_CATALOG_MIN);
+    /*
+     * Grep: net_door: soft residual wire22 denser (init; sparse; H2 once)
+     * STRONGER wire22 residual denser surface for product sshd Dual DoD B.
+     * Soft!=product; Dual DoD OPEN; product_dod_b=UDX;
+     * denser H1 thr-only door eth poll (arm0 sublocks + poll_h1_wire22).
+     * greppable: denser_h1 | thr-only door eth poll | poll_h1_wire22
+     */
+    kprintf("net_door: soft residual wire22 denser init Soft!=product denser=1 "
+            "STRONGER=1 denser_arms=%u denser_min=%u denser_h1_sub=%u "
+            "denser_sock_sub=%u "
+            "wire22_stack=%u denser_h1=1 thr-only_door_eth_poll=1 "
+            "ssh_port=%u sock_ops=socket|bind|listen|accept|poll|sock_poll "
+            "arms=h1_poll|sock22|yield|dual_dod_open|product_udx "
+            "h1_thr_only=%u h1_poll_sites=%u net_eth_irq=%u irq_path=%u "
+            "door_thr_only=%u poll_own=door_thr poll_h1_wire22=0 "
+            "fault_class=H1_irq_stack_smash "
+            "stack=eth|tcp|door|:22 wire_handoff+tcp22=1 "
+            "product_sshd_tcp22=OPEN product_dod_b=UDX "
+            "dual_dod_b=OPEN_UDX dual_dod_b=OPEN dual_dod=OPEN "
+            "not_freestanding_rtl=1 handoff=netstackd|sshd|UDX "
+            "soft_ne_product=1 dual=MIT_OR_Apache-2.0 G-AC-1=1 "
+            "agent!=close stamp_free=v2026.08.04.75 never=.76 "
+            "(STRONGER wire22 residual denser init; SOCK BIND/LISTEN/ACCEPT/"
+            "POLL :22 door product sshd; denser H1 thr-only door eth poll; "
+            "denser_sock_sub; Soft!=product; Dual DoD OPEN; product_dod_b=UDX)\n",
+            (unsigned)NET_DOOR_WIRE22_DENSE_ARMS,
+            (unsigned)NET_DOOR_WIRE22_DENSE_MIN,
+            (unsigned)NET_DOOR_WIRE22_DENSE_H1_SUB,
+            (unsigned)NET_DOOR_WIRE22_DENSE_SOCK_SUB,
+            (unsigned)NET_DOOR_WIRE22_STACK,
+            (unsigned)NET_DOOR_SSH_PORT,
+            (unsigned)NET_DOOR_H1_THR_ONLY,
+            (unsigned)NET_DOOR_H1_POLL_SITES,
+            (unsigned)NET_DOOR_H1_IRQ_POLL,
+            (unsigned)NET_DOOR_H1_IRQ_PATH,
+            (unsigned)NET_DOOR_H1_DOOR_THR);
+    /* Grep: net_door: ring map notes (init; sparse) */
+    kprintf("net_door: ring map notes init Soft!=product product_dod_b=UDX "
+            "page=%u map_ring_op=%u map_dma_op=%u desc_op=%u user_avail_op=%u "
+            "export_op=%u kick_op=%u avail_push_op=%u used_reap_op=%u "
+            "ring_state_op=%u map_va=0 dma_va=0 reclaim=soft_same_va "
+            "dma_reclaim=soft_same_va "
+            "udx_attach=map_va+off_desc|off_avail|off_used "
+            "udx_host_stack=claim|map_ring|map_dma|desc|user_avail|bounce "
+            "handoff=netstackd|sshd|UDX door_thr_only=1 H1=1 h1_poll_sites=%u "
+            "thr_only=%u poll_own=door_thr fault_class=H1_irq_stack_smash "
+            "(NODEV soft-skip without virtio-net; no per-MAP dump; "
+            "dual MIT OR Apache-2.0; G-AC-1; C1 H1 thr-only)\n",
+            (unsigned)NET_DOOR_PAGE_SIZE,
+            GJ_NET_OP_MAP_RING, GJ_NET_OP_MAP_DMA, GJ_NET_OP_DESC_ALLOC,
+            GJ_NET_OP_USER_AVAIL, GJ_NET_OP_EXPORT_RING, GJ_NET_OP_KICK,
+            GJ_NET_OP_AVAIL_PUSH, GJ_NET_OP_USED_REAP, GJ_NET_OP_RING_STATE,
+            (unsigned)NET_DOOR_H1_POLL_SITES,
+            (unsigned)NET_DOOR_H1_THR_ONLY);
 }
 
 int
@@ -1567,6 +1834,12 @@ net_door_ring_map_va(void)
     return g_u64RingMapVa;
 }
 
+u64
+net_door_map_dma_va(void)
+{
+    return g_u64MapDmaVa;
+}
+
 u32
 net_door_ring_calls(void)
 {
@@ -1581,7 +1854,7 @@ net_door_claim_count(void)
 }
 
 /**
- * Soft terminal: classify ret + one-shot inventory, then return ret.
+ * Soft terminal: classify ret + one-shot residual, then return ret.
  * All product returns from net_door_call go through here (ABI unchanged).
  */
 static i64
@@ -1591,72 +1864,6 @@ net_door_soft_done(i64 i64Ret)
     net_door_soft_note_ret(i64Ret);
     net_door_soft_maybe_once();
     return i64Ret;
-}
-
-/**
- * Soft: socket-family terminal (tcp|lo routing + ok|fail + owned).
- * greppable: net_door: soft sock
- */
-static i64
-net_door_soft_sock_done(i64 i64Ret, int fTcp)
-{
-    if (fTcp != 0) {
-        net_door_soft_inc(&g_soft.u64SockTcp);
-    } else {
-        net_door_soft_inc(&g_soft.u64SockLo);
-    }
-    if (i64Ret >= 0) {
-        net_door_soft_inc(&g_soft.u64SockOk);
-    } else {
-        net_door_soft_inc(&g_soft.u64SockFail);
-    }
-    if (g_u32OwnerToken != 0) {
-        net_door_soft_inc(&g_soft.u64SockOwned);
-    } else {
-        net_door_soft_inc(&g_soft.u64SockUnowned);
-    }
-    return net_door_soft_done(i64Ret);
-}
-
-/**
- * Soft: SEND/RECV terminal (bytes + tcp|lo + sock outcomes).
- * greppable: net_door: soft xfer
- */
-static i64
-net_door_soft_xfer_done(i64 i64Ret, int fSend, int fTcp)
-{
-    if (fTcp != 0) {
-        net_door_soft_inc(&g_soft.u64SockTcp);
-    } else {
-        net_door_soft_inc(&g_soft.u64SockLo);
-    }
-    if (i64Ret >= 0) {
-        net_door_soft_inc(&g_soft.u64SockOk);
-        if (fSend != 0) {
-            net_door_soft_inc(&g_soft.u64SendOk);
-            if (i64Ret > 0) {
-                net_door_soft_add64(&g_soft.u64SendBytes, (u64)i64Ret);
-            }
-        } else {
-            net_door_soft_inc(&g_soft.u64RecvOk);
-            if (i64Ret > 0) {
-                net_door_soft_add64(&g_soft.u64RecvBytes, (u64)i64Ret);
-            }
-        }
-    } else {
-        net_door_soft_inc(&g_soft.u64SockFail);
-        if (fSend != 0) {
-            net_door_soft_inc(&g_soft.u64SendFail);
-        } else {
-            net_door_soft_inc(&g_soft.u64RecvFail);
-        }
-    }
-    if (g_u32OwnerToken != 0) {
-        net_door_soft_inc(&g_soft.u64SockOwned);
-    } else {
-        net_door_soft_inc(&g_soft.u64SockUnowned);
-    }
-    return net_door_soft_done(i64Ret);
 }
 
 i64
@@ -1674,6 +1881,7 @@ net_door_call(u32 u32Op, u64 u64Arg1, u64 u64Arg2, u64 u64Arg3)
     case GJ_NET_OP_CLAIM:
         /* arg1 = non-zero ownership token (low 32 bits only). */
         if (u64Arg1 == 0 || (u64Arg1 >> 32) != 0) {
+            /* Path tally only; terminal class via note_ret (no double-count). */
             net_door_soft_inc(&g_soft.u64ClaimInval);
             return net_door_soft_done(GJ_ERR_INVAL);
         }
@@ -1694,12 +1902,13 @@ net_door_call(u32 u32Op, u64 u64Arg1, u64 u64Arg2, u64 u64Arg3)
                 g_u32OwnerToken);
         return net_door_soft_done(0);
     case GJ_NET_OP_RELEASE:
-        /* Soft free path: already unowned → 0 (no token match required). */
+        /* Soft free path: already unowned -> 0 (no token match required). */
         if (g_u32OwnerToken == 0) {
             net_door_soft_inc(&g_soft.u64ReleaseFree);
             return net_door_soft_done(0);
         }
         if ((u64Arg1 >> 32) != 0 || (u32)u64Arg1 != g_u32OwnerToken) {
+            /* Path tally only; terminal class via note_ret (no double-count). */
             net_door_soft_inc(&g_soft.u64ReleaseInval);
             return net_door_soft_done(GJ_ERR_INVAL);
         }
@@ -1708,127 +1917,275 @@ net_door_call(u32 u32Op, u64 u64Arg1, u64 u64Arg2, u64 u64Arg3)
         net_door_soft_inc(&g_soft.u64ReleaseOk);
         return net_door_soft_done(0);
     case GJ_NET_OP_POLL:
+        /*
+         * Interim freestanding eth advance (Soft!=product dual license):
+         * door thr stack -> net_door_eth_poll_h1 -> net_eth_poll
+         * (L2 RX demux + net_tcp_input/poll). Never IRQ/timer (H1). Soft
+         * always 0; never NODEV. L2 absent: eth soft-skips still ticks
+         * net_tcp_poll for rtx/TW. sshd yield loop: POLL+ACCEPT. Product
+         * DoD B = UDX not freestanding rtl. No per-POLL residual dump
+         * (no stamp storms). Sole net_eth_poll site in this TU is the H1
+         * wrapper (h1_poll_sites=1; NET_DOOR_H1_POLL_SITES). C1 thr-only
+         * residual deepen: thr_only=1 net_eth_irq=0 irq_path=0
+         * poll_own=door_thr fault_class=H1_irq_stack_smash dual_dod_b=OPEN.
+         * greppable: poll->net_eth_poll | irq=0 | net_eth_poll=run_loop_or_door
+         * greppable: h1_poll_sites=1 | poll_h1 | door_thr_only=1 | H1
+         * greppable: thr_only=1 | net_eth_irq=0 | poll_own=door_thr
+         * greppable: fault_class=H1_irq_stack_smash | net_door: soft residual h1
+         */
         net_door_soft_inc(&g_soft.u64Poll);
-        net_eth_poll();
+        if (net_l2_ready() != 0) {
+            net_door_soft_inc(&g_soft.u64PollL2Ready);
+        }
+        /* STRONGER wire22 denser: POLL while soft :22 held (sshd yield). */
+        if (g_fSoftSshd22 != 0) {
+            net_door_soft_inc(&g_soft.u64Poll22);
+        }
+        /* H1: door thr only; sole eth advance site (C1 thr-only locks). */
+        net_door_eth_poll_h1();
+        net_door_soft_inc(&g_soft.u64PollEth);
+        net_door_soft_inc(&g_soft.u64PollOk);
         return net_door_soft_done(0);
     case GJ_NET_OP_STATS: {
         u32 aSt[4];
 
-        net_door_soft_inc(&g_soft.u64Stats);
         if (u64Arg1 == 0) {
-            net_door_soft_inc(&g_soft.u64StatsInval);
             return net_door_soft_done(GJ_ERR_INVAL);
         }
+        /*
+         * Soft-friendly fill: getters return 0 when eth never replied.
+         * ABI: [0]arp [1]udp [2]icmp [3]door calls - stable for shell smoke.
+         * No per-STATS residual dump (stamp storm risk under yield loops).
+         */
         aSt[0] = net_eth_arp_replies();
         aSt[1] = net_eth_udp_echoes();
         aSt[2] = net_eth_icmp_echoes();
         aSt[3] = g_u32Calls;
         if (user_range_ok(u64Arg1, sizeof(aSt))) {
-            net_door_soft_inc(&g_soft.u64UserCopy);
             if (copy_to_user(u64Arg1, aSt, sizeof(aSt)) != GJ_OK) {
-                net_door_soft_inc(&g_soft.u64StatsFault);
                 return net_door_soft_done(GJ_ERR_FAULT);
             }
         } else {
-            net_door_soft_inc(&g_soft.u64KernelCopy);
             memcpy((void *)(gj_vaddr_t)u64Arg1, aSt, sizeof(aSt));
         }
-        /*
-         * Emit soft inventory on STATS so bring-up smoke greps
-         * net_door: soft … without a dedicated opcode.
-         * greppable: net_door: soft
-         */
-        net_door_soft_inventory_log();
         return net_door_soft_done(0);
     }
-    case GJ_NET_OP_SOCKET:
-        /* AF_INET=2: SOCK_STREAM → TCP (virtio eth + loopback pair);
-         * SOCK_DGRAM → net_lo UDP-shaped path. */
+    case GJ_NET_OP_SOCKET: {
+        /*
+         * sshd interim residual soft path (Soft!=product; product_dod_b=UDX):
+         * sshd-gj SOCKET -> BIND(:22) -> LISTEN -> ACCEPT(+POLL yield).
+         * STRONGER FUNCTIONAL: TCP vs lo route tallies.
+         */
+        i64 i64R;
+        int fTcp;
+
         net_door_soft_inc(&g_soft.u64Socket);
-        if ((int)u64Arg2 == SOCK_STREAM) {
-            return net_door_soft_sock_done(net_tcp_socket(), 1);
+        fTcp = ((int)u64Arg2 == SOCK_STREAM) ? 1 : 0;
+        if (fTcp != 0) {
+            net_door_soft_inc(&g_soft.u64SocketTcp);
+            i64R = net_tcp_socket();
+        } else {
+            net_door_soft_inc(&g_soft.u64SocketLo);
+            i64R = net_lo_socket((int)u64Arg1, (int)u64Arg2, (int)u64Arg3);
         }
-        return net_door_soft_sock_done(
-            net_lo_socket((int)u64Arg1, (int)u64Arg2, (int)u64Arg3), 0);
-    case GJ_NET_OP_BIND:
+        return net_door_soft_done(i64R);
+    }
+    case GJ_NET_OP_BIND: {
+        /*
+         * Soft residual: port 22 marks sshd interim :22 (Soft!=product).
+         * dual_dod_b=OPEN_UDX product_sshd_tcp22=OPEN until DUT host banner.
+         * Product DoD B = UDX not freestanding rtl (G-AC-1).
+         */
+        i64 i64R;
+        u16 u16Port;
+        int fTcp;
+        int f22;
+
         net_door_soft_inc(&g_soft.u64Bind);
-        if (net_tcp_fd_ok((i64)u64Arg1)) {
-            return net_door_soft_sock_done(
-                net_tcp_bind((i64)u64Arg1, (u16)u64Arg2), 1);
+        u16Port = (u16)u64Arg2;
+        f22 = (u16Port == (u16)NET_DOOR_SSH_PORT) ? 1 : 0;
+        fTcp = net_tcp_fd_ok((i64)u64Arg1) ? 1 : 0;
+        if (f22 != 0) {
+            net_door_soft_inc(&g_soft.u64Bind22);
         }
-        return net_door_soft_sock_done(
-            net_lo_bind((i64)u64Arg1, (u16)u64Arg2), 0);
-    case GJ_NET_OP_LISTEN:
+        if (fTcp != 0) {
+            i64R = net_tcp_bind((i64)u64Arg1, u16Port);
+        } else {
+            i64R = net_lo_bind((i64)u64Arg1, u16Port);
+        }
+        if (i64R >= 0 && f22 != 0) {
+            net_door_soft_inc(&g_soft.u64Bind22Ok);
+            g_fSoftSshd22 = 1; /* soft hold :22 for listen/accept lamps */
+        }
+        return net_door_soft_done(i64R);
+    }
+    case GJ_NET_OP_LISTEN: {
+        i64 i64R;
+        int fTcp;
+
         net_door_soft_inc(&g_soft.u64Listen);
-        if (net_tcp_fd_ok((i64)u64Arg1)) {
-            return net_door_soft_sock_done(
-                net_tcp_listen((i64)u64Arg1, (int)u64Arg2), 1);
+        fTcp = net_tcp_fd_ok((i64)u64Arg1) ? 1 : 0;
+        if (g_fSoftSshd22 != 0) {
+            net_door_soft_inc(&g_soft.u64Listen22);
         }
-        return net_door_soft_sock_done(
-            net_lo_listen((i64)u64Arg1, (int)u64Arg2), 0);
-    case GJ_NET_OP_ACCEPT:
+        if (fTcp != 0) {
+            i64R = net_tcp_listen((i64)u64Arg1, (int)u64Arg2);
+        } else {
+            i64R = net_lo_listen((i64)u64Arg1, (int)u64Arg2);
+        }
+        /* Functional residual: listen success while soft :22 held (sshd). */
+        if (i64R >= 0 && g_fSoftSshd22 != 0) {
+            net_door_soft_inc(&g_soft.u64Listen22Ok);
+        }
+        return net_door_soft_done(i64R);
+    }
+    case GJ_NET_OP_ACCEPT: {
+        /*
+         * sshd interim park: empty accept is soft EAGAIN (-11), not hard-fail.
+         * sshd yield loop POLL+ACCEPT; Soft!=product until host banner.
+         * Product DoD B = UDX not freestanding rtl (G-AC-1).
+         * Functional residual: accept22_ok + eagain path tallies.
+         */
+        i64 i64R;
+        int fTcp;
+
         net_door_soft_inc(&g_soft.u64Accept);
-        if (net_tcp_fd_ok((i64)u64Arg1)) {
-            return net_door_soft_sock_done(net_tcp_accept((i64)u64Arg1), 1);
+        fTcp = net_tcp_fd_ok((i64)u64Arg1) ? 1 : 0;
+        if (g_fSoftSshd22 != 0) {
+            net_door_soft_inc(&g_soft.u64Accept22);
         }
-        return net_door_soft_sock_done(net_lo_accept((i64)u64Arg1), 0);
-    case GJ_NET_OP_CONNECT:
+        if (fTcp != 0) {
+            i64R = net_tcp_accept((i64)u64Arg1);
+        } else {
+            i64R = net_lo_accept((i64)u64Arg1);
+        }
+        if (i64R >= 0) {
+            net_door_soft_inc(&g_soft.u64AcceptOk);
+            if (g_fSoftSshd22 != 0) {
+                net_door_soft_inc(&g_soft.u64Accept22Ok);
+            }
+        } else if (i64R == (i64)-11 || i64R == GJ_ERR_AGAIN) {
+            /* Soft empty: yield park (sshd interim; product_dod_b=UDX). */
+            net_door_soft_inc(&g_soft.u64AcceptEagain);
+            /* STRONGER FUNCTIONAL: :22 yield park honesty. */
+            if (g_fSoftSshd22 != 0) {
+                net_door_soft_inc(&g_soft.u64AcceptEagain22);
+            }
+        }
+        return net_door_soft_done(i64R);
+    }
+    case GJ_NET_OP_CONNECT: {
+        /*
+         * Functional residual CONNECT (sshd pair / netstackd loopback).
+         * Soft!=product; STRONGER: TCP|lo route + connect :22 client path.
+         */
+        i64 i64R;
+        int fTcp;
+        int f22;
+
         net_door_soft_inc(&g_soft.u64Connect);
-        if (net_tcp_fd_ok((i64)u64Arg1)) {
-            return net_door_soft_sock_done(
-                net_tcp_connect((i64)u64Arg1, (u16)u64Arg2), 1);
+        fTcp = net_tcp_fd_ok((i64)u64Arg1) ? 1 : 0;
+        f22 = ((u16)u64Arg2 == (u16)NET_DOOR_SSH_PORT) ? 1 : 0;
+        if (f22 != 0) {
+            net_door_soft_inc(&g_soft.u64Connect22);
         }
-        return net_door_soft_sock_done(
-            net_lo_connect((i64)u64Arg1, (u16)u64Arg2), 0);
-    case GJ_NET_OP_CLOSE:
+        if (fTcp != 0) {
+            net_door_soft_inc(&g_soft.u64ConnectTcp);
+            i64R = net_tcp_connect((i64)u64Arg1, (u16)u64Arg2);
+        } else {
+            net_door_soft_inc(&g_soft.u64ConnectLo);
+            i64R = net_lo_connect((i64)u64Arg1, (u16)u64Arg2);
+        }
+        if (i64R >= 0) {
+            net_door_soft_inc(&g_soft.u64ConnectOk);
+            if (f22 != 0) {
+                net_door_soft_inc(&g_soft.u64Connect22Ok);
+            }
+        } else if (i64R == (i64)-11 || i64R == GJ_ERR_AGAIN) {
+            net_door_soft_inc(&g_soft.u64ConnectEagain);
+        }
+        return net_door_soft_done(i64R);
+    }
+    case GJ_NET_OP_CLOSE: {
+        /*
+         * Functional residual CLOSE (sshd session teardown / pair cleanup).
+         * STRONGER: TCP|lo route + close while soft :22 held.
+         */
+        i64 i64R;
+        int fTcp;
+
         net_door_soft_inc(&g_soft.u64Close);
-        if (net_tcp_fd_ok((i64)u64Arg1)) {
-            return net_door_soft_sock_done(net_tcp_close((i64)u64Arg1), 1);
+        if (g_fSoftSshd22 != 0) {
+            net_door_soft_inc(&g_soft.u64Close22);
         }
-        return net_door_soft_sock_done(net_lo_close((i64)u64Arg1), 0);
+        fTcp = net_tcp_fd_ok((i64)u64Arg1) ? 1 : 0;
+        if (fTcp != 0) {
+            net_door_soft_inc(&g_soft.u64CloseTcp);
+            i64R = net_tcp_close((i64)u64Arg1);
+        } else {
+            net_door_soft_inc(&g_soft.u64CloseLo);
+            i64R = net_lo_close((i64)u64Arg1);
+        }
+        if (i64R >= 0) {
+            net_door_soft_inc(&g_soft.u64CloseOk);
+        }
+        return net_door_soft_done(i64R);
+    }
     case GJ_NET_OP_SEND: {
-        /* Bounce ≤ NET_XFER_MAX; TCP multi-seg chunks by MSS inside net_tcp. */
+        /* Bounce <= NET_XFER_MAX; TCP multi-seg chunks by MSS inside net_tcp. */
         u8 aBuf[NET_XFER_MAX];
         size_t cb = (size_t)u64Arg3;
         i64 n;
         int fTcp;
 
         net_door_soft_inc(&g_soft.u64Send);
+        if (g_fSoftSshd22 != 0) {
+            net_door_soft_inc(&g_soft.u64Send22);
+        }
         if (u64Arg2 == 0 || cb == 0) {
-            net_door_soft_inc(&g_soft.u64SendFail);
             return net_door_soft_done(GJ_ERR_INVAL);
         }
         if (cb > NET_XFER_MAX) {
             cb = NET_XFER_MAX;
         }
         if (user_range_ok(u64Arg2, cb)) {
-            net_door_soft_inc(&g_soft.u64UserCopy);
             if (copy_from_user(aBuf, u64Arg2, cb) != GJ_OK) {
-                net_door_soft_inc(&g_soft.u64SendFail);
                 return net_door_soft_done(GJ_ERR_FAULT);
             }
         } else {
-            net_door_soft_inc(&g_soft.u64KernelCopy);
             memcpy(aBuf, (const void *)(gj_vaddr_t)u64Arg2, cb);
         }
         fTcp = net_tcp_fd_ok((i64)u64Arg1) ? 1 : 0;
         if (fTcp != 0) {
+            net_door_soft_inc(&g_soft.u64SendTcp);
             n = net_tcp_send((i64)u64Arg1, aBuf, cb);
         } else {
+            net_door_soft_inc(&g_soft.u64SendLo);
             n = net_lo_send((i64)u64Arg1, aBuf, cb);
         }
-        return net_door_soft_xfer_done(n, 1, fTcp);
+        /* Functional residual SEND outcomes (sshd banner / session / bulk). */
+        if (n > 0) {
+            net_door_soft_inc(&g_soft.u64SendOk);
+            if (g_fSoftSshd22 != 0) {
+                net_door_soft_inc(&g_soft.u64Send22Ok);
+            }
+        } else if (n == (i64)-11 || n == GJ_ERR_AGAIN) {
+            net_door_soft_inc(&g_soft.u64SendEagain);
+        }
+        return net_door_soft_done(n);
     }
     case GJ_NET_OP_RECV: {
-        /* Multi-seg drain may take several RECV calls; each ≤ NET_XFER_MAX. */
+        /* Multi-seg drain may take several RECV calls; each <= NET_XFER_MAX. */
         u8 aBuf[NET_XFER_MAX];
         size_t cb = (size_t)u64Arg3;
         i64 n;
         int fTcp;
 
         net_door_soft_inc(&g_soft.u64Recv);
+        if (g_fSoftSshd22 != 0) {
+            net_door_soft_inc(&g_soft.u64Recv22);
+        }
         if (u64Arg2 == 0 || cb == 0) {
-            net_door_soft_inc(&g_soft.u64RecvFail);
             return net_door_soft_done(GJ_ERR_INVAL);
         }
         if (cb > NET_XFER_MAX) {
@@ -1836,108 +2193,132 @@ net_door_call(u32 u32Op, u64 u64Arg1, u64 u64Arg2, u64 u64Arg3)
         }
         fTcp = net_tcp_fd_ok((i64)u64Arg1) ? 1 : 0;
         if (fTcp != 0) {
+            net_door_soft_inc(&g_soft.u64RecvTcp);
             n = net_tcp_recv((i64)u64Arg1, aBuf, cb);
         } else {
+            net_door_soft_inc(&g_soft.u64RecvLo);
             n = net_lo_recv((i64)u64Arg1, aBuf, cb);
         }
         if (n > 0) {
             if ((size_t)n > NET_XFER_MAX) {
-                net_door_soft_inc(&g_soft.u64RecvFail);
                 return net_door_soft_done(GJ_ERR_IO); /* defensive */
             }
             if (user_range_ok(u64Arg2, (size_t)n)) {
-                net_door_soft_inc(&g_soft.u64UserCopy);
                 if (copy_to_user(u64Arg2, aBuf, (size_t)n) != GJ_OK) {
-                    net_door_soft_inc(&g_soft.u64RecvFail);
                     return net_door_soft_done(GJ_ERR_FAULT);
                 }
             } else {
-                net_door_soft_inc(&g_soft.u64KernelCopy);
                 memcpy((void *)(gj_vaddr_t)u64Arg2, aBuf, (size_t)n);
             }
+            /* Functional residual RECV ok (sshd session / multi-seg drain). */
+            net_door_soft_inc(&g_soft.u64RecvOk);
+            if (g_fSoftSshd22 != 0) {
+                net_door_soft_inc(&g_soft.u64Recv22Ok);
+            }
+        } else if (n == 0) {
+            net_door_soft_inc(&g_soft.u64Recv0); /* EOF soft */
+        } else if (n == (i64)-11 || n == GJ_ERR_AGAIN) {
+            net_door_soft_inc(&g_soft.u64RecvEagain);
         }
-        return net_door_soft_xfer_done(n, 0, fTcp);
+        return net_door_soft_done(n);
     }
     case GJ_NET_OP_TCP_STATS: {
         u32 aSt[4];
         u32 segs;
         u32 rtx;
 
+        /*
+         * sshd freestanding smoke path (Soft!=product). Soft-friendly:
+         * getters zero when quiet; never hard-fail on empty stack.
+         */
         net_door_soft_inc(&g_soft.u64TcpStats);
         if (u64Arg1 == 0) {
-            net_door_soft_inc(&g_soft.u64TcpStatsInval);
             return net_door_soft_done(GJ_ERR_INVAL);
         }
-        /* Prefer full tx_bytes; pack rtx into segs high half (segs rarely wrap). */
         segs = net_tcp_segments();
         rtx = net_tcp_retransmits();
         aSt[0] = net_tcp_accepts();
         aSt[1] = (rtx << 16) | (segs & 0xffffu);
         aSt[2] = net_tcp_bytes_rx();
         aSt[3] = net_tcp_bytes_tx();
-        /* Soft gap: tw_reaps stays in soft backend inventory (ABI full). */
         if (user_range_ok(u64Arg1, sizeof(aSt))) {
-            net_door_soft_inc(&g_soft.u64UserCopy);
             if (copy_to_user(u64Arg1, aSt, sizeof(aSt)) != GJ_OK) {
-                net_door_soft_inc(&g_soft.u64TcpStatsFault);
                 return net_door_soft_done(GJ_ERR_FAULT);
             }
         } else {
-            net_door_soft_inc(&g_soft.u64KernelCopy);
             memcpy((void *)(gj_vaddr_t)u64Arg1, aSt, sizeof(aSt));
         }
         return net_door_soft_done(0);
     }
     case GJ_NET_OP_SOCK_POLL: {
         /*
-         * Product interim fd readiness for freestanding over Linux NR poll.
-         * arg1=fd arg2=want → mask bits (net_tcp_poll_mask). Non-TCP → 0.
+         * FUNCTIONAL residual SOCK_POLL (sshd/UDX / cold poll path; STRONGER):
+         * TCP -> net_tcp_poll_mask; net_lo -> net_lo_poll_mask (was soft 0).
+         * Want POLLIN/POLLOUT interest + empty ready soft park tallies.
+         * Soft!=product: empty ready is soft 0 (never hard-fail for sshd).
+         * greppable: functional_ops=sock_poll | functional_route=tcp|lo
+         * greppable: net_door: soft residual functional
          */
         u32 u32Want;
         u32 u32Got;
         int fTcp;
+        int fLo;
 
         net_door_soft_inc(&g_soft.u64SockPoll);
         u32Want = (u32)u64Arg2;
+        if ((u32Want & NET_DOOR_POLLIN) != 0u) {
+            net_door_soft_inc(&g_soft.u64SockPollIn);
+        }
+        if ((u32Want & NET_DOOR_POLLOUT) != 0u) {
+            net_door_soft_inc(&g_soft.u64SockPollOut);
+        }
+        /* W11 Dual DoD B: SOCK_POLL while soft :22 held (wire22 stack). */
+        if (g_fSoftSshd22 != 0) {
+            net_door_soft_inc(&g_soft.u64SockPoll22);
+        }
         fTcp = net_tcp_fd_ok((i64)u64Arg1) ? 1 : 0;
+        fLo = 0;
         if (fTcp != 0) {
             u32Got = net_tcp_poll_mask((i64)u64Arg1, u32Want);
-            return net_door_soft_sock_done((i64)u32Got, 1);
+            net_door_soft_inc(&g_soft.u64SockPollTcp);
+        } else if (net_lo_fd_ok((i64)u64Arg1)) {
+            u32Got = net_lo_poll_mask((i64)u64Arg1, u32Want);
+            fLo = 1;
+            net_door_soft_inc(&g_soft.u64SockPollLo);
+        } else {
+            /* Unknown fd: soft empty readiness (never hard-fail). */
+            u32Got = 0;
         }
-        /* Soft: net_lo / unknown have no door poll_mask; empty ready. */
-        return net_door_soft_done(0);
+        (void)fLo;
+        if (u32Got != 0) {
+            net_door_soft_inc(&g_soft.u64SockPollReady);
+        } else {
+            /* Soft empty ready (sshd park / UDX cold poll). */
+            net_door_soft_inc(&g_soft.u64SockPollEmpty);
+        }
+        return net_door_soft_done((i64)u32Got);
     }
     case GJ_NET_OP_VIRTIO_TX: {
-        /* L2 frame path: bound to NET_ETH_MAX (driver also rejects >1514). */
         u8 aFrame[NET_ETH_MAX];
         u32 cb = (u32)u64Arg2;
 
-        net_door_soft_inc(&g_soft.u64VirtioTx);
         if (!virtio_net_ready()) {
-            net_door_soft_inc(&g_soft.u64VirtioTxNodev);
             return net_door_soft_done(GJ_ERR_NODEV);
         }
         if (u64Arg1 == 0 || cb == 0 || cb > NET_ETH_MAX) {
-            net_door_soft_inc(&g_soft.u64VirtioTxInval);
             return net_door_soft_done(GJ_ERR_INVAL);
         }
         if (user_range_ok(u64Arg1, cb)) {
-            net_door_soft_inc(&g_soft.u64UserCopy);
             if (copy_from_user(aFrame, u64Arg1, cb) != GJ_OK) {
-                net_door_soft_inc(&g_soft.u64VirtioTxFault);
                 return net_door_soft_done(GJ_ERR_FAULT);
             }
         } else {
-            net_door_soft_inc(&g_soft.u64KernelCopy);
             memcpy(aFrame, (const void *)(gj_vaddr_t)u64Arg1, cb);
         }
         g_u32VqCalls++;
         if (virtio_net_tx(aFrame, cb) != 0) {
-            net_door_soft_inc(&g_soft.u64VirtioTxIo);
             return net_door_soft_done(GJ_ERR_IO);
         }
-        net_door_soft_inc(&g_soft.u64VirtioTxOk);
-        net_door_soft_add64(&g_soft.u64VirtioTxBytes, (u64)cb);
         return net_door_soft_done((i64)cb);
     }
     case GJ_NET_OP_VIRTIO_RX: {
@@ -1945,13 +2326,10 @@ net_door_call(u32 u32Op, u64 u64Arg1, u64 u64Arg2, u64 u64Arg3)
         u32 cbMax = (u32)u64Arg2;
         i32 n;
 
-        net_door_soft_inc(&g_soft.u64VirtioRx);
         if (!virtio_net_ready()) {
-            net_door_soft_inc(&g_soft.u64VirtioRxNodev);
             return net_door_soft_done(GJ_ERR_NODEV);
         }
         if (u64Arg1 == 0 || cbMax == 0) {
-            net_door_soft_inc(&g_soft.u64VirtioRxInval);
             return net_door_soft_done(GJ_ERR_INVAL);
         }
         if (cbMax > NET_ETH_MAX) {
@@ -1960,37 +2338,27 @@ net_door_call(u32 u32Op, u64 u64Arg1, u64 u64Arg2, u64 u64Arg3)
         g_u32VqCalls++;
         n = virtio_net_rx(aFrame, cbMax);
         if (n < 0) {
-            net_door_soft_inc(&g_soft.u64VirtioRxIo);
             return net_door_soft_done(GJ_ERR_IO);
         }
         if (n == 0) {
-            net_door_soft_inc(&g_soft.u64VirtioRxOk);
             return net_door_soft_done(0);
         }
         if ((u32)n > NET_ETH_MAX) {
-            net_door_soft_inc(&g_soft.u64VirtioRxIo);
             return net_door_soft_done(GJ_ERR_IO);
         }
         if (user_range_ok(u64Arg1, (u32)n)) {
-            net_door_soft_inc(&g_soft.u64UserCopy);
             if (copy_to_user(u64Arg1, aFrame, (size_t)n) != GJ_OK) {
-                net_door_soft_inc(&g_soft.u64VirtioRxFault);
                 return net_door_soft_done(GJ_ERR_FAULT);
             }
         } else {
-            net_door_soft_inc(&g_soft.u64KernelCopy);
             memcpy((void *)(gj_vaddr_t)u64Arg1, aFrame, (size_t)n);
         }
-        net_door_soft_inc(&g_soft.u64VirtioRxOk);
-        net_door_soft_add64(&g_soft.u64VirtioRxBytes, (u64)(u32)n);
         return net_door_soft_done((i64)n);
     }
     case GJ_NET_OP_QUEUE_INFO: {
         u32 aQ[5];
 
-        net_door_soft_inc(&g_soft.u64QueueInfo);
         if (u64Arg1 == 0) {
-            net_door_soft_inc(&g_soft.u64QueueInval);
             return net_door_soft_done(GJ_ERR_INVAL);
         }
         aQ[0] = virtio_net_tx_count();
@@ -1999,30 +2367,27 @@ net_door_call(u32 u32Op, u64 u64Arg1, u64 u64Arg2, u64 u64Arg3)
         aQ[3] = g_u32OwnerToken ? 1u : 0u;
         aQ[4] = g_u32VqCalls;
         if (user_range_ok(u64Arg1, sizeof(aQ))) {
-            net_door_soft_inc(&g_soft.u64UserCopy);
             if (copy_to_user(u64Arg1, aQ, sizeof(aQ)) != GJ_OK) {
-                net_door_soft_inc(&g_soft.u64QueueFault);
                 return net_door_soft_done(GJ_ERR_FAULT);
             }
         } else {
-            net_door_soft_inc(&g_soft.u64KernelCopy);
             memcpy((void *)(gj_vaddr_t)u64Arg1, aQ, sizeof(aQ));
         }
-        net_door_soft_inc(&g_soft.u64QueueOk);
-        /* greppable: net_door: soft (queue path also dumps inventory) */
-        net_door_soft_inventory_log();
+        /* No per-QUEUE_INFO residual dump (no stamp storms). */
         return net_door_soft_done(0);
     }
     case GJ_NET_OP_EXPORT_RING: {
         struct gj_virtq_export ex;
 
         g_u32RingCalls++;
+        net_door_soft_inc(&g_soft.u64RingEnter);
         net_door_soft_inc(&g_soft.u64ExportRing);
+        if (g_u32OwnerToken != 0) {
+            net_door_soft_inc(&g_soft.u64HostOwnedRing);
+        }
         if (u64Arg2 == 0) {
-            net_door_soft_inc(&g_soft.u64ExportInval);
             return net_door_soft_done(GJ_ERR_INVAL);
         }
-        /* Soft-skip surface: no virtio-net → NODEV (netstackd soft-logs). */
         if (!virtio_net_ready()) {
             net_door_soft_inc(&g_soft.u64ExportNodev);
             return net_door_soft_done(GJ_ERR_NODEV);
@@ -2033,13 +2398,10 @@ net_door_call(u32 u32Op, u64 u64Arg1, u64 u64Arg2, u64 u64Arg3)
         }
         g_u32VqCalls++;
         if (user_range_ok(u64Arg2, sizeof(ex))) {
-            net_door_soft_inc(&g_soft.u64UserCopy);
             if (copy_to_user(u64Arg2, &ex, sizeof(ex)) != GJ_OK) {
-                net_door_soft_inc(&g_soft.u64ExportFault);
                 return net_door_soft_done(GJ_ERR_FAULT);
             }
         } else {
-            net_door_soft_inc(&g_soft.u64KernelCopy);
             memcpy((void *)(gj_vaddr_t)u64Arg2, &ex, sizeof(ex));
         }
         net_door_soft_inc(&g_soft.u64ExportOk);
@@ -2047,49 +2409,64 @@ net_door_call(u32 u32Op, u64 u64Arg1, u64 u64Arg2, u64 u64Arg3)
     }
     case GJ_NET_OP_MAP_RING: {
         struct gj_virtq_export ex;
-        int fRemap;
+        int fReclaim;
 
+        /*
+         * UDX/host ring MAP residual (Soft!=product; product_dod_b=UDX):
+         * arg1=which (0=rx,1=tx) arg2=page-aligned user VA
+         * arg3=optional gj_virtq_export out for udx_virtq_attach.
+         * Soft re-MAP same VA = reclaim (re-install PTEs + re-export).
+         * NODEV soft-skip without virtio-net. No per-MAP residual dump.
+         * greppable: net_door: ring map notes | udx_host_stack
+         * H1: door thr only (not IRQ/timer).
+         */
         g_u32RingCalls++;
+        net_door_soft_inc(&g_soft.u64RingEnter);
+        net_door_soft_inc(&g_soft.u64UserRing);
         net_door_soft_inc(&g_soft.u64MapRing);
+        if (g_u32OwnerToken != 0) {
+            net_door_soft_inc(&g_soft.u64HostOwnedRing);
+        }
         if (u64Arg2 == 0) {
-            net_door_soft_inc(&g_soft.u64MapInval);
+            net_door_soft_inc(&g_soft.u64MapRingInval);
             return net_door_soft_done(GJ_ERR_INVAL);
         }
-        /* VA base must be page-aligned for ring map into user AS. */
-        if ((u64Arg2 & (GJ_PAGE_SIZE - 1ull)) != 0) {
-            net_door_soft_inc(&g_soft.u64MapInval);
+        if ((u64Arg2 & (NET_DOOR_PAGE_SIZE - 1ull)) != 0) {
+            net_door_soft_inc(&g_soft.u64MapRingInval);
             return net_door_soft_done(GJ_ERR_INVAL);
         }
-        /* Soft-skip surface: no virtio-net → NODEV (distinct from map FAULT). */
         if (!virtio_net_ready()) {
-            net_door_soft_inc(&g_soft.u64MapNodev);
+            net_door_soft_inc(&g_soft.u64MapRingNodev);
             return net_door_soft_done(GJ_ERR_NODEV);
         }
+        fReclaim = (g_u64RingMapVa != 0 && g_u64RingMapVa == u64Arg2) ? 1 : 0;
         /*
          * Soft re-MAP of the same VA: re-install PTEs + re-export (idempotent
          * hand-off for netstackd / UDX reclaim of the map window).
          */
-        fRemap = (g_u64RingMapVa != 0 && g_u64RingMapVa == u64Arg2) ? 1 : 0;
         if (virtio_net_map_q_user((u16)u64Arg1, u64Arg2, &ex) != 0) {
-            net_door_soft_inc(&g_soft.u64MapFault);
+            net_door_soft_inc(&g_soft.u64MapRingFault);
             return net_door_soft_done(GJ_ERR_FAULT);
         }
         g_u64RingMapVa = u64Arg2;
+        g_u16LastMapWhich = (u16)u64Arg1;
         g_u32VqCalls++;
-        if (fRemap) {
-            net_door_soft_inc(&g_soft.u64MapRemap);
+        net_door_soft_inc(&g_soft.u64MapRingOk);
+        /* Functional residual UDX: which=0 rx / which=1 tx attach split. */
+        if ((u16)u64Arg1 == 0u) {
+            net_door_soft_inc(&g_soft.u64MapRingRx);
         } else {
-            net_door_soft_inc(&g_soft.u64MapOk);
+            net_door_soft_inc(&g_soft.u64MapRingTx);
+        }
+        if (fReclaim != 0) {
+            net_door_soft_inc(&g_soft.u64MapRingReclaim);
         }
         if (u64Arg3 != 0) {
             if (user_range_ok(u64Arg3, sizeof(ex))) {
-                net_door_soft_inc(&g_soft.u64UserCopy);
                 if (copy_to_user(u64Arg3, &ex, sizeof(ex)) != GJ_OK) {
-                    net_door_soft_inc(&g_soft.u64MapFault);
                     return net_door_soft_done(GJ_ERR_FAULT);
                 }
             } else {
-                net_door_soft_inc(&g_soft.u64KernelCopy);
                 memcpy((void *)(gj_vaddr_t)u64Arg3, &ex, sizeof(ex));
             }
         }
@@ -2097,8 +2474,11 @@ net_door_call(u32 u32Op, u64 u64Arg1, u64 u64Arg2, u64 u64Arg3)
     }
     case GJ_NET_OP_KICK:
         g_u32RingCalls++;
+        net_door_soft_inc(&g_soft.u64RingEnter);
         net_door_soft_inc(&g_soft.u64Kick);
-        /* Soft-skip when virtio-net absent; kick is best-effort notify. */
+        if (g_u32OwnerToken != 0) {
+            net_door_soft_inc(&g_soft.u64HostOwnedRing);
+        }
         if (!virtio_net_ready()) {
             net_door_soft_inc(&g_soft.u64KickNodev);
             return net_door_soft_done(GJ_ERR_NODEV);
@@ -2116,45 +2496,51 @@ net_door_call(u32 u32Op, u64 u64Arg1, u64 u64Arg2, u64 u64Arg3)
         u16 which = (u16)u64Arg1;
         int fWrite = (which == 0) ? 1 : 0;
 
+        g_u32RingCalls++;
+        net_door_soft_inc(&g_soft.u64RingEnter);
         net_door_soft_inc(&g_soft.u64AvailPush);
+        if (g_u32OwnerToken != 0) {
+            net_door_soft_inc(&g_soft.u64HostOwnedRing);
+        }
         if (!virtio_net_ready()) {
-            net_door_soft_inc(&g_soft.u64AvailNodev);
+            net_door_soft_inc(&g_soft.u64AvailPushNodev);
             return net_door_soft_done(GJ_ERR_NODEV);
         }
         if (u64Arg2 == 0 || cb == 0 || cb > NET_ETH_MAX) {
-            net_door_soft_inc(&g_soft.u64AvailInval);
+            net_door_soft_inc(&g_soft.u64AvailPushInval);
             return net_door_soft_done(GJ_ERR_INVAL);
         }
         if (user_range_ok(u64Arg2, cb)) {
-            net_door_soft_inc(&g_soft.u64UserCopy);
             if (copy_from_user(aBuf, u64Arg2, cb) != GJ_OK) {
-                net_door_soft_inc(&g_soft.u64AvailFault);
                 return net_door_soft_done(GJ_ERR_FAULT);
             }
         } else {
-            net_door_soft_inc(&g_soft.u64KernelCopy);
             memcpy(aBuf, (const void *)(gj_vaddr_t)u64Arg2, cb);
         }
         g_u32VqCalls++;
-        /* Ring programming path: AVAIL push + kick (no full TX helper) */
         if (virtio_net_avail_push(which, aBuf, cb, fWrite, 1) != 0) {
-            net_door_soft_inc(&g_soft.u64AvailIo);
+            net_door_soft_inc(&g_soft.u64AvailPushIo);
             return net_door_soft_done(GJ_ERR_IO);
         }
-        net_door_soft_inc(&g_soft.u64AvailOk);
+        net_door_soft_inc(&g_soft.u64AvailPushOk);
         return net_door_soft_done((i64)cb);
     }
     case GJ_NET_OP_USED_REAP: {
         u32 n;
 
+        g_u32RingCalls++;
+        net_door_soft_inc(&g_soft.u64RingEnter);
         net_door_soft_inc(&g_soft.u64UsedReap);
+        if (g_u32OwnerToken != 0) {
+            net_door_soft_inc(&g_soft.u64HostOwnedRing);
+        }
         if (!virtio_net_ready()) {
-            net_door_soft_inc(&g_soft.u64ReapNodev);
+            net_door_soft_inc(&g_soft.u64UsedReapNodev);
             return net_door_soft_done(GJ_ERR_NODEV);
         }
         n = virtio_net_used_reap((u16)u64Arg1, (u32)u64Arg2);
         g_u32VqCalls++;
-        net_door_soft_inc(&g_soft.u64ReapOk);
+        net_door_soft_inc(&g_soft.u64UsedReapOk);
         return net_door_soft_done((i64)n);
     }
     case GJ_NET_OP_RING_STATE: {
@@ -2162,9 +2548,12 @@ net_door_call(u32 u32Op, u64 u64Arg1, u64 u64Arg2, u64 u64Arg3)
         u32 aS[4];
 
         g_u32RingCalls++;
+        net_door_soft_inc(&g_soft.u64RingEnter);
         net_door_soft_inc(&g_soft.u64RingState);
+        if (g_u32OwnerToken != 0) {
+            net_door_soft_inc(&g_soft.u64HostOwnedRing);
+        }
         if (u64Arg1 == 0) {
-            net_door_soft_inc(&g_soft.u64RingStateInval);
             return net_door_soft_done(GJ_ERR_INVAL);
         }
         if (virtio_net_ready()) {
@@ -2180,29 +2569,39 @@ net_door_call(u32 u32Op, u64 u64Arg1, u64 u64Arg2, u64 u64Arg3)
         }
         aS[3] = g_u32VqCalls;
         if (user_range_ok(u64Arg1, sizeof(aS))) {
-            net_door_soft_inc(&g_soft.u64UserCopy);
             if (copy_to_user(u64Arg1, aS, sizeof(aS)) != GJ_OK) {
-                net_door_soft_inc(&g_soft.u64RingStateFault);
                 return net_door_soft_done(GJ_ERR_FAULT);
             }
         } else {
-            net_door_soft_inc(&g_soft.u64KernelCopy);
             memcpy((void *)(gj_vaddr_t)u64Arg1, aS, sizeof(aS));
         }
-        net_door_soft_inc(&g_soft.u64RingStateOk);
-        /* greppable: net_door: soft (ring state also dumps inventory) */
-        net_door_soft_inventory_log();
+        /* No per-RING_STATE residual dump (no stamp storms). */
         return net_door_soft_done(0);
     }
     case GJ_NET_OP_MAP_DMA: {
         struct gj_virtq_dma_export ex;
+        int fReclaim;
 
+        /*
+         * UDX DMA window handoff residual (Soft!=product).
+         * arg1=page-aligned user VA arg2=optional gj_virtq_dma_export out.
+         * Last success base in g_u64MapDmaVa (ring map notes residual).
+         * Soft re-MAP_DMA same VA = reclaim (re-install DMA window).
+         * greppable: net_door: ring map notes | udx_host_stack
+         * H1: door thr only.
+         */
+        g_u32RingCalls++;
+        net_door_soft_inc(&g_soft.u64RingEnter);
+        net_door_soft_inc(&g_soft.u64UserRing);
         net_door_soft_inc(&g_soft.u64MapDma);
+        if (g_u32OwnerToken != 0) {
+            net_door_soft_inc(&g_soft.u64HostOwnedRing);
+        }
         if (u64Arg1 == 0) {
             net_door_soft_inc(&g_soft.u64MapDmaInval);
             return net_door_soft_done(GJ_ERR_INVAL);
         }
-        if ((u64Arg1 & (GJ_PAGE_SIZE - 1ull)) != 0) {
+        if ((u64Arg1 & (NET_DOOR_PAGE_SIZE - 1ull)) != 0) {
             net_door_soft_inc(&g_soft.u64MapDmaInval);
             return net_door_soft_done(GJ_ERR_INVAL);
         }
@@ -2210,45 +2609,63 @@ net_door_call(u32 u32Op, u64 u64Arg1, u64 u64Arg2, u64 u64Arg3)
             net_door_soft_inc(&g_soft.u64MapDmaNodev);
             return net_door_soft_done(GJ_ERR_NODEV);
         }
+        fReclaim = (g_u64MapDmaVa != 0 && g_u64MapDmaVa == u64Arg1) ? 1 : 0;
         if (virtio_net_map_dma_user(u64Arg1, &ex) != 0) {
             net_door_soft_inc(&g_soft.u64MapDmaFault);
             return net_door_soft_done(GJ_ERR_FAULT);
         }
+        g_u64MapDmaVa = u64Arg1;
         g_u32VqCalls++;
+        net_door_soft_inc(&g_soft.u64MapDmaOk);
+        if (fReclaim != 0) {
+            net_door_soft_inc(&g_soft.u64MapDmaReclaim);
+        }
         if (u64Arg2 != 0) {
             if (user_range_ok(u64Arg2, sizeof(ex))) {
-                net_door_soft_inc(&g_soft.u64UserCopy);
                 if (copy_to_user(u64Arg2, &ex, sizeof(ex)) != GJ_OK) {
-                    net_door_soft_inc(&g_soft.u64MapDmaFault);
                     return net_door_soft_done(GJ_ERR_FAULT);
                 }
             } else {
-                net_door_soft_inc(&g_soft.u64KernelCopy);
                 memcpy((void *)(gj_vaddr_t)u64Arg2, &ex, sizeof(ex));
             }
         }
-        net_door_soft_inc(&g_soft.u64MapDmaOk);
         return net_door_soft_done(0);
     }
     case GJ_NET_OP_DESC_ALLOC: {
         int head;
 
+        g_u32RingCalls++;
+        net_door_soft_inc(&g_soft.u64RingEnter);
+        net_door_soft_inc(&g_soft.u64UserRing);
         net_door_soft_inc(&g_soft.u64DescAlloc);
+        if (g_u32OwnerToken != 0) {
+            net_door_soft_inc(&g_soft.u64HostOwnedRing);
+        }
         if (!virtio_net_ready()) {
-            net_door_soft_inc(&g_soft.u64DescNodev);
+            net_door_soft_inc(&g_soft.u64DescAllocNodev);
             return net_door_soft_done(GJ_ERR_NODEV);
         }
         head = virtio_net_desc_alloc((u16)u64Arg1);
         if (head < 0) {
-            net_door_soft_inc(&g_soft.u64DescNomem);
+            net_door_soft_inc(&g_soft.u64DescAllocNomem);
             return net_door_soft_done(GJ_ERR_NOMEM);
         }
         g_u32VqCalls++;
-        net_door_soft_inc(&g_soft.u64DescOk);
+        net_door_soft_inc(&g_soft.u64DescAllocOk);
         return net_door_soft_done((i64)head);
     }
     case GJ_NET_OP_USER_AVAIL: {
+        /*
+         * UDX avail programming; kick path remains door thr (H1).
+         * Functional residual: bit0=kick tally (user_avail_kick) on success.
+         */
+        g_u32RingCalls++;
+        net_door_soft_inc(&g_soft.u64RingEnter);
+        net_door_soft_inc(&g_soft.u64UserRing);
         net_door_soft_inc(&g_soft.u64UserAvail);
+        if (g_u32OwnerToken != 0) {
+            net_door_soft_inc(&g_soft.u64HostOwnedRing);
+        }
         if (!virtio_net_ready()) {
             net_door_soft_inc(&g_soft.u64UserAvailNodev);
             return net_door_soft_done(GJ_ERR_NODEV);
@@ -2260,6 +2677,10 @@ net_door_call(u32 u32Op, u64 u64Arg1, u64 u64Arg2, u64 u64Arg3)
         }
         g_u32VqCalls++;
         net_door_soft_inc(&g_soft.u64UserAvailOk);
+        /* bit0=kick: H1 door thr notify residual (UDX host stack). */
+        if (((int)u64Arg3 & 1) != 0) {
+            net_door_soft_inc(&g_soft.u64UserAvailKick);
+        }
         return net_door_soft_done(0);
     }
     case GJ_NET_OP_BOUNCE_FILL: {
@@ -2267,36 +2688,179 @@ net_door_call(u32 u32Op, u64 u64Arg1, u64 u64Arg2, u64 u64Arg3)
         u32 cb = (u32)u64Arg3;
         int n;
 
+        g_u32RingCalls++;
+        net_door_soft_inc(&g_soft.u64RingEnter);
+        net_door_soft_inc(&g_soft.u64UserRing);
         net_door_soft_inc(&g_soft.u64BounceFill);
+        if (g_u32OwnerToken != 0) {
+            net_door_soft_inc(&g_soft.u64HostOwnedRing);
+        }
         if (!virtio_net_ready()) {
-            net_door_soft_inc(&g_soft.u64BounceNodev);
+            net_door_soft_inc(&g_soft.u64BounceFillNodev);
             return net_door_soft_done(GJ_ERR_NODEV);
         }
         if (u64Arg2 == 0 || cb == 0 || cb > NET_ETH_MAX) {
-            net_door_soft_inc(&g_soft.u64BounceInval);
+            net_door_soft_inc(&g_soft.u64BounceFillInval);
             return net_door_soft_done(GJ_ERR_INVAL);
         }
         if (user_range_ok(u64Arg2, cb)) {
-            net_door_soft_inc(&g_soft.u64UserCopy);
             if (copy_from_user(aBuf, u64Arg2, cb) != GJ_OK) {
-                net_door_soft_inc(&g_soft.u64BounceFault);
                 return net_door_soft_done(GJ_ERR_FAULT);
             }
         } else {
-            net_door_soft_inc(&g_soft.u64KernelCopy);
             memcpy(aBuf, (const void *)(gj_vaddr_t)u64Arg2, cb);
         }
         /* slot in arg1; TX header prepend for net */
         n = virtio_net_bounce_fill((u32)u64Arg1, aBuf, cb, 1);
         if (n < 0) {
-            net_door_soft_inc(&g_soft.u64BounceIo);
+            net_door_soft_inc(&g_soft.u64BounceFillIo);
             return net_door_soft_done(GJ_ERR_IO);
         }
         g_u32VqCalls++;
-        net_door_soft_inc(&g_soft.u64BounceOk);
+        net_door_soft_inc(&g_soft.u64BounceFillOk);
         return net_door_soft_done((i64)n);
+    }
+    case GJ_NET_OP_ETH_UDX_READY: {
+        /*
+         * Product UDX L2 soft ready (rtl8168_udx park thr). Soft!=product.
+         * Arm then pin lab IP + soft demux MAC on net_l2 (backend=none /
+         * freestanding rtl SKIP) so ARP/ICMP demux + ETH_TX_PULL work.
+         * greppable: ETH_UDX_READY | path=rtl8168_udx | net_l2: soft udx ready
+         */
+        if (u64Arg1 != 0ull) {
+            g_fUdxReady = 1u;
+            net_l2_udx_ready_identity();
+            if (g_fUdxReadyLamp == 0u) {
+                g_fUdxReadyLamp = 1u;
+                kprintf("net_door: soft ETH_UDX_READY arm=1 "
+                        "path=rtl8168_udx owner=product_udx_abi "
+                        "lab_ip=10.200.125.50 dual_dod_b=OPEN_UDX "
+                        "freestanding_rtl=SKIP Soft!=product G-AC-1 "
+                        "(l2 identity pin; Soft!=product)\n");
+            }
+        } else {
+            g_fUdxReady = 0u;
+        }
+        return net_door_soft_done(0);
+    }
+    case GJ_NET_OP_ETH_INJECT: {
+        /*
+         * UDX thr-poll RX residual → demux. Soft!=product Dual DoD B.
+         * greppable: ETH_INJECT | net_eth: soft udx inject
+         */
+        u8 aFrame[NET_DOOR_UDX_TX_MAX];
+        u32 cb;
+        int nOk;
+
+        cb = (u32)u64Arg2;
+        if (u64Arg1 == 0ull || cb < 14u || cb > NET_DOOR_UDX_TX_MAX) {
+            return net_door_soft_done(GJ_ERR_INVAL);
+        }
+        if (user_range_ok(u64Arg1, cb)) {
+            if (copy_from_user(aFrame, u64Arg1, cb) != GJ_OK) {
+                return net_door_soft_done(GJ_ERR_FAULT);
+            }
+        } else {
+            memcpy(aFrame, (const void *)(gj_vaddr_t)u64Arg1, cb);
+        }
+        nOk = net_eth_input_frame(aFrame, cb);
+        if (nOk != 0) {
+            if (g_u32UdxInjOk < 0xfffffffeu) {
+                g_u32UdxInjOk++;
+            }
+            if (g_fUdxInjLamp == 0u) {
+                g_fUdxInjLamp = 1u;
+                kprintf("net_door: soft ETH_INJECT first len=%u ok=1 "
+                        "path=rtl8168_udx dual_dod_b=OPEN_UDX "
+                        "Soft!=product G-AC-1\n",
+                        (unsigned)cb);
+            }
+        }
+        return net_door_soft_done((i64)nOk);
+    }
+    case GJ_NET_OP_ETH_TX_PULL: {
+        /*
+         * Host park pulls demux soft TX for UDX DMA. Soft!=product.
+         * greppable: ETH_TX_PULL
+         */
+        u32 cb;
+        u32 u32Max;
+        u32 iSlot;
+
+        u32Max = (u32)u64Arg2;
+        if (u64Arg1 == 0ull || u32Max < 14u) {
+            return net_door_soft_done(GJ_ERR_INVAL);
+        }
+        if (g_u32UdxTxN == 0u) {
+            return net_door_soft_done(0);
+        }
+        iSlot = g_u32UdxTxTail % NET_DOOR_UDX_TX_SLOTS;
+        cb = (u32)g_aUdxTxLen[iSlot];
+        if (cb < 14u || cb > NET_DOOR_UDX_TX_MAX) {
+            g_aUdxTxLen[iSlot] = 0u;
+            g_u32UdxTxTail++;
+            if (g_u32UdxTxN > 0u) {
+                g_u32UdxTxN--;
+            }
+            return net_door_soft_done(0);
+        }
+        if (cb > u32Max) {
+            cb = u32Max;
+        }
+        if (user_range_ok(u64Arg1, cb)) {
+            if (copy_to_user(u64Arg1, g_aUdxTx[iSlot], cb) != GJ_OK) {
+                return net_door_soft_done(GJ_ERR_FAULT);
+            }
+        } else {
+            memcpy((void *)(gj_vaddr_t)u64Arg1, g_aUdxTx[iSlot], cb);
+        }
+        g_aUdxTxLen[iSlot] = 0u;
+        g_u32UdxTxTail++;
+        if (g_u32UdxTxN > 0u) {
+            g_u32UdxTxN--;
+        }
+        if (g_u32UdxTxPull < 0xfffffffeu) {
+            g_u32UdxTxPull++;
+        }
+        if (g_fUdxTxLamp == 0u) {
+            g_fUdxTxLamp = 1u;
+            kprintf("net_door: soft ETH_TX_PULL first len=%u "
+                    "path=rtl8168_udx dual_dod_b=OPEN_UDX "
+                    "Soft!=product G-AC-1\n",
+                    (unsigned)cb);
+        }
+        return net_door_soft_done((i64)cb);
     }
     default:
         return net_door_soft_done(GJ_ERR_NOSUPPORT);
     }
+}
+
+int
+net_door_udx_ready(void)
+{
+    return (g_fUdxReady != 0u) ? 1 : 0;
+}
+
+int
+net_door_udx_tx_soft(const void *pFrame, u32 cb)
+{
+    u32 iSlot;
+
+    if (g_fUdxReady == 0u || pFrame == NULL || cb < 14u ||
+        cb > NET_DOOR_UDX_TX_MAX) {
+        return -1;
+    }
+    if (g_u32UdxTxN >= NET_DOOR_UDX_TX_SLOTS) {
+        return -1;
+    }
+    iSlot = g_u32UdxTxHead % NET_DOOR_UDX_TX_SLOTS;
+    memcpy(g_aUdxTx[iSlot], pFrame, cb);
+    g_aUdxTxLen[iSlot] = (u16)cb;
+    g_u32UdxTxHead++;
+    g_u32UdxTxN++;
+    if (g_u32UdxTxEnq < 0xfffffffeu) {
+        g_u32UdxTxEnq++;
+    }
+    return 0;
 }

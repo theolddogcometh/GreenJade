@@ -4,53 +4,78 @@
  *
  * Capability tables + x86_64 addressing Scheme A (docs/CAP_ADDRESSING.md).
  *
- * Authority model (SECURITY_CORE_DESIGN §1):
- *   seL4-style typed caps in CNodes; untyped retype; CDT + revoke §1.1.
+ * Authority model (SECURITY_CORE_DESIGN s1):
+ *   seL4-style typed caps in CNodes; untyped retype; CDT + revoke s1.1.
  *   No ambient root after bootstrap seal; every act needs a cap.
  *   Mint never escalates rights; Grant required to copy/move authority.
  *
- * Handle = (u64 slot, u32 slot_gen) — two registers / two syscall args.
+ * Handle = (u64 slot, u32 slot_gen) - two registers / two syscall args.
  *   Slot 0 = root meta (reserved; GJ_CAP_ROOT_META only; kernel ops).
  *   One CNode per process; all threads in the process share it.
  *   Null handle: u32SlotGen == 0 (live slots use gen >= 1).
  *   Never: packed (gen<<32)|slot; never hardware tagged pointers.
  *
- * Security — object DEAD + gen first (S1/S2):
+ * Security - object DEAD + gen first (S1/S2):
  *   Every use checks slot gen + object LIVE + object gen.
  *   Uncleared slots after revoke must not grant success (fail closed).
  *   Structured slot invalidate (S7): type INVALID, bump slot gen (skip 0),
  *   clear rights/obj, unlink CDT edge, refund quota.
  *
- * Revoke (§1.1) — split invalidate from reclaim (no stop-the-world):
- *   Phase A   — CAS LIVE→REVOKING, then DEAD + bump gen; enqueue hygiene
- *   Phase A′  — deferred CDT walk + structured invalidate (S4/S7); try-lock
+ * Revoke (s1.1) - split invalidate from reclaim (no stop-the-world):
+ *   Phase A   - CAS LIVE->REVOKING, then DEAD + bump gen; enqueue hygiene
+ *   Phase A'  - deferred CDT walk + structured invalidate (S4/S7); try-lock
  *               CNode and defer if busy (R2); driven until all slots cleared
- *   Phase C   — reclaim when slots_left / refs / pins are 0
+ *   Phase C   - reclaim when slots_left / refs / pins are 0
  * Soft CDT/quota hooks are present so mint and ledger wire without
- * redesigning this surface (docs/SOLARIS_STYLE_REMAINING.md §2).
+ * redesigning this surface (docs/SOLARIS_STYLE_REMAINING.md s2).
  *
  * Lock order (full impl; soft stubs prepare the same topology):
- *   CNode → Object → Endpoint   (never reverse; R1)
+ *   CNode -> Object -> Endpoint   (never reverse; R1)
  * Soft CNode try-lock: u32SoftLock (R2 slot hygiene). Grep: cap:cdt trylock
  *
- * Grep markers (cap surface — keep stable for smokes / tooling):
- *   cap:cdt           — soft CDT edges, walk, deferred hygiene
- *   cap:cdt trylock   — CNode soft try-lock / unlock
- *   cap:cdt walk      — gj_revoke_cdt_walk_batch
- *   cap:cdt deferred  — gj_revoke_process_deferred
- *   cap:quota         — flat/hierarchical slot quota ledger
- *   cap:quota parent  — hierarchical roll-up via pParent
- *   cap:quota soft    — charge/refund no-op when account NULL
+ * DDI/UDX lean residual foundation (soft only; Soft!=product; G-AC-1):
+ *   Product direction: device untyped -> MMIO_FRAME / IRQ->Notification /
+ *   DMA window caps minted by devmgr into host CNode via gj_cap_mint
+ *   (cross-CNode; rights subset; driver .c never mints) - docs/DDI_SOFT.md.
+ *   This header classifies existing types for that path, publishes soft
+ *   default host-grant right subsets, and soft residual helpers that shape
+ *   future product mint policy (role map, rights-subset observe, host
+ *   package role bits, DMA rights shape without a DMA type ordinal).
+ *   Soft residual != product mint. Product mint remains OPEN honesty.
+ *   DMA window has no new enum ordinal today (GJ_RIGHTS_DDI_DMA_HOST only;
+ *   role GJ_CAP_DDI_MINT_ROLE_DMA_OPEN is reserved; observe-only).
+ *   No Linux .ko product AC (G-AC-1). Dual MIT OR Apache-2.0.
+ *   Grep: cap: ddi | cap: udx | cap: soft residual lean | cap: ddi foundation
+ *   Grep: cap: udx host mint residual | cap: product mint OPEN
+ *   Grep: cap: udx host mmio|irq|dma residual
+ *
+ * Grep markers (cap surface - keep stable for smokes / tooling):
+ *   cap:cdt           - soft CDT edges, walk, deferred hygiene
+ *   cap:cdt trylock   - CNode soft try-lock / unlock
+ *   cap:cdt walk      - gj_revoke_cdt_walk_batch
+ *   cap:cdt deferred  - gj_revoke_process_deferred
+ *   cap:quota         - flat/hierarchical slot quota ledger
+ *   cap:quota parent  - hierarchical roll-up via pParent
+ *   cap:quota soft    - charge/refund no-op when account NULL
+ *   cap: ddi          - DDI/UDX lean residual foundation (types + rights)
+ *   cap: udx          - UDX host grant subsets (soft; product mint OPEN)
+ *   cap: udx host mint residual - cross-CNode mint soft residual (cnode.c)
+ *   cap: udx host mmio residual - MMIO_FRAME role lean (product OPEN)
+ *   cap: udx host irq residual  - IRQ/Notification role lean (product OPEN)
+ *   cap: udx host dma residual  - DMA rights-shape lean (type/mint OPEN)
+ *   cap: product mint OPEN - honesty lamp; mint not product-complete
+ *   cap: soft residual lean PASS - greppable lean residual lamp (cnode.c)
  *
  * Implementation:
- *   kernel/cap/cnode.c  — resolve, install, mint/copy/move/delete, CDT, quota
- *   kernel/cap/revoke.c — Phase A begin, deferred hygiene, reclaim
+ *   kernel/cap/cnode.c  - resolve, install, mint/copy/move/delete, CDT, quota
+ *   kernel/cap/revoke.c - Phase A begin, deferred hygiene, reclaim
  * This header is the normative API surface; race/ordering detail lives in .c.
  *
  * Companion docs:
  *   docs/CAP_ADDRESSING.md
- *   docs/SECURITY_CORE_DESIGN.md §1 / §1.1 / §2
- *   docs/SOLARIS_STYLE_REMAINING.md §2 (CDT/quota soft path)
+ *   docs/SECURITY_CORE_DESIGN.md s1 / s1.1 / s2
+ *   docs/SOLARIS_STYLE_REMAINING.md s2 (CDT/quota soft path)
+ *   docs/DDI_SOFT.md (MMIO/IRQ/DMA product path; soft stub today)
  *   docs/DESIGN_SPEC_COMPLETE.md (doors as ENDPOINT install)
  */
 #pragma once
@@ -63,10 +88,10 @@
 /**
  * Object header state machine (security-visible).
  *
- * LIVE     — usable; resolve + gen match may succeed
- * REVOKING — one revoker won CAS; transitional (R6); use still fails closed
+ * LIVE     - usable; resolve + gen match may succeed
+ * REVOKING - one revoker won CAS; transitional (R6); use still fails closed
  *            once DEAD is published (S1 does DEAD+gen before long work)
- * DEAD     — all use paths return GJ_ERR_DEAD / STALE; reclaim later (Phase C)
+ * DEAD     - all use paths return GJ_ERR_DEAD / STALE; reclaim later (Phase C)
  */
 enum gj_obj_state {
     GJ_OBJ_LIVE     = 0,
@@ -77,28 +102,40 @@ enum gj_obj_state {
 /**
  * Capability type tags stored in slot.u16Type.
  *
- * INVALID      — empty / free after structured invalidate
- * CNODE        — nested table (v1 product path is one process CNode; type kept)
- * THREAD       — thread control object
- * SPACE        — address space
- * PROCESS      — task port: parent mint on spawn; not root meta (CAP_ADDRESSING)
- * ENDPOINT     — doors-shaped sync IPC (see door.h / G-DOOR-1)
- * NOTIFICATION — async badge bitmask pulse/wait (see notify.h)
- * REPLY        — kernel ephemeral single-use reply (Call path; scaffold)
- * IRQ          — interrupt binding authority
- * FRAME        — physical frame
- * UNTYPED      — retype source (RAM / device regions)
- * PAGE_TABLE   — paging structure
- * SCHED_CONTEXT— CPU budget / period authority
- * MEMORY_OBJECT— Apple channel: owns pages; maps are views
- * ROOT_META    — slot 0 only; process/root identity; kernel ops only (K1–K6)
+ * INVALID      - empty / free after structured invalidate
+ * CNODE        - nested table (v1 product path is one process CNode; type kept)
+ * THREAD       - thread control object
+ * SPACE        - address space
+ * PROCESS      - task port: parent mint on spawn; not root meta (CAP_ADDRESSING)
+ * ENDPOINT     - doors-shaped sync IPC (see door.h / G-DOOR-1)
+ * NOTIFICATION - async badge bitmask pulse/wait (see notify.h);
+ *                DDI/UDX: IRQ delivery surface (IRQ->Notification product)
+ * REPLY        - kernel ephemeral single-use reply (Call path; scaffold)
+ * IRQ          - interrupt binding authority (DDI/UDX hard-IRQ bind note)
+ * FRAME        - physical frame; DDI/UDX MMIO_FRAME role when device-sourced
+ * UNTYPED      - retype source (RAM / device regions); device untyped is
+ *                the DDI retype root for MMIO_FRAME / DMA window ingredients
+ * PAGE_TABLE   - paging structure
+ * SCHED_CONTEXT- CPU budget / period authority
+ * MEMORY_OBJECT- Apple channel: owns pages; maps are views
+ * ROOT_META    - slot 0 only; process/root identity; kernel ops only (K1-K6)
+ *
+ * DDI/UDX class (soft foundation; no new enum ordinals):
+ *   UNTYPED (device) | FRAME (MMIO role) | IRQ | NOTIFICATION
+ *   DMA window product mint remains OPEN (soft window-note only today;
+ *   rights mask GJ_RIGHTS_DDI_DMA_HOST published for future type/role).
+ *   Soft residual != product mint. G-AC-1. Grep: cap: ddi
+ *
+ * Soft product-mint residual roles (observe / policy shape only; not types):
+ *   See gj_cap_ddi_mint_role - maps existing types to future host-grant
+ *   roles without inventing MMIO_FRAME / DMA_WINDOW enum ordinals.
  */
 enum gj_cap_type {
     GJ_CAP_INVALID = 0,
     GJ_CAP_CNODE,
     GJ_CAP_THREAD,
     GJ_CAP_SPACE,
-    GJ_CAP_PROCESS, /* task port — parent mint on spawn; not root meta */
+    GJ_CAP_PROCESS, /* task port - parent mint on spawn; not root meta */
     GJ_CAP_ENDPOINT,
     GJ_CAP_NOTIFICATION,
     GJ_CAP_REPLY, /* kernel ephemeral single-use (Call) */
@@ -108,7 +145,7 @@ enum gj_cap_type {
     GJ_CAP_PAGE_TABLE,
     GJ_CAP_SCHED_CONTEXT,
     GJ_CAP_MEMORY_OBJECT, /* Apple channel: owns pages; maps are views */
-    GJ_CAP_ROOT_META,     /* slot 0 only — process/root meta */
+    GJ_CAP_ROOT_META,     /* slot 0 only - process/root meta */
 };
 
 /*
@@ -122,14 +159,292 @@ enum gj_cap_type {
 #define GJ_RIGHT_DESTROY  (1u << 4)  /* includes KILL on PROCESS */
 #define GJ_RIGHT_MAP      (1u << 5)
 #define GJ_RIGHT_IDENTIFY (1u << 6)
-#define GJ_RIGHT_WAIT     (1u << 7)  /* PROCESS: reap / wait */
+#define GJ_RIGHT_WAIT     (1u << 7)  /* PROCESS: reap / wait; IRQ/NOTIF wait */
 #define GJ_RIGHT_VM       (1u << 8)  /* PROCESS: default pager / regions */
 #define GJ_RIGHT_SPAWN    (1u << 9)  /* PROCESS: further spawn under ledger */
-#define GJ_RIGHT_INSPECT  (1u << 10) /* PROCESS: debug — off by default */
+#define GJ_RIGHT_INSPECT  (1u << 10) /* PROCESS: debug - off by default */
 #define GJ_RIGHT_JIT      (1u << 11) /* task/space: MAP_JIT / RWX exception */
+
+/*
+ * Soft default host-grant right subsets for DDI/UDX (product mint OPEN).
+ * Future product: devmgr mints into host CNode with these (or weaker);
+ * never escalate beyond source. Soft residual only - install/mint do not
+ * auto-apply these masks as product policy (observe helpers only).
+ * Grep: cap: ddi | cap: udx
+ */
+#define GJ_RIGHTS_DDI_MMIO_HOST                                                    \
+    (GJ_RIGHT_READ | GJ_RIGHT_WRITE | GJ_RIGHT_MAP | GJ_RIGHT_IDENTIFY)
+#define GJ_RIGHTS_DDI_IRQ_HOST                                                     \
+    (GJ_RIGHT_READ | GJ_RIGHT_WAIT | GJ_RIGHT_IDENTIFY)
+#define GJ_RIGHTS_DDI_NOTIF_HOST                                                   \
+    (GJ_RIGHT_READ | GJ_RIGHT_WAIT | GJ_RIGHT_IDENTIFY)
+/* Future DMA window host grant; no GJ_CAP_* ordinal yet - product OPEN. */
+#define GJ_RIGHTS_DDI_DMA_HOST                                                     \
+    (GJ_RIGHT_READ | GJ_RIGHT_WRITE | GJ_RIGHT_MAP | GJ_RIGHT_IDENTIFY)
+#define GJ_RIGHTS_DDI_UNTYPED_DEVMGR                                               \
+    (GJ_RIGHT_MINT | GJ_RIGHT_IDENTIFY | GJ_RIGHT_DESTROY | GJ_RIGHT_GRANT)
+
+/*
+ * Soft product-mint residual role tags (not cap types; no new ordinals).
+ * Future product path uses these roles when minting into a UDX host CNode.
+ * Soft residual != product mint. DMA role has no type today (OPEN).
+ * Grep: cap: ddi | cap: udx | cap: product mint OPEN
+ */
+#define GJ_CAP_DDI_MINT_ROLE_NONE    0u
+#define GJ_CAP_DDI_MINT_ROLE_MMIO    1u /* FRAME as MMIO_FRAME host grant */
+#define GJ_CAP_DDI_MINT_ROLE_IRQ     2u /* IRQ bind authority */
+#define GJ_CAP_DDI_MINT_ROLE_NOTIF   3u /* IRQ->Notification deliver */
+#define GJ_CAP_DDI_MINT_ROLE_UNTYPED 4u /* device untyped (devmgr retype) */
+/* Role 5 reserved: DMA window when a product type lands (mint OPEN today). */
+#define GJ_CAP_DDI_MINT_ROLE_DMA_OPEN 5u
+
+/*
+ * Soft UDX host-grant package role bits (observe / policy shape only).
+ * Product host attach mints a package into the host CNode:
+ *   MMIO_FRAME | IRQ | IRQ->Notification | DMA window (OPEN type today).
+ * Soft residual uses these bits to lean mint tallies toward that package
+ * without claiming product complete. Grep: cap: udx host mint residual
+ */
+#define GJ_CAP_UDX_HOST_PKG_MMIO  (1u << 0) /* FRAME / MMIO_FRAME role */
+#define GJ_CAP_UDX_HOST_PKG_IRQ   (1u << 1) /* IRQ bind role */
+#define GJ_CAP_UDX_HOST_PKG_NOTIF (1u << 2) /* IRQ->Notification role */
+#define GJ_CAP_UDX_HOST_PKG_DMA   (1u << 3) /* DMA window role (OPEN type) */
+/* Full intended product package shape (DMA bit set; type still OPEN). */
+#define GJ_CAP_UDX_HOST_PKG_FULL                                                       \
+    (GJ_CAP_UDX_HOST_PKG_MMIO | GJ_CAP_UDX_HOST_PKG_IRQ | GJ_CAP_UDX_HOST_PKG_NOTIF |   \
+     GJ_CAP_UDX_HOST_PKG_DMA)
+/* Soft residual class roles that have type ordinals today (no DMA type). */
+#define GJ_CAP_UDX_HOST_PKG_TYPED                                                      \
+    (GJ_CAP_UDX_HOST_PKG_MMIO | GJ_CAP_UDX_HOST_PKG_IRQ | GJ_CAP_UDX_HOST_PKG_NOTIF)
 
 #define GJ_CNODE_SLOTS_DEFAULT 1024u
 #define GJ_CAP_SLOT_ROOT_META  0ull /* reserved root meta index */
+
+/**
+ * Soft DDI/UDX class test (lean residual foundation).
+ * True for types that participate in the device-host grant path:
+ *   IRQ, FRAME (MMIO role), UNTYPED (device retype), NOTIFICATION (IRQ deliver).
+ * Soft residual != product MMIO_FRAME / IRQ Notification / DMA window mint.
+ * G-AC-1: no .ko product AC. Grep: cap: ddi
+ */
+static inline int
+gj_cap_type_is_ddi(u16 u16Type)
+{
+    switch (u16Type) {
+    case (u16)GJ_CAP_IRQ:
+    case (u16)GJ_CAP_FRAME:
+    case (u16)GJ_CAP_UNTYPED:
+    case (u16)GJ_CAP_NOTIFICATION:
+        return 1;
+    default:
+        return 0;
+    }
+}
+
+/**
+ * Soft UDX host-visible grant class (same set as DDI today).
+ * Product: only granted slots land in host CNode; driver .c never mints.
+ * Grep: cap: udx
+ */
+static inline int
+gj_cap_type_is_udx_host(u16 u16Type)
+{
+    return gj_cap_type_is_ddi(u16Type);
+}
+
+/**
+ * Soft default rights for a DDI/UDX type when minting a host grant.
+ * Returns 0 for non-DDI types (caller must supply rights explicitly).
+ * Soft residual - not auto-applied by install/mint. Grep: cap: ddi
+ */
+static inline u16
+gj_cap_rights_ddi_host_default(u16 u16Type)
+{
+    switch (u16Type) {
+    case (u16)GJ_CAP_FRAME:
+        return (u16)GJ_RIGHTS_DDI_MMIO_HOST;
+    case (u16)GJ_CAP_IRQ:
+        return (u16)GJ_RIGHTS_DDI_IRQ_HOST;
+    case (u16)GJ_CAP_NOTIFICATION:
+        return (u16)GJ_RIGHTS_DDI_NOTIF_HOST;
+    case (u16)GJ_CAP_UNTYPED:
+        return (u16)GJ_RIGHTS_DDI_UNTYPED_DEVMGR;
+    default:
+        return 0;
+    }
+}
+
+/**
+ * Soft product-mint residual role for an existing cap type.
+ * Maps FRAME/IRQ/NOTIFICATION/UNTYPED to future host-grant roles without
+ * inventing MMIO_FRAME / DMA_WINDOW enum ordinals. Returns
+ * GJ_CAP_DDI_MINT_ROLE_NONE for non-DDI types.
+ * Soft residual != product mint. Grep: cap: ddi | cap: udx
+ */
+static inline u32
+gj_cap_ddi_mint_role(u16 u16Type)
+{
+    switch (u16Type) {
+    case (u16)GJ_CAP_FRAME:
+        return GJ_CAP_DDI_MINT_ROLE_MMIO;
+    case (u16)GJ_CAP_IRQ:
+        return GJ_CAP_DDI_MINT_ROLE_IRQ;
+    case (u16)GJ_CAP_NOTIFICATION:
+        return GJ_CAP_DDI_MINT_ROLE_NOTIF;
+    case (u16)GJ_CAP_UNTYPED:
+        return GJ_CAP_DDI_MINT_ROLE_UNTYPED;
+    default:
+        return GJ_CAP_DDI_MINT_ROLE_NONE;
+    }
+}
+
+/**
+ * Soft rights-subset check (mint no-escalate shape).
+ * True when every bit in u16Want is present in u16Have.
+ * Zero want is a subset of any have (caller may still refuse empty grants).
+ * Grep: cap: ddi | cap: udx
+ */
+static inline int
+gj_cap_rights_is_subset(u16 u16Have, u16 u16Want)
+{
+    return ((u16Want & (u16)(~u16Have)) == 0);
+}
+
+/**
+ * Soft residual: non-zero rights and ⊆ host default for a DDI/UDX type.
+ * Future product policy shape for devmgr->host grants; not auto-enforced
+ * by gj_cap_mint today (source MINT + rights_weaker remains authoritative).
+ * Returns 0 for non-DDI types or empty rights. Grep: cap: udx
+ */
+static inline int
+gj_cap_rights_ddi_host_subset_ok(u16 u16Type, u16 u16Rights)
+{
+    u16 u16Def;
+
+    if (u16Rights == 0) {
+        return 0;
+    }
+    u16Def = gj_cap_rights_ddi_host_default(u16Type);
+    if (u16Def == 0) {
+        return 0;
+    }
+    return gj_cap_rights_is_subset(u16Def, u16Rights);
+}
+
+/**
+ * Soft default rights for a future DMA window host grant.
+ * No GJ_CAP_* type ordinal yet - returns GJ_RIGHTS_DDI_DMA_HOST always.
+ * Soft residual - not auto-applied. Grep: cap: ddi | cap: udx | cap: product mint OPEN
+ */
+static inline u16
+gj_cap_rights_ddi_dma_host_default(void)
+{
+    return (u16)GJ_RIGHTS_DDI_DMA_HOST;
+}
+
+/**
+ * Soft residual: non-zero rights and ⊆ DMA host default (future window shape).
+ * FRAME/UNTYPED mints may carry the same right bits as a future DMA window;
+ * this observes rights shape only - does not invent a DMA type or mint.
+ * Returns 0 for empty rights. Grep: cap: udx | cap: product mint OPEN
+ */
+static inline int
+gj_cap_rights_ddi_dma_host_subset_ok(u16 u16Rights)
+{
+    if (u16Rights == 0) {
+        return 0;
+    }
+    return gj_cap_rights_is_subset(gj_cap_rights_ddi_dma_host_default(),
+                                   u16Rights);
+}
+
+/**
+ * Soft package bit for an existing cap type (host-grant package shape).
+ * Returns one of GJ_CAP_UDX_HOST_PKG_* or 0 for non-package / non-DDI types.
+ * DMA has no type ordinal - never returned from a live type today.
+ * Soft residual != product mint. Grep: cap: udx host mint residual
+ */
+static inline u32
+gj_cap_udx_host_pkg_bit_for_type(u16 u16Type)
+{
+    switch (u16Type) {
+    case (u16)GJ_CAP_FRAME:
+        return GJ_CAP_UDX_HOST_PKG_MMIO;
+    case (u16)GJ_CAP_IRQ:
+        return GJ_CAP_UDX_HOST_PKG_IRQ;
+    case (u16)GJ_CAP_NOTIFICATION:
+        return GJ_CAP_UDX_HOST_PKG_NOTIF;
+    default:
+        return 0;
+    }
+}
+
+/**
+ * Soft honesty: product MMIO_FRAME host mint is OPEN (FRAME type exists;
+ * product policy + live map wire remain OPEN). Always 0.
+ * Grep: cap: product mint OPEN | cap: udx host mmio
+ */
+static inline int
+gj_cap_ddi_mmio_product_ready(void)
+{
+    return 0; /* Soft!=product; MMIO_FRAME product mint remains OPEN */
+}
+
+/**
+ * Soft honesty: product IRQ / IRQ->Notification host mint is OPEN.
+ * Types exist; live hard-IRQ bind + badge wire remain OPEN. Always 0.
+ * Grep: cap: product mint OPEN | cap: udx host irq
+ */
+static inline int
+gj_cap_ddi_irq_notif_product_ready(void)
+{
+    return 0; /* Soft!=product; IRQ/Notification product mint remains OPEN */
+}
+
+/**
+ * Soft honesty: product DMA window mint is OPEN (no type ordinal yet).
+ * Rights mask GJ_RIGHTS_DDI_DMA_HOST is published for future use only.
+ * Always returns 0 (not product-complete). Grep: cap: product mint OPEN
+ */
+static inline int
+gj_cap_ddi_dma_window_product_ready(void)
+{
+    return 0; /* Soft!=product; DMA window cap type/mint remains OPEN */
+}
+
+/**
+ * Soft honesty: product UDX host CNode mint path is OPEN (not complete).
+ * Mechanism (gj_cap_mint cross-CNode + CDT + rights subset) is soft residual;
+ * policy owner (devmgr match/grant graph) and live IOMMU/IRQ/DMA wire remain OPEN.
+ * Always returns 0. Grep: cap: product mint OPEN | cap: udx
+ */
+static inline int
+gj_cap_udx_host_mint_product_ready(void)
+{
+    return 0; /* Soft!=product; host CNode product mint remains OPEN */
+}
+
+/**
+ * Soft residual: intended product host package role bits (MMIO|IRQ|NOTIF|DMA).
+ * Always GJ_CAP_UDX_HOST_PKG_FULL - describes shape, not readiness.
+ * Soft residual != product mint. Grep: cap: udx host mint residual
+ */
+static inline u32
+gj_cap_udx_host_package_roles_intended(void)
+{
+    return GJ_CAP_UDX_HOST_PKG_FULL;
+}
+
+/**
+ * Soft residual: host package roles that have type ordinals today.
+ * DMA bit absent until a product type lands. Soft residual != product.
+ * Grep: cap: udx host mint residual
+ */
+static inline u32
+gj_cap_udx_host_package_roles_typed(void)
+{
+    return GJ_CAP_UDX_HOST_PKG_TYPED;
+}
 
 /*
  * Scheme A user handle: not packed into one u64.
@@ -137,7 +452,7 @@ enum gj_cap_type {
  * Null handle: u32SlotGen == 0 (live slots use gen >= 1).
  *
  * SMEP/SMAP: handles are never kernel pointers. Resolve always goes
- * process CNode → slot → object under LIVE+gen checks.
+ * process CNode -> slot -> object under LIVE+gen checks.
  */
 struct gj_cap_ref {
     u64 u64Slot;
@@ -169,11 +484,11 @@ gj_cap_ref_null(void)
 /*
  * One slot in a CNode.
  *
- * u16Type    — gj_cap_type (INVALID ⇒ free for install)
- * u16Rights  — rights bitmask for this binding
- * u32Gen     — slot generation (handle.u32SlotGen); bump on invalidate; skip 0
- * u32ObjGen  — object generation captured at install (S2 match)
- * pObj       — object pointer; NULL when INVALID
+ * u16Type    - gj_cap_type (INVALID => free for install)
+ * u16Rights  - rights bitmask for this binding
+ * u32Gen     - slot generation (handle.u32SlotGen); bump on invalidate; skip 0
+ * u32ObjGen  - object generation captured at install (S2 match)
+ * pObj       - object pointer; NULL when INVALID
  */
 struct gj_cap_slot {
     u16  u16Type;
@@ -189,14 +504,14 @@ struct gj_cdt_edge;
 struct gj_cap_quota;
 
 /*
- * Object header — first field of every kernel cap object.
+ * Object header - first field of every kernel cap object.
  *
- * u32State     — gj_obj_state (LIVE / REVOKING / DEAD)
- * u32Gen       — object generation; starts at 1; bump on DEAD (S1); 0 reserved
- * u32Ref       — kernel refs held across use; Phase C waits for 0
- * u32Pin       — short-term pins (e.g. in-flight op); Phase C waits via sleep
- * u32SlotsLeft — outstanding derived CNode bindings (S4/S6 accounting)
- * pCdtHead     — soft CDT child-edge list (NULL until mint wires edges)
+ * u32State     - gj_obj_state (LIVE / REVOKING / DEAD)
+ * u32Gen       - object generation; starts at 1; bump on DEAD (S1); 0 reserved
+ * u32Ref       - kernel refs held across use; Phase C waits for 0
+ * u32Pin       - short-term pins (e.g. in-flight op); Phase C waits via sleep
+ * u32SlotsLeft - outstanding derived CNode bindings (S4/S6 accounting)
+ * pCdtHead     - soft CDT child-edge list (NULL until mint wires edges)
  *
  * Grep: cap:cdt
  */
@@ -210,11 +525,11 @@ struct gj_obj_hdr {
 };
 
 /*
- * Soft CDT child edge: one derived slot binding object ← CNode[slot].
+ * Soft CDT child edge: one derived slot binding object <- CNode[slot].
  *
  * Storage is mint/slab-owned; link/unlink only manipulate the list.
  * Full walk lands in gj_revoke_cdt_walk_batch (revoke.c). Edges whose CNode
- * try-lock is busy are left for a later deferred pass (R2) — security is
+ * try-lock is busy are left for a later deferred pass (R2) - security is
  * already done once the object is DEAD.
  *
  * Grep: cap:cdt
@@ -228,15 +543,15 @@ struct gj_cdt_edge {
 /*
  * One CNode per process; all threads of that process share this table.
  *
- * hdr          — CNode is itself a cap object (state/gen/ref/pin/CDT)
- * cSlots       — table length; index space is u64 (Scheme A headroom)
- * pSlots       — slot array (caller-owned storage for static/bootstrap tables)
- * pQuotaAccount— soft process slot-quota account (hierarchical via pParent);
- *                NULL ⇒ charge/refund hooks no-op. Grep: cap:quota soft
- * u32SoftLock  — soft try-lock stub for R2 slot hygiene (0 free, 1 held).
- *                Full impl replaces with a real mutex; order CNode → Object →
+ * hdr          - CNode is itself a cap object (state/gen/ref/pin/CDT)
+ * cSlots       - table length; index space is u64 (Scheme A headroom)
+ * pSlots       - slot array (caller-owned storage for static/bootstrap tables)
+ * pQuotaAccount- soft process slot-quota account (hierarchical via pParent);
+ *                NULL => charge/refund hooks no-op. Grep: cap:quota soft
+ * u32SoftLock  - soft try-lock stub for R2 slot hygiene (0 free, 1 held).
+ *                Full impl replaces with a real mutex; order CNode -> Object ->
  *                Endpoint. Grep: cap:cdt trylock
- * u32PadLock   — align / future waiter bits
+ * u32PadLock   - align / future waiter bits
  */
 struct gj_cnode {
     struct gj_obj_hdr    hdr;
@@ -244,10 +559,10 @@ struct gj_cnode {
     struct gj_cap_slot  *pSlots;
     /*
      * Soft process slot-quota account (hierarchical ledger via pParent).
-     * NULL ⇒ charge/refund hooks no-op. Grep: cap:quota soft
+     * NULL => charge/refund hooks no-op. Grep: cap:quota soft
      */
     void                *pQuotaAccount;
-    u32                  u32SoftLock; /* 0 free, 1 held — soft stub */
+    u32                  u32SoftLock; /* 0 free, 1 held - soft stub */
     u32                  u32PadLock;  /* align / future waiter bits */
 };
 
@@ -267,12 +582,12 @@ struct gj_cap_resolved {
 /**
  * Fail-closed live check used on every use path after resolve (S2).
  *
- *   GJ_ERR_INVAL     — null object
- *   GJ_ERR_DEAD      — state != LIVE (includes REVOKING once not LIVE)
- *   GJ_ERR_STALE_CAP — object gen != expected (slot.u32ObjGen or caller's)
- *   GJ_OK            — LIVE and gen match
+ *   GJ_ERR_INVAL     - null object
+ *   GJ_ERR_DEAD      - state != LIVE (includes REVOKING once not LIVE)
+ *   GJ_ERR_STALE_CAP - object gen != expected (slot.u32ObjGen or caller's)
+ *   GJ_OK            - LIVE and gen match
  *
- * Does not inspect slot gen — resolve does that first.
+ * Does not inspect slot gen - resolve does that first.
  */
 static inline gj_status_t
 gj_obj_check_live(const struct gj_obj_hdr *pObj, u32 u32ObjGenExpected)
@@ -291,7 +606,7 @@ gj_obj_check_live(const struct gj_obj_hdr *pObj, u32 u32ObjGenExpected)
 
 /*
  * S7 structured slot field clear (type/gen/ptr). Does not touch CDT or
- * slots_left — callers that know the object should use
+ * slots_left - callers that know the object should use
  * gj_cap_slot_invalidate_locked so accounting stays single-pathed.
  *
  * Slot gen bumps and skips 0 so null handles stay distinguishable.
@@ -306,7 +621,7 @@ gj_cap_slot_invalidate(struct gj_cap_slot *pSlot)
     pSlot->u16Rights = 0;
     pSlot->u32Gen++;
     if (pSlot->u32Gen == 0) {
-        pSlot->u32Gen = 1; /* skip 0 — reserved for null handles */
+        pSlot->u32Gen = 1; /* skip 0 - reserved for null handles */
     }
     pSlot->u32ObjGen = 0;
     pSlot->pObj = NULL;
@@ -331,8 +646,8 @@ void gj_cnode_init(struct gj_cnode *pCnode, struct gj_cap_slot *pSlots,
 
 /**
  * Soft CNode try-lock (R2). Returns 1 if acquired, 0 if busy / NULL.
- * Soft stub uses u32SoftLock atomic; full impl → real mutex.
- * Never spin unbounded for slot hygiene — defer instead (R2/R7).
+ * Soft stub uses u32SoftLock atomic; full impl -> real mutex.
+ * Never spin unbounded for slot hygiene - defer instead (R2/R7).
  * Grep: cap:cdt trylock
  */
 int  gj_cnode_trylock(struct gj_cnode *pCnode);
@@ -411,15 +726,15 @@ void gj_cdt_unlink_slot(struct gj_obj_hdr *pObj, struct gj_cnode *pCnode,
  * Attach via gj_cap_quota_attach. Charge rolls up pParent (zone-like).
  * Grep: cap:quota
  *
- * u32Limit     — max occupied slots charged at this node
- * u32Used      — currently charged at this node
- * u32Exhaust   — times charge returned QUOTA (this node)
- * u32HighWater — peak u32Used since init (observability)
- * u32ChargeOk  — successful slot charges (observability)
- * u32RefundOk  — successful slot refunds (observability)
- * pParent      — soft hierarchical parent; NULL = flat leaf/root
+ * u32Limit     - max occupied slots charged at this node
+ * u32Used      - currently charged at this node
+ * u32Exhaust   - times charge returned QUOTA (this node)
+ * u32HighWater - peak u32Used since init (observability)
+ * u32ChargeOk  - successful slot charges (observability)
+ * u32RefundOk  - successful slot refunds (observability)
+ * pParent      - soft hierarchical parent; NULL = flat leaf/root
  *
- * SECURITY_CORE §2: no create without quota when an account is attached.
+ * SECURITY_CORE s2: no create without quota when an account is attached.
  * NULL account remains a soft no-op so early bring-up can install before
  * ledger attach without redesigning call sites.
  */
@@ -441,7 +756,7 @@ void gj_cap_quota_attach(struct gj_cnode *pCnode, struct gj_cap_quota *pQ);
 
 /**
  * Soft hierarchical link: pQ charges roll up into pParent.
- * NULL parent → flat. Refuses simple self/cycle. Grep: cap:quota parent
+ * NULL parent -> flat. Refuses simple self/cycle. Grep: cap:quota parent
  */
 void gj_cap_quota_set_parent(struct gj_cap_quota *pQ,
                              struct gj_cap_quota *pParent);
@@ -452,7 +767,7 @@ u32  gj_cap_quota_highwater(const struct gj_cap_quota *pQ);
 u32  gj_cap_quota_exhaust_count(const struct gj_cap_quota *pQ);
 
 /**
- * Soft quota hooks. pAccount NULL ⇒ GJ_OK (no charge).
+ * Soft quota hooks. pAccount NULL => GJ_OK (no charge).
  * Real account: charge/refund one slot at leaf and each pParent (soft hierarchy).
  * GJ_ERR_QUOTA if any node on the chain is exhausted (depth capped by
  * GJ_CAP_QUOTA_DEPTH_MAX). Grep: cap:quota
@@ -461,10 +776,14 @@ gj_status_t gj_cap_quota_slot_charge(void *pAccount);
 gj_status_t gj_cap_quota_slot_refund(void *pAccount);
 
 /**
- * Mint: derive a new slot in pDstCnode from src handle with rights ⊆ src.
+ * Mint: derive a new slot in pDstCnode from src handle with rights subset of src.
  * Requires MINT on source. Wires soft CDT edge from edge pool when available.
- * Cross-CNode mint is the derivation path for parent→child task ports etc.
- * Grep: cap:cdt
+ * Cross-CNode mint is the derivation path for parent->child task ports and
+ * future devmgr->UDX host DDI grants (MMIO_FRAME / IRQ->Notification /
+ * device untyped slice). Soft residual tallies host-grant shape (cnode.c);
+ * product mint remains OPEN (Soft!=product). DMA window type still OPEN.
+ * Driver .c never calls this - host grants are policy-owned. G-AC-1.
+ * Grep: cap:cdt / cap: ddi / cap: udx / cap: udx host mint residual
  */
 gj_status_t gj_cap_mint(struct gj_cnode *pSrcCnode, u64 u64SrcSlot,
                         u32 u32SrcGen, u16 u16Rights,
@@ -472,7 +791,7 @@ gj_status_t gj_cap_mint(struct gj_cnode *pSrcCnode, u64 u64SrcSlot,
 
 /**
  * Copy: same object, new slot in the same CNode; requires GRANT on source.
- * Rights must be ⊆ source. Soft CDT edge recorded when pool allows.
+ * Rights must be a subset of source. Soft CDT edge recorded when pool allows.
  */
 gj_status_t gj_cap_copy(struct gj_cnode *pCnode, u64 u64SrcSlot, u32 u32SrcGen,
                         u16 u16Rights, struct gj_cap_ref *pOut);
@@ -487,7 +806,7 @@ gj_status_t gj_cap_move(struct gj_cnode *pCnode, u64 u64SrcSlot, u32 u32SrcGen,
 
 /**
  * Delete/invalidate one slot (structured); refunds quota + CDT unlink.
- * Does not by itself revoke the object if other slots remain — only this
+ * Does not by itself revoke the object if other slots remain - only this
  * binding. Use gj_obj_revoke_begin for object-wide DEAD.
  */
 gj_status_t gj_cap_delete(struct gj_cnode *pCnode, u64 u64Slot, u32 u32SlotGen);
@@ -505,8 +824,8 @@ u32 gj_cnode_invalidate_obj_slots(struct gj_cnode *pCnode,
 /* ---- Revoke API (revoke.c) ---------------------------------------------- */
 
 /**
- * Phase A: CAS LIVE→REVOKING, then DEAD + bump gen (S1). Enqueues deferred
- * slot hygiene. Concurrent revoke → object already DEAD/secure; queue full →
+ * Phase A: CAS LIVE->REVOKING, then DEAD + bump gen (S1). Enqueues deferred
+ * slot hygiene. Concurrent revoke -> object already DEAD/secure; queue full ->
  * AGAIN (object still fail-closed). Does not free memory.
  *
  * Wake of object waiters (IPC PEER_DEAD etc.) is object-type specific
@@ -515,9 +834,9 @@ u32 gj_cnode_invalidate_obj_slots(struct gj_cnode *pCnode,
 gj_status_t gj_obj_revoke_begin(struct gj_obj_hdr *pObj);
 
 /**
- * Phase A′ driver (R2/R7): bounded deferred CDT/slot work. Call from timer,
+ * Phase A' driver (R2/R7): bounded deferred CDT/slot work. Call from timer,
  * idle, or syscall exit. Returns slots cleared this invocation.
- * Must be driven until gj_revoke_deferred_pending() drains and S4 holds —
+ * Must be driven until gj_revoke_deferred_pending() drains and S4 holds -
  * no silent drop of work items (R7).
  * Grep: cap:cdt deferred
  */

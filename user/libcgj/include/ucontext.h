@@ -21,6 +21,17 @@
  * ---------
  * Full POSIX/Linux completeness; stubs and soft fills may return ENOSYS
  * until the hybrid ABI path is wired. See docs/GLIBC_COMPAT.md.
+ *
+ * Soft residual (C2 libcgj header; Soft!=product; G-AC-1; Dual DoD A/B OPEN):
+ *   soft path  = get/set/make/swapcontext integer-GPR bring-up (no SSE/x87)
+ *   product    = full mcontext with FP/SIMD product state (OPEN; not here)
+ *   catalog    = NGREG REG_* gregset_t mcontext_t ucontext_t + 4 ops
+ *   honesty    = Soft!=product; soft context != product coroutine mint
+ *   hazard     = H3 thr_exit before as_destroy (stack/context residual OPEN)
+ *   Bar honesty v2026.08.04.75. NEVER bump GJ_IMAGE_VERSION from this unit.
+ * greppable: libcgj: soft residual ucontext
+ * greppable: libcgj: soft residual ucontext Soft!=product
+ * Dual MIT OR Apache-2.0. No GPL. G-AC-1. Dual DoD A/B OPEN.
  */
 #pragma once
 

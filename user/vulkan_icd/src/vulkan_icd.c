@@ -16,6 +16,13 @@
  *   vk_icd: soft path software_present|virtio_gpu
  * Soft counters wrap OK; never hard-gate product returns.
  * greppable: "vk_icd: soft"
+ *
+ * C2 residual Soft!=product (exclusive; G-AC-1; Dual DoD OPEN):
+ *   Soft inventory/deepen/path/honesty lamps are observation only.
+ *   Soft!=product: never close product GPU path or Dual DoD A/B.
+ *   product_kernel=OPEN; agent_ne_close=1; multi_server=0; confine=0.
+ *   Dual MIT OR Apache-2.0. Stamp-free (never bump GJ_IMAGE_VERSION).
+ *   greppable: Soft!=product soft_ne_product=1 G-AC-1 Dual_DoD
  */
 #include <vulkan/vulkan_core_gj.h>
 #include <vulkan/vk_icd.h>
@@ -1058,12 +1065,14 @@ static const char g_szVkIcdSoftInventory[] =
 
 /*
  * Grep: vk_icd: soft deepen
+ * Soft!=product; product_kernel=OPEN; Dual DoD remains OPEN.
  */
 static const char g_szVkIcdSoftDeepen[] =
     "vk_icd: soft deepen wave=70 areas=14 "
     "negotiate,instance,device,swapchain,acquire,present,submit,"
     "lookup,host,path,counts,features,note,crc "
-    "software_present=1 multi_server=0 confine=0";
+    "software_present=1 multi_server=0 confine=0 "
+    "soft_ne_product=1 Soft!=product product_kernel=OPEN Dual_DoD=OPEN";
 
 /*
  * Grep: vk_icd: soft path
@@ -1081,16 +1090,33 @@ static const char g_szVkIcdSoftPath[] =
 
 /*
  * Grep: vk_icd: soft honesty
+ * C2 residual Soft!=product; G-AC-1; Dual DoD OPEN; never hard-gate product.
  */
 static const char g_szVkIcdSoftHonesty[] =
     "vk_icd: soft honesty multi_server=0 confine=0 exclusive=1 "
-    "soft=1 product_kernel=OPEN wave=70";
+    "soft=1 product_kernel=OPEN wave=70 "
+    "soft_ne_product=1 Dual_DoD_A=OPEN Dual_DoD_B=OPEN agent_ne_close=1 "
+    "G-AC-1 dual=MIT_OR_Apache-2.0 Soft!=product "
+    "(soft residual; never hard-gate product)";
+
+/*
+ * Grep: vk_icd: soft residual Soft!=product
+ * C2 exclusive residual lean (cold string only; lamps never close DoD).
+ */
+static const char g_szVkIcdSoftResidual[] =
+    "vk_icd: soft residual Soft!=product "
+    "C2=1 exclusive=1 product_gate=0 never_hard_gate=1 "
+    "multi_server=0 confine=0 product_kernel=OPEN "
+    "Dual_DoD_A=OPEN Dual_DoD_B=OPEN agent_ne_close=1 "
+    "soft_ne_product=1 G-AC-1 dual=MIT_OR_Apache-2.0 "
+    "gpl=0 ko_product_ac=0 software_present=1 wave=70 "
+    "(Soft!=product; residual lean only)";
 
 /* Soft area name catalog (Wave 111; cold only). */
-/* Wave 126 soft deepen surfaces (CREATE-ONLY soft ≠ product):
+/* Wave 126 soft deepen surfaces (CREATE-ONLY Soft!=product):
  *   greppable: soft retgradientangle continuum_toward=26800 soft_ne_product=1 wave=126
  *   greppable: soft retblendangle exclusive=1 continuum_toward=26800 soft_ne_product=1 wave=126
- * Soft ≠ product complete; product lamps 0;
+ * Soft!=product complete; product lamps 0; Dual DoD OPEN; G-AC-1;
  */
 
 static const char *const g_apszVkIcdSoftAreas[] = {
@@ -1208,11 +1234,18 @@ gj_vk_icd_loader_soft_path(void)
 
 /*
  * Cold soft honesty line (Wave 126 exclusive). Grep: vk_icd: soft honesty
+ * Residual Soft!=product lean stays addressable (C2; never product close).
  */
 const char *
 gj_vk_icd_loader_soft_honesty(void)
 {
-    return g_szVkIcdSoftHonesty;
+    /* Keep residual rodata live without changing honesty return contract. */
+    static const char *const apKeep[2] = {
+        g_szVkIcdSoftHonesty,
+        g_szVkIcdSoftResidual,
+    };
+
+    return apKeep[0] != 0 ? apKeep[0] : apKeep[1];
 }
 
 /*

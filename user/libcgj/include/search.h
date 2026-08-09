@@ -21,6 +21,14 @@
  * ---------
  * Full POSIX/Linux completeness; stubs and soft fills may return ENOSYS
  * until the hybrid ABI path is wired. See docs/GLIBC_COMPAT.md.
+ *
+ * Soft residual lean (this unit; Soft!=product; G-AC-1; Dual DoD A/B OPEN):
+ *   - tsearch/hsearch/lfind surface; soft fills may ENOSYS until hybrid ABI
+ *   - Soft!=product: libcgj search bring-up != UDX/DDI product close
+ *   - product = UDX/DDI + hot/cold Linux ABI; freestanding rtl/USB SKIP
+ *   - agent PASS != close Dual DoD; no stamp storms; bar v2026.08.04.75 parent-only
+ *   - dual MIT OR Apache-2.0; no GPL; no Linux .ko product AC (G-AC-1)
+ * Grep: libcgj search.h: soft residual lean Soft!=product
  */
 #pragma once
 

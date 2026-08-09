@@ -4,7 +4,7 @@
  *
  * Ticket-free test-and-set spinlock for SMP (G-SMP). UP-safe.
  * Pure C11 atomics + arch cpu_relax / IRQ mask for irqsave variants.
- * Header-only deepen (no spinlock.c) — soft probes + aligned pad + irqsave try.
+ * Header-only deepen (no spinlock.c) - soft probes + aligned pad + irqsave try.
  *
  * Rules (SECURITY_CORE_DESIGN §4):
  *   - Hold only for short non-blocking critical sections
@@ -12,16 +12,24 @@
  *   - Use irqsave when the same lock is touched from IRQ (e.g. futex timer)
  *   - Lock order published by subsystem; no reverse acquire under debug
  *
+ * Pikus-aligned notes (docs/PURE_C_CONCURRENCY_AND_OPS.md · PURE_C_CONCURRENCY):
+ *   - Measure contention before inventing lock-free multi-word protocols
+ *   - High contention: short spinlock CS beats CAS storms on shared data
+ *   - Algorithm already: read-spin (relaxed load + cpu_relax) then CAS acquire
+ *   - Acquire on lock / release on unlock; data race on non-atomics = UB
+ *   - False sharing: prefer SPIN_ALIGNED when the lock sits next to hot fields
+ *   - atomic RMW ≠ a lock-free algorithm; Soft!=product
+ *
  * Soft product surface (header-only):
- *   SPIN_TAS              — ticket-free test-and-set + read-spin
- *   SPIN_IRQSAVE          — local IRQ mask around acquire/release
- *   SPIN_SOFT_IS_LOCKED   — relaxed probe (debug / soft asserts)
- *   SPIN_TRY_IRQSAVE      — non-blocking irqsave acquire
- *   SPIN_ALIGNED          — cacheline-padded lock (false-sharing pad)
- *   SPIN_SOFT_IRQ_PROBE   — soft “IRQs disabled?” probe
+ *   SPIN_TAS              - ticket-free test-and-set + read-spin
+ *   SPIN_IRQSAVE          - local IRQ mask around acquire/release
+ *   SPIN_SOFT_IS_LOCKED   - relaxed probe (debug / soft asserts)
+ *   SPIN_TRY_IRQSAVE      - non-blocking irqsave acquire
+ *   SPIN_ALIGNED          - cacheline-padded lock (false-sharing pad)
+ *   SPIN_SOFT_IRQ_PROBE   - soft “IRQs disabled?” probe
  *
  * greppable: SPIN_TAS SPIN_IRQSAVE SPIN_SOFT_IS_LOCKED SPIN_TRY_IRQSAVE
- * greppable: SPIN_ALIGNED SPIN_SOFT_IRQ_PROBE G-SMP
+ * greppable: SPIN_ALIGNED SPIN_SOFT_IRQ_PROBE G-SMP PURE_C_CONCURRENCY
  */
 #pragma once
 
@@ -30,7 +38,7 @@
 
 /**
  * Ticket-free TAS word. Mutate only via __atomic_* (not plain loads/stores
- * that form the lock protocol — soft is_locked uses relaxed atomic load).
+ * that form the lock protocol - soft is_locked uses relaxed atomic load).
  */
 struct gj_spinlock {
     u32 u32Locked;
@@ -186,7 +194,7 @@ gj_spin_is_locked(const struct gj_spinlock *pLock)
 
 /**
  * Soft assert helper: 1 if locked (or !GJ_DEBUG), 0 if unlocked under debug.
- * No panic dependency — callers may trap/log on 0.
+ * No panic dependency - callers may trap/log on 0.
  */
 static inline int
 gj_spin_assert_locked(const struct gj_spinlock *pLock)

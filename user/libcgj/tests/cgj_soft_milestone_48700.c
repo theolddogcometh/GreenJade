@@ -212,6 +212,18 @@
  *   - Optional: fold these soft gates into cgj_dyn_smoke.c /
  *     cgj_smoke.c continuum soft blocks (same skip-if-missing rule).
  *   - Soft gates; bar3 still open (gj_bar3_ready_48700 == 0).
+ *
+ * Wave-6 residual lean (Soft!=product; G-AC-1; Dual DoD A/B OPEN):
+ *   Soft host KAT only - agent PASS never closes Dual DoD A/B or product AC.
+ *   Soft!=product ASCII honesty (no Softneq unicode footgun).
+ *   G-AC-1: no Linux .ko product AC; freestanding rtl/USB class SKIP.
+ *   Product surface = UDX/DDI+hot/cold ABI (OPEN until DUT/L3 proof).
+ *   Bar honesty v2026.08.04.75 stamp-free (not GJ_IMAGE_VERSION).
+ *   Lamp catalog: shell/libcgj green=1; bar3_ready=0; product_score=0;
+ *     continuum/smoke/dyn soft=1; tag/wave/batch/graph = 48700.
+ * greppable: libcgj: soft m48700 residual Soft!=product
+ * greppable: libcgj: soft m48700 Dual DoD A/B OPEN
+ * greppable: libcgj: soft m48700 G-AC-1
  */
 
 #define _GNU_SOURCE
@@ -382,7 +394,8 @@ main(void)
 		        "libcgj: soft m48700 DIRECT FAIL fails=%d\n", nFail);
 		return 1;
 	}
-	printf("libcgj: soft m48700 DIRECT PASS (all 11 lamps + markers)\n");
+	printf("libcgj: soft m48700 DIRECT PASS (all 11 lamps + markers; "
+	       "Soft!=product; Dual DoD A/B OPEN; G-AC-1; agent!=close)\n");
 	return 0;
 #else
 	void *h = NULL;
@@ -406,7 +419,8 @@ main(void)
 		fprintf(stderr,
 		        "libcgj: soft m48700 skip (dlopen fail: %s)\n",
 		        dlerror());
-		printf("libcgj: soft m48700 SOFT-SKIP (no product SO)\n");
+		printf("libcgj: soft m48700 SOFT-SKIP (no product SO; "
+		       "Soft!=product; Dual DoD A/B OPEN; G-AC-1)\n");
 		return 0;
 	}
 
@@ -453,7 +467,8 @@ main(void)
 	}
 
 	printf("libcgj: soft m48700 PASS path=%s checked=%d "
-	       "(soft-skip unexported/missing; bar3 still open)\n",
+	       "(soft-skip unexported/missing; bar3 still open; "
+	       "Soft!=product; Dual DoD A/B OPEN; G-AC-1; agent!=close)\n",
 	       szPath, nChecked);
 	(void)dlclose(h);
 	return 0;

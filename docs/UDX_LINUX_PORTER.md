@@ -2,13 +2,15 @@
 
 | Field | Value |
 |-------|--------|
-| **Document** | UDX Linux porter guide v1.1 |
+| **Document** | UDX Linux porter guide v1.2 |
 | **Status** | **Accepted** surface for clean-room ports |
-| **License** | MIT OR Apache-2.0 only — **no Linux source** |
+| **License** | Dual **MIT OR Apache-2.0** only — **no Linux source** · **no GPL** |
+| **Law** | **G-AC-1** · **Soft ≠ product** · freestanding class drivers **SKIP** · product = **hot+cold ABI + UDX/DDI userspace** |
 | **Code** | `user/udx/` |
 | **Build** | `make udx` → `build/libudx.a` · `make udx-example` |
-| **Companion** | [CAP_ADDRESSING.md](CAP_ADDRESSING.md) · [X86_64_INTEL_PLATFORM.md](X86_64_INTEL_PLATFORM.md) · [SOLARIS_STYLE_REMAINING.md](SOLARIS_STYLE_REMAINING.md) · [APPLE_CHANNEL_REMAINING.md](APPLE_CHANNEL_REMAINING.md) 6, 16 · [PROTON_PERSONALITY.md](PROTON_PERSONALITY.md) (games ICD uses GPU host; drivers stay UDX) |
-| **Honesty (Wave 111)** | Host soft path ≠ full GJ grants / multi-server / bar3; continuum **toward 25300** soft only; product lamps **0** (13) |
+| **Companion** | [DDI_SOFT.md](DDI_SOFT.md) · [LAPTOP_LINUX_DRIVER_HOST.md](LAPTOP_LINUX_DRIVER_HOST.md) · [ABI_FIRST_PIVOT.md](ABI_FIRST_PIVOT.md) · [CAP_ADDRESSING.md](CAP_ADDRESSING.md) · [X86_64_INTEL_PLATFORM.md](X86_64_INTEL_PLATFORM.md) · [SOLARIS_STYLE_REMAINING.md](SOLARIS_STYLE_REMAINING.md) · [PROTON_PERSONALITY.md](PROTON_PERSONALITY.md) (games ICD uses GPU host; drivers stay UDX) |
+| **Operator pivot (2026-08)** | **Stop freestanding rtl rabbit hole.** Freestanding class **SKIP** live. Dual DoD **A/B** = **UDX USB / UDX NIC** — both **OPEN**. Flash bar honesty: **v2026.08.04.73** (no invent .73). No test-panel photo IDs. |
+| **Honesty** | Host soft path ≠ full GJ grants / multi-server / bar3; Soft ≠ product complete; product lamps **0** for UDX datapath until evidence |
 
 ---
 
@@ -30,6 +32,9 @@ Let people who know **Linux device drivers** port hardware support by rewriting 
 └──────────────────────────────────────────┘
 ```
 
+**Product path (normative):** hot + cold **Linux ABI** + **Linux-shaped UDX/DDI userspace** drivers.  
+**Not product:** freestanding in-kernel class thrash (`rtl8168.c` / `xhci_msc.c`) · in-kernel Linux `.ko` wire (**G-AC-1**).
+
 ---
 
 ## 2. Best combo (locked)
@@ -41,7 +46,7 @@ Let people who know **Linux device drivers** port hardware support by rewriting 
 | **IRQ** | **Threaded only** (kernel Notification → UDX handler) | No hard-IRQ driver code |
 | **Authority** | **Caps hidden** — never expose mint/revoke to driver `.c` | Security first |
 | **Develop** | **`udx/host.h` inject** on Linux host | Write drivers before GJ kernel is ready |
-| **License** | Clean-room MIT/Apache C only | No GPL import |
+| **License** | Clean-room dual **MIT OR Apache-2.0** C only | No GPL import |
 
 This is the **best combo for Linux porters**: familiar surface, Solaris lifecycle teeth, GreenJade security underneath.
 
@@ -52,10 +57,12 @@ This is the **best combo for Linux porters**: familiar surface, Solaris lifecycl
 | Rule | Detail |
 |------|--------|
 | **No Linux source** | Specs + manuals only; clean-room |
-| **No kernel modules** | One **host process** per device (or function) |
+| **No kernel modules as product** | One **host process** per device (or function). **G-AC-1:** no Linux `.ko` **runs in kernel** as product AC |
 | **No raw caps in driver .c** | Use `udx_*` only |
 | **Hard IRQ is not in the driver** | Kernel notifies; UDX runs **threaded** handler |
 | **Quiesce on remove/crash** | Like DDI `quiesce` + Linux `remove` |
+| **Soft ≠ product** | Soft probe / inject / soft ddi lamps **do not** close Dual DoD A/B or TX/RX/BOT |
+| **Freestanding SKIP** | In-kernel freestanding class drivers are **not** the porter product path (default `GJ_RTL8168_PROBE=0` · `GJ_XHCI_MSC_PROBE=0`) |
 
 ---
 
@@ -92,6 +99,7 @@ This is the **best combo for Linux porters**: familiar surface, Solaris lifecycl
 | Crash | Process death ⇒ kernel revokes windows; **quiesce** best-effort in `remove` |
 | Threads | IRQ thread(s) + optional work; all share host state with locks |
 | **Host sim** | `udx_host_inject_pci` / `udx_host_fire_irq` for bring-up on Linux |
+| **GJ soft bind** | `udx_host_bind_by_id` → SCAN / GET / OPEN / MAP_BAR (`GJ_SYS_DDI`) when kernel present |
 
 ---
 
@@ -141,6 +149,8 @@ u64 aBarLen[6] = { 0x1000 }; /* BAR0 size */
 udx_host_inject_pci(0x8086, 0x100e, 0, 0, 11, aBarLen, NULL, &pPdev);
 ```
 
+G752 class skeletons (clean-room, dual-license): `user/drivers/rtl8168_udx` (`10ec:8168`) · `user/drivers/xhci_udx` (`8086:a12f`). Soft probe ≠ product wire / BOT.
+
 ---
 
 ## 9. What drivers must not call
@@ -149,6 +159,7 @@ udx_host_inject_pci(0x8086, 0x100e, 0, 0, 11, aBarLen, NULL, &pPdev);
 - `set_pager` / root meta  
 - Raw IPC to kernel endpoints  
 - Manual IOMMU page table programming  
+- Linux `.ko` load / in-kernel module product paths (**G-AC-1**)
 
 ---
 
@@ -197,50 +208,74 @@ make udx-example   # build/udx_skeleton
 
 | Piece | Host (now) | Full GJ |
 |-------|------------|---------|
-| PCI match/probe | inject + id table | devmgr grants |
-| MMIO | host window table | MMIO FRAME map |
+| PCI match/probe | inject + id table · soft SCAN/GET/OPEN | devmgr grants |
+| MMIO | host window table · soft MAP_BAR | MMIO FRAME map |
 | IRQ | `udx_host_fire_irq` | Notification cap |
-| DMA | malloc cookie | IOMMU window |
+| DMA | malloc cookie · soft DMA_NOTE | IOMMU window |
 | Work | queue + `udx_run` flush | host work thread |
 | Caps | hidden (none) | hidden (real) |
 
 ---
 
-## 13. Soft status / honesty bounds (Wave 111 · 2026-07-24)
+## 13. Soft status / honesty bounds (2026-08 operator pivot)
 
-**Additive only (Wave 111 exclusive for this file).** Porter contract 1–12 stay **Accepted**. This section is a Wave 111 honesty ledger: host/sim UDX soft path vs full GreenJade grants, multi-server product, and Steam **bar3**. Wave 109 soft-status text is superseded here under Wave 111 exclusive ownership of this file’s honesty ledger. It does **not** re-litigate the Linux-shaped API map or invent product driver completion.
+**Porter contract 1–12 stay Accepted.** This section is the honesty ledger under the 2026-08 operator pivot: host/sim UDX soft path vs full GreenJade grants, Dual DoD A/B, freestanding SKIP, and Steam **bar3**. Soft ≠ product. It does **not** re-litigate the Linux-shaped API map or invent product driver completion.
+
+### Product model (normative)
+
+| Rule | Meaning |
+|------|---------|
+| **G-AC-1** | No Linux `.ko` binary **runs in the kernel** as product |
+| **Product** | Hot + cold **Linux ABI** + **Linux-shaped UDX/DDI userspace** drivers |
+| **Freestanding class drivers** | **Not product.** Default **SKIP** (`GJ_RTL8168_PROBE=0` · `GJ_XHCI_MSC_PROBE=0`). **Stop freestanding rtl rabbit hole.** |
+| **Soft residual** | Soft bind / inject / soft ddi lamps / module eng path ≠ product AC |
+
+### Dual DoD A/B (retargeted — freestanding net/USB out)
+
+| # | DoD | Status | Close when |
+|---|-----|--------|------------|
+| **A** | **Linux-shaped USB** (laptop) via **UDX/DDI** (`xhci_udx` …) | **OPEN** | Userspace UDX USB host path binds `8086:a12f` and owns USB datapath for lab. **Not** freestanding MSC. **Not** `usb_storage.ko` init in kernel. Soft lamps alone ≠ close. |
+| **B** | **Linux-shaped NIC** (laptop) via **UDX/DDI** (`rtl8168_udx` …) | **OPEN** | Userspace UDX NIC binds `10ec:8168` and owns wire for lab IP / stack / sshd. **Not** freestanding rtl R-climb. **Not** in-kernel `r8169.ko` wire. Soft lamps alone ≠ close. |
+
+Flash bar honesty for operator media: panel **`STATUS (static) v2026.08.04.73`** from `GJ_IMAGE_VERSION` (`kernel/include/gj/config.h`). **Confirm stamp after flash** in docs. Confirm cut after flash. Public evidence = lamps / serial only — **no test-panel photo IDs**.
 
 | Item | State |
 |------|--------|
-| **UDX host soft path** | Present — `make udx` → `libudx.a`, host inject / fire_irq, skeleton example |
+| **UDX host soft path** | Present — `make udx` → `libudx.a`, host inject / fire_irq, skeleton + class soft hosts |
 | **Full GJ grants (PCI/IRQ/DMA)** | **Open** — see 12 Host vs Full GJ |
 | **Product multi-server confine** | **Open** — UDX soft path does **not** close multi-server confine product |
-| **Soft continuum** | High-water **advancing toward 25300** CREATE-ONLY parent wire only — **not** UDX product; **not** bar3 |
-| **Product lamps** | Remain **0** by design |
+| **Dual DoD A (UDX USB)** | **OPEN** |
+| **Dual DoD B (UDX NIC)** | **OPEN** |
+| **Freestanding rtl / freestanding USB** | **SKIP default** — residual opt-in only; **not** Dual DoD close |
+| **Product lamps (TX/RX · BOT · live IRQ)** | Remain **0** / **OPEN** by design until evidence |
 | **bar3 / Steam client** | **Out of scope** for this doc — no claim; **bar3 remains OPEN** |
 
 | Soft surface | What it is | What it is **not** |
 |--------------|------------|--------------------|
 | Host inject / `udx_host_fire_irq` / skeleton | Clean-room Linux-shaped porter develop path | Full GJ MMIO FRAME / IOMMU window / Notification product |
+| Soft DDI bind (`udx_host_bind_by_id`) | Soft SCAN/GET/OPEN/MAP_BAR path | Dual DoD A/B close; product TX/RX or BOT |
 | `make udx` / `libudx.a` | Host archive for porters | Multi-server confined driver host product |
-| Continuum **toward 25300** | Soft graph wire only | UDX product complete; Steam client; matrix fill |
+| Soft class probes (`rtl8168_udx` / `xhci_udx`) | Soft skeleton path | Product wire ownership; freestanding substitute |
 
-**Hard stamp (Wave 111):** UDX host soft path **≠** full GJ grants **≠** product multi-server **≠** bar3. Soft continuum **toward 25300** does **not** close UDX product. Product lamps **0**. **Soft ≠ product complete.**
+**Hard stamp (2026-08):** UDX host soft path **≠** full GJ grants **≠** product multi-server **≠** Dual DoD A/B closed **≠** bar3. Freestanding class **SKIP**. Product = **ABI + UDX**. **Soft ≠ product complete.**
 
-**Soft stamp (2026-07-24 / Wave 111):** UDX remains a **host/sim soft path** for clean-room Linux-shaped ports. Host inject ≠ product multi-server confine. Multi-server confine product path stays **open**. Continuum soft gates **≠** UDX product. **No bar3 claim.**
-
-### Explicit non-claims (Wave 111)
+### Explicit non-claims (2026-08)
 
 | Claim | Allowed? |
 |-------|----------|
 | “UDX Linux-shaped porter surface **Accepted**” | **Yes** — this document |
 | “Host soft path greppable (`make udx`, skeleton)” | **Yes** — host/sim only |
 | “Full GJ PCI/IRQ/DMA grants product-complete” | **No** |
-| “UDX soft path = multi-server confine closed” | **No** |
-| “Continuum toward 25300 closes UDX product or bar3” | **No** |
+| “UDX soft path = Dual DoD A/B closed” | **No** |
+| “Freestanding rtl closes Dual DoD B / product NIC” | **No** — freestanding **SKIP**; product NIC = UDX |
+| “In-kernel `r8169.ko` / freestanding MSC is product” | **No** — **G-AC-1** / freestanding SKIP |
 | Any **bar3** closed claim from UDX alone | **No** |
+| Flash bar **v2026.08.04.73** without matching cut / invent **.73** | **No** — honesty: **v2026.08.04.73** only |
 
 ---
 
 *UDX = Linux-shaped surface, DDI quiesce, GreenJade security underneath.*  
-*13 Wave 111 honesty (2026-07-24): host soft path ≠ full GJ grants / multi-server / bar3; continuum **toward 25300 soft only**; product lamps **0**; **soft ≠ product complete**.*
+*Dual MIT OR Apache-2.0 · **G-AC-1** · **Soft ≠ product** · freestanding **SKIP** · product = **ABI + UDX**.*  
+*Dual DoD **A** UDX USB **OPEN** · **B** UDX NIC **OPEN**. Stop freestanding rtl rabbit hole.*  
+*Flash bar honesty: **STATUS (static) v2026.08.04.73** — freestanding **SKIP** live · Dual DoD A/B **OPEN** · do not invent .73. No test-panel photo IDs.*  
+*13 honesty (2026-08): host soft path ≠ full GJ grants / multi-server / Dual DoD close / bar3.*

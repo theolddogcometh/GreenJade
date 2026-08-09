@@ -21,6 +21,14 @@
  * ---------
  * Full POSIX/Linux completeness; stubs and soft fills may return ENOSYS
  * until the hybrid ABI path is wired. See docs/GLIBC_COMPAT.md.
+ *
+ * Soft residual (C2 libcgj keyutils.h; Soft!=product; G-AC-1; Dual DoD A/B OPEN):
+ *   soft     = add_key/request_key/keyctl-shaped wrappers (subset; ENOSYS soft OK)
+ *   product  = Cap/key path via kernel doors not this header alone; not .ko AC
+ *   honesty  = keyctl soft != product Cap mint close; agent PASS != Dual DoD
+ *              close; stamp-free bar honesty (no version stamp)
+ *   law      = dual MIT OR Apache-2.0; no GPL; H2 no stamp storms
+ * greppable: libcgj: keyutils soft residual Soft!=product
  */
 #pragma once
 #include <stddef.h>

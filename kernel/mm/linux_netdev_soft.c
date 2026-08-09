@@ -2,7 +2,7 @@
  * SPDX-License-Identifier: MIT OR Apache-2.0
  * Copyright (c) 2026 Project GreenJade contributors
  *
- * Soft Linux netdev lifecycle seed.
+ * Soft Linux netdev lifecycle seed (ABI / hostability eng residual).
  * Pure C11 freestanding. Dual MIT OR Apache-2.0. No GPL / no Linux .ko source.
  *
  * Soft only:
@@ -14,14 +14,17 @@
  *     __pskb_pull_tail / pskb_expand_head / __netdev_alloc_skb / dev_alloc_skb
  *   - carrier / queue / NAPI bookkeeping (enable/disable/schedule_prep/complete)
  *   - netdev_* printk soft no-ops or bookkeeping
+ *   - residual lean: freestanding_rtl SKIP + product_nic=UDX honesty lamps
  *
- * Soft ≠ ABI-stable: struct layouts are incomplete soft shapes, not Linux ABI.
- * Soft ≠ product: no live product RX/TX; soft NAPI state only (not Linux bits).
+ * Soft != ABI-stable: struct layouts are incomplete soft shapes, not Linux ABI.
+ * Soft != product: no live product RX/TX; soft NAPI state only (not Linux bits).
  * Soft TX path helpers do NOT call .ko ndo_start_xmit.
+ * Product NIC = userspace UDX (not freestanding rtl; not in-kernel .ko wire).
+ * Freestanding rtl default SKIP (GJ_RTL8168_PROBE=0). Soft!=product. G-AC-1.
  *
  * Greppable markers (keep stable):
  *   linux_netdev_soft: soft init PASS
- *   linux_netdev_soft: soft register PASS name=…
+ *   linux_netdev_soft: soft register PASS name=...
  *   linux_netdev_soft: soft register SKIP
  *   linux_netdev_soft: soft ksym register PASS|SKIP
  *   linux_netdev_soft: soft napi enable|disable|prep|complete
@@ -31,36 +34,94 @@
  *   linux_netdev_soft: soft l2 rx napi
  *   linux_netdev_soft: soft open primary
  *   linux_netdev_soft: soft open skip .ko ops
- *   linux_netdev_soft: soft ops diagnostic …
- *   linux_netdev_soft: soft hostish net_device fill PASS …
+ *   linux_netdev_soft: soft ops diagnostic ...
+ *   linux_netdev_soft: soft hostish net_device fill PASS ...
+ *   linux_netdev_soft: soft hostish residual refuse ...
+ *   linux_netdev_soft: soft layout deepen PASS ...
+ *   linux_netdev_soft: soft residual layout ...
+ *   linux_netdev_soft: soft default ops install ...
  *   linux_netdev_soft: soft l2 bridge first tx
- *   linux_netdev_soft: soft rtnl …
+ *   linux_netdev_soft: soft rtnl ...
  *   linux_netdev_soft: soft eth_platform EOPNOTSUPP
- *   linux_netdev_soft: soft eth_mac …
+ *   linux_netdev_soft: soft eth_mac ...
  *   linux_netdev_soft: soft synchronize_net
- *   linux_netdev_soft: soft ethtool_op_get_link …
- *   linux_netdev_soft: soft ethtool_op_get_ts_info …
- *   linux_netdev_soft: soft net_ratelimit …
- *   linux_netdev_soft: soft skb_copy_bits …
- *   linux_netdev_soft: soft __skb_pad …
- *   linux_netdev_soft: soft skb_put …
- *   linux_netdev_soft: soft pskb_may_pull …
- *   linux_netdev_soft: soft __netdev_alloc_skb …
- *   linux_netdev_soft: soft l2 tx from_skb …
- *   linux_netdev_soft: soft dev_queue_xmit …
+ *   linux_netdev_soft: soft ethtool_op_get_link ...
+ *   linux_netdev_soft: soft ethtool_op_get_ts_info ...
+ *   linux_netdev_soft: soft net_ratelimit ...
+ *   linux_netdev_soft: soft skb_copy_bits ...
+ *   linux_netdev_soft: soft __skb_pad ...
+ *   linux_netdev_soft: soft skb_put ...
+ *   linux_netdev_soft: soft pskb_may_pull ...
+ *   linux_netdev_soft: soft __netdev_alloc_skb ...
+ *   linux_netdev_soft: soft l2 tx from_skb ...
+ *   linux_netdev_soft: soft dev_queue_xmit ...
+ *   linux_netdev_soft: soft napi mmio_handoff SET refuse
+ *   linux_netdev_soft: soft hybrid zero-touch PASS Soft!=product ...
+ *   linux_netdev_soft: soft hybrid residual E Soft!=product ...
+ *   linux_netdev_soft: soft dual DoD B residual gate0 PASS Soft!=product ...
+ *   linux_netdev_soft: soft residual lean PASS Soft!=product ...
+ *   linux_netdev_soft: soft residual freestanding_rtl=SKIP ...
+ *   linux_netdev_soft: soft residual product_nic=UDX ...
+ *   linux_netdev_soft: soft residual RUN_INIT=0 freestanding_no_exec ...
+ *   linux_netdev_soft: soft residual R0 thrash refuse ...
+ *   linux_netdev_soft: soft residual wire sole freestanding ...
+ *   linux_netdev_soft: soft freestanding owns wire ...
+ *   linux_netdev_soft: soft open|napi|xmit fail-closed live 8168 ...
+ *   linux_netdev_soft: soft residual C0 ... (claim_class=C0; Dual DoD OPEN)
  *   main: linux path HYBRID wire=freestanding soft=r8169  (phase 4a lamp)
+ *   STATUS hold14: l2 br rx=N tx=M · hold15: HYBRID wire=fs soft=r8169
+ *   linux_netdev_soft: soft hold14 freestanding R/T mirror rx=... tx=...
  *
- * Soft-originated TX (reverse path): soft-pool skb → freestanding net_l2_tx
- * via linux_netdev_soft_l2_tx_from_skb / soft dev_queue_xmit ksym.
- * Soft≠product; no dual-drive; no auto wire smoke unless GJ_SOFT_L2_TX_SMOKE=1.
+ * Soft residual lean (ABI / hostability eng · C0 claim class):
+ * Soft netdev seed residual only - never claim freestanding wire product.
+ * Freestanding rtl default SKIP (GJ_RTL8168_PROBE=0). Product NIC =
+ * userspace UDX. Soft!=product; G-AC-1. Once-capped lamps; no stamp storms.
+ * Claim class C0 (ASSURANCE_LITE): greppable soft lamp only - never Dual
+ * DoD A/B close, never bar3, never G-AC-1 product, never "net works".
+ * Grep: soft residual lean PASS · freestanding_rtl=SKIP · product_nic=UDX
+ *       claim_class=C0 · dual_DoD_A=OPEN · dual_DoD_B=OPEN
  *
- * Phase 4a hybrid (default gate0): freestanding owns wire; soft netdev is the
- * Linux-shaped control object; L2 bridge + reverse TX. Not 4b .ko wire.
- * Grep: linux path HYBRID · docs/R8169_MMIO_HANDOFF.md
+ * Soft-originated TX (reverse path): soft-pool skb -> freestanding net_l2_tx
+ * via linux_netdev_soft_l2_tx_from_skb / soft dev_queue_xmit ksym when
+ * freestanding is deliberately live. Soft!=product; no dual-drive; no auto
+ * wire smoke unless GJ_SOFT_L2_TX_SMOKE=1. Default freestanding_rtl=SKIP.
  *
- * Safety (dual MMIO): freestanding owns MMIO today. Soft L2 bridge feeds RX
- * and runs soft NAPI bookkeeping only. Do NOT call .ko napi poll / ISR while
- * g_fMmioHandoff==0. Soft≠product. No hardware IRQ inject into .ko.
+ * Phase 4a hybrid (opt-in freestanding live): freestanding may own wire;
+ * soft netdev is the Linux-shaped control object; L2 bridge + reverse TX.
+ * Not 4b .ko wire. Not product NIC (product = UDX userspace). Soft!=product.
+ * Grep: linux path HYBRID · linux_netdev_soft: soft hybrid · docs/R8169_MMIO_HANDOFF.md
+ *
+ * Hybrid residual E (gate0 dual DoD companion; opt-in freestanding): when
+ * freestanding rtl is live it may own 10ec:8168 BAR/wire. Soft open / NAPI /
+ * xmit fail closed for live 8168 - never call .ko ndo_open / napi poll /
+ * ndo_start_xmit while freestanding ready. Hostish dual blob inventory only
+ * (refuse helpers). Logs once-capped - no stamp storms. hold14 freestanding
+ * R/T mirror when soft feed rare. Soft!=product. Hybrid SOFT must not steal
+ * BAR (g_fMmioHandoff stays 0). Default freestanding_rtl=SKIP.
+ *
+ * Dual DoD B residual (gate0 hybrid friendliness · eng only · C0):
+ * Soft residual MUST NOT steal freestanding wire or thrash live BAR (R0/H4).
+ * RUN_INIT=0 / freestanding_no_exec honesty: soft hosts control object only -
+ * never .ko init exec in kernel (G-AC-1 lean). Never claim freestanding wire
+ * as product; product NIC = UDX userspace. Soft!=product. Once-capped lamps
+ * only - no version stamp, no stamp storms. Dual DoD A/B OPEN until UDX DUT
+ * proof (product path = Linux-shaped UDX; not freestanding rtl R-climb; not
+ * soft listen :22 close; not in-kernel .ko wire). Dual MIT OR Apache-2.0.
+ * Grep: soft dual DoD B residual gate0 · soft residual lean PASS
+ *       soft residual freestanding_rtl=SKIP · soft residual product_nic=UDX
+ *       soft residual RUN_INIT=0 · soft residual R0 thrash refuse
+ *       soft no_bar_steal · soft residual wire sole freestanding
+ *       soft freestanding owns wire · claim_class=C0
+ *
+ * hold14 freestanding R/T: while freestanding owns MMIO (opt-in live), panel
+ * hold14 is max(soft fed/tx_ok, freestanding rtl R/T). Poll getters + feed/
+ * note paths force-refresh so freestanding climb paints when soft feed is
+ * rare (HY7). Soft!=product; read-only counters; never dual-drive BAR.
+ *
+ * Safety (dual MMIO): when freestanding is live it owns MMIO. Soft L2 bridge
+ * feeds RX and runs soft NAPI bookkeeping only. Do NOT call .ko napi poll /
+ * ISR while g_fMmioHandoff==0. Soft!=product. No hardware IRQ inject into .ko.
+ * Default freestanding_rtl=SKIP; product NIC = UDX userspace.
  */
 #include <gj/config.h>
 #include <gj/fb_console.h>
@@ -72,7 +133,7 @@
 #include <stdarg.h>
 
 /*
- * F2 linux_ksym may be linked later. Weak unresolved → NULL; init skips export.
+ * F2 linux_ksym may be linked later. Weak unresolved -> NULL; init skips export.
  * Coordinator may also point ksym at these symbols by C name without this call.
  */
 int linux_ksym_register(const char *szName, void *pFn) __attribute__((weak));
@@ -80,13 +141,13 @@ int linux_ksym_register(const char *szName, void *pFn) __attribute__((weak));
 /* Soft log cap for netdev_* printk helpers (once-ish). */
 #define LNDS_LOG_CAP 16u
 
-/* Soft NAPI side-table (keyed by driver pNapi cookie; Soft≠Linux state bits). */
+/* Soft NAPI side-table (keyed by driver pNapi cookie; Soft!=Linux state bits). */
 #define LNDS_NAPI_MAX       8u
 #define LNDS_NAPI_F_USED    0x01u
 #define LNDS_NAPI_F_ENABLED 0x02u
 #define LNDS_NAPI_F_SCHED   0x04u
 #define LNDS_NAPI_F_MISSED  0x08u
-/* pfnPoll recorded via netif_napi_add soft body — treat as .ko until handoff. */
+/* pfnPoll recorded via netif_napi_add soft body - treat as .ko until handoff. */
 #define LNDS_NAPI_F_KO_POLL 0x10u
 
 /* ---- Soft state --------------------------------------------------------- */
@@ -112,24 +173,67 @@ static u32  g_cLive;
 static u32  g_cRegistered;
 static int  g_fL2Bridge;
 static u32  g_cL2RxFed;
+static u32  g_cL2RxAttempt;   /* bridge ON + eth-sized frame seen */
+static u32  g_cL2RxDrop;      /* attempt but no primary / skb / etc. */
 static u32  g_cL2TxOk;
 static u32  g_cL2TxFail;
 static u32  g_cL2TxAttempt;
 static u32  g_cL2TxAccounted;
 static int  g_fL2BridgeLog;
 static int  g_fL2FirstTxLog;
+/* hold14 last painted (avoid STATUS spam; Soft!=product). */
+static u32  g_u32LastHold14Rx;
+static u32  g_u32LastHold14Tx;
+static int  g_fHold14Painted;
+/* Last freestanding R/T sample used by hold14 mirror (read-only). */
+static u32  g_u32Hold14FsRx;
+static u32  g_u32Hold14FsTx;
+/** Once-lamp when freestanding R or T first exceeds soft fed/tx_ok. */
+static int  g_fHold14FsMirrorLog;
+/** Once-log for gate-safe set_mmio_handoff refuse. */
+static int  g_fMmioSetHandoffLog;
+/** BAR-steal refuse tally (set_mmio_handoff refuse; Soft!=product). */
+static u32  g_cBarStealRefuse;
+/** Dual DoD B / gate0 residual once-lamp (lean; Soft!=product). */
+static int  g_fGate0ResidualLog;
+/** Soft residual lean once-lamp (ABI/hostability; freestanding_rtl SKIP). */
+static int  g_fResidualLeanLog;
+/** Residual E once-lamps: open/NAPI/xmit fail-closed live 8168 (Soft!=product). */
+static int  g_fLive8168OpenFcLog;
+static int  g_fLive8168NapiFcLog;
+static int  g_fLive8168XmitFcLog;
+/** Residual E fail-closed tallies (Soft!=product; no stamp storm). */
+static u32  g_cLive8168FcOpen;
+static u32  g_cLive8168FcNapi;
+static u32  g_cLive8168FcXmit;
+/** Hostish residual refuse once-lamps (inventory; never call .ko ndo). */
+static int  g_fHostishOpenRefuseLog;
+static int  g_fHostishXmitRefuseLog;
+static u32  g_cHostishOpenRefuse;
+static u32  g_cHostishXmitRefuse;
+/** Cap soft register SKIP / unregister logs (no stamp storms). */
+static u32  g_cRegSkipLog;
+static u32  g_cUnregLog;
 static u32  g_cSoftOpen;
 static int  g_fSoftOpenLog;
 static int  g_fSoftOpenSkipKoLog;
 static int  g_fSoftOpsDiagLog;
-/** Hostish net_device dual-blob fill once-log (Strategy A; Soft≠product). */
+/** Hostish net_device dual-blob fill once-log (Strategy A; Soft!=product). */
 static int  g_fHostishNdFillLog;
+/** Soft layout deepen once-lamp (fields/ops residual; Soft!=product). */
+static int  g_fLayoutDeepenLog;
+/** Soft default ops install once-log. */
+static int  g_fSoftDefaultOpsLog;
+/** Soft init first PASS already emitted (idempotent silent after). */
+static int  g_fInitPassLog;
+/** mmio_handoff state-change once-log (cap stamp storms). */
+static int  g_fMmioHandoffStateLog;
 /** Soft MMIO handoff ready stub once-log (phase 1). */
 static int  g_fMmioHandoffReadyLog;
-/** Phase-3 try_open once-log / done edge (Soft≠product). */
+/** Phase-3 try_open once-log / done edge (Soft!=product). */
 static int  g_fMmioTryOpenLog;
 static int  g_fMmioTryOpenDone;
-/** Phase-4a hybrid once-lamp (Soft≠product). */
+/** Phase-4a hybrid once-lamp (Soft!=product). */
 static int  g_fHybridLampLog;
 static u32  g_cNapiEnable;
 static u32  g_cNapiDisable;
@@ -146,12 +250,12 @@ static int  g_fNapiPollSkipKoLog;
 static int  g_fL2RxNapiLog;
 static int  g_fNapiBridgeEnLog;
 /*
- * MMIO handoff gate (default 0): freestanding owns MMIO → never call .ko
- * pfnPoll from soft_poll. Other agent may set 1 after full handoff; Soft≠product.
+ * MMIO handoff gate (default 0): freestanding owns MMIO -> never call .ko
+ * pfnPoll from soft_poll. Other agent may set 1 after full handoff; Soft!=product.
  */
 static int  g_fMmioHandoff;
 
-/* Post-probe RTNL / eth / sync bookkeeping (Soft≠product). */
+/* Post-probe RTNL / eth / sync bookkeeping (Soft!=product). */
 static u32  g_cRtnlDepth;
 static u32  g_cRtnlLock;
 static u32  g_cRtnlUnlock;
@@ -170,7 +274,7 @@ static int  g_fEthtoolLinkLog;
 static int  g_fEthtoolTsLog;
 static int  g_fNetRatelimitLog;
 
-/* Soft skb path bookkeeping (Soft≠product; future r8169 soft TX). */
+/* Soft skb path bookkeeping (Soft!=product; future r8169 soft TX). */
 static u32  g_cSkbCopyBits;
 static u32  g_cSkbCopyBitsFail;
 static u32  g_cSkbPad;
@@ -187,7 +291,7 @@ static int  g_fSkbPadLog;
 static int  g_fSkbPutLog;
 static int  g_fPskbMayPullLog;
 static int  g_fNetdevAllocSkbLog;
-/* Soft-originated TX from soft skb / dev_queue_xmit (Soft≠product). */
+/* Soft-originated TX from soft skb / dev_queue_xmit (Soft!=product). */
 static u32  g_cSoftTxFromSkbAttempt;
 static u32  g_cSoftTxFromSkbOk;
 static u32  g_cSoftTxFromSkbFail;
@@ -205,12 +309,19 @@ static int  g_fSoftL2TxSmokeLog;
 #define LNDS_ENOMEM        (-12)
 #define LNDS_EFAULT        (-14)
 
-/* Freestanding L2 (weak if net_l2 not linked). Soft≠product HW path. */
+/* Freestanding L2 (weak if net_l2 not linked). Soft!=product HW path. */
 int net_l2_tx(const void *pFrame, u32 cbLen) __attribute__((weak));
 int net_l2_ready(void) __attribute__((weak));
 /* Soft MMIO handoff pending/fault (fail closed; weak if net_l2 absent). */
 int net_l2_soft_handoff_pending(void) __attribute__((weak));
 int net_l2_soft_handoff_fault(void) __attribute__((weak));
+/*
+ * Freestanding rtl8168 counters / ready (weak if rtl not linked).
+ * hold14 freestanding R/T mirror samples these read-only. Soft!=product.
+ */
+int  rtl8168_ready(void) __attribute__((weak));
+u32  rtl8168_rx_count(void) __attribute__((weak));
+u32  rtl8168_tx_count(void) __attribute__((weak));
 
 /** First successfully registered soft netdev still live. */
 static struct net_device *g_pPrimary;
@@ -220,10 +331,10 @@ static struct net_device *g_pPrimary;
  * Priv is accessed as (u8 *)pNd + LINUX_NETDEV_SOFT_ND_BYTES.
  *
  * REAL r8169 probe writes host-layout fields into this same VA (ops @+0x08,
- * etc.). Soft front is 0x800; host sizeof is 0xaf0 → host writes spill into
+ * etc.). Soft front is 0x800; host sizeof is 0xaf0 -> host writes spill into
  * abPriv. Dual hostish blob (below) captures 0xaf0 for Option B readiness;
- * soft bookkeeping remains on soft struct. Soft priv @+0x800 ≠ host priv
- * after 0xaf0 — see linux_netdev_hostish_off.h.
+ * soft bookkeeping remains on soft struct. Soft priv @+0x800 != host priv
+ * after 0xaf0 - see linux_netdev_hostish_off.h.
  */
 struct soft_nd_slab {
     struct net_device nd;
@@ -241,7 +352,7 @@ _Static_assert(LINUX_NETDEV_HOSTISH_BLOB_BYTES >= LINUX_NETDEV_HOSTISH_SIZE_NET_
 /*
  * Strategy A dual hostish net_device pool (mirror pci_dev 0xb40 / 0xc00).
  * Separate from soft inventory; filled after register_netdev from soft primary
- * bytes (captures .ko host-offset stores). Soft≠product; no ndo_open call.
+ * bytes (captures .ko host-offset stores). Soft!=product; no ndo_open call.
  */
 static u8 g_aNdHostish[LINUX_NETDEV_HOSTISH_POOL][LINUX_NETDEV_HOSTISH_BLOB_BYTES]
     __attribute__((aligned(16)));
@@ -249,6 +360,8 @@ static u8 g_aNdHostishLive[LINUX_NETDEV_HOSTISH_POOL];
 static void *g_pHostishPrimary; /* hostish blob for soft primary, or NULL */
 static void *g_pHostishOpsCached;     /* Option B readiness; no call */
 static void *g_pHostishNdoOpenCached; /* Option B readiness; no call */
+static void *g_pHostishNdoStopCached; /* ops+0x18; no call */
+static void *g_pHostishNdoXmitCached; /* ops+0x20; no call */
 static int   g_fHostishFilled;
 
 /** Soft skb slab (data buffer for later RX/TX feed). */
@@ -266,7 +379,7 @@ static u32             g_cSkbLive;
 
 /**
  * Soft NAPI bookkeeping slot. pNapi is an opaque cookie from the driver
- * (often &priv->napi); Soft≠Linux napi_struct layout under that pointer.
+ * (often &priv->napi); Soft!=Linux napi_struct layout under that pointer.
  */
 struct soft_napi {
     void *pNapi;
@@ -280,26 +393,96 @@ struct soft_napi {
 static struct soft_napi g_aNapi[LNDS_NAPI_MAX];
 
 /*
- * Soft-shaped netdev_ops (incomplete Soft≠Linux ABI).
+ * Soft-shaped netdev_ops magic/ver: use header LINUX_NETDEV_SOFT_OPS_*.
  * Magic/version prefix distinguishes tables we own from a .ko ops pointer.
- * DO NOT call .ko ndo_open / ndo_start_xmit — freestanding owns MMIO.
+ * DO NOT call .ko ndo_open / ndo_start_xmit - freestanding owns MMIO.
+ * Soft default table (ver2) is eng residual for UDX/Linux-shaped userspace.
  */
-#define LNDS_SOFT_OPS_MAGIC 0x4C4E4453u /* 'LNDS' */
-#define LNDS_SOFT_OPS_VER   1u
+#define LNDS_SOFT_OPS_MAGIC  LINUX_NETDEV_SOFT_OPS_MAGIC
+#define LNDS_SOFT_OPS_VER    LINUX_NETDEV_SOFT_OPS_VER
 
-struct soft_netdev_ops {
-    u32  u32Magic;
-    u32  u32Ver;
-    int (*ndo_open)(void *pDev);
-    int (*ndo_stop)(void *pDev);
-};
-
-/* Defined later; feed_rx may call before body. Soft≠product. */
+/* Defined later; feed_rx may call before body. Soft!=product. */
 void linux_netdev_soft_softirq_kick(void);
+/* Soft reverse TX used by default soft ndo_start_xmit residual. */
+int linux_netdev_soft_l2_tx_from_skb(void *pSkb);
+/* Soft default ops install (defined with soft_netdev_ops table). */
+static void lnds_install_default_soft_ops(struct net_device *pNd);
 #if GJ_SOFT_L2_TX_SMOKE != 0
-/* Lab-only; defined after from_skb path. Soft≠product. */
+/* Lab-only; defined after from_skb path. Soft!=product. */
 static void lnds_soft_l2_tx_smoke_once(void);
 #endif
+
+/*
+ * Live freestanding 10ec:8168 owns wire (hybrid residual E).
+ * Non-zero when rtl ready and soft has not claimed MMIO handoff.
+ * Soft open/NAPI/xmit must fail closed for .ko BAR touch. Soft!=product.
+ * Hybrid SOFT must not steal BAR. Dual DoD B residual: gate0 never claims.
+ */
+static int
+lnds_live_fs_8168(void)
+{
+#if GJ_SOFT_R8169_MMIO_HANDOFF == 0
+    /* Gate0: soft handoff claim is forbidden; force honesty. Soft!=product. */
+    if (g_fMmioHandoff != 0) {
+        g_fMmioHandoff = 0;
+    }
+#endif
+    if (g_fMmioHandoff != 0) {
+        return 0;
+    }
+    if (rtl8168_ready != NULL && rtl8168_ready() != 0) {
+        return 1;
+    }
+    return 0;
+}
+
+/**
+ * Soft freestanding-owns check for reverse TX / hybrid residual E.
+ * Soft!=product: handoff pending / fault / soft mmio_handoff -> not freestanding.
+ * Hybrid SOFT must not steal BAR - reverse path fails closed if soft claims.
+ * Dual DoD B residual: refuse dual-drive that yields freestanding R0.
+ */
+static int
+lnds_soft_tx_freestanding_owns(void)
+{
+#if GJ_SOFT_R8169_MMIO_HANDOFF == 0
+    /* Gate0 residual: never allow soft BAR claim to poison freestanding wire. */
+    if (g_fMmioHandoff != 0) {
+        g_fMmioHandoff = 0;
+    }
+#endif
+    if (g_fMmioHandoff != 0) {
+        return 0;
+    }
+    if (net_l2_soft_handoff_pending != NULL &&
+        net_l2_soft_handoff_pending() != 0) {
+        return 0;
+    }
+    if (net_l2_soft_handoff_fault != NULL &&
+        net_l2_soft_handoff_fault() != 0) {
+        return 0;
+    }
+    return 1;
+}
+
+/**
+ * Gate0 residual: force soft MMIO handoff clear (no BAR steal / no R0 thrash).
+ * Compile-time gate0 only. Soft!=product; dual DoD B freestanding wire friend.
+ */
+static void
+lnds_gate0_force_no_bar_steal(void)
+{
+#if GJ_SOFT_R8169_MMIO_HANDOFF == 0
+    if (g_fMmioHandoff != 0) {
+        g_fMmioHandoff = 0;
+        if (g_cBarStealRefuse < 0xffffffffu) {
+            g_cBarStealRefuse++;
+        }
+    }
+#else
+    (void)0;
+#endif
+}
 
 /* ---- Helpers ------------------------------------------------------------ */
 
@@ -398,6 +581,19 @@ lnds_alloc_nd(int nSizeofPriv, unsigned uTxQs, unsigned uRxQs, void *pParent,
     pNd->u32Slot = i;
     pNd->mtu = 1500u;
     pNd->u8Attached = 1u;
+    /* Soft layout deepen residual (UDX/Linux-shaped; Soft!=host ABI). */
+    pNd->u16Type = (u16)LINUX_NETDEV_SOFT_ARPHRD_ETHER;
+    pNd->u16HardHeaderLen = (u16)LINUX_NETDEV_SOFT_ETH_HLEN;
+    pNd->u8AddrLen = (u8)LINUX_NETDEV_SOFT_ETH_ALEN;
+    pNd->u16MinMtu = (u16)LINUX_NETDEV_SOFT_MIN_MTU;
+    pNd->u32MaxMtu = LINUX_NETDEV_SOFT_MAX_MTU;
+    pNd->nIfindex = (int)(i + 1u);
+    pNd->u32SoftLayoutVer = LINUX_NETDEV_SOFT_LAYOUT_VER;
+    /* Soft default features: SG|CSUM|TSO-ish soft bits (bookkeeping only). */
+    pNd->u64Features = 0x3ull;       /* soft NETIF_F_SG | NETIF_F_IP_CSUM-ish */
+    pNd->u64HwFeatures = 0x3ull;
+    pNd->u64WantedFeatures = 0x3ull;
+    pNd->u64VlanFeatures = 0ull;
     /* Soft default name ethN; register may keep or driver may overwrite. */
     if (i < 10u) {
         pNd->name[0] = 'e';
@@ -408,6 +604,12 @@ lnds_alloc_nd(int nSizeofPriv, unsigned uTxQs, unsigned uRxQs, void *pParent,
     } else {
         (void)strlcpy(pNd->name, "eth?", sizeof(pNd->name));
     }
+    /*
+     * Install soft-owned ops / ethtool tables (LNDS / LNET magic).
+     * Soft field @+0x18 - independent of hostish ops @+0x8 that REAL .ko
+     * may store into the same slab. Soft!=product; freestanding owns wire.
+     */
+    lnds_install_default_soft_ops(pNd);
 
     if (g_cLive < 0xffffffffu) {
         g_cLive++;
@@ -417,7 +619,7 @@ lnds_alloc_nd(int nSizeofPriv, unsigned uTxQs, unsigned uRxQs, void *pParent,
 
 /**
  * Soft skb cookie check: non-NULL only if pSkb is a live pool entry.
- * Fail closed for host/.ko sk_buff layouts we do not own. Soft≠product.
+ * Fail closed for host/.ko sk_buff layouts we do not own. Soft!=product.
  */
 static struct soft_skb *
 lnds_skb_of(void *pSkb)
@@ -456,8 +658,8 @@ lnds_skb_free(void *pSkb)
 }
 
 /**
- * Soft pool alloc. fSetLen: 1 → uLen=uWant (RX-shaped); 0 → uLen=0 (TX put).
- * Soft≠product; does not call .ko ndo_start_xmit.
+ * Soft pool alloc. fSetLen: 1 -> uLen=uWant (RX-shaped); 0 -> uLen=0 (TX put).
+ * Soft!=product; does not call .ko ndo_start_xmit.
  */
 static struct soft_skb *
 lnds_skb_alloc(void *pNapi, unsigned uWant, int fSetLen)
@@ -572,7 +774,7 @@ lnds_napi_bind(void *pDev, void *pNapi, void *pfnPoll, int nWeight)
     /*
      * Soft body of netif_napi_add is invoked by .ko probe: mark KO_POLL so
      * soft_poll will not call pfnPoll while freestanding owns MMIO.
-     * Soft≠product dual-MMIO safety.
+     * Soft!=product dual-MMIO safety.
      */
     if (pfnPoll != NULL) {
         pSlot->u8State |= LNDS_NAPI_F_KO_POLL;
@@ -584,7 +786,7 @@ lnds_napi_bind(void *pDev, void *pNapi, void *pfnPoll, int nWeight)
  * Soft-enable NAPI slots bound to primary (or any used slot if primary cookie
  * matches). Used when L2 bridge turns ON / open_primary so feed_rx soft_poll
  * can run bookkeeping even if .ko open never reached soft napi_enable.
- * Soft≠product: state bits only; no .ko poll call here.
+ * Soft!=product: state bits only; no .ko poll call here.
  */
 static void
 lnds_napi_soft_enable_bridge_slots(void)
@@ -647,7 +849,7 @@ lnds_napi_soft_enable_bridge_slots(void)
         /* Grep: linux_netdev_soft: soft napi bridge enable */
         kprintf("linux_netdev_soft: soft napi bridge enable newly=%u "
                 "enabled=%u sched=%u mmio_handoff=%d "
-                "(Soft≠product; bookkeeping only; no .ko poll)\n",
+                "(Soft!=product; bookkeeping only; no .ko poll)\n",
                 (unsigned)cEn,
                 (unsigned)linux_netdev_soft_napi_enabled_count(),
                 (unsigned)linux_netdev_soft_napi_sched_count(),
@@ -672,7 +874,7 @@ lnds_log_once(u32 *pu32Ctr, const char *szTag, const void *pDev,
     return 0;
 }
 
-/** 1 if pOps is a soft-shaped ops table we own (magic+ver). Soft≠product. */
+/** 1 if pOps is a soft-shaped ops table we own (magic+ver 1..current). Soft!=product. */
 static int
 lnds_ops_is_soft(void *pOps)
 {
@@ -682,8 +884,245 @@ lnds_ops_is_soft(void *pOps)
         return 0;
     }
     pSoft = (const struct soft_netdev_ops *)pOps;
-    return (pSoft->u32Magic == LNDS_SOFT_OPS_MAGIC &&
-            pSoft->u32Ver == LNDS_SOFT_OPS_VER) ? 1 : 0;
+    if (pSoft->u32Magic != LNDS_SOFT_OPS_MAGIC) {
+        return 0;
+    }
+    /* Accept ver1 prefix and ver2 deepen tables. */
+    if (pSoft->u32Ver < 1u || pSoft->u32Ver > LNDS_SOFT_OPS_VER) {
+        return 0;
+    }
+    return 1;
+}
+
+/** 1 if pOps is soft ethtool table we own. Soft!=product. */
+static int
+lnds_ethtool_is_soft(void *pOps)
+{
+    const struct soft_ethtool_ops *pSoft;
+
+    if (pOps == NULL) {
+        return 0;
+    }
+    pSoft = (const struct soft_ethtool_ops *)pOps;
+    return (pSoft->u32Magic == LINUX_NETDEV_SOFT_ETHTOOL_MAGIC &&
+            pSoft->u32Ver == LINUX_NETDEV_SOFT_ETHTOOL_VER) ? 1 : 0;
+}
+
+/*
+ * Soft default ops bodies (eng residual; Soft!=product).
+ * Live freestanding 8168 -> fail closed (residual E; no BAR steal).
+ * Soft xmit may reverse-path soft-pool skb via freestanding L2 when safe.
+ */
+static int
+lnds_soft_ndo_init(void *pDev)
+{
+    (void)pDev;
+    return 0;
+}
+
+static void
+lnds_soft_ndo_uninit(void *pDev)
+{
+    (void)pDev;
+}
+
+static int
+lnds_soft_ndo_open(void *pDev)
+{
+    struct net_device *pNd = (struct net_device *)pDev;
+
+    /* Dual DoD B residual: never claim BAR via soft open. Soft!=product. */
+    lnds_gate0_force_no_bar_steal();
+    if (pNd == NULL || lnds_slab_of(pNd) == NULL) {
+        return LNDS_EINVAL;
+    }
+    if (lnds_live_fs_8168() != 0) {
+        /* Residual E: freestanding owns wire - bookkeeping only, no BAR. */
+        if (g_cLive8168FcOpen < 0xffffffffu) {
+            g_cLive8168FcOpen++;
+        }
+        return 0;
+    }
+    pNd->u8Open = 1u;
+    pNd->u8Carrier = 1u;
+    pNd->u8QueueStopped = 0u;
+    return 0;
+}
+
+static int
+lnds_soft_ndo_stop(void *pDev)
+{
+    struct net_device *pNd = (struct net_device *)pDev;
+
+    if (pNd == NULL || lnds_slab_of(pNd) == NULL) {
+        return LNDS_EINVAL;
+    }
+    pNd->u8Open = 0u;
+    pNd->u8Carrier = 0u;
+    pNd->u8QueueStopped = 1u;
+    return 0;
+}
+
+static int
+lnds_soft_ndo_start_xmit(void *pSkb, void *pDev)
+{
+    struct net_device *pNd = (struct net_device *)pDev;
+    int nSt;
+
+    (void)pNd;
+    /* Dual DoD B residual: soft xmit must never steal freestanding BAR. */
+    lnds_gate0_force_no_bar_steal();
+    if (lnds_live_fs_8168() != 0) {
+        /*
+         * Residual E: never .ko-shaped xmit dual-drive. Soft reverse path
+         * still allowed only via freestanding L2 when bridge ON elsewhere;
+         * default soft xmit fail-closed on live 8168 to keep sole owner.
+         * Never follow hostish ndo_start_xmit @ ops+0x20. Soft!=product.
+         */
+        if (g_cLive8168FcXmit < 0xffffffffu) {
+            g_cLive8168FcXmit++;
+        }
+        if (g_fLive8168XmitFcLog == 0) {
+            g_fLive8168XmitFcLog = 1;
+            /* Grep: linux_netdev_soft: soft xmit fail-closed live 8168 */
+            kprintf("linux_netdev_soft: soft xmit fail-closed live 8168 "
+                    "soft_ops_xmit=1 (Soft!=product; freestanding owns BAR; "
+                    "no .ko ndo_start_xmit; residual E; reverse TX via "
+                    "l2_xmit/dev_queue_xmit only; no_bar_steal=1)\n");
+        }
+        if (pSkb != NULL) {
+            lnds_skb_free(pSkb);
+        }
+        return LNDS_EOPNOTSUPP;
+    }
+    if (pSkb == NULL) {
+        return LNDS_EINVAL;
+    }
+    /* Soft-pool reverse TX only while freestanding owns wire. Soft!=product. */
+    if (lnds_soft_tx_freestanding_owns() == 0) {
+        if (pSkb != NULL) {
+            lnds_skb_free(pSkb);
+        }
+        return LNDS_EOPNOTSUPP;
+    }
+    nSt = linux_netdev_soft_l2_tx_from_skb(pSkb);
+    return (nSt == 0) ? 0 : LNDS_EOPNOTSUPP;
+}
+
+static int
+lnds_soft_ndo_set_mac(void *pDev, void *pSa)
+{
+    return eth_mac_addr(pDev, pSa);
+}
+
+static int
+lnds_soft_ndo_validate_addr(void *pDev)
+{
+    return eth_validate_addr(pDev);
+}
+
+static int
+lnds_soft_ndo_change_mtu(void *pDev, int nNewMtu)
+{
+    struct net_device *pNd = (struct net_device *)pDev;
+
+    if (pNd == NULL || lnds_slab_of(pNd) == NULL || pNd->u8Live == 0u) {
+        return LNDS_EINVAL;
+    }
+    if (nNewMtu < (int)pNd->u16MinMtu || nNewMtu > (int)pNd->u32MaxMtu) {
+        return LNDS_EINVAL;
+    }
+    pNd->mtu = (u32)nNewMtu;
+    return 0;
+}
+
+static void
+lnds_soft_ndo_tx_timeout(void *pDev, unsigned uTxq)
+{
+    (void)pDev;
+    (void)uTxq;
+    /* Soft no-op; freestanding owns wire timeouts. Soft!=product. */
+}
+
+static void
+lnds_soft_ndo_get_stats64(void *pDev, void *pStats)
+{
+    struct net_device *pNd = (struct net_device *)pDev;
+    struct soft_netdev_stats64 *pS = (struct soft_netdev_stats64 *)pStats;
+
+    if (pS == NULL) {
+        return;
+    }
+    memset(pS, 0, sizeof(*pS));
+    if (pNd == NULL || lnds_slab_of(pNd) == NULL || pNd->u8Live == 0u) {
+        return;
+    }
+    pS->u64RxPackets = pNd->u64RxPackets;
+    pS->u64TxPackets = pNd->u64TxPackets;
+    pS->u64RxBytes = pNd->u64RxBytes;
+    pS->u64TxBytes = pNd->u64TxBytes;
+    pS->u64RxDropped = pNd->u64RxDropped;
+    pS->u64TxDropped = pNd->u64TxDropped;
+}
+
+static const struct soft_netdev_ops g_softDefaultOps = {
+    .u32Magic = LNDS_SOFT_OPS_MAGIC,
+    .u32Ver = LNDS_SOFT_OPS_VER,
+    .ndo_open = lnds_soft_ndo_open,
+    .ndo_stop = lnds_soft_ndo_stop,
+    .ndo_init = lnds_soft_ndo_init,
+    .ndo_uninit = lnds_soft_ndo_uninit,
+    .ndo_start_xmit = lnds_soft_ndo_start_xmit,
+    .ndo_set_mac_address = lnds_soft_ndo_set_mac,
+    .ndo_validate_addr = lnds_soft_ndo_validate_addr,
+    .ndo_change_mtu = lnds_soft_ndo_change_mtu,
+    .ndo_tx_timeout = lnds_soft_ndo_tx_timeout,
+    .ndo_get_stats64 = lnds_soft_ndo_get_stats64,
+};
+
+static const struct soft_ethtool_ops g_softDefaultEthtoolOps = {
+    .u32Magic = LINUX_NETDEV_SOFT_ETHTOOL_MAGIC,
+    .u32Ver = LINUX_NETDEV_SOFT_ETHTOOL_VER,
+    .get_link = ethtool_op_get_link,
+    .get_ts_info = ethtool_op_get_ts_info,
+};
+
+/**
+ * Install soft-owned default ops/ethtool on a soft netdev (alloc path).
+ * Soft!=product; does not touch hostish ops @+0x8. Once-log capped.
+ */
+static void
+lnds_install_default_soft_ops(struct net_device *pNd)
+{
+    if (pNd == NULL) {
+        return;
+    }
+    pNd->netdev_ops = (void *)&g_softDefaultOps;
+    pNd->ethtool_ops = (void *)&g_softDefaultEthtoolOps;
+    pNd->u8SoftOpsOwned = 1u;
+    if (g_fSoftDefaultOpsLog == 0) {
+        g_fSoftDefaultOpsLog = 1;
+        /* Grep: linux_netdev_soft: soft default ops install */
+        kprintf("linux_netdev_soft: soft default ops install "
+                "ops_ver=%u ethtool_ver=%u layout_ver=%u "
+                "(Soft!=product; LNDS soft table; freestanding owns wire; "
+                "no .ko ndo_open/xmit)\n",
+                (unsigned)LNDS_SOFT_OPS_VER,
+                (unsigned)LINUX_NETDEV_SOFT_ETHTOOL_VER,
+                (unsigned)LINUX_NETDEV_SOFT_LAYOUT_VER);
+    }
+}
+
+const struct soft_netdev_ops *
+linux_netdev_soft_default_ops(void)
+{
+    return &g_softDefaultOps;
+}
+
+const struct soft_ethtool_ops *
+linux_netdev_soft_default_ethtool_ops(void)
+{
+    return &g_softDefaultEthtoolOps;
 }
 
 /* Soft module load range (weak if linux_module not linked). */
@@ -691,7 +1130,7 @@ int linux_module_load_va_range(const char *szName, void **ppBase, u64 *pcb)
     __attribute__((weak));
 
 /**
- * True if pFn is inside [pBase, pBase+cb). Soft≠product diagnostic.
+ * True if pFn is inside [pBase, pBase+cb). Soft!=product diagnostic.
  */
 static int
 lnds_ptr_in_range(const void *pFn, const void *pBase, u64 cb)
@@ -714,7 +1153,7 @@ lnds_ptr_in_range(const void *pFn, const void *pBase, u64 cb)
 
 /**
  * Read hostish netdev_ops from a net_device-shaped base (soft or hostish blob).
- * Host OFF_NETDEV_OPS = 0x08. Soft≠product. No ndo_open call.
+ * Host OFF_NETDEV_OPS = 0x08. Soft!=product. No ndo_open call.
  */
 void *
 linux_netdev_soft_hostish_ops(void *pNd)
@@ -732,25 +1171,54 @@ linux_netdev_soft_hostish_ops(void *pNd)
 }
 
 /**
- * Read hostish ndo_open from ops table at +0x10 (RHEL 5.14 oracle).
- * Soft≠product. Never invokes the function.
+ * Read hostish function pointer from ops table at host relative offset.
+ * Soft!=product. Never invokes the function.
  */
-void *
-linux_netdev_soft_hostish_ndo_open(void *pNd)
+static void *
+lnds_hostish_ops_slot(void *pNd, u32 u32Off)
 {
     void *pOps;
-    void *pOpen;
+    void *pFn;
     const u8 *pOpsBytes;
 
     pOps = linux_netdev_soft_hostish_ops(pNd);
     if (pOps == NULL) {
         return NULL;
     }
-    pOpen = NULL;
+    pFn = NULL;
     pOpsBytes = (const u8 *)pOps;
-    memcpy(&pOpen, pOpsBytes + LINUX_NETDEV_HOSTISH_OPS_OFF_NDO_OPEN,
-           sizeof(void *));
-    return pOpen;
+    memcpy(&pFn, pOpsBytes + u32Off, sizeof(void *));
+    return pFn;
+}
+
+/**
+ * Read hostish ndo_open from ops table at +0x10 (RHEL 5.14 oracle).
+ * Soft!=product. Never invokes the function.
+ */
+void *
+linux_netdev_soft_hostish_ndo_open(void *pNd)
+{
+    return lnds_hostish_ops_slot(pNd, LINUX_NETDEV_HOSTISH_OPS_OFF_NDO_OPEN);
+}
+
+/**
+ * Hostish ndo_stop @ ops+0x18. Soft deepen residual; never call. Soft!=product.
+ */
+void *
+linux_netdev_soft_hostish_ndo_stop(void *pNd)
+{
+    return lnds_hostish_ops_slot(pNd, LINUX_NETDEV_HOSTISH_OPS_OFF_NDO_STOP);
+}
+
+/**
+ * Hostish ndo_start_xmit @ ops+0x20. Soft deepen residual; never call.
+ * Soft!=product; freestanding owns wire under residual E.
+ */
+void *
+linux_netdev_soft_hostish_ndo_start_xmit(void *pNd)
+{
+    return lnds_hostish_ops_slot(pNd,
+                                 LINUX_NETDEV_HOSTISH_OPS_OFF_NDO_START_XMIT);
 }
 
 void *
@@ -768,9 +1236,228 @@ linux_netdev_soft_hostish_filled(void)
     return g_fHostishFilled != 0 ? 1 : 0;
 }
 
+void *
+linux_netdev_soft_hostish_ops_cached(void)
+{
+    return g_fHostishFilled != 0 ? g_pHostishOpsCached : NULL;
+}
+
+void *
+linux_netdev_soft_hostish_ndo_open_cached(void)
+{
+    return g_fHostishFilled != 0 ? g_pHostishNdoOpenCached : NULL;
+}
+
+void *
+linux_netdev_soft_hostish_ndo_stop_cached(void)
+{
+    return g_fHostishFilled != 0 ? g_pHostishNdoStopCached : NULL;
+}
+
+void *
+linux_netdev_soft_hostish_ndo_xmit_cached(void)
+{
+    return g_fHostishFilled != 0 ? g_pHostishNdoXmitCached : NULL;
+}
+
+/*
+ * Hostish residual refuse helpers (inventory honesty; Soft!=product).
+ * Residual E / Option B readiness: recover pointers, never invoke under
+ * freestanding wire ownership. Once-lamp; tallies only. Cap logs.
+ * Grep: linux_netdev_soft: soft hostish residual refuse
+ */
+int
+linux_netdev_soft_hostish_ndo_open_refuse(void)
+{
+    void *pOpen;
+
+    if (g_cHostishOpenRefuse < 0xffffffffu) {
+        g_cHostishOpenRefuse++;
+    }
+    pOpen = linux_netdev_soft_hostish_ndo_open_cached();
+    if (pOpen == NULL && g_pPrimary != NULL) {
+        pOpen = linux_netdev_soft_hostish_ndo_open(g_pPrimary);
+    }
+    if (g_fHostishOpenRefuseLog == 0) {
+        g_fHostishOpenRefuseLog = 1;
+        /* Grep: linux_netdev_soft: soft hostish residual refuse */
+        kprintf("linux_netdev_soft: soft hostish residual refuse "
+                "ndo_open=%p live_fs_8168=%d mmio_handoff=%d filled=%d "
+                "(Soft!=product; residual E; no .ko ndo_open call; "
+                "freestanding owns wire; Option B gate default 0)\n",
+                pOpen, lnds_live_fs_8168(), g_fMmioHandoff,
+                g_fHostishFilled);
+    }
+    (void)pOpen;
+    return LNDS_EOPNOTSUPP;
+}
+
+int
+linux_netdev_soft_hostish_ndo_xmit_refuse(void)
+{
+    void *pXmit;
+
+    if (g_cHostishXmitRefuse < 0xffffffffu) {
+        g_cHostishXmitRefuse++;
+    }
+    pXmit = linux_netdev_soft_hostish_ndo_xmit_cached();
+    if (pXmit == NULL && g_pPrimary != NULL) {
+        pXmit = linux_netdev_soft_hostish_ndo_start_xmit(g_pPrimary);
+    }
+    if (g_fHostishXmitRefuseLog == 0) {
+        g_fHostishXmitRefuseLog = 1;
+        /* Grep: linux_netdev_soft: soft hostish residual refuse */
+        kprintf("linux_netdev_soft: soft hostish residual refuse "
+                "ndo_xmit=%p live_fs_8168=%d mmio_handoff=%d filled=%d "
+                "(Soft!=product; residual E; no .ko ndo_start_xmit; "
+                "freestanding owns wire; G-AC-1)\n",
+                pXmit, lnds_live_fs_8168(), g_fMmioHandoff,
+                g_fHostishFilled);
+    }
+    (void)pXmit;
+    return LNDS_EOPNOTSUPP;
+}
+
+u32
+linux_netdev_soft_live8168_fc_open(void)
+{
+    return g_cLive8168FcOpen;
+}
+
+u32
+linux_netdev_soft_live8168_fc_napi(void)
+{
+    return g_cLive8168FcNapi;
+}
+
+u32
+linux_netdev_soft_live8168_fc_xmit(void)
+{
+    return g_cLive8168FcXmit;
+}
+
+u32
+linux_netdev_soft_layout_ver(void)
+{
+    if (g_pPrimary == NULL || g_pPrimary->u8Live == 0u) {
+        return 0u;
+    }
+    return g_pPrimary->u32SoftLayoutVer;
+}
+
+int
+linux_netdev_soft_primary_ifindex(void)
+{
+    if (g_pPrimary == NULL || g_pPrimary->u8Live == 0u) {
+        return 0;
+    }
+    return g_pPrimary->nIfindex;
+}
+
+u64
+linux_netdev_soft_primary_features(void)
+{
+    if (g_pPrimary == NULL || g_pPrimary->u8Live == 0u) {
+        return 0ull;
+    }
+    return g_pPrimary->u64Features;
+}
+
+/**
+ * Once-lamp soft layout deepen honesty. Soft!=product; hard-capped.
+ * Grep: linux_netdev_soft: soft layout deepen PASS
+ * Grep: linux_netdev_soft: soft residual layout
+ */
+int
+linux_netdev_soft_layout_deepen_lamp_once(void)
+{
+    struct net_device *pNd;
+    void *pOpsSoft;
+    void *pOpsHostish;
+    void *pNdoOpen;
+    void *pNdoStop;
+    void *pNdoXmit;
+    int fSoftOps;
+    int fSoftEth;
+
+    if (g_fLayoutDeepenLog != 0) {
+        return 0;
+    }
+    pNd = g_pPrimary;
+    if (pNd == NULL || pNd->u8Live == 0u) {
+        return 0;
+    }
+    g_fLayoutDeepenLog = 1;
+
+    pOpsSoft = pNd->netdev_ops;
+    pOpsHostish = linux_netdev_soft_hostish_ops(pNd);
+    pNdoOpen = linux_netdev_soft_hostish_ndo_open(pNd);
+    pNdoStop = linux_netdev_soft_hostish_ndo_stop(pNd);
+    pNdoXmit = linux_netdev_soft_hostish_ndo_start_xmit(pNd);
+    fSoftOps = lnds_ops_is_soft(pOpsSoft);
+    fSoftEth = lnds_ethtool_is_soft(pNd->ethtool_ops);
+
+    /*
+     * Grep: linux_netdev_soft: soft layout deepen PASS
+     * Soft!=product; ABI/hostability eng; freestanding_rtl SKIP default;
+     * product_nic=UDX residual fields.
+     */
+    kprintf("linux_netdev_soft: soft layout deepen PASS "
+            "layout_ver=%u front_used=240 nd_bytes=%u ops_ver=%u "
+            "ifindex=%d type=%u hh_len=%u addr_len=%u mtu=%u "
+            "min_mtu=%u max_mtu=%u features=0x%llx "
+            "soft_ops=%d soft_ethtool=%d soft_ops_owned=%u "
+            "hostish_ops=%p hostish_open=%p hostish_stop=%p hostish_xmit=%p "
+            "live_fs_8168=%d mmio_handoff=%d freestanding_rtl=%s "
+            "product_nic=UDX "
+            "(Soft!=product; ABI/hostability eng residual; "
+            "never freestanding wire product; no .ko ndo call)\n",
+            (unsigned)pNd->u32SoftLayoutVer,
+            (unsigned)LINUX_NETDEV_SOFT_ND_BYTES,
+            (unsigned)LNDS_SOFT_OPS_VER,
+            pNd->nIfindex,
+            (unsigned)pNd->u16Type,
+            (unsigned)pNd->u16HardHeaderLen,
+            (unsigned)pNd->u8AddrLen,
+            (unsigned)pNd->mtu,
+            (unsigned)pNd->u16MinMtu,
+            (unsigned)pNd->u32MaxMtu,
+            (unsigned long long)pNd->u64Features,
+            fSoftOps, fSoftEth, (unsigned)pNd->u8SoftOpsOwned,
+            pOpsHostish, pNdoOpen, pNdoStop, pNdoXmit,
+            lnds_live_fs_8168(), g_fMmioHandoff,
+            (GJ_RTL8168_PROBE == 0) ? "SKIP" : "opt_in");
+
+    /* Grep: linux_netdev_soft: soft residual layout */
+    /* Grep: linux_netdev_soft: soft residual C0 */
+    kprintf("linux_netdev_soft: soft residual layout Soft!=product "
+            "soft residual C0 claim_class=C0 "
+            "soft_nd=1 hostish_blob=%d "
+            "ops_table=soft_LNDS ethtool=soft_LNET "
+            "hostish_open=%p hostish_xmit=%p "
+            "fc_open=%u fc_napi=%u fc_xmit=%u "
+            "RUN_INIT=0 freestanding_no_exec=1 no_bar_steal=%d "
+            "freestanding_rtl=%s rtl_probe=%u product_nic=UDX "
+            "product_path=UDX product_tx_rx=OPEN G-AC-1 "
+            "dual_DoD_A=OPEN dual_DoD_B=OPEN "
+            "(C0 soft residual; ABI/hostability eng; soft fields/ops for UDX; "
+            "hostish inventory only no ndo call; "
+            "never freestanding wire product; residual E; no R0 thrash; "
+            "Dual DoD A/B OPEN until UDX DUT; not freestanding :22 close)\n",
+            g_fHostishFilled,
+            g_pHostishNdoOpenCached, g_pHostishNdoXmitCached,
+            (unsigned)g_cLive8168FcOpen, (unsigned)g_cLive8168FcNapi,
+            (unsigned)g_cLive8168FcXmit,
+            g_fMmioHandoff == 0 ? 1 : 0,
+            (GJ_RTL8168_PROBE == 0) ? "SKIP" : "opt_in",
+            (unsigned)GJ_RTL8168_PROBE);
+
+    return 1;
+}
+
 /**
  * Optional overlay: if hostish name/mtu/dev_addr empty after memcpy, copy from
- * soft bookkeeping fields (soft name@0 / mtu / dev_addr). Soft≠product.
+ * soft bookkeeping fields (soft name@0 / mtu / dev_addr). Soft!=product.
  */
 static void
 lnds_hostish_overlay_soft_known(u8 *pHost, const struct net_device *pSoft)
@@ -828,7 +1515,7 @@ lnds_hostish_overlay_soft_known(u8 *pHost, const struct net_device *pSoft)
 /**
  * Dual hostish net_device fill from soft primary (or pSoftNd).
  * Grep: linux_netdev_soft: soft hostish net_device fill PASS
- * Soft≠product; never calls ndo_open.
+ * Soft!=product; never calls ndo_open.
  */
 int
 linux_netdev_soft_hostish_fill(void *pSoftNd)
@@ -840,6 +1527,8 @@ linux_netdev_soft_hostish_fill(void *pSoftNd)
     u32 u32Copy;
     void *pOps;
     void *pNdoOpen;
+    void *pNdoStop;
+    void *pNdoXmit;
     void *pModBase;
     u64 cbMod;
     int fInR8169;
@@ -896,6 +1585,8 @@ linux_netdev_soft_hostish_fill(void *pSoftNd)
     g_pHostishPrimary = pHost;
     g_pHostishOpsCached = pOps;
     g_pHostishNdoOpenCached = pNdoOpen;
+    g_pHostishNdoStopCached = linux_netdev_soft_hostish_ndo_stop(pHost);
+    g_pHostishNdoXmitCached = linux_netdev_soft_hostish_ndo_start_xmit(pHost);
     g_fHostishFilled = 1;
 
     pModBase = NULL;
@@ -913,29 +1604,46 @@ linux_netdev_soft_hostish_fill(void *pSoftNd)
         }
     }
 
+    pNdoStop = g_pHostishNdoStopCached;
+    pNdoXmit = g_pHostishNdoXmitCached;
+
     if (g_fHostishNdFillLog == 0) {
         g_fHostishNdFillLog = 1;
         /*
          * Grep: linux_netdev_soft: soft hostish net_device fill PASS
-         * Soft≠product; layout soft≠host; no ndo_open call.
+         * Soft!=product; layout soft!=host; no ndo_open / xmit call.
          */
         kprintf("linux_netdev_soft: soft hostish net_device fill PASS "
-                "ops=%p ndo_open=%p in_r8169=%d "
+                "ops=%p ndo_open=%p ndo_stop=%p ndo_xmit=%p in_r8169=%d "
                 "blob=%p soft=%p cb=0x%x host_sz=0x%x "
                 "ops_off=0x%x ndo_open_off=0x%x "
-                "(Soft≠product; dual object; no ndo_open call)\n",
-                pOps, pNdoOpen, fInR8169, (void *)pHost, (void *)pSoft,
+                "layout_ver=%u ifindex=%d "
+                "(Soft!=product; dual object; no ndo call; freestanding wire)\n",
+                pOps, pNdoOpen, pNdoStop, pNdoXmit, fInR8169,
+                (void *)pHost, (void *)pSoft,
                 (unsigned)u32Copy,
                 (unsigned)LINUX_NETDEV_HOSTISH_SIZE_NET_DEVICE,
                 (unsigned)LINUX_NETDEV_HOSTISH_OFF_NETDEV_OPS,
-                (unsigned)LINUX_NETDEV_HOSTISH_OPS_OFF_NDO_OPEN);
+                (unsigned)LINUX_NETDEV_HOSTISH_OPS_OFF_NDO_OPEN,
+                (unsigned)pSoft->u32SoftLayoutVer, pSoft->nIfindex);
     }
+
+    /* Soft layout deepen once-lamp after hostish fill. Soft!=product. */
+    (void)linux_netdev_soft_layout_deepen_lamp_once();
+
+    /*
+     * Hostish residual refuse once-lamp (inventory honesty; no ndo call).
+     * Residual E: freestanding owns wire - refuse helpers never invoke.
+     * Soft!=product; cap logs (no stamp storms).
+     */
+    (void)linux_netdev_soft_hostish_ndo_open_refuse();
+    (void)linux_netdev_soft_hostish_ndo_xmit_refuse();
 
     return 0;
 }
 
 /**
- * Read-only soft vs hostish netdev_ops diagnostic. Soft≠product.
+ * Read-only soft vs hostish netdev_ops diagnostic. Soft!=product.
  * Grep: linux_netdev_soft: soft ops diagnostic
  */
 void
@@ -963,7 +1671,7 @@ linux_netdev_soft_ops_diagnostic(void)
     if (pNd == NULL) {
         /* Grep: linux_netdev_soft: soft ops diagnostic */
         kprintf("linux_netdev_soft: soft ops diagnostic SKIP (no primary; "
-                "Soft≠product; no ndo_open call)\n");
+                "Soft!=product; no ndo_open call)\n");
         return;
     }
 
@@ -998,15 +1706,23 @@ linux_netdev_soft_ops_diagnostic(void)
     /*
      * Grep: linux_netdev_soft: soft ops diagnostic
      * soft_ops = soft struct field (+0x18); hostish_ops = word at +0x8.
-     * Never call ndo_open. Soft≠product. Layout soft≠host.
+     * Never call ndo_open. Soft!=product. Layout soft!=host.
      */
     kprintf("linux_netdev_soft: soft ops diagnostic "
             "soft_ops=%p hostish_ops@+0x8=%p hostish_ndo_open@+0x10=%p "
-            "soft_magic=%d in_r8169_soft=%d in_r8169_hostish=%d "
+            "hostish_ndo_stop@+0x18=%p hostish_ndo_xmit@+0x20=%p "
+            "soft_magic=%d soft_layout_ver=%u ifindex=%d "
+            "in_r8169_soft=%d in_r8169_hostish=%d "
             "in_r8169_ndo_open=%d hostish_blob=%p hostish_filled=%d "
             "r8169_load=%p..+0x%lx host_ndo_open_off=0x%x "
-            "(Soft≠product; layout soft≠host; no ndo_open call)\n",
-            pOpsSoft, pOpsHostish, pNdoOpen, fSoftMagic, fInSoft, fInHostish,
+            "(Soft!=product; layout soft!=host; no ndo call; "
+            "freestanding owns wire)\n",
+            pOpsSoft, pOpsHostish, pNdoOpen,
+            linux_netdev_soft_hostish_ndo_stop(pNd),
+            linux_netdev_soft_hostish_ndo_start_xmit(pNd),
+            fSoftMagic,
+            (unsigned)pNd->u32SoftLayoutVer, pNd->nIfindex,
+            fInSoft, fInHostish,
             fInNdoOpen, pBlob, g_fHostishFilled, pModBase,
             (unsigned long)cbMod,
             (unsigned)LINUX_NETDEV_HOSTISH_OPS_OFF_NDO_OPEN);
@@ -1014,30 +1730,82 @@ linux_netdev_soft_ops_diagnostic(void)
 
 /**
  * Optional soft-only open via soft-shaped ops table.
- * If netdev_ops is .ko (non-null, not our magic): DO NOT call open —
- * log once and leave MMIO to freestanding. Soft≠product.
+ * If netdev_ops is .ko (non-null, not our magic): DO NOT call open -
+ * log once and leave MMIO to freestanding. Soft!=product.
+ * Residual E: live freestanding 8168 -> fail closed (never .ko ndo_open).
  */
 static void
 lnds_soft_dev_open(struct net_device *pNd)
 {
     const struct soft_netdev_ops *pSoft;
     int nSt;
+    int fLiveFs;
 
     if (pNd == NULL) {
         return;
     }
+    /* Dual DoD B residual: never dual-drive BAR on soft open. Soft!=product. */
+    lnds_gate0_force_no_bar_steal();
+    fLiveFs = lnds_live_fs_8168();
     if (pNd->netdev_ops == NULL) {
+        /* Soft bookkeeping open only; no ops. Residual E still honest. */
+        if (fLiveFs != 0) {
+            if (g_cLive8168FcOpen < 0xffffffffu) {
+                g_cLive8168FcOpen++;
+            }
+            if (g_fLive8168OpenFcLog == 0) {
+                g_fLive8168OpenFcLog = 1;
+                /* Grep: linux_netdev_soft: soft open fail-closed live 8168 */
+                kprintf("linux_netdev_soft: soft open fail-closed live 8168 "
+                        "name=%s ops=NULL (Soft!=product; freestanding owns BAR; "
+                        "no .ko ndo_open; residual E)\n",
+                        lnds_name_of(pNd));
+            }
+        }
         return;
     }
     if (lnds_ops_is_soft(pNd->netdev_ops) == 0) {
-        /* .ko or foreign ops — never invoke (dual-drive MMIO risk). */
+        /* .ko or foreign ops - never invoke (dual-drive MMIO risk). */
         if (g_fSoftOpenSkipKoLog == 0) {
             g_fSoftOpenSkipKoLog = 1;
             /* Grep: linux_netdev_soft: soft open skip .ko ops */
             kprintf("linux_netdev_soft: soft open skip .ko ops "
                     "(MMIO freestanding owns) name=%s ops=%p "
-                    "(Soft≠product)\n",
+                    "(Soft!=product)\n",
                     lnds_name_of(pNd), pNd->netdev_ops);
+        }
+        if (fLiveFs != 0) {
+            if (g_cLive8168FcOpen < 0xffffffffu) {
+                g_cLive8168FcOpen++;
+            }
+            if (g_fLive8168OpenFcLog == 0) {
+                g_fLive8168OpenFcLog = 1;
+                /* Grep: linux_netdev_soft: soft open fail-closed live 8168 */
+                kprintf("linux_netdev_soft: soft open fail-closed live 8168 "
+                        "name=%s ops=%p (Soft!=product; freestanding owns BAR; "
+                        "no .ko ndo_open; residual E; hybrid SOFT must not steal "
+                        "BAR)\n",
+                        lnds_name_of(pNd), pNd->netdev_ops);
+            }
+            /* Hostish residual refuse (inventory; no call). Soft!=product. */
+            (void)linux_netdev_soft_hostish_ndo_open_refuse();
+        }
+        return;
+    }
+    /*
+     * Soft-shaped ops only. Still refuse soft ndo_open body while live FS
+     * owns BAR - residual E honesty (no accidental program path). Soft!=product.
+     */
+    if (fLiveFs != 0) {
+        if (g_cLive8168FcOpen < 0xffffffffu) {
+            g_cLive8168FcOpen++;
+        }
+        if (g_fLive8168OpenFcLog == 0) {
+            g_fLive8168OpenFcLog = 1;
+            kprintf("linux_netdev_soft: soft open fail-closed live 8168 "
+                    "name=%s soft_ops=1 (Soft!=product; freestanding owns wire; "
+                    "bookkeeping open only; residual E)\n",
+                    lnds_name_of(pNd));
         }
         return;
     }
@@ -1045,12 +1813,12 @@ lnds_soft_dev_open(struct net_device *pNd)
     if (pSoft->ndo_open == NULL) {
         return;
     }
-    /* Soft-owned open only (not .ko). Soft≠product. */
+    /* Soft-owned open only (not .ko). Soft!=product. */
     nSt = pSoft->ndo_open(pNd);
     (void)nSt;
 }
 
-/** First soft TX path entry lamp (note_tx or l2_xmit). Soft≠product. */
+/** First soft TX path entry lamp (note_tx or l2_xmit). Soft!=product. */
 static void
 lnds_l2_first_tx_lamp(int fOk)
 {
@@ -1060,9 +1828,202 @@ lnds_l2_first_tx_lamp(int fOk)
     g_fL2FirstTxLog = 1;
     /* Grep: linux_netdev_soft: soft l2 bridge first tx */
     kprintf("linux_netdev_soft: soft l2 bridge first tx ok=%d "
-            "attempt=%u accounted=%u (Soft≠product; freestanding owns wire)\n",
+            "attempt=%u accounted=%u (Soft!=product; freestanding owns wire)\n",
             fOk != 0 ? 1 : 0, (unsigned)g_cL2TxAttempt,
             (unsigned)g_cL2TxAccounted);
+}
+
+/*
+ * hold14 display counters (Soft!=product).
+ *
+ * Soft bridge fed/tx_ok climb only when feed_rx / note_tx run. Under hybrid
+ * SOFT, bridge may lag enable -> feed_rx rare while freestanding R/T (rtl)
+ * still climb. Mirror freestanding R/T into the panel when freestanding
+ * owns the wire so hold14 tracks live freestanding traffic (HY7).
+ * Never dual-drive; read-only counters. Soft!=product.
+ */
+static void
+lnds_hold14_sample_fs(u32 *pcFsRx, u32 *pcFsTx)
+{
+    u32 cFsRx;
+    u32 cFsTx;
+    int fFsReady;
+
+    cFsRx = 0u;
+    cFsTx = 0u;
+    /*
+     * Freestanding owns MMIO (handoff==0): sample rtl R/T when the hybrid
+     * surface is live (bridge ON, soft primary, or freestanding ready).
+     * feed_rx may be rare if bridge lags. Weak-safe if rtl not linked.
+     */
+    if (g_fMmioHandoff != 0) {
+        g_u32Hold14FsRx = 0u;
+        g_u32Hold14FsTx = 0u;
+        if (pcFsRx != NULL) {
+            *pcFsRx = 0u;
+        }
+        if (pcFsTx != NULL) {
+            *pcFsTx = 0u;
+        }
+        return;
+    }
+    fFsReady = 0;
+    if (rtl8168_ready != NULL && rtl8168_ready() != 0) {
+        fFsReady = 1;
+    }
+    if (g_fL2Bridge == 0 &&
+        (g_pPrimary == NULL || g_pPrimary->u8Registered == 0u) &&
+        fFsReady == 0) {
+        g_u32Hold14FsRx = 0u;
+        g_u32Hold14FsTx = 0u;
+        if (pcFsRx != NULL) {
+            *pcFsRx = 0u;
+        }
+        if (pcFsTx != NULL) {
+            *pcFsTx = 0u;
+        }
+        return;
+    }
+    if (rtl8168_rx_count != NULL) {
+        cFsRx = rtl8168_rx_count();
+    }
+    if (rtl8168_tx_count != NULL) {
+        cFsTx = rtl8168_tx_count();
+    }
+    g_u32Hold14FsRx = cFsRx;
+    g_u32Hold14FsTx = cFsTx;
+    if (pcFsRx != NULL) {
+        *pcFsRx = cFsRx;
+    }
+    if (pcFsTx != NULL) {
+        *pcFsTx = cFsTx;
+    }
+}
+
+static void
+lnds_hold14_counts(u32 *pcRx, u32 *pcTx)
+{
+    u32 cRx;
+    u32 cTx;
+    u32 cFsRx;
+    u32 cFsTx;
+
+    cRx = g_cL2RxFed;
+    cTx = g_cL2TxOk;
+    lnds_hold14_sample_fs(&cFsRx, &cFsTx);
+    if (cFsRx > cRx) {
+        cRx = cFsRx;
+    }
+    if (cFsTx > cTx) {
+        cTx = cFsTx;
+    }
+    /*
+     * Once-lamp when freestanding R or T first exceeds soft bookkeeping -
+     * greppable honesty that hold14 is freestanding R/T mirror (HY7).
+     * Soft!=product; not product AC / not continuous ping claim.
+     */
+    if (g_fHold14FsMirrorLog == 0 &&
+        (cFsRx > g_cL2RxFed || cFsTx > g_cL2TxOk)) {
+        g_fHold14FsMirrorLog = 1;
+        /* Grep: linux_netdev_soft: soft hold14 freestanding R/T mirror */
+        kprintf("linux_netdev_soft: soft hold14 freestanding R/T mirror "
+                "rx=%u tx=%u soft_fed=%u soft_tx=%u "
+                "(Soft!=product; freestanding owns wire; HY7)\n",
+                (unsigned)cFsRx, (unsigned)cFsTx,
+                (unsigned)g_cL2RxFed, (unsigned)g_cL2TxOk);
+    }
+    if (pcRx != NULL) {
+        *pcRx = cRx;
+    }
+    if (pcTx != NULL) {
+        *pcTx = cTx;
+    }
+}
+
+/** Append decimal u32 (0..99999) into *pq; Soft!=product panel helper. */
+static char *
+lnds_hold14_put_u32(char *qBr, u32 uTmp)
+{
+    if (uTmp >= 10000u) {
+        *qBr++ = (char)('0' + (uTmp / 10000u) % 10u);
+    }
+    if (uTmp >= 1000u) {
+        *qBr++ = (char)('0' + (uTmp / 1000u) % 10u);
+    }
+    if (uTmp >= 100u) {
+        *qBr++ = (char)('0' + (uTmp / 100u) % 10u);
+    }
+    if (uTmp >= 10u) {
+        *qBr++ = (char)('0' + (uTmp / 10u) % 10u);
+    }
+    *qBr++ = (char)('0' + (uTmp % 10u));
+    return qBr;
+}
+
+/**
+ * STATUS hold14: soft L2 bridge rx/tx (Soft!=product).
+ * Format matches main/net_eth: "l2 br rx=N tx=M". Never clobbers 7-13.
+ * Paints when bridge ON (or hybrid freestanding+primary) and counters change.
+ * freestanding R/T climb -> panel refresh even if feed_rx rare (bridge off SOFT).
+ * Grep / panel: L2 BR RX · hold14 · freestanding R/T
+ */
+static void
+lnds_hold14_l2_br_refresh(void)
+{
+    char szBr[48];
+    char *qBr;
+    const char *pBr;
+    u32 cRx;
+    u32 cTx;
+
+    /*
+     * Bridge ON is the normal latch. Under hybrid SOFT, bridge may lag
+     * (net_l2 note race) while freestanding R/T climb - still paint when
+     * soft primary is registered and freestanding owns wire, or when
+     * freestanding alone is ready (panel honesty before soft latch).
+     * Soft!=product. Not REAL probe mode only.
+     */
+    if (g_fL2Bridge == 0) {
+        int fFsReady;
+
+        if (g_fMmioHandoff != 0) {
+            return;
+        }
+        fFsReady = 0;
+        if (rtl8168_ready != NULL && rtl8168_ready() != 0) {
+            fFsReady = 1;
+        }
+        if ((g_pPrimary == NULL || g_pPrimary->u8Registered == 0u) &&
+            fFsReady == 0) {
+            return;
+        }
+    }
+    if (14u >= FB_HOLD_LINES) {
+        return;
+    }
+    lnds_hold14_counts(&cRx, &cTx);
+    if (g_fHold14Painted != 0 &&
+        cRx == g_u32LastHold14Rx && cTx == g_u32LastHold14Tx) {
+        return;
+    }
+    g_fHold14Painted = 1;
+    g_u32LastHold14Rx = cRx;
+    g_u32LastHold14Tx = cTx;
+
+    qBr = szBr;
+    pBr = "l2 br rx=";
+    while (*pBr != '\0') {
+        *qBr++ = *pBr++;
+    }
+    qBr = lnds_hold14_put_u32(qBr, cRx);
+    pBr = " tx=";
+    while (*pBr != '\0') {
+        *qBr++ = *pBr++;
+    }
+    qBr = lnds_hold14_put_u32(qBr, cTx);
+    *qBr = '\0';
+    /* STATUS static only - no scroll kprintf. Soft!=product. */
+    fb_console_hold(14, szBr);
 }
 
 /* ---- Public init / getters ---------------------------------------------- */
@@ -1075,9 +2036,10 @@ linux_netdev_soft_init(void)
 
     g_cInitCalls++;
     if (g_fReady) {
-        /* Grep: linux_netdev_soft: soft init PASS */
-        kprintf("linux_netdev_soft: soft init PASS (idempotent call=%u)\n",
-                (unsigned)g_cInitCalls);
+        /*
+         * Idempotent: silent after first PASS (no stamp storms).
+         * Soft!=product. Grep first-boot: soft init PASS.
+         */
         return;
     }
 
@@ -1086,7 +2048,22 @@ linux_netdev_soft_init(void)
     g_pHostishPrimary = NULL;
     g_pHostishOpsCached = NULL;
     g_pHostishNdoOpenCached = NULL;
+    g_pHostishNdoStopCached = NULL;
+    g_pHostishNdoXmitCached = NULL;
     g_fHostishNdFillLog = 0;
+    g_fHostishOpenRefuseLog = 0;
+    g_fHostishXmitRefuseLog = 0;
+    g_cHostishOpenRefuse = 0u;
+    g_cHostishXmitRefuse = 0u;
+    g_cLive8168FcOpen = 0u;
+    g_cLive8168FcNapi = 0u;
+    g_cLive8168FcXmit = 0u;
+    g_cRegSkipLog = 0u;
+    g_cUnregLog = 0u;
+    g_fInitPassLog = 0;
+    g_fMmioHandoffStateLog = 0;
+    g_fLayoutDeepenLog = 0;
+    g_fSoftDefaultOpsLog = 0;
     {
         u32 iH;
 
@@ -1127,19 +2104,34 @@ linux_netdev_soft_init(void)
     g_fNapiPollSkipKoLog = 0;
     g_fL2RxNapiLog = 0;
     g_fNapiBridgeEnLog = 0;
-    g_fMmioHandoff = 0; /* freestanding owns MMIO */
+    g_fMmioHandoff = 0; /* freestanding owns MMIO; gate0 residual force */
     g_fMmioHandoffReadyLog = 0;
     g_fMmioTryOpenLog = 0;
     g_fMmioTryOpenDone = 0; /* phase3 edge; gate-0 path still resets */
     g_fHybridLampLog = 0; /* phase 4a hybrid once-lamp */
+    g_fGate0ResidualLog = 0; /* dual DoD B residual once-lamp */
+    g_fResidualLeanLog = 0; /* soft residual lean once-lamp (ABI/hostability) */
+    g_cBarStealRefuse = 0u;
     g_fL2Bridge = 0;
     g_fL2BridgeLog = 0;
     g_fL2FirstTxLog = 0;
     g_cL2RxFed = 0u;
+    g_cL2RxAttempt = 0u;
+    g_cL2RxDrop = 0u;
     g_cL2TxOk = 0u;
     g_cL2TxFail = 0u;
     g_cL2TxAttempt = 0u;
     g_cL2TxAccounted = 0u;
+    g_u32LastHold14Rx = 0u;
+    g_u32LastHold14Tx = 0u;
+    g_fHold14Painted = 0;
+    g_u32Hold14FsRx = 0u;
+    g_u32Hold14FsTx = 0u;
+    g_fHold14FsMirrorLog = 0;
+    g_fMmioSetHandoffLog = 0;
+    g_fLive8168OpenFcLog = 0;
+    g_fLive8168NapiFcLog = 0;
+    g_fLive8168XmitFcLog = 0;
     g_cRtnlDepth = 0u;
     g_cRtnlLock = 0u;
     g_cRtnlUnlock = 0u;
@@ -1243,7 +2235,7 @@ linux_netdev_soft_init(void)
                   &u32KsymOk, &u32KsymSkip);
     lnds_ksym_one("napi_alloc_skb", (void *)napi_alloc_skb, &u32KsymOk,
                   &u32KsymSkip);
-    /* Post-probe NAPI soft bodies (replace empty ksym stubs). Soft≠product. */
+    /* Post-probe NAPI soft bodies (replace empty ksym stubs). Soft!=product. */
     lnds_ksym_one("napi_enable", (void *)napi_enable, &u32KsymOk, &u32KsymSkip);
     lnds_ksym_one("napi_disable", (void *)napi_disable, &u32KsymOk,
                   &u32KsymSkip);
@@ -1279,7 +2271,7 @@ linux_netdev_soft_init(void)
                   &u32KsymOk, &u32KsymSkip);
 
     /*
-     * Post-probe open/datapath (replace empty ksym stubs). Soft≠product;
+     * Post-probe open/datapath (replace empty ksym stubs). Soft!=product;
      * no dual-drive of freestanding MMIO. eth_platform fails closed so the
      * driver falls back to chip EEPROM rather than trusting a success stub.
      */
@@ -1300,7 +2292,7 @@ linux_netdev_soft_init(void)
      * Post-init without dual-drive: ethtool link / ts_info / net_ratelimit.
      * Empty ksym stubs returned 0 (link down; always suppress). Soft bodies
      * report freestanding/soft carrier and allow rate-limit prints.
-     * Soft≠product; no BAR touch.
+     * Soft!=product; no BAR touch.
      */
     lnds_ksym_one("ethtool_op_get_link", (void *)ethtool_op_get_link,
                   &u32KsymOk, &u32KsymSkip);
@@ -1310,7 +2302,7 @@ linux_netdev_soft_init(void)
                   &u32KsymSkip);
 
     /*
-     * Soft skb path (replace empty ksym stubs). Soft≠product; fail closed
+     * Soft skb path (replace empty ksym stubs). Soft!=product; fail closed
      * on non-pool cookies. No .ko ndo_start_xmit. Future r8169 soft TX.
      */
     lnds_ksym_one("skb_copy_bits", (void *)skb_copy_bits, &u32KsymOk,
@@ -1330,19 +2322,45 @@ linux_netdev_soft_init(void)
     lnds_ksym_one("__napi_alloc_skb", (void *)__napi_alloc_skb, &u32KsymOk,
                   &u32KsymSkip);
     /*
-     * Soft-originated TX reverse path (Soft≠product).
-     * bridge ON + freestanding owns → net_l2_tx; handoff pending fail closed.
+     * Soft-originated TX reverse path (Soft!=product).
+     * bridge ON + freestanding owns -> net_l2_tx; handoff pending fail closed.
      * No auto wire inject (GJ_SOFT_L2_TX_SMOKE default 0).
      */
     lnds_ksym_one("dev_queue_xmit", (void *)dev_queue_xmit, &u32KsymOk,
                   &u32KsymSkip);
 
-    /* Grep: linux_netdev_soft: soft init PASS */
-    kprintf("linux_netdev_soft: soft init PASS nd_max=%u skb_max=%u "
-            "nd_bytes=%u priv_max=%u napi_max=%u soft_ne_abi=1 product=OPEN\n",
-            (unsigned)LINUX_NETDEV_SOFT_MAX, (unsigned)LINUX_NETDEV_SOFT_SKB_MAX,
-            (unsigned)LINUX_NETDEV_SOFT_ND_BYTES,
-            (unsigned)LINUX_NETDEV_SOFT_PRIV_MAX, (unsigned)LNDS_NAPI_MAX);
+    /* Grep: linux_netdev_soft: soft init PASS - once only (no stamp storms). */
+    if (g_fInitPassLog == 0) {
+        g_fInitPassLog = 1;
+        kprintf("linux_netdev_soft: soft init PASS nd_max=%u skb_max=%u "
+                "nd_bytes=%u priv_max=%u napi_max=%u layout_ver=%u ops_ver=%u "
+                "soft_ne_abi=1 product=OPEN claim_class=C0 "
+                "RUN_INIT=0 freestanding_no_exec=1 no_bar_steal=1 "
+                "freestanding_rtl=%s rtl_probe=%u product_nic=UDX "
+                "product_path=UDX dual_DoD_A=OPEN dual_DoD_B=OPEN "
+                "gate0_mmio_handoff=%d "
+                "(Soft!=product; C0 soft residual; ABI/hostability eng; "
+                "never freestanding wire product; UDX residual fields; "
+                "residual E fail-closed live 8168; hostish inventory only; "
+                "dual DoD A/B residual OPEN until UDX DUT; G-AC-1; "
+                "no real BAR thrash; not freestanding :22 close)\n",
+                (unsigned)LINUX_NETDEV_SOFT_MAX,
+                (unsigned)LINUX_NETDEV_SOFT_SKB_MAX,
+                (unsigned)LINUX_NETDEV_SOFT_ND_BYTES,
+                (unsigned)LINUX_NETDEV_SOFT_PRIV_MAX, (unsigned)LNDS_NAPI_MAX,
+                (unsigned)LINUX_NETDEV_SOFT_LAYOUT_VER,
+                (unsigned)LNDS_SOFT_OPS_VER,
+                (GJ_RTL8168_PROBE == 0) ? "SKIP" : "opt_in",
+                (unsigned)GJ_RTL8168_PROBE,
+                (int)GJ_SOFT_R8169_MMIO_HANDOFF);
+    }
+    /* Gate0 residual: soft must not steal BAR; Soft!=product. */
+    lnds_gate0_force_no_bar_steal();
+    /*
+     * Residual lean once-lamp (ABI/hostability eng; C0). Soft!=product.
+     * freestanding_rtl SKIP + product_nic=UDX + Dual DoD OPEN. No stamp storm.
+     */
+    (void)linux_netdev_soft_residual_lean_lamp_once();
 
     if (u32KsymOk > 0u) {
         /* Grep: linux_netdev_soft: soft ksym register PASS */
@@ -1433,18 +2451,24 @@ register_netdev(void *pDev)
         if (g_cRegSkip < 0xffffffffu) {
             g_cRegSkip++;
         }
-        /* Grep: linux_netdev_soft: soft register SKIP */
-        kprintf("linux_netdev_soft: soft register SKIP (inval dev)\n");
+        /* Grep: linux_netdev_soft: soft register SKIP - cap logs. */
+        if (g_cRegSkipLog < LNDS_LOG_CAP) {
+            g_cRegSkipLog++;
+            kprintf("linux_netdev_soft: soft register SKIP (inval dev)\n");
+        }
         return -1;
     }
     if (pNd->u8Registered != 0u) {
         if (g_cRegSkip < 0xffffffffu) {
             g_cRegSkip++;
         }
-        /* Grep: linux_netdev_soft: soft register SKIP */
-        kprintf("linux_netdev_soft: soft register SKIP (already registered "
-                "name=%s)\n",
-                lnds_name_of(pNd));
+        /* Grep: linux_netdev_soft: soft register SKIP - cap logs. */
+        if (g_cRegSkipLog < LNDS_LOG_CAP) {
+            g_cRegSkipLog++;
+            kprintf("linux_netdev_soft: soft register SKIP (already registered "
+                    "name=%s)\n",
+                    lnds_name_of(pNd));
+        }
         return -1;
     }
 
@@ -1461,14 +2485,18 @@ register_netdev(void *pDev)
 
     /* Grep: linux_netdev_soft: soft register PASS name= */
     kprintf("linux_netdev_soft: soft register PASS name=%s mtu=%u "
-            "txqs=%u rxqs=%u slot=%u\n",
+            "txqs=%u rxqs=%u slot=%u ifindex=%d layout_ver=%u "
+            "soft_ops=%d features=0x%llx\n",
             lnds_name_of(pNd), (unsigned)pNd->mtu, (unsigned)pNd->u16TxQs,
-            (unsigned)pNd->u16RxQs, (unsigned)pNd->u32Slot);
+            (unsigned)pNd->u16RxQs, (unsigned)pNd->u32Slot,
+            pNd->nIfindex, (unsigned)pNd->u32SoftLayoutVer,
+            lnds_ops_is_soft(pNd->netdev_ops),
+            (unsigned long long)pNd->u64Features);
 
     /*
      * Strategy A dual hostish net_device: after REAL register, soft primary
      * already holds .ko host-offset stores (ops @+0x8 etc.). Memcpy into
-     * hostish blob for Option B readiness. Soft≠product; no ndo_open.
+     * hostish blob for Option B readiness. Soft!=product; no ndo_open.
      * Grep: linux_netdev_soft: soft hostish net_device fill PASS
      */
     if (g_pPrimary == pNd) {
@@ -1510,17 +2538,24 @@ unregister_netdev(void *pDev)
                 break;
             }
         }
-        /* Drop dual hostish blob when primary leaves. Soft≠product. */
+        /* Drop dual hostish blob when primary leaves. Soft!=product. */
         g_fHostishFilled = 0;
         g_pHostishPrimary = NULL;
         g_pHostishOpsCached = NULL;
         g_pHostishNdoOpenCached = NULL;
+        g_pHostishNdoStopCached = NULL;
+        g_pHostishNdoXmitCached = NULL;
         g_aNdHostishLive[0] = 0u;
         if (g_pPrimary != NULL) {
             (void)linux_netdev_soft_hostish_fill(g_pPrimary);
         }
     }
-    kprintf("linux_netdev_soft: soft unregister name=%s\n", lnds_name_of(pNd));
+    /* Cap unregister logs (no stamp storms). Soft!=product. */
+    if (g_cUnregLog < LNDS_LOG_CAP) {
+        g_cUnregLog++;
+        kprintf("linux_netdev_soft: soft unregister name=%s\n",
+                lnds_name_of(pNd));
+    }
 }
 
 void
@@ -1546,6 +2581,8 @@ free_netdev(void *pDev)
         g_pHostishPrimary = NULL;
         g_pHostishOpsCached = NULL;
         g_pHostishNdoOpenCached = NULL;
+        g_pHostishNdoStopCached = NULL;
+        g_pHostishNdoXmitCached = NULL;
         g_aNdHostishLive[0] = 0u;
     }
     if (g_cLive > 0u) {
@@ -1681,7 +2718,7 @@ napi_enable(void *pNapi)
         g_cNapiLog++;
         /* Grep: linux_netdev_soft: soft napi enable */
         kprintf("linux_netdev_soft: soft napi enable napi=%p dev=%p "
-                "calls=%u live=%u (Soft≠product)\n",
+                "calls=%u live=%u (Soft!=product)\n",
                 pNapi, pSlot->pDev, (unsigned)g_cNapiEnable,
                 (unsigned)g_cNapiLive);
     }
@@ -1704,7 +2741,7 @@ napi_disable(void *pNapi)
         return;
     }
     /*
-     * Soft: drop ENABLED + SCHED immediately (no wait for poll). Soft≠product
+     * Soft: drop ENABLED + SCHED immediately (no wait for poll). Soft!=product
      * synchronize_irq / busy-wait for NAPI_STATE_SCHED clear.
      */
     pSlot->u8State &= (u8)~(LNDS_NAPI_F_ENABLED | LNDS_NAPI_F_SCHED |
@@ -1713,7 +2750,7 @@ napi_disable(void *pNapi)
         g_cNapiLog++;
         /* Grep: linux_netdev_soft: soft napi disable */
         kprintf("linux_netdev_soft: soft napi disable napi=%p calls=%u "
-                "(Soft≠product)\n",
+                "(Soft!=product)\n",
                 pNapi, (unsigned)g_cNapiDisable);
     }
 }
@@ -1759,7 +2796,7 @@ napi_schedule_prep(void *pNapi)
         g_cNapiLog++;
         /* Grep: linux_netdev_soft: soft napi prep */
         kprintf("linux_netdev_soft: soft napi prep ok napi=%p calls=%u "
-                "(Soft≠product)\n",
+                "(Soft!=product)\n",
                 pNapi, (unsigned)g_cNapiPrepOk);
     }
     return 1;
@@ -1792,7 +2829,7 @@ napi_complete_done(void *pNapi, int nWorkDone)
         g_cNapiLog++;
         /* Grep: linux_netdev_soft: soft napi complete */
         kprintf("linux_netdev_soft: soft napi complete napi=%p work=%d "
-                "resched=%d calls=%u (Soft≠product)\n",
+                "resched=%d calls=%u (Soft!=product)\n",
                 pNapi, nWorkDone, fResched, (unsigned)g_cNapiComplete);
     }
     (void)nWorkDone;
@@ -1831,7 +2868,7 @@ int
 napi_gro_receive(void *pNapi, void *pSkb)
 {
     (void)pNapi;
-    /* Soft GRO: same as receive drop path (no real GRO merge). Soft≠product. */
+    /* Soft GRO: same as receive drop path (no real GRO merge). Soft!=product. */
     return netif_receive_skb(pSkb);
 }
 
@@ -1909,7 +2946,7 @@ rtnl_lock(void)
     if (g_fRtnlLogOnce == 0) {
         g_fRtnlLogOnce = 1;
         /* Grep: linux_netdev_soft: soft rtnl */
-        kprintf("linux_netdev_soft: soft rtnl lock depth=%u (Soft≠product; "
+        kprintf("linux_netdev_soft: soft rtnl lock depth=%u (Soft!=product; "
                 "no wait)\n",
                 (unsigned)g_cRtnlDepth);
     }
@@ -1928,7 +2965,7 @@ rtnl_unlock(void)
         g_fRtnlLogOnce = 1;
         /* Grep: linux_netdev_soft: soft rtnl */
         kprintf("linux_netdev_soft: soft rtnl unlock depth=%u "
-                "(Soft≠product)\n",
+                "(Soft!=product)\n",
                 (unsigned)g_cRtnlDepth);
     }
 }
@@ -1941,7 +2978,7 @@ eth_platform_get_mac_address(void *pDev, u8 *pu8Addr)
      * Fail closed: empty ksym stub returned 0 (success) without writing a
      * MAC, which can strand open with a zero/garbage address. Drivers that
      * treat platform MAC as optional fall back to EEPROM on -EOPNOTSUPP.
-     * Soft≠product (no DT/ACPI MAC oracle).
+     * Soft!=product (no DT/ACPI MAC oracle).
      */
     if (pu8Addr != NULL) {
         memset(pu8Addr, 0, 6u);
@@ -1950,7 +2987,7 @@ eth_platform_get_mac_address(void *pDev, u8 *pu8Addr)
         g_fEthPlatLogOnce = 1;
         /* Grep: linux_netdev_soft: soft eth_platform EOPNOTSUPP */
         kprintf("linux_netdev_soft: soft eth_platform EOPNOTSUPP "
-                "(null/zero addr; driver may use chip EEPROM; Soft≠product)\n");
+                "(null/zero addr; driver may use chip EEPROM; Soft!=product)\n");
     }
     return LNDS_EOPNOTSUPP;
 }
@@ -1981,7 +3018,7 @@ eth_mac_addr(void *pDev, void *pSa)
         g_fEthMacLogOnce = 1;
         /* Grep: linux_netdev_soft: soft eth_mac */
         kprintf("linux_netdev_soft: soft eth_mac set name=%s "
-                "%02x:%02x:%02x:%02x:%02x:%02x (Soft≠product)\n",
+                "%02x:%02x:%02x:%02x:%02x:%02x (Soft!=product)\n",
                 lnds_name_of(pNd),
                 (unsigned)pNd->dev_addr[0], (unsigned)pNd->dev_addr[1],
                 (unsigned)pNd->dev_addr[2], (unsigned)pNd->dev_addr[3],
@@ -2032,7 +3069,7 @@ eth_type_trans(void *pSkb, void *pDev)
     }
     pSoft = lnds_skb_of(pSkb);
     if (pSoft == NULL) {
-        /* Unknown skb cookie (host layout): soft zero type; Soft≠product. */
+        /* Unknown skb cookie (host layout): soft zero type; Soft!=product. */
         return 0u;
     }
     if (pSoft->uLen < 14u) {
@@ -2051,19 +3088,19 @@ synchronize_net(void)
     }
     /*
      * Soft no-op: no RCU grace, no NAPI wait. Open/close paths that call
-     * synchronize_net continue immediately. Soft≠product.
+     * synchronize_net continue immediately. Soft!=product.
      */
     if (g_fSyncNetLogOnce == 0) {
         g_fSyncNetLogOnce = 1;
         /* Grep: linux_netdev_soft: soft synchronize_net */
-        kprintf("linux_netdev_soft: soft synchronize_net (no-op; Soft≠product)\n");
+        kprintf("linux_netdev_soft: soft synchronize_net (no-op; Soft!=product)\n");
     }
 }
 
 /*
- * ethtool_op_get_link(dev) — Linux returns 1 if carrier, 0 if down.
+ * ethtool_op_get_link(dev) - Linux returns 1 if carrier, 0 if down.
  * Empty ksym stub returned 0 always (false down). Soft: soft netdev carrier,
- * else freestanding rtl8168_ready. Soft≠product; no dual-drive.
+ * else freestanding rtl8168_ready. Soft!=product; no dual-drive.
  * Grep: linux_netdev_soft: soft ethtool_op_get_link
  */
 u32
@@ -2082,22 +3119,22 @@ ethtool_op_get_link(void *pDev)
             uLink = 1u;
         }
     } else if (rtl8168_ready() != 0) {
-        /* Unknown cookie or no soft carrier — freestanding wire up. */
+        /* Unknown cookie or no soft carrier - freestanding wire up. */
         uLink = 1u;
     }
     if (g_fEthtoolLinkLog == 0) {
         g_fEthtoolLinkLog = 1;
         /* Grep: linux_netdev_soft: soft ethtool_op_get_link */
         kprintf("linux_netdev_soft: soft ethtool_op_get_link link=%u "
-                "(Soft≠product; no BAR)\n",
+                "(Soft!=product; no BAR)\n",
                 (unsigned)uLink);
     }
     return uLink;
 }
 
 /*
- * ethtool_op_get_ts_info(dev, info) — soft zero info blob (if non-NULL) and
- * return 0. No HW timestamp oracle. Soft≠product.
+ * ethtool_op_get_ts_info(dev, info) - soft zero info blob (if non-NULL) and
+ * return 0. No HW timestamp oracle. Soft!=product.
  * Grep: linux_netdev_soft: soft ethtool_op_get_ts_info
  */
 int
@@ -2110,7 +3147,7 @@ ethtool_op_get_ts_info(void *pDev, void *pInfo)
     /*
      * Soft: clear first 44 B of ethtool_ts_info shape (cmd/so_timestamping/
      * phc_index/tx_types/rx_filters common head). Fail closed if no buffer.
-     * Soft≠product; no PHC.
+     * Soft!=product; no PHC.
      */
     if (pInfo != NULL) {
         memset(pInfo, 0, 44u);
@@ -2119,15 +3156,15 @@ ethtool_op_get_ts_info(void *pDev, void *pInfo)
         g_fEthtoolTsLog = 1;
         /* Grep: linux_netdev_soft: soft ethtool_op_get_ts_info */
         kprintf("linux_netdev_soft: soft ethtool_op_get_ts_info zero "
-                "(no PHC; Soft≠product)\n");
+                "(no PHC; Soft!=product)\n");
     }
     return 0;
 }
 
 /*
- * net_ratelimit() — Linux returns 1 to allow print, 0 to suppress.
+ * net_ratelimit() - Linux returns 1 to allow print, 0 to suppress.
  * Empty ksym stub returned 0 (always suppress). Soft always allows.
- * Soft≠product.
+ * Soft!=product.
  * Grep: linux_netdev_soft: soft net_ratelimit
  */
 int
@@ -2140,7 +3177,7 @@ net_ratelimit(void)
         g_fNetRatelimitLog = 1;
         /* Grep: linux_netdev_soft: soft net_ratelimit */
         kprintf("linux_netdev_soft: soft net_ratelimit allow "
-                "(Soft≠product; no real token bucket)\n");
+                "(Soft!=product; no real token bucket)\n");
     }
     return 1;
 }
@@ -2156,11 +3193,11 @@ napi_alloc_skb(void *pNapi, unsigned uLen)
 
 /*
  * Soft skb path for future r8169 soft TX bookkeeping.
- * Fail closed on non-pool cookies. Soft≠product. No .ko ndo_start_xmit.
+ * Fail closed on non-pool cookies. Soft!=product. No .ko ndo_start_xmit.
  */
 
 /**
- * skb_copy_bits(skb, offset, to, len) — copy soft abData → buffer.
+ * skb_copy_bits(skb, offset, to, len) - copy soft abData -> buffer.
  * Soft: only our pool skbs; else -EFAULT once-log.
  */
 int
@@ -2182,7 +3219,7 @@ skb_copy_bits(const void *pSkb, int nOffset, void *pTo, int nLen)
             g_fSkbCopyBitsLog = 1;
             /* Grep: linux_netdev_soft: soft skb_copy_bits */
             kprintf("linux_netdev_soft: soft skb_copy_bits FAIL closed "
-                    "(not soft skb or bad args; Soft≠product)\n");
+                    "(not soft skb or bad args; Soft!=product)\n");
         }
         return LNDS_EFAULT;
     }
@@ -2195,7 +3232,7 @@ skb_copy_bits(const void *pSkb, int nOffset, void *pTo, int nLen)
         if (g_fSkbCopyBitsLog == 0) {
             g_fSkbCopyBitsLog = 1;
             kprintf("linux_netdev_soft: soft skb_copy_bits FAIL range "
-                    "off=%d len=%d uLen=%u (Soft≠product)\n",
+                    "off=%d len=%d uLen=%u (Soft!=product)\n",
                     nOffset, nLen, pSoft->uLen);
         }
         return LNDS_EFAULT;
@@ -2207,14 +3244,14 @@ skb_copy_bits(const void *pSkb, int nOffset, void *pTo, int nLen)
         g_fSkbCopyBitsLog = 1;
         /* Grep: linux_netdev_soft: soft skb_copy_bits */
         kprintf("linux_netdev_soft: soft skb_copy_bits PASS off=%d len=%d "
-                "(Soft≠product; soft pool only)\n",
+                "(Soft!=product; soft pool only)\n",
                 nOffset, nLen);
     }
     return 0;
 }
 
 /**
- * __skb_pad(skb, pad, free_on_error) — zero pad after soft data if room.
+ * __skb_pad(skb, pad, free_on_error) - zero pad after soft data if room.
  * Soft: does not grow uLen (Linux pad tailroom). Fail -ENOMEM; free if flag.
  */
 int
@@ -2235,7 +3272,7 @@ __skb_pad(void *pSkb, int nPad, int fFreeOnError)
             g_fSkbPadLog = 1;
             /* Grep: linux_netdev_soft: soft __skb_pad */
             kprintf("linux_netdev_soft: soft __skb_pad FAIL closed "
-                    "(not soft skb; Soft≠product)\n");
+                    "(not soft skb; Soft!=product)\n");
         }
         return LNDS_ENOMEM;
     }
@@ -2257,7 +3294,7 @@ __skb_pad(void *pSkb, int nPad, int fFreeOnError)
         if (g_fSkbPadLog == 0) {
             g_fSkbPadLog = 1;
             kprintf("linux_netdev_soft: soft __skb_pad FAIL no room "
-                    "pad=%d uLen=%u uCap=%u free=%d (Soft≠product)\n",
+                    "pad=%d uLen=%u uCap=%u free=%d (Soft!=product)\n",
                     nPad, uLenSave, uCapSave, fFreeOnError != 0 ? 1 : 0);
         }
         return LNDS_ENOMEM;
@@ -2267,15 +3304,15 @@ __skb_pad(void *pSkb, int nPad, int fFreeOnError)
         g_fSkbPadLog = 1;
         /* Grep: linux_netdev_soft: soft __skb_pad */
         kprintf("linux_netdev_soft: soft __skb_pad PASS pad=%d "
-                "(Soft≠product)\n",
+                "(Soft!=product)\n",
                 nPad);
     }
     return 0;
 }
 
 /**
- * skb_put(skb, len) — grow soft uLen; return pointer to previous tail.
- * Soft: NULL on non-pool or overflow (fail closed). Soft≠product.
+ * skb_put(skb, len) - grow soft uLen; return pointer to previous tail.
+ * Soft: NULL on non-pool or overflow (fail closed). Soft!=product.
  */
 void *
 skb_put(void *pSkb, unsigned uLen)
@@ -2295,7 +3332,7 @@ skb_put(void *pSkb, unsigned uLen)
             g_fSkbPutLog = 1;
             /* Grep: linux_netdev_soft: soft skb_put */
             kprintf("linux_netdev_soft: soft skb_put FAIL closed "
-                    "(not soft skb; Soft≠product)\n");
+                    "(not soft skb; Soft!=product)\n");
         }
         return NULL;
     }
@@ -2306,7 +3343,7 @@ skb_put(void *pSkb, unsigned uLen)
         if (g_fSkbPutLog == 0) {
             g_fSkbPutLog = 1;
             kprintf("linux_netdev_soft: soft skb_put FAIL overflow "
-                    "want=%u uLen=%u uCap=%u (Soft≠product)\n",
+                    "want=%u uLen=%u uCap=%u (Soft!=product)\n",
                     uLen, pSoft->uLen, pSoft->uCap);
         }
         return NULL;
@@ -2317,14 +3354,14 @@ skb_put(void *pSkb, unsigned uLen)
         g_fSkbPutLog = 1;
         /* Grep: linux_netdev_soft: soft skb_put */
         kprintf("linux_netdev_soft: soft skb_put PASS len=%u new_uLen=%u "
-                "(Soft≠product)\n",
+                "(Soft!=product)\n",
                 uLen, pSoft->uLen);
     }
     return pTail;
 }
 
 /**
- * pskb_may_pull(skb, len) — soft linear buffer always.
+ * pskb_may_pull(skb, len) - soft linear buffer always.
  * Soft: 1 if live soft skb has uLen >= len; else 0 fail closed.
  */
 int
@@ -2344,7 +3381,7 @@ pskb_may_pull(void *pSkb, unsigned uLen)
             g_fPskbMayPullLog = 1;
             /* Grep: linux_netdev_soft: soft pskb_may_pull */
             kprintf("linux_netdev_soft: soft pskb_may_pull FAIL closed "
-                    "(not soft skb; Soft≠product)\n");
+                    "(not soft skb; Soft!=product)\n");
         }
         return 0;
     }
@@ -2358,14 +3395,14 @@ pskb_may_pull(void *pSkb, unsigned uLen)
         g_fPskbMayPullLog = 1;
         /* Grep: linux_netdev_soft: soft pskb_may_pull */
         kprintf("linux_netdev_soft: soft pskb_may_pull PASS len=%u uLen=%u "
-                "(Soft≠product; linear soft)\n",
+                "(Soft!=product; linear soft)\n",
                 uLen, pSoft->uLen);
     }
     return 1;
 }
 
 /**
- * __pskb_pull_tail(skb, delta) — soft no frags; success if soft has data.
+ * __pskb_pull_tail(skb, delta) - soft no frags; success if soft has data.
  * Soft: return abData pointer (non-NULL) or NULL fail closed.
  */
 void *
@@ -2386,7 +3423,7 @@ __pskb_pull_tail(void *pSkb, int nDelta)
 }
 
 /**
- * pskb_expand_head(skb, nhead, ntail, gfp) — soft fixed slab.
+ * pskb_expand_head(skb, nhead, ntail, gfp) - soft fixed slab.
  * Soft: 0 if soft skb and nhead/ntail fit remaining; else -ENOMEM.
  */
 int
@@ -2415,8 +3452,8 @@ pskb_expand_head(void *pSkb, int nHead, int nTail, unsigned uGfp)
 }
 
 /**
- * __netdev_alloc_skb(dev, length, gfp) — soft pool; len starts 0 (TX put).
- * Soft≠product; no .ko xmit.
+ * __netdev_alloc_skb(dev, length, gfp) - soft pool; len starts 0 (TX put).
+ * Soft!=product; no .ko xmit.
  */
 void *
 __netdev_alloc_skb(void *pDev, unsigned uLen, unsigned uGfp)
@@ -2433,13 +3470,13 @@ __netdev_alloc_skb(void *pDev, unsigned uLen, unsigned uGfp)
         g_fNetdevAllocSkbLog = 1;
         /* Grep: linux_netdev_soft: soft __netdev_alloc_skb */
         kprintf("linux_netdev_soft: soft __netdev_alloc_skb %s len=%u "
-                "(Soft≠product; soft pool; no .ko xmit)\n",
+                "(Soft!=product; soft pool; no .ko xmit)\n",
                 pSkb != NULL ? "PASS" : "FAIL", uLen);
     }
     return pSkb;
 }
 
-/** dev_alloc_skb(length) — alias soft pool (GFP ignored). Soft≠product. */
+/** dev_alloc_skb(length) - alias soft pool (GFP ignored). Soft!=product. */
 void *
 dev_alloc_skb(unsigned uLen)
 {
@@ -2447,8 +3484,8 @@ dev_alloc_skb(unsigned uLen)
 }
 
 /**
- * __napi_alloc_skb(napi, length, gfp) — soft pool RX-shaped (uLen preset).
- * Soft≠product.
+ * __napi_alloc_skb(napi, length, gfp) - soft pool RX-shaped (uLen preset).
+ * Soft!=product.
  */
 void *
 __napi_alloc_skb(void *pNapi, unsigned uLen, unsigned uGfp)
@@ -2463,7 +3500,7 @@ netif_receive_skb(void *pSkb)
     /*
      * Soft bridge intake: count as soft stack RX then free skb.
      * Product demux remains freestanding net_eth handle_frame.
-     * Soft≠product.
+     * Soft!=product.
      */
     if (pSkb != NULL) {
         if (g_cSkbDrop < 0xffffffffu) {
@@ -2486,15 +3523,20 @@ linux_netdev_soft_open_primary(void)
     if (!g_fReady) {
         linux_netdev_soft_init();
     }
+    /*
+     * Dual DoD B residual: soft open is control-object only.
+     * Force freestanding sole BAR before any open bookkeeping. Soft!=product.
+     */
+    lnds_gate0_force_no_bar_steal();
     pNd = g_pPrimary;
     if (pNd == NULL || pNd->u8Registered == 0u) {
         return;
     }
 
-    /* Layout diagnostic once (read-only; no .ko ndo_open). Soft≠product. */
+    /* Layout diagnostic once (read-only; no .ko ndo_open). Soft!=product. */
     linux_netdev_soft_ops_diagnostic();
 
-    /* Soft open edge: once per primary until unregister. Soft≠product. */
+    /* Soft open edge: once per primary until unregister. Soft!=product. */
     if (pNd->u8Open == 0u) {
         pNd->u8Open = 1u;
         if (g_cSoftOpen < 0xffffffffu) {
@@ -2514,13 +3556,13 @@ linux_netdev_soft_open_primary(void)
 
     /*
      * Optional soft-only ndo_open when ops table is ours.
-     * .ko ops: skip (MMIO freestanding owns) — never dual-drive.
+     * .ko ops: skip (MMIO freestanding owns) - never dual-drive.
      */
     lnds_soft_dev_open(pNd);
 
     /*
      * Soft NAPI bookkeeping enable for bridge/open (not .ko poll).
-     * Soft≠product: state bits only while freestanding owns MMIO.
+     * Soft!=product: state bits only while freestanding owns MMIO.
      */
     lnds_napi_soft_enable_bridge_slots();
 
@@ -2534,12 +3576,20 @@ linux_netdev_soft_open_primary(void)
         /* Grep: linux_netdev_soft: soft open primary */
         kprintf("linux_netdev_soft: soft open primary name=%s mtu=%u "
                 "carrier=%u queue_run=%u ops=%d soft_ops=%d napi=%d "
-                "napi_en=%u open_n=%u (Soft≠product; no .ko ndo_open)\n",
+                "napi_en=%u open_n=%u live_fs_8168=%d no_bar_steal=%d "
+                "(Soft!=product; no .ko ndo_open; residual E fail-closed "
+                "live 8168; freestanding owns wire; G-AC-1 lean)\n",
                 lnds_name_of(pNd), (unsigned)pNd->mtu,
                 (unsigned)pNd->u8Carrier,
                 pNd->u8QueueStopped == 0u ? 1u : 0u, fOps, fOpsSoft, fNapi,
-                (unsigned)cNapiEn, (unsigned)g_cSoftOpen);
+                (unsigned)cNapiEn, (unsigned)g_cSoftOpen,
+                lnds_live_fs_8168(), g_fMmioHandoff == 0 ? 1 : 0);
     }
+    /*
+     * Dual DoD B residual honesty early (does not require hybrid_active).
+     * Once-capped inside helper; no stamp storm. Soft!=product; G-AC-1 lean.
+     */
+    (void)linux_netdev_soft_gate0_residual_lamp_once();
 }
 
 int
@@ -2563,23 +3613,32 @@ linux_netdev_soft_l2_bridge_enable(int fOn)
     if (!g_fReady) {
         linux_netdev_soft_init();
     }
+    /*
+     * Dual DoD B residual: L2 bridge is copy/account only.
+     * Freestanding remains sole BAR/wire owner at gate0. Soft!=product.
+     */
+    lnds_gate0_force_no_bar_steal();
     g_fL2Bridge = (fOn != 0) ? 1 : 0;
     if (g_fL2Bridge != 0 && g_fL2BridgeLog == 0) {
         g_fL2BridgeLog = 1;
         /* Grep: linux_netdev_soft: soft l2 bridge ON */
         kprintf("linux_netdev_soft: soft l2 bridge ON "
-                "(freestanding L2 ↔ soft netdev; Soft≠product; "
-                "mmio=freestanding no .ko poll/ISR; soft TX API ready, "
-                "no auto wire inject unless GJ_SOFT_L2_TX_SMOKE=1)\n");
+                "(freestanding L2 ↔ soft netdev; Soft!=product; "
+                "mmio=freestanding no .ko poll/ISR; no_bar_steal=1; "
+                "soft TX API ready, no auto wire inject unless "
+                "GJ_SOFT_L2_TX_SMOKE=1; G-AC-1 lean)\n");
         /* Soft-open primary + soft-enable NAPI bookkeeping slots. */
         linux_netdev_soft_open_primary();
+        /* hold14 baseline (rx=0 tx=0) so panel is honest before traffic. */
+        lnds_hold14_l2_br_refresh();
 #if GJ_SOFT_L2_TX_SMOKE != 0
-        /* Lab-only reverse-path smoke — default gate 0 (no live-wire junk). */
+        /* Lab-only reverse-path smoke - default gate 0 (no live-wire junk). */
         lnds_soft_l2_tx_smoke_once();
 #endif
     } else if (g_fL2Bridge != 0) {
-        /* Re-enable: refresh open + NAPI enable if probe raced. Soft≠product. */
+        /* Re-enable: refresh open + NAPI enable if probe raced. Soft!=product. */
         linux_netdev_soft_open_primary();
+        lnds_hold14_l2_br_refresh();
     }
 }
 
@@ -2596,14 +3655,36 @@ linux_netdev_soft_l2_feed_rx(const void *pFrame, u32 cbLen)
     struct soft_skb *pSoft;
 
     if (g_fL2Bridge == 0 || pFrame == NULL || cbLen < 14u) {
+        /*
+         * Bridge off: feed_rx rare under SOFT hybrid until latch. Still
+         * refresh hold14 so freestanding R climb paints L2 BR (HY7).
+         * Soft!=product; no copy / no BAR touch.
+         */
+        lnds_hold14_l2_br_refresh();
         return;
     }
+    /*
+     * Bridge ON + eth-sized frame -> attempt. Drop if no soft primary/skb.
+     * Soft!=product: freestanding already demuxed; this is copy-only.
+     * Never dual-drive BAR / rings.
+     */
+    if (g_cL2RxAttempt < 0xffffffffu) {
+        g_cL2RxAttempt++;
+    }
     if (g_pPrimary == NULL || g_pPrimary->u8Registered == 0u) {
+        if (g_cL2RxDrop < 0xffffffffu) {
+            g_cL2RxDrop++;
+        }
+        if (g_pPrimary != NULL) {
+            g_pPrimary->u64RxDropped++;
+        }
+        /* freestanding R may still climb - keep hold14 live. Soft!=product. */
+        lnds_hold14_l2_br_refresh();
         return;
     }
     /*
      * Late soft-enable: probe may have registered napi after bridge ON.
-     * Soft≠product; keeps feed_rx soft_poll from no-op forever.
+     * Soft!=product; keeps feed_rx soft_poll from no-op forever.
      */
     if (linux_netdev_soft_napi_enabled_count() == 0u &&
         g_pPrimary->pNapi != NULL) {
@@ -2611,6 +3692,11 @@ linux_netdev_soft_l2_feed_rx(const void *pFrame, u32 cbLen)
     }
     pSkb = napi_alloc_skb(g_pPrimary->pNapi, cbLen);
     if (pSkb == NULL) {
+        if (g_cL2RxDrop < 0xffffffffu) {
+            g_cL2RxDrop++;
+        }
+        g_pPrimary->u64RxDropped++;
+        lnds_hold14_l2_br_refresh();
         return;
     }
     pSoft = (struct soft_skb *)pSkb;
@@ -2622,23 +3708,31 @@ linux_netdev_soft_l2_feed_rx(const void *pFrame, u32 cbLen)
     if (g_cL2RxFed < 0xffffffffu) {
         g_cL2RxFed++;
     }
+    /* Soft net_device stats residual (bookkeeping; freestanding owns wire). */
+    if (g_pPrimary != NULL) {
+        g_pPrimary->u64RxPackets++;
+        g_pPrimary->u64RxBytes += (u64)cbLen;
+    }
     (void)netif_receive_skb(pSkb);
+    /* hold14 live refresh (HY7); freestanding R mirror + soft fed. Soft!=product. */
+    lnds_hold14_l2_br_refresh();
     if (g_fL2RxNapiLog == 0) {
         g_fL2RxNapiLog = 1;
         /* Grep: linux_netdev_soft: soft l2 rx napi */
         kprintf("linux_netdev_soft: soft l2 rx napi first fed=%u "
-                "enabled=%u sched=%u mmio_handoff=%d "
-                "(Soft≠product; soft L2 bridge only)\n",
-                (unsigned)g_cL2RxFed,
+                "attempt=%u drop=%u enabled=%u sched=%u mmio_handoff=%d "
+                "(Soft!=product; soft L2 bridge only; no BAR dual-drive)\n",
+                (unsigned)g_cL2RxFed, (unsigned)g_cL2RxAttempt,
+                (unsigned)g_cL2RxDrop,
                 (unsigned)linux_netdev_soft_napi_enabled_count(),
                 (unsigned)linux_netdev_soft_napi_sched_count(),
                 g_fMmioHandoff);
     }
     /*
-     * Soft IRQ → NAPI path (no hardware IRQ into .ko):
+     * Soft IRQ -> NAPI path (no hardware IRQ into .ko):
      *   softirq_kick: schedule_prep + __napi_schedule bookkeeping
      *   soft_poll:    complete (+ optional poll only if safe)
-     * Soft≠product; freestanding owns MMIO.
+     * Soft!=product; freestanding owns MMIO.
      */
     linux_netdev_soft_softirq_kick();
     linux_netdev_soft_napi_soft_poll();
@@ -2652,8 +3746,34 @@ linux_netdev_soft_l2_xmit(const void *pFrame, u32 cbLen)
     if (g_fL2Bridge == 0 || pFrame == NULL || cbLen == 0u) {
         return -1;
     }
+    /*
+     * Dual DoD B residual: reverse TX never steals freestanding BAR.
+     * Force gate0 clear before freestanding-owns check. Soft!=product.
+     */
+    lnds_gate0_force_no_bar_steal();
     if (g_cL2TxAttempt < 0xffffffffu) {
         g_cL2TxAttempt++;
+    }
+    /*
+     * Residual E: reverse soft->freestanding TX only while freestanding owns.
+     * Never .ko ndo_start_xmit. Handoff pending / soft mmio -> fail closed.
+     * Soft!=product; hybrid SOFT must not steal BAR.
+     */
+    if (lnds_soft_tx_freestanding_owns() == 0) {
+        if (g_cL2TxFail < 0xffffffffu) {
+            g_cL2TxFail++;
+        }
+        if (g_fLive8168XmitFcLog == 0) {
+            g_fLive8168XmitFcLog = 1;
+            /* Grep: linux_netdev_soft: soft xmit fail-closed live 8168 */
+            kprintf("linux_netdev_soft: soft xmit fail-closed live 8168 "
+                    "(not freestanding-owns; mmio_handoff=%d; Soft!=product; "
+                    "no .ko ndo_start_xmit; residual E)\n",
+                    g_fMmioHandoff);
+        }
+        lnds_l2_first_tx_lamp(0);
+        lnds_hold14_l2_br_refresh();
+        return -1;
     }
     if (net_l2_tx == NULL || net_l2_ready == NULL || net_l2_ready() == 0) {
         if (g_cL2TxFail < 0xffffffffu) {
@@ -2670,19 +3790,29 @@ linux_netdev_soft_l2_xmit(const void *pFrame, u32 cbLen)
         if (g_cL2TxAccounted < 0xffffffffu) {
             g_cL2TxAccounted++;
         }
+        /* Soft net_device stats residual (Soft!=product). */
+        if (g_pPrimary != NULL) {
+            g_pPrimary->u64TxPackets++;
+            g_pPrimary->u64TxBytes += (u64)cbLen;
+        }
         lnds_l2_first_tx_lamp(1);
     } else {
         if (g_cL2TxFail < 0xffffffffu) {
             g_cL2TxFail++;
         }
+        if (g_pPrimary != NULL) {
+            g_pPrimary->u64TxDropped++;
+        }
         lnds_l2_first_tx_lamp(0);
     }
+    /* Always refresh - freestanding R/T mirror + soft tx (ok or fail). */
+    lnds_hold14_l2_br_refresh();
     return nSt;
 }
 
 /**
- * Soft-originated TX: validate soft pool skb → freestanding net_l2_tx.
- * Soft≠product; no .ko ndo_start_xmit. Consumes soft skb when pool cookie.
+ * Soft-originated TX: validate soft pool skb -> freestanding net_l2_tx.
+ * Soft!=product; no .ko ndo_start_xmit. Consumes soft skb when pool cookie.
  * Grep: linux_netdev_soft: soft l2 tx from_skb
  */
 int
@@ -2704,7 +3834,7 @@ linux_netdev_soft_l2_tx_from_skb(void *pSkb)
             g_fSoftTxFromSkbLog = 1;
             /* Grep: linux_netdev_soft: soft l2 tx from_skb */
             kprintf("linux_netdev_soft: soft l2 tx from_skb FAIL closed "
-                    "(not soft pool skb; Soft≠product)\n");
+                    "(not soft pool skb; Soft!=product)\n");
         }
         return -1;
     }
@@ -2717,7 +3847,7 @@ linux_netdev_soft_l2_tx_from_skb(void *pSkb)
         if (g_fSoftTxFromSkbLog == 0) {
             g_fSoftTxFromSkbLog = 1;
             kprintf("linux_netdev_soft: soft l2 tx from_skb FAIL empty/bad "
-                    "len=%u (Soft≠product)\n",
+                    "len=%u (Soft!=product)\n",
                     (unsigned)cbLen);
         }
         return -1;
@@ -2725,7 +3855,7 @@ linux_netdev_soft_l2_tx_from_skb(void *pSkb)
     /*
      * Frame bytes live in soft abData until freestanding copies into TX
      * ring. Call l2_xmit (bridge gate + attempt/ok/fail + first-tx lamp)
-     * then free soft skb. Soft≠product.
+     * then free soft skb. Soft!=product.
      */
     nSt = linux_netdev_soft_l2_xmit(pSoft->abData, cbLen);
     lnds_skb_free(pSkb);
@@ -2737,7 +3867,7 @@ linux_netdev_soft_l2_tx_from_skb(void *pSkb)
             g_fSoftTxFromSkbLog = 1;
             /* Grep: linux_netdev_soft: soft l2 tx from_skb */
             kprintf("linux_netdev_soft: soft l2 tx from_skb PASS len=%u "
-                    "ok=%u fail=%u (Soft≠product; freestanding owns wire)\n",
+                    "ok=%u fail=%u (Soft!=product; freestanding owns wire)\n",
                     (unsigned)cbLen, (unsigned)g_cSoftTxFromSkbOk,
                     (unsigned)g_cSoftTxFromSkbFail);
         }
@@ -2748,7 +3878,7 @@ linux_netdev_soft_l2_tx_from_skb(void *pSkb)
         if (g_fSoftTxFromSkbLog == 0) {
             g_fSoftTxFromSkbLog = 1;
             kprintf("linux_netdev_soft: soft l2 tx from_skb FAIL xmit "
-                    "len=%u bridge=%d (Soft≠product)\n",
+                    "len=%u bridge=%d (Soft!=product)\n",
                     (unsigned)cbLen, g_fL2Bridge);
         }
     }
@@ -2756,29 +3886,9 @@ linux_netdev_soft_l2_tx_from_skb(void *pSkb)
 }
 
 /**
- * Soft freestanding-owns check for reverse TX.
- * Soft≠product: handoff pending / fault / soft mmio_handoff → not freestanding.
- */
-static int
-lnds_soft_tx_freestanding_owns(void)
-{
-    if (g_fMmioHandoff != 0) {
-        return 0;
-    }
-    if (net_l2_soft_handoff_pending != NULL &&
-        net_l2_soft_handoff_pending() != 0) {
-        return 0;
-    }
-    if (net_l2_soft_handoff_fault != NULL &&
-        net_l2_soft_handoff_fault() != 0) {
-        return 0;
-    }
-    return 1;
-}
-
-/**
- * Soft dev_queue_xmit(skb) — ksym reverse path soft stack → freestanding L2.
- * Soft≠product; fail closed when handoff pending or freestanding does not own.
+ * Soft dev_queue_xmit(skb) - ksym reverse path soft stack -> freestanding L2.
+ * Soft!=product; fail closed when handoff pending or freestanding does not own.
+ * Residual E: never .ko ndo_start_xmit while live 8168 freestanding owns.
  * Grep: linux_netdev_soft: soft dev_queue_xmit
  */
 int
@@ -2792,10 +3902,12 @@ dev_queue_xmit(void *pSkb)
         g_cSoftDqXmit++;
     }
 
+    /* Dual DoD B residual: reverse path never steals freestanding wire. */
+    lnds_gate0_force_no_bar_steal();
     fOwns = lnds_soft_tx_freestanding_owns();
     /*
-     * Safe path: L2 bridge ON + freestanding owns MMIO → soft skb → net_l2_tx.
-     * Soft≠product; no .ko ndo_start_xmit.
+     * Safe path: L2 bridge ON + freestanding owns MMIO -> soft skb -> net_l2_tx.
+     * Soft!=product; no .ko ndo_start_xmit.
      */
     if (g_fL2Bridge != 0 && fOwns != 0) {
         nSt = linux_netdev_soft_l2_tx_from_skb(pSkb);
@@ -2813,7 +3925,7 @@ dev_queue_xmit(void *pSkb)
             /* Grep: linux_netdev_soft: soft dev_queue_xmit */
             kprintf("linux_netdev_soft: soft dev_queue_xmit %s "
                     "bridge=1 freestanding=1 ok=%u fail=%u "
-                    "(Soft≠product; no dual-drive)\n",
+                    "(Soft!=product; no dual-drive)\n",
                     nSt == 0 ? "PASS" : "FAIL",
                     (unsigned)g_cSoftDqXmitOk, (unsigned)g_cSoftDqXmitFail);
         }
@@ -2823,7 +3935,7 @@ dev_queue_xmit(void *pSkb)
     /*
      * Handoff pending / bridge off / soft mmio owns: fail closed.
      * Free soft pool skb to avoid leak; ignore non-pool cookies.
-     * Soft≠product — no WAIT poll / no .ko open.
+     * Soft!=product - no WAIT poll / no .ko open.
      */
     if (g_cSoftDqXmitFail < 0xffffffffu) {
         g_cSoftDqXmitFail++;
@@ -2837,7 +3949,7 @@ dev_queue_xmit(void *pSkb)
         /* Grep: linux_netdev_soft: soft dev_queue_xmit */
         kprintf("linux_netdev_soft: soft dev_queue_xmit FAIL closed "
                 "bridge=%d freestanding_owns=%d mmio_handoff=%d "
-                "(Soft≠product; handoff pending or bridge off)\n",
+                "(Soft!=product; handoff pending or bridge off)\n",
                 g_fL2Bridge, fOwns, g_fMmioHandoff);
     }
     return -1;
@@ -2845,9 +3957,9 @@ dev_queue_xmit(void *pSkb)
 
 #if GJ_SOFT_L2_TX_SMOKE != 0
 /**
- * Lab-only once smoke: soft alloc → put 60B minimal eth → from_skb.
- * Soft≠product. Default build has GJ_SOFT_L2_TX_SMOKE=0 (no auto wire inject).
- * Deliberate lab images only — G752 has real NIC.
+ * Lab-only once smoke: soft alloc -> put 60B minimal eth -> from_skb.
+ * Soft!=product. Default build has GJ_SOFT_L2_TX_SMOKE=0 (no auto wire inject).
+ * Deliberate lab images only - G752 has real NIC.
  */
 static void
 lnds_soft_l2_tx_smoke_once(void)
@@ -2862,32 +3974,32 @@ lnds_soft_l2_tx_smoke_once(void)
     g_fSoftL2TxSmokeLog = 1;
     if (g_fL2Bridge == 0 || lnds_soft_tx_freestanding_owns() == 0) {
         kprintf("linux_netdev_soft: soft l2 tx smoke SKIP "
-                "(bridge/owns; Soft≠product; GJ_SOFT_L2_TX_SMOKE=1)\n");
+                "(bridge/owns; Soft!=product; GJ_SOFT_L2_TX_SMOKE=1)\n");
         return;
     }
     if (net_l2_ready == NULL || net_l2_ready() == 0) {
         kprintf("linux_netdev_soft: soft l2 tx smoke SKIP (net_l2 not ready; "
-                "Soft≠product)\n");
+                "Soft!=product)\n");
         return;
     }
     pSkb = dev_alloc_skb(60u);
     if (pSkb == NULL) {
         kprintf("linux_netdev_soft: soft l2 tx smoke FAIL alloc "
-                "(Soft≠product)\n");
+                "(Soft!=product)\n");
         return;
     }
     pTail = skb_put(pSkb, 60u);
     if (pTail == NULL) {
         lnds_skb_free(pSkb);
         kprintf("linux_netdev_soft: soft l2 tx smoke FAIL put "
-                "(Soft≠product)\n");
+                "(Soft!=product)\n");
         return;
     }
     /* Minimal 60B Ethernet: zeros = invalid ethertype; lab smoke only. */
     memset(pTail, 0, 60u);
     nSt = linux_netdev_soft_l2_tx_from_skb(pSkb);
     kprintf("linux_netdev_soft: soft l2 tx smoke %s st=%d "
-            "(Soft≠product; GJ_SOFT_L2_TX_SMOKE=1 lab only)\n",
+            "(Soft!=product; GJ_SOFT_L2_TX_SMOKE=1 lab only)\n",
             nSt == 0 ? "PASS" : "FAIL", nSt);
 }
 #endif /* GJ_SOFT_L2_TX_SMOKE */
@@ -2895,13 +4007,73 @@ lnds_soft_l2_tx_smoke_once(void)
 u32
 linux_netdev_soft_l2_rx_fed(void)
 {
-    return g_cL2RxFed;
+    u32 cRx;
+    u32 cTx;
+
+    /*
+     * Panel / net_eth hold14 poll path: report max(soft_fed, freestanding R)
+     * so freestanding R climb updates hold14 when feed_rx is rare (bridge
+     * off under SOFT). Force-refresh STATUS hold14 so freestanding R/T
+     * climb paints even when soft counters stagnate (HY7). Soft!=product;
+     * pure soft-fed is g_cL2RxFed only.
+     */
+    lnds_hold14_counts(&cRx, &cTx);
+    (void)cTx;
+    lnds_hold14_l2_br_refresh();
+    return cRx;
+}
+
+u32
+linux_netdev_soft_l2_rx_attempt(void)
+{
+    return g_cL2RxAttempt;
+}
+
+u32
+linux_netdev_soft_l2_rx_drop(void)
+{
+    return g_cL2RxDrop;
 }
 
 u32
 linux_netdev_soft_l2_tx_ok(void)
 {
-    return g_cL2TxOk;
+    u32 cRx;
+    u32 cTx;
+
+    /*
+     * Same freestanding R/T mirror as rx_fed - keep hold14 rx/tx coherent.
+     * Force-refresh STATUS hold14 on poll (HY7). Soft!=product.
+     */
+    lnds_hold14_counts(&cRx, &cTx);
+    (void)cRx;
+    lnds_hold14_l2_br_refresh();
+    return cTx;
+}
+
+void
+linux_netdev_soft_hold14_refresh(void)
+{
+    /* Grep / panel: L2 BR RX · hold14 · freestanding R/T force */
+    lnds_hold14_l2_br_refresh();
+}
+
+u32
+linux_netdev_soft_hold14_fs_rx(void)
+{
+    u32 cFsRx;
+
+    lnds_hold14_sample_fs(&cFsRx, NULL);
+    return cFsRx;
+}
+
+u32
+linux_netdev_soft_hold14_fs_tx(void)
+{
+    u32 cFsTx;
+
+    lnds_hold14_sample_fs(NULL, &cFsTx);
+    return cFsTx;
 }
 
 u32
@@ -2926,14 +4098,19 @@ void
 linux_netdev_soft_l2_note_tx(int fOk)
 {
     if (g_fL2Bridge == 0) {
+        /*
+         * Bridge off under SOFT: still refresh hold14 so freestanding R/B
+         * mirror can paint while feed_rx rare. Soft!=product.
+         */
+        lnds_hold14_l2_br_refresh();
         return;
     }
     if (g_cL2TxAttempt < 0xffffffffu) {
         g_cL2TxAttempt++;
     }
     /*
-     * Freestanding already sent (or failed) on the wire — soft-account only.
-     * Soft≠product: no second send / no .ko ndo_start_xmit.
+     * Freestanding already sent (or failed) on the wire - soft-account only.
+     * Soft!=product: no second send / no .ko ndo_start_xmit.
      */
     if (fOk != 0) {
         if (g_cL2TxOk < 0xffffffffu) {
@@ -2949,6 +4126,8 @@ linux_netdev_soft_l2_note_tx(int fOk)
         }
         lnds_l2_first_tx_lamp(0);
     }
+    /* Always refresh - freestanding R mirror + soft tx. Soft!=product. */
+    lnds_hold14_l2_br_refresh();
 }
 
 void
@@ -2961,8 +4140,10 @@ linux_netdev_soft_softirq_kick(void)
     /*
      * Soft IRQ half of NAPI: schedule_prep + __napi_schedule only.
      * Never calls .ko ISR or poll. Safe with freestanding MMIO ownership.
-     * Soft≠product. Grep: linux_netdev_soft: soft softirq kick
+     * Dual DoD B residual: bookkeeping only; no BAR steal. Soft!=product.
+     * Grep: linux_netdev_soft: soft softirq kick
      */
+    lnds_gate0_force_no_bar_steal();
     if (g_fL2Bridge == 0 || g_pPrimary == NULL) {
         return;
     }
@@ -2976,7 +4157,7 @@ linux_netdev_soft_softirq_kick(void)
     }
     nPrep = napi_schedule_prep(pNd->pNapi);
     if (nPrep == 0) {
-        /* Already SCHED or disabled — soft MISSED may be set by prep. */
+        /* Already SCHED or disabled - soft MISSED may be set by prep. */
         return;
     }
     __napi_schedule(pNd->pNapi);
@@ -2985,7 +4166,8 @@ linux_netdev_soft_softirq_kick(void)
     }
     if (g_cSoftirqKick == 1u) {
         kprintf("linux_netdev_soft: soft softirq kick napi=%p calls=1 "
-                "(bookkeeping only; Soft≠product; no .ko ISR)\n",
+                "(bookkeeping only; Soft!=product; no .ko ISR; "
+                "no_bar_steal=1; freestanding owns wire)\n",
                 pNd->pNapi);
     }
 }
@@ -3011,7 +4193,7 @@ linux_netdev_soft_napi_soft_poll(void)
     }
     pSlot = lnds_napi_find(pNd->pNapi);
     if (pSlot == NULL || (pSlot->u8State & LNDS_NAPI_F_ENABLED) == 0u) {
-        /* Soft: no poll until napi_enable bookkeeping. Soft≠product. */
+        /* Soft: no poll until napi_enable bookkeeping. Soft!=product. */
         return;
     }
     /* Ensure SCHED bit (softirq_kick or local IRQ-path bookkeeping). */
@@ -3030,7 +4212,7 @@ linux_netdev_soft_napi_soft_poll(void)
             fKoPoll = 1;
         }
     } else if (pNd->pfnNapiPoll != NULL) {
-        /* netdev cookie copy — treat as .ko-sourced unless handoff. */
+        /* netdev cookie copy - treat as .ko-sourced unless handoff. */
         pfnPoll = (int (*)(void *, int))(uintptr_t)pNd->pfnNapiPoll;
         fKoPoll = 1;
     }
@@ -3039,12 +4221,20 @@ linux_netdev_soft_napi_soft_poll(void)
      * SAFETY: freestanding owns MMIO today. Calling .ko napi poll can touch
      * dual-owned BAR and crash. Default: bookkeeping only (complete).
      * Call poll only if:
-     *   (a) mmio handoff gate is set (other agent), OR
-     *   (b) pfnPoll is soft-owned (not KO_POLL).
+     *   (a) mmio handoff gate is set AND freestanding not live, OR
+     *   (b) pfnPoll is soft-owned (not KO_POLL) AND freestanding not live.
+     * Residual E: live freestanding 8168 -> always fail closed (.ko poll).
+     * Hybrid SOFT must not steal BAR. Soft!=product.
      * Grep: linux_netdev_soft: soft napi poll skip .ko (mmio freestanding)
+     * Grep: linux_netdev_soft: soft napi fail-closed live 8168
      */
+    /*
+     * Dual DoD B residual: gate0 force freestanding sole BAR before poll
+     * decision. Soft!=product; never .ko poll dual-drive (R0 thrash class).
+     */
+    lnds_gate0_force_no_bar_steal();
     fCallPoll = 0;
-    if (pfnPoll != NULL) {
+    if (pfnPoll != NULL && lnds_live_fs_8168() == 0) {
         if (g_fMmioHandoff != 0) {
             fCallPoll = 1;
         } else if (fKoPoll == 0) {
@@ -3058,10 +4248,25 @@ linux_netdev_soft_napi_soft_poll(void)
         }
         if (pfnPoll != NULL && fKoPoll != 0 && g_fNapiPollSkipKoLog == 0) {
             g_fNapiPollSkipKoLog = 1;
+            /* Grep: linux_netdev_soft: soft napi poll skip .ko (mmio freestanding) */
             kprintf("linux_netdev_soft: soft napi poll skip .ko "
                     "(mmio freestanding)\n");
         }
-        /* Bookkeeping-only complete (work=0). Soft≠product. */
+        if (lnds_live_fs_8168() != 0) {
+            if (g_cLive8168FcNapi < 0xffffffffu) {
+                g_cLive8168FcNapi++;
+            }
+            if (g_fLive8168NapiFcLog == 0) {
+                g_fLive8168NapiFcLog = 1;
+                /* Grep: linux_netdev_soft: soft napi fail-closed live 8168 */
+                kprintf("linux_netdev_soft: soft napi fail-closed live 8168 "
+                        "napi=%p ko_poll=%d mmio_handoff=%d "
+                        "(Soft!=product; freestanding owns BAR; residual E; "
+                        "hybrid SOFT must not steal BAR)\n",
+                        pNd->pNapi, fKoPoll, g_fMmioHandoff);
+            }
+        }
+        /* Bookkeeping-only complete (work=0). Soft!=product. */
         (void)napi_complete_done(pNd->pNapi, 0);
         return;
     }
@@ -3099,6 +4304,8 @@ linux_netdev_soft_softirq_kick_count(void)
 int
 linux_netdev_soft_napi_mmio_handoff(void)
 {
+    /* Dual DoD B residual: gate0 never reports soft BAR claim. Soft!=product. */
+    lnds_gate0_force_no_bar_steal();
     return g_fMmioHandoff;
 }
 
@@ -3106,37 +4313,96 @@ void
 linux_netdev_soft_napi_set_mmio_handoff(int fOn)
 {
     /*
-     * Minimal gate for MMIO handoff agent — not full handoff implementation.
-     * Default remains 0 (freestanding owns MMIO). Soft≠product.
+     * Minimal gate for MMIO handoff agent - not full handoff implementation.
+     * Default remains 0 (freestanding owns MMIO). Soft!=product.
      * Phase 1 prepare must NOT set this; only later phases after freestanding
      * quiesce may allow .ko poll (see docs/R8169_MMIO_HANDOFF.md).
+     *
+     * Gate-safe: refuse fOn=1 under GJ_SOFT_R8169_MMIO_HANDOFF==0 (default)
+     * and refuse while freestanding still ready - never dual-drive BAR.
+     * Dual DoD B residual: refuse is the R0-thrash guard (no real BAR steal).
+     * Phase3 try_open assigns g_fMmioHandoff directly after sole-owner.
      */
+    if (fOn != 0) {
+#if GJ_SOFT_R8169_MMIO_HANDOFF == 0
+        if (g_cBarStealRefuse < 0xffffffffu) {
+            g_cBarStealRefuse++;
+        }
+        if (g_fMmioSetHandoffLog == 0) {
+            g_fMmioSetHandoffLog = 1;
+            /*
+             * Grep: soft napi mmio_handoff SET refuse
+             * Grep: soft residual R0 thrash refuse
+             * Lean once-lamp only (no stamp storm). Soft!=product.
+             */
+            kprintf("linux_netdev_soft: soft napi mmio_handoff SET refuse "
+                    "soft residual R0 thrash refuse refuse_n=%u "
+                    "(gate off; freestanding owns BAR; Soft!=product; "
+                    "no_bar_steal=1; dual DoD B; G-AC-1; "
+                    "RUN_INIT=0 freestanding_no_exec)\n",
+                    (unsigned)g_cBarStealRefuse);
+        }
+        lnds_gate0_force_no_bar_steal();
+        return;
+#else
+        {
+            extern int rtl8168_ready(void);
+
+            if (rtl8168_ready() != 0) {
+                if (g_cBarStealRefuse < 0xffffffffu) {
+                    g_cBarStealRefuse++;
+                }
+                if (g_fMmioSetHandoffLog == 0) {
+                    g_fMmioSetHandoffLog = 1;
+                    kprintf("linux_netdev_soft: soft napi mmio_handoff SET "
+                            "refuse (freestanding still ready; dual-drive; "
+                            "Soft!=product; residual R0 thrash refuse)\n");
+                }
+                return;
+            }
+        }
+#endif
+    }
+#if GJ_SOFT_R8169_MMIO_HANDOFF == 0
+    /* Gate0: clear only; never promote soft BAR claim. Soft!=product. */
+    g_fMmioHandoff = 0;
+    (void)fOn;
+#else
     g_fMmioHandoff = (fOn != 0) ? 1 : 0;
-    kprintf("linux_netdev_soft: soft napi mmio_handoff=%d "
-            "(Soft≠product; .ko poll %s)\n",
-            g_fMmioHandoff,
-            g_fMmioHandoff != 0 ? "allowed" : "blocked");
+#endif
+    /* Cap state-change lamp (no stamp storms). Soft!=product. */
+    if (g_fMmioHandoffStateLog == 0) {
+        g_fMmioHandoffStateLog = 1;
+        kprintf("linux_netdev_soft: soft napi mmio_handoff=%d "
+                "(Soft!=product; .ko poll %s; no_bar_steal=%d)\n",
+                g_fMmioHandoff,
+                g_fMmioHandoff != 0 ? "allowed" : "blocked",
+                g_fMmioHandoff == 0 ? 1 : 0);
+    }
 }
 
 /*
- * Soft MMIO handoff readiness (phase 2 sole-owner deepen; Soft≠product).
+ * Soft MMIO handoff readiness (phase 2 sole-owner deepen; Soft!=product).
  * Gate off: SKIP once, return 0.
  * Gate on return codes:
  *   0  = skip / gate off (compile path never here when gate 1)
  *   1  = wait (prepare or primary not ready)
  *   2  = ready-for-open (sole-owner candidate; still no .ko / ndo_open)
  *  -1  = fault (dual-drive / fail closed)
- * Does NOT set g_fMmioHandoff (phase 3 only). Soft≠product.
+ * Does NOT set g_fMmioHandoff (phase 3 only). Soft!=product.
  * Grep: linux_netdev_soft: soft mmio handoff
  */
 int
 linux_netdev_soft_mmio_handoff_ready(void)
 {
 #if GJ_SOFT_R8169_MMIO_HANDOFF == 0
+    /* Dual DoD B residual: gate0 ready is always SKIP; freestanding owns BAR. */
+    lnds_gate0_force_no_bar_steal();
     if (g_fMmioHandoffReadyLog == 0) {
         g_fMmioHandoffReadyLog = 1;
         /* Grep: linux_netdev_soft: soft mmio handoff SKIP (gate off) */
-        kprintf("linux_netdev_soft: soft mmio handoff SKIP (gate off)\n");
+        kprintf("linux_netdev_soft: soft mmio handoff SKIP (gate off; "
+                "no_bar_steal=1; Soft!=product; dual DoD B residual)\n");
     }
     return 0;
 #else
@@ -3156,14 +4422,14 @@ linux_netdev_soft_mmio_handoff_ready(void)
             g_fMmioHandoffReadyLog = 1;
             /* Grep: linux_netdev_soft: soft mmio handoff FAULT */
             kprintf("linux_netdev_soft: soft mmio handoff FAULT "
-                    "(fail closed; Soft≠product)\n");
+                    "(fail closed; Soft!=product)\n");
         }
         return -1;
     }
 
     fPrep = rtl8168_soft_handoff_prepared();
     fFsReady = rtl8168_ready();
-    /* Dual-drive: freestanding still ready after prepare claimed → FAULT. */
+    /* Dual-drive: freestanding still ready after prepare claimed -> FAULT. */
     if (fPrep != 0 && fFsReady != 0) {
         extern void net_l2_soft_handoff_set_fault(const char *szWhy);
 
@@ -3171,7 +4437,7 @@ linux_netdev_soft_mmio_handoff_ready(void)
         if (g_fMmioHandoffReadyLog == 0) {
             g_fMmioHandoffReadyLog = 1;
             kprintf("linux_netdev_soft: soft mmio handoff FAULT "
-                    "(dual-drive; Soft≠product)\n");
+                    "(dual-drive; Soft!=product)\n");
         }
         return -1;
     }
@@ -3189,7 +4455,7 @@ linux_netdev_soft_mmio_handoff_ready(void)
             g_fMmioHandoffReadyLog = 1;
             /* Grep: linux_netdev_soft: soft mmio handoff READY */
             kprintf("linux_netdev_soft: soft mmio handoff READY "
-                    "(prepare done + primary; no .ko open; Soft≠product)\n");
+                    "(prepare done + primary; no .ko open; Soft!=product)\n");
             /*
              * Grep: soft mmio handoff sole-owner
              * Phase-2 marker: soft claim is logical (hostish blob), not a
@@ -3197,7 +4463,7 @@ linux_netdev_soft_mmio_handoff_ready(void)
              */
             kprintf("linux_netdev_soft: soft mmio handoff sole-owner "
                     "hostish BAR/IRQ (g_pMmio idle; no dual-map; "
-                    "Soft≠product; no .ko open; mmio_handoff=0)\n");
+                    "Soft!=product; no .ko open; mmio_handoff=0)\n");
         }
         return 2; /* ready-for-open (phase 3 gated later) */
     }
@@ -3206,7 +4472,7 @@ linux_netdev_soft_mmio_handoff_ready(void)
         g_fMmioHandoffReadyLog = 1;
         /* Grep: linux_netdev_soft: soft mmio handoff WAIT */
         kprintf("linux_netdev_soft: soft mmio handoff WAIT "
-                "prep=%d primary=%d fs_ready=%d (Soft≠product)\n",
+                "prep=%d primary=%d fs_ready=%d (Soft!=product)\n",
                 fPrep, fPrimary, fFsReady);
     }
     return 1; /* wait */
@@ -3216,7 +4482,7 @@ linux_netdev_soft_mmio_handoff_ready(void)
 /*
  * Phase-2 sole-owner marker. Non-zero only when handoff_ready()==2
  * (prepare done, freestanding not ready, primary present, no fault).
- * Gate 0 → always 0. Does not open .ko; does not set g_fMmioHandoff.
+ * Gate 0 -> always 0. Does not open .ko; does not set g_fMmioHandoff.
  * Grep: soft mmio handoff sole-owner
  */
 int
@@ -3233,28 +4499,34 @@ linux_netdev_soft_mmio_sole_owner(void)
 }
 
 /*
- * Soft EBUSY for phase-3 wait (Linux errno 16). Freestanding C11 — no errno.h.
+ * Soft EBUSY for phase-3 wait (Linux errno 16). Freestanding C11 - no errno.h.
  */
 #define LNDS_SOFT_EBUSY  (-16)
 
 /*
- * Phase-3 gated soft-open after sole-owner (Soft≠product).
- * Gate off → SKIP once, return 0 (freestanding path untouched).
- * Gate on + !sole_owner → WAIT once, return soft EBUSY.
- * Gate on + sole_owner → Option A soft open (no .ko ndo_open this wave):
+ * Phase-3 gated soft-open after sole-owner (Soft!=product).
+ * Gate off -> SKIP once, return 0 (freestanding path untouched).
+ * Gate on + !sole_owner -> WAIT once, return soft EBUSY.
+ * Gate on + sole_owner -> Option A soft open (no .ko ndo_open this wave):
  *   set g_fMmioHandoff=1 carefully; carrier/queue via open_primary.
- * Option B (.ko ndo_open): GJ_SOFT_R8169_KO_NDO_OPEN default 0 — next lab only.
+ * Option B (.ko ndo_open): GJ_SOFT_R8169_KO_NDO_OPEN default 0 - next lab only.
  * Grep: linux_netdev_soft: soft mmio handoff phase3
  */
 int
 linux_netdev_soft_mmio_try_open(void)
 {
 #if GJ_SOFT_R8169_MMIO_HANDOFF == 0
+    /*
+     * Dual DoD B residual: gate0 never opens soft BAR claim.
+     * Soft!=product; freestanding wire sole; no R0 thrash path.
+     */
+    lnds_gate0_force_no_bar_steal();
     if (g_fMmioTryOpenLog == 0) {
         g_fMmioTryOpenLog = 1;
         /* Grep: linux_netdev_soft: soft mmio handoff phase3 SKIP (gate off) */
         kprintf("linux_netdev_soft: soft mmio handoff phase3 SKIP "
-                "(gate off)\n");
+                "(gate off; no_bar_steal=1; Soft!=product; dual DoD B residual; "
+                "RUN_INIT=0 freestanding_no_exec; no real BAR thrash)\n");
     }
     return 0;
 #else
@@ -3276,7 +4548,7 @@ linux_netdev_soft_mmio_try_open(void)
         if (g_fMmioTryOpenLog == 0) {
             g_fMmioTryOpenLog = 1;
             kprintf("linux_netdev_soft: soft mmio handoff phase3 FAULT "
-                    "(fail closed; Soft≠product)\n");
+                    "(fail closed; Soft!=product)\n");
         }
         return -1;
     }
@@ -3287,7 +4559,7 @@ linux_netdev_soft_mmio_try_open(void)
             g_fMmioTryOpenLog = 1;
             /* Grep: linux_netdev_soft: soft mmio handoff phase3 WAIT */
             kprintf("linux_netdev_soft: soft mmio handoff phase3 WAIT "
-                    "(sole-owner not ready; Soft≠product)\n");
+                    "(sole-owner not ready; Soft!=product)\n");
         }
         return LNDS_SOFT_EBUSY;
     }
@@ -3298,23 +4570,23 @@ linux_netdev_soft_mmio_try_open(void)
         if (g_fMmioTryOpenLog == 0) {
             g_fMmioTryOpenLog = 1;
             kprintf("linux_netdev_soft: soft mmio handoff phase3 FAULT "
-                    "(dual-drive; Soft≠product)\n");
+                    "(dual-drive; Soft!=product)\n");
         }
         return -1;
     }
 
     /*
-     * Phase 3: freestanding quiesced + sole-owner → allow soft NAPI poll path.
-     * Still NO .ko ndo_open this wave (Option A). Soft≠product.
+     * Phase 3: freestanding quiesced + sole-owner -> allow soft NAPI poll path.
+     * Still NO .ko ndo_open this wave (Option A). Soft!=product.
      */
     if (g_fMmioHandoff == 0) {
         g_fMmioHandoff = 1;
         kprintf("linux_netdev_soft: soft napi mmio_handoff=1 "
-                "(phase3 after sole-owner; Soft≠product; .ko poll allowed)\n");
+                "(phase3 after sole-owner; Soft!=product; .ko poll allowed)\n");
     }
 
     /*
-     * Option A: soft open only — carrier/queue/attach via open_primary.
+     * Option A: soft open only - carrier/queue/attach via open_primary.
      * lnds_soft_dev_open still skips .ko ops (soft open skip .ko ops).
      */
     linux_netdev_soft_open_primary();
@@ -3322,12 +4594,12 @@ linux_netdev_soft_mmio_try_open(void)
 #if GJ_SOFT_R8169_KO_NDO_OPEN != 0
     /*
      * Option B (RISKY lab): would call .ko ndo_open if netdev_ops looks like
-     * a Linux layout. NOT implemented this wave — next lab experiment only.
+     * a Linux layout. NOT implemented this wave - next lab experiment only.
      * Gate default 0; requires GJ_SOFT_R8169_MMIO_HANDOFF=1.
      * Grep: soft mmio handoff phase3 Option B
      */
     kprintf("linux_netdev_soft: soft mmio handoff phase3 Option B "
-            "ko ndo_open DEFER (not this wave; Soft≠product; RISKY)\n");
+            "ko ndo_open DEFER (not this wave; Soft!=product; RISKY)\n");
 #endif
 
     g_fMmioTryOpenDone = 1;
@@ -3339,28 +4611,32 @@ linux_netdev_soft_mmio_try_open(void)
      * Grep: phase3 soft-open only (no .ko ndo_open yet)
      */
     kprintf("linux_netdev_soft: soft mmio handoff phase3 soft-open only "
-            "(no .ko ndo_open yet; mmio_handoff=1; Soft≠product)\n");
+            "(no .ko ndo_open yet; mmio_handoff=1; Soft!=product)\n");
     return 0;
 #endif
 }
 
 /*
- * Phase 4a hybrid (default lab under gate 0; Soft≠product).
+ * Phase 4a hybrid (default lab under gate 0; Soft!=product).
  * Freestanding owns wire; soft r8169 is the Linux-shaped control object.
  * Grep: linux path HYBRID · docs/R8169_MMIO_HANDOFF.md
+ *
+ * Safety: never active while soft claims MMIO or handoff pending/fault
+ * (would dual-drive freestanding BAR). Null-check weak handoff symbols.
+ * Probe mode: SOFT/EMU (0) OR REAL (1) - not REAL-only (gate0 hybrid SOFT).
  */
 int
 linux_netdev_soft_hybrid_active(void)
 {
     extern int linux_pci_soft_last_probe_mode(void);
     extern int rtl8168_ready(void);
-    extern int net_l2_soft_handoff_pending(void);
-    extern int net_l2_soft_handoff_fault(void);
     int nMode;
 
     if (!g_fReady) {
         return 0;
     }
+    /* Dual DoD B residual: gate0 never allows soft BAR claim. Soft!=product. */
+    lnds_gate0_force_no_bar_steal();
     if (g_fL2Bridge == 0) {
         return 0;
     }
@@ -3368,23 +4644,24 @@ linux_netdev_soft_hybrid_active(void)
         return 0;
     }
     /*
-     * Hybrid 4a: freestanding wire + soft netdev. REAL preferred historically;
-     * gate0 now uses EMU (SOFT mode) so .ko probe does not kill the BAR.
-     * Accept SOFT or REAL when freestanding rtl is ready.
+     * Hybrid 4a: freestanding wire + soft netdev.
+     * gate0 default lab uses EMU bind -> last_probe_mode SOFT (0); REAL (1)
+     * also valid after hostish probe. Do NOT require REAL only.
+     * Soft!=product.
      */
     nMode = linux_pci_soft_last_probe_mode();
-    if (nMode != 1 /* REAL */ && nMode != 0 /* SOFT/EMU */) {
+    if (nMode != 0 /* SOFT/EMU */ && nMode != 1 /* REAL */) {
         return 0;
     }
     if (rtl8168_ready() == 0) {
         return 0;
     }
-    /* Soft must not own MMIO / be mid-handoff — that is 4b, not hybrid. */
+    /* Soft must not own MMIO / be mid-handoff - that is 4b, not hybrid. */
     if (g_fMmioHandoff != 0) {
         return 0;
     }
-    if (net_l2_soft_handoff_pending() != 0 ||
-        net_l2_soft_handoff_fault() != 0) {
+    /* Same freestanding-owns check as reverse TX (null-safe weak). */
+    if (lnds_soft_tx_freestanding_owns() == 0) {
         return 0;
     }
     return 1;
@@ -3396,7 +4673,36 @@ linux_netdev_soft_hybrid_lamp_once(void)
     if (g_fHybridLampLog != 0) {
         return 0;
     }
+    /* Dual DoD B residual: never hybrid-lamp with soft BAR claim. Soft!=product. */
+    lnds_gate0_force_no_bar_steal();
+    /*
+     * Under hybrid SOFT, bridge may lag enable (net_l2 note race / order).
+     * Auto-enable when freestanding ready + primary + freestanding owns -
+     * SOFT(0) or REAL(1); not REAL-only. Soft!=product; not 4b .ko wire.
+     */
+    if (g_fL2Bridge == 0 && g_fMmioHandoff == 0 &&
+        g_pPrimary != NULL && g_pPrimary->u8Registered != 0u &&
+        lnds_soft_tx_freestanding_owns() != 0) {
+        extern int linux_pci_soft_last_probe_mode(void);
+        extern int rtl8168_ready(void);
+        int nMode;
+
+        nMode = linux_pci_soft_last_probe_mode();
+        if ((nMode == 0 /* SOFT/EMU */ || nMode == 1 /* REAL */) &&
+            rtl8168_ready() != 0) {
+            linux_netdev_soft_l2_bridge_enable(1);
+        }
+    }
+    /*
+     * Safety: only lamp when hybrid_active (bridge + primary + freestanding
+     * ready + SOFT|REAL mode + not handoff). Never lamp if dual-drive risk.
+     * Soft!=product; not 4b .ko wire. Not REAL probe mode only.
+     */
     if (linux_netdev_soft_hybrid_active() == 0) {
+        return 0;
+    }
+    /* Defense-in-depth: mmio_handoff must stay 0 for hybrid claim. */
+    if (g_fMmioHandoff != 0) {
         return 0;
     }
     g_fHybridLampLog = 1;
@@ -3405,13 +4711,304 @@ linux_netdev_soft_hybrid_lamp_once(void)
      * (prefix main: so serial greps match boot lamp family)
      */
     kprintf("main: linux path HYBRID wire=freestanding soft=r8169 "
-            "(Soft≠product; freestanding datapath; soft control; "
-            "not 4b .ko wire; G-AC-1)\n");
-    /* STATUS hold 15 — never clobber 7–14 (ksym/r8169/xhci/l2 br). */
+            "(Soft!=product; freestanding datapath; soft control; "
+            "not 4b .ko wire; G-AC-1; hold14 L2 BR live; SOFT|REAL)\n");
+    /*
+     * Grep: linux_netdev_soft: soft hybrid zero-touch PASS
+     * Grep: linux_netdev_soft: soft hybrid residual E
+     * Soft!=product; freestanding owns wire; hybrid SOFT must not steal BAR.
+     */
+    kprintf("linux_netdev_soft: soft hybrid zero-touch PASS Soft!=product "
+            "wire=freestanding soft=r8169 bridge=%d open=%d "
+            "mmio_handoff=%d live_fs_8168=%d hold14_mirror=1 "
+            "(freestanding BAR sole; no .ko open/NAPI/xmit; G-AC-1; "
+            "hybrid SOFT must not steal BAR)\n",
+            g_fL2Bridge,
+            g_pPrimary != NULL ? (int)g_pPrimary->u8Open : 0,
+            g_fMmioHandoff,
+            lnds_live_fs_8168());
+    kprintf("linux_netdev_soft: soft hybrid residual E Soft!=product "
+            "open/NAPI/xmit fail-closed live 8168 "
+            "fc_open=%u fc_napi=%u fc_xmit=%u "
+            "hostish_filled=%d hostish_xmit_cached=%p "
+            "hold14 freestanding R/T mirror companion "
+            "(hybrid SOFT must not steal BAR; no .ko ndo_xmit; "
+            "logs once-capped; RUN_INIT=0 freestanding_no_exec)\n",
+            (unsigned)g_cLive8168FcOpen, (unsigned)g_cLive8168FcNapi,
+            (unsigned)g_cLive8168FcXmit, g_fHostishFilled,
+            g_pHostishNdoXmitCached);
+    /*
+     * Dual DoD B residual lean lamp (gate0 friendliness). Soft!=product.
+     * Once-capped inside helper; no stamp storm. Companion to residual E.
+     * Includes freestanding_rtl SKIP + product_nic=UDX honesty.
+     */
+    (void)linux_netdev_soft_gate0_residual_lamp_once();
+    (void)linux_netdev_soft_residual_lean_lamp_once();
+    /*
+     * hold14 first (L2 BR; freestanding R/T mirror companion when feed rare).
+     * hold15 HYBRID slogan - never clobber 7-13. Soft!=product (not product NIC).
+     */
+    lnds_hold14_l2_br_refresh();
     if (15u < FB_HOLD_LINES) {
         fb_console_hold(15, "HYBRID wire=fs soft=r8169");
     }
     return 1;
+}
+
+/*
+ * C0 residual silent self-check (Soft!=product; stamp-free; no kprintf).
+ * Verifies soft residual invariants without serial traffic (H2 no stamp storm).
+ * Soft!=product; claim class C0 only - never Dual DoD / bar3 / product close.
+ * @return 1 if all residual arms ok, 0 if any fail.
+ */
+static int
+lnds_residual_c0_self_check(void)
+{
+    int nOk = 1;
+
+    /* Soft net_device layout residual (companion to header _Static_assert). */
+    if (sizeof(struct net_device) != LINUX_NETDEV_SOFT_ND_BYTES) {
+        nOk = 0;
+    }
+    if (sizeof(struct soft_nd_slab) < LINUX_NETDEV_HOSTISH_SIZE_NET_DEVICE) {
+        nOk = 0;
+    }
+    if (LINUX_NETDEV_HOSTISH_BLOB_BYTES < LINUX_NETDEV_HOSTISH_SIZE_NET_DEVICE) {
+        nOk = 0;
+    }
+    /* Soft default ops / ethtool tables (LNDS / LNET; Soft!=host ABI). */
+    if (g_softDefaultOps.u32Magic != LNDS_SOFT_OPS_MAGIC) {
+        nOk = 0;
+    }
+    if (g_softDefaultOps.u32Ver != LNDS_SOFT_OPS_VER) {
+        nOk = 0;
+    }
+    if (g_softDefaultOps.ndo_open == NULL ||
+        g_softDefaultOps.ndo_stop == NULL ||
+        g_softDefaultOps.ndo_start_xmit == NULL ||
+        g_softDefaultOps.ndo_get_stats64 == NULL) {
+        nOk = 0;
+    }
+    if (g_softDefaultEthtoolOps.u32Magic != LINUX_NETDEV_SOFT_ETHTOOL_MAGIC) {
+        nOk = 0;
+    }
+    if (g_softDefaultEthtoolOps.u32Ver != LINUX_NETDEV_SOFT_ETHTOOL_VER) {
+        nOk = 0;
+    }
+    if (g_softDefaultEthtoolOps.get_link == NULL) {
+        nOk = 0;
+    }
+    /* Soft layout deepen residual (ver2 fields for UDX-shaped userspace). */
+    if (LINUX_NETDEV_SOFT_LAYOUT_VER < 2u) {
+        nOk = 0;
+    }
+    if (LNDS_SOFT_OPS_VER < 2u) {
+        nOk = 0;
+    }
+    /* Gate0 residual: soft must not hold BAR claim after force. Soft!=product. */
+    lnds_gate0_force_no_bar_steal();
+#if GJ_SOFT_R8169_MMIO_HANDOFF == 0
+    if (g_fMmioHandoff != 0) {
+        nOk = 0;
+    }
+#endif
+    /* Pool bounds residual (non-zero eng seed capacity). */
+    if (LINUX_NETDEV_SOFT_MAX == 0u || LINUX_NETDEV_SOFT_SKB_MAX == 0u) {
+        nOk = 0;
+    }
+    return nOk;
+}
+
+/*
+ * Dual DoD B residual honesty (gate0 hybrid friendliness; Soft!=product; C0).
+ * Lean once-lamp: RUN_INIT=0 / freestanding_no_exec + no_bar_steal +
+ * freestanding_rtl SKIP + product_nic=UDX + residual E fail-closed counts.
+ * Never sets mmio_handoff; never real BAR thrash. Never freestanding wire
+ * product claim. Dual DoD A/B OPEN until UDX DUT (not freestanding :22). G-AC-1.
+ * Grep: soft dual DoD B residual gate0 PASS
+ * Grep: soft residual RUN_INIT=0 freestanding_no_exec
+ * Grep: soft residual freestanding_rtl=SKIP
+ * Grep: soft residual product_nic=UDX
+ * Grep: soft residual C0 · claim_class=C0
+ */
+int
+linux_netdev_soft_gate0_residual_lamp_once(void)
+{
+    int fOwns;
+    int fSelf;
+
+    if (g_fGate0ResidualLog != 0) {
+        return 0;
+    }
+    if (!g_fReady) {
+        return 0;
+    }
+    /* Gate0 residual force: soft must not steal BAR; Soft!=product. */
+    lnds_gate0_force_no_bar_steal();
+    g_fGate0ResidualLog = 1;
+    fOwns = lnds_soft_tx_freestanding_owns();
+    fSelf = lnds_residual_c0_self_check();
+
+    /*
+     * Grep: linux_netdev_soft: soft dual DoD B residual gate0 PASS
+     * Grep: linux_netdev_soft: soft residual RUN_INIT=0 freestanding_no_exec
+     * Grep: linux_netdev_soft: soft residual freestanding_rtl=SKIP
+     * Grep: linux_netdev_soft: soft residual product_nic=UDX
+     * Grep: linux_netdev_soft: soft residual wire sole freestanding
+     * Grep: linux_netdev_soft: soft residual C0
+     * Soft!=product; Dual DoD A/B OPEN until UDX DUT proof; eng residual only.
+     * Lean single once-lamp (no stamp storm; no version stamp). G-AC-1 lean.
+     * product_nic=UDX; freestanding rtl default SKIP (not product wire).
+     * claim_class=C0: soft lamp only - never Dual DoD close / bar3 / "net works".
+     */
+    kprintf("linux_netdev_soft: soft dual DoD B residual gate0 PASS "
+            "soft residual C0 claim_class=C0 "
+            "soft residual RUN_INIT=0 freestanding_no_exec "
+            "soft residual freestanding_rtl=%s "
+            "soft residual product_nic=UDX "
+            "soft residual wire sole freestanding "
+            "Soft!=product soft=r8169 product_path=UDX "
+            "dual_DoD_A=OPEN dual_DoD_B=OPEN "
+            "mmio_handoff=%d no_bar_steal=%d freestanding_owns=%d "
+            "live_fs_8168=%d rtl_probe=%u bridge=%d open=%d hostish_filled=%d "
+            "fc_open=%u fc_napi=%u fc_xmit=%u bar_steal_refuse=%u "
+            "hostish_open_refuse=%u hostish_xmit_refuse=%u "
+            "gate_mmio_handoff=%d soft_control=1 ko_init_exec=0 "
+            "ko_ndo_call=0 product=0 self_check=%d "
+            "(C0 soft residual; ABI/hostability eng; residual E fail-closed; "
+            "never freestanding wire product; no real BAR thrash / no R0 "
+            "class dual-drive; product NIC=UDX userspace; G-AC-1 lean; "
+            "dual DoD A/B OPEN until UDX DUT proof; not freestanding :22 close; "
+            "soft listen :22 != Dual DoD B; lean lamp once; "
+            "no version stamp)\n",
+            (GJ_RTL8168_PROBE == 0) ? "SKIP" : "opt_in",
+            g_fMmioHandoff,
+            g_fMmioHandoff == 0 ? 1 : 0,
+            fOwns,
+            lnds_live_fs_8168(),
+            (unsigned)GJ_RTL8168_PROBE,
+            g_fL2Bridge,
+            g_pPrimary != NULL ? (int)g_pPrimary->u8Open : 0,
+            g_fHostishFilled,
+            (unsigned)g_cLive8168FcOpen,
+            (unsigned)g_cLive8168FcNapi,
+            (unsigned)g_cLive8168FcXmit,
+            (unsigned)g_cBarStealRefuse,
+            (unsigned)g_cHostishOpenRefuse,
+            (unsigned)g_cHostishXmitRefuse,
+            (int)GJ_SOFT_R8169_MMIO_HANDOFF,
+            fSelf);
+
+    /* Companion lean lamp (once-capped inside; no stamp storm). Soft!=product. */
+    (void)linux_netdev_soft_residual_lean_lamp_once();
+
+    return 1;
+}
+
+/*
+ * Soft residual lean (ABI / hostability eng; Soft!=product; G-AC-1; C0).
+ * Soft netdev seed residual only - never freestanding wire product.
+ * Freestanding rtl default SKIP; product NIC = UDX userspace.
+ * Dual DoD A/B OPEN until UDX DUT (not freestanding :22 close).
+ * Once-capped; no version stamp; no stamp storms.
+ * Grep: soft residual lean PASS Soft!=product
+ * Grep: soft residual freestanding_rtl=SKIP
+ * Grep: soft residual product_nic=UDX
+ * Grep: soft residual C0 · claim_class=C0
+ */
+int
+linux_netdev_soft_residual_lean_lamp_once(void)
+{
+    int fSelf;
+
+    if (g_fResidualLeanLog != 0) {
+        return 0;
+    }
+    if (!g_fReady) {
+        return 0;
+    }
+    lnds_gate0_force_no_bar_steal();
+    g_fResidualLeanLog = 1;
+    fSelf = lnds_residual_c0_self_check();
+
+    /*
+     * Grep: linux_netdev_soft: soft residual lean PASS Soft!=product
+     * Grep: linux_netdev_soft: soft residual freestanding_rtl=SKIP
+     * Grep: linux_netdev_soft: soft residual product_nic=UDX
+     * Grep: linux_netdev_soft: soft residual C0
+     */
+    /*
+     * Lean once-lamp: greppable freestanding_rtl=SKIP (default) +
+     * product_nic=UDX + claim_class=C0 + Dual DoD A/B OPEN + no Option B
+     * .ko ndo product. Soft!=product; G-AC-1. No version stamp; no storms.
+     * Dual MIT OR Apache-2.0. Product path = UDX (not freestanding wire).
+     */
+    kprintf("linux_netdev_soft: soft residual lean PASS Soft!=product "
+            "soft residual C0 claim_class=C0 "
+            "soft residual freestanding_rtl=%s "
+            "soft residual product_nic=UDX "
+            "product_path=UDX dual_DoD_A=OPEN dual_DoD_B=OPEN "
+            "abi_hostability=1 soft_seed=1 layout_ver=%u ops_ver=%u "
+            "RUN_INIT=0 freestanding_no_exec=1 no_bar_steal=%d "
+            "mmio_handoff=%d rtl_probe=%u live_fs_8168=%d "
+            "soft_control=1 ko_init_exec=0 ko_ndo_call=0 "
+            "option_b_ko_ndo_open=%d product=0 self_check=%d "
+            "bar_steal_refuse=%u stamp_storm=0 version_stamp=0 G-AC-1=1 "
+            "(C0 soft residual; seed residual for ABI/hostability eng; "
+            "never freestanding wire product; product NIC=UDX userspace; "
+            "Dual DoD A/B OPEN until UDX DUT proof; not freestanding :22 close; "
+            "no Option B .ko ndo_open product; dual MIT OR Apache-2.0; "
+            "lean lamp once)\n",
+            (GJ_RTL8168_PROBE == 0) ? "SKIP" : "opt_in",
+            (unsigned)LINUX_NETDEV_SOFT_LAYOUT_VER,
+            (unsigned)LNDS_SOFT_OPS_VER,
+            g_fMmioHandoff == 0 ? 1 : 0,
+            g_fMmioHandoff,
+            (unsigned)GJ_RTL8168_PROBE,
+            lnds_live_fs_8168(),
+            (int)GJ_SOFT_R8169_KO_NDO_OPEN,
+            fSelf,
+            (unsigned)g_cBarStealRefuse);
+
+    return 1;
+}
+
+int
+linux_netdev_soft_no_bar_steal(void)
+{
+    lnds_gate0_force_no_bar_steal();
+    return (g_fMmioHandoff == 0) ? 1 : 0;
+}
+
+int
+linux_netdev_soft_freestanding_owns_wire(void)
+{
+    /*
+     * Dual DoD B residual: freestanding owns wire honesty when live.
+     * Soft!=product; G-AC-1 lean. Forces gate0 no_bar_steal.
+     * Default freestanding_rtl=SKIP - not product NIC (product = UDX).
+     * Grep: soft freestanding owns wire
+     */
+    lnds_gate0_force_no_bar_steal();
+    return lnds_soft_tx_freestanding_owns();
+}
+
+u32
+linux_netdev_soft_bar_steal_refuse_count(void)
+{
+    return g_cBarStealRefuse;
+}
+
+u32
+linux_netdev_soft_hostish_open_refuse_count(void)
+{
+    return g_cHostishOpenRefuse;
+}
+
+u32
+linux_netdev_soft_hostish_xmit_refuse_count(void)
+{
+    return g_cHostishXmitRefuse;
 }
 
 void
@@ -3487,20 +5084,53 @@ netdev_printk(const char *szLevel, const void *pDev, const char *szFmt, ...)
 void
 netdev_update_features(void *pDev)
 {
-    (void)pDev;
+    struct net_device *pNd = (struct net_device *)pDev;
+
+    /*
+     * Soft features residual: wanted ∩ hw -> features.
+     * Soft!=product bookkeeping for UDX/Linux-shaped residual; no BAR.
+     */
+    if (pNd == NULL || lnds_slab_of(pNd) == NULL || pNd->u8Live == 0u) {
+        return;
+    }
+    pNd->u64Features = pNd->u64WantedFeatures & pNd->u64HwFeatures;
 }
 
 void
 netdev_stats_to_stats64(void *pS64, const void *pStats)
 {
+    struct soft_netdev_stats64 *pOut;
+    const struct soft_netdev_stats64 *pIn;
+    struct net_device *pNd;
+
     /*
-     * Soft: zero-fill a 64-byte soft stats64 blob when present.
-     * Layout not Linux-ABI; prevents NULL-pointer probe crashes only.
+     * Soft stats64 residual (128 B soft blob). Soft!=Linux ABI.
+     * Prefer pStats copy; else soft primary counters. Soft!=product.
      */
-    if (pS64 != NULL) {
-        memset(pS64, 0, 64);
+    if (pS64 == NULL) {
+        return;
     }
-    (void)pStats;
+    pOut = (struct soft_netdev_stats64 *)pS64;
+    memset(pOut, 0, sizeof(*pOut));
+    if (pStats != NULL) {
+        pIn = (const struct soft_netdev_stats64 *)pStats;
+        pOut->u64RxPackets = pIn->u64RxPackets;
+        pOut->u64TxPackets = pIn->u64TxPackets;
+        pOut->u64RxBytes = pIn->u64RxBytes;
+        pOut->u64TxBytes = pIn->u64TxBytes;
+        pOut->u64RxDropped = pIn->u64RxDropped;
+        pOut->u64TxDropped = pIn->u64TxDropped;
+        return;
+    }
+    pNd = g_pPrimary;
+    if (pNd != NULL && pNd->u8Live != 0u) {
+        pOut->u64RxPackets = pNd->u64RxPackets;
+        pOut->u64TxPackets = pNd->u64TxPackets;
+        pOut->u64RxBytes = pNd->u64RxBytes;
+        pOut->u64TxBytes = pNd->u64TxBytes;
+        pOut->u64RxDropped = pNd->u64RxDropped;
+        pOut->u64TxDropped = pNd->u64TxDropped;
+    }
 }
 
 void

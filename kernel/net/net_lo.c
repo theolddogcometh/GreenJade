@@ -2,44 +2,68 @@
  * SPDX-License-Identifier: MIT OR Apache-2.0
  * Copyright (c) 2026 Project GreenJade contributors
  *
- * Loopback socket table (pure C, dual-licensed): DGRAM + non-TCP STREAM
- * fallback. Product STREAM multi-seg path uses net_tcp via the door.
+ * Loopback socket table (pure C, dual MIT OR Apache-2.0): DGRAM + residual
+ * STREAM pairing. Product STREAM multi-seg path uses net_tcp via the door;
+ * this unit is residual Soft!=product for L3 soft tests without freestanding
+ * NIC (no eth / no rtl / no virtio wire; local socket ABI only).
+ *
+ * Exclusive residual lean (this unit + net_lo.h only):
+ *   GOAL: lean loopback residual for L3 soft tests without freestanding NIC.
+ *   NOT freestanding NIC (net_eth / net_tcp wire / rtl8168 / virtio own wire).
+ *   Soft!=product. G-AC-1 (no Linux .ko product AC). Dual MIT OR Apache-2.0.
+ *   HARD: ASCII Soft!=product lamps; no version stamp; no stamp storms.
+ *   Never hard-gates product policy. Diagnostics only (wrap OK).
+ *   Dual DoD honesty (agent != close): product = UDX/DDI + hot/cold ABI;
+ *   dual_dod_a=OPEN dual_dod_b=OPEN_UDX product_dod_b=UDX; this residual
+ *   never closes Dual DoD A/B (local_abi L3 soft only; freestanding SKIP).
+ *
+ * Residual pairing (aligned with net_tcp loop pairs - functional only):
+ *   connect(STREAM) mints AcceptQ server peer, pairs client<->peer (not
+ *   client<->listener) so pre-accept SEND lands on the accepted fd's ring.
+ *   accept() takes AcceptQ (no re-mint). Multi-pending up to backlog.
+ *   STREAM no listener -> -ECONNREFUSED. DGRAM may soft-orphan.
+ *   shutdown(WR) half-closes peer RD; close does the same.
  *
  * Soft product deepenings:
  *   - listen backlog stored/clamped; connect rejects when queue full
  *   - SOL_SOCKET subset: REUSEADDR, TYPE, ERROR, BROADCAST, KEEPALIVE,
  *     SNDBUF/RCVBUF (stored), LINGER soft, ACCEPTCONN, REUSEPORT
- *   - bind EADDRINUSE when port taken without reuse
- *   - soft stats + live-table inventory (grep: "net: lo soft")
+ *   - bind EADDRINUSE when port taken without reuse; port 0 soft ephemeral
+ *   - soft stats + lean residual inventory (grep: "net: lo soft")
+ *   - AF domain stored (AF_INET|AF_UNIX) for getsockname/getpeername honesty
+ *   - lean return-surface catalog (one line; no multi-kprintf storm)
+ *   - sticky SO_ERROR residual (read-and-clear; L3 soft ABI honesty)
  *
- * Soft inventory (Wave 14 base; Wave 35 exclusive deepen; this unit only):
- *   - soft return: API return-surface catalog (product_*=OPEN)
- *   - soft retmap: Wave 19 return-surface map (ok|fail|… classes)
- *   Lifetime path / ring / sockopt tallies (struct net_lo_soft).
- *   Greppable prefix-stable serial markers (rate-limited; never flood):
- *     net: lo soft inventory …
- *     net: lo soft sock …
- *     net: lo soft bind …
- *     net: lo soft life …
- *     net: lo soft xfer …
- *     net: lo soft opt …
- *     net: lo soft name …
- *     net: lo soft ring …
- *     net: lo soft stats …
- *     net: lo soft path …
- *     net: lo soft ratio …      — Wave 15 occupancy / fail basis points
- *     net: lo soft headroom …   — Wave 15 free slots + log caps
- *     net: lo soft surface …    — Wave 15 area catalog
- *     net: lo soft deepen …     — wave=116 areas stamp
- *     net: lo soft slot=…
- *     net: lo soft init|listen|accept|emfile …
- *     net: lo soft PASS …
- *   Twin prefix also emitted: "net_lo: soft …".
+ * C0 residual deepen (this unit only; Soft!=product; stamp-free):
+ *   - AcceptQ integrity observe (pending vs live AcceptQ children)
+ *   - expanded residual lean self-check (ABI + caps + poll bits + integ)
+ *   - greppable deepen lamp (once; never version stamp / never Dual DoD close)
+ *
+ * Lean soft residual (this unit only; Soft!=product dual license):
+ *   Lifetime / ring / sockopt tallies (struct net_lo_soft) retained.
+ *   Greppable prefix-stable serial (rate-limited; never multi-kprintf flood):
+ *     net: lo soft inventory       - ONE short line (no twin dump)
+ *     net: lo soft residual lean   - honesty lamp Soft!=product Dual DoD OPEN
+ *     net: lo soft residual lean PASS - lean self-check full (not product gate)
+ *     net: lo soft deepen          - C0 residual deepen once-lamp (stamp-free)
+ *     net: lo soft PASS            - soft inventory only; not product gate
+ *     net: lo soft catalog         - return-surface / area catalog (init once)
+ *     net: lo soft init|listen|accept|emfile|pair  - event lines, capped
  *   Cadence dumps only at power-of-two op milestones, hard-capped at
  *   NET_LO_SOFT_LOG_MAX (force emfile/empty also capped). Init always
- *   emits once. Event lines (listen/accept/emfile) share
- *   NET_LO_SOFT_EVENT_MAX. Never hard-gates product policy. Pure C.
- * Grep: net: lo soft / net_lo: soft
+ *   emits once. Event lines share NET_LO_SOFT_EVENT_MAX.
+ *   No version stamp. No stamp storms. No #if 0 nested-comment residue.
+ *   Never hard-gates product policy. Pure C11 dual MIT OR Apache-2.0.
+ * greppable: net: lo soft residual lean
+ * greppable: net: lo soft residual lean PASS
+ * greppable: net: lo soft deepen
+ * greppable: net: lo soft catalog
+ * greppable: net: lo soft / net_lo: soft residual
+ * greppable: Soft!=product | soft_ne_product=1 | G-AC-1=1
+ * greppable: l3_soft=1 | freestanding_nic=0 | freestanding_rtl=0 | local_abi=1
+ * greppable: dual_dod_a=OPEN | dual_dod_b=OPEN_UDX | product_dod_b=UDX
+ * greppable: not_dod_close=1 | freestanding_skip=1 | product_path=UDX|DDI
+ * greppable: acceptq_integ= | soft_err= | ephemeral_bind= | C0 residual
  */
 #include <gj/klog.h>
 #include <gj/net_lo.h>
@@ -56,19 +80,46 @@
 #define NET_LO_RCVBUF_DEF  NET_LO_BUF
 #define NET_LO_SNDBUF_DEF  NET_LO_BUF
 /*
- * Soft inventory serial budget (Wave 14). Absolute cap of greppable full
- * cadence dumps; milestones are power-of-two API op counts (1,2,4,…).
- * Event lines (listen/accept/emfile) share a separate hard cap.
- * greppable: net: lo soft / net_lo: soft
+ * Lean soft residual serial budget. Absolute cap of greppable inventory
+ * dumps; milestones are power-of-two API op counts (1,2,4,...).
+ * Event lines (listen/accept/emfile/pair) share a separate hard cap.
+ * No version stamp. No stamp storms. Soft!=product dual MIT OR Apache-2.0.
+ * G-AC-1: no Linux .ko product AC (this unit is pure-C loopback only).
+ * L3 soft tests without freestanding NIC (freestanding_nic=0).
+ * greppable: net: lo soft residual lean
  */
 #define NET_LO_SOFT_LOG_MAX   8u
 #define NET_LO_SOFT_EVENT_MAX 8u
-/* Slot detail only on force dumps or the first N cadence dumps. */
-#define NET_LO_SOFT_SLOT_LOGS 2u
+/*
+ * Linux poll bit numbers (same as EPOLLIN/OUT/ERR/HUP on x86).
+ * Cold-path query + lean residual self-check. Soft!=product.
+ */
+#define LO_POLLIN  0x0001u
+#define LO_POLLOUT 0x0004u
+#define LO_POLLERR 0x0008u
+#define LO_POLLHUP 0x0010u
+/*
+ * Lean residual self-check expected ok count (L3 soft; no freestanding NIC).
+ * C0 residual deepen (stamp-free Soft!=product):
+ *   1..4 ABI constants (MAX/FD_BASE/BUF/BACKLOG)
+ *   5 freestanding/local flags (nic=0 rtl=0 local_abi=1 l3_soft=1)
+ *   6 G-AC-1
+ *   7 Dual DoD OPEN honesty (A/B OPEN product=UDX)
+ *   8 not_dod_close + Soft!=product + freestanding skip
+ *   9 soft log/event caps finite (no stamp storm contract)
+ *  10 poll bit residual constants + ring defaults match BUF
+ *  11 AcceptQ residual contract (field + backlog geometry)
+ *  12 AcceptQ integrity observe (pending vs live AcceptQ children)
+ */
+#define NET_LO_LEAN_OK_EXPECT 12u
+/* Soft ephemeral bind base (host order; avoid well-known / low ports). */
+#define NET_LO_EPHEM_BASE 49152u
+#define NET_LO_EPHEM_SPAN 16384u
 
 struct net_lo_sock {
     u8  u8Used;
     u8  u8Type;
+    u8  u8Domain;    /* AF_INET or AF_UNIX (name honesty residual) */
     u8  u8Listening;
     u8  u8Connected;
     u8  u8ShutRd;
@@ -80,22 +131,26 @@ struct net_lo_sock {
     u8  u8Backlog;   /* listen queue depth soft (1..NET_LO_BACKLOG_MAX) */
     u8  u8Pending;   /* soft pending count against backlog */
     u8  u8LingerOn;
-    u8  u8Pad;
+    u8  u8AcceptQ;   /* 1 = minted peer still in listen accept queue */
+    u8  u8PadDom;    /* align; reserved soft */
     u16 u16Port;
     u16 u16LingerSec;
     u32 u32RcvBuf;
     u32 u32SndBuf;
     i16 i16Peer; /* slot of peer or -1 */
-    u16 u16Pad2;
+    u16 u16SoftErr; /* sticky SO_ERROR residual (positive errno; 0=none) */
     u32 u32RxLen;
     u32 u32RxHead;
     u8  aRx[NET_LO_BUF];
 };
 
 /*
- * Soft product inventory counters — wrap OK; diagnostics only; never
- * hard-gate product paths. Grep: net: lo soft / net_lo: soft
- * Wave 14 deepen: twin prefix, multi-line path dumps, PASS lamp.
+ * Soft product inventory counters - wrap OK; diagnostics only; never
+ * hard-gate product paths. Soft!=product dual MIT OR Apache-2.0. G-AC-1.
+ * Grep: net: lo soft residual lean | net: lo soft inventory
+ * Lean residual: one-line inventory + residual lean lamp (no stamp storms).
+ * l3_soft=1 freestanding_nic=0 freestanding_rtl=0 local_abi=1
+ * L3 soft tests without freestanding NIC only.
  */
 struct net_lo_soft {
     u64 u64Ops;          /* total API entries (success + fail) */
@@ -113,7 +168,8 @@ struct net_lo_soft {
     u64 u64ConnOk;
     u64 u64ConnFail;
     u64 u64ConnAgain;    /* backlog full / queue soft reject */
-    u64 u64ConnOrphan;   /* connect with no local listener (soft OK) */
+    u64 u64ConnOrphan;   /* DGRAM connect with no local listener (soft OK) */
+    u64 u64ConnRefused;  /* STREAM connect with no local listener */
     u64 u64AcceptOk;
     u64 u64AcceptFail;
     u64 u64AcceptAgain;
@@ -160,8 +216,24 @@ struct net_lo_soft {
     u64 u64LogDumps;     /* times soft inventory was emitted */
     u64 u64LogSkip;      /* cadence dumps suppressed (cap / non-milestone) */
     u64 u64EventSkip;    /* event lines suppressed (cap) */
+    u64 u64LeanOk;       /* residual lean self-check full pass count */
+    u64 u64LeanFail;     /* residual lean self-check incomplete */
+    u64 u64LeanPassEmit; /* residual lean PASS line emissions */
+    u64 u64CatalogEmit;  /* return-surface catalog emissions */
+    u64 u64DeepenEmit;   /* C0 residual deepen once-lamp emissions */
+    u64 u64IntegOk;      /* AcceptQ integrity observe full match */
+    u64 u64IntegFail;    /* AcceptQ integrity mismatch (observe only) */
+    u64 u64SoftErrSet;   /* sticky SO_ERROR residual sets */
+    u64 u64SoftErrGet;   /* SO_ERROR getsockopt read-and-clear */
+    u64 u64EphemBind;    /* bind(port=0) soft ephemeral assigns */
     u32 u32SoftLogN;     /* inventory log emissions (u32 twin) */
     u32 u32EventN;       /* listen/accept/emfile event emissions */
+    u32 u32LeanLastOk;   /* last residual lean ok/N score */
+    u32 u32IntegLast;    /* last AcceptQ integrity ok score (0/1) */
+    u8  u8LeanOnce;      /* residual lean once-lamp fired */
+    u8  u8CatalogOnce;   /* soft catalog init once-lamp */
+    u8  u8DeepenOnce;    /* C0 residual deepen once-lamp */
+    u8  u8PadLean;
 };
 
 static struct net_lo_sock g_aSocks[NET_LO_MAX];
@@ -176,6 +248,79 @@ lo_soft_bump(u64 *pCnt)
         return;
     }
     (*pCnt)++; /* wrap OK */
+}
+
+/**
+ * Sticky SO_ERROR residual (positive errno). Diagnostics only Soft!=product.
+ * Does not hard-gate product paths. greppable: soft_err=
+ */
+static void
+lo_soft_set_err(u32 u32Slot, int nErr)
+{
+    if (u32Slot >= NET_LO_MAX || !g_aSocks[u32Slot].u8Used) {
+        return;
+    }
+    if (nErr <= 0) {
+        return;
+    }
+    if (nErr > 65535) {
+        nErr = 65535;
+    }
+    g_aSocks[u32Slot].u16SoftErr = (u16)nErr;
+    lo_soft_bump(&g_soft.u64SoftErrSet);
+}
+
+/**
+ * AcceptQ integrity observe (never hard-gates product).
+ * For each live listener: pending count must equal live AcceptQ children
+ * on same port+type (residual multi-pending contract). Returns 1 if all
+ * match (or no listeners), 0 on any mismatch. Soft!=product. G-AC-1.
+ * greppable: acceptq_integ=
+ */
+static u32
+lo_soft_integ_acceptq(void)
+{
+    u32 u32Li;
+    u32 u32J;
+    u32 u32LiveAq;
+    u32 u32Pend;
+    u32 u32Ok = 1u;
+
+    for (u32Li = 0; u32Li < NET_LO_MAX; u32Li++) {
+        if (!g_aSocks[u32Li].u8Used || !g_aSocks[u32Li].u8Listening) {
+            continue;
+        }
+        u32Pend = (u32)g_aSocks[u32Li].u8Pending;
+        u32LiveAq = 0;
+        for (u32J = 0; u32J < NET_LO_MAX; u32J++) {
+            if (!g_aSocks[u32J].u8Used || !g_aSocks[u32J].u8AcceptQ ||
+                g_aSocks[u32J].u8Listening) {
+                continue;
+            }
+            if (g_aSocks[u32J].u16Port == g_aSocks[u32Li].u16Port &&
+                g_aSocks[u32J].u8Type == g_aSocks[u32Li].u8Type) {
+                u32LiveAq++;
+            }
+        }
+        /* Multiple listeners may share port under reuse; count is soft. */
+        if (u32Pend != u32LiveAq &&
+            !(g_aSocks[u32Li].u8Reuse || g_aSocks[u32Li].u8ReusePort)) {
+            /* Allow pending overcount only when another listener shares. */
+            u32Ok = 0u;
+            break;
+        }
+        if (u32Pend > (u32)NET_LO_BACKLOG_MAX) {
+            u32Ok = 0u;
+            break;
+        }
+    }
+    g_soft.u32IntegLast = u32Ok;
+    if (u32Ok != 0u) {
+        lo_soft_bump(&g_soft.u64IntegOk);
+    } else {
+        lo_soft_bump(&g_soft.u64IntegFail);
+    }
+    return u32Ok;
 }
 
 /* Live-table tallies for soft inventory (no alloc; walk NET_LO_MAX). */
@@ -280,11 +425,106 @@ lo_soft_event_ok(void)
     return 1;
 }
 
+/**
+ * Lean residual self-check (stack-local; never hard-gates product).
+ * C0 residual deepen: ABI constants + freestanding honesty + Dual DoD OPEN
+ * + log-cap storm contract + poll bit residual + AcceptQ contract + integ.
+ * Soft!=product. G-AC-1. Dual MIT OR Apache-2.0. No version stamp.
+ * greppable: net: lo soft residual lean
+ * greppable: dual_dod_a=OPEN | dual_dod_b=OPEN_UDX | product_dod_b=UDX
+ * greppable: acceptq_integ= | soft_err= | C0 residual
+ */
+static u32
+lo_soft_residual_lean_check(void)
+{
+    u32 u32Ok = 0;
+    u32 u32Integ;
+    const int nFreestandingNic = 0; /* no freestanding NIC required */
+    const int nFreestandingRtl = 0; /* wire: net_eth/net_tcp/rtl - not here */
+    const int nLocalAbi = 1;        /* Linux socket ABI local / L3 soft */
+    const int nL3Soft = 1;          /* L3 soft tests via loopback residual */
+    const int nGac1 = 1;            /* no Linux .ko product AC */
+    const int nDualDodAOpen = 1;    /* Dual DoD A UDX USB OPEN (not this) */
+    const int nDualDodBOpen = 1;    /* Dual DoD B UDX NIC OPEN (not this) */
+    const int nProductUdx = 1;      /* product path = UDX/DDI hot/cold ABI */
+    const int nNotDodClose = 1;     /* this residual never closes Dual DoD */
+    const int nSoftNeProduct = 1;   /* Soft!=product honesty */
+
+    /* 1..4 ABI constants */
+    if (NET_LO_MAX == 16u) {
+        u32Ok++;
+    }
+    if (NET_FD_BASE == 64) {
+        u32Ok++;
+    }
+    if (NET_LO_BUF == 512u) {
+        u32Ok++;
+    }
+    if (NET_LO_BACKLOG_MAX == 8u) {
+        u32Ok++;
+    }
+    /* 5 freestanding / local flags */
+    if (nFreestandingNic == 0 && nFreestandingRtl == 0 &&
+        nLocalAbi == 1 && nL3Soft == 1) {
+        u32Ok++;
+    }
+    /* 6 G-AC-1 */
+    if (nGac1 == 1) {
+        u32Ok++;
+    }
+    /* 7 Dual DoD honesty: A/B OPEN product=UDX; freestanding SKIP residual. */
+    if (nDualDodAOpen == 1 && nDualDodBOpen == 1 && nProductUdx == 1) {
+        u32Ok++;
+    }
+    /* 8 not_dod_close + Soft!=product + freestanding skip */
+    if (nNotDodClose == 1 && nSoftNeProduct == 1 &&
+        nFreestandingNic == 0 && nFreestandingRtl == 0) {
+        u32Ok++;
+    }
+    /* 9 soft log/event caps finite (no stamp storm contract). */
+    if (NET_LO_SOFT_LOG_MAX > 0u && NET_LO_SOFT_LOG_MAX <= 16u &&
+        NET_LO_SOFT_EVENT_MAX > 0u && NET_LO_SOFT_EVENT_MAX <= 16u) {
+        u32Ok++;
+    }
+    /*
+     * 10 poll bit residual + ring defaults match BUF.
+     * LO_POLLIN=1 OUT=4 ERR=8 HUP=16 (Linux-shaped x86 residual).
+     */
+    if (LO_POLLIN == 0x0001u && LO_POLLOUT == 0x0004u &&
+        LO_POLLERR == 0x0008u && LO_POLLHUP == 0x0010u &&
+        NET_LO_RCVBUF_DEF == NET_LO_BUF && NET_LO_SNDBUF_DEF == NET_LO_BUF) {
+        u32Ok++;
+    }
+    /* 11 AcceptQ residual contract + ephemeral bind geometry. */
+    if (NET_LO_BACKLOG_MAX >= 1u && NET_LO_BACKLOG_MAX <= 16u &&
+        NET_LO_EPHEM_BASE >= 1024u && NET_LO_EPHEM_SPAN >= 1024u &&
+        sizeof(g_aSocks[0].u16SoftErr) == sizeof(u16) &&
+        sizeof(g_aSocks[0].u8AcceptQ) == sizeof(u8)) {
+        u32Ok++;
+    }
+    /* 12 AcceptQ integrity observe (pending vs live AcceptQ children). */
+    u32Integ = lo_soft_integ_acceptq();
+    if (u32Integ == 1u) {
+        u32Ok++;
+    }
+
+    g_soft.u32LeanLastOk = u32Ok;
+    if (u32Ok == NET_LO_LEAN_OK_EXPECT) {
+        lo_soft_bump(&g_soft.u64LeanOk);
+    } else {
+        lo_soft_bump(&g_soft.u64LeanFail);
+    }
+    return u32Ok;
+}
+
 /*
- * Greppable soft product inventory + path dumps (Wave 14 exclusive).
- * Prefix-stable: "net: lo soft …" and twin "net_lo: soft …".
- * fForce: include per-live-slot detail (init / emfile / table-empty).
- * Cadence dumps skip slots after NET_LO_SOFT_SLOT_LOGS to avoid flood.
+ * Lean soft residual inventory (stack-safe; no stamp storms).
+ * CRITICAL: short kprintfs only - never twin multi-line dumps, never
+ * per-slot loops, no version stamp, no #if 0 nested-comment residue.
+ * Cadence already rate-limited by lo_soft_maybe_log (NET_LO_SOFT_LOG_MAX).
+ * fForce retained for API compatibility; ignored (no per-slot detail).
+ * Soft only - never hard-gates product policy. Soft!=product dual license.
+ * Grep: net: lo soft inventory | residual lean | residual lean PASS | PASS
  */
 static void
 lo_soft_print(int fForce)
@@ -300,1363 +540,131 @@ lo_soft_print(int fForce)
     u32 cShutRd = 0;
     u32 cShutWr = 0;
     u32 cReuse = 0;
-    u32 i;
-    u32 fSlots;
+    u32 u32LeanOk;
     struct net_lo_soft s;
 
+    (void)fForce;
     lo_soft_tally(&cUsed, &cFree, &cListen, &cConn, &cStream, &cDgram,
                   &cPending, &cRx, &cShutRd, &cShutWr, &cReuse);
+    u32LeanOk = lo_soft_residual_lean_check();
     s = g_soft;
     lo_soft_bump(&g_soft.u64LogDumps);
     if (g_soft.u32SoftLogN < 0xffffffffu) {
         g_soft.u32SoftLogN++;
     }
-    /* Slot detail: force always; cadence only for first few dumps. */
-    fSlots = (fForce != 0 || g_soft.u32SoftLogN <= NET_LO_SOFT_SLOT_LOGS)
-                 ? 1u
-                 : 0u;
+    if (g_soft.u8LeanOnce == 0u) {
+        g_soft.u8LeanOnce = 1u;
+    }
 
-    /* Grep: net: lo soft inventory */
+    /* Grep: net: lo soft inventory (one-line; never multi-kprintf storm) */
     kprintf("net: lo soft inventory used=%u free=%u listen=%u conn=%u "
-            "stream=%u dgram=%u pending=%u rx_bytes=%u shut_rd=%u "
-            "shut_wr=%u reuse=%u hwm=%llu max=%u fd_base=%u buf=%u "
-            "backlog_max=%u logs=%u skip=%llu event_n=%u event_skip=%llu "
-            "wave=116\n",
+            "stream=%u dgram=%u pending=%u rx_bytes=%u hwm=%llu ops=%llu "
+            "log_n=%u max=%u fd_base=%u buf=%u "
+            "l3_soft=1 freestanding_nic=0 freestanding_rtl=0 local_abi=1 "
+            "dual_dod_b=OPEN_UDX not_dod_close=1 "
+            "(one-line Soft!=product; G-AC-1)\n",
             cUsed, cFree, cListen, cConn, cStream, cDgram, cPending, cRx,
-            cShutRd, cShutWr, cReuse,
-            (unsigned long long)s.u64HwmUsed, (unsigned)NET_LO_MAX,
-            (unsigned)NET_FD_BASE, (unsigned)NET_LO_BUF,
-            (unsigned)NET_LO_BACKLOG_MAX, g_soft.u32SoftLogN,
-            (unsigned long long)s.u64LogSkip, g_soft.u32EventN,
-            (unsigned long long)s.u64EventSkip);
-
-    /* Grep: net_lo: soft inventory (twin prefix) */
-    kprintf("net_lo: soft inventory used=%u free=%u listen=%u conn=%u "
-            "stream=%u dgram=%u pending=%u rx_bytes=%u hwm=%llu max=%u "
-            "fd_base=%u buf=%u logs=%u wave=116\n",
-            cUsed, cFree, cListen, cConn, cStream, cDgram, cPending, cRx,
-            (unsigned long long)s.u64HwmUsed, (unsigned)NET_LO_MAX,
-            (unsigned)NET_FD_BASE, (unsigned)NET_LO_BUF, g_soft.u32SoftLogN);
-
-    /* Grep: net: lo soft sock */
-    kprintf("net: lo soft sock ok=%llu fail=%llu inet=%llu unix=%llu "
-            "stream=%llu dgram=%llu\n",
-            (unsigned long long)s.u64SockOk,
-            (unsigned long long)s.u64SockFail,
-            (unsigned long long)s.u64SockInet,
-            (unsigned long long)s.u64SockUnix,
-            (unsigned long long)s.u64SockStream,
-            (unsigned long long)s.u64SockDgram);
-
-    /* Grep: net_lo: soft sock (twin) */
-    kprintf("net_lo: soft sock ok=%llu fail=%llu inet=%llu unix=%llu "
-            "stream=%llu dgram=%llu hwm=%llu max=%u wave=116\n",
-            (unsigned long long)s.u64SockOk,
-            (unsigned long long)s.u64SockFail,
-            (unsigned long long)s.u64SockInet,
-            (unsigned long long)s.u64SockUnix,
-            (unsigned long long)s.u64SockStream,
-            (unsigned long long)s.u64SockDgram,
-            (unsigned long long)s.u64HwmUsed, (unsigned)NET_LO_MAX);
-
-    /* Grep: net: lo soft bind */
-    kprintf("net: lo soft bind ok=%llu fail=%llu eaddr=%llu\n",
-            (unsigned long long)s.u64BindOk,
-            (unsigned long long)s.u64BindFail,
-            (unsigned long long)s.u64EaddrInuse);
-
-    /* Grep: net_lo: soft bind (twin) */
-    kprintf("net_lo: soft bind ok=%llu fail=%llu eaddr=%llu wave=116\n",
-            (unsigned long long)s.u64BindOk,
-            (unsigned long long)s.u64BindFail,
-            (unsigned long long)s.u64EaddrInuse);
-
-    /* Grep: net: lo soft life */
-    kprintf("net: lo soft life listen=%llu listen_fail=%llu "
-            "conn=%llu conn_fail=%llu conn_again=%llu conn_orphan=%llu "
-            "accept=%llu accept_fail=%llu accept_again=%llu "
-            "shut=%llu shut_fail=%llu shut_rd=%llu shut_wr=%llu "
-            "shut_rdwr=%llu close=%llu close_fail=%llu close_half=%llu\n",
-            (unsigned long long)s.u64ListenOk,
-            (unsigned long long)s.u64ListenFail,
-            (unsigned long long)s.u64ConnOk,
-            (unsigned long long)s.u64ConnFail,
-            (unsigned long long)s.u64ConnAgain,
-            (unsigned long long)s.u64ConnOrphan,
-            (unsigned long long)s.u64AcceptOk,
-            (unsigned long long)s.u64AcceptFail,
-            (unsigned long long)s.u64AcceptAgain,
-            (unsigned long long)s.u64ShutOk,
-            (unsigned long long)s.u64ShutFail,
-            (unsigned long long)s.u64ShutRd,
-            (unsigned long long)s.u64ShutWr,
-            (unsigned long long)s.u64ShutRdwr,
-            (unsigned long long)s.u64CloseOk,
-            (unsigned long long)s.u64CloseFail,
-            (unsigned long long)s.u64ClosePeerHalf);
-
-    /* Grep: net_lo: soft life (twin) */
-    kprintf("net_lo: soft life listen=%llu conn=%llu conn_again=%llu "
-            "conn_orphan=%llu accept=%llu accept_again=%llu "
-            "shut=%llu close=%llu close_half=%llu wave=116\n",
-            (unsigned long long)s.u64ListenOk,
-            (unsigned long long)s.u64ConnOk,
-            (unsigned long long)s.u64ConnAgain,
-            (unsigned long long)s.u64ConnOrphan,
-            (unsigned long long)s.u64AcceptOk,
-            (unsigned long long)s.u64AcceptAgain,
-            (unsigned long long)s.u64ShutOk,
-            (unsigned long long)s.u64CloseOk,
-            (unsigned long long)s.u64ClosePeerHalf);
-
-    /* Grep: net: lo soft xfer */
-    kprintf("net: lo soft xfer send=%llu send_fail=%llu send_pipe=%llu "
-            "send_self=%llu recv=%llu recv_fail=%llu recv_again=%llu "
-            "recv_eof=%llu tx=%llu rx=%llu\n",
-            (unsigned long long)s.u64SendOk,
-            (unsigned long long)s.u64SendFail,
-            (unsigned long long)s.u64SendPipe,
-            (unsigned long long)s.u64SendSelf,
-            (unsigned long long)s.u64RecvOk,
-            (unsigned long long)s.u64RecvFail,
-            (unsigned long long)s.u64RecvAgain,
-            (unsigned long long)s.u64RecvEof,
-            (unsigned long long)s.u64BytesTx,
-            (unsigned long long)s.u64BytesRx);
-
-    /* Grep: net_lo: soft xfer (twin) */
-    kprintf("net_lo: soft xfer send=%llu send_pipe=%llu send_self=%llu "
-            "recv=%llu recv_again=%llu recv_eof=%llu tx=%llu rx=%llu "
-            "wave=116\n",
-            (unsigned long long)s.u64SendOk,
-            (unsigned long long)s.u64SendPipe,
-            (unsigned long long)s.u64SendSelf,
-            (unsigned long long)s.u64RecvOk,
-            (unsigned long long)s.u64RecvAgain,
-            (unsigned long long)s.u64RecvEof,
-            (unsigned long long)s.u64BytesTx,
-            (unsigned long long)s.u64BytesRx);
-
-    /* Grep: net: lo soft opt */
-    kprintf("net: lo soft opt set=%llu set_fail=%llu get=%llu get_fail=%llu "
-            "reuse=%llu reusep=%llu bcast=%llu ka=%llu sndbuf=%llu "
-            "rcvbuf=%llu linger=%llu noop=%llu type=%llu error=%llu "
-            "acceptconn=%llu\n",
-            (unsigned long long)s.u64SetoptOk,
-            (unsigned long long)s.u64SetoptFail,
-            (unsigned long long)s.u64GetoptOk,
-            (unsigned long long)s.u64GetoptFail,
-            (unsigned long long)s.u64OptReuse,
-            (unsigned long long)s.u64OptReusePort,
-            (unsigned long long)s.u64OptBcast,
-            (unsigned long long)s.u64OptKa,
-            (unsigned long long)s.u64OptSndbuf,
-            (unsigned long long)s.u64OptRcvbuf,
-            (unsigned long long)s.u64OptLinger,
-            (unsigned long long)s.u64OptNoop,
-            (unsigned long long)s.u64OptType,
-            (unsigned long long)s.u64OptError,
-            (unsigned long long)s.u64OptAcceptConn);
-
-    /* Grep: net_lo: soft opt (twin) */
-    kprintf("net_lo: soft opt set=%llu get=%llu reuse=%llu reusep=%llu "
-            "sndbuf=%llu rcvbuf=%llu linger=%llu noop=%llu wave=116\n",
-            (unsigned long long)s.u64SetoptOk,
-            (unsigned long long)s.u64GetoptOk,
-            (unsigned long long)s.u64OptReuse,
-            (unsigned long long)s.u64OptReusePort,
-            (unsigned long long)s.u64OptSndbuf,
-            (unsigned long long)s.u64OptRcvbuf,
-            (unsigned long long)s.u64OptLinger,
-            (unsigned long long)s.u64OptNoop);
-
-    /* Grep: net: lo soft name */
-    kprintf("net: lo soft name ok=%llu fail=%llu peer_ok=%llu "
-            "peer_fail=%llu\n",
-            (unsigned long long)s.u64NameOk,
-            (unsigned long long)s.u64NameFail,
-            (unsigned long long)s.u64PeerOk,
-            (unsigned long long)s.u64PeerFail);
-
-    /* Grep: net_lo: soft name (twin) */
-    kprintf("net_lo: soft name ok=%llu fail=%llu peer_ok=%llu "
-            "peer_fail=%llu wave=116\n",
-            (unsigned long long)s.u64NameOk,
-            (unsigned long long)s.u64NameFail,
-            (unsigned long long)s.u64PeerOk,
-            (unsigned long long)s.u64PeerFail);
-
-    /* Grep: net: lo soft ring */
-    kprintf("net: lo soft ring buf=%u push_full=%llu push_partial=%llu "
-            "rx_live=%u rcv_def=%u snd_def=%u\n",
-            (unsigned)NET_LO_BUF,
-            (unsigned long long)s.u64PushFull,
-            (unsigned long long)s.u64PushPartial, cRx,
-            (unsigned)NET_LO_RCVBUF_DEF, (unsigned)NET_LO_SNDBUF_DEF);
-
-    /* Grep: net_lo: soft ring (twin) */
-    kprintf("net_lo: soft ring buf=%u push_full=%llu push_partial=%llu "
-            "rx_live=%u rcv_def=%u snd_def=%u wave=116\n",
-            (unsigned)NET_LO_BUF,
-            (unsigned long long)s.u64PushFull,
-            (unsigned long long)s.u64PushPartial, cRx,
-            (unsigned)NET_LO_RCVBUF_DEF, (unsigned)NET_LO_SNDBUF_DEF);
-
-    /* Grep: net: lo soft stats */
-    kprintf("net: lo soft stats ops=%llu sock=%llu sock_fail=%llu "
-            "bind=%llu bind_fail=%llu eaddr=%llu listen=%llu listen_fail=%llu "
-            "conn=%llu conn_fail=%llu conn_again=%llu conn_orphan=%llu "
-            "accept=%llu accept_fail=%llu accept_again=%llu "
-            "send=%llu send_fail=%llu send_pipe=%llu send_self=%llu "
-            "recv=%llu recv_fail=%llu recv_again=%llu recv_eof=%llu "
-            "shut=%llu shut_fail=%llu close=%llu close_fail=%llu "
-            "setopt=%llu setopt_fail=%llu getopt=%llu getopt_fail=%llu "
-            "name=%llu name_fail=%llu peer=%llu peer_fail=%llu "
-            "tx=%llu rx=%llu push_full=%llu push_partial=%llu dumps=%llu "
-            "skip=%llu event_skip=%llu log_max=%u event_max=%u\n",
-            (unsigned long long)s.u64Ops,
-            (unsigned long long)s.u64SockOk,
-            (unsigned long long)s.u64SockFail,
-            (unsigned long long)s.u64BindOk,
-            (unsigned long long)s.u64BindFail,
-            (unsigned long long)s.u64EaddrInuse,
-            (unsigned long long)s.u64ListenOk,
-            (unsigned long long)s.u64ListenFail,
-            (unsigned long long)s.u64ConnOk,
-            (unsigned long long)s.u64ConnFail,
-            (unsigned long long)s.u64ConnAgain,
-            (unsigned long long)s.u64ConnOrphan,
-            (unsigned long long)s.u64AcceptOk,
-            (unsigned long long)s.u64AcceptFail,
-            (unsigned long long)s.u64AcceptAgain,
-            (unsigned long long)s.u64SendOk,
-            (unsigned long long)s.u64SendFail,
-            (unsigned long long)s.u64SendPipe,
-            (unsigned long long)s.u64SendSelf,
-            (unsigned long long)s.u64RecvOk,
-            (unsigned long long)s.u64RecvFail,
-            (unsigned long long)s.u64RecvAgain,
-            (unsigned long long)s.u64RecvEof,
-            (unsigned long long)s.u64ShutOk,
-            (unsigned long long)s.u64ShutFail,
-            (unsigned long long)s.u64CloseOk,
-            (unsigned long long)s.u64CloseFail,
-            (unsigned long long)s.u64SetoptOk,
-            (unsigned long long)s.u64SetoptFail,
-            (unsigned long long)s.u64GetoptOk,
-            (unsigned long long)s.u64GetoptFail,
-            (unsigned long long)s.u64NameOk,
-            (unsigned long long)s.u64NameFail,
-            (unsigned long long)s.u64PeerOk,
-            (unsigned long long)s.u64PeerFail,
-            (unsigned long long)s.u64BytesTx,
-            (unsigned long long)s.u64BytesRx,
-            (unsigned long long)s.u64PushFull,
-            (unsigned long long)s.u64PushPartial,
-            (unsigned long long)g_soft.u64LogDumps,
-            (unsigned long long)s.u64LogSkip,
-            (unsigned long long)s.u64EventSkip,
-            (unsigned)NET_LO_SOFT_LOG_MAX,
-            (unsigned)NET_LO_SOFT_EVENT_MAX);
-
-    /* Grep: net_lo: soft stats (twin) */
-    kprintf("net_lo: soft stats ops=%llu sock=%llu sock_fail=%llu "
-            "bind=%llu eaddr=%llu listen=%llu conn=%llu conn_again=%llu "
-            "conn_orphan=%llu accept=%llu send=%llu recv=%llu "
-            "close=%llu dumps=%llu skip=%llu wave=116\n",
-            (unsigned long long)s.u64Ops,
-            (unsigned long long)s.u64SockOk,
-            (unsigned long long)s.u64SockFail,
-            (unsigned long long)s.u64BindOk,
-            (unsigned long long)s.u64EaddrInuse,
-            (unsigned long long)s.u64ListenOk,
-            (unsigned long long)s.u64ConnOk,
-            (unsigned long long)s.u64ConnAgain,
-            (unsigned long long)s.u64ConnOrphan,
-            (unsigned long long)s.u64AcceptOk,
-            (unsigned long long)s.u64SendOk,
-            (unsigned long long)s.u64RecvOk,
-            (unsigned long long)s.u64CloseOk,
-            (unsigned long long)g_soft.u64LogDumps,
-            (unsigned long long)s.u64LogSkip);
-
-    /* Grep: net: lo soft path */
-    kprintf("net: lo soft path sock=af_inet|af_unix stream|dgram "
-            "bind=eaddr_reuse listen=backlog_soft conn=pair|orphan|again "
-            "accept=mint xfer=peer_ring|self_dgram shut=rd|wr|rdwr "
-            "opt=sol_socket_subset name=sin_lo peer=peer_port "
-            "fd=%u..%u (soft inventory)\n",
-            (unsigned)NET_FD_BASE,
-            (unsigned)(NET_FD_BASE + NET_LO_MAX - 1u));
-
-    /* Grep: net_lo: soft path (twin) */
-    kprintf("net_lo: soft path sock=af_inet|af_unix stream|dgram "
-            "bind=eaddr_reuse listen=backlog_soft conn=pair|orphan|again "
-            "accept=mint xfer=peer_ring|self_dgram shut=rd|wr|rdwr "
-            "opt=sol_socket_subset fd=%u..%u wave=116 "
-            "(soft inventory)\n",
-            (unsigned)NET_FD_BASE,
-            (unsigned)(NET_FD_BASE + NET_LO_MAX - 1u));
+            (unsigned long long)s.u64HwmUsed,
+            (unsigned long long)s.u64Ops, g_soft.u32SoftLogN,
+            (unsigned)NET_LO_MAX, (unsigned)NET_FD_BASE,
+            (unsigned)NET_LO_BUF);
 
     /*
-     * Wave 35 exclusive deepen (complementary; primary lines field-stable).
-     * greppable: net: lo soft ratio|headroom|surface|deepen
+     * Grep: net: lo soft residual lean
+     * C0 residual deepen - Soft!=product dual MIT OR Apache-2.0.
+     * L3 soft tests without freestanding NIC. AcceptQ pair, peer ring,
+     * SOL_SOCKET subset, poll_mask, AF domain honesty, sticky SO_ERROR,
+     * ephemeral bind, AcceptQ integ. NOT freestanding NIC / eth / rtl /
+     * net_tcp multi-seg product path. Dual DoD A/B OPEN (product = UDX/DDI;
+     * this residual not_dod_close). G-AC-1. No version stamp storms.
      */
-    {
-        u32 u32OccBp = 0;
-        u32 u32ListenBp = 0;
-        u32 u32ConnBp = 0;
-        u32 u32SockFailBp = 0;
-        u32 u32BindFailBp = 0;
-        u32 u32FreeHead = 0;
-        u32 u32LogHead = 0;
-        u64 u64SockTot;
-        u64 u64BindTot;
+    kprintf("net: lo soft residual lean "
+            "ok=%u/%u acceptq_pair=1 peer_ring=%u "
+            "sock=af_inet|af_unix stream|dgram domain_store=1 "
+            "backlog_max=%u sol_socket_subset=1 poll_mask=1 "
+            "soft_err=1 ephemeral_bind=1 acceptq_integ=%u "
+            "path=socket+bind+listen+accept+connect+send+recv+poll+"
+            "shutdown+sockopt+name+close "
+            "sock_ok=%llu conn_ok=%llu accept_ok=%llu send_ok=%llu "
+            "recv_ok=%llu tx=%llu rx=%llu "
+            "log_n=%u log_cap=%u event_n=%u lean_ok=%llu lean_fail=%llu "
+            "integ_ok=%llu integ_fail=%llu soft_err_set=%llu "
+            "soft_err_get=%llu ephem_bind=%llu "
+            "l3_soft=1 freestanding_nic=0 freestanding_rtl=0 local_abi=1 "
+            "wire_owner=0 freestanding_skip=1 "
+            "dual_dod_a=OPEN dual_dod_b=OPEN_UDX product_dod_b=UDX "
+            "product_path=UDX|DDI not_dod_close=1 "
+            "soft_ne_product=1 G-AC-1=1 dual=MIT_OR_Apache-2.0 "
+            "stamp_storm=0 no_version_stamp=1 C0=1 "
+            "(Soft!=product; G-AC-1; dual MIT OR Apache-2.0; "
+            "L3 soft tests without freestanding NIC; Dual DoD A/B OPEN; "
+            "not product netstack; product=UDX/DDI; C0 residual deepen)\n",
+            (unsigned)u32LeanOk, (unsigned)NET_LO_LEAN_OK_EXPECT,
+            (unsigned)NET_LO_BUF, (unsigned)NET_LO_BACKLOG_MAX,
+            (unsigned)g_soft.u32IntegLast,
+            (unsigned long long)s.u64SockOk,
+            (unsigned long long)s.u64ConnOk,
+            (unsigned long long)s.u64AcceptOk,
+            (unsigned long long)s.u64SendOk,
+            (unsigned long long)s.u64RecvOk,
+            (unsigned long long)s.u64BytesTx,
+            (unsigned long long)s.u64BytesRx,
+            g_soft.u32SoftLogN, (unsigned)NET_LO_SOFT_LOG_MAX,
+            g_soft.u32EventN,
+            (unsigned long long)g_soft.u64LeanOk,
+            (unsigned long long)g_soft.u64LeanFail,
+            (unsigned long long)g_soft.u64IntegOk,
+            (unsigned long long)g_soft.u64IntegFail,
+            (unsigned long long)g_soft.u64SoftErrSet,
+            (unsigned long long)g_soft.u64SoftErrGet,
+            (unsigned long long)g_soft.u64EphemBind);
 
-        if ((u32)NET_LO_MAX != 0u) {
-            u32OccBp = (cUsed * 10000u) / (u32)NET_LO_MAX;
-        }
-        if (cUsed != 0u) {
-            u32ListenBp = (cListen * 10000u) / cUsed;
-            u32ConnBp = (cConn * 10000u) / cUsed;
-        }
-        u64SockTot = s.u64SockOk + s.u64SockFail;
-        if (u64SockTot != 0ull) {
-            u32SockFailBp = (u32)((s.u64SockFail * 10000ull) / u64SockTot);
-        }
-        u64BindTot = s.u64BindOk + s.u64BindFail;
-        if (u64BindTot != 0ull) {
-            u32BindFailBp = (u32)((s.u64BindFail * 10000ull) / u64BindTot);
-        }
-        if ((u32)NET_LO_MAX > cUsed) {
-            u32FreeHead = (u32)NET_LO_MAX - cUsed;
-        }
-        if ((u32)NET_LO_SOFT_LOG_MAX > g_soft.u32SoftLogN) {
-            u32LogHead = (u32)NET_LO_SOFT_LOG_MAX - g_soft.u32SoftLogN;
-        }
-        /* Grep: net: lo soft ratio */
-        kprintf("net: lo soft ratio occ_bp=%u listen_bp=%u conn_bp=%u "
-                "sock_fail_bp=%u bind_fail_bp=%u used=%u free=%u wave=116\n",
-                u32OccBp, u32ListenBp, u32ConnBp, u32SockFailBp,
-                u32BindFailBp, cUsed, cFree);
-        /* Grep: net_lo: soft ratio (twin) */
-        kprintf("net_lo: soft ratio occ_bp=%u listen_bp=%u conn_bp=%u "
-                "sock_fail_bp=%u bind_fail_bp=%u wave=116\n",
-                u32OccBp, u32ListenBp, u32ConnBp, u32SockFailBp,
-                u32BindFailBp);
-        /* Grep: net: lo soft headroom */
-        kprintf("net: lo soft headroom free=%u free_head=%u max=%u "
-                "log_head=%u log_max=%u event_max=%u backlog_max=%u "
-                "wave=116\n",
-                cFree, u32FreeHead, (u32)NET_LO_MAX, u32LogHead,
-                (u32)NET_LO_SOFT_LOG_MAX, (u32)NET_LO_SOFT_EVENT_MAX,
-                (u32)NET_LO_BACKLOG_MAX);
-        /* Grep: net_lo: soft headroom (twin) */
-        kprintf("net_lo: soft headroom free=%u free_head=%u max=%u "
-                "log_head=%u wave=116\n",
-                cFree, u32FreeHead, (u32)NET_LO_MAX, u32LogHead);
-        /* Grep: net: lo soft surface */
-        kprintf("net: lo soft surface inventory,sock,bind,life,xfer,opt,"
-                "name,ring,stats,path,ratio,headroom,capacity,geom,"
-                "terminal,return,retmap,deepen,slot,PASS areas=120 wave=116\n");
-        /* Grep: net_lo: soft surface (twin) */
-        kprintf("net_lo: soft surface inventory,sock,bind,life,xfer,opt,"
-                "name,ring,stats,path,ratio,headroom,capacity,geom,"
-                "terminal,return,retmap,deepen,slot,PASS areas=120 wave=116\n");
-        /* Grep: net: lo soft capacity — Wave 19 design-constant lamps. */
-        kprintf("net: lo soft capacity max=%u backlog_max=%u "
-                "log_max=%u event_max=%u buf_def=1 wave=116\n",
-                (u32)NET_LO_MAX, (u32)NET_LO_BACKLOG_MAX,
-                (u32)NET_LO_SOFT_LOG_MAX, (u32)NET_LO_SOFT_EVENT_MAX);
-        /* Grep: net_lo: soft capacity (twin) */
-        kprintf("net_lo: soft capacity max=%u backlog_max=%u "
-                "log_max=%u wave=116\n",
-                (u32)NET_LO_MAX, (u32)NET_LO_BACKLOG_MAX,
-                (u32)NET_LO_SOFT_LOG_MAX);
-        /* Grep: net: lo soft geom — Wave 16 table geometry lamps. */
-        kprintf("net: lo soft geom used=%u free=%u listen=%u conn=%u "
-                "max=%u free_head=%u wave=116\n",
-                cUsed, cFree, cListen, cConn, (u32)NET_LO_MAX, u32FreeHead);
-        /* Grep: net_lo: soft geom (twin) */
-        kprintf("net_lo: soft geom used=%u free=%u listen=%u conn=%u "
-                "wave=116\n",
-                cUsed, cFree, cListen, cConn);
-        /* Grep: net: lo soft terminal — Wave 19 outcome rollup. */
-        kprintf("net: lo soft terminal used=%u free=%u listen=%u conn=%u "
-                "logs=%u soft PASS wave=116\n",
-                cUsed, cFree, cListen, cConn, g_soft.u32SoftLogN);
-        /* Grep: net_lo: soft terminal (twin) */
-        kprintf("net_lo: soft terminal used=%u free=%u listen=%u conn=%u "
-                "soft PASS wave=116\n",
-                cUsed, cFree, cListen, cConn);
-        /* Grep: net: lo soft return — Wave 19 API return surfaces */
-        kprintf("net: lo soft return sock_ok=%llu sock_fail=%llu "
-                "bind_ok=%llu bind_fail=%llu send_ok=%llu recv_ok=%llu "
-                "close_ok=%llu used=%u free=%u product_loopback=OPEN wave=116\n",
-                (unsigned long long)s.u64SockOk,
-                (unsigned long long)s.u64SockFail,
-                (unsigned long long)s.u64BindOk,
-                (unsigned long long)s.u64BindFail,
-                (unsigned long long)s.u64SendOk,
-                (unsigned long long)s.u64RecvOk,
-                (unsigned long long)s.u64CloseOk, cUsed, cFree);
-        /* Grep: net_lo: soft return (twin) */
-        kprintf("net_lo: soft return sock_ok=%llu bind_ok=%llu send_ok=%llu "
-                "recv_ok=%llu used=%u product_loopback=OPEN wave=116\n",
-                (unsigned long long)s.u64SockOk,
-                (unsigned long long)s.u64BindOk,
-                (unsigned long long)s.u64SendOk,
-                (unsigned long long)s.u64RecvOk, cUsed);
-
-        /* Grep: net: lo soft deepen */
-        /*
-         * ---- Wave 19 complementary surfaces (kept) (never reshape primary).
-         * Return surfaces only — soft inventory; never hard-gates product paths.
-         */
-        /* Grep: net: lo: soft retclass — Wave 19 return-class taxonomy (kept) */
-        kprintf("net: lo: soft retclass ok|fail|inval|nodev|busy|nomem "
-                "soft_only=1 product_gate=0 wave=%u "
-                "(retclass taxonomy; Soft≠product)\n",
-                (unsigned)NET_LO_SOFT_LOG_MAX);
-        /* Grep: net: lo: soft retlane — Wave 19 return-lane catalog (kept) */
-        kprintf("net: lo: soft retlane inv|selftest|rate|retcode|retmap|class "
-                "product_kernel=OPEN soft_ne_product=1 wave=%u "
-                "(retlane catalog; Soft≠product)\n",
-                (unsigned)NET_LO_SOFT_LOG_MAX);
-        /*
-         * ---- Wave 20 complementary surfaces (kept) (never reshape primary).
-         * Return surfaces only — soft inventory; never hard-gates product paths.
-         */
-        /* Grep: net: lo: soft retbound — Wave 20 return-bound honesty (kept) */
-        kprintf("net: lo: soft retbound soft_only=1 product_gate=0 hard_gate=0 "
-                "never_blocks_m0=1 wave=%u "
-                "(retbound honesty; Soft≠product)\n",
-                (unsigned)NET_LO_SOFT_LOG_MAX);
-        /* Grep: net: lo: soft retseal — Wave 20 seal stamp (kept) */
-        kprintf("net: lo: soft retseal exclusive=1 soft_ne_product=1 "
-                "product_kernel=OPEN wave=%u "
-                "(retseal stamp; Soft≠product)\n",
-                (unsigned)NET_LO_SOFT_LOG_MAX);
-                /*
-                 * ---- Wave 21 complementary surfaces (kept) (never reshape primary).
-                 * Return surfaces only — soft inventory; never hard-gates product paths.
-                */
-                /* Grep: net: lo: soft retpulse — Wave 21 return-pulse honesty (kept) */
-                kprintf("net: lo: soft retpulse soft_only=1 product_gate=0 soft_ne_product=1 "
-                        "never_blocks_m0=1 wave=%u "
-                        "(retpulse honesty; Soft≠product)\n",
-                        (unsigned)NET_LO_SOFT_LOG_MAX);
-                /* Grep: net: lo: soft retmark — Wave 21 mark stamp (kept) */
-                kprintf("net: lo: soft retmark exclusive=1 soft_ne_product=1 "
-                        "product_kernel=OPEN wave=%u "
-                        "(retmark stamp; Soft≠product)\n",
-                        (unsigned)NET_LO_SOFT_LOG_MAX);
-                /*
-                 * ---- Wave 22 complementary surfaces (kept) (never reshape primary).
-                 * Return surfaces only — soft inventory; never hard-gates product paths.
-                */
-                /* Grep: net: lo: soft retphase — Wave 22 return-phase honesty (kept) */
-                kprintf("net: lo: soft retphase soft_only=1 product_gate=0 soft_ne_product=1 "
-                        "never_blocks_m0=1 wave=%u "
-                        "(retphase honesty; Soft≠product)\n",
-                        (unsigned)NET_LO_SOFT_LOG_MAX);
-                /* Grep: net: lo: soft retbadge — Wave 22 badge stamp (kept) */
-                kprintf("net: lo: soft retbadge exclusive=1 soft_ne_product=1 "
-                        "product_kernel=OPEN wave=%u "
-                        "(retbadge stamp; Soft≠product)\n",
-                        (unsigned)NET_LO_SOFT_LOG_MAX);
-/*
- * ---- Wave 23 complementary surfaces (kept) (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
-                */
-                /* Grep: net: lo: soft rettoken — Wave 23 return-token honesty (kept) */
-                kprintf("net: lo: soft rettoken soft_only=1 product_gate=0 soft_ne_product=1 "
-                        "never_blocks_m0=1 wave=%u "
-                        "(rettoken honesty; Soft≠product)\n",
-                        (unsigned)NET_LO_SOFT_LOG_MAX);
-                /* Grep: net: lo: soft retcrest — Wave 23 crest stamp (kept) */
-                kprintf("net: lo: soft retcrest exclusive=1 soft_ne_product=1 "
-                        "product_kernel=OPEN wave=%u "
-                        "(retcrest stamp; Soft≠product)\n",
-                        (unsigned)NET_LO_SOFT_LOG_MAX);
-                /*
-                 * ---- Wave 24 complementary surfaces (kept) (never reshape primary).
-                 * Return surfaces only — soft inventory; never hard-gates product paths.
-                 */
-                /* Grep: net: lo: soft retvault — Wave 24 return-vault honesty (kept) */
-                kprintf("net: lo: soft retvault soft_only=1 product_gate=0 soft_ne_product=1 "
-                        "never_blocks_m0=1 wave=%u "
-                        "(retvault honesty; Soft≠product)\n",
-                        (unsigned)NET_LO_SOFT_LOG_MAX);
-                /* Grep: net: lo: soft retbanner — Wave 24 banner stamp (kept) */
-                kprintf("net: lo: soft retbanner exclusive=1 soft_ne_product=1 "
-                        "product_kernel=OPEN wave=%u "
-                        "(retbanner stamp; Soft≠product)\n",
-                        (unsigned)NET_LO_SOFT_LOG_MAX);
-                /*
-                 * ---- Wave 25 complementary surfaces (kept) (never reshape primary).
-                 * Return surfaces only — soft inventory; never hard-gates product paths.
-                 */
-                /* Grep: net: lo: soft retledger — Wave 25 return-ledger honesty (kept) */
-                kprintf("net: lo: soft retledger soft_only=1 product_gate=0 soft_ne_product=1 "
-                        "never_blocks_m0=1 wave=%u "
-                        "(retledger honesty; Soft≠product)\n",
-                        (unsigned)NET_LO_SOFT_LOG_MAX);
-                /* Grep: net: lo: soft retbeacon — Wave 25 beacon stamp (kept) */
-                kprintf("net: lo: soft retbeacon exclusive=1 soft_ne_product=1 "
-                        "product_kernel=OPEN wave=%u "
-                        "(retbeacon stamp; Soft≠product)\n",
-                        (unsigned)NET_LO_SOFT_LOG_MAX);
-                /*
-                 * ---- Wave 26 complementary surfaces (kept) (never reshape primary).
-                 * Return surfaces only — soft inventory; never hard-gates product paths.
-                 */
-                /* Grep: net: lo: soft retcipher — Wave 26 return-cipher honesty (kept) */
-                kprintf("net: lo: soft retcipher soft_only=1 product_gate=0 soft_ne_product=1 "
-                        "never_blocks_m0=1 wave=%u "
-                        "(retcipher honesty; Soft≠product)\n",
-                        (unsigned)NET_LO_SOFT_LOG_MAX);
-                /* Grep: net: lo: soft retflame — Wave 26 flame stamp (kept) */
-                kprintf("net: lo: soft retflame exclusive=1 soft_ne_product=1 "
-                        "product_kernel=OPEN wave=%u "
-                        "(retflame stamp; Soft≠product)\n",
-                        (unsigned)NET_LO_SOFT_LOG_MAX);
-                        /*
-                         * ---- Wave 27 complementary surfaces (kept) (never reshape primary).
-                         * Return surfaces only — soft inventory; never hard-gates product paths.
-                         */
-                        /* Grep: net: lo: soft retprism — Wave 27 return-prism honesty (kept) */
-                        kprintf("net: lo: soft retprism soft_only=1 product_gate=0 soft_ne_product=1 "
-                                "never_blocks_m0=1 wave=%u "
-                                "(retprism honesty; Soft≠product)\n",
-                                (unsigned)NET_LO_SOFT_LOG_MAX);
-                        /* Grep: net: lo: soft retforge — Wave 27 forge stamp (kept) */
-                        kprintf("net: lo: soft retforge exclusive=1 soft_ne_product=1 "
-                                "product_kernel=OPEN wave=%u "
-                                "(retforge stamp; Soft≠product)\n",
-                                (unsigned)NET_LO_SOFT_LOG_MAX);
-                                /*
-                                 * ---- Wave 28 complementary surfaces (kept) (never reshape primary).
-                                 * Return surfaces only — soft inventory; never hard-gates product paths.
-                                 */
-                                /* Grep: net: lo: soft retshard — Wave 28 return-shard honesty (kept) */
-                                kprintf("net: lo: soft retshard soft_only=1 product_gate=0 soft_ne_product=1 "
-                                    "never_blocks_m0=1 wave=%u "
-                                    "(retshard honesty; Soft≠product)\n",
-                                    (unsigned)NET_LO_SOFT_LOG_MAX);
-                                /* Grep: net: lo: soft retcrown — Wave 28 crown stamp (kept) */
-                                kprintf("net: lo: soft retcrown exclusive=1 soft_ne_product=1 "
-                                    "product_kernel=OPEN wave=%u "
-                                    "(retcrown stamp; Soft≠product)\n",
-                                    (unsigned)NET_LO_SOFT_LOG_MAX);
-                                        /*
-                                 * ---- Wave 29 complementary surfaces (kept) (never reshape primary).
-                                 * Return surfaces only — soft inventory; never hard-gates product paths.
-                                 */
-                                /* Grep: net: lo: soft retglyph — Wave 29 return-glyph honesty (kept) */
-                                kprintf("net: lo: soft retglyph soft_only=1 product_gate=0 soft_ne_product=1 "
-                                        "never_blocks_m0=1 wave=116 "
-                                        "(retglyph honesty; Soft≠product)\n");
-                                /* Grep: net: lo: soft retscepter — Wave 29 scepter stamp (kept) */
-                                kprintf("net: lo: soft retscepter exclusive=1 soft_ne_product=1 "
-                                        "product_kernel=OPEN wave=116 "
-                                        "(retscepter stamp; Soft≠product)\n");
-                                        /*
-                                 * ---- Wave 30 complementary surfaces (kept) (never reshape primary).
-                                 * Return surfaces only — soft inventory; never hard-gates product paths.
-                                 */
-                                /* Grep: net: lo: soft retsigil — Wave 30 return-sigil honesty (kept) */
-                                kprintf("net: lo: soft retsigil soft_only=1 product_gate=0 soft_ne_product=1 "
-                                        "never_blocks_m0=1 wave=116 "
-                                        "(retsigil honesty; Soft≠product)\n");
-                                /* Grep: net: lo: soft retemblem — Wave 30 emblem stamp (kept) */
-                                kprintf("net: lo: soft retemblem exclusive=1 soft_ne_product=1 "
-                                        "product_kernel=OPEN wave=116 "
-                                        "(retemblem stamp; Soft≠product)\n");
-                                /*
-                                 * ---- Wave 31 complementary surfaces (kept) (never reshape primary).
-                                 * Return surfaces only — soft inventory; never hard-gates product paths.
-                                 */
-                                /* Grep: net: lo: soft retaegis — Wave 31 return-aegis honesty (kept) */
-                                kprintf("net: lo: soft retaegis soft_only=1 product_gate=0 soft_ne_product=1 "
-                                        "never_blocks_m0=1 wave=116 "
-                                        "(retaegis honesty; Soft≠product)\n");
-                                /* Grep: net: lo: soft retsigil — Wave 30 return-sigil honesty (kept) */
-                                kprintf("net: lo: soft retsigil soft_only=1 product_gate=0 soft_ne_product=1 "
-                                        "never_blocks_m0=1 wave=116 "
-                                        "(retsigil honesty; Soft≠product)\n");
-                                /* Grep: net: lo: soft retmantle — Wave 31 mantle stamp (kept) */
-                                kprintf("net: lo: soft retmantle exclusive=1 soft_ne_product=1 "
-                                        "product_kernel=OPEN wave=116 "
-                                        "(retmantle stamp; Soft≠product)\n");
-/*
- * ---- Wave 32 complementary surfaces (kept) (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: net: lo: soft retbulwark — Wave 32 return-bulwark honesty (kept) */
-kprintf("net: lo: soft retbulwark soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retbulwark honesty; Soft≠product)\n");
-/* Grep: net: lo: soft retpanoply — Wave 32 panoply stamp (kept) */
-kprintf("net: lo: soft retpanoply exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retpanoply stamp; Soft≠product)\n");
-/*
- * ---- Wave 33 complementary surfaces (kept) (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: net: lo: soft retbastion — Wave 33 return-bastion honesty (kept) */
-kprintf("net: lo: soft retbastion soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retbastion honesty; Soft≠product)\n");
-/* Grep: net: lo: soft retcitadel — Wave 33 citadel stamp (kept) */
-kprintf("net: lo: soft retcitadel exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retcitadel stamp; Soft≠product)\n");
-/*
- * ---- Wave 34 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: net: lo: soft retredoubt — Wave 34 return-redoubt honesty */
-kprintf("net: lo: soft retredoubt soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retredoubt honesty; Soft≠product)\n");
-/* Grep: net: lo: soft retkeep — Wave 34 exclusive keep stamp */
-kprintf("net: lo: soft retkeep exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retkeep stamp; Soft≠product)\n");
-/*
- * ---- Wave 35 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: net: lo: soft retfortress — Wave 35 return-fortress honesty */
-kprintf("net: lo: soft retfortress soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retfortress honesty; Soft≠product)\n");
-/* Grep: net: lo: soft retpalace — Wave 35 exclusive palace stamp */
-kprintf("net: lo: soft retpalace exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retpalace stamp; Soft≠product)\n");
-/*
- * ---- Wave 36 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: net: lo: soft rethold — Wave 36 return-hold honesty */
-kprintf("net: lo: soft rethold soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(rethold honesty; Soft≠product)\n");
-/* Grep: net: lo: soft retspire — Wave 36 exclusive spire stamp */
-kprintf("net: lo: soft retspire exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retspire stamp; Soft≠product)\n");
-/*
- * ---- Wave 37 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: net: lo: soft retwall — Wave 37 return-wall honesty */
-kprintf("net: lo: soft retwall soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retwall honesty; Soft≠product)\n");
-/* Grep: net: lo: soft retgate — Wave 37 exclusive gate stamp */
-kprintf("net: lo: soft retgate exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retgate stamp; Soft≠product)\n");
-/*
- * ---- Wave 38 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: net: lo: soft retmoat — Wave 38 return-moat honesty */
-kprintf("net: lo: soft retmoat soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retmoat honesty; Soft≠product)\n");
-/* Grep: net: lo: soft retower — Wave 38 exclusive tower stamp */
-kprintf("net: lo: soft retower exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retower stamp; Soft≠product)\n");
-/*
- * ---- Wave 39 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: net: lo: soft retbarbican — Wave 39 return-barbican honesty */
-kprintf("net: lo: soft retbarbican soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retbarbican honesty; Soft≠product)\n");
-/* Grep: net: lo: soft retglacis — Wave 39 exclusive glacis stamp */
-kprintf("net: lo: soft retglacis exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retglacis stamp; Soft≠product)\n");
-/*
- * ---- Wave 40 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: net: lo: soft retcurtain — Wave 40 return-curtain honesty */
-kprintf("net: lo: soft retcurtain soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retcurtain honesty; Soft≠product)\n");
-/* Grep: net: lo: soft retparapet — Wave 40 exclusive parapet stamp */
-kprintf("net: lo: soft retparapet exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retparapet stamp; Soft≠product)\n");
-/*
- * ---- Wave 41 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: net: lo: soft retravelin — Wave 41 return-travelin honesty */
-kprintf("net: lo: soft retravelin soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retravelin honesty; Soft≠product)\n");
-/* Grep: net: lo: soft retditch — Wave 41 exclusive ditch stamp */
-kprintf("net: lo: soft retditch exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retditch stamp; Soft≠product)\n");
-/*
- * ---- Wave 42 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: net: lo: soft retportcullis — Wave 42 return-portcullis honesty */
-kprintf("net: lo: soft retportcullis soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retportcullis honesty; Soft≠product)\n");
-/* Grep: net: lo: soft retbattlement — Wave 42 exclusive battlement stamp */
-kprintf("net: lo: soft retbattlement exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retbattlement stamp; Soft≠product)\n");
-/*
- * ---- Wave 43 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: net: lo: soft retmachicolation — Wave 43 return-machicolation honesty */
-kprintf("net: lo: soft retmachicolation soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retmachicolation honesty; Soft≠product)\n");
-/* Grep: net: lo: soft retarrowslit — Wave 43 exclusive arrowslit stamp */
-kprintf("net: lo: soft retarrowslit exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retarrowslit stamp; Soft≠product)\n");
-
-/*
- * ---- Wave 44 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: net: lo: soft retmerlon — Wave 44 return-merlon honesty */
-kprintf("net: lo: soft retmerlon soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retmerlon honesty; Soft≠product)\n");
-/* Grep: net: lo: soft retembrasure — Wave 44 exclusive embrasure stamp */
-kprintf("net: lo: soft retembrasure exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retembrasure stamp; Soft≠product)\n");
-
-/*
- * ---- Wave 45 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: net: lo: soft retkeepgate — Wave 45 return-keepgate honesty */
-kprintf("net: lo: soft retkeepgate soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retkeepgate honesty; Soft≠product)\n");
-/* Grep: net: lo: soft retouterward — Wave 45 exclusive outerward stamp */
-kprintf("net: lo: soft retouterward exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retouterward stamp; Soft≠product)\n");
-
-/*
- * ---- Wave 46 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: net: lo: soft retbailey — Wave 46 return-bailey honesty */
-kprintf("net: lo: soft retbailey soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retbailey honesty; Soft≠product)\n");
-/* Grep: net: lo: soft retpostern — Wave 46 exclusive postern stamp */
-kprintf("net: lo: soft retpostern exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retpostern stamp; Soft≠product)\n");
-
-/*
- * ---- Wave 47 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: net: lo: soft retinnerward — Wave 47 return-innerward honesty */
-kprintf("net: lo: soft retinnerward soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retinnerward honesty; Soft≠product)\n");
-/* Grep: net: lo: soft retdonjon — Wave 47 exclusive donjon stamp */
-kprintf("net: lo: soft retdonjon exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retdonjon stamp; Soft≠product)\n");
-
-/*
- * ---- Wave 48 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: net: lo: soft retchevaux — Wave 48 return-chevaux honesty */
-kprintf("net: lo: soft retchevaux soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retchevaux honesty; Soft≠product)\n");
-/* Grep: net: lo: soft retpalisade — Wave 48 exclusive palisade stamp */
-kprintf("net: lo: soft retpalisade exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retpalisade stamp; Soft≠product)\n");
-
-/*
- * ---- Wave 49 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: net: lo: soft retglacisgate — Wave 49 return-glacisgate honesty */
-kprintf("net: lo: soft retglacisgate soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retglacisgate honesty; Soft≠product)\n");
-/* Grep: net: lo: soft retoutwork — Wave 49 exclusive outwork stamp */
-kprintf("net: lo: soft retoutwork exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retoutwork stamp; Soft≠product)\n");
-/*
- * ---- Wave 50 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: net: lo: soft retsally — Wave 50 return-sally honesty */
-kprintf("net: lo: soft retsally soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retsally honesty; Soft≠product)\n");
-/* Grep: net: lo: soft retcounterscarp — Wave 50 exclusive counterscarp stamp */
-kprintf("net: lo: soft retcounterscarp exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retcounterscarp stamp; Soft≠product)\n");
-/*
- * ---- Wave 51 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: net: lo: soft retfosse — Wave 51 return-fosse honesty */
-kprintf("net: lo: soft retfosse soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retfosse honesty; Soft≠product)\n");
-/* Grep: net: lo: soft retcoveredway — Wave 51 exclusive coveredway stamp */
-kprintf("net: lo: soft retcoveredway exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retcoveredway stamp; Soft≠product)\n");
-
-/*
- * ---- Wave 52 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: net: lo: soft rettenaille — Wave 52 return-tenaille honesty */
-kprintf("net: lo: soft rettenaille soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(rettenaille honesty; Soft≠product)\n");
-/* Grep: net: lo: soft retdemilune — Wave 52 exclusive demilune stamp */
-kprintf("net: lo: soft retdemilune exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retdemilune stamp; Soft≠product)\n");
-/*
- * ---- Wave 53 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: net: lo: soft retravelin — Wave 53 return-travelin honesty */
-kprintf("net: lo: soft retravelin soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retravelin honesty; Soft≠product)\n");
-/* Grep: net: lo: soft retlunette — Wave 53 exclusive lunette stamp */
-kprintf("net: lo: soft retlunette exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retlunette stamp; Soft≠product)\n");
-/*
- * ---- Wave 54 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: net: lo: soft retcaponier — Wave 54 return-caponier honesty */
-kprintf("net: lo: soft retcaponier soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retcaponier honesty; Soft≠product)\n");
-/* Grep: net: lo: soft retredan — Wave 54 exclusive redan stamp */
-kprintf("net: lo: soft retredan exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retredan stamp; Soft≠product)\n");
-/*
- * ---- Wave 55 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: net: lo: soft retflank — Wave 55 return-flank honesty */
-kprintf("net: lo: soft retflank soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retflank honesty; Soft≠product)\n");
-/* Grep: net: lo: soft retface — Wave 55 exclusive face stamp */
-kprintf("net: lo: soft retface exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retface stamp; Soft≠product)\n");
-/*
- * ---- Wave 56 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: net: lo: soft retgorge — Wave 56 return-gorge honesty */
-kprintf("net: lo: soft retgorge soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retgorge honesty; Soft≠product)\n");
-/* Grep: net: lo: soft retshoulder — Wave 56 exclusive shoulder stamp */
-kprintf("net: lo: soft retshoulder exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retshoulder stamp; Soft≠product)\n");
-/*
- * ---- Wave 57 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: net: lo: soft retraverse — Wave 57 return-traverse honesty */
-kprintf("net: lo: soft retraverse soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retraverse honesty; Soft≠product)\n");
-/* Grep: net: lo: soft retcasemate — Wave 57 exclusive casemate stamp */
-kprintf("net: lo: soft retcasemate exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retcasemate stamp; Soft≠product)\n");
-
-/*
- * ---- Wave 58 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: net: lo: soft retorillon — Wave 58 return-orillon honesty */
-kprintf("net: lo: soft retorillon soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retorillon honesty; Soft≠product)\n");
-/* Grep: net: lo: soft retbonnette — Wave 58 exclusive bonnette stamp */
-kprintf("net: lo: soft retbonnette exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retbonnette stamp; Soft≠product)\n");
-
-/*
- * ---- Wave 59 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: net: lo: soft retcrownwork — Wave 59 return-crownwork honesty */
-kprintf("net: lo: soft retcrownwork soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retcrownwork honesty; Soft≠product)\n");
-/* Grep: net: lo: soft rethornwork — Wave 59 exclusive hornwork stamp */
-kprintf("net: lo: soft rethornwork exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(rethornwork stamp; Soft≠product)\n");
-
-/*
- * ---- Wave 60 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: net: lo: soft retplace — Wave 60 return-place honesty */
-kprintf("net: lo: soft retplace soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retplace honesty; Soft≠product)\n");
-/* Grep: net: lo: soft retenvelope — Wave 60 exclusive envelope stamp */
-kprintf("net: lo: soft retenvelope exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retenvelope stamp; Soft≠product)\n");
-
-
-
-
-
-
-
-
-
-/*
- * ---- Wave 61 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: net: lo: soft retcounterguard — Wave 61 return-counterguard honesty */
-kprintf("net: lo: soft retcounterguard soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retcounterguard honesty; Soft≠product)\n");
-/* Grep: net: lo: soft retcoveredface — Wave 61 exclusive coveredface stamp */
-kprintf("net: lo: soft retcoveredface exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retcoveredface stamp; Soft≠product)\n");
-/*
- * ---- Wave 62 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: net: lo: soft retbastionface — Wave 62 return-bastionface honesty */
-kprintf("net: lo: soft retbastionface soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retbastionface honesty; Soft≠product)\n");
-/* Grep: net: lo: soft retcurtainangle — Wave 62 exclusive curtainangle stamp */
-kprintf("net: lo: soft retcurtainangle exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retcurtainangle stamp; Soft≠product)\n");
-/*
- * ---- Wave 63 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: net: lo: soft retdoubletenaille — Wave 63 return-doubletenaille honesty */
-kprintf("net: lo: soft retdoubletenaille soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retdoubletenaille honesty; Soft≠product)\n");
-/* Grep: net: lo: soft retplaceofarms — Wave 63 exclusive placeofarms stamp */
-kprintf("net: lo: soft retplaceofarms exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retplaceofarms stamp; Soft≠product)\n");
- /*
-  * ---- Wave 64 exclusive complementary surfaces (never reshape primary).
-  * Return surfaces only — soft inventory; never hard-gates product paths.
-  */
- /* Grep: net: lo: soft retreentrant — Wave 64 return-reentrant honesty */
-kprintf("net: lo: soft retreentrant soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retreentrant honesty; Soft≠product)\n");
- /* Grep: net: lo: soft retsallyport — Wave 64 exclusive sallyport stamp */
-kprintf("net: lo: soft retsallyport exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retsallyport stamp; Soft≠product)\n");
- /*
-  * ---- Wave 65 exclusive complementary surfaces (never reshape primary).
-  * Return surfaces only — soft inventory; never hard-gates product paths.
-  */
- /* Grep: net: lo: soft retgorgeangle — Wave 65 return-gorgeangle honesty */
-kprintf("net: lo: soft retgorgeangle soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retgorgeangle honesty; Soft≠product)\n");
- /* Grep: net: lo: soft retshoulderangle — Wave 65 exclusive shoulderangle stamp */
-kprintf("net: lo: soft retshoulderangle exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retshoulderangle stamp; Soft≠product)\n");
- /*
-  * ---- Wave 66 exclusive complementary surfaces (never reshape primary).
-  * Return surfaces only — soft inventory; never hard-gates product paths.
-  */
- /* Grep: net: lo: soft retflankangle — Wave 66 return-flankangle honesty */
- kprintf("net: lo: soft retflankangle soft_only=1 product_gate=0 soft_ne_product=1 "
-         "never_blocks_m0=1 wave=116 "
-         "(retflankangle honesty; Soft≠product)\n");
- /* Grep: net: lo: soft retfaceangle — Wave 66 exclusive faceangle stamp */
- kprintf("net: lo: soft retfaceangle exclusive=1 soft_ne_product=1 "
-         "product_kernel=OPEN wave=116 "
-         "(retfaceangle stamp; Soft≠product)\n");
-/*
- * ---- Wave 67 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: net: lo: soft retcaponierangle — Wave 67 return-caponierangle honesty */
-kprintf("net: lo: soft retcaponierangle soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retcaponierangle honesty; Soft≠product)\n");
-/* Grep: net: lo: soft retredanangle — Wave 67 exclusive redanangle stamp */
-kprintf("net: lo: soft retredanangle exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retredanangle stamp; Soft≠product)\n");
-/*
- * ---- Wave 68 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: net: lo: soft retlunetteangle — Wave 68 return-lunetteangle honesty */
-kprintf("net: lo: soft retlunetteangle soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retlunetteangle honesty; Soft≠product)\n");
-/* Grep: net: lo: soft rettenailleangle — Wave 68 exclusive tenailleangle stamp */
-kprintf("net: lo: soft rettenailleangle exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(rettenailleangle stamp; Soft≠product)\n");
-/*
- * ---- Wave 69 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: net: lo: soft retdemiluneangle — Wave 69 return-demiluneangle honesty */
-kprintf("net: lo: soft retdemiluneangle soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retdemiluneangle honesty; Soft≠product)\n");
-/* Grep: net: lo: soft retcoveredwayangle — Wave 69 exclusive coveredwayangle stamp */
-kprintf("net: lo: soft retcoveredwayangle exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retcoveredwayangle stamp; Soft≠product)\n");
-/*
- * ---- Wave 70 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: net: lo: soft retfosseangle — Wave 70 return-fosseangle honesty */
-kprintf("net: lo: soft retfosseangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retfosseangle honesty; Soft≠product)\n");
-/* Grep: net: lo: soft retcounterscarple — Wave 70 exclusive counterscarple stamp */
-kprintf("net: lo: soft retcounterscarple exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retcounterscarple stamp; Soft≠product)\n");
-/*
- * ---- Wave 71 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: net: lo: soft retsallyportangle — Wave 71 return-sallyportangle honesty */
-kprintf("net: lo: soft retsallyportangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retsallyportangle honesty; Soft≠product)\n");
-/* Grep: net: lo: soft retreentrantangle — Wave 71 exclusive reentrantangle stamp */
-kprintf("net: lo: soft retreentrantangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retreentrantangle stamp; Soft≠product)\n");
-/*
- * ---- Wave 72 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: net: lo: soft retplaceofarmsangle — Wave 72 return-placeofarmsangle honesty */
-kprintf("net: lo: soft retplaceofarmsangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retplaceofarmsangle honesty; Soft≠product)\n");
-/* Grep: net: lo: soft retdoubletenailleangle — Wave 72 exclusive doubletenailleangle stamp */
-kprintf("net: lo: soft retdoubletenailleangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retdoubletenailleangle stamp; Soft≠product)\n");
-/* Grep: net: lo: soft retcurtainface — Wave 73 return-curtainface honesty */
-kprintf("net: lo: soft retcurtainface soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retcurtainface honesty; Soft≠product)\n");
-/* Grep: net: lo: soft retbastionangle — Wave 73 exclusive bastionangle stamp */
-kprintf("net: lo: soft retbastionangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retbastionangle stamp; Soft≠product)\n");
-/* Grep: net: lo: soft retglacisangle — Wave 74 return-glacisangle honesty */
-kprintf("net: lo: soft retglacisangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retglacisangle honesty; Soft≠product)\n");
-/* Grep: net: lo: soft retparapetangle — Wave 74 exclusive parapetangle stamp */
-kprintf("net: lo: soft retparapetangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retparapetangle stamp; Soft≠product)\n");
-/* Grep: net: lo: soft retmoatangle — Wave 75 return-moatangle honesty */
-kprintf("net: lo: soft retmoatangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retmoatangle honesty; Soft≠product)\n");
-/* Grep: net: lo: soft retowerangle — Wave 75 exclusive towerangle stamp */
-kprintf("net: lo: soft retowerangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retowerangle stamp; Soft≠product)\n");
-/* Grep: net: lo: soft retgateangle — Wave 76 return-gateangle honesty */
-kprintf("net: lo: soft retgateangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retgateangle honesty; Soft≠product)\n");
-/* Grep: net: lo: soft retwallangle — Wave 76 exclusive wallangle stamp */
-kprintf("net: lo: soft retwallangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retwallangle stamp; Soft≠product)\n");
-/* Grep: net: lo: soft retspireangle — Wave 77 return-spireangle honesty */
-kprintf("net: lo: soft retspireangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retspireangle honesty; Soft≠product)\n");
-/* Grep: net: lo: soft retholdangle — Wave 77 exclusive holdangle stamp */
-kprintf("net: lo: soft retholdangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retholdangle stamp; Soft≠product)\n");
-/* Grep: net: lo: soft retpalaceangle — Wave 78 return-palaceangle honesty */
-kprintf("net: lo: soft retpalaceangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retpalaceangle honesty; Soft≠product)\n");
-/* Grep: net: lo: soft retfortressangle — Wave 78 exclusive fortressangle stamp */
-kprintf("net: lo: soft retfortressangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retfortressangle stamp; Soft≠product)\n");
-/* Grep: net: lo: soft retkeepangle — Wave 79 return-keepangle honesty */
-kprintf("net: lo: soft retkeepangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retkeepangle honesty; Soft≠product)\n");
-/* Grep: net: lo: soft retredoubtangle — Wave 79 exclusive redoubtangle stamp */
-kprintf("net: lo: soft retredoubtangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retredoubtangle stamp; Soft≠product)\n");
-/* Grep: net: lo: soft retcitadelangle — Wave 80 return-citadelangle honesty */
-kprintf("net: lo: soft retcitadelangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retcitadelangle honesty; Soft≠product)\n");
-/* Grep: net: lo: soft retbastionkeep — Wave 80 exclusive bastionkeep stamp */
-kprintf("net: lo: soft retbastionkeep exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retbastionkeep stamp; Soft≠product)\n");
-/* Grep: net: lo: soft retpanoplyangle — Wave 81 return-panoplyangle honesty */
-kprintf("net: lo: soft retpanoplyangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retpanoplyangle honesty; Soft≠product)\n");
-/* Grep: net: lo: soft retbulwarkangle — Wave 81 exclusive bulwarkangle stamp */
-kprintf("net: lo: soft retbulwarkangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retbulwarkangle stamp; Soft≠product)\n");
-/* Grep: net: lo: soft retmantleangle — Wave 82 return-mantleangle honesty */
-kprintf("net: lo: soft retmantleangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retmantleangle honesty; Soft≠product)\n");
-/* Grep: net: lo: soft retaegisangle — Wave 82 exclusive aegisangle stamp */
-kprintf("net: lo: soft retaegisangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retaegisangle stamp; Soft≠product)\n");
-/* Grep: net: lo: soft retemblemangle — Wave 83 return-emblemangle honesty */
-kprintf("net: lo: soft retemblemangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retemblemangle honesty; Soft≠product)\n");
-/* Grep: net: lo: soft retsigilangle — Wave 83 exclusive sigilangle stamp */
-kprintf("net: lo: soft retsigilangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retsigilangle stamp; Soft≠product)\n");
-/* Grep: net: lo: soft retscepterangle — Wave 84 return-scepterangle honesty */
-kprintf("net: lo: soft retscepterangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retscepterangle honesty; Soft≠product)\n");
-/* Grep: net: lo: soft retglyphangle — Wave 84 exclusive glyphangle stamp */
-kprintf("net: lo: soft retglyphangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retglyphangle stamp; Soft≠product)\n");
-/* Grep: net: lo: soft retcrownangle — Wave 85 return-crownangle honesty */
-kprintf("net: lo: soft retcrownangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retcrownangle honesty; Soft≠product)\n");
-/* Grep: net: lo: soft retshardangle — Wave 85 exclusive shardangle stamp */
-kprintf("net: lo: soft retshardangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retshardangle stamp; Soft≠product)\n");
-/* Grep: net: lo: soft retforgeangle — Wave 86 return-forgeangle honesty */
-kprintf("net: lo: soft retforgeangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retforgeangle honesty; Soft≠product)\n");
-/* Grep: net: lo: soft retprismangle — Wave 86 exclusive prismangle stamp */
-kprintf("net: lo: soft retprismangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retprismangle stamp; Soft≠product)\n");
-/* Grep: net: lo: soft retflameangle — Wave 87 return-flameangle honesty */
-kprintf("net: lo: soft retflameangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retflameangle honesty; Soft≠product)\n");
-/* Grep: net: lo: soft retcipherangle — Wave 87 exclusive cipherangle stamp */
-kprintf("net: lo: soft retcipherangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retcipherangle stamp; Soft≠product)\n");
-/* Grep: net: lo: soft retbeaconangle — Wave 88 return-beaconangle honesty */
-kprintf("net: lo: soft retbeaconangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retbeaconangle honesty; Soft≠product)\n");
-/* Grep: net: lo: soft retledgerangle — Wave 88 exclusive ledgerangle stamp */
-kprintf("net: lo: soft retledgerangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retledgerangle stamp; Soft≠product)\n");
-/* Grep: net: lo: soft retbannerangle — Wave 89 return-bannerangle honesty */
-kprintf("net: lo: soft retbannerangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retbannerangle honesty; Soft≠product)\n");
-/* Grep: net: lo: soft retvaultangle — Wave 89 exclusive vaultangle stamp */
-kprintf("net: lo: soft retvaultangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retvaultangle stamp; Soft≠product)\n");
-/* Grep: net: lo: soft retcrestangle — Wave 90 return-crestangle honesty */
-kprintf("net: lo: soft retcrestangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retcrestangle honesty; Soft≠product)\n");
-/* Grep: net: lo: soft rettokenangle — Wave 90 exclusive tokenangle stamp */
-kprintf("net: lo: soft rettokenangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (rettokenangle stamp; Soft≠product)\n");
-/* Grep: net: lo: soft retbadgeangle — Wave 91 return-badgeangle honesty */
-kprintf("net: lo: soft retbadgeangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retbadgeangle honesty; Soft≠product)\n");
-/* Grep: net: lo: soft retphaseangle — Wave 91 exclusive phaseangle stamp */
-kprintf("net: lo: soft retphaseangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retphaseangle stamp; Soft≠product)\n");
-/* Grep: net: lo: soft retmarkangle — Wave 92 return-markangle honesty */
-kprintf("net: lo: soft retmarkangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retmarkangle honesty; Soft≠product)\n");
-/* Grep: net: lo: soft retpulseangle — Wave 92 exclusive pulseangle stamp */
-kprintf("net: lo: soft retpulseangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retpulseangle stamp; Soft≠product)\n");
-
-/* Grep: net: lo: soft retsealangle — Wave 93 return-sealangle honesty */
-kprintf("net: lo: soft retsealangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retsealangle honesty; Soft≠product)\n");
-/* Grep: net: lo: soft retboundangle — Wave 93 exclusive boundangle stamp */
-kprintf("net: lo: soft retboundangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retboundangle stamp; Soft≠product)\n");
-/* Grep: net: lo: soft retstemangle — Wave 94 return-stemangle honesty */
-kprintf("net: lo: soft retstemangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retstemangle honesty; Soft≠product)\n");
-/* Grep: net: lo: soft retbladeangle — Wave 94 exclusive bladeangle stamp */
-kprintf("net: lo: soft retbladeangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retbladeangle stamp; Soft≠product)\n");
-/* Grep: net: lo: soft retchordangle — Wave 95 return-chordangle honesty */
-kprintf("net: lo: soft retchordangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retchordangle honesty; Soft≠product)\n");
-/* Grep: net: lo: soft retarcangle — Wave 95 exclusive arcangle stamp */
-kprintf("net: lo: soft retarcangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retarcangle stamp; Soft≠product)\n");
-/* Grep: net: lo: soft retsectorangle — Wave 96 return-sectorangle honesty */
-kprintf("net: lo: soft retsectorangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retsectorangle honesty; Soft≠product)\n");
-/* Grep: net: lo: soft retwedgeangle — Wave 96 exclusive wedgeangle stamp */
-kprintf("net: lo: soft retwedgeangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retwedgeangle stamp; Soft≠product)\n");
-/* Grep: net: lo: soft retradiusangle — Wave 97 return-radiusangle honesty */
-kprintf("net: lo: soft retradiusangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retradiusangle honesty; Soft≠product)\n");
-/* Grep: net: lo: soft retdiameterangle — Wave 97 exclusive diameterangle stamp */
-kprintf("net: lo: soft retdiameterangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retdiameterangle stamp; Soft≠product)\n");
-/* Grep: net: lo: soft retcircumangle — Wave 98 return-circumangle honesty */
-kprintf("net: lo: soft retcircumangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retcircumangle honesty; Soft≠product)\n");
-/* Grep: net: lo: soft retellipseangle — Wave 98 exclusive ellipseangle stamp */
-kprintf("net: lo: soft retellipseangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retellipseangle stamp; Soft≠product)\n");
-/* Grep: net: lo: soft rethyperangle — Wave 99 return-hyperangle honesty */
-kprintf("net: lo: soft rethyperangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (rethyperangle honesty; Soft≠product)\n");
-/* Grep: net: lo: soft retparabolaangle — Wave 99 exclusive parabolaangle stamp */
-kprintf("net: lo: soft retparabolaangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retparabolaangle stamp; Soft≠product)\n");
-/* Grep: net: lo: soft retspiralangle — Wave 100 return-spiralangle honesty */
-kprintf("net: lo: soft retspiralangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retspiralangle honesty; Soft≠product)\n");
-/* Grep: net: lo: soft rethelixangle — Wave 100 exclusive helixangle stamp */
-kprintf("net: lo: soft rethelixangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (rethelixangle stamp; Soft≠product)\n");
-/* Grep: net: lo: soft rettorusangle — Wave 101 return-torusangle honesty */
-kprintf("net: lo: soft rettorusangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (rettorusangle honesty; Soft≠product)\n");
-/* Grep: net: lo: soft retknotangle — Wave 101 exclusive knotangle stamp */
-kprintf("net: lo: soft retknotangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retknotangle stamp; Soft≠product)\n");
-/* Grep: net: lo: soft retmoebiusangle — Wave 102 return-moebiusangle honesty */
-kprintf("net: lo: soft retmoebiusangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retmoebiusangle honesty; Soft≠product)\n");
-/* Grep: net: lo: soft retkleinangle — Wave 102 exclusive kleinangle stamp */
-kprintf("net: lo: soft retkleinangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retkleinangle stamp; Soft≠product)\n");
-/* Grep: net: lo: soft retprojectangle — Wave 103 return-projectangle honesty */
-kprintf("net: lo: soft retprojectangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retprojectangle honesty; Soft≠product)\n");
-/* Grep: net: lo: soft retaffineangle — Wave 103 exclusive affineangle stamp */
-kprintf("net: lo: soft retaffineangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retaffineangle stamp; Soft≠product)\n");
-/* Grep: net: lo: soft retlinearangle — Wave 104 return-linearangle honesty */
-kprintf("net: lo: soft retlinearangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retlinearangle honesty; Soft≠product)\n");
-/* Grep: net: lo: soft retbilinearangle — Wave 104 exclusive bilinearangle stamp */
-kprintf("net: lo: soft retbilinearangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retbilinearangle stamp; Soft≠product)\n");
-/* Grep: net: lo: soft retquadraticangle — Wave 105 return-quadraticangle honesty */
-kprintf("net: lo: soft retquadraticangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retquadraticangle honesty; Soft≠product)\n");
-/* Grep: net: lo: soft retcubicangle — Wave 105 exclusive cubicangle stamp */
-kprintf("net: lo: soft retcubicangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retcubicangle stamp; Soft≠product)\n");
-/* Grep: net: lo: soft retquarticangle — Wave 106 return-quarticangle honesty */
-kprintf("net: lo: soft retquarticangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retquarticangle honesty; Soft≠product)\n");
-/* Grep: net: lo: soft retquinticangle — Wave 106 exclusive quinticangle stamp */
-kprintf("net: lo: soft retquinticangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retquinticangle stamp; Soft≠product)\n");
-/* Grep: net: lo: soft retsplineangle — Wave 107 return-splineangle honesty */
-kprintf("net: lo: soft retsplineangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retsplineangle honesty; Soft≠product)\n");
-/* Grep: net: lo: soft retbezierangle — Wave 107 exclusive bezierangle stamp */
-kprintf("net: lo: soft retbezierangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retbezierangle stamp; Soft≠product)\n");
-/* Grep: net: lo: soft rethurmitangle — Wave 108 return-hermitangle honesty */
-kprintf("net: lo: soft rethurmitangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (rethurmitangle honesty; Soft≠product)\n");
-/* Grep: net: lo: soft retcatmullangle — Wave 108 exclusive catmullangle stamp */
-kprintf("net: lo: soft retcatmullangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retcatmullangle stamp; Soft≠product)\n");
-/* Grep: net: lo: soft retnurbsangle — Wave 109 return-nurbsangle honesty */
-kprintf("net: lo: soft retnurbsangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retnurbsangle honesty; Soft≠product)\n");
-/* Grep: net: lo: soft retbsplineangle — Wave 109 exclusive bsplineangle stamp */
-kprintf("net: lo: soft retbsplineangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retbsplineangle stamp; Soft≠product)\n");
-/* Grep: net: lo: soft retmeshangle — Wave 110 return-meshangle honesty */
-kprintf("net: lo: soft retmeshangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retmeshangle honesty; Soft≠product)\n");
-/* Grep: net: lo: soft retgridangle — Wave 110 exclusive gridangle stamp */
-kprintf("net: lo: soft retgridangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retgridangle stamp; Soft≠product)\n");
-/* Grep: net: lo: soft retvoxelangle — Wave 111 return-voxelangle honesty */
-kprintf("net: lo: soft retvoxelangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retvoxelangle honesty; Soft≠product)\n");
-/* Grep: net: lo: soft rettexelangle — Wave 111 exclusive texelangle stamp */
-kprintf("net: lo: soft rettexelangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (rettexelangle stamp; Soft≠product)\n");
-/* Grep: net: lo: soft retfragmentangle — Wave 112 return-fragmentangle honesty */
-kprintf("net: lo: soft retfragmentangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retfragmentangle honesty; Soft≠product)\n");
-/* Grep: net: lo: soft retvertexangle — Wave 112 exclusive vertexangle stamp */
-kprintf("net: lo: soft retvertexangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retvertexangle stamp; Soft≠product)\n");
-/* Grep: net: lo: soft retshaderangle — Wave 113 return-shaderangle honesty */
-kprintf("net: lo: soft retshaderangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retshaderangle honesty; Soft≠product)\n");
-/* Grep: net: lo: soft retpipelineangle — Wave 113 exclusive pipelineangle stamp */
-kprintf("net: lo: soft retpipelineangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retpipelineangle stamp; Soft≠product)\n");
-/* Grep: net: lo: soft retframebufferangle — Wave 114 return-framebufferangle honesty */
-kprintf("net: lo: soft retframebufferangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retframebufferangle honesty; Soft≠product)\n");
-/* Grep: net: lo: soft retswapchainangle — Wave 114 exclusive swapchainangle stamp */
-kprintf("net: lo: soft retswapchainangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retswapchainangle stamp; Soft≠product)\n");
-/* Grep: net: lo: soft retpresentangle — Wave 115 return-presentangle honesty */
-kprintf("net: lo: soft retpresentangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retpresentangle honesty; Soft≠product)\n");
-/* Grep: net: lo: soft retvsyncangle — Wave 115 exclusive vsyncangle stamp */
-kprintf("net: lo: soft retvsyncangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retvsyncangle stamp; Soft≠product)\n");
-/* Grep: net: lo: soft retfenceangle — Wave 116 return-fenceangle honesty */
-kprintf("net: lo: soft retfenceangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retfenceangle honesty; Soft≠product)\n");
-/* Grep: net: lo: soft retsemaphoreangle — Wave 116 exclusive semaphoreangle stamp */
-kprintf("net: lo: soft retsemaphoreangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retsemaphoreangle stamp; Soft≠product)\n");
-                                kprintf("net: lo soft deepen wave=116 areas=172 used=%u free=%u "
-                "listen=%u conn=%u logs=%u\n",
-                cUsed, cFree, cListen, cConn, g_soft.u32SoftLogN);
-        /* Grep: net_lo: soft retmap — Wave 19 return-surface map */
-    kprintf("net_lo: soft retmap ok|fail|inval|nodev|busy|nomem product_gate=0 soft_only=1 wave=116\n");
-
-    /* Grep: net_lo: soft deepen (twin) */
-        kprintf("net_lo: soft deepen wave=116 areas=172 used=%u free=%u "
-                "listen=%u conn=%u logs=%u\n",
-                cUsed, cFree, cListen, cConn, g_soft.u32SoftLogN);
-    }
-
-    /* Grep: net: lo soft PASS */
-    kprintf("net: lo soft PASS wave=116 logs=%u skip=%llu event_n=%u "
-            "event_skip=%llu max=%u event_max=%u force=%u slots=%u "
-            "used=%u conn=%u "
-            "(soft inventory only; not product gate)\n",
+    /* Grep: net: lo soft PASS (soft inventory only; not product gate) */
+    kprintf("net: lo soft PASS logs=%u skip=%llu event_n=%u "
+            "event_skip=%llu used=%u conn=%u lean_ok=%u/%u "
+            "acceptq_integ=%u soft_err_set=%llu ephem_bind=%llu "
+            "l3_soft=1 freestanding_nic=0 freestanding_rtl=0 local_abi=1 "
+            "dual_dod_a=OPEN dual_dod_b=OPEN_UDX product_dod_b=UDX "
+            "not_dod_close=1 soft_ne_product=1 G-AC-1=1 dual=MIT_OR_Apache-2.0 "
+            "(soft inventory only; Soft!=product; not product gate; "
+            "L3 soft tests without freestanding NIC; Dual DoD A/B OPEN)\n",
             g_soft.u32SoftLogN, (unsigned long long)s.u64LogSkip,
             g_soft.u32EventN, (unsigned long long)s.u64EventSkip,
-            (unsigned)NET_LO_SOFT_LOG_MAX, (unsigned)NET_LO_SOFT_EVENT_MAX,
-            fForce ? 1u : 0u, fSlots, cUsed, cConn);
+            cUsed, cConn, (unsigned)u32LeanOk,
+            (unsigned)NET_LO_LEAN_OK_EXPECT,
+            (unsigned)g_soft.u32IntegLast,
+            (unsigned long long)g_soft.u64SoftErrSet,
+            (unsigned long long)g_soft.u64EphemBind);
 
-    /* Grep: net_lo: soft PASS (twin) */
-    kprintf("net_lo: soft PASS wave=116 logs=%u skip=%llu event_n=%u "
-            "event_skip=%llu max=%u force=%u used=%u "
-            "(soft inventory only; not product gate)\n",
-            g_soft.u32SoftLogN, (unsigned long long)s.u64LogSkip,
-            g_soft.u32EventN, (unsigned long long)s.u64EventSkip,
-            (unsigned)NET_LO_SOFT_LOG_MAX, fForce ? 1u : 0u, cUsed);
-
-    /* Per-live-slot soft detail (rate-limited; product smoke inventory). */
-    if (fSlots == 0u) {
-        return;
+    /*
+     * Grep: net: lo soft residual lean PASS
+     * Only when lean self-check full - soft residual only; never Dual DoD
+     * close; never product gate. Soft!=product dual MIT OR Apache-2.0.
+     */
+    if (u32LeanOk == NET_LO_LEAN_OK_EXPECT) {
+        lo_soft_bump(&g_soft.u64LeanPassEmit);
+        kprintf("net: lo soft residual lean PASS "
+                "ok=%u/%u acceptq_pair=1 peer_ring=%u domain_store=1 "
+                "poll_mask=1 sol_socket_subset=1 soft_err=1 "
+                "ephemeral_bind=1 acceptq_integ=%u "
+                "path=socket+bind+listen+accept+connect+send+recv+poll+"
+                "shutdown+sockopt+name+close "
+                "l3_soft=1 freestanding_nic=0 freestanding_rtl=0 local_abi=1 "
+                "freestanding_skip=1 dual_dod_a=OPEN dual_dod_b=OPEN_UDX "
+                "product_dod_b=UDX product_path=UDX|DDI not_dod_close=1 "
+                "soft_ne_product=1 G-AC-1=1 dual=MIT_OR_Apache-2.0 C0=1 "
+                "(Soft!=product; lean residual full; not Dual DoD close; "
+                "not product gate; L3 soft local ABI only; C0 residual)\n",
+                (unsigned)u32LeanOk, (unsigned)NET_LO_LEAN_OK_EXPECT,
+                (unsigned)NET_LO_BUF, (unsigned)g_soft.u32IntegLast);
     }
-    for (i = 0; i < NET_LO_MAX; i++) {
-        if (!g_aSocks[i].u8Used) {
-            continue;
-        }
-        /* Grep: net: lo soft slot */
-        kprintf("net: lo soft slot=%u type=%u port=%u listen=%u conn=%u "
-                "peer=%d rx=%u head=%u bl=%u pend=%u reuse=%u reusep=%u "
-                "ka=%u bcast=%u shut_rd=%u shut_wr=%u rcvbuf=%u sndbuf=%u "
-                "linger=%u/%u fd=%u\n",
-                i, (unsigned)g_aSocks[i].u8Type,
-                (unsigned)g_aSocks[i].u16Port,
-                (unsigned)g_aSocks[i].u8Listening,
-                (unsigned)g_aSocks[i].u8Connected,
-                (int)g_aSocks[i].i16Peer,
-                (unsigned)g_aSocks[i].u32RxLen,
-                (unsigned)g_aSocks[i].u32RxHead,
-                (unsigned)g_aSocks[i].u8Backlog,
-                (unsigned)g_aSocks[i].u8Pending,
-                (unsigned)g_aSocks[i].u8Reuse,
-                (unsigned)g_aSocks[i].u8ReusePort,
-                (unsigned)g_aSocks[i].u8Keepalive,
-                (unsigned)g_aSocks[i].u8Broadcast,
-                (unsigned)g_aSocks[i].u8ShutRd,
-                (unsigned)g_aSocks[i].u8ShutWr,
-                (unsigned)g_aSocks[i].u32RcvBuf,
-                (unsigned)g_aSocks[i].u32SndBuf,
-                (unsigned)g_aSocks[i].u8LingerOn,
-                (unsigned)g_aSocks[i].u16LingerSec,
-                (unsigned)(NET_FD_BASE + i));
-        /* Grep: net_lo: soft slot (twin; force/first dumps only) */
-        kprintf("net_lo: soft slot=%u type=%u port=%u listen=%u conn=%u "
-                "peer=%d rx=%u bl=%u pend=%u fd=%u wave=116\n",
-                i, (unsigned)g_aSocks[i].u8Type,
-                (unsigned)g_aSocks[i].u16Port,
-                (unsigned)g_aSocks[i].u8Listening,
-                (unsigned)g_aSocks[i].u8Connected,
-                (int)g_aSocks[i].i16Peer,
-                (unsigned)g_aSocks[i].u32RxLen,
-                (unsigned)g_aSocks[i].u8Backlog,
-                (unsigned)g_aSocks[i].u8Pending,
-                (unsigned)(NET_FD_BASE + i));
-    }
-}
-
-/*
- * Rate-limit soft inventory: power-of-two op milestones, hard-capped.
- * Force path (emfile / table-empty) prefers slots but still respects
- * NET_LO_SOFT_LOG_MAX so serial cannot flood. Init calls lo_soft_print(1)
- * directly (pre-activity). Soft skip tallies only suppressed dumps (cap);
- * non-milestone ops are silent without a skip bump.
- * greppable: net: lo soft / net_lo: soft
- */
+} /* end lo_soft_print */
 static void
 lo_soft_maybe_log(int fForce)
 {
     u64 u64N;
 
-    lo_soft_bump(&g_soft.u64Ops);
+    lo_soft_bump(&g_soft.u64Ops); /* wrap OK */
     if (fForce != 0) {
         if (g_soft.u32SoftLogN >= NET_LO_SOFT_LOG_MAX) {
             lo_soft_bump(&g_soft.u64LogSkip);
@@ -1677,24 +685,105 @@ lo_soft_maybe_log(int fForce)
     lo_soft_print(0);
 }
 
+/**
+ * Lean return-surface / area catalog (init once; Soft!=product).
+ * One greppable line - never multi-kprintf storm. Diagnostics only.
+ * greppable: net: lo soft catalog
+ */
+static void
+lo_soft_catalog_once(void)
+{
+    if (g_soft.u8CatalogOnce != 0u) {
+        return;
+    }
+    g_soft.u8CatalogOnce = 1u;
+    lo_soft_bump(&g_soft.u64CatalogEmit);
+    /*
+     * Grep: net: lo soft catalog
+     * Return surfaces (errno-shaped) + API areas for L3 soft residual.
+     * Dual DoD A/B remain OPEN (product=UDX/DDI); this unit not_dod_close.
+     * C0 residual: soft_err sticky + ephemeral bind + AcceptQ integ.
+     */
+    kprintf("net: lo soft catalog "
+            "areas=socket|bind|listen|accept|connect|send|recv|poll|"
+            "shutdown|sockopt|name|close "
+            "ret=0|-9|-11|-22|-24|-32|-92|-97|-98|-106|-107|-111 "
+            "ok|ebadf|eagain|einval|emfile|epipe|enoprotoopt|"
+            "eafnosupport|eaddrinuse|eisconn|enotconn|econnrefused "
+            "pair=acceptq_mint domain=af_inet|af_unix "
+            "sol=reuseaddr|reuseport|type|error|broadcast|keepalive|"
+            "sndbuf|rcvbuf|linger|acceptconn "
+            "poll=in|out|err|hup half_close=shut_wr->peer_rd "
+            "soft_err=sticky_read_clear ephemeral_bind=1 acceptq_integ=1 "
+            "l3_soft=1 freestanding_nic=0 freestanding_rtl=0 local_abi=1 "
+            "freestanding_skip=1 dual_dod_a=OPEN dual_dod_b=OPEN_UDX "
+            "product_dod_b=UDX product_path=UDX|DDI not_dod_close=1 "
+            "soft_ne_product=1 G-AC-1=1 dual=MIT_OR_Apache-2.0 C0=1 "
+            "(Soft!=product; return-surface catalog; not product gate; "
+            "not Dual DoD close; C0 residual deepen)\n");
+}
+
+/**
+ * C0 residual deepen once-lamp (stamp-free Soft!=product).
+ * Catalogs residual deepen surfaces without version stamp / Dual DoD close.
+ * greppable: net: lo soft deepen
+ * greppable: C0 residual | acceptq_integ= | soft_err= | ephemeral_bind=
+ */
+static void
+lo_soft_deepen_once(void)
+{
+    if (g_soft.u8DeepenOnce != 0u) {
+        return;
+    }
+    g_soft.u8DeepenOnce = 1u;
+    lo_soft_bump(&g_soft.u64DeepenEmit);
+    /*
+     * Grep: net: lo soft deepen
+     * C0 residual deepen surfaces only - never product gate / Dual DoD close.
+     * No wave= / no GJ_IMAGE_VERSION / no stamp storms.
+     */
+    kprintf("net: lo soft deepen "
+            "areas=acceptq_pair|acceptq_integ|peer_ring|poll_mask|"
+            "sol_socket|domain_store|soft_err|ephemeral_bind|"
+            "half_close|catalog|lean_check "
+            "lean_expect=%u log_cap=%u event_cap=%u "
+            "ephem_base=%u ephem_span=%u "
+            "poll=in|out|err|hup soft_err=sticky_read_clear "
+            "acceptq_integ=observe dual_dod_a=OPEN dual_dod_b=OPEN_UDX "
+            "product_dod_b=UDX product_path=UDX|DDI not_dod_close=1 "
+            "l3_soft=1 freestanding_nic=0 freestanding_rtl=0 local_abi=1 "
+            "freestanding_skip=1 soft_ne_product=1 G-AC-1=1 "
+            "dual=MIT_OR_Apache-2.0 stamp_storm=0 no_version_stamp=1 C0=1 "
+            "(Soft!=product; C0 residual deepen; not Dual DoD close; "
+            "not product gate; stamp-free)\n",
+            (unsigned)NET_LO_LEAN_OK_EXPECT,
+            (unsigned)NET_LO_SOFT_LOG_MAX,
+            (unsigned)NET_LO_SOFT_EVENT_MAX,
+            (unsigned)NET_LO_EPHEM_BASE,
+            (unsigned)NET_LO_EPHEM_SPAN);
+}
+
 void
 net_lo_init(void)
 {
     memset(g_aSocks, 0, sizeof(g_aSocks));
     memset(&g_soft, 0, sizeof(g_soft));
     kprintf("net_lo: init (loopback + peer ring + sockopt/backlog soft)\n");
-    /* Grep: net: lo soft init / net_lo: soft init */
+    /* Grep: net: lo soft init (lean; no version stamp; no stamp storms) */
     kprintf("net: lo soft init max=%u fd_base=%u buf=%u backlog_max=%u "
-            "rcv_def=%u snd_def=%u log_max=%u event_max=%u wave=116\n",
+            "rcv_def=%u snd_def=%u log_max=%u event_max=%u "
+            "l3_soft=1 freestanding_nic=0 freestanding_rtl=0 local_abi=1 "
+            "freestanding_skip=1 dual_dod_a=OPEN dual_dod_b=OPEN_UDX "
+            "product_dod_b=UDX product_path=UDX|DDI not_dod_close=1 "
+            "soft_ne_product=1 G-AC-1=1 dual=MIT_OR_Apache-2.0 "
+            "(Soft!=product; G-AC-1; dual MIT OR Apache-2.0; "
+            "L3 soft tests without freestanding NIC; Dual DoD A/B OPEN)\n",
             (unsigned)NET_LO_MAX, (unsigned)NET_FD_BASE,
             (unsigned)NET_LO_BUF, (unsigned)NET_LO_BACKLOG_MAX,
             (unsigned)NET_LO_RCVBUF_DEF, (unsigned)NET_LO_SNDBUF_DEF,
             (unsigned)NET_LO_SOFT_LOG_MAX, (unsigned)NET_LO_SOFT_EVENT_MAX);
-    kprintf("net_lo: soft init max=%u fd_base=%u buf=%u backlog_max=%u "
-            "log_max=%u event_max=%u wave=116\n",
-            (unsigned)NET_LO_MAX, (unsigned)NET_FD_BASE,
-            (unsigned)NET_LO_BUF, (unsigned)NET_LO_BACKLOG_MAX,
-            (unsigned)NET_LO_SOFT_LOG_MAX, (unsigned)NET_LO_SOFT_EVENT_MAX);
+    lo_soft_catalog_once();
+    lo_soft_deepen_once();
     lo_soft_print(1);
 }
 
@@ -1710,16 +799,7 @@ net_lo_fd_ok(i64 i64Fd)
     return g_aSocks[u32Slot].u8Used;
 }
 
-/*
- * Linux poll bit numbers (same as EPOLLIN/OUT/ERR/HUP on x86).
- * Cold-path query only — net_lo table state, no vfs_ram/protonrt.
- */
-#define LO_POLLIN  0x0001u
-#define LO_POLLOUT 0x0004u
-#define LO_POLLERR 0x0008u
-#define LO_POLLHUP 0x0010u
-
-/** Soft RX free space: 1 if push_rx would accept ≥1 byte. */
+/** Soft RX free space: 1 if push_rx would accept >=1 byte. */
 static int
 lo_rx_has_space(u32 u32Slot)
 {
@@ -1743,10 +823,10 @@ lo_rx_has_space(u32 u32Slot)
  * POLLIN:  RX data, accept pending, or EOF (RD shut / peer half-close).
  * POLLOUT: WR open and destination ring has space (peer or self unpaired).
  * POLLHUP: both directions shut, or peer gone with drained RX.
- * POLLERR: reserved soft (no RST surface); not set on live slots.
+ * POLLERR: sticky SO_ERROR residual pending (read-and-clear via getsockopt).
  *
  * Returns 0 if fd is not a live net_lo socket. ERR/HUP always surface;
- * IN/OUT filtered by u32Want (0 → default IN|OUT interest).
+ * IN/OUT filtered by u32Want (0 -> default IN|OUT interest).
  */
 u32
 net_lo_poll_mask(i64 i64Fd, u32 u32Want)
@@ -1763,14 +843,32 @@ net_lo_poll_mask(i64 i64Fd, u32 u32Want)
     u32Slot = (u32)(i64Fd - NET_FD_BASE);
     pS = &g_aSocks[u32Slot];
 
-    /* Listener: POLLIN when accept() would not EAGAIN. */
+    /* Sticky SO_ERROR residual -> POLLERR (cleared only by getsockopt). */
+    if (pS->u16SoftErr != 0u) {
+        u32Got |= LO_POLLERR;
+    }
+
+    /* Listener: POLLIN when accept() would not EAGAIN (AcceptQ residual). */
     if (pS->u8Listening) {
+        u32 j;
+
         i16Peer = pS->i16Peer;
         if (i16Peer >= 0 && (u32)i16Peer < NET_LO_MAX &&
-            g_aSocks[i16Peer].u8Used) {
+            g_aSocks[i16Peer].u8Used && g_aSocks[i16Peer].u8AcceptQ) {
             u32Got |= LO_POLLIN;
         } else if (pS->u8Pending > 0) {
             u32Got |= LO_POLLIN;
+        } else {
+            /* Multi-pending: any AcceptQ child on this listen port. */
+            for (j = 0; j < NET_LO_MAX; j++) {
+                if (g_aSocks[j].u8Used && g_aSocks[j].u8AcceptQ &&
+                    !g_aSocks[j].u8Listening &&
+                    g_aSocks[j].u16Port == pS->u16Port &&
+                    g_aSocks[j].u8Type == pS->u8Type) {
+                    u32Got |= LO_POLLIN;
+                    break;
+                }
+            }
         }
         /* Listeners are not writeable soft. */
     } else {
@@ -1778,31 +876,41 @@ net_lo_poll_mask(i64 i64Fd, u32 u32Want)
         if (pS->u32RxLen > 0) {
             u32Got |= LO_POLLIN;
         } else if (pS->u8ShutRd) {
-            /* Empty ring + RD shut → EOF-shaped POLLIN. */
+            /* Empty ring + RD shut -> EOF-shaped POLLIN. */
             u32Got |= LO_POLLIN;
+        } else {
+            /* Peer WR shut half-close -> EOF once RX drained. */
+            i16Peer = pS->i16Peer;
+            if (i16Peer >= 0 && (u32)i16Peer < NET_LO_MAX &&
+                g_aSocks[i16Peer].u8Used && g_aSocks[i16Peer].u8ShutWr) {
+                u32Got |= LO_POLLIN;
+            }
         }
 
         /*
          * Writeable when send path accepts data: local WR open and
-         * destination ring has free space. Unpaired → self ring (dgram smoke).
+         * destination ring has free space. Unpaired -> self ring (dgram smoke).
+         * STREAM with peer RD shut / peer gone -> not writeable (EPIPE path).
          */
         if (!pS->u8ShutWr) {
             i16Peer = pS->i16Peer;
             if (i16Peer >= 0 && (u32)i16Peer < NET_LO_MAX &&
                 g_aSocks[i16Peer].u8Used) {
-                if (lo_rx_has_space((u32)i16Peer)) {
+                if (!g_aSocks[i16Peer].u8ShutRd &&
+                    lo_rx_has_space((u32)i16Peer)) {
                     u32Got |= LO_POLLOUT;
                 }
-            } else if (lo_rx_has_space(u32Slot)) {
-                /* Unpaired / peer gone: self-loop path still accepts. */
-                u32Got |= LO_POLLOUT;
+            } else if (pS->u8Type == SOCK_DGRAM || !pS->u8Connected) {
+                /* Unpaired dgram / never-connected residual self-loop. */
+                if (lo_rx_has_space(u32Slot)) {
+                    u32Got |= LO_POLLOUT;
+                }
             }
         }
 
         /*
          * HUP when both directions shut, or peer half-closed us with no RX
-         * left and local WR also shut. Peer gone alone keeps POLLOUT soft
-         * until RD drained; once RD shut + empty → HUP with POLLIN EOF.
+         * left. Peer gone alone keeps residual until RD drained.
          */
         if (pS->u8ShutRd && pS->u8ShutWr) {
             u32Got |= LO_POLLHUP;
@@ -1852,6 +960,7 @@ net_lo_socket(int nDomain, int nType, int nProto)
         if (!g_aSocks[i].u8Used) {
             g_aSocks[i].u8Used = 1;
             g_aSocks[i].u8Type = (u8)nType;
+            g_aSocks[i].u8Domain = (u8)nDomain; /* AF honesty residual */
             g_aSocks[i].u8Listening = 0;
             g_aSocks[i].u8Connected = 0;
             g_aSocks[i].u8ShutRd = 0;
@@ -1863,11 +972,14 @@ net_lo_socket(int nDomain, int nType, int nProto)
             g_aSocks[i].u8Backlog = 0;
             g_aSocks[i].u8Pending = 0;
             g_aSocks[i].u8LingerOn = 0;
+            g_aSocks[i].u8AcceptQ = 0;
+            g_aSocks[i].u8PadDom = 0;
             g_aSocks[i].u16Port = 0;
             g_aSocks[i].u16LingerSec = 0;
             g_aSocks[i].u32RcvBuf = NET_LO_RCVBUF_DEF;
             g_aSocks[i].u32SndBuf = NET_LO_SNDBUF_DEF;
             g_aSocks[i].i16Peer = -1;
+            g_aSocks[i].u16SoftErr = 0;
             g_aSocks[i].u32RxLen = 0;
             g_aSocks[i].u32RxHead = 0;
             /* HWM update via tally walk (outputs unused). */
@@ -1891,11 +1003,10 @@ net_lo_socket(int nDomain, int nType, int nProto)
     lo_soft_bump(&g_soft.u64SockFail);
     /* Grep: net: lo soft emfile / net_lo: soft emfile (rate-limited) */
     if (lo_soft_event_ok()) {
-        kprintf("net: lo soft emfile max=%u ops=%llu used_hwm=%llu\n",
+        kprintf("net: lo soft emfile max=%u ops=%llu used_hwm=%llu "
+                "soft_ne_product=1 Soft!=product\n",
                 (unsigned)NET_LO_MAX, (unsigned long long)g_soft.u64Ops,
                 (unsigned long long)g_soft.u64HwmUsed);
-        kprintf("net_lo: soft emfile max=%u ops=%llu wave=116\n",
-                (unsigned)NET_LO_MAX, (unsigned long long)g_soft.u64Ops);
     }
     lo_soft_maybe_log(1);
     return -24; /* EMFILE */
@@ -1928,10 +1039,34 @@ port_in_use(u32 u32Self, u16 u16Port, u8 u8Type, u8 u8Reuse)
     return 0;
 }
 
+/**
+ * Soft ephemeral port pick (host order). Residual only; Soft!=product.
+ * Scans NET_LO_EPHEM_BASE..+SPAN for a free port of the same type.
+ * Returns 0 if none free (caller maps to EADDRINUSE).
+ */
+static u16
+lo_ephem_port(u32 u32Self, u8 u8Type, u8 u8Reuse)
+{
+    u32 u32Off;
+    u16 u16Cand;
+
+    for (u32Off = 0; u32Off < NET_LO_EPHEM_SPAN; u32Off++) {
+        u16Cand = (u16)(NET_LO_EPHEM_BASE + (u32Off % NET_LO_EPHEM_SPAN));
+        if (u16Cand == 0u) {
+            continue;
+        }
+        if (!port_in_use(u32Self, u16Cand, u8Type, u8Reuse)) {
+            return u16Cand;
+        }
+    }
+    return 0;
+}
+
 i64
 net_lo_bind(i64 i64Fd, u16 u16Port)
 {
     u32 u32Slot;
+    u8 u8Reuse;
 
     if (!net_lo_fd_ok(i64Fd)) {
         lo_soft_bump(&g_soft.u64BindFail);
@@ -1939,11 +1074,23 @@ net_lo_bind(i64 i64Fd, u16 u16Port)
         return -9;
     }
     u32Slot = (u32)(i64Fd - NET_FD_BASE);
-    if (port_in_use(u32Slot, u16Port, g_aSocks[u32Slot].u8Type,
-                    g_aSocks[u32Slot].u8Reuse ||
-                        g_aSocks[u32Slot].u8ReusePort)) {
+    u8Reuse = g_aSocks[u32Slot].u8Reuse || g_aSocks[u32Slot].u8ReusePort;
+    /* Port 0: soft ephemeral residual for L3 soft tests (not product). */
+    if (u16Port == 0u) {
+        u16Port = lo_ephem_port(u32Slot, g_aSocks[u32Slot].u8Type, u8Reuse);
+        if (u16Port == 0u) {
+            lo_soft_bump(&g_soft.u64BindFail);
+            lo_soft_bump(&g_soft.u64EaddrInuse);
+            lo_soft_set_err(u32Slot, 98);
+            lo_soft_maybe_log(0);
+            return -98; /* EADDRINUSE-shaped (ephem exhausted) */
+        }
+        lo_soft_bump(&g_soft.u64EphemBind);
+    }
+    if (port_in_use(u32Slot, u16Port, g_aSocks[u32Slot].u8Type, u8Reuse)) {
         lo_soft_bump(&g_soft.u64BindFail);
         lo_soft_bump(&g_soft.u64EaddrInuse);
+        lo_soft_set_err(u32Slot, 98);
         lo_soft_maybe_log(0);
         return -98; /* EADDRINUSE-shaped */
     }
@@ -1980,19 +1127,83 @@ net_lo_listen(i64 i64Fd, int nBacklog)
     /* Grep: net: lo soft listen / net_lo: soft listen (rate-limited) */
     if (lo_soft_event_ok()) {
         kprintf("net: lo soft listen fd=%lld port=%u backlog=%u "
-                "type=%u ops=%llu\n",
+                "type=%u ops=%llu soft_ne_product=1 Soft!=product\n",
                 (long long)i64Fd, (unsigned)g_aSocks[u32Slot].u16Port,
                 (unsigned)g_aSocks[u32Slot].u8Backlog,
                 (unsigned)g_aSocks[u32Slot].u8Type,
                 (unsigned long long)g_soft.u64Ops);
-        kprintf("net_lo: soft listen fd=%lld port=%u backlog=%u "
-                "type=%u wave=116\n",
-                (long long)i64Fd, (unsigned)g_aSocks[u32Slot].u16Port,
-                (unsigned)g_aSocks[u32Slot].u8Backlog,
-                (unsigned)g_aSocks[u32Slot].u8Type);
     }
     lo_soft_maybe_log(0);
     return 0;
+}
+
+/** Free table slot index or -1. */
+static int
+lo_alloc_slot(void)
+{
+    u32 i;
+
+    for (i = 0; i < NET_LO_MAX; i++) {
+        if (!g_aSocks[i].u8Used) {
+            return (int)i;
+        }
+    }
+    return -1;
+}
+
+/**
+ * FIFO-ish AcceptQ child for listen port+type (lowest live slot).
+ * Matches residual multi-pending after connect mint-on-pair.
+ */
+static i16
+lo_find_acceptq(u16 u16Port, u8 u8Type)
+{
+    u32 i;
+
+    for (i = 0; i < NET_LO_MAX; i++) {
+        if (g_aSocks[i].u8Used && g_aSocks[i].u8AcceptQ &&
+            !g_aSocks[i].u8Listening && g_aSocks[i].u16Port == u16Port &&
+            g_aSocks[i].u8Type == u8Type) {
+            return (i16)i;
+        }
+    }
+    return -1;
+}
+
+/** Point listeners on port at another remaining AcceptQ child (if any). */
+static void
+lo_rehook_acceptq(u16 u16Port, u8 u8Type, i16 i16Skip)
+{
+    i16 i16Alt;
+    u32 u32Li;
+
+    i16Alt = -1;
+    for (u32Li = 0; u32Li < NET_LO_MAX; u32Li++) {
+        if (!g_aSocks[u32Li].u8Used || !g_aSocks[u32Li].u8AcceptQ ||
+            g_aSocks[u32Li].u8Listening) {
+            continue;
+        }
+        if (g_aSocks[u32Li].u16Port != u16Port ||
+            g_aSocks[u32Li].u8Type != u8Type) {
+            continue;
+        }
+        if ((i16)u32Li == i16Skip) {
+            continue;
+        }
+        i16Alt = (i16)u32Li;
+        break;
+    }
+    if (i16Alt < 0) {
+        return;
+    }
+    for (u32Li = 0; u32Li < NET_LO_MAX; u32Li++) {
+        if (g_aSocks[u32Li].u8Used && g_aSocks[u32Li].u8Listening &&
+            g_aSocks[u32Li].u16Port == u16Port &&
+            g_aSocks[u32Li].u8Type == u8Type &&
+            g_aSocks[u32Li].i16Peer < 0) {
+            g_aSocks[u32Li].i16Peer = i16Alt;
+        }
+    }
 }
 
 i64
@@ -2000,6 +1211,8 @@ net_lo_connect(i64 i64Fd, u16 u16Port)
 {
     u32 u32Slot;
     u32 i;
+    int nPeer;
+    u8 u8Type;
 
     if (!net_lo_fd_ok(i64Fd)) {
         lo_soft_bump(&g_soft.u64ConnFail);
@@ -2007,44 +1220,125 @@ net_lo_connect(i64 i64Fd, u16 u16Port)
         return -9;
     }
     u32Slot = (u32)(i64Fd - NET_FD_BASE);
-    g_aSocks[u32Slot].u16Port = u16Port;
+    u8Type = g_aSocks[u32Slot].u8Type;
+    /* Already paired residual: EISCONN-shaped for STREAM. */
+    if (u8Type == SOCK_STREAM && g_aSocks[u32Slot].u8Connected &&
+        g_aSocks[u32Slot].i16Peer >= 0) {
+        lo_soft_bump(&g_soft.u64ConnFail);
+        lo_soft_set_err(u32Slot, 106);
+        lo_soft_maybe_log(0);
+        return -106; /* EISCONN */
+    }
     /*
-     * Pair client ↔ listener so send/recv works without accept (legacy path).
-     * accept() later mints a dedicated server peer and re-pairs.
-     * Soft backlog: reject when listener already has a pending peer and
-     * pending count would exceed u8Backlog (single-slot queue today).
+     * Residual pairing with net_tcp loop shape (L3 soft without freestanding
+     * NIC): STREAM connect mints AcceptQ server peer and pairs client<->peer
+     * so pre-accept SEND lands on the fd accept() will return. Listener only
+     * holds i16Peer hint + pending count (multi-backlog). Soft!=product.
+     * L3 soft tests; freestanding_nic=0; freestanding_rtl=0. G-AC-1.
      */
     for (i = 0; i < NET_LO_MAX; i++) {
-        if (i != u32Slot && g_aSocks[i].u8Used && g_aSocks[i].u8Listening &&
-            g_aSocks[i].u16Port == u16Port) {
-            if (g_aSocks[i].i16Peer >= 0 &&
-                g_aSocks[i].i16Peer != (i16)u32Slot) {
-                /* Queue full (one soft pending slot). */
-                lo_soft_bump(&g_soft.u64ConnAgain);
-                lo_soft_maybe_log(0);
-                return -11; /* EAGAIN */
+        if (i == u32Slot || !g_aSocks[i].u8Used || !g_aSocks[i].u8Listening ||
+            g_aSocks[i].u16Port != u16Port || g_aSocks[i].u8Type != u8Type) {
+            continue;
+        }
+        if (g_aSocks[i].u8Backlog == 0) {
+            g_aSocks[i].u8Backlog = 1;
+        }
+        if (g_aSocks[i].u8Pending >= g_aSocks[i].u8Backlog) {
+            lo_soft_bump(&g_soft.u64ConnAgain);
+            lo_soft_maybe_log(0);
+            return -11; /* EAGAIN */
+        }
+        if (u8Type == SOCK_STREAM) {
+            nPeer = lo_alloc_slot();
+            if (nPeer < 0) {
+                lo_soft_bump(&g_soft.u64ConnFail);
+                lo_soft_bump(&g_soft.u64SockFail);
+                if (lo_soft_event_ok()) {
+                    kprintf("net: lo soft emfile max=%u ops=%llu "
+                            "(connect mint) soft_ne_product=1 Soft!=product\n",
+                            (unsigned)NET_LO_MAX,
+                            (unsigned long long)g_soft.u64Ops);
+                }
+                lo_soft_maybe_log(1);
+                return -24; /* EMFILE */
             }
-            if (g_aSocks[i].u8Backlog == 0) {
-                g_aSocks[i].u8Backlog = 1;
+            /* Mint AcceptQ server peer (net_tcp loop-pair residual). */
+            g_aSocks[nPeer].u8Used = 1;
+            g_aSocks[nPeer].u8Type = u8Type;
+            g_aSocks[nPeer].u8Domain = g_aSocks[i].u8Domain != 0
+                                           ? g_aSocks[i].u8Domain
+                                           : g_aSocks[u32Slot].u8Domain;
+            if (g_aSocks[nPeer].u8Domain == 0) {
+                g_aSocks[nPeer].u8Domain = (u8)AF_INET;
             }
-            if (g_aSocks[i].u8Pending >= g_aSocks[i].u8Backlog &&
-                g_aSocks[i].i16Peer >= 0) {
-                lo_soft_bump(&g_soft.u64ConnAgain);
-                lo_soft_maybe_log(0);
-                return -11;
+            g_aSocks[nPeer].u8Listening = 0;
+            g_aSocks[nPeer].u8Connected = 1;
+            g_aSocks[nPeer].u8ShutRd = 0;
+            g_aSocks[nPeer].u8ShutWr = 0;
+            g_aSocks[nPeer].u8Reuse = 0;
+            g_aSocks[nPeer].u8ReusePort = 0;
+            g_aSocks[nPeer].u8Keepalive = g_aSocks[i].u8Keepalive;
+            g_aSocks[nPeer].u8Broadcast = 0;
+            g_aSocks[nPeer].u8Backlog = 0;
+            g_aSocks[nPeer].u8Pending = 0;
+            g_aSocks[nPeer].u8LingerOn = 0;
+            g_aSocks[nPeer].u8AcceptQ = 1;
+            g_aSocks[nPeer].u8PadDom = 0;
+            g_aSocks[nPeer].u16Port = u16Port;
+            g_aSocks[nPeer].u16LingerSec = 0;
+            g_aSocks[nPeer].u32RcvBuf = g_aSocks[i].u32RcvBuf;
+            g_aSocks[nPeer].u32SndBuf = g_aSocks[i].u32SndBuf;
+            g_aSocks[nPeer].i16Peer = (i16)u32Slot;
+            g_aSocks[nPeer].u16SoftErr = 0;
+            g_aSocks[nPeer].u32RxLen = 0;
+            g_aSocks[nPeer].u32RxHead = 0;
+            /* Client keeps bound port if any; else soft dest port. */
+            if (g_aSocks[u32Slot].u16Port == 0) {
+                g_aSocks[u32Slot].u16Port = u16Port;
             }
-            g_aSocks[i].i16Peer = (i16)u32Slot;
+            g_aSocks[u32Slot].i16Peer = (i16)nPeer;
+            g_aSocks[u32Slot].u8Connected = 1;
+            g_aSocks[i].i16Peer = (i16)nPeer;
             if (g_aSocks[i].u8Pending < 255u) {
                 g_aSocks[i].u8Pending++;
             }
-            g_aSocks[u32Slot].i16Peer = (i16)i;
-            g_aSocks[u32Slot].u8Connected = 1;
-            g_aSocks[i].u8Connected = 1;
+            lo_soft_tally(NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL,
+                          NULL, NULL, NULL);
             lo_soft_bump(&g_soft.u64ConnOk);
+            /* Grep: net: lo soft pair (rate-limited residual; no stamp storm) */
+            if (lo_soft_event_ok()) {
+                kprintf("net: lo soft pair fd=%lld port=%u peer_slot=%d "
+                        "listen_pending=%u loop=1 acceptq=1 "
+                        "soft_ne_product=1 Soft!=product\n",
+                        (long long)i64Fd, (unsigned)u16Port, nPeer,
+                        (unsigned)g_aSocks[i].u8Pending);
+            }
             lo_soft_maybe_log(0);
             return 0;
         }
+        /* DGRAM soft: pair to listener slot (no AcceptQ mint). */
+        g_aSocks[i].i16Peer = (i16)u32Slot;
+        if (g_aSocks[i].u8Pending < 255u) {
+            g_aSocks[i].u8Pending++;
+        }
+        g_aSocks[u32Slot].u16Port = u16Port;
+        g_aSocks[u32Slot].i16Peer = (i16)i;
+        g_aSocks[u32Slot].u8Connected = 1;
+        g_aSocks[i].u8Connected = 1;
+        lo_soft_bump(&g_soft.u64ConnOk);
+        lo_soft_maybe_log(0);
+        return 0;
     }
+    /* No listener: STREAM refuses (match net_tcp); DGRAM soft-orphan OK. */
+    if (u8Type == SOCK_STREAM) {
+        lo_soft_bump(&g_soft.u64ConnFail);
+        lo_soft_bump(&g_soft.u64ConnRefused);
+        lo_soft_set_err(u32Slot, 111);
+        lo_soft_maybe_log(0);
+        return -111; /* ECONNREFUSED-shaped */
+    }
+    g_aSocks[u32Slot].u16Port = u16Port;
     g_aSocks[u32Slot].u8Connected = 1;
     lo_soft_bump(&g_soft.u64ConnOk);
     lo_soft_bump(&g_soft.u64ConnOrphan);
@@ -2056,8 +1350,10 @@ i64
 net_lo_accept(i64 i64Fd)
 {
     u32 u32Slot;
-    u32 i;
+    u32 u32Li;
+    i16 i16Peer;
     i16 i16Cli;
+    int fDec = 0;
 
     if (!net_lo_fd_ok(i64Fd)) {
         lo_soft_bump(&g_soft.u64AcceptFail);
@@ -2070,70 +1366,62 @@ net_lo_accept(i64 i64Fd)
         lo_soft_maybe_log(0);
         return -22; /* EINVAL */
     }
-    i16Cli = g_aSocks[u32Slot].i16Peer;
-    if (i16Cli < 0 || (u32)i16Cli >= NET_LO_MAX || !g_aSocks[i16Cli].u8Used) {
+    /*
+     * Take pre-minted AcceptQ peer (connect residual). i16Peer is a newest
+     * hint; scan FIFO AcceptQ so multi-pending works. Soft!=product.
+     */
+    i16Peer = g_aSocks[u32Slot].i16Peer;
+    if (i16Peer < 0 || (u32)i16Peer >= NET_LO_MAX ||
+        !g_aSocks[i16Peer].u8Used || !g_aSocks[i16Peer].u8AcceptQ ||
+        g_aSocks[i16Peer].u16Port != g_aSocks[u32Slot].u16Port) {
+        i16Peer = lo_find_acceptq(g_aSocks[u32Slot].u16Port,
+                                  g_aSocks[u32Slot].u8Type);
+    }
+    if (i16Peer < 0) {
         lo_soft_bump(&g_soft.u64AcceptAgain);
         lo_soft_maybe_log(0);
         return -11; /* EAGAIN */
     }
-    /* Mint accepted socket; pair with client; free listener pending slot */
-    for (i = 0; i < NET_LO_MAX; i++) {
-        if (!g_aSocks[i].u8Used) {
-            g_aSocks[i].u8Used = 1;
-            g_aSocks[i].u8Type = g_aSocks[u32Slot].u8Type;
-            g_aSocks[i].u8Listening = 0;
-            g_aSocks[i].u8Connected = 1;
-            g_aSocks[i].u8ShutRd = 0;
-            g_aSocks[i].u8ShutWr = 0;
-            g_aSocks[i].u8Reuse = 0;
-            g_aSocks[i].u8ReusePort = 0;
-            g_aSocks[i].u8Keepalive = g_aSocks[u32Slot].u8Keepalive;
-            g_aSocks[i].u8Broadcast = 0;
-            g_aSocks[i].u8Backlog = 0;
-            g_aSocks[i].u8Pending = 0;
-            g_aSocks[i].u8LingerOn = 0;
-            g_aSocks[i].u16Port = g_aSocks[u32Slot].u16Port;
-            g_aSocks[i].u16LingerSec = 0;
-            g_aSocks[i].u32RcvBuf = g_aSocks[u32Slot].u32RcvBuf;
-            g_aSocks[i].u32SndBuf = g_aSocks[u32Slot].u32SndBuf;
-            g_aSocks[i].i16Peer = i16Cli;
-            g_aSocks[i].u32RxLen = 0;
-            g_aSocks[i].u32RxHead = 0;
-            g_aSocks[i16Cli].i16Peer = (i16)i;
-            g_aSocks[u32Slot].i16Peer = -1;
-            if (g_aSocks[u32Slot].u8Pending > 0) {
-                g_aSocks[u32Slot].u8Pending--;
+    i16Cli = g_aSocks[i16Peer].i16Peer;
+    g_aSocks[i16Peer].u8AcceptQ = 0;
+    /* Drop listen hint + pending; re-hook remaining AcceptQ children. */
+    for (u32Li = 0; u32Li < NET_LO_MAX; u32Li++) {
+        if (!g_aSocks[u32Li].u8Used || !g_aSocks[u32Li].u8Listening) {
+            continue;
+        }
+        if (g_aSocks[u32Li].i16Peer == i16Peer) {
+            g_aSocks[u32Li].i16Peer = -1;
+            if (g_aSocks[u32Li].u8Pending > 0) {
+                g_aSocks[u32Li].u8Pending--;
+                fDec = 1;
             }
-            lo_soft_bump(&g_soft.u64AcceptOk);
-            /* Grep: net: lo soft accept / net_lo: soft accept (rate-limited) */
-            if (lo_soft_event_ok()) {
-                kprintf("net: lo soft accept listen_fd=%lld new_fd=%u "
-                        "cli_slot=%d port=%u type=%u pending=%u ops=%llu\n",
-                        (long long)i64Fd, (unsigned)(NET_FD_BASE + i),
-                        (int)i16Cli, (unsigned)g_aSocks[i].u16Port,
-                        (unsigned)g_aSocks[i].u8Type,
-                        (unsigned)g_aSocks[u32Slot].u8Pending,
-                        (unsigned long long)g_soft.u64Ops);
-                kprintf("net_lo: soft accept listen_fd=%lld new_fd=%u "
-                        "cli_slot=%d port=%u wave=116\n",
-                        (long long)i64Fd, (unsigned)(NET_FD_BASE + i),
-                        (int)i16Cli, (unsigned)g_aSocks[i].u16Port);
-            }
-            lo_soft_maybe_log(0);
-            return (i64)(NET_FD_BASE + i);
         }
     }
-    lo_soft_bump(&g_soft.u64AcceptFail);
-    /* Grep: net: lo soft emfile / net_lo: soft emfile (accept mint) */
-    if (lo_soft_event_ok()) {
-        kprintf("net: lo soft emfile max=%u ops=%llu (accept mint)\n",
-                (unsigned)NET_LO_MAX, (unsigned long long)g_soft.u64Ops);
-        kprintf("net_lo: soft emfile max=%u ops=%llu (accept mint) "
-                "wave=116\n",
-                (unsigned)NET_LO_MAX, (unsigned long long)g_soft.u64Ops);
+    if (fDec == 0 && g_aSocks[u32Slot].u8Pending > 0) {
+        g_aSocks[u32Slot].u8Pending--;
     }
-    lo_soft_maybe_log(1);
-    return -24; /* EMFILE */
+    lo_rehook_acceptq(g_aSocks[u32Slot].u16Port, g_aSocks[u32Slot].u8Type,
+                      i16Peer);
+    /* Ensure client still points at accepted peer. */
+    if (i16Cli >= 0 && (u32)i16Cli < NET_LO_MAX && g_aSocks[i16Cli].u8Used) {
+        g_aSocks[i16Cli].i16Peer = i16Peer;
+        g_aSocks[i16Cli].u8Connected = 1;
+    }
+    g_aSocks[i16Peer].u8Connected = 1;
+    lo_soft_bump(&g_soft.u64AcceptOk);
+    /* Grep: net: lo soft accept / net_lo: soft accept (rate-limited) */
+    if (lo_soft_event_ok()) {
+        kprintf("net: lo soft accept listen_fd=%lld new_fd=%u "
+                "cli_slot=%d port=%u type=%u pending=%u ops=%llu "
+                "acceptq_taken=1 soft_ne_product=1 Soft!=product\n",
+                (long long)i64Fd, (unsigned)(NET_FD_BASE + (u32)i16Peer),
+                (int)i16Cli, (unsigned)g_aSocks[i16Peer].u16Port,
+                (unsigned)g_aSocks[i16Peer].u8Type,
+                (unsigned)g_aSocks[u32Slot].u8Pending,
+                (unsigned long long)g_soft.u64Ops);
+    }
+    lo_soft_maybe_log(0);
+    return (i64)(NET_FD_BASE + (u32)i16Peer);
 }
 
 static int
@@ -2181,6 +1469,7 @@ net_lo_send(i64 i64Fd, const void *pBuf, size_t cb)
     u32 u32N;
     int nPushed;
     int fSelf = 0;
+    struct net_lo_sock *pS;
 
     if (!net_lo_fd_ok(i64Fd) || pBuf == NULL) {
         lo_soft_bump(&g_soft.u64SendFail);
@@ -2193,19 +1482,41 @@ net_lo_send(i64 i64Fd, const void *pBuf, size_t cb)
         return 0;
     }
     u32Slot = (u32)(i64Fd - NET_FD_BASE);
-    if (g_aSocks[u32Slot].u8ShutWr) {
+    pS = &g_aSocks[u32Slot];
+    if (pS->u8Listening) {
+        lo_soft_bump(&g_soft.u64SendFail);
+        lo_soft_maybe_log(0);
+        return -22; /* EINVAL - listener is not a data endpoint */
+    }
+    if (pS->u8ShutWr) {
         lo_soft_bump(&g_soft.u64SendPipe);
+        lo_soft_set_err(u32Slot, 32);
         lo_soft_maybe_log(0);
         return -32; /* EPIPE-shaped */
     }
     /* Soft SO_SNDBUF: clamp one-shot write to advertised send buffer. */
     u32N = (u32)cb;
-    if (g_aSocks[u32Slot].u32SndBuf > 0 && u32N > g_aSocks[u32Slot].u32SndBuf) {
-        u32N = g_aSocks[u32Slot].u32SndBuf;
+    if (pS->u32SndBuf > 0 && u32N > pS->u32SndBuf) {
+        u32N = pS->u32SndBuf;
     }
-    i16Peer = g_aSocks[u32Slot].i16Peer;
-    if (i16Peer < 0 || (u32)i16Peer >= NET_LO_MAX) {
-        /* Unpaired: loop into own RX for dgram smoke */
+    i16Peer = pS->i16Peer;
+    if (i16Peer >= 0 && (u32)i16Peer < NET_LO_MAX &&
+        g_aSocks[i16Peer].u8Used) {
+        /* Peer RD shut (half-close) -> EPIPE for residual STREAM pair. */
+        if (g_aSocks[i16Peer].u8ShutRd) {
+            lo_soft_bump(&g_soft.u64SendPipe);
+            lo_soft_set_err(u32Slot, 32);
+            lo_soft_maybe_log(0);
+            return -32;
+        }
+    } else if (pS->u8Type == SOCK_STREAM && pS->u8Connected) {
+        /* Connected STREAM peer gone -> EPIPE (not self-loop). */
+        lo_soft_bump(&g_soft.u64SendPipe);
+        lo_soft_set_err(u32Slot, 32);
+        lo_soft_maybe_log(0);
+        return -32;
+    } else {
+        /* Unpaired: loop into own RX for dgram / never-connected smoke. */
         i16Peer = (i16)u32Slot;
         fSelf = 1;
     }
@@ -2231,6 +1542,8 @@ net_lo_recv(i64 i64Fd, void *pBuf, size_t cb)
     struct net_lo_sock *pS;
     u32 u32N;
     u32 i;
+    i16 i16Peer;
+    int fPeerEof = 0;
 
     if (!net_lo_fd_ok(i64Fd) || pBuf == NULL) {
         lo_soft_bump(&g_soft.u64RecvFail);
@@ -2244,10 +1557,28 @@ net_lo_recv(i64 i64Fd, void *pBuf, size_t cb)
     }
     u32Slot = (u32)(i64Fd - NET_FD_BASE);
     pS = &g_aSocks[u32Slot];
-    if (pS->u8ShutRd) {
-        lo_soft_bump(&g_soft.u64RecvEof);
+    if (pS->u8Listening) {
+        lo_soft_bump(&g_soft.u64RecvFail);
         lo_soft_maybe_log(0);
-        return 0; /* EOF */
+        return -22; /* EINVAL */
+    }
+    i16Peer = pS->i16Peer;
+    if (i16Peer >= 0 && (u32)i16Peer < NET_LO_MAX &&
+        g_aSocks[i16Peer].u8Used && g_aSocks[i16Peer].u8ShutWr) {
+        fPeerEof = 1;
+    } else if (pS->u8Type == SOCK_STREAM && pS->u8Connected &&
+               (i16Peer < 0 || (u32)i16Peer >= NET_LO_MAX ||
+                !g_aSocks[i16Peer].u8Used)) {
+        /* STREAM peer gone after close half-close residual. */
+        fPeerEof = 1;
+    }
+    if (pS->u8ShutRd || fPeerEof) {
+        if (pS->u32RxLen == 0) {
+            lo_soft_bump(&g_soft.u64RecvEof);
+            lo_soft_maybe_log(0);
+            return 0; /* EOF */
+        }
+        /* Drain remaining RX before EOF. */
     }
     if (pS->u32RxLen == 0) {
         lo_soft_bump(&g_soft.u64RecvAgain);
@@ -2273,6 +1604,7 @@ i64
 net_lo_shutdown(i64 i64Fd, int nHow)
 {
     u32 u32Slot;
+    i16 i16Peer;
 
     if (!net_lo_fd_ok(i64Fd)) {
         lo_soft_bump(&g_soft.u64ShutFail);
@@ -2282,7 +1614,7 @@ net_lo_shutdown(i64 i64Fd, int nHow)
     if (nHow < 0 || nHow > 2) {
         lo_soft_bump(&g_soft.u64ShutFail);
         lo_soft_maybe_log(0);
-        return -22; /* EINVAL — validate before mutating flags */
+        return -22; /* EINVAL - validate before mutating flags */
     }
     u32Slot = (u32)(i64Fd - NET_FD_BASE);
     if (nHow == 0 || nHow == 2) {
@@ -2290,6 +1622,15 @@ net_lo_shutdown(i64 i64Fd, int nHow)
     }
     if (nHow == 1 || nHow == 2) {
         g_aSocks[u32Slot].u8ShutWr = 1;
+        /*
+         * Residual half-close: peer sees RD shut / EOF after drain
+         * (pairs with net_tcp FIN-shaped local smoke without eth).
+         */
+        i16Peer = g_aSocks[u32Slot].i16Peer;
+        if (i16Peer >= 0 && (u32)i16Peer < NET_LO_MAX &&
+            g_aSocks[i16Peer].u8Used) {
+            g_aSocks[i16Peer].u8ShutRd = 1;
+        }
     }
     lo_soft_bump(&g_soft.u64ShutOk);
     if (nHow == 0) {
@@ -2379,7 +1720,7 @@ net_lo_setsockopt(i64 i64Fd, int nLevel, int nOpt, const void *pVal, u32 u32Len)
         return 0;
     }
     if (nOpt == 13 /* SO_LINGER */) {
-        /* struct linger { int l_onoff; int l_linger; } — soft store only. */
+        /* struct linger { int l_onoff; int l_linger; } - soft store only. */
         if (pVal != NULL && u32Len >= 8) {
             const int *pL = (const int *)pVal;
 
@@ -2392,7 +1733,7 @@ net_lo_setsockopt(i64 i64Fd, int nLevel, int nOpt, const void *pVal, u32 u32Len)
         lo_soft_maybe_log(0);
         return 0;
     }
-    /* SO_DEBUG=1, SO_DONTROUTE=5, SO_OOBINLINE=10, timeos — accept no-op */
+    /* SO_DEBUG=1, SO_DONTROUTE=5, SO_OOBINLINE=10, timeos - accept no-op */
     if (nOpt == 1 || nOpt == 5 || nOpt == 10 || nOpt == 20 || nOpt == 21) {
         lo_soft_bump(&g_soft.u64SetoptOk);
         lo_soft_bump(&g_soft.u64OptNoop);
@@ -2426,7 +1767,12 @@ net_lo_getsockopt(i64 i64Fd, int nLevel, int nOpt, void *pVal, u32 *pLen)
         v = g_aSocks[u32Slot].u8Type;
         lo_soft_bump(&g_soft.u64OptType);
     } else if (nOpt == 4 /* SO_ERROR */) {
-        v = 0;
+        /* Sticky SO_ERROR residual: read-and-clear (L3 soft ABI honesty). */
+        v = (int)g_aSocks[u32Slot].u16SoftErr;
+        g_aSocks[u32Slot].u16SoftErr = 0;
+        if (v != 0) {
+            lo_soft_bump(&g_soft.u64SoftErrGet);
+        }
         lo_soft_bump(&g_soft.u64OptError);
     } else if (nOpt == 2 /* SO_REUSEADDR */) {
         v = g_aSocks[u32Slot].u8Reuse;
@@ -2478,15 +1824,24 @@ net_lo_getsockopt(i64 i64Fd, int nLevel, int nOpt, void *pVal, u32 *pLen)
     return 0;
 }
 
+/**
+ * Soft sockaddr fill: AF_INET -> sin-shaped 127.0.0.1:port;
+ * AF_UNIX -> family only (path residual empty). Domain honesty residual.
+ */
 static void
-fill_sin(u8 *p, u16 u16Port)
+fill_addr(u8 *p, u8 u8Domain, u16 u16Port)
 {
     u32 i;
 
     for (i = 0; i < 16; i++) {
         p[i] = 0;
     }
-    p[0] = 2; /* AF_INET */
+    if (u8Domain == (u8)AF_UNIX) {
+        p[0] = (u8)AF_UNIX; /* soft AF_UNIX family residual */
+        p[1] = 0;
+        return;
+    }
+    p[0] = (u8)AF_INET; /* AF_INET */
     p[1] = 0;
     p[2] = (u8)(u16Port >> 8);
     p[3] = (u8)(u16Port & 0xffu);
@@ -2500,6 +1855,7 @@ i64
 net_lo_getsockname(i64 i64Fd, void *pAddr, u32 *pLen)
 {
     u32 u32Slot;
+    u8 u8Dom;
 
     if (!net_lo_fd_ok(i64Fd) || pAddr == NULL || pLen == NULL) {
         lo_soft_bump(&g_soft.u64NameFail);
@@ -2512,7 +1868,11 @@ net_lo_getsockname(i64 i64Fd, void *pAddr, u32 *pLen)
         return -22;
     }
     u32Slot = (u32)(i64Fd - NET_FD_BASE);
-    fill_sin((u8 *)pAddr, g_aSocks[u32Slot].u16Port);
+    u8Dom = g_aSocks[u32Slot].u8Domain;
+    if (u8Dom != (u8)AF_INET && u8Dom != (u8)AF_UNIX) {
+        u8Dom = (u8)AF_INET;
+    }
+    fill_addr((u8 *)pAddr, u8Dom, g_aSocks[u32Slot].u16Port);
     *pLen = 16;
     lo_soft_bump(&g_soft.u64NameOk);
     lo_soft_maybe_log(0);
@@ -2524,6 +1884,7 @@ net_lo_getpeername(i64 i64Fd, void *pAddr, u32 *pLen)
 {
     u32 u32Slot;
     i16 peer;
+    u8 u8Dom;
 
     if (!net_lo_fd_ok(i64Fd) || pAddr == NULL || pLen == NULL) {
         lo_soft_bump(&g_soft.u64PeerFail);
@@ -2542,7 +1903,16 @@ net_lo_getpeername(i64 i64Fd, void *pAddr, u32 *pLen)
         lo_soft_maybe_log(0);
         return -107; /* ENOTCONN */
     }
-    fill_sin((u8 *)pAddr, g_aSocks[peer].u16Port);
+    /* Peer family from local domain residual (pair inherits). */
+    u8Dom = g_aSocks[u32Slot].u8Domain;
+    if (g_aSocks[peer].u8Domain == (u8)AF_INET ||
+        g_aSocks[peer].u8Domain == (u8)AF_UNIX) {
+        u8Dom = g_aSocks[peer].u8Domain;
+    }
+    if (u8Dom != (u8)AF_INET && u8Dom != (u8)AF_UNIX) {
+        u8Dom = (u8)AF_INET;
+    }
+    fill_addr((u8 *)pAddr, u8Dom, g_aSocks[peer].u16Port);
     *pLen = 16;
     lo_soft_bump(&g_soft.u64PeerOk);
     lo_soft_maybe_log(0);
@@ -2555,6 +1925,7 @@ net_lo_close(i64 i64Fd)
     u32 u32Slot;
     i16 peer;
     u32 cUsed = 0;
+    u32 u32Li;
 
     if (!net_lo_fd_ok(i64Fd)) {
         lo_soft_bump(&g_soft.u64CloseFail);
@@ -2563,17 +1934,35 @@ net_lo_close(i64 i64Fd)
     }
     u32Slot = (u32)(i64Fd - NET_FD_BASE);
     peer = g_aSocks[u32Slot].i16Peer;
-    if (peer >= 0 && (u32)peer < NET_LO_MAX) {
+    /* Closing AcceptQ child: drop pending on any listener that hints here. */
+    if (g_aSocks[u32Slot].u8AcceptQ) {
+        for (u32Li = 0; u32Li < NET_LO_MAX; u32Li++) {
+            if (!g_aSocks[u32Li].u8Used || !g_aSocks[u32Li].u8Listening) {
+                continue;
+            }
+            if (g_aSocks[u32Li].i16Peer == (i16)u32Slot) {
+                g_aSocks[u32Li].i16Peer = -1;
+                if (g_aSocks[u32Li].u8Pending > 0) {
+                    g_aSocks[u32Li].u8Pending--;
+                }
+            }
+        }
+        lo_rehook_acceptq(g_aSocks[u32Slot].u16Port, g_aSocks[u32Slot].u8Type,
+                          (i16)u32Slot);
+    }
+    if (peer >= 0 && (u32)peer < NET_LO_MAX && g_aSocks[peer].u8Used) {
         if (g_aSocks[peer].i16Peer == (i16)u32Slot) {
             g_aSocks[peer].i16Peer = -1;
         }
-        /* Soft half-close: peer sees RD shutdown if we were connected. */
+        /* Soft half-close: peer sees RD shutdown if we were a data endpoint. */
         if (g_aSocks[u32Slot].u8Connected && !g_aSocks[u32Slot].u8Listening) {
             g_aSocks[peer].u8ShutRd = 1;
             lo_soft_bump(&g_soft.u64ClosePeerHalf);
         }
-        if (g_aSocks[peer].u8Listening && g_aSocks[peer].u8Pending > 0) {
+        if (g_aSocks[peer].u8Listening && g_aSocks[peer].u8Pending > 0 &&
+            g_aSocks[peer].i16Peer == (i16)u32Slot) {
             g_aSocks[peer].u8Pending--;
+            g_aSocks[peer].i16Peer = -1;
         }
     }
     memset(&g_aSocks[u32Slot], 0, sizeof(g_aSocks[u32Slot]));

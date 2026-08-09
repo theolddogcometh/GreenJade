@@ -1,0 +1,7 @@
+created=0
+already_existed=2000
+planned=2000
+range=68001..70000
+pattern=25850 simple identity + decade lamps (*91-*00) at each hundred
+note=CREATE-ONLY O_EXCL: full range present (verified endpoints + decade lamps + capstones). Emitter at _emit_wave_70000_once.py / /tmp/emit_graph_68001_70000.py for re-run. No Makefile/kernel/docs touch. Soft only; product lamps remain open (bar3_ready=0, product_score=0) at each *00 decade.
+samples=graph_batch68001.c (simple), graph_batch68091.c (shell_green_68100), graph_batch68093.c (bar3_ready_68100=0), graph_batch68100.c (capstone), graph_batch69091.c (shell_green_69100), graph_batch69991.c (shell_green_70000), graph_batch69993.c (bar3_ready_70000=0), graph_batch70000.c (capstone makefile_max=70000)

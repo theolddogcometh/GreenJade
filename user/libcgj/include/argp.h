@@ -21,6 +21,15 @@
  * ---------
  * Full POSIX/Linux completeness; stubs and soft fills may return ENOSYS
  * until the hybrid ABI path is wired. See docs/GLIBC_COMPAT.md.
+ *
+ * Soft residual (C2 libcgj argp.h; Soft!=product; G-AC-1; Dual DoD A/B OPEN):
+ *   soft     = argp_option/state/child + argp_parse/help/usage/error/failure
+ *              bring-up subset; soft fills OK until hybrid ABI graphs need more
+ *   product  = UDX/DDI + hot/cold ABI hosts; not freestanding class; not .ko AC
+ *   honesty  = header decls != full GNU argp completeness; agent PASS !=
+ *              Dual DoD close; stamp-free bar honesty (no version stamp)
+ *   law      = dual MIT OR Apache-2.0; no GPL; H2 no stamp storms
+ * greppable: libcgj: argp soft residual Soft!=product
  */
 #pragma once
 

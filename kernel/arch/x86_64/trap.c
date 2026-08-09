@@ -13,47 +13,105 @@
  *   Lifetime classify / #PF COW / PE32 / except-or-kill tallies (gj_trap_stats).
  *   File-local resume/halt/last-frame/rate lamps (never hard-gate).
  *   Greppable prefix-stable serial markers (rate-limited; never flood):
- *     trap: soft inventory …
- *     trap: soft class …
- *     trap: soft pf …
- *     trap: soft pe32 …
- *     trap: soft outcome …
- *     trap: soft stats …
- *     trap: soft limit …
- *     trap: soft last …
- *     trap: soft resume …
- *     trap: soft halt …
- *     trap: soft rate …
- *     trap: soft path …
- *     trap: soft deepen …
+ *     trap: soft inventory ...
+ *     trap: soft class ...
+ *     trap: soft pf ...
+ *     trap: soft pe32 ...
+ *     trap: soft outcome ...
+ *     trap: soft stats ...
+ *     trap: soft limit ...
+ *     trap: soft last ...
+ *     trap: soft resume ...
+ *     trap: soft halt ...
+ *     trap: soft rate ...
+ *     trap: soft path ...
+ *     trap: soft deepen ...
  * Wave 15 complementary surfaces (kept; never reshape primary fields):
- *     trap: soft honesty …  — soft-only / non-claim catalog
- *     trap: soft api …      — trap_stats_get/reset/soft call tallies
- *     trap: soft frame …    — last full frame lamps (err/rip/cs/rsp/ss/rflags)
- *     trap: soft vec …      — last vector class + name lamp
- *     trap: soft mile …     — power-of-two milestone / quiet / skip rollup
+ *     trap: soft honesty ...  - soft-only / non-claim catalog
+ *     trap: soft api ...      - trap_stats_get/reset/soft call tallies
+ *     trap: soft frame ...    - last full frame lamps (err/rip/cs/rsp/ss/rflags)
+ *     trap: soft vec ...      - last vector class + name lamp
+ *     trap: soft mile ...     - power-of-two milestone / quiet / skip rollup
  * Wave 16 complementary surfaces (kept; never reshape primary fields):
- *     trap: soft exclusive …— exclusive=1 unit stamp + wave
- *     trap: soft claim …    — product claim bounds (classify+pe32+cow)
- *     trap: soft ratio …    — class/outcome/resume/halt path ratios
- * Wave 17 complementary surfaces (kept) (never reshape primary fields):
- *     trap: soft return …   — Wave 17 API return surfaces (kept)
- *     trap: soft return selftest … — Wave 17 terminal return surface (kept)
- *     trap: soft retmap …   — Wave 17 return-surface map (kept)
+ *     trap: soft exclusive ...- exclusive=1 unit stamp + wave
+ *     trap: soft claim ...    - product claim bounds (classify+pe32+cow)
+ *     trap: soft ratio ...    - class/outcome/resume/halt path ratios
+ * Emission policy (soft inventory):
  *   Emissions only at power-of-two trap_dispatch milestones, hard-capped at
  *   TRAP_SOFT_LOG_MAX. Explicit trap_stats_soft() always dumps (smoke path).
  *   Never hard-gates product policy. Pure C. Soft.
- * Grep: trap: soft · trap: #PF soft
+ * Grep: trap: soft | trap: #PF soft
  * greppable: trap: soft deepen
  * greppable: trap: soft exclusive
- * greppable: trap: soft return
- * greppable: trap: soft return selftest
- * greppable: trap: soft retmap
+ * greppable: trap: string-as-code
+ * greppable: trap: wild-rip
+ * greppable: trap: #PF I=1
+ *
+ * Lab G752 #PF I=1 class lamp (one-shot; no multi-line storm; no stamp storms):
+ *   string-as-code - I=1 + RIP in kernel image window (soft-deepen /.rodata;
+ *                    lab stamp mass ~0x5a2400). Parent skips .ko init (G-AC-1).
+ *   wild-rip       - I=1 + RIP outside image / non-canonical / null-ish
+ *                    (lab class exemplar RIP~0x58240013 from stage residual).
+ *
+ * Lean residual - #PF I=1 wild-rip / user kill / FAULT pin honesty
+ * -----------------------------------------------------------------
+ * Kernel #PF: STATUS pin first (fb_console_trap -> KERNEL FAULT - HALTED), then
+ * one-shot I=1 class lamp (hold2 I=1 class), then cli;hlt. Product halt path
+ * unchanged - never weaken KERNEL FAULT pin path.
+ * User kill: thr EXITED + schedule - never fb_console_trap (that hard-labels
+ * KERNEL FAULT - HALTED and freezes LOG). Soft!=product; never upgrades kill
+ * -> hard-halt.
+ *
+ * C3 no-COM1 user-kill panel (G752 photo-only diagnose; Soft!=product):
+ *   hold1: "user kill <name>" [I=1]
+ *   hold2: rip= thr= tag= [u32]   - fault RIP + thr soft tag (always tag=)
+ *   hold3: cr2= err= [P/W/U/I] [entry=] - fault CR2 + err bits for #PF
+ * I=1 class lamp (string-as-code / wild-rip) stays serial + kernel hold2 only;
+ * must never clobber user-kill hold2 rip/thr/tag (panel residual deepen).
+ * STRONGER thr kill panel tags residual (Soft!=product):
+ *   Soft tag sticky from thread unit; if empty, derive from entry/RIP VA class
+ *   (pe32_wow @ 0x52000000 / pe32_u32 / ring3 / user_elf). Always paint tag=
+ *   on hold2 (tag=- only when no class). Named-class pe32_wow|sshd|init|ring3
+ *   panel honesty for C0 pe32_wow thr kill residual. Soft!=product.
+ *
+ * FAULT pin honesty: pin is kernel-halt only. User kill paints hold1/2/3
+ * and rate-capped detail; never sticky KERNEL FAULT pin. Soft!=product.
+ * G-AC-1: residual lamps never claim in-kernel .ko product AC / wire owner.
+ * No freestanding net thrash in this unit (diagnose only; no NIC product path).
+ *
+ * Lean soft residual (this unit only; dual MIT OR Apache-2.0):
+ *   trap: soft residual lean ... - once-lamp; Soft!=product dual license
+ *   No version stamp. No stamp storms. Soft never hard-gates halt vs kill.
+ * greppable: trap: soft residual lean
+ * greppable: trap: user kill honesty
+ * greppable: trap: user kill panel
+ * greppable: thr tag=
+ * greppable: trap: wild-rip
+ * greppable: trap: #PF I=1
+ * greppable: trap: FAULT
+ * greppable: trap: string-as-code
+ *
+ * Dual DoD residual flood honesty (R90+#PF class under high RX/arping flood):
+ *   Per-event #PF / banner / FAULT detail / kill / except lamps hard-capped;
+ *   suppressed events bump greppable skip tallies (never silent mask).
+ *   Totals always free; Soft!=product; never hard-gates halt vs kill.
+ * greppable: trap: #PF soft rate
+ * greppable: trap: soft rate
+ *
+ * H2 (C3) string-as-code rate caps residual (ASSURANCE_LITE hazard H2):
+ *   One-shot class lamp (trap: string-as-code / trap: wild-rip); further I=1
+ *   hits only tally + skip counters. Power-of-two skip lamp keeps flood
+ *   greppable without stamp storms (no multi-line class re-dump).
+ *   Totals always free; Soft!=product; never hard-gates halt vs kill.
+ * greppable: trap: string-as-code rate
+ * greppable: trap: #PF I=1 rate
+ * greppable: trap: string-as-code
  */
 #include <gj/config.h>
 #include <gj/cpu.h>
 #include <gj/error.h>
 #include <gj/except.h>
+#include <gj/fb_console.h>
 #include <gj/gdt.h>
 #include <gj/klog.h>
 #include <gj/pe32.h>
@@ -206,12 +264,12 @@ static const char *const g_aszExc[] = {
     "24",   "25",   "26",   "27",   "28",   "29",   "#SX",  "31",
 };
 
-/* Soft trap path counters — wrap OK; never gate product policy. */
+/* Soft trap path counters - wrap OK; never gate product policy. */
 static struct gj_trap_stats g_trapStats;
 
 /*
  * Soft inventory serial budget (Wave 16). Absolute cap of greppable dumps;
- * milestones are power-of-two non-null trap_dispatch entries (1,2,4,…).
+ * milestones are power-of-two non-null trap_dispatch entries (1,2,4,...).
  * greppable: trap: soft
  */
 #define TRAP_SOFT_LOG_MAX 12u
@@ -240,9 +298,61 @@ static u64 g_u64SoftApiGet;      /* trap_stats_get entries */
 static u64 g_u64SoftApiReset;    /* trap_stats_reset entries */
 static u64 g_u64SoftApiSoft;     /* trap_stats_soft entries */
 static u64 g_u64SoftMileHit;     /* power-of-two milestone hits (pre-cap) */
+/* Panel-path FAULT detail: one-shot banners (never flood LOG / serial). */
+static u32 g_u32FaultDetailLogged; /* compact trap: FAULT detail lines */
+static u32 g_u32TrapBannerLogged;  /* multi-line *** TRAP *** banners */
+static u32 g_u32PfSoftLogged;      /* user #PF soft decision lines */
+static u32 g_u32KillLogged;        /* "killing user thread" lamps */
+static u32 g_u32ExceptLogged;      /* "delivered to exception port" lamps */
+/* Residual skip tallies - flood visible without per-event spam. Soft!=product. */
+static u64 g_u64PfSoftSkip;        /* #PF soft decision lines suppressed */
+static u64 g_u64BannerSkip;        /* *** TRAP *** banners suppressed */
+static u64 g_u64FaultDetailSkip;   /* FAULT detail lines suppressed */
+static u64 g_u64KillLogSkip;       /* kill lamps suppressed */
+static u64 g_u64ExceptLogSkip;     /* except-port lamps suppressed */
+/* #PF I=1 class tallies (string-as-code / wild-rip). Soft!=product. */
+static u64 g_u64PfI1Hit;           /* #PF with I=1 seen (all rings) */
+static u64 g_u64PfI1StringAsCode;  /* I=1 + RIP in kernel image window */
+static u64 g_u64PfI1WildRip;       /* I=1 + RIP outside image / non-canonical */
+static u32 g_u32PfI1ClassLogged;   /* one-shot class lamp emissions */
+/* H2 rate-cap residual: post-one-shot I=1 class lamp suppressions. Soft!=product. */
+static u64 g_u64PfI1ClassSkip;     /* class lamp lines suppressed after one-shot */
+static u64 g_u64PfI1SacSkip;       /* string-as-code class skips (post one-shot) */
+static u64 g_u64PfI1WildSkip;      /* wild-rip class skips (post one-shot) */
+/* Lean residual once-lamp (Soft!=product; no stamp storms; no version stamp). */
+static u32 g_u32SoftResidualLeanLogged;
+/*
+ * STRONGER thr kill panel tag residual tallies (Soft!=product; C3 no-COM1).
+ * Soft tag sticky preferred; entry/RIP VA class fallback when empty.
+ * Named-class: pe32_wow|sshd|init|ring3. Never product identity.
+ */
+static u64 g_u64KillTagSoftHit;     /* soft tag non-empty on kill panel */
+static u64 g_u64KillTagFallback;    /* entry/RIP class fallback used */
+static u64 g_u64KillTagEmpty;       /* still empty after fallback (tag=-) */
+static u64 g_u64KillTagPe32Wow;     /* panel tag pe32_wow (C0 residual) */
+static u64 g_u64KillTagNamed;       /* panel tag pe32_wow|sshd|init|ring3 */
+
+#define TRAP_FAULT_DETAIL_LOG_MAX 4u
+#define TRAP_BANNER_LOG_MAX       4u
+#define TRAP_PF_SOFT_LOG_MAX      4u
+#define TRAP_KILL_LOG_MAX         4u
+#define TRAP_EXCEPT_LOG_MAX       4u
+/* Lab G752 #PF I=1 wild-RIP class exemplar (stage residual RIP). greppable. */
+#define TRAP_PF_I1_CLASS_LAB      0x58240013ull
 
 static void trap_soft_inventory_log(void);
 static void trap_soft_maybe_log(void);
+static void trap_soft_residual_lean(void);
+static void trap_fault_status_pin(u32 u32Vec, u64 u64Err, u64 u64Rip,
+                                 u64 u64Cr2, u32 u32Thr, u32 u32State,
+                                 int fUser);
+static void trap_user_kill_honesty_soft(u32 u32Vec, u64 u64Err, u64 u64Rip,
+                                        u64 u64Cr2, u32 u32Thr);
+static int  trap_rip_in_known_rodata_soft(u64 u64Rip, u64 *pu64Lo,
+                                          u64 *pu64Hi);
+static int  trap_rip_canonical_soft(u64 u64Rip);
+static void trap_string_as_code_lamp(u64 u64Err, u64 u64Rip, u64 u64Cr2,
+                                    int fUser);
 
 static u64
 read_cr2(void)
@@ -252,22 +362,836 @@ read_cr2(void)
     return u64Cr2;
 }
 
+/*
+ * Soft known kernel-image window for #PF I=1 class lamp (no linker __rodata_*).
+ * Image layout (x86_64 linker.ld): .boot|.text|.rodata|.data|.bss
+ *   lo/hi: [__kernel_start, __bss_start) - kernel image below .bss.
+ * I=1 already implies a non-executable leaf under NX (excludes live .text RX).
+ * Covers lab RIP ~0x5a2400 virtio/soft-deepen stamp mass. Soft!=product.
+ * greppable: trap: string-as-code
+ */
+static int
+trap_rip_in_known_rodata_soft(u64 u64Rip, u64 *pu64Lo, u64 *pu64Hi)
+{
+    extern char __kernel_start[];
+    extern char __bss_start[];
+    u64 u64Lo;
+    u64 u64Hi;
+
+    u64Lo = (u64)(uintptr_t)(void *)__kernel_start;
+    u64Hi = (u64)(uintptr_t)(void *)__bss_start;
+    if (pu64Lo != NULL) {
+        *pu64Lo = u64Lo;
+    }
+    if (pu64Hi != NULL) {
+        *pu64Hi = u64Hi;
+    }
+    if (u64Hi <= u64Lo) {
+        return 0;
+    }
+    if (u64Rip < u64Lo || u64Rip >= u64Hi) {
+        return 0;
+    }
+    return 1;
+}
+
 /**
- * Greppable soft trap inventory (product / smoke) — Wave 16 deepen.
- * Prefix-stable markers (trap: soft …):
- *   trap: soft inventory  — totals + rate-limit lamps + wave stamp
- *   trap: soft class      — user/kernel + vector class
- *   trap: soft pf         — #PF COW pipeline
- *   trap: soft pe32       — CS32 #BP / int 0x80 smokes + resume/death
- *   trap: soft outcome    — except port vs kill fallthrough
- *   trap: soft stats      — aggregate one-liner (legacy smoke)
- *   trap: soft limit      — hard cap / power-of-two policy lamps
- *   trap: soft last       — last frame lamps (vec/user/err/rip/cr2/cs)
- *   trap: soft resume     — COW ok + PE32 int80 return
- *   trap: soft halt       — kernel / null frame halt entries
- *   trap: soft rate       — milestone / quiet / force / skip rollup
- *   trap: soft path       — product claim + honesty
- *   trap: soft deepen     — Wave 20 stamp line
+ * Soft canonical-address check (48-bit VA, bits 63:48 = sign-extend of bit 47).
+ * Non-canonical RIP under I=1 is always wild-rip class. Soft!=product.
+ */
+static int
+trap_rip_canonical_soft(u64 u64Rip)
+{
+    u64 u64Top;
+
+    u64Top = u64Rip >> 47;
+    return (u64Top == 0ull || u64Top == 0x1ffffull) ? 1 : 0;
+}
+
+/**
+ * Soft ASCII-ish peek at kernel-image RIP (identity-mapped). Confirms
+ * string-as-code without dumping bytes (no multi-line storm). Returns
+ * printable count in first 4 bytes (0..4). Only call when RIP in image.
+ */
+static u32
+trap_rip_ascii_peek_soft(u64 u64Rip)
+{
+    const volatile u8 *p;
+    u32 n;
+    u32 i;
+    u8 c;
+
+    p = (const volatile u8 *)(uintptr_t)u64Rip;
+    n = 0u;
+    for (i = 0u; i < 4u; i++) {
+        c = p[i];
+        if (c >= 0x20u && c <= 0x7eu) {
+            n++;
+        } else if (c == 0u || c == (u8)'\n' || c == (u8)'\t') {
+            /* format-string / C-string noise still counts soft */
+            n++;
+        }
+    }
+    return n;
+}
+
+/**
+ * Lean residual honesty lamp (once only; Soft!=product dual license).
+ *
+ * Surfaces #PF I=1 wild-rip / user-kill residual + FAULT pin honesty without
+ * multi-line stamp storms or product version stamps. Soft never hard-gates
+ * halt vs kill. G-AC-1: no .ko product AC claim. greppable: trap: soft residual lean
+ * STRONGER: thr kill panel tag soft/fallback tallies (Soft!=product).
+ */
+static void
+trap_soft_residual_lean(void)
+{
+    if (g_u32SoftResidualLeanLogged != 0u) {
+        return;
+    }
+    g_u32SoftResidualLeanLogged = 1u;
+
+    /* Grep: trap: soft residual lean | trap: user kill panel | thr tag= */
+    kprintf("trap: soft residual lean "
+            "pf_i1=%lu sac=%lu wild=%lu i1_log=%u "
+            "i1_skip=%lu sac_skip=%lu wild_skip=%lu "
+            "kill=%lu kill_log=%u kill_skip=%lu "
+            "detail_log=%u detail_skip=%lu "
+            "banner_skip=%lu pf_soft_skip=%lu "
+            "tag_soft=%lu tag_fb=%lu tag_empty=%lu "
+            "tag_pe32_wow=%lu tag_named=%lu "
+            "fault_pin=kernel_only user_kill_ne_KERNEL_FAULT=1 "
+            "hold1=user_kill hold2=rip_thr_tag hold3=cr2_err "
+            "no_com1_panel=1 i1_hold2=kernel_only "
+            "tag_always=1 tag_fallback_va=1 "
+            "policy_kern=halt policy_user=kill "
+            "h2_sac_rate_cap=1 "
+            "lab=0x%lx hard_gate=0 storm=0 soft_ne_product=1 "
+            "g_ac1=1 no_ko_product_ac=1 no_fs_net_thrash=1 "
+            "dual=MIT_OR_Apache-2.0 unit=trap.c "
+            "(Soft!=product; dual MIT OR Apache-2.0; G-AC-1; no version stamp; "
+            "FAULT pin honesty; #PF I=1 wild-rip residual; H2 rate caps; "
+            "user-kill panel rip/cr2/tag no-COM1; thr kill panel tags)\n",
+            (unsigned long)g_u64PfI1Hit,
+            (unsigned long)g_u64PfI1StringAsCode,
+            (unsigned long)g_u64PfI1WildRip,
+            g_u32PfI1ClassLogged,
+            (unsigned long)g_u64PfI1ClassSkip,
+            (unsigned long)g_u64PfI1SacSkip,
+            (unsigned long)g_u64PfI1WildSkip,
+            (unsigned long)g_trapStats.u64Kill,
+            g_u32KillLogged,
+            (unsigned long)g_u64KillLogSkip,
+            g_u32FaultDetailLogged,
+            (unsigned long)g_u64FaultDetailSkip,
+            (unsigned long)g_u64BannerSkip,
+            (unsigned long)g_u64PfSoftSkip,
+            (unsigned long)g_u64KillTagSoftHit,
+            (unsigned long)g_u64KillTagFallback,
+            (unsigned long)g_u64KillTagEmpty,
+            (unsigned long)g_u64KillTagPe32Wow,
+            (unsigned long)g_u64KillTagNamed,
+            (unsigned long)TRAP_PF_I1_CLASS_LAB);
+}
+
+/**
+ * #PF I=1 class lamp: string-as-code vs wild-rip (lab class 0x58240013).
+ *
+ * Intel SDM #PF err bit4 = I/D (instruction fetch). Classify once:
+ *   string-as-code - RIP inside kernel image window (NX leaf -> soft-deepen
+ *                    string / .rodata as code; lab ~0x5a2400).
+ *   wild-rip       - RIP outside image, non-canonical, or null-ish
+ *                    (lab exemplar RIP~0x58240013).
+ *
+ * Kernel path: caller STATUS-pins first (product halt); this paints hold2
+ * with short I=1 class (writable after pin; never claims product fields).
+ * User path: serial class lamp only - never paint hold2. User-kill honesty
+ * owns STATUS hold1/2/3 (rip/thr/tag + cr2) for no-COM1 photo diagnose;
+ * I=1 class must not clobber that panel residual. Soft!=product.
+ * One-shot single greppable line; never multi-line storm; never hard-gates
+ * halt vs kill. No stamp storms.
+ *
+ * H2 (C3) rate-cap residual: after the one-shot class lamp, further I=1 hits
+ * still classify + tally (totals free) but suppress class re-dump; skip
+ * counters + power-of-two `trap: string-as-code rate` keep flood greppable
+ * without stamp storms (ASSURANCE_LITE H2). Soft!=product.
+ *
+ * greppable: trap: #PF I=1
+ * greppable: trap: string-as-code
+ * greppable: trap: wild-rip
+ * greppable: trap: string-as-code rate
+ * greppable: trap: #PF I=1 rate
+ */
+static void
+trap_string_as_code_lamp(u64 u64Err, u64 u64Rip, u64 u64Cr2, int fUser)
+{
+    u32 u32I;
+    u64 u64Lo;
+    u64 u64Hi;
+    int fInImage;
+    int fCanon;
+    int fNullish;
+    int fWild;
+    u32 u32Ascii;
+    const char *szClass;
+    char szHold[48];
+    char *q;
+    const char *p;
+
+    /* Intel SDM #PF err bit4 = I/D (instruction fetch). */
+    u32I = (u32)((u64Err >> 4) & 1ull);
+    if (u32I == 0u) {
+        return;
+    }
+
+    g_u64PfI1Hit++;
+    fInImage = trap_rip_in_known_rodata_soft(u64Rip, &u64Lo, &u64Hi);
+    fCanon = trap_rip_canonical_soft(u64Rip);
+    /* null-ish: page-0 / low guard - always wild-rip class (lean residual). */
+    fNullish = (u64Rip < 0x1000ull) ? 1 : 0;
+    u32Ascii = 0u;
+    /*
+     * Class: non-canonical, null-ish, or outside image -> wild-rip
+     * (lab 0x58240013); else I=1 into image NX leaf -> string-as-code.
+     */
+    if (fCanon == 0 || fNullish != 0 || fInImage == 0) {
+        g_u64PfI1WildRip++;
+        fWild = 1;
+        szClass = "wild-rip";
+    } else {
+        /*
+         * ASCII peek only on first class lamp (one-shot path below).
+         * Under H2 flood residual, skip re-peek after cap - rate honesty
+         * does not need per-event .rodata bytes. Soft!=product.
+         */
+        if (g_u32PfI1ClassLogged == 0u) {
+            u32Ascii = trap_rip_ascii_peek_soft(u64Rip);
+        }
+        g_u64PfI1StringAsCode++;
+        fWild = 0;
+        szClass = "string-as-code";
+    }
+
+    /*
+     * One-shot serial + STATUS hold. Further I=1 hits: totals free; class
+     * lamp suppressed; H2 rate-cap residual tallies + pow2 greppable lamp.
+     * Soft!=product; never silent-mask totals (g_u64PfI1* always free).
+     * greppable: trap: string-as-code rate | trap: #PF I=1 rate
+     */
+    if (g_u32PfI1ClassLogged != 0u) {
+        g_u64PfI1ClassSkip++;
+        if (fWild != 0) {
+            g_u64PfI1WildSkip++;
+        } else {
+            g_u64PfI1SacSkip++;
+        }
+        /* First + power-of-two skips stay greppable (never silent mask). */
+        if ((g_u64PfI1ClassSkip & (g_u64PfI1ClassSkip - 1ull)) == 0ull) {
+            /* Grep: trap: string-as-code rate | trap: #PF I=1 rate */
+            kprintf("trap: string-as-code rate "
+                    "trap: #PF I=1 rate "
+                    "skip=%lu sac_skip=%lu wild_skip=%lu "
+                    "pf_i1=%lu sac=%lu wild=%lu i1_log=%u "
+                    "last_rip=0x%lx last_cr2=0x%lx ring=%u class=%s "
+                    "policy=%s "
+                    "(H2 rate-capped; one-shot class lamp; no stamp storm; "
+                    "Soft!=product; totals free)\n",
+                    (unsigned long)g_u64PfI1ClassSkip,
+                    (unsigned long)g_u64PfI1SacSkip,
+                    (unsigned long)g_u64PfI1WildSkip,
+                    (unsigned long)g_u64PfI1Hit,
+                    (unsigned long)g_u64PfI1StringAsCode,
+                    (unsigned long)g_u64PfI1WildRip,
+                    g_u32PfI1ClassLogged,
+                    (unsigned long)u64Rip,
+                    (unsigned long)u64Cr2,
+                    fUser ? 3u : 0u,
+                    szClass,
+                    fUser ? "kill" : "halt");
+        }
+        return;
+    }
+    g_u32PfI1ClassLogged = 1u;
+
+    /*
+     * Hold line 2: short I=1 class for G752 panel (no COM1) - KERNEL path
+     * only. Writable after FAULT pin (pin owns 0 + 6..10 only). User path:
+     * do NOT paint hold2 - trap_user_kill_honesty_soft owns hold2 as
+     * rip/thr/tag for photo-only diagnose (C3 no-COM1 residual). Soft!=product.
+     * Hand-built freestanding.
+     */
+    if (fUser == 0) {
+        q = szHold;
+        p = "I=1 ";
+        while (*p != '\0' && (u32)(q - szHold) < 40u) {
+            *q++ = *p++;
+        }
+        p = szClass;
+        while (*p != '\0' && (u32)(q - szHold) < 40u) {
+            *q++ = *p++;
+        }
+        if (fWild != 0) {
+            p = " lab=";
+            while (*p != '\0' && (u32)(q - szHold) < 40u) {
+                *q++ = *p++;
+            }
+            /* fixed lab exemplar hex - greppable 58240013 on STATUS */
+            p = "0x58240013";
+            while (*p != '\0' && (u32)(q - szHold) < 46u) {
+                *q++ = *p++;
+            }
+        }
+        *q = '\0';
+        fb_console_hold(2, szHold);
+    }
+
+    /*
+     * Single greppable line. Prefixes keep existing greps alive:
+     *   trap: #PF I=1 class=...
+     *   trap: string-as-code ...  (when class=string-as-code)
+     *   trap: wild-rip ...        (when class=wild-rip)
+     * User path tags policy=kill; kernel path tags policy=halt (honest).
+     * No multi-line storm. Soft!=product.
+     */
+    if (fWild != 0) {
+        /* Grep: trap: #PF I=1 / trap: wild-rip */
+        kprintf("trap: #PF I=1 class=wild-rip lab=0x%lx "
+                "trap: wild-rip rip=0x%lx cr2=0x%lx err=0x%lx ring=%u "
+                "canon=%u nullish=%u in_image=%u img=[0x%lx,0x%lx) "
+                "policy=%s "
+                "(corrupt ret / smash / bad fn ptr; Soft!=product)\n",
+                (unsigned long)TRAP_PF_I1_CLASS_LAB,
+                (unsigned long)u64Rip,
+                (unsigned long)u64Cr2,
+                (unsigned long)u64Err,
+                fUser ? 3u : 0u,
+                fCanon ? 1u : 0u,
+                fNullish ? 1u : 0u,
+                fInImage ? 1u : 0u,
+                (unsigned long)u64Lo,
+                (unsigned long)u64Hi,
+                fUser ? "kill" : "halt");
+    } else {
+        /* Grep: trap: #PF I=1 / trap: string-as-code */
+        kprintf("trap: #PF I=1 class=string-as-code lab=0x%lx "
+                "trap: string-as-code rip=0x%lx cr2=0x%lx err=0x%lx "
+                "ring=%u ascii=%u rodata=[0x%lx,0x%lx) policy=%s "
+                "(exec soft-deepen string / .rodata; parent skips .ko init; "
+                "Soft!=product)\n",
+                (unsigned long)TRAP_PF_I1_CLASS_LAB,
+                (unsigned long)u64Rip,
+                (unsigned long)u64Cr2,
+                (unsigned long)u64Err,
+                fUser ? 3u : 0u,
+                u32Ascii,
+                (unsigned long)u64Lo,
+                (unsigned long)u64Hi,
+                fUser ? "kill" : "halt");
+    }
+}
+
+/*
+ * Hex digits into STATUS hold text (no snprintf; freestanding pure C).
+ * G752-class DUT has no COM1 - panel must carry FAULT detail without serial.
+ */
+static void
+trap_hold_append_hex(char **pq, char *szEnd, u64 u64Val, u32 u32Digits)
+{
+    static const char szHex[] = "0123456789abcdef";
+    char *q;
+    u32 i;
+
+    q = *pq;
+    if (u32Digits == 0u || u32Digits > 16u) {
+        u32Digits = 16u;
+    }
+    for (i = u32Digits; i > 0u; i--) {
+        if (q + 1 >= szEnd) {
+            break;
+        }
+        *q++ = szHex[(u64Val >> ((i - 1u) * 4u)) & 0xfull];
+    }
+    *pq = q;
+}
+
+/**
+ * STRONGER thr kill panel tag resolve (Soft!=product; C3 no-COM1).
+ * Prefer sticky soft tag from thread unit. If empty, derive class from
+ * entry VA or fault RIP (pe32_wow @ 0x52000000 lab class, pe32_u32, ring3,
+ * user_elf). Soft!=product; not product identity / Dual DoD close.
+ * Returns static short name or "" if no class.
+ */
+static const char *
+trap_kill_panel_tag_resolve(u32 u32Thr, u64 u64Rip, u64 u64Entry, u32 u32Fl,
+                            int *pfFallback)
+{
+    const char *szTag;
+    u64 u64Class;
+    int fUser32;
+
+    if (pfFallback != NULL) {
+        *pfFallback = 0;
+    }
+    szTag = thread_soft_tag_get(u32Thr);
+    if (szTag != NULL && szTag[0] != '\0') {
+        g_u64KillTagSoftHit++;
+        return szTag;
+    }
+    /* Fallback: entry first, then fault RIP (C0 pe32_wow residual band). */
+    u64Class = (u64Entry != 0ull) ? u64Entry : u64Rip;
+    fUser32 = ((u32Fl & GJ_THR_F_USER32_ENTRY) != 0) ? 1 : 0;
+    if (u64Class >= 0x52000000ull && u64Class < 0x53000000ull) {
+        if (pfFallback != NULL) {
+            *pfFallback = 1;
+        }
+        g_u64KillTagFallback++;
+        return fUser32 ? "pe32_u32" : "pe32_wow";
+    }
+    if (u64Class >= 0x51000000ull && u64Class < 0x52000000ull) {
+        if (pfFallback != NULL) {
+            *pfFallback = 1;
+        }
+        g_u64KillTagFallback++;
+        return "pe32_img";
+    }
+    if (u64Class >= 0x55000000ull && u64Class < 0x56000000ull) {
+        if (pfFallback != NULL) {
+            *pfFallback = 1;
+        }
+        g_u64KillTagFallback++;
+        return "pe32_u32";
+    }
+    if (u64Class >= 0x1000000ull && u64Class < 0x2000000ull) {
+        if (pfFallback != NULL) {
+            *pfFallback = 1;
+        }
+        g_u64KillTagFallback++;
+        return "ring3";
+    }
+    if (u64Class >= 0x10000000ull && u64Class < 0x12000000ull) {
+        if (pfFallback != NULL) {
+            *pfFallback = 1;
+        }
+        g_u64KillTagFallback++;
+        return "user_elf";
+    }
+    if (fUser32 != 0) {
+        if (pfFallback != NULL) {
+            *pfFallback = 1;
+        }
+        g_u64KillTagFallback++;
+        return "user32";
+    }
+    g_u64KillTagEmpty++;
+    return "";
+}
+
+/**
+ * Note named-class panel tag for residual tallies (Soft!=product).
+ * Panel-critical: pe32_wow|sshd|init|ring3 (C0 pe32_wow thr kill class).
+ */
+static void
+trap_kill_panel_tag_note(const char *szTag)
+{
+    u32 i;
+    const char *a;
+    const char *b;
+    int fEq;
+
+    if (szTag == NULL || szTag[0] == '\0') {
+        return;
+    }
+    /* pe32_wow */
+    a = szTag;
+    b = "pe32_wow";
+    fEq = 1;
+    for (i = 0; i < 12u; i++) {
+        if (a[i] != b[i]) {
+            fEq = 0;
+            break;
+        }
+        if (a[i] == '\0') {
+            break;
+        }
+    }
+    if (fEq != 0) {
+        g_u64KillTagPe32Wow++;
+        g_u64KillTagNamed++;
+        return;
+    }
+    /* sshd | init | ring3 */
+    if ((szTag[0] == 's' && szTag[1] == 's' && szTag[2] == 'h' &&
+         szTag[3] == 'd' && szTag[4] == '\0') ||
+        (szTag[0] == 'i' && szTag[1] == 'n' && szTag[2] == 'i' &&
+         szTag[3] == 't' && szTag[4] == '\0') ||
+        (szTag[0] == 'r' && szTag[1] == 'i' && szTag[2] == 'n' &&
+         szTag[3] == 'g' && szTag[4] == '3' && szTag[5] == '\0')) {
+        g_u64KillTagNamed++;
+    }
+}
+
+/**
+ * Lean user-kill honesty (Soft!=product; no stamp storms).
+ *
+ * Never calls fb_console_trap / trap_fault_status_pin - those paint
+ * "KERNEL FAULT - HALTED" and sticky-freeze LOG (product halt path only).
+ * User policy is thr EXITED + schedule, not hard-halt of the product path.
+ * Never weaken KERNEL FAULT pin path (separate kernel halt only).
+ *
+ * C3 G752 / no-COM1: STATUS must carry kill detail (photo-only diagnose).
+ *   hold1: "user kill <name>" [I=1]
+ *   hold2: rip= thr= tag= [u32]     - fault RIP + thr soft tag (always tag=)
+ *   hold3: cr2= err= [P/W/U/I] [entry=] - fault CR2 first (photo priority)
+ * I=1 class lamp does not own hold2 on user path (see trap_string_as_code_lamp).
+ * LOG kprintf still emitted when rate budget allows.
+ * STRONGER thr kill panel tags: soft tag sticky; VA class fallback; always
+ * paint tag= (tag=- only if no class). Soft!=product; not product identity.
+ *
+ * greppable: trap: user kill honesty
+ * greppable: trap: killing user thread
+ * greppable: trap: user kill panel
+ * greppable: thr tag=
+ */
+static void
+trap_user_kill_honesty_soft(u32 u32Vec, u64 u64Err, u64 u64Rip, u64 u64Cr2,
+                            u32 u32Thr)
+{
+    const char *szName;
+    const char *szTag;
+    const char *szTagLamp;
+    u64 u64Entry;
+    u32 u32Fl;
+    int fTagFb;
+    /* Full hold width - panel is FB_HOLD_CHARS; no-COM1 photo needs headroom. */
+    char sz[FB_HOLD_CHARS];
+    char *q;
+    char *szEnd;
+    const char *p;
+    u32 u32I;
+    u32 u32P;
+    u32 u32W;
+    u32 u32U;
+    u32 u32Rsvd;
+
+    if (u32Vec < 32u) {
+        szName = g_aszExc[u32Vec];
+    } else if (u32Vec == 128u) {
+        szName = "int80";
+    } else {
+        szName = "irq";
+    }
+
+    u64Entry = thread_user_entry_get(u32Thr);
+    u32Fl = thread_flags_get(u32Thr);
+    fTagFb = 0;
+    szTag = trap_kill_panel_tag_resolve(u32Thr, u64Rip, u64Entry, u32Fl,
+                                        &fTagFb);
+    if (szTag == NULL) {
+        szTag = "";
+    }
+    szTagLamp = (szTag[0] != '\0') ? szTag : "-";
+    trap_kill_panel_tag_note(szTag);
+
+    /* hold1: short user-kill honesty for panel (no KERNEL FAULT pin). */
+    q = sz;
+    szEnd = sz + (FB_HOLD_CHARS - 1u);
+    p = "user kill ";
+    while (*p != '\0' && q < szEnd) {
+        *q++ = *p++;
+    }
+    p = szName;
+    while (*p != '\0' && q < szEnd) {
+        *q++ = *p++;
+    }
+    if (u32Vec == 14u) {
+        u32I = (u32)((u64Err >> 4) & 1ull);
+        if (u32I != 0u) {
+            p = " I=1";
+            while (*p != '\0' && q < szEnd) {
+                *q++ = *p++;
+            }
+        }
+    }
+    *q = '\0';
+    fb_console_hold(1, sz);
+
+    /*
+     * hold2: rip + thr + soft tag for DUTs without serial (G752 no-COM1).
+     * Never sticky KERNEL FAULT pin - thr still EXITED + schedule.
+     * STRONGER: always paint tag= (sticky soft tag or VA class fallback;
+     * tag=- only when no class). Owns hold2 on user path - I=1 class lamp
+     * must not clobber (C3 residual). greppable: trap: user kill panel | thr tag=
+     */
+    q = sz;
+    szEnd = sz + (FB_HOLD_CHARS - 1u);
+    p = "rip=0x";
+    while (*p != '\0' && q < szEnd) {
+        *q++ = *p++;
+    }
+    trap_hold_append_hex(&q, szEnd, u64Rip, 16u);
+    p = " thr=";
+    while (*p != '\0' && q < szEnd) {
+        *q++ = *p++;
+    }
+    if (u32Thr >= 100u && q < szEnd) {
+        *q++ = (char)('0' + (u32Thr / 100u) % 10u);
+    }
+    if (u32Thr >= 10u && q < szEnd) {
+        *q++ = (char)('0' + (u32Thr / 10u) % 10u);
+    }
+    if (q < szEnd) {
+        *q++ = (char)('0' + (u32Thr % 10u));
+    }
+    /* Always paint tag= for no-COM1 photo residual (Soft!=product). */
+    p = " tag=";
+    while (*p != '\0' && q < szEnd) {
+        *q++ = *p++;
+    }
+    p = szTagLamp;
+    while (*p != '\0' && q < szEnd) {
+        *q++ = *p++;
+    }
+    if ((u32Fl & GJ_THR_F_USER32_ENTRY) != 0) {
+        p = " u32";
+        while (*p != '\0' && q < szEnd) {
+            *q++ = *p++;
+        }
+    }
+    *q = '\0';
+    fb_console_hold(2, sz);
+
+    /*
+     * hold3: cr2 first (photo priority), then err bits, then entry if room.
+     * C3 no-COM1 residual: rip/cr2/tag survive without serial. Soft!=product.
+     */
+    q = sz;
+    szEnd = sz + (FB_HOLD_CHARS - 1u);
+    p = "cr2=0x";
+    while (*p != '\0' && q < szEnd) {
+        *q++ = *p++;
+    }
+    trap_hold_append_hex(&q, szEnd, u64Cr2, 16u);
+    p = " err=0x";
+    while (*p != '\0' && q < szEnd) {
+        *q++ = *p++;
+    }
+    trap_hold_append_hex(&q, szEnd, u64Err, 4u);
+    if (u32Vec == 14u) {
+        u32P = (u32)(u64Err & 1ull);
+        u32W = (u32)((u64Err >> 1) & 1ull);
+        u32U = (u32)((u64Err >> 2) & 1ull);
+        u32I = (u32)((u64Err >> 4) & 1ull);
+        p = " P=";
+        while (*p != '\0' && q < szEnd) {
+            *q++ = *p++;
+        }
+        if (q < szEnd) {
+            *q++ = (char)('0' + (u32P & 1u));
+        }
+        p = " W=";
+        while (*p != '\0' && q < szEnd) {
+            *q++ = *p++;
+        }
+        if (q < szEnd) {
+            *q++ = (char)('0' + (u32W & 1u));
+        }
+        p = " U=";
+        while (*p != '\0' && q < szEnd) {
+            *q++ = *p++;
+        }
+        if (q < szEnd) {
+            *q++ = (char)('0' + (u32U & 1u));
+        }
+        p = " I=";
+        while (*p != '\0' && q < szEnd) {
+            *q++ = *p++;
+        }
+        if (q < szEnd) {
+            *q++ = (char)('0' + (u32I & 1u));
+        }
+    }
+    /* entry= only if headroom remains - never crowd out cr2/err. */
+    if ((u32)(szEnd - q) > 24u) {
+        p = " e=";
+        while (*p != '\0' && q < szEnd) {
+            *q++ = *p++;
+        }
+        trap_hold_append_hex(&q, szEnd, u64Entry, 16u);
+    }
+    *q = '\0';
+    fb_console_hold(3, sz);
+
+    /* Compact FAULT detail - LOG when budget allows; never sticky halt pin. */
+    if (g_u32FaultDetailLogged >= TRAP_FAULT_DETAIL_LOG_MAX) {
+        g_u64FaultDetailSkip++;
+        return;
+    }
+    g_u32FaultDetailLogged++;
+    if (u32Vec == 14u) {
+        u32P = (u32)(u64Err & 1ull);
+        u32W = (u32)((u64Err >> 1) & 1ull);
+        u32U = (u32)((u64Err >> 2) & 1ull);
+        u32Rsvd = (u32)((u64Err >> 3) & 1ull);
+        u32I = (u32)((u64Err >> 4) & 1ull);
+        /* Grep: trap: FAULT detail | trap: user kill honesty | trap: user kill panel | thr tag= */
+        kprintf("trap: FAULT detail vec=%u name=%s ring=3 err=0x%lx "
+                "rip=0x%lx cr2=0x%lx P=%u W=%u U=%u RSVD=%u I=%u "
+                "thr=%u tag=%s entry=0x%lx tag_fb=%d "
+                "trap: user kill honesty policy=kill not halt "
+                "trap: user kill panel no_com1=1 "
+                "hold2=rip_thr_tag hold3=cr2_err "
+                "(Soft!=product; no KERNEL FAULT pin; thr kill panel tags)\n",
+                u32Vec, szName,
+                (unsigned long)u64Err,
+                (unsigned long)u64Rip,
+                (unsigned long)u64Cr2,
+                u32P, u32W, u32U, u32Rsvd, u32I,
+                u32Thr, szTagLamp,
+                (unsigned long)u64Entry, fTagFb);
+    } else {
+        /* Grep: trap: FAULT detail | trap: user kill honesty | trap: user kill panel | thr tag= */
+        kprintf("trap: FAULT detail vec=%u name=%s ring=3 err=0x%lx "
+                "rip=0x%lx cr2=0x%lx thr=%u tag=%s entry=0x%lx tag_fb=%d "
+                "trap: user kill honesty policy=kill not halt "
+                "trap: user kill panel no_com1=1 "
+                "hold2=rip_thr_tag hold3=cr2_err "
+                "(Soft!=product; no KERNEL FAULT pin; thr kill panel tags)\n",
+                u32Vec, szName,
+                (unsigned long)u64Err,
+                (unsigned long)u64Rip,
+                (unsigned long)u64Cr2,
+                u32Thr, szTagLamp,
+                (unsigned long)u64Entry, fTagFb);
+    }
+}
+
+/**
+ * Pin FAULT on STATUS (vector / err / RIP / CR2 / thr) then one compact
+ * greppable detail line for laptop panel debugging (net/USB probe faults).
+ *
+ * Order matters on G752-class DUTs (no COM1): STATUS first, then one LOG
+ * line - never soft inventory before pin (multi-KiB flood delayed halt).
+ * Soft != product. greppable: trap: FAULT
+ */
+static void
+trap_fault_status_pin(u32 u32Vec, u64 u64Err, u64 u64Rip, u64 u64Cr2,
+                      u32 u32Thr, u32 u32State, int fUser)
+{
+    const char *szName;
+    u32 u32P;
+    u32 u32W;
+    u32 u32U;
+    u32 u32Rsvd;
+    u32 u32I;
+
+    /* STATUS pane - existing fb_console_trap API (hold 0,6-10). */
+    fb_console_trap(u32Vec, u64Err, u64Rip, u64Cr2, u32Thr, u32State);
+
+    if (u32Vec == 0xffffffffu) {
+        szName = "null";
+    } else if (u32Vec < 32u) {
+        szName = g_aszExc[u32Vec];
+    } else if (u32Vec == 128u) {
+        szName = "int80";
+    } else {
+        szName = "irq";
+    }
+
+    /* #PF err decode (Intel SDM): P W U RSVD I/D - net/USB MMIO clues. */
+    u32P = (u32)(u64Err & 1ull);
+    u32W = (u32)((u64Err >> 1) & 1ull);
+    u32U = (u32)((u64Err >> 2) & 1ull);
+    u32Rsvd = (u32)((u64Err >> 3) & 1ull);
+    u32I = (u32)((u64Err >> 4) & 1ull);
+
+    /*
+     * Hold line 1: short name + PF bits (overwrites phase; fault wins).
+     * Hand-built so freestanding stays pure C without snprintf.
+     */
+    {
+        char sz[80];
+        char *q = sz;
+        const char *p;
+
+        p = "name=";
+        while (*p != '\0' && (u32)(q - sz) < 70u) {
+            *q++ = *p++;
+        }
+        p = szName;
+        while (*p != '\0' && (u32)(q - sz) < 70u) {
+            *q++ = *p++;
+        }
+        if (u32Vec == 14u) {
+            p = " P=";
+            while (*p != '\0' && (u32)(q - sz) < 70u) {
+                *q++ = *p++;
+            }
+            *q++ = (char)('0' + (u32P & 1u));
+            p = " W=";
+            while (*p != '\0' && (u32)(q - sz) < 70u) {
+                *q++ = *p++;
+            }
+            *q++ = (char)('0' + (u32W & 1u));
+            p = " U=";
+            while (*p != '\0' && (u32)(q - sz) < 70u) {
+                *q++ = *p++;
+            }
+            *q++ = (char)('0' + (u32U & 1u));
+            p = " I=";
+            while (*p != '\0' && (u32)(q - sz) < 70u) {
+                *q++ = *p++;
+            }
+            *q++ = (char)('0' + (u32I & 1u));
+        }
+        *q = '\0';
+        fb_console_hold(1, sz);
+    }
+
+    if (g_u32FaultDetailLogged >= TRAP_FAULT_DETAIL_LOG_MAX) {
+        /* Cap hit - tally only; STATUS pin already applied. Soft!=product. */
+        g_u64FaultDetailSkip++;
+        return;
+    }
+    g_u32FaultDetailLogged++;
+
+    /* Grep: trap: FAULT detail - single line; panel LOG keeps trap: lines. */
+    if (u32Vec == 14u) {
+        kprintf("trap: FAULT detail vec=%u name=%s ring=%u err=0x%lx "
+                "rip=0x%lx cr2=0x%lx P=%u W=%u U=%u RSVD=%u I=%u "
+                "thr=%u state=%u\n",
+                u32Vec, szName, fUser ? 3u : 0u,
+                (unsigned long)u64Err,
+                (unsigned long)u64Rip,
+                (unsigned long)u64Cr2,
+                u32P, u32W, u32U, u32Rsvd, u32I,
+                u32Thr, u32State);
+    } else {
+        kprintf("trap: FAULT detail vec=%u name=%s ring=%u err=0x%lx "
+                "rip=0x%lx cr2=0x%lx thr=%u state=%u\n",
+                u32Vec, szName, fUser ? 3u : 0u,
+                (unsigned long)u64Err,
+                (unsigned long)u64Rip,
+                (unsigned long)u64Cr2,
+                u32Thr, u32State);
+    }
+}
+
+/**
+ * Greppable soft trap inventory (product / smoke) - Wave 16 deepen.
+ * Prefix-stable markers (trap: soft ...):
+ *   trap: soft inventory  - totals + rate-limit lamps + wave stamp
+ *   trap: soft class      - user/kernel + vector class
+ *   trap: soft pf         - #PF COW pipeline
+ *   trap: soft pe32       - CS32 #BP / int 0x80 smokes + resume/death
+ *   trap: soft outcome    - except port vs kill fallthrough
+ *   trap: soft stats      - aggregate one-liner (legacy smoke)
+ *   trap: soft limit      - hard cap / power-of-two policy lamps
+ *   trap: soft last       - last frame lamps (vec/user/err/rip/cr2/cs)
+ *   trap: soft resume     - COW ok + PE32 int80 return
+ *   trap: soft halt       - kernel / null frame halt entries
+ *   trap: soft rate       - milestone / quiet / force / skip rollup
+ *   trap: soft path       - product claim + honesty
+ *   trap: soft deepen     - Wave 20 stamp line
  * Wave 15 complementary (kept; never reshape primary):
  *   trap: soft honesty / api / frame / vec / mile
  * Wave 16 complementary (kept) + Wave 19 return surfaces:
@@ -291,6 +1215,26 @@ trap_soft_inventory_log(void)
     if (g_u32SoftLogged < 0xffffffffu) {
         g_u32SoftLogged++;
     }
+
+    /*
+     * Panel path: never multi-line soft inventory. FAULT detail is on STATUS
+     * via fb_console_trap; soft flood delayed/hid net+USB diagnose.
+     * greppable: trap: soft last
+     */
+    if (serial_thre_dead() != 0u) {
+        kprintf("trap: soft last vec=%u user=%u err=0x%lx rip=0x%lx "
+                "cr2=0x%lx cs=0x%lx logs=%u "
+                "(compact; Soft!=product; no COM1)\n",
+                g_u32SoftLastVec,
+                g_u32SoftLastUser,
+                (unsigned long)g_u64SoftLastErr,
+                (unsigned long)g_u64SoftLastRip,
+                (unsigned long)g_u64SoftLastCr2,
+                (unsigned long)g_u64SoftLastCs,
+                g_u32SoftLogged);
+        return;
+    }
+
     u32AtCap = (g_u32SoftLogged >= TRAP_SOFT_LOG_MAX) ? 1u : 0u;
     u32Room = (g_u32SoftLogged < TRAP_SOFT_LOG_MAX)
                   ? (TRAP_SOFT_LOG_MAX - g_u32SoftLogged)
@@ -348,6 +1292,7 @@ trap_soft_inventory_log(void)
     /* Grep: trap: soft pf */
     kprintf("trap: soft pf user=%lu cow_cand=%lu cow_cr3=%lu cow_ok=%lu "
             "cow_miss=%lu cow_skip=%lu last_cr2=0x%lx "
+            "pf_logs=%u pf_soft_skip=%lu "
             "pipe=pf_user>cow_cand>(cr3)>ok|miss skip=non_p_w\n",
             (unsigned long)g_trapStats.u64PfUser,
             (unsigned long)g_trapStats.u64PfCowCand,
@@ -355,7 +1300,9 @@ trap_soft_inventory_log(void)
             (unsigned long)g_trapStats.u64PfCowOk,
             (unsigned long)g_trapStats.u64PfCowMiss,
             (unsigned long)g_trapStats.u64PfCowSkip,
-            (unsigned long)g_u64SoftLastCr2);
+            (unsigned long)g_u64SoftLastCr2,
+            g_u32PfSoftLogged,
+            (unsigned long)g_u64PfSoftSkip);
 
     /* Grep: trap: soft pe32 */
     kprintf("trap: soft pe32 bp=%lu int80=%lu resume=%lu death=%lu "
@@ -447,10 +1394,16 @@ trap_soft_inventory_log(void)
             (unsigned long)g_u64SoftHaltKern,
             (unsigned long)g_u64SoftHaltNull);
 
-    /* Grep: trap: soft rate */
+    /* Grep: trap: soft rate - residual flood honesty (arping / R90+#PF / H2). */
     kprintf("trap: soft rate total=%lu mile_last=%lu logs=%u "
             "skip=%lu quiet=%lu force=%lu max=%u "
-            "policy=pow2(1,2,4,...) hard_cap=%u\n",
+            "pf_soft_skip=%lu banner_skip=%lu detail_skip=%lu "
+            "kill_skip=%lu except_skip=%lu "
+            "pf_i1=%lu sac=%lu wild=%lu i1_log=%u "
+            "i1_skip=%lu sac_skip=%lu wild_skip=%lu "
+            "h2_sac_rate_cap=1 "
+            "policy=pow2(1,2,4,...) hard_cap=%u "
+            "(residual; Soft!=product; totals free; H2 rate caps)\n",
             (unsigned long)g_trapStats.u64Total,
             (unsigned long)g_u64SoftMileLast,
             g_u32SoftLogged,
@@ -458,6 +1411,18 @@ trap_soft_inventory_log(void)
             (unsigned long)g_u64SoftQuiet,
             (unsigned long)g_u64SoftForce,
             (unsigned)TRAP_SOFT_LOG_MAX,
+            (unsigned long)g_u64PfSoftSkip,
+            (unsigned long)g_u64BannerSkip,
+            (unsigned long)g_u64FaultDetailSkip,
+            (unsigned long)g_u64KillLogSkip,
+            (unsigned long)g_u64ExceptLogSkip,
+            (unsigned long)g_u64PfI1Hit,
+            (unsigned long)g_u64PfI1StringAsCode,
+            (unsigned long)g_u64PfI1WildRip,
+            g_u32PfI1ClassLogged,
+            (unsigned long)g_u64PfI1ClassSkip,
+            (unsigned long)g_u64PfI1SacSkip,
+            (unsigned long)g_u64PfI1WildSkip,
             (unsigned)TRAP_SOFT_LOG_MAX);
 
     /* Grep: trap: soft path */
@@ -466,17 +1431,18 @@ trap_soft_inventory_log(void)
             "rate=pow2+cap wave=%u (soft inventory)\n",
             (unsigned)TRAP_SOFT_WAVE);
 
-    /*
-     * ---- Wave 15 complementary surfaces (kept; never reshape primary).
-     */
 
     /* Grep: trap: soft honesty */
-    kprintf("trap: soft honesty claim=classify+pe32+cow+except "
-            " hard_gate=0 soft_only=1 rate_limited=1 "
-            "unit=trap.c wave=%u (soft inventory)\n",
+    kprintf("trap: soft honesty claim=classify+pe32+cow+except+user_kill "
+            "hard_gate=0 soft_only=1 rate_limited=1 no_stamp_storm=1 "
+            "user_kill!=KERNEL_FAULT_pin kernel_halt_unchanged=1 "
+            "pf_i1_wild_rip=1 residual_lean=1 h2_sac_rate_cap=1 "
+            "dual=MIT_OR_Apache-2.0 "
+            "g_ac1=1 no_ko_product_ac=1 no_fs_net_thrash=1 "
+            "unit=trap.c wave=%u (Soft!=product; G-AC-1; no version stamp)\n",
             (unsigned)TRAP_SOFT_WAVE);
 
-    /* Grep: trap: soft api — trap_stats_* call tallies */
+    /* Grep: trap: soft api - trap_stats_* call tallies */
     kprintf("trap: soft api get=%lu reset=%lu soft=%lu "
             "force=%lu logs=%u inv_path=dispatch|null|soft\n",
             (unsigned long)g_u64SoftApiGet,
@@ -485,7 +1451,7 @@ trap_soft_inventory_log(void)
             (unsigned long)g_u64SoftForce,
             g_u32SoftLogged);
 
-    /* Grep: trap: soft frame — last full frame lamps */
+    /* Grep: trap: soft frame - last full frame lamps */
     kprintf("trap: soft frame vec=%u user=%u rpl=%u err=0x%lx "
             "rip=0x%lx cs=0x%lx rsp=0x%lx ss=0x%lx rflags=0x%lx "
             "cr2=0x%lx\n",
@@ -500,7 +1466,7 @@ trap_soft_inventory_log(void)
             (unsigned long)g_u64SoftLastRflags,
             (unsigned long)g_u64SoftLastCr2);
 
-    /* Grep: trap: soft vec — last vector class + name lamp */
+    /* Grep: trap: soft vec - last vector class + name lamp */
     kprintf("trap: soft vec last=%u name=%s exc=%u hi=%u pf=%u "
             "pe32=%u user=%u name_table=g_aszExc\n",
             g_u32SoftLastVec,
@@ -511,7 +1477,7 @@ trap_soft_inventory_log(void)
             u32LastPe32,
             g_u32SoftLastUser);
 
-    /* Grep: trap: soft mile — milestone / quiet / skip rollup */
+    /* Grep: trap: soft mile - milestone / quiet / skip rollup */
     kprintf("trap: soft mile hit=%lu last=%lu quiet=%lu skip=%lu "
             "force=%lu logs=%u max=%u at_cap=%u "
             "policy=pow2(1,2,4,...) \n",
@@ -524,9 +1490,6 @@ trap_soft_inventory_log(void)
             (unsigned)TRAP_SOFT_LOG_MAX,
             u32AtCap);
 
-    /*
-     * ---- Wave 16 complementary surfaces (kept; never reshape primary).
-     */
 
     /* Grep: trap: soft exclusive */
     kprintf("trap: soft exclusive wave=%u exclusive=1 soft=1 "
@@ -534,13 +1497,15 @@ trap_soft_inventory_log(void)
             "rate_limited=1 product_complete=0\n",
             (unsigned)TRAP_SOFT_WAVE);
 
-    /* Grep: trap: soft claim — product claim bounds */
+    /* Grep: trap: soft claim - product claim bounds (Soft!=product; G-AC-1) */
     kprintf("trap: soft claim classify=1 pe32=1 cow=1 except=1 "
-            "kill_fallthrough=1 rate=pow2+cap "
-            " hard_gate=0 soft_only=1 wave=%u\n",
+            "kill_fallthrough=1 user_kill_honesty=1 "
+            "pf_i1_wild_rip=1 h2_sac_rate_cap=1 rate=pow2+cap "
+            "hard_gate=0 soft_only=1 kernel_halt_unchanged=1 "
+            "g_ac1=1 no_ko_product_ac=1 wave=%u\n",
             (unsigned)TRAP_SOFT_WAVE);
 
-    /* Grep: trap: soft ratio — class/outcome/resume/halt path ratios */
+    /* Grep: trap: soft ratio - class/outcome/resume/halt path ratios */
     kprintf("trap: soft ratio total=%lu user=%lu kern=%lu "
             "vec32=%lu vec_hi=%lu pf_user=%lu cow_ok=%lu cow_miss=%lu "
             "pe32_bp=%lu pe32_int80=%lu except_ok=%lu kill=%lu "
@@ -563,982 +1528,27 @@ trap_soft_inventory_log(void)
             (unsigned)TRAP_SOFT_WAVE);
 
     /*
-     * ---- Wave 17 complementary surfaces (kept; never reshape primary).
-     * Return surfaces only — soft inventory; never hard-gates product paths.
+     * Lean residual once-lamp (#PF I=1 wild-rip / user kill / FAULT pin).
+     * Soft!=product dual license; no version stamp; no stamp storms.
+     * greppable: trap: soft residual lean
      */
-    /* Grep: trap: soft return — Wave 17 API return surfaces (kept) */
-    kprintf("trap: soft return classify=1 pe32=1 cow=1 except=1 "
-            "stats_get=1 stats_reset=1 soft_inv=1 product_kernel=OPEN "
-            " hard_gate=0 wave=%u soft PASS\n",
-            (unsigned)TRAP_SOFT_WAVE);
+    trap_soft_residual_lean();
 
-    /* Grep: trap: soft return selftest — Wave 17 terminal return surface (kept) */
-    kprintf("trap: soft return selftest inv_ret=1 product_kernel=OPEN "
-            "multi_server=0 rate_limited=1 wave=%u soft PASS\n",
-            (unsigned)TRAP_SOFT_WAVE);
-
-    /* Grep: trap: soft retmap — Wave 17 return-surface map (kept) */
-    kprintf("trap: soft retmap dispatch=1 resume=1 halt=1 kill=1 "
-            "soft_inv=1 deepen=1 product=OPEN wave=%u soft PASS\n",
-            (unsigned)TRAP_SOFT_WAVE);
-
-    /*
-     * ---- Wave 18 complementary surfaces (kept) (never reshape primary).
-     * Return surfaces only — soft inventory; never hard-gates product paths.
-     */
-    /* Grep: trap: soft return rate — Wave 19 ok/fail rate lamps */
-    kprintf("trap: soft return rate soft_inv=1 selftest=1 retmap=1 "
-            "product_kernel=OPEN hard_gate=0 wave=%u "
-            "(return rate; Soft≠product)\n",
-            (unsigned)TRAP_SOFT_WAVE);
-
-    /* Grep: trap: soft retcode — Wave 19 retcode catalog */
-    kprintf("trap: soft retcode ok=1 fail=1 inval=1 busy=1 "
-            "selftest=1 retmap=1 product=OPEN soft_ne_product=1 wave=%u "
-            "(retcode catalog; Soft≠product)\n",
-            (unsigned)TRAP_SOFT_WAVE);
-
-    /* Grep: trap: soft deepen */
-    /*
-     * ---- Wave 19 complementary surfaces (kept) (never reshape primary).
-     * Return surfaces only — soft inventory; never hard-gates product paths.
-     */
-    /* Grep: trap: soft retclass — Wave 19 return-class taxonomy (kept) */
-    kprintf("trap: soft retclass ok|fail|inval|nodev|busy|nomem "
-            "soft_only=1 product_gate=0 wave=%u "
-            "(retclass taxonomy; Soft≠product)\n",
-            (unsigned)TRAP_SOFT_WAVE);
-    /* Grep: trap: soft retlane — Wave 19 return-lane catalog (kept) */
-    kprintf("trap: soft retlane inv|selftest|rate|retcode|retmap|class "
-            "product_kernel=OPEN soft_ne_product=1 wave=%u "
-            "(retlane catalog; Soft≠product)\n",
-            (unsigned)TRAP_SOFT_WAVE);
-    /*
-     * ---- Wave 20 complementary surfaces (kept) (never reshape primary).
-     * Return surfaces only — soft inventory; never hard-gates product paths.
-     */
-    /* Grep: trap: soft retbound — Wave 20 return-bound honesty (kept) */
-    kprintf("trap: soft retbound soft_only=1 product_gate=0 hard_gate=0 "
-            "never_blocks_m0=1 wave=%u "
-            "(retbound honesty; Soft≠product)\n",
-            (unsigned)TRAP_SOFT_WAVE);
-    /* Grep: trap: soft retseal — Wave 20 seal stamp (kept) */
-    kprintf("trap: soft retseal exclusive=1 soft_ne_product=1 "
-            "product_kernel=OPEN wave=%u "
-            "(retseal stamp; Soft≠product)\n",
-            (unsigned)TRAP_SOFT_WAVE);
-            /*
-             * ---- Wave 21 complementary surfaces (kept) (never reshape primary).
-             * Return surfaces only — soft inventory; never hard-gates product paths.
-            */
-            /* Grep: trap: soft retpulse — Wave 21 return-pulse honesty (kept) */
-            kprintf("trap: soft retpulse soft_only=1 product_gate=0 soft_ne_product=1 "
-                    "never_blocks_m0=1 wave=%u "
-                    "(retpulse honesty; Soft≠product)\n",
-                    (unsigned)TRAP_SOFT_WAVE);
-            /* Grep: trap: soft retmark — Wave 21 mark stamp (kept) */
-            kprintf("trap: soft retmark exclusive=1 soft_ne_product=1 "
-                    "product_kernel=OPEN wave=%u "
-                    "(retmark stamp; Soft≠product)\n",
-                    (unsigned)TRAP_SOFT_WAVE);
-            /*
-             * ---- Wave 22 complementary surfaces (kept) (never reshape primary).
-             * Return surfaces only — soft inventory; never hard-gates product paths.
-            */
-            /* Grep: trap: soft retphase — Wave 22 return-phase honesty (kept) */
-            kprintf("trap: soft retphase soft_only=1 product_gate=0 soft_ne_product=1 "
-                    "never_blocks_m0=1 wave=%u "
-                    "(retphase honesty; Soft≠product)\n",
-                    (unsigned)TRAP_SOFT_WAVE);
-            /* Grep: trap: soft retbadge — Wave 22 badge stamp (kept) */
-            kprintf("trap: soft retbadge exclusive=1 soft_ne_product=1 "
-                    "product_kernel=OPEN wave=%u "
-                    "(retbadge stamp; Soft≠product)\n",
-                    (unsigned)TRAP_SOFT_WAVE);
-/*
- * ---- Wave 23 complementary surfaces (kept) (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
-            */
-            /* Grep: trap: soft rettoken — Wave 23 return-token honesty (kept) */
-            kprintf("trap: soft rettoken soft_only=1 product_gate=0 soft_ne_product=1 "
-                    "never_blocks_m0=1 wave=%u "
-                    "(rettoken honesty; Soft≠product)\n",
-                    (unsigned)TRAP_SOFT_WAVE);
-            /* Grep: trap: soft retcrest — Wave 23 crest stamp (kept) */
-            kprintf("trap: soft retcrest exclusive=1 soft_ne_product=1 "
-                    "product_kernel=OPEN wave=%u "
-                    "(retcrest stamp; Soft≠product)\n",
-                    (unsigned)TRAP_SOFT_WAVE);
-            /*
-             * ---- Wave 24 complementary surfaces (kept) (never reshape primary).
-             * Return surfaces only — soft inventory; never hard-gates product paths.
-             */
-            /* Grep: trap: soft retvault — Wave 24 return-vault honesty (kept) */
-            kprintf("trap: soft retvault soft_only=1 product_gate=0 soft_ne_product=1 "
-                    "never_blocks_m0=1 wave=%u "
-                    "(retvault honesty; Soft≠product)\n",
-                    (unsigned)TRAP_SOFT_WAVE);
-            /* Grep: trap: soft retbanner — Wave 24 banner stamp (kept) */
-            kprintf("trap: soft retbanner exclusive=1 soft_ne_product=1 "
-                    "product_kernel=OPEN wave=%u "
-                    "(retbanner stamp; Soft≠product)\n",
-                    (unsigned)TRAP_SOFT_WAVE);
-            /*
-             * ---- Wave 25 complementary surfaces (kept) (never reshape primary).
-             * Return surfaces only — soft inventory; never hard-gates product paths.
-             */
-            /* Grep: trap: soft retledger — Wave 25 return-ledger honesty (kept) */
-            kprintf("trap: soft retledger soft_only=1 product_gate=0 soft_ne_product=1 "
-                    "never_blocks_m0=1 wave=%u "
-                    "(retledger honesty; Soft≠product)\n",
-                    (unsigned)TRAP_SOFT_WAVE);
-            /* Grep: trap: soft retbeacon — Wave 25 beacon stamp (kept) */
-            kprintf("trap: soft retbeacon exclusive=1 soft_ne_product=1 "
-                    "product_kernel=OPEN wave=%u "
-                    "(retbeacon stamp; Soft≠product)\n",
-                    (unsigned)TRAP_SOFT_WAVE);
-            /*
-             * ---- Wave 26 complementary surfaces (kept) (never reshape primary).
-             * Return surfaces only — soft inventory; never hard-gates product paths.
-             */
-            /* Grep: trap: soft retcipher — Wave 26 return-cipher honesty (kept) */
-            kprintf("trap: soft retcipher soft_only=1 product_gate=0 soft_ne_product=1 "
-                    "never_blocks_m0=1 wave=%u "
-                    "(retcipher honesty; Soft≠product)\n",
-                    (unsigned)TRAP_SOFT_WAVE);
-            /* Grep: trap: soft retflame — Wave 26 flame stamp (kept) */
-            kprintf("trap: soft retflame exclusive=1 soft_ne_product=1 "
-                    "product_kernel=OPEN wave=%u "
-                    "(retflame stamp; Soft≠product)\n",
-                    (unsigned)TRAP_SOFT_WAVE);
-                    /*
-                     * ---- Wave 27 complementary surfaces (kept) (never reshape primary).
-                     * Return surfaces only — soft inventory; never hard-gates product paths.
-                     */
-                    /* Grep: trap: soft retprism — Wave 27 return-prism honesty (kept) */
-                    kprintf("trap: soft retprism soft_only=1 product_gate=0 soft_ne_product=1 "
-                            "never_blocks_m0=1 wave=%u "
-                            "(retprism honesty; Soft≠product)\n",
-                            (unsigned)TRAP_SOFT_WAVE);
-                    /* Grep: trap: soft retforge — Wave 27 forge stamp (kept) */
-                    kprintf("trap: soft retforge exclusive=1 soft_ne_product=1 "
-                            "product_kernel=OPEN wave=%u "
-                            "(retforge stamp; Soft≠product)\n",
-                            (unsigned)TRAP_SOFT_WAVE);
-                            /*
-                             * ---- Wave 28 complementary surfaces (kept) (never reshape primary).
-                             * Return surfaces only — soft inventory; never hard-gates product paths.
-                             */
-                            /* Grep: trap: soft retshard — Wave 28 return-shard honesty (kept) */
-                            kprintf("trap: soft retshard soft_only=1 product_gate=0 soft_ne_product=1 "
-                                "never_blocks_m0=1 wave=%u "
-                                "(retshard honesty; Soft≠product)\n",
-                                (unsigned)TRAP_SOFT_WAVE);
-                            /* Grep: trap: soft retcrown — Wave 28 crown stamp (kept) */
-                            kprintf("trap: soft retcrown exclusive=1 soft_ne_product=1 "
-                                "product_kernel=OPEN wave=%u "
-                                "(retcrown stamp; Soft≠product)\n",
-                                (unsigned)TRAP_SOFT_WAVE);
-                                /*
-                             * ---- Wave 29 complementary surfaces (kept) (never reshape primary).
-                             * Return surfaces only — soft inventory; never hard-gates product paths.
-                             */
-                            /* Grep: trap: soft retglyph — Wave 29 return-glyph honesty (kept) */
-                            kprintf("trap: soft retglyph soft_only=1 product_gate=0 soft_ne_product=1 "
-                                    "never_blocks_m0=1 wave=%u "
-                                    "(retglyph honesty; Soft≠product)\n",
-                                    (unsigned)TRAP_SOFT_WAVE);
-                            /* Grep: trap: soft retscepter — Wave 29 scepter stamp (kept) */
-                            kprintf("trap: soft retscepter exclusive=1 soft_ne_product=1 "
-                                    "product_kernel=OPEN wave=%u "
-                                    "(retscepter stamp; Soft≠product)\n",
-                                    (unsigned)TRAP_SOFT_WAVE);
-                                /*
-                             * ---- Wave 30 complementary surfaces (kept) (never reshape primary).
-                             * Return surfaces only — soft inventory; never hard-gates product paths.
-                             */
-                            /* Grep: trap: soft retsigil — Wave 30 return-sigil honesty (kept) */
-                            kprintf("trap: soft retsigil soft_only=1 product_gate=0 soft_ne_product=1 "
-                                    "never_blocks_m0=1 wave=%u "
-                                    "(retsigil honesty; Soft≠product)\n",
-                                    (unsigned)TRAP_SOFT_WAVE);
-                            /* Grep: trap: soft retemblem — Wave 30 emblem stamp (kept) */
-                            kprintf("trap: soft retemblem exclusive=1 soft_ne_product=1 "
-                                    "product_kernel=OPEN wave=%u "
-                                    "(retemblem stamp; Soft≠product)\n",
-                                    (unsigned)TRAP_SOFT_WAVE);
-                            /*
-                             * ---- Wave 31 complementary surfaces (kept) (never reshape primary).
-                             * Return surfaces only — soft inventory; never hard-gates product paths.
-                             */
-                            /* Grep: trap: soft retaegis — Wave 31 return-aegis honesty (kept) */
-                            kprintf("trap: soft retaegis soft_only=1 product_gate=0 soft_ne_product=1 "
-                                    "never_blocks_m0=1 wave=%u "
-                                    "(retaegis honesty; Soft≠product)\n",
-                                    (unsigned)TRAP_SOFT_WAVE);
-                            /* Grep: trap: soft retsigil — Wave 30 return-sigil honesty (kept) */
-                            kprintf("trap: soft retsigil soft_only=1 product_gate=0 soft_ne_product=1 "
-                                    "never_blocks_m0=1 wave=%u "
-                                    "(retsigil honesty; Soft≠product)\n",
-                                    (unsigned)TRAP_SOFT_WAVE);
-                            /* Grep: trap: soft retmantle — Wave 31 mantle stamp (kept) */
-                            kprintf("trap: soft retmantle exclusive=1 soft_ne_product=1 "
-                                    "product_kernel=OPEN wave=%u "
-                                    "(retmantle stamp; Soft≠product)\n",
-                                    (unsigned)TRAP_SOFT_WAVE);
-/*
- * ---- Wave 32 complementary surfaces (kept) (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: trap: soft retbulwark — Wave 32 return-bulwark honesty (kept) */
-kprintf("trap: soft retbulwark soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=%u "
-        "(retbulwark honesty; Soft≠product)\n",
-        (unsigned)TRAP_SOFT_WAVE);
-/* Grep: trap: soft retpanoply — Wave 32 panoply stamp (kept) */
-kprintf("trap: soft retpanoply exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=%u "
-        "(retpanoply stamp; Soft≠product)\n",
-        (unsigned)TRAP_SOFT_WAVE);
-/*
- * ---- Wave 33 complementary surfaces (kept) (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: trap: soft retbastion — Wave 33 return-bastion honesty (kept) */
-kprintf("trap: soft retbastion soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=%u "
-        "(retbastion honesty; Soft≠product)\n",
-        (unsigned)TRAP_SOFT_WAVE);
-/* Grep: trap: soft retcitadel — Wave 33 citadel stamp (kept) */
-kprintf("trap: soft retcitadel exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=%u "
-        "(retcitadel stamp; Soft≠product)\n",
-        (unsigned)TRAP_SOFT_WAVE);
-/*
- * ---- Wave 34 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: trap: soft retredoubt — Wave 34 return-redoubt honesty */
-kprintf("trap: soft retredoubt soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=%u "
-        "(retredoubt honesty; Soft≠product)\n",
-        (unsigned)TRAP_SOFT_WAVE);
-/* Grep: trap: soft retkeep — Wave 34 exclusive keep stamp */
-kprintf("trap: soft retkeep exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=%u "
-        "(retkeep stamp; Soft≠product)\n",
-        (unsigned)TRAP_SOFT_WAVE);
-/*
- * ---- Wave 35 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: trap: soft retfortress — Wave 35 return-fortress honesty */
-kprintf("trap: soft retfortress soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=%u "
-        "(retfortress honesty; Soft≠product)\n",
-        (unsigned)TRAP_SOFT_WAVE);
-/* Grep: trap: soft retpalace — Wave 35 exclusive palace stamp */
-kprintf("trap: soft retpalace exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=%u "
-        "(retpalace stamp; Soft≠product)\n",
-        (unsigned)TRAP_SOFT_WAVE);
-/*
- * ---- Wave 36 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: trap: soft rethold — Wave 36 return-hold honesty */
-kprintf("trap: soft rethold soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=%u "
-        "(rethold honesty; Soft≠product)\n",
-        (unsigned)TRAP_SOFT_WAVE);
-/* Grep: trap: soft retspire — Wave 36 exclusive spire stamp */
-kprintf("trap: soft retspire exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=%u "
-        "(retspire stamp; Soft≠product)\n",
-        (unsigned)TRAP_SOFT_WAVE);
-/*
- * ---- Wave 37 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: trap: soft retwall — Wave 37 return-wall honesty */
-kprintf("trap: soft retwall soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=%u "
-        "(retwall honesty; Soft≠product)\n",
-        (unsigned)TRAP_SOFT_WAVE);
-/* Grep: trap: soft retgate — Wave 37 exclusive gate stamp */
-kprintf("trap: soft retgate exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=%u "
-        "(retgate stamp; Soft≠product)\n",
-        (unsigned)TRAP_SOFT_WAVE);
-/*
- * ---- Wave 38 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: trap: soft retmoat — Wave 38 return-moat honesty */
-kprintf("trap: soft retmoat soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=%u "
-        "(retmoat honesty; Soft≠product)\n",
-        (unsigned)TRAP_SOFT_WAVE);
-/* Grep: trap: soft retower — Wave 38 exclusive tower stamp */
-kprintf("trap: soft retower exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=%u "
-        "(retower stamp; Soft≠product)\n",
-        (unsigned)TRAP_SOFT_WAVE);
-                            
-/*
- * ---- Wave 39 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: trap: soft retbarbican — Wave 39 return-barbican honesty */
-kprintf("trap: soft retbarbican soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=%u "
-        "(retbarbican honesty; Soft≠product)\n",
-        (unsigned)TRAP_SOFT_WAVE);
-/* Grep: trap: soft retglacis — Wave 39 exclusive glacis stamp */
-kprintf("trap: soft retglacis exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=%u "
-        "(retglacis stamp; Soft≠product)\n",
-        (unsigned)TRAP_SOFT_WAVE);
-/*
- * ---- Wave 40 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: trap: soft retcurtain — Wave 40 return-curtain honesty */
-kprintf("trap: soft retcurtain soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=%u "
-        "(retcurtain honesty; Soft≠product)\n",
-        (unsigned)TRAP_SOFT_WAVE);
-/* Grep: trap: soft retparapet — Wave 40 exclusive parapet stamp */
-kprintf("trap: soft retparapet exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=%u "
-        "(retparapet stamp; Soft≠product)\n",
-        (unsigned)TRAP_SOFT_WAVE);
-/*
- * ---- Wave 41 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: trap: soft retravelin — Wave 41 return-travelin honesty */
-kprintf("trap: soft retravelin soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=%u "
-        "(retravelin honesty; Soft≠product)\n",
-        (unsigned)TRAP_SOFT_WAVE);
-/* Grep: trap: soft retditch — Wave 41 exclusive ditch stamp */
-kprintf("trap: soft retditch exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=%u "
-        "(retditch stamp; Soft≠product)\n",
-        (unsigned)TRAP_SOFT_WAVE);
-/*
- * ---- Wave 42 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: trap: soft retportcullis — Wave 42 return-portcullis honesty */
-kprintf("trap: soft retportcullis soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=%u "
-        "(retportcullis honesty; Soft≠product)\n",
-        (unsigned)TRAP_SOFT_WAVE);
-/* Grep: trap: soft retbattlement — Wave 42 exclusive battlement stamp */
-kprintf("trap: soft retbattlement exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=%u "
-        "(retbattlement stamp; Soft≠product)\n",
-        (unsigned)TRAP_SOFT_WAVE);
-/*
- * ---- Wave 43 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: trap: soft retmachicolation — Wave 43 return-machicolation honesty */
-kprintf("trap: soft retmachicolation soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=%u "
-        "(retmachicolation honesty; Soft≠product)\n",
-        (unsigned)TRAP_SOFT_WAVE);
-/* Grep: trap: soft retarrowslit — Wave 43 exclusive arrowslit stamp */
-kprintf("trap: soft retarrowslit exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=%u "
-        "(retarrowslit stamp; Soft≠product)\n",
-        (unsigned)TRAP_SOFT_WAVE);
-
-/*
- * ---- Wave 44 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: trap: soft retmerlon — Wave 44 return-merlon honesty */
-kprintf("trap: soft retmerlon soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=%u "
-        "(retmerlon honesty; Soft≠product)\n",
-        (unsigned)TRAP_SOFT_WAVE);
-/* Grep: trap: soft retembrasure — Wave 44 exclusive embrasure stamp */
-kprintf("trap: soft retembrasure exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=%u "
-        "(retembrasure stamp; Soft≠product)\n",
-        (unsigned)TRAP_SOFT_WAVE);
-
-/*
- * ---- Wave 45 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: trap: soft retkeepgate — Wave 45 return-keepgate honesty */
-kprintf("trap: soft retkeepgate soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=%u "
-        "(retkeepgate honesty; Soft≠product)\n",
-        (unsigned)TRAP_SOFT_WAVE);
-/* Grep: trap: soft retouterward — Wave 45 exclusive outerward stamp */
-kprintf("trap: soft retouterward exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=%u "
-        "(retouterward stamp; Soft≠product)\n",
-        (unsigned)TRAP_SOFT_WAVE);
-
-/*
- * ---- Wave 46 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: trap: soft retbailey — Wave 46 return-bailey honesty */
-kprintf("trap: soft retbailey soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=%u "
-        "(retbailey honesty; Soft≠product)\n",
-        (unsigned)TRAP_SOFT_WAVE);
-/* Grep: trap: soft retpostern — Wave 46 exclusive postern stamp */
-kprintf("trap: soft retpostern exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=%u "
-        "(retpostern stamp; Soft≠product)\n",
-        (unsigned)TRAP_SOFT_WAVE);
-
-/*
- * ---- Wave 47 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: trap: soft retinnerward — Wave 47 return-innerward honesty */
-kprintf("trap: soft retinnerward soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=118 "
-        "(retinnerward honesty; Soft≠product)\n");
-/* Grep: trap: soft retdonjon — Wave 47 exclusive donjon stamp */
-kprintf("trap: soft retdonjon exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=118 "
-        "(retdonjon stamp; Soft≠product)\n");
-
-/*
- * ---- Wave 48 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: trap: soft retchevaux — Wave 48 return-chevaux honesty */
-kprintf("trap: soft retchevaux soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=118 "
-        "(retchevaux honesty; Soft≠product)\n");
-/* Grep: trap: soft retpalisade — Wave 48 exclusive palisade stamp */
-kprintf("trap: soft retpalisade exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=118 "
-        "(retpalisade stamp; Soft≠product)\n");
-
-/*
- * ---- Wave 49 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: trap: soft retglacisgate — Wave 49 return-glacisgate honesty */
-kprintf("trap: soft retglacisgate soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=118 "
-        "(retglacisgate honesty; Soft≠product)\n");
-/* Grep: trap: soft retoutwork — Wave 49 exclusive outwork stamp */
-kprintf("trap: soft retoutwork exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=118 "
-        "(retoutwork stamp; Soft≠product)\n");
-/*
- * ---- Wave 50 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: trap: soft retsally — Wave 50 return-sally honesty */
-kprintf("trap: soft retsally soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=118 "
-        "(retsally honesty; Soft≠product)\n");
-/* Grep: trap: soft retcounterscarp — Wave 50 exclusive counterscarp stamp */
-kprintf("trap: soft retcounterscarp exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=118 "
-        "(retcounterscarp stamp; Soft≠product)\n");
-/*
- * ---- Wave 51 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: trap: soft retfosse — Wave 51 return-fosse honesty */
-kprintf("trap: soft retfosse soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=118 "
-        "(retfosse honesty; Soft≠product)\n");
-/* Grep: trap: soft retcoveredway — Wave 51 exclusive coveredway stamp */
-kprintf("trap: soft retcoveredway exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=118 "
-        "(retcoveredway stamp; Soft≠product)\n");
-
-/*
- * ---- Wave 52 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: trap: soft rettenaille — Wave 52 return-tenaille honesty */
-kprintf("trap: soft rettenaille soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=118 "
-        "(rettenaille honesty; Soft≠product)\n");
-/* Grep: trap: soft retdemilune — Wave 52 exclusive demilune stamp */
-kprintf("trap: soft retdemilune exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=118 "
-        "(retdemilune stamp; Soft≠product)\n");
-/*
- * ---- Wave 53 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: trap: soft retravelin — Wave 53 return-travelin honesty */
-kprintf("trap: soft retravelin soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=118 "
-        "(retravelin honesty; Soft≠product)\n");
-/* Grep: trap: soft retlunette — Wave 53 exclusive lunette stamp */
-kprintf("trap: soft retlunette exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=118 "
-        "(retlunette stamp; Soft≠product)\n");
-/*
- * ---- Wave 54 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: trap: soft retcaponier — Wave 54 return-caponier honesty */
-kprintf("trap: soft retcaponier soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=118 "
-        "(retcaponier honesty; Soft≠product)\n");
-/* Grep: trap: soft retredan — Wave 54 exclusive redan stamp */
-kprintf("trap: soft retredan exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=118 "
-        "(retredan stamp; Soft≠product)\n");
-/*
- * ---- Wave 55 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: trap: soft retflank — Wave 55 return-flank honesty */
-kprintf("trap: soft retflank soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=118 "
-        "(retflank honesty; Soft≠product)\n");
-/* Grep: trap: soft retface — Wave 55 exclusive face stamp */
-kprintf("trap: soft retface exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=118 "
-        "(retface stamp; Soft≠product)\n");
-/*
- * ---- Wave 56 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: trap: soft retgorge — Wave 56 return-gorge honesty */
-kprintf("trap: soft retgorge soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=118 "
-        "(retgorge honesty; Soft≠product)\n");
-/* Grep: trap: soft retshoulder — Wave 56 exclusive shoulder stamp */
-kprintf("trap: soft retshoulder exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=118 "
-        "(retshoulder stamp; Soft≠product)\n");
-/*
- * ---- Wave 57 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: trap: soft retraverse — Wave 57 return-traverse honesty */
-kprintf("trap: soft retraverse soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=118 "
-        "(retraverse honesty; Soft≠product)\n");
-/* Grep: trap: soft retcasemate — Wave 57 exclusive casemate stamp */
-kprintf("trap: soft retcasemate exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=118 "
-        "(retcasemate stamp; Soft≠product)\n");
-
-/*
- * ---- Wave 58 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: trap: soft retorillon — Wave 58 return-orillon honesty */
-kprintf("trap: soft retorillon soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=118 "
-        "(retorillon honesty; Soft≠product)\n");
-/* Grep: trap: soft retbonnette — Wave 58 exclusive bonnette stamp */
-kprintf("trap: soft retbonnette exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=118 "
-        "(retbonnette stamp; Soft≠product)\n");
-
-/*
- * ---- Wave 59 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: trap: soft retcrownwork — Wave 59 return-crownwork honesty */
-kprintf("trap: soft retcrownwork soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=118 "
-        "(retcrownwork honesty; Soft≠product)\n");
-/* Grep: trap: soft rethornwork — Wave 59 exclusive hornwork stamp */
-kprintf("trap: soft rethornwork exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=118 "
-        "(rethornwork stamp; Soft≠product)\n");
-
-/*
- * ---- Wave 60 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: trap: soft retplace — Wave 60 return-place honesty */
-kprintf("trap: soft retplace soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=118 "
-        "(retplace honesty; Soft≠product)\n");
-/* Grep: trap: soft retenvelope — Wave 60 exclusive envelope stamp */
-kprintf("trap: soft retenvelope exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=118 "
-        "(retenvelope stamp; Soft≠product)\n");
-
-
-
-
-
-
-
-
-
-/*
- * ---- Wave 61 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: trap: soft retcounterguard — Wave 61 return-counterguard honesty */
-kprintf("trap: soft retcounterguard soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=118 "
-        "(retcounterguard honesty; Soft≠product)\n");
-/* Grep: trap: soft retcoveredface — Wave 61 exclusive coveredface stamp */
-kprintf("trap: soft retcoveredface exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=118 "
-        "(retcoveredface stamp; Soft≠product)\n");
-/*
- * ---- Wave 62 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: trap: soft retbastionface — Wave 62 return-bastionface honesty */
-kprintf("trap: soft retbastionface soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=118 "
-        "(retbastionface honesty; Soft≠product)\n");
-/* Grep: trap: soft retcurtainangle — Wave 62 exclusive curtainangle stamp */
-kprintf("trap: soft retcurtainangle exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=118 "
-        "(retcurtainangle stamp; Soft≠product)\n");
-/*
- * ---- Wave 63 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: trap: soft retdoubletenaille — Wave 63 return-doubletenaille honesty */
-kprintf("trap: soft retdoubletenaille soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=118 "
-        "(retdoubletenaille honesty; Soft≠product)\n");
-/* Grep: trap: soft retplaceofarms — Wave 63 exclusive placeofarms stamp */
-kprintf("trap: soft retplaceofarms exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=118 "
-        "(retplaceofarms stamp; Soft≠product)\n");
- /*
-  * ---- Wave 64 exclusive complementary surfaces (never reshape primary).
-  * Return surfaces only — soft inventory; never hard-gates product paths.
-  */
- /* Grep: trap: soft retreentrant — Wave 64 return-reentrant honesty */
-kprintf("trap: soft retreentrant soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=118 "
-        "(retreentrant honesty; Soft≠product)\n");
- /* Grep: trap: soft retsallyport — Wave 64 exclusive sallyport stamp */
-kprintf("trap: soft retsallyport exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=118 "
-        "(retsallyport stamp; Soft≠product)\n");
- /*
-  * ---- Wave 65 exclusive complementary surfaces (never reshape primary).
-  * Return surfaces only — soft inventory; never hard-gates product paths.
-  */
- /* Grep: trap: soft retgorgeangle — Wave 65 return-gorgeangle honesty */
-kprintf("trap: soft retgorgeangle soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=118 "
-        "(retgorgeangle honesty; Soft≠product)\n");
- /* Grep: trap: soft retshoulderangle — Wave 65 exclusive shoulderangle stamp */
-kprintf("trap: soft retshoulderangle exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=118 "
-        "(retshoulderangle stamp; Soft≠product)\n");
- /*
-  * ---- Wave 66 exclusive complementary surfaces (never reshape primary).
-  * Return surfaces only — soft inventory; never hard-gates product paths.
-  */
- /* Grep: trap: soft retflankangle — Wave 66 return-flankangle honesty */
- kprintf("trap: soft retflankangle soft_only=1 product_gate=0 soft_ne_product=1 "
-         "never_blocks_m0=1 wave=118 "
-         "(retflankangle honesty; Soft≠product)\n");
- /* Grep: trap: soft retfaceangle — Wave 66 exclusive faceangle stamp */
- kprintf("trap: soft retfaceangle exclusive=1 soft_ne_product=1 "
-         "product_kernel=OPEN wave=118 "
-         "(retfaceangle stamp; Soft≠product)\n");
-/*
- * ---- Wave 67 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: trap: soft retcaponierangle — Wave 67 return-caponierangle honesty */
-kprintf("trap: soft retcaponierangle soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=118 "
-        "(retcaponierangle honesty; Soft≠product)\n");
-/* Grep: trap: soft retredanangle — Wave 67 exclusive redanangle stamp */
-kprintf("trap: soft retredanangle exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=118 "
-        "(retredanangle stamp; Soft≠product)\n");
-/*
- * ---- Wave 68 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: trap: soft retlunetteangle — Wave 68 return-lunetteangle honesty */
-kprintf("trap: soft retlunetteangle soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=118 "
-        "(retlunetteangle honesty; Soft≠product)\n");
-/* Grep: trap: soft rettenailleangle — Wave 68 exclusive tenailleangle stamp */
-kprintf("trap: soft rettenailleangle exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=118 "
-        "(rettenailleangle stamp; Soft≠product)\n");
-/*
- * ---- Wave 69 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: trap: soft retdemiluneangle — Wave 69 return-demiluneangle honesty */
-kprintf("trap: soft retdemiluneangle soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=118 "
-        "(retdemiluneangle honesty; Soft≠product)\n");
-/* Grep: trap: soft retcoveredwayangle — Wave 69 exclusive coveredwayangle stamp */
-kprintf("trap: soft retcoveredwayangle exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=118 "
-        "(retcoveredwayangle stamp; Soft≠product)\n");
-/*
- * ---- Wave 70 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: trap: soft retfosseangle — Wave 70 return-fosseangle honesty */
-kprintf("trap: soft retfosseangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=118 (retfosseangle honesty; Soft≠product)\n");
-/* Grep: trap: soft retcounterscarple — Wave 70 exclusive counterscarple stamp */
-kprintf("trap: soft retcounterscarple exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=118 (retcounterscarple stamp; Soft≠product)\n");
-/*
- * ---- Wave 71 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: trap: soft retsallyportangle — Wave 71 return-sallyportangle honesty */
-kprintf("trap: soft retsallyportangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=118 (retsallyportangle honesty; Soft≠product)\n");
-/* Grep: trap: soft retreentrantangle — Wave 71 exclusive reentrantangle stamp */
-kprintf("trap: soft retreentrantangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=118 (retreentrantangle stamp; Soft≠product)\n");
-/*
- * ---- Wave 72 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: trap: soft retplaceofarmsangle — Wave 72 return-placeofarmsangle honesty */
-kprintf("trap: soft retplaceofarmsangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=118 (retplaceofarmsangle honesty; Soft≠product)\n");
-/* Grep: trap: soft retdoubletenailleangle — Wave 72 exclusive doubletenailleangle stamp */
-kprintf("trap: soft retdoubletenailleangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=118 (retdoubletenailleangle stamp; Soft≠product)\n");
-/* Grep: trap: soft retcurtainface — Wave 73 return-curtainface honesty */
-kprintf("trap: soft retcurtainface soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=118 (retcurtainface honesty; Soft≠product)\n");
-/* Grep: trap: soft retbastionangle — Wave 73 exclusive bastionangle stamp */
-kprintf("trap: soft retbastionangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=118 (retbastionangle stamp; Soft≠product)\n");
-/* Grep: trap: soft retglacisangle — Wave 74 return-glacisangle honesty */
-kprintf("trap: soft retglacisangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=118 (retglacisangle honesty; Soft≠product)\n");
-/* Grep: trap: soft retparapetangle — Wave 74 exclusive parapetangle stamp */
-kprintf("trap: soft retparapetangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=118 (retparapetangle stamp; Soft≠product)\n");
-/* Grep: trap: soft retmoatangle — Wave 75 return-moatangle honesty */
-kprintf("trap: soft retmoatangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=118 (retmoatangle honesty; Soft≠product)\n");
-/* Grep: trap: soft retowerangle — Wave 75 exclusive towerangle stamp */
-kprintf("trap: soft retowerangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=118 (retowerangle stamp; Soft≠product)\n");
-/* Grep: trap: soft retgateangle — Wave 76 return-gateangle honesty */
-kprintf("trap: soft retgateangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=118 (retgateangle honesty; Soft≠product)\n");
-/* Grep: trap: soft retwallangle — Wave 76 exclusive wallangle stamp */
-kprintf("trap: soft retwallangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=118 (retwallangle stamp; Soft≠product)\n");
-/* Grep: trap: soft retspireangle — Wave 77 return-spireangle honesty */
-kprintf("trap: soft retspireangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=118 (retspireangle honesty; Soft≠product)\n");
-/* Grep: trap: soft retholdangle — Wave 77 exclusive holdangle stamp */
-kprintf("trap: soft retholdangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=118 (retholdangle stamp; Soft≠product)\n");
-/* Grep: trap: soft retpalaceangle — Wave 78 return-palaceangle honesty */
-kprintf("trap: soft retpalaceangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=118 (retpalaceangle honesty; Soft≠product)\n");
-/* Grep: trap: soft retfortressangle — Wave 78 exclusive fortressangle stamp */
-kprintf("trap: soft retfortressangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=118 (retfortressangle stamp; Soft≠product)\n");
-/* Grep: trap: soft retkeepangle — Wave 79 return-keepangle honesty */
-kprintf("trap: soft retkeepangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=118 (retkeepangle honesty; Soft≠product)\n");
-/* Grep: trap: soft retredoubtangle — Wave 79 exclusive redoubtangle stamp */
-kprintf("trap: soft retredoubtangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=118 (retredoubtangle stamp; Soft≠product)\n");
-/* Grep: trap: soft retcitadelangle — Wave 80 return-citadelangle honesty */
-kprintf("trap: soft retcitadelangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=118 (retcitadelangle honesty; Soft≠product)\n");
-/* Grep: trap: soft retbastionkeep — Wave 80 exclusive bastionkeep stamp */
-kprintf("trap: soft retbastionkeep exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=118 (retbastionkeep stamp; Soft≠product)\n");
-/* Grep: trap: soft retpanoplyangle — Wave 81 return-panoplyangle honesty */
-kprintf("trap: soft retpanoplyangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=118 (retpanoplyangle honesty; Soft≠product)\n");
-/* Grep: trap: soft retbulwarkangle — Wave 81 exclusive bulwarkangle stamp */
-kprintf("trap: soft retbulwarkangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=118 (retbulwarkangle stamp; Soft≠product)\n");
-/* Grep: trap: soft retmantleangle — Wave 82 return-mantleangle honesty */
-kprintf("trap: soft retmantleangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=118 (retmantleangle honesty; Soft≠product)\n");
-/* Grep: trap: soft retaegisangle — Wave 82 exclusive aegisangle stamp */
-kprintf("trap: soft retaegisangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=118 (retaegisangle stamp; Soft≠product)\n");
-/* Grep: trap: soft retemblemangle — Wave 83 return-emblemangle honesty */
-kprintf("trap: soft retemblemangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=118 (retemblemangle honesty; Soft≠product)\n");
-/* Grep: trap: soft retsigilangle — Wave 83 exclusive sigilangle stamp */
-kprintf("trap: soft retsigilangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=118 (retsigilangle stamp; Soft≠product)\n");
-/* Grep: trap: soft retscepterangle — Wave 84 return-scepterangle honesty */
-kprintf("trap: soft retscepterangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=118 (retscepterangle honesty; Soft≠product)\n");
-/* Grep: trap: soft retglyphangle — Wave 84 exclusive glyphangle stamp */
-kprintf("trap: soft retglyphangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=118 (retglyphangle stamp; Soft≠product)\n");
-/* Grep: trap: soft retcrownangle — Wave 85 return-crownangle honesty */
-kprintf("trap: soft retcrownangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=118 (retcrownangle honesty; Soft≠product)\n");
-/* Grep: trap: soft retshardangle — Wave 85 exclusive shardangle stamp */
-kprintf("trap: soft retshardangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=118 (retshardangle stamp; Soft≠product)\n");
-/* Grep: trap: soft retforgeangle — Wave 86 return-forgeangle honesty */
-kprintf("trap: soft retforgeangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=118 (retforgeangle honesty; Soft≠product)\n");
-/* Grep: trap: soft retprismangle — Wave 86 exclusive prismangle stamp */
-kprintf("trap: soft retprismangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=118 (retprismangle stamp; Soft≠product)\n");
-/* Grep: trap: soft retflameangle — Wave 87 return-flameangle honesty */
-kprintf("trap: soft retflameangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=118 (retflameangle honesty; Soft≠product)\n");
-/* Grep: trap: soft retcipherangle — Wave 87 exclusive cipherangle stamp */
-kprintf("trap: soft retcipherangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=118 (retcipherangle stamp; Soft≠product)\n");
-/* Grep: trap: soft retbeaconangle — Wave 88 return-beaconangle honesty */
-kprintf("trap: soft retbeaconangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=118 (retbeaconangle honesty; Soft≠product)\n");
-/* Grep: trap: soft retledgerangle — Wave 88 exclusive ledgerangle stamp */
-kprintf("trap: soft retledgerangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=118 (retledgerangle stamp; Soft≠product)\n");
-/* Grep: trap: soft retbannerangle — Wave 89 return-bannerangle honesty */
-kprintf("trap: soft retbannerangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=118 (retbannerangle honesty; Soft≠product)\n");
-/* Grep: trap: soft retvaultangle — Wave 89 exclusive vaultangle stamp */
-kprintf("trap: soft retvaultangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=118 (retvaultangle stamp; Soft≠product)\n");
-/* Grep: trap: soft retcrestangle — Wave 90 return-crestangle honesty */
-kprintf("trap: soft retcrestangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=118 (retcrestangle honesty; Soft≠product)\n");
-/* Grep: trap: soft rettokenangle — Wave 90 exclusive tokenangle stamp */
-kprintf("trap: soft rettokenangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=118 (rettokenangle stamp; Soft≠product)\n");
-/* Grep: trap: soft retbadgeangle — Wave 91 return-badgeangle honesty */
-kprintf("trap: soft retbadgeangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=118 (retbadgeangle honesty; Soft≠product)\n");
-/* Grep: trap: soft retphaseangle — Wave 91 exclusive phaseangle stamp */
-kprintf("trap: soft retphaseangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=118 (retphaseangle stamp; Soft≠product)\n");
-/* Grep: trap: soft retmarkangle — Wave 92 return-markangle honesty */
-kprintf("trap: soft retmarkangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=118 (retmarkangle honesty; Soft≠product)\n");
-/* Grep: trap: soft retpulseangle — Wave 92 exclusive pulseangle stamp */
-kprintf("trap: soft retpulseangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=118 (retpulseangle stamp; Soft≠product)\n");
-
-/* Grep: trap: soft retsealangle — Wave 93 return-sealangle honesty */
-kprintf("trap: soft retsealangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=118 (retsealangle honesty; Soft≠product)\n");
-/* Grep: trap: soft retboundangle — Wave 93 exclusive boundangle stamp */
-kprintf("trap: soft retboundangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=118 (retboundangle stamp; Soft≠product)\n");
-/* Grep: trap: soft retstemangle — Wave 94 return-stemangle honesty */
-kprintf("trap: soft retstemangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=118 (retstemangle honesty; Soft≠product)\n");
-/* Grep: trap: soft retbladeangle — Wave 94 exclusive bladeangle stamp */
-kprintf("trap: soft retbladeangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=118 (retbladeangle stamp; Soft≠product)\n");
-/* Grep: trap: soft retchordangle — Wave 95 return-chordangle honesty */
-kprintf("trap: soft retchordangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=118 (retchordangle honesty; Soft≠product)\n");
-/* Grep: trap: soft retarcangle — Wave 95 exclusive arcangle stamp */
-kprintf("trap: soft retarcangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=118 (retarcangle stamp; Soft≠product)\n");
-/* Grep: trap: soft retsectorangle — Wave 96 return-sectorangle honesty */
-kprintf("trap: soft retsectorangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=118 (retsectorangle honesty; Soft≠product)\n");
-/* Grep: trap: soft retwedgeangle — Wave 96 exclusive wedgeangle stamp */
-kprintf("trap: soft retwedgeangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=118 (retwedgeangle stamp; Soft≠product)\n");
-/* Grep: trap: soft retradiusangle — Wave 97 return-radiusangle honesty */
-kprintf("trap: soft retradiusangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=118 (retradiusangle honesty; Soft≠product)\n");
-/* Grep: trap: soft retdiameterangle — Wave 97 exclusive diameterangle stamp */
-kprintf("trap: soft retdiameterangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=118 (retdiameterangle stamp; Soft≠product)\n");
-/* Grep: trap: soft retcircumangle — Wave 98 return-circumangle honesty */
-kprintf("trap: soft retcircumangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=118 (retcircumangle honesty; Soft≠product)\n");
-/* Grep: trap: soft retellipseangle — Wave 98 exclusive ellipseangle stamp */
-kprintf("trap: soft retellipseangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=118 (retellipseangle stamp; Soft≠product)\n");
-/* Grep: trap: soft rethyperangle — Wave 99 return-hyperangle honesty */
-kprintf("trap: soft rethyperangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=118 (rethyperangle honesty; Soft≠product)\n");
-/* Grep: trap: soft retparabolaangle — Wave 99 exclusive parabolaangle stamp */
-kprintf("trap: soft retparabolaangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=118 (retparabolaangle stamp; Soft≠product)\n");
-/* Grep: trap: soft retspiralangle — Wave 100 return-spiralangle honesty */
-kprintf("trap: soft retspiralangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=118 (retspiralangle honesty; Soft≠product)\n");
-/* Grep: trap: soft rethelixangle — Wave 100 exclusive helixangle stamp */
-kprintf("trap: soft rethelixangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=118 (rethelixangle stamp; Soft≠product)\n");
-/* Grep: trap: soft rettorusangle — Wave 101 return-torusangle honesty */
-kprintf("trap: soft rettorusangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=118 (rettorusangle honesty; Soft≠product)\n");
-/* Grep: trap: soft retknotangle — Wave 101 exclusive knotangle stamp */
-kprintf("trap: soft retknotangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=118 (retknotangle stamp; Soft≠product)\n");
-/* Grep: trap: soft retmoebiusangle — Wave 102 return-moebiusangle honesty */
-kprintf("trap: soft retmoebiusangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=118 (retmoebiusangle honesty; Soft≠product)\n");
-/* Grep: trap: soft retkleinangle — Wave 102 exclusive kleinangle stamp */
-kprintf("trap: soft retkleinangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=118 (retkleinangle stamp; Soft≠product)\n");
-/* Grep: trap: soft retprojectangle — Wave 103 return-projectangle honesty */
-kprintf("trap: soft retprojectangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=118 (retprojectangle honesty; Soft≠product)\n");
-/* Grep: trap: soft retaffineangle — Wave 103 exclusive affineangle stamp */
-kprintf("trap: soft retaffineangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=118 (retaffineangle stamp; Soft≠product)\n");
-/* Grep: trap: soft retlinearangle — Wave 104 return-linearangle honesty */
-kprintf("trap: soft retlinearangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=118 (retlinearangle honesty; Soft≠product)\n");
-/* Grep: trap: soft retbilinearangle — Wave 104 exclusive bilinearangle stamp */
-kprintf("trap: soft retbilinearangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=118 (retbilinearangle stamp; Soft≠product)\n");
-/* Grep: trap: soft retquadraticangle — Wave 105 return-quadraticangle honesty */
-kprintf("trap: soft retquadraticangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=118 (retquadraticangle honesty; Soft≠product)\n");
-/* Grep: trap: soft retcubicangle — Wave 105 exclusive cubicangle stamp */
-kprintf("trap: soft retcubicangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=118 (retcubicangle stamp; Soft≠product)\n");
-/* Grep: trap: soft retquarticangle — Wave 106 return-quarticangle honesty */
-kprintf("trap: soft retquarticangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=118 (retquarticangle honesty; Soft≠product)\n");
-/* Grep: trap: soft retquinticangle — Wave 106 exclusive quinticangle stamp */
-kprintf("trap: soft retquinticangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=118 (retquinticangle stamp; Soft≠product)\n");
-/* Grep: trap: soft retsplineangle — Wave 107 return-splineangle honesty */
-kprintf("trap: soft retsplineangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=118 (retsplineangle honesty; Soft≠product)\n");
-/* Grep: trap: soft retbezierangle — Wave 107 exclusive bezierangle stamp */
-kprintf("trap: soft retbezierangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=118 (retbezierangle stamp; Soft≠product)\n");
-/* Grep: trap: soft rethurmitangle — Wave 108 return-hermitangle honesty */
-kprintf("trap: soft rethurmitangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=118 (rethurmitangle honesty; Soft≠product)\n");
-/* Grep: trap: soft retcatmullangle — Wave 108 exclusive catmullangle stamp */
-kprintf("trap: soft retcatmullangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=118 (retcatmullangle stamp; Soft≠product)\n");
-/* Grep: trap: soft retnurbsangle — Wave 109 return-nurbsangle honesty */
-kprintf("trap: soft retnurbsangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=118 (retnurbsangle honesty; Soft≠product)\n");
-/* Grep: trap: soft retbsplineangle — Wave 109 exclusive bsplineangle stamp */
-kprintf("trap: soft retbsplineangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=118 (retbsplineangle stamp; Soft≠product)\n");
-/* Grep: trap: soft retmeshangle — Wave 110 return-meshangle honesty */
-kprintf("trap: soft retmeshangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=118 (retmeshangle honesty; Soft≠product)\n");
-/* Grep: trap: soft retgridangle — Wave 110 exclusive gridangle stamp */
-kprintf("trap: soft retgridangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=118 (retgridangle stamp; Soft≠product)\n");
-/* Grep: trap: soft retvoxelangle — Wave 111 return-voxelangle honesty */
-kprintf("trap: soft retvoxelangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=118 (retvoxelangle honesty; Soft≠product)\n");
-/* Grep: trap: soft rettexelangle — Wave 111 exclusive texelangle stamp */
-kprintf("trap: soft rettexelangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=118 (rettexelangle stamp; Soft≠product)\n");
-/* Grep: trap: soft retfragmentangle — Wave 112 return-fragmentangle honesty */
-kprintf("trap: soft retfragmentangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=118 (retfragmentangle honesty; Soft≠product)\n");
-/* Grep: trap: soft retvertexangle — Wave 112 exclusive vertexangle stamp */
-kprintf("trap: soft retvertexangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=118 (retvertexangle stamp; Soft≠product)\n");
-/* Grep: trap: soft retshaderangle — Wave 113 return-shaderangle honesty */
-kprintf("trap: soft retshaderangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=118 (retshaderangle honesty; Soft≠product)\n");
-/* Grep: trap: soft retpipelineangle — Wave 113 exclusive pipelineangle stamp */
-kprintf("trap: soft retpipelineangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=118 (retpipelineangle stamp; Soft≠product)\n");
-/* Grep: trap: soft retframebufferangle — Wave 114 return-framebufferangle honesty */
-kprintf("trap: soft retframebufferangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=118 (retframebufferangle honesty; Soft≠product)\n");
-/* Grep: trap: soft retswapchainangle — Wave 114 exclusive swapchainangle stamp */
-kprintf("trap: soft retswapchainangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=118 (retswapchainangle stamp; Soft≠product)\n");
-/* Grep: trap: soft retpresentangle — Wave 115 return-presentangle honesty */
-kprintf("trap: soft retpresentangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=118 (retpresentangle honesty; Soft≠product)\n");
-/* Grep: trap: soft retvsyncangle — Wave 115 exclusive vsyncangle stamp */
-kprintf("trap: soft retvsyncangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=118 (retvsyncangle stamp; Soft≠product)\n");
-/* Grep: trap: soft retfenceangle — Wave 116 return-fenceangle honesty */
-kprintf("trap: soft retfenceangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=118 (retfenceangle honesty; Soft≠product)\n");
-/* Grep: trap: soft retsemaphoreangle — Wave 116 exclusive semaphoreangle stamp */
-kprintf("trap: soft retsemaphoreangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=118 (retsemaphoreangle stamp; Soft≠product)\n");
-/* Grep: trap: soft retmutexangle — Wave 117 return-mutexangle honesty */
-kprintf("trap: soft retmutexangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=118 (retmutexangle honesty; Soft≠product)\n");
-/* Grep: trap: soft retcondangle — Wave 117 exclusive condangle stamp */
-kprintf("trap: soft retcondangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=118 (retcondangle stamp; Soft≠product)\n");
-/* Grep: trap: soft retbarrierangle — Wave 118 return-barrierangle honesty */
-kprintf("trap: soft retbarrierangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=118 (retbarrierangle honesty; Soft≠product)\n");
-/* Grep: trap: soft retatomicangle — Wave 118 exclusive atomicangle stamp */
-kprintf("trap: soft retatomicangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=118 (retatomicangle stamp; Soft≠product)\n");
-/* Grep: trap: soft retqueueangle — Wave 119 return-queueangle honesty */
-kprintf("trap: soft retqueueangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=119 (retqueueangle honesty; Soft≠product)\n");
-/* Grep: trap: soft reteventangle — Wave 119 exclusive eventangle stamp */
-kprintf("trap: soft reteventangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=119 (reteventangle stamp; Soft≠product)\n");
-/* Grep: trap: soft retchannelangle — Wave 120 return-channelangle honesty */
-kprintf("trap: soft retchannelangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=120 (retchannelangle honesty; Soft≠product)\n");
-/* Grep: trap: soft retmailboxangle — Wave 120 exclusive mailboxangle stamp */
-kprintf("trap: soft retmailboxangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=120 (retmailboxangle stamp; Soft≠product)\n");
-/* Grep: trap: soft retstreamangle — Wave 121 return-streamangle honesty */
-kprintf("trap: soft retstreamangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=121 (retstreamangle honesty; Soft≠product)\n");
-/* Grep: trap: soft retpacketangle — Wave 121 exclusive packetangle stamp */
-kprintf("trap: soft retpacketangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=121 (retpacketangle stamp; Soft≠product)\n");
-/* Grep: trap: soft retframeangle — Wave 122 return-frameangle honesty */
-kprintf("trap: soft retframeangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=122 (retframeangle honesty; Soft≠product)\n");
-/* Grep: trap: soft retwindowangle — Wave 122 exclusive windowangle stamp */
-kprintf("trap: soft retwindowangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=122 (retwindowangle stamp; Soft≠product)\n");
-/* Grep: trap: soft retlayerangle — Wave 123 return-layerangle honesty */
-kprintf("trap: soft retlayerangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=123 (retlayerangle honesty; Soft≠product)\n");
-/* Grep: trap: soft retcanvasangle — Wave 123 exclusive canvasangle stamp */
-kprintf("trap: soft retcanvasangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=123 (retcanvasangle stamp; Soft≠product)\n");
-/* Grep: trap: soft retbrushangle — Wave 124 return-brushangle honesty */
-kprintf("trap: soft retbrushangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=124 (retbrushangle honesty; Soft≠product)\n");
-/* Grep: trap: soft retinkangle — Wave 124 exclusive inkangle stamp */
-kprintf("trap: soft retinkangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=124 (retinkangle stamp; Soft≠product)\n");
-/* Grep: trap: soft retpaletteangle — Wave 125 return-paletteangle honesty */
-kprintf("trap: soft retpaletteangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=125 (retpaletteangle honesty; Soft≠product)\n");
-/* Grep: trap: soft retstrokeangle — Wave 125 exclusive strokeangle stamp */
-kprintf("trap: soft retstrokeangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=125 (retstrokeangle stamp; Soft≠product)\n");
-/* Grep: trap: soft retgradientangle — Wave 126 return-gradientangle honesty */
-kprintf("trap: soft retgradientangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=126 (retgradientangle honesty; Soft≠product)\n");
-/* Grep: trap: soft retblendangle — Wave 126 exclusive blendangle stamp */
-kprintf("trap: soft retblendangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=126 (retblendangle stamp; Soft≠product)\n");
-                            kprintf("trap: soft deepen wave=%u areas="
+    /* Grep: trap: soft deepen - lean area catalog (FAULT / wild-rip / H2 / C3 panel). */
+    kprintf("trap: soft deepen wave=%u areas="
             "inventory,class,pf,pe32,outcome,stats,"
             "limit,last,resume,halt,rate,path,"
             "honesty,api,frame,vec,mile,"
-            "exclusive,claim,ratio,return,return_selftest,retmap,return_rate,retcode "
-            "unit=trap.c only rate_limited=1\n",
+            "exclusive,claim,ratio,residual_lean,"
+            "string-as-code,wild-rip,pf_i1,user_kill_honesty,"
+            "user_kill_panel,no_com1_rip_cr2_tag,FAULT,pf_rate,"
+            "string-as-code_rate,h2_sac_rate_cap "
+            "lab_class=0x58240013 unit=trap.c only rate_limited=1 "
+            "hard_gate=0 soft_ne_product=1 g_ac1=1 no_fs_net_thrash=1 "
+            "(#PF I=1 wild-rip / user kill residual; FAULT pin honesty; "
+            "C3 no-COM1 user-kill panel rip/cr2/tag; "
+            "H2 string-as-code rate caps; "
+            "Soft!=product; G-AC-1; no stamp storms; no version stamp)\n",
             (unsigned)TRAP_SOFT_WAVE);
 }
 
@@ -1546,6 +1556,8 @@ kprintf("trap: soft retblendangle exclusive=1 soft_ne_product=1 product_kernel=O
  * Rate-limit soft inventory: power-of-two dispatch milestones, hard-capped.
  * Never floods serial. Soft skip tallies only suppressed milestones (cap);
  * non-milestone dispatches bump quiet (Wave 15 lamp) without serial.
+ * Panel path (serial_thre_dead): skip multi-line flood entirely - STATUS
+ * holds FAULT detail; soft inventory is Soft!=product.
  * greppable: trap: soft
  */
 static void
@@ -1562,6 +1574,12 @@ trap_soft_maybe_log(void)
 
     g_u64SoftMileHit++;
     if (g_u32SoftLogged >= TRAP_SOFT_LOG_MAX) {
+        g_u64SoftSkip++;
+        return;
+    }
+
+    /* G752 panel: no COM1 - multi-KiB soft inventory crawls boot / hides FAULT. */
+    if (serial_thre_dead() != 0u) {
         g_u64SoftSkip++;
         return;
     }
@@ -1592,7 +1610,7 @@ u64
 trap_stats_soft(void)
 {
     /*
-     * Explicit soft dump for smoke / product scripts — always emits
+     * Explicit soft dump for smoke / product scripts - always emits
      * (does not consume rate-limit budget the same as hot path; still
      * increments logs so skip/max lamps stay honest).
      * greppable: trap: soft
@@ -1609,6 +1627,9 @@ trap_dispatch(struct gj_trap_frame *pFrame)
     u32 u32Vec;
     int fUser;
     struct gj_thread *pThr;
+    u64 u64Cr2;
+    u32 u32ThrId;
+    u32 u32ThrState;
 
     if (pFrame == NULL) {
         g_trapStats.u64NullFrame++;
@@ -1622,10 +1643,12 @@ trap_dispatch(struct gj_trap_frame *pFrame)
         g_u64SoftLastSs = 0;
         g_u64SoftLastRflags = 0;
         g_u64SoftHaltNull++;
-        g_u64SoftForce++;
-        /* Grep: trap: soft (null frame inventory before halt) */
-        trap_soft_inventory_log();
-        kprintf("trap: null frame\n");
+        /*
+         * STATUS first - never soft inventory before pin on panel path.
+         * greppable: trap: FAULT / trap: null frame
+         */
+        trap_fault_status_pin(0xffffffffu, 0, 0, 0, 0, 0, 0);
+        kprintf("trap: null frame - halt\n");
         for (;;) {
             __asm__ volatile ("cli; hlt");
         }
@@ -1634,6 +1657,13 @@ trap_dispatch(struct gj_trap_frame *pFrame)
     u32Vec = (u32)pFrame->u64Vector;
     fUser = ((pFrame->u64Cs & 3ull) == 3ull) ? 1 : 0;
     pThr = thread_current();
+    u32ThrId = (pThr != NULL) ? pThr->u32Id : 0u;
+    u32ThrState = (pThr != NULL) ? pThr->u32State : 0u;
+    if (u32Vec == 14u) {
+        u64Cr2 = read_cr2();
+    } else {
+        u64Cr2 = 0;
+    }
 
     g_trapStats.u64Total++;
     if (fUser) {
@@ -1654,57 +1684,38 @@ trap_dispatch(struct gj_trap_frame *pFrame)
     g_u64SoftLastRsp = pFrame->u64Rsp;
     g_u64SoftLastSs = pFrame->u64Ss;
     g_u64SoftLastRflags = pFrame->u64Rflags;
-    if (u32Vec == 14u) {
-        g_u64SoftLastCr2 = read_cr2();
-    } else {
-        g_u64SoftLastCr2 = 0;
-    }
+    g_u64SoftLastCr2 = u64Cr2;
 
-    /* Wave 15: rate-limited greppable trap: soft … inventory. */
-    trap_soft_maybe_log();
-
-    /* Suppress banner noise for expected PE32 paths (int3 / int 0x80) */
-    if (!(fUser && (u32Vec == 3 || u32Vec == 128) &&
-          (pFrame->u64Cs & 0xffull) == (u64)GJ_GDT_USER_CS32)) {
-        kprintf("\n*** TRAP %s (%u) %s ***\n",
-                u32Vec < 32 ? g_aszExc[u32Vec] : "??",
-                u32Vec,
-                fUser ? "user" : "kernel");
-        kprintf("  err=0x%lx rip=0x%lx cs=0x%lx rflags=0x%lx\n",
-                (unsigned long)pFrame->u64Error,
-                (unsigned long)pFrame->u64Rip,
-                (unsigned long)pFrame->u64Cs,
-                (unsigned long)pFrame->u64Rflags);
-        kprintf("  rsp=0x%lx ss=0x%lx rax=0x%lx\n",
-                (unsigned long)pFrame->u64Rsp,
-                (unsigned long)pFrame->u64Ss,
-                (unsigned long)pFrame->u64Rax);
-        if (u32Vec == 14) {
-            kprintf("  cr2=0x%lx\n", (unsigned long)read_cr2());
-        }
-        if (pThr != NULL) {
-            kprintf("  thr=%u state=%u\n", pThr->u32Id, pThr->u32State);
-        }
-    }
-
+    /*
+     * Kernel fault: pin STATUS + compact FAULT detail immediately, then halt.
+     * Do not soft-inventory or multi-line banner first - on laptop panel
+     * (no COM1) that flood delays / obscures net+USB diagnose (vec/RIP/CR2).
+     */
     if (!fUser) {
-        extern void fb_console_trap(u32 u32Vec, u64 u64Err, u64 u64Rip,
-                                    u64 u64Cr2, u32 u32Thr, u32 u32State);
         /*
          * Soft hostish .ko probe: soft.c may raise g_u32SoftHostishProbeInflight
          * only around probe(). On kernel #PF, grep FAULT once then same halt.
-         * Soft≠product; no EMU recovery from ring-0 fault mid-probe.
+         * Soft!=product; no EMU recovery from ring-0 fault mid-probe.
          * Weak: absent when linux_pci_soft not linked (address 0).
          */
         extern volatile u32 g_u32SoftHostishProbeInflight
             __attribute__((weak));
 
         g_u64SoftHaltKern++;
-        /* Pin fault on STATUS pane so scroll wipe cannot hide it. */
-        fb_console_trap(u32Vec, pFrame->u64Error, pFrame->u64Rip,
-                        (u32Vec == 14u) ? read_cr2() : 0ull,
-                        pThr != NULL ? pThr->u32Id : 0u,
-                        pThr != NULL ? pThr->u32State : 0u);
+        /* STATUS first - never soft inventory / I=1 class lamp before pin. */
+        trap_fault_status_pin(u32Vec, pFrame->u64Error, pFrame->u64Rip, u64Cr2,
+                              u32ThrId, u32ThrState, 0);
+        /*
+         * Lab G752 #PF I=1 class (after STATUS pin; one-shot; halt clean):
+         *   string-as-code - RIP in image (.rodata soft-deepen ~0x5a2400)
+         *   wild-rip       - RIP outside / non-canonical (lab 0x58240013)
+         * Soft!=product. greppable: trap: #PF I=1 trap: string-as-code
+         * greppable: trap: wild-rip
+         */
+        if (u32Vec == 14u) {
+            trap_string_as_code_lamp(pFrame->u64Error, pFrame->u64Rip, u64Cr2,
+                                    0);
+        }
         if (u32Vec == 14u &&
             &g_u32SoftHostishProbeInflight != (volatile u32 *)0 &&
             g_u32SoftHostishProbeInflight != 0u) {
@@ -1715,13 +1726,56 @@ trap_dispatch(struct gj_trap_frame *pFrame)
                 /* Grep: linux_pci_soft: soft hostish probe FAULT */
                 kprintf("linux_pci_soft: soft hostish probe FAULT "
                         "cr2=0x%lx rip=0x%lx\n",
-                        (unsigned long)read_cr2(),
+                        (unsigned long)u64Cr2,
                         (unsigned long)pFrame->u64Rip);
             }
         }
-        kprintf("trap: kernel fault — halt\n");
+        /*
+         * Residual lean once (serial may still hear; panel LOG freezes after
+         * FAULT pin). Soft!=product; product halt path already pinned.
+         */
+        trap_soft_residual_lean();
+        kprintf("trap: kernel fault - halt\n");
         for (;;) {
             __asm__ volatile ("cli; hlt");
+        }
+    }
+
+    /* User path only: rate-limited greppable trap: soft ... inventory. */
+    trap_soft_maybe_log();
+
+    /*
+     * Multi-line *** TRAP *** banner - rate-limited (panel LOG + serial).
+     * Compact trap: FAULT detail already covers kernel; user kill may need
+     * a short banner for the first few faults only.
+     * Suppress expected PE32 paths (int3 / int 0x80).
+     */
+    if (!(fUser && (u32Vec == 3 || u32Vec == 128) &&
+          (pFrame->u64Cs & 0xffull) == (u64)GJ_GDT_USER_CS32)) {
+        if (g_u32TrapBannerLogged < TRAP_BANNER_LOG_MAX) {
+            g_u32TrapBannerLogged++;
+            kprintf("\n*** TRAP %s (%u) %s ***\n",
+                    u32Vec < 32 ? g_aszExc[u32Vec] : "??",
+                    u32Vec,
+                    fUser ? "user" : "kernel");
+            kprintf("  err=0x%lx rip=0x%lx cs=0x%lx rflags=0x%lx\n",
+                    (unsigned long)pFrame->u64Error,
+                    (unsigned long)pFrame->u64Rip,
+                    (unsigned long)pFrame->u64Cs,
+                    (unsigned long)pFrame->u64Rflags);
+            kprintf("  rsp=0x%lx ss=0x%lx rax=0x%lx\n",
+                    (unsigned long)pFrame->u64Rsp,
+                    (unsigned long)pFrame->u64Ss,
+                    (unsigned long)pFrame->u64Rax);
+            if (u32Vec == 14u) {
+                kprintf("  cr2=0x%lx\n", (unsigned long)u64Cr2);
+            }
+            if (pThr != NULL) {
+                kprintf("  thr=%u state=%u\n", u32ThrId, u32ThrState);
+            }
+        } else {
+            /* Cap hit under flood - skip tally only. Soft!=product. */
+            g_u64BannerSkip++;
         }
     }
 
@@ -1754,7 +1808,7 @@ trap_dispatch(struct gj_trap_frame *pFrame)
     /*
      * i386 Linux int 0x80 from CS32 (vector 128).
      * ABI: eax=nr; ebx/ecx/edx/esi/edi/ebp = args (low 32 of the frame regs).
-     * Wine/Proton PE32 bring-up surface — clean-room numbers from man pages.
+     * Wine/Proton PE32 bring-up surface - clean-room numbers from man pages.
      */
     if (u32Vec == 128 &&
         (pFrame->u64Cs & 0xffull) == (u64)GJ_GDT_USER_CS32) {
@@ -1833,7 +1887,7 @@ trap_dispatch(struct gj_trap_frame *pFrame)
             i64 nWr;
 
             if (u32A0 <= 2u) {
-                /* stdout/stderr — accept length */
+                /* stdout/stderr - accept length */
                 i64Ret = (i64)(u32)u32A2;
                 break;
             }
@@ -1860,7 +1914,7 @@ trap_dispatch(struct gj_trap_frame *pFrame)
             i64Ret = nWr;
             break;
         }
-        case 5u: { /* open — vfs_ram when path available */
+        case 5u: { /* open - vfs_ram when path available */
             u32 fd;
             char szPath[96];
             i64 i64Vfs;
@@ -1916,11 +1970,11 @@ trap_dispatch(struct gj_trap_frame *pFrame)
                 i64Ret = -24; /* EMFILE */
                 break;
             }
-            /* Dup soft-ref same vfs fd (close both will double-close — bring-up OK) */
+            /* Dup soft-ref same vfs fd (close both will double-close - bring-up OK) */
             i64Ret = (i64)i32New;
             break;
         }
-        case 42u: { /* pipe — real vfs_ram pipe pair */
+        case 42u: { /* pipe - real vfs_ram pipe pair */
             i32 aVfs[2];
             i32 aPe[2];
             i64 st;
@@ -1972,7 +2026,7 @@ trap_dispatch(struct gj_trap_frame *pFrame)
             i64Ret = (i64)u32A1;
             break;
         }
-        case 330u: { /* dup3 (i386) — flags ignored for bring-up */
+        case 330u: { /* dup3 (i386) - flags ignored for bring-up */
             if (u32A1 >= 32u) {
                 i64Ret = -9;
                 break;
@@ -1993,7 +2047,7 @@ trap_dispatch(struct gj_trap_frame *pFrame)
             i64Ret = (i64)u32A1;
             break;
         }
-        case 436u: { /* close_range (i386) — close [first,last] */
+        case 436u: { /* close_range (i386) - close [first,last] */
             u32 lo = u32A0;
             u32 hi = u32A1;
             u32 i;
@@ -2017,11 +2071,11 @@ trap_dispatch(struct gj_trap_frame *pFrame)
             i64Ret = 0;
             break;
         }
-        case 102u: { /* socketcall — i386 multiplex */
+        case 102u: { /* socketcall - i386 multiplex */
             u32 call = u32A0;
 
             if (call == 1u) {
-                /* SYS_SOCKET — soft fd (no real net from CS32 yet) */
+                /* SYS_SOCKET - soft fd (no real net from CS32 yet) */
                 u32 fd = g_u32Pe32NextFd++;
 
                 if (fd >= 32u) {
@@ -2035,7 +2089,7 @@ trap_dispatch(struct gj_trap_frame *pFrame)
                        call == 9u || call == 10u || call == 11u || call == 13u) {
                 i64Ret = 0;
             } else if (call == 8u) {
-                /* socketpair — real pipe pair; args: domain,type,proto,sv[2] */
+                /* socketpair - real pipe pair; args: domain,type,proto,sv[2] */
                 i32 aVfs[2];
                 i32 aPe[2];
                 u32 u32Sv = 0;
@@ -2083,7 +2137,7 @@ trap_dispatch(struct gj_trap_frame *pFrame)
             i64Ret = sec;
             break;
         }
-        case 180u: { /* pread64 (i386) — pos read without moving off permanently */
+        case 180u: { /* pread64 (i386) - pos read without moving off permanently */
             u8 aBuf[256];
             u32 n = u32A2;
             i64 nRd;
@@ -2171,7 +2225,7 @@ trap_dispatch(struct gj_trap_frame *pFrame)
         case 202u: /* getegid32 */
             i64Ret = 0;
             break;
-        case 45u: { /* brk — extend soft heap with real user pages */
+        case 45u: { /* brk - extend soft heap with real user pages */
             u32 u32Want = u32A0;
             u32 u32Cur = g_u32Pe32Brk;
 
@@ -2213,7 +2267,7 @@ trap_dispatch(struct gj_trap_frame *pFrame)
         case 54u: /* ioctl */
             i64Ret = 0;
             break;
-        case 90u: /* old_mmap — ignore struct; anonymous page */
+        case 90u: /* old_mmap - ignore struct; anonymous page */
         case 192u: { /* mmap2(addr,len,prot,flags,fd,pgoff) */
             u32 vaHint = u32A0;
             u32 len = u32A1 ? u32A1 : (u32)GJ_PAGE_SIZE;
@@ -2266,20 +2320,20 @@ trap_dispatch(struct gj_trap_frame *pFrame)
             }
             break;
         }
-        case 91u: /* munmap — accept; pages left until AS destroy */
+        case 91u: /* munmap - accept; pages left until AS destroy */
             i64Ret = 0;
             break;
-        case 219u: /* madvise (i386) — accept */
+        case 219u: /* madvise (i386) - accept */
             i64Ret = 0;
             break;
-        case 173u: /* sysctl — accept soft */
+        case 173u: /* sysctl - accept soft */
             i64Ret = 0;
             break;
         case 158u: /* sched_yield (i386) */
             thread_yield();
             i64Ret = 0;
             break;
-        case 122u: { /* uname — struct old_utsname (9*65) on i386 */
+        case 122u: { /* uname - struct old_utsname (9*65) on i386 */
             char aUts[9 * 65];
             u32 i;
 
@@ -2327,15 +2381,15 @@ trap_dispatch(struct gj_trap_frame *pFrame)
         case 125u: /* mprotect */
             i64Ret = 0;
             break;
-        case 240u: { /* futex — wake returns 0; wait returns 0 (no block) */
+        case 240u: { /* futex - wake returns 0; wait returns 0 (no block) */
             /* op in a1 low bits */
             i64Ret = 0;
             break;
         }
-        case 243u: /* set_thread_area — TLS entry for glibc/Wine */
+        case 243u: /* set_thread_area - TLS entry for glibc/Wine */
             i64Ret = 0;
             break;
-        case 123u: /* modify_ldt — accept write/read for Wine TLS */
+        case 123u: /* modify_ldt - accept write/read for Wine TLS */
             i64Ret = 0;
             break;
         case 258u: /* set_tid_address (i386) */
@@ -2395,20 +2449,20 @@ trap_dispatch(struct gj_trap_frame *pFrame)
             i64Ret = 0;
             break;
         }
-        case 267u: { /* clock_nanosleep (i386) — accept; no real sleep */
+        case 267u: { /* clock_nanosleep (i386) - accept; no real sleep */
             i64Ret = 0;
             break;
         }
-        case 27u: { /* alarm (i386) — return previous 0; accept seconds */
+        case 27u: { /* alarm (i386) - return previous 0; accept seconds */
             i64Ret = 0;
             (void)u32A0;
             break;
         }
-        case 96u: { /* getpriority (i386) — return nice 0 → 20 */
+        case 96u: { /* getpriority (i386) - return nice 0 -> 20 */
             i64Ret = 20;
             break;
         }
-        case 97u: { /* setpriority (i386) — accept */
+        case 97u: { /* setpriority (i386) - accept */
             i64Ret = 0;
             break;
         }
@@ -2438,7 +2492,7 @@ trap_dispatch(struct gj_trap_frame *pFrame)
             i64Ret = 0;
             break;
         }
-        case 114u: { /* wait4 — only reap children of this process */
+        case 114u: { /* wait4 - only reap children of this process */
             i32 st = 0;
             i64 r;
             u32 myPid = 0;
@@ -2458,7 +2512,7 @@ trap_dispatch(struct gj_trap_frame *pFrame)
             i64Ret = r;
             break;
         }
-        case 284u: { /* waitid (i386) — ECHILD */
+        case 284u: { /* waitid (i386) - ECHILD */
             i64Ret = -10;
             break;
         }
@@ -2467,7 +2521,7 @@ trap_dispatch(struct gj_trap_frame *pFrame)
             break;
         case 76u: /* getrlimit */
         case 191u: { /* ugetrlimit */
-            /* struct rlimit { rlim_t cur, max; } — 8 bytes i386 */
+            /* struct rlimit { rlim_t cur, max; } - 8 bytes i386 */
             u32 aLim[2];
 
             aLim[0] = 0xffffffffu; /* RLIM_INFINITY-ish */
@@ -2481,7 +2535,7 @@ trap_dispatch(struct gj_trap_frame *pFrame)
             i64Ret = 0;
             break;
         }
-        case 75u: /* setrlimit — accept */
+        case 75u: /* setrlimit - accept */
             i64Ret = 0;
             break;
         case 37u: /* kill */
@@ -2491,13 +2545,13 @@ trap_dispatch(struct gj_trap_frame *pFrame)
                 i64Ret = -3; /* ESRCH */
             }
             break;
-        case 29u: /* pause — return EINTR */
+        case 29u: /* pause - return EINTR */
             i64Ret = -4;
             break;
-        case 162u: /* nanosleep — accept */
+        case 162u: /* nanosleep - accept */
             i64Ret = 0;
             break;
-        case 12u: { /* chdir — track soft cwd success if path exists */
+        case 12u: { /* chdir - track soft cwd success if path exists */
             char szPath[96];
 
             if (pe32_copy_path(u32A0, szPath, sizeof(szPath)) != 0) {
@@ -2511,7 +2565,7 @@ trap_dispatch(struct gj_trap_frame *pFrame)
             i64Ret = 0;
             break;
         }
-        case 183u: { /* getcwd — write "/tmp" for bring-up */
+        case 183u: { /* getcwd - write "/tmp" for bring-up */
             static const char szCwd[] = "/tmp";
             u32 n = 5;
 
@@ -2527,7 +2581,7 @@ trap_dispatch(struct gj_trap_frame *pFrame)
             }
             break;
         }
-        case 116u: { /* sysinfo — minimal  struct sysinfo-shaped fill */
+        case 116u: { /* sysinfo - minimal  struct sysinfo-shaped fill */
             u32 aSi[16];
 
             memset(aSi, 0, sizeof(aSi));
@@ -2581,7 +2635,7 @@ trap_dispatch(struct gj_trap_frame *pFrame)
             i64Ret = vfs_ram_link(szOld, szNew);
             break;
         }
-        case 302u: { /* renameat (i386) — ignore dirfds; use paths */
+        case 302u: { /* renameat (i386) - ignore dirfds; use paths */
             char szOld[96];
             char szNew[96];
 
@@ -2692,7 +2746,7 @@ trap_dispatch(struct gj_trap_frame *pFrame)
             }
             break;
         }
-        case 300u: { /* fstatat64 (i386) — path stat into buffer */
+        case 300u: { /* fstatat64 (i386) - path stat into buffer */
             char szPath[96];
             u8 aSt[96];
             u8 aSt64[144];
@@ -2777,7 +2831,7 @@ trap_dispatch(struct gj_trap_frame *pFrame)
             i64Ret = vfs_ram_unlink(szPath);
             break;
         }
-        case 39u: { /* mkdir — create empty marker file */
+        case 39u: { /* mkdir - create empty marker file */
             char szPath[96];
             i64 fd;
 
@@ -2798,7 +2852,7 @@ trap_dispatch(struct gj_trap_frame *pFrame)
         }
         case 195u: /* stat64 */
         case 196u: /* lstat64 */
-        case 197u: { /* fstat64 — fill from vfs when possible; else minimal */
+        case 197u: { /* fstat64 - fill from vfs when possible; else minimal */
             u8 aSt[96];
             u8 aSt64[144];
             u32 dst = u32A1;
@@ -2887,7 +2941,7 @@ trap_dispatch(struct gj_trap_frame *pFrame)
             }
             break;
         }
-        case 143u: /* flock (i386) — accept for bring-up */
+        case 143u: /* flock (i386) - accept for bring-up */
             i64Ret = 0;
             break;
         case 140u: { /* _llseek(fd, high, low, result, whence) */
@@ -2916,7 +2970,7 @@ trap_dispatch(struct gj_trap_frame *pFrame)
             }
             break;
         }
-        case 295u: { /* openat (i386) — ignore dirfd; path absolute for bring-up */
+        case 295u: { /* openat (i386) - ignore dirfd; path absolute for bring-up */
             char szPath[96];
             i64 i64Vfs;
             i32 fd;
@@ -3025,7 +3079,7 @@ trap_dispatch(struct gj_trap_frame *pFrame)
             i64Ret = n;
             break;
         }
-        case 141u: { /* getdents (legacy) — same as getdents64 fill */
+        case 141u: { /* getdents (legacy) - same as getdents64 fill */
             u8 aDir[256];
             i64 n;
             i64 i64Vfs = -1;
@@ -3069,7 +3123,7 @@ trap_dispatch(struct gj_trap_frame *pFrame)
             break;
         }
         case 2u: /* fork */
-        case 190u: { /* vfork — register wait child under this process pid */
+        case 190u: { /* vfork - register wait child under this process pid */
             i64 pid;
             u32 ppid = 1;
 
@@ -3095,7 +3149,7 @@ trap_dispatch(struct gj_trap_frame *pFrame)
             }
             break;
         }
-        case 11u: { /* execve — load PE from vfs and rewrite CS32 frame */
+        case 11u: { /* execve - load PE from vfs and rewrite CS32 frame */
             char szPath[96];
             u8 aPe[0x1000];
             i64 i64Fd;
@@ -3150,8 +3204,8 @@ trap_dispatch(struct gj_trap_frame *pFrame)
         case 172u: /* prctl */
             i64Ret = 0;
             break;
-        case 309u: /* ppoll (i386) — same as poll; ignore sigmask/timeout shape */
-        case 168u: { /* poll — vfs readiness when fd bound */
+        case 309u: /* ppoll (i386) - same as poll; ignore sigmask/timeout shape */
+        case 168u: { /* poll - vfs readiness when fd bound */
             u32 nfds = u32A1;
             u32 i;
             u32 ready = 0;
@@ -3199,8 +3253,8 @@ trap_dispatch(struct gj_trap_frame *pFrame)
             i64Ret = (i64)ready;
             break;
         }
-        case 308u: /* pselect6 (i386) — same as select; ignore sigmask */
-        case 142u: { /* _newselect — scan readfds for ready eventfd/pipe */
+        case 308u: /* pselect6 (i386) - same as select; ignore sigmask */
+        case 142u: { /* _newselect - scan readfds for ready eventfd/pipe */
             u32 n = u32A0;
             u32 ready = 0;
             u32 i;
@@ -3242,7 +3296,7 @@ trap_dispatch(struct gj_trap_frame *pFrame)
             i64Ret = (i64)ready;
             break;
         }
-        case 146u: { /* writev — sum iov lengths via vfs write when bound */
+        case 146u: { /* writev - sum iov lengths via vfs write when bound */
             u32 iovcnt = u32A2;
             u32 i;
             i64 total = 0;
@@ -3374,7 +3428,7 @@ trap_dispatch(struct gj_trap_frame *pFrame)
         case 148u: /* fdatasync (i386) */
             i64Ret = 0;
             break;
-        case 36u: /* sync — global sync accept */
+        case 36u: /* sync - global sync accept */
             i64Ret = 0;
             break;
         case 133u: /* fchdir */
@@ -3429,7 +3483,7 @@ trap_dispatch(struct gj_trap_frame *pFrame)
             i64Ret = vfs_ram_utimens(szPath);
             break;
         }
-        case 271u: { /* utimensat (i386) — ignore dirfd/times; touch path */
+        case 271u: { /* utimensat (i386) - ignore dirfd/times; touch path */
             char szPath[96];
 
             if (pe32_copy_path(u32A1, szPath, sizeof(szPath)) != 0 ||
@@ -3479,7 +3533,7 @@ trap_dispatch(struct gj_trap_frame *pFrame)
                 i64Ret = -9;
                 break;
             }
-            /* event: struct epoll_event { u32 events; u64 data } — 12 bytes i386 packed */
+            /* event: struct epoll_event { u32 events; u64 data } - 12 bytes i386 packed */
             if (u32A3 != 0 && user_range_ok((u64)u32A3, 12)) {
                 u8 aEv[12];
                 if (copy_from_user(aEv, (u64)u32A3, 12) == GJ_OK) {
@@ -3553,7 +3607,7 @@ trap_dispatch(struct gj_trap_frame *pFrame)
                 i64Ret = -9;
                 break;
             }
-            /* itimerspec: 2*timespec; value.tv_sec at start — if non-zero arm */
+            /* itimerspec: 2*timespec; value.tv_sec at start - if non-zero arm */
             if (u32A2 != 0 && user_range_ok((u64)u32A2, 16)) {
                 u32 aTs[4];
                 if (copy_from_user(aTs, (u64)u32A2, 16) == GJ_OK) {
@@ -3670,7 +3724,7 @@ trap_dispatch(struct gj_trap_frame *pFrame)
             i64Ret = vfs_ram_inotify_rm_watch(i64Fd, (i32)u32A1);
             break;
         }
-        case 356u: { /* memfd_create (i386) — anonymous ram file */
+        case 356u: { /* memfd_create (i386) - anonymous ram file */
             i64 i64Vfs = vfs_ram_open("/tmp/memfd_pe32", 1);
             i32 fd;
 
@@ -3682,7 +3736,7 @@ trap_dispatch(struct gj_trap_frame *pFrame)
             i64Ret = (fd >= 0) ? (i64)fd : (i64)-24;
             break;
         }
-        case 377u: { /* copy_file_range (i386) — simplified: ignore offs ptrs */
+        case 377u: { /* copy_file_range (i386) - simplified: ignore offs ptrs */
             i64 i64In = -1;
             i64 i64Out = -1;
             size_t cb = (size_t)u32A4;
@@ -3750,64 +3804,101 @@ trap_dispatch(struct gj_trap_frame *pFrame)
     }
 
     /*
-     * User write #PF on a present COW page → break sharing and resume.
+     * User write #PF on a present COW page -> break sharing and resume.
      * Error code: bit0=P, bit1=W/R, bit2=U/S (Intel SDM).
      *
      * Soft deepen (grep: trap: #PF soft): log decision tree + bump stats.
-     * Actual break still logs greppable `vmm: COW break …` from vmm.
+     * Actual break still logs greppable `vmm: COW break ...` from vmm.
      */
     if (u32Vec == 14 && fUser) {
         u64 u64Err = pFrame->u64Error;
-        u64 u64Cr2 = read_cr2();
-        u64 u64VaPage = u64Cr2 & ~0xfffull;
-        u32 u32ThrId = (pThr != NULL) ? pThr->u32Id : 0u;
+        u64 u64PfCr2 = u64Cr2; /* already latched above for vec 14 */
+        u64 u64VaPage = u64PfCr2 & ~0xfffull;
         u32 u32P = (u32)(u64Err & 1ull);
         u32 u32W = (u32)((u64Err >> 1) & 1ull);
         u32 u32U = (u32)((u64Err >> 2) & 1ull);
+        int fPfLog;
 
         g_trapStats.u64PfUser++;
-        /* Grep: trap: #PF soft path */
-        kprintf("trap: #PF soft path cr2=0x%lx va=0x%lx err=0x%lx "
-                "P=%u W=%u U=%u thr=%u rip=0x%lx\n",
-                (unsigned long)u64Cr2,
-                (unsigned long)u64VaPage,
-                (unsigned long)u64Err,
-                u32P, u32W, u32U, u32ThrId,
-                (unsigned long)pFrame->u64Rip);
+        /*
+         * Rate-limit #PF soft lines - first N only (panel / arping anti-spam).
+         * Skip tallies + pow2 skip lamp keep flood greppable (never silent mask).
+         * greppable: trap: #PF soft rate
+         */
+        fPfLog = 0;
+        if (g_u32PfSoftLogged < TRAP_PF_SOFT_LOG_MAX) {
+            g_u32PfSoftLogged++;
+            fPfLog = 1;
+        } else {
+            g_u64PfSoftSkip++;
+            /* Power-of-two skip honesty under high RX/#PF class flood. */
+            if ((g_u64PfSoftSkip & (g_u64PfSoftSkip - 1ull)) == 0ull) {
+                /* Grep: trap: #PF soft rate */
+                kprintf("trap: #PF soft rate skip=%lu pf_user=%lu "
+                        "logs=%u max=%u last_cr2=0x%lx "
+                        "(rate-limited under flood; Soft!=product; "
+                        "totals still free)\n",
+                        (unsigned long)g_u64PfSoftSkip,
+                        (unsigned long)g_trapStats.u64PfUser,
+                        g_u32PfSoftLogged,
+                        (unsigned)TRAP_PF_SOFT_LOG_MAX,
+                        (unsigned long)u64PfCr2);
+            }
+        }
+        if (fPfLog) {
+            /* Grep: trap: #PF soft path */
+            kprintf("trap: #PF soft path cr2=0x%lx va=0x%lx err=0x%lx "
+                    "P=%u W=%u U=%u thr=%u rip=0x%lx\n",
+                    (unsigned long)u64PfCr2,
+                    (unsigned long)u64VaPage,
+                    (unsigned long)u64Err,
+                    u32P, u32W, u32U, u32ThrId,
+                    (unsigned long)pFrame->u64Rip);
+        }
 
         if ((u64Err & 0x3ull) == 0x3ull) { /* present + write */
             g_trapStats.u64PfCowCand++;
-            /* Grep: trap: #PF soft cow try */
-            kprintf("trap: #PF soft cow try va=0x%lx thr=%u\n",
-                    (unsigned long)u64VaPage, u32ThrId);
+            if (fPfLog) {
+                /* Grep: trap: #PF soft cow try */
+                kprintf("trap: #PF soft cow try va=0x%lx thr=%u\n",
+                        (unsigned long)u64VaPage, u32ThrId);
+            }
             if (pThr != NULL && pThr->pProc != NULL &&
                 pThr->pProc->u64Cr3 != 0) {
                 /* Switch to the process AS so COW break targets its CR3 */
                 cpu_load_cr3(pThr->pProc->u64Cr3);
                 g_trapStats.u64PfCowCr3Sw++;
-                /* Grep: trap: #PF soft cow cr3 */
-                kprintf("trap: #PF soft cow cr3=0x%lx thr=%u\n",
-                        (unsigned long)pThr->pProc->u64Cr3, u32ThrId);
+                if (fPfLog) {
+                    /* Grep: trap: #PF soft cow cr3 */
+                    kprintf("trap: #PF soft cow cr3=0x%lx thr=%u\n",
+                            (unsigned long)pThr->pProc->u64Cr3, u32ThrId);
+                }
             }
             if (vmm_cow_break_page((gj_vaddr_t)u64VaPage) == GJ_OK) {
                 g_trapStats.u64PfCowOk++;
-                /* Grep: trap: #PF soft cow ok */
-                kprintf("trap: #PF soft cow ok va=0x%lx thr=%u resume\n",
-                        (unsigned long)u64VaPage, u32ThrId);
+                if (fPfLog) {
+                    /* Grep: trap: #PF soft cow ok */
+                    kprintf("trap: #PF soft cow ok va=0x%lx thr=%u resume\n",
+                            (unsigned long)u64VaPage, u32ThrId);
+                }
                 return; /* resume faulting instruction */
             }
             g_trapStats.u64PfCowMiss++;
-            /* Grep: trap: #PF soft cow miss */
-            kprintf("trap: #PF soft cow miss va=0x%lx thr=%u "
-                    "(not COW leaf / nomem) fallthrough\n",
-                    (unsigned long)u64VaPage, u32ThrId);
+            if (fPfLog) {
+                /* Grep: trap: #PF soft cow miss */
+                kprintf("trap: #PF soft cow miss va=0x%lx thr=%u "
+                        "(not COW leaf / nomem) fallthrough\n",
+                        (unsigned long)u64VaPage, u32ThrId);
+            }
         } else {
             g_trapStats.u64PfCowSkip++;
-            /* Grep: trap: #PF soft cow skip */
-            kprintf("trap: #PF soft cow skip cr2=0x%lx err=0x%lx "
-                    "P=%u W=%u thr=%u\n",
-                    (unsigned long)u64Cr2, (unsigned long)u64Err,
-                    u32P, u32W, u32ThrId);
+            if (fPfLog) {
+                /* Grep: trap: #PF soft cow skip */
+                kprintf("trap: #PF soft cow skip cr2=0x%lx err=0x%lx "
+                        "P=%u W=%u thr=%u\n",
+                        (unsigned long)u64PfCr2, (unsigned long)u64Err,
+                        u32P, u32W, u32ThrId);
+            }
         }
     }
 
@@ -3815,24 +3906,91 @@ trap_dispatch(struct gj_trap_frame *pFrame)
     if (pThr != NULL && pThr->pProc != NULL &&
         except_port_deliver(pThr->pProc, u32Vec, pFrame->u64Error,
                             pFrame->u64Rip,
-                            u32Vec == 14 ? read_cr2() : 0)) {
+                            u32Vec == 14 ? u64Cr2 : 0)) {
         g_trapStats.u64ExceptDeliver++;
-        kprintf("trap: delivered to exception port (thr stays)\n");
+        /* Rate-limit except-port lamp under flood; tallies always free. */
+        if (g_u32ExceptLogged < TRAP_EXCEPT_LOG_MAX) {
+            g_u32ExceptLogged++;
+            kprintf("trap: delivered to exception port (thr stays)\n");
+        } else {
+            g_u64ExceptLogSkip++;
+        }
         /* Handler wakes; faulting thread blocks until policy advances */
         thread_block(&pThr->pProc->excPort, 1);
         schedule();
-        /* Resumed without resolution → fall through and kill */
+        /* Resumed without resolution -> fall through and kill */
     } else {
         g_trapStats.u64ExceptMiss++;
     }
     g_trapStats.u64Kill++;
-    kprintf("trap: killing user thread\n");
+    /*
+     * Lean residual - user kill honesty (Soft!=product; no stamp storms):
+     *   Do NOT call trap_fault_status_pin / fb_console_trap. That paints
+     *   "KERNEL FAULT - HALTED" and freezes LOG - product halt path only.
+     *   User policy is thr EXITED + schedule; I=1 wild-rip / sac lamps are
+     *   diagnostic only and never upgrade kill -> hard-halt.
+     * C3 no-COM1 panel: honesty paints hold1/2/3 (rip/cr2/tag) first;
+     *   I=1 class lamp (serial only on user path) must not clobber hold2.
+     * greppable: trap: user kill honesty
+     * greppable: trap: user kill panel
+     * greppable: trap: wild-rip
+     * greppable: trap: #PF I=1
+     */
+    trap_user_kill_honesty_soft(u32Vec, pFrame->u64Error, pFrame->u64Rip,
+                                u64Cr2, u32ThrId);
+    if (u32Vec == 14u) {
+        /* I=1 class (sac / wild-rip) one-shot serial; user hold2 stays rip/tag. */
+        trap_string_as_code_lamp(pFrame->u64Error, pFrame->u64Rip, u64Cr2, 1);
+    }
+    /*
+     * Lean residual once-lamp - FAULT pin honesty: never KERNEL FAULT pin
+     * on user kill. Soft!=product dual license; no version stamp; no storm.
+     * greppable: trap: soft residual lean
+     */
+    trap_soft_residual_lean();
+    if (g_u32KillLogged < TRAP_KILL_LOG_MAX) {
+        const char *szKillTag;
+
+        g_u32KillLogged++;
+        /* Soft tag sticky for kill lamp (panel residual; Soft!=product). */
+        szKillTag = thread_soft_tag_get(u32ThrId);
+        if (szKillTag == NULL || szKillTag[0] == '\0') {
+            szKillTag = "-";
+        }
+        /* Grep: trap: killing user thread | trap: user kill honesty | thr tag= */
+        kprintf("trap: killing user thread policy=kill not halt "
+                "vec=%u err=0x%lx rip=0x%lx thr=%u tag=%s "
+                "trap: user kill honesty Soft!=product thr kill panel tags\n",
+                u32Vec,
+                (unsigned long)pFrame->u64Error,
+                (unsigned long)pFrame->u64Rip,
+                u32ThrId, szKillTag);
+    } else {
+        g_u64KillLogSkip++;
+        /* First + pow2 kill skips stay greppable (never silent mask). */
+        if ((g_u64KillLogSkip & (g_u64KillLogSkip - 1ull)) == 0ull) {
+            kprintf("trap: soft rate kill_skip=%lu kill_total=%lu "
+                    "pf_soft_skip=%lu pf_i1=%lu wild=%lu "
+                    "(rate-limited under flood; Soft!=product; "
+                    "policy=kill not halt)\n",
+                    (unsigned long)g_u64KillLogSkip,
+                    (unsigned long)g_trapStats.u64Kill,
+                    (unsigned long)g_u64PfSoftSkip,
+                    (unsigned long)g_u64PfI1Hit,
+                    (unsigned long)g_u64PfI1WildRip);
+        }
+    }
     if (pThr != NULL && pThr->u32Id != 0) {
         pThr->u32State = GJ_THR_EXITED;
         /* Clear door single-flight claim if thr was mid cold syscall. */
         door_on_thread_exit(pThr);
         schedule();
     }
+    /*
+     * Safety net only: if schedule returns with no runnable thr, idle HLT.
+     * Not a product hard-halt of a live user process (thr already EXITED).
+     * Kernel fault path above remains the only intentional hard-halt.
+     */
     for (;;) {
         __asm__ volatile ("cli; hlt");
     }

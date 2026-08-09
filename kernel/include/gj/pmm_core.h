@@ -31,15 +31,15 @@
  *
  * Soft product surface
  * --------------------
- *   PMM_CORE_INIT      — build freelist over [base, limit)
- *   PMM_CORE_ALLOC     — one page; 0 empty
- *   PMM_CORE_FREE      — one page back to LIFO head
- *   PMM_CORE_SELFTEST  — OOB/unaligned/LIFO/payload soft PASS|FAIL
+ *   PMM_CORE_INIT      - build freelist over [base, limit)
+ *   PMM_CORE_ALLOC     - one page; 0 empty
+ *   PMM_CORE_FREE      - one page back to LIFO head
+ *   PMM_CORE_SELFTEST  - OOB/unaligned/LIFO/payload soft PASS|FAIL
  *
  * Layering vs pmm.h
  * -----------------
- *   pmm_core  — portable order-0 only; shared object
- *   pmm       — x86 hierarchical + low/high + soak (product bar ≥ 1 TiB)
+ *   pmm_core  - portable order-0 only; shared object
+ *   pmm       - x86 hierarchical + low/high + soak (product bar ≥ 1 TiB)
  * Callers that need contiguous multi-page or high-zone prefer pmm.h when
  * available; aarch64 scaffold uses this core until hierarchy is shared.
  *
@@ -55,7 +55,7 @@
 #define GJ_PMM_CORE_PAGE_SIZE  (1ul << GJ_PMM_CORE_PAGE_SHIFT)
 
 /**
- * Init freelist over [u64Base, u64Limit) — both page-aligned physical
+ * Init freelist over [u64Base, u64Limit) - both page-aligned physical
  * addresses that are identity-mapped for early bring-up.
  *
  * Frames are pushed free in walk order; subsequent alloc is LIFO from head.

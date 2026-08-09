@@ -17,6 +17,15 @@
  * Non-goals
  * ---------
  * Every historic BSD multicast option name.
+ *
+ * Soft residual (C2 libcgj netinet/in.h; Soft!=product; G-AC-1; Dual DoD A/B OPEN):
+ *   soft     = sockaddr_in/in6 + in_addr + IPPROTO_*/INADDR_* Linux LP64 catalog
+ *   product  = Dual DoD B wire = rtl8168_udx + DDI (OPEN); freestanding rtl SKIP
+ *   honesty  = address family catalog != product stack close; agent PASS != Dual
+ *              DoD close; stamp-free bar honesty (no version stamp); G-AC-1 no .ko AC
+ *   law      = dual MIT OR Apache-2.0; no GPL; H1 no net_eth_poll from IRQ;
+ *              H2 no stamp storms
+ * greppable: libcgj: netinet/in soft residual Soft!=product
  */
 #pragma once
 

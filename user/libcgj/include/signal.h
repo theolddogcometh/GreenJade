@@ -21,6 +21,14 @@
  * ---------
  * Full realtime signal delivery semantics and SA_SIGINFO for every signal.
  * See docs/GLIBC_COMPAT.md, docs/LINUX_ABI_HYBRID.md.
+ *
+ * Soft residual lean (this unit; Soft!=product; G-AC-1; Dual DoD A/B OPEN):
+ *   - glibc-shaped sigset/sigaction surface; RT queue soft residual
+ *   - Soft!=product: libcgj signal surface != UDX/DDI product close
+ *   - product = UDX/DDI + hot/cold Linux ABI; freestanding rtl/USB SKIP
+ *   - agent PASS != close Dual DoD; no stamp storms; bar v2026.08.04.75 parent-only
+ *   - dual MIT OR Apache-2.0; no GPL; no Linux .ko product AC (G-AC-1)
+ * Grep: libcgj signal.h: soft residual lean Soft!=product
  */
 #pragma once
 

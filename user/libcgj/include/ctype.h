@@ -19,6 +19,15 @@
  * Non-goals
  * ---------
  * Full locale-dependent ctype tables beyond C; isw* family is separate.
+ *
+ * Soft residual (C2 libcgj ctype.h; Soft!=product; G-AC-1; Dual DoD A/B OPEN):
+ *   soft     = ASCII C-locale is*/to* + __ctype_*_loc table accessors;
+ *              bring-up may share process tables (not full TLS locale tables)
+ *   product  = UDX/DDI + hot/cold ABI hosts; not freestanding class; not .ko AC
+ *   honesty  = C-locale tables != full glibc locale product; agent PASS != Dual
+ *              DoD close; stamp-free bar honesty (no version stamp)
+ *   law      = dual MIT OR Apache-2.0; no GPL; H2 no stamp storms
+ * greppable: libcgj: ctype soft residual Soft!=product
  */
 #pragma once
 

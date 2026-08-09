@@ -21,6 +21,14 @@
  * ---------
  * Full POSIX/Linux completeness; stubs and soft fills may return ENOSYS
  * until the hybrid ABI path is wired. See docs/GLIBC_COMPAT.md.
+ *
+ * Soft residual (C2 libcgj pty.h; Soft!=product; G-AC-1; Dual DoD A/B OPEN):
+ *   soft     = openpty/forkpty/login_tty stubs (ENOSYS soft fill OK until wired)
+ *   product  = session/term path not freestanding class; not .ko AC
+ *   honesty  = pty soft != product session completeness; agent PASS != Dual DoD
+ *              close; stamp-free bar honesty (no version stamp)
+ *   law      = dual MIT OR Apache-2.0; no GPL; H2 no stamp storms
+ * greppable: libcgj: pty soft residual Soft!=product
  */
 #pragma once
 

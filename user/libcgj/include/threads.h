@@ -21,6 +21,18 @@
  * ---------
  * Full POSIX/Linux completeness; stubs and soft fills may return ENOSYS
  * until the hybrid ABI path is wired. See docs/GLIBC_COMPAT.md.
+ *
+ * Soft residual (C2 libcgj header; Soft!=product; G-AC-1; Dual DoD A/B OPEN):
+ *   soft path  = C11 thrd/mtx/cnd/tss/once over freestanding pthread fill
+ *   product    = multi-process confine / full NPTL product (OPEN; not here)
+ *   catalog    = thrd_* mtx_* cnd_* tss_* call_once + TSS_DTOR_ITERATIONS
+ *   honesty    = Soft!=product; thrd_exit soft residual != product thr teardown
+ *   hazard     = H3 thr_exit before as_destroy (process law residual OPEN);
+ *                H1 N/A; H2 once-lamp spirit only (no stamp storms)
+ *   Bar honesty v2026.08.04.75. NEVER bump GJ_IMAGE_VERSION from this unit.
+ * greppable: libcgj: soft residual threads
+ * greppable: libcgj: soft residual threads Soft!=product
+ * Dual MIT OR Apache-2.0. No GPL. G-AC-1. Dual DoD A/B OPEN.
  */
 #pragma once
 

@@ -4,51 +4,49 @@
  *
  * Early mono clock: PIT ch0 @ GJ_TIMER_HZ on remapped IRQ0 (vector 32).
  * After LAPIC calibrate, jiffies/mono prefer the local APIC (vector 48);
- * PIT is demoted to soft-fallback only (IRQ0 masked; no mono advance).
+ * PIT is demoted to soft-fallback only (IRQ0 unmasked for HLT wake; no mono).
  *
  * Soft mono (timer_mono_nsec_soft / mono soft snapshot) may interpolate
  * within the current APIC period using LAPIC CUR; coarse mono stays
  * jiffy-stable for futex/door deadlines. Quantum soft-preempt counters
- * deepen tick → yield-request → preempt_check observability.
+ * deepen tick -> yield-request -> preempt_check observability.
  *
  * Mono source preference (APIC/x2APIC armed):
  *   mono/jiffies advance from timer_tick_apic only; timer_tick EOIs PIC
  *   but never increments jiffies while g_fApicSource is set.
  * Honesty: full x2APIC ICR/timer replace of the 8259+PIT product path
  * remains PARTIAL when the hardware path is incomplete (xAPIC timer
- * handoff alone ≠ complete x2APIC ICR/timer replace).
+ * handoff alone != complete x2APIC ICR/timer replace).
  *
- * Soft timer inventory (Wave 10 base + Wave 13 path + Wave 35 exclusive deepen;
- * this unit only — greppable "timer: soft …"):
- *   timer: soft inventory     — ready/src/hz/quantum + surface catalog + wave
- *   timer: soft mono          — coarse/soft mono delta + pit/apic tick axes
- *   timer: soft preempt       — quantum slice + soft preempt_check counters
- *   timer: soft source        — PIT/APIC handoff + LAPIC INIT/CUR sample
- *   timer: soft apic mono     — APIC mono preference deepen (Wave 13)
- *   timer: soft path          — honesty catalog (product surface bounds)
- *   timer: soft handoff       — PIT→APIC demotion / switch tallies
- *   timer: soft interpolate   — LAPIC CUR soft-mono sample counters
- *   timer: soft deepen        — wave stamp + area catalog
- *   timer: soft PASS|FAIL     — soft lamp (ready + quantum); never hard-gates
- * Wave 15 complementary surfaces (kept; never reshape primary fields):
- *   timer: soft lamps         — ready/apic/x2/interp/quantum readiness lamps
- *   timer: soft stats         — aggregate path counters + wave
- *   timer: soft vectors       — PIT32 / APIC48 + EOI policy lamps
- *   timer: soft quantum       — slice/preempt/yield axis deepen
- *   timer: soft futex         — futex_timer_check coupling lamp (soft)
- *   timer: soft honesty       — soft ≠ full x2APIC ICR/timer product replace
- *   timer: soft surface       — bit catalog of soft product surfaces
- * Wave 16 complementary surfaces (kept; never reshape primary fields):
- *   timer: soft exclusive     — exclusive=1 unit stamp + wave
- *   timer: soft claim         — product claim bounds (soft-only)
- *   timer: soft ratio         — pit/apic/handoff/interp path ratios
- *   timer: soft eoi           — PIC EOI + spur policy lamps
- * Wave 17 complementary surfaces (kept) (never reshape primary fields):
- *   timer: soft return        — Wave 17 API return surfaces (kept)
- *   timer: soft return selftest — Wave 17 terminal return surface (kept)
- *   timer: soft retmap        — Wave 17 return-surface map (kept)
- * Diagnostics only — never hard-gates boot or product deadlines. Pure C.
- * Soft ≠ full x2APIC timer product (xAPIC handoff alone remains PARTIAL).
+ * Dual DoD A/B / H1 residual (Soft!=product - this unit exclusive; G-AC-1):
+ *   timer_tick / timer_tick_apic / irq_timer_handler NEVER call net_eth_poll.
+ *   Fault class (H1): timer IRQ -> net_eth_poll -> net_tcp_poll / soft residual ->
+ *   IRQ stack smash -> #PF I=1 wild RIP. Eth poll ownership is run-loop only
+ *   (scheduler_run on full thr stack). TIMER_H1_* compile-time locks + lean
+ *   residual lamps document ownership; soft PASS != product Dual DoD close
+ *   (host arping/ping / :22 still OPEN; agent!=close). Dual MIT|Apache-2.0.
+ *   No version stamps. No stamp storms (inventory cap init+handoff; residual
+ *   lean <= few greppable lines - never tick path). No GPL.
+ *
+ * Soft timer inventory (this unit only - greppable "timer: soft ..."):
+ *   timer: soft inventory     - ready/src/hz/quantum + H1 eth ownership tokens
+ *   timer: soft mono          - coarse/soft mono delta + pit/apic tick axes
+ *   timer: soft preempt       - quantum slice + soft preempt_check counters
+ *   timer: soft source        - PIT/APIC handoff + LAPIC INIT/CUR sample
+ *   timer: soft apic mono     - APIC mono preference deepen
+ *   timer: soft path          - honesty catalog (product surface bounds)
+ *   timer: soft handoff       - PIT->APIC demotion / switch tallies
+ *   timer: soft interpolate   - LAPIC CUR soft-mono sample counters
+ *   timer: soft eth           - lean H1 eth poll ownership (DoD B residual)
+ *   timer: soft residual      - lean dual_dod_b residual surface (Soft!=product)
+ *   timer: soft deepen        - area catalog (inventory-capped only)
+ *   timer: soft PASS|FAIL     - soft lamp (ready + quantum); never hard-gates
+ * Complementary surfaces (kept; never reshape primary fields):
+ *   timer: soft lamps|stats|vectors|quantum|futex|honesty|surface
+ *   timer: soft exclusive|claim|ratio|eoi
+ * Diagnostics only - never hard-gates boot or product deadlines. Pure C.
+ * Soft != full x2APIC timer product (xAPIC handoff alone remains PARTIAL).
+ * Soft != product Dual DoD B close.
  *
  * greppable: timer: soft inventory
  * greppable: timer: soft mono
@@ -58,6 +56,8 @@
  * greppable: timer: soft path
  * greppable: timer: soft handoff
  * greppable: timer: soft interpolate
+ * greppable: timer: soft eth
+ * greppable: timer: soft residual dual_dod_b
  * greppable: timer: soft deepen
  * greppable: timer: soft lamps
  * greppable: timer: soft stats
@@ -70,9 +70,6 @@
  * greppable: timer: soft claim
  * greppable: timer: soft ratio
  * greppable: timer: soft eoi
- * greppable: timer: soft return
- * greppable: timer: soft return selftest
- * greppable: timer: soft retmap
  * greppable: timer: soft PASS
  * greppable: timer: soft FAIL
  * greppable: timer: mono soft
@@ -82,6 +79,14 @@
  * greppable: timer: pit demoted soft
  * greppable: timer: apic mono preferred PASS
  * greppable: timer: x2apic mono replace soft
+ * greppable: net_eth_poll=run_loop_only
+ * greppable: net_eth_irq=0
+ * greppable: dual_dod_b
+ * greppable: dual_dod_a
+ * greppable: soft_ne_product=1
+ * greppable: G-AC-1
+ * greppable: TIMER_H1_
+ * greppable: fault_class=H1_irq_stack_smash
  */
 #include <gj/apic.h>
 #include <gj/cap.h>
@@ -106,7 +111,45 @@
 /* Soft inventory wave stamp (this unit exclusive deepen; never hard-gates). */
 #define TIMER_SOFT_WAVE 126u
 
-/* Soft surface bit lamps (Wave 15+ catalog; software-only claims). */
+/*
+ * Soft inventory emit cap: init + PIT->APIC handoff only (never timer_soft_log,
+ * never tick path). Multi-line dump collapsed; soft != product. G752 panel /
+ * COM1 storm guard. Paired with no net_eth_poll on IRQ (Dual DoD B residual).
+ */
+#define TIMER_SOFT_INV_CAP 2u
+
+/*
+ * H1 residual locks (C0 timer exclusive; Soft!=product; G-AC-1).
+ * Flip requires H1 review - timer IRQ -> net_eth_poll is #PF I=1 fault class.
+ * No net_eth.h in this unit - cannot call net_eth_poll by construction.
+ * Dual DoD A/B remain OPEN (agent!=close). No version stamps. No GPL.
+ * greppable: TIMER_H1_ | net_eth_irq=0 | tick_path=0 | dual_dod_b=OPEN
+ * greppable: fault_class=H1_irq_stack_smash | G-AC-1 | soft_ne_product=1
+ */
+#define TIMER_H1_ETH_POLL_IRQ    0u /* never net_eth_poll on timer IRQ */
+#define TIMER_H1_TICK_PATH       0u /* timer_tick has no eth poll */
+#define TIMER_H1_TICK_APIC_PATH  0u /* timer_tick_apic has no eth poll */
+#define TIMER_H1_IRQ_HANDLER     0u /* irq_timer_handler has no eth poll */
+#define TIMER_H1_NET_ETH_IRQ     0u /* net_eth_irq=0 forever from this unit */
+#define TIMER_H1_RUN_LOOP_ONLY   1u /* eth poll owner = scheduler_run thr */
+#define TIMER_H1_LEAN_CHECKS     6u /* soft residual lean self-check count */
+
+_Static_assert(TIMER_H1_ETH_POLL_IRQ == 0u,
+               "H1: timer IRQ must never call net_eth_poll");
+_Static_assert(TIMER_H1_TICK_PATH == 0u,
+               "H1: timer_tick path must not poll eth");
+_Static_assert(TIMER_H1_TICK_APIC_PATH == 0u,
+               "H1: timer_tick_apic path must not poll eth");
+_Static_assert(TIMER_H1_IRQ_HANDLER == 0u,
+               "H1: irq_timer_handler must not poll eth");
+_Static_assert(TIMER_H1_NET_ETH_IRQ == 0u,
+               "H1: net_eth_irq must be 0 (run-loop thr owns eth poll)");
+_Static_assert(TIMER_H1_RUN_LOOP_ONLY == 1u,
+               "H1: eth poll ownership is scheduler_run thr stack only");
+_Static_assert(TIMER_H1_LEAN_CHECKS == 6u,
+               "H1 lean: residual self-check count locked");
+
+/* Soft surface bit lamps (catalog; software-only claims). */
 #define TIMER_SOFT_SURF_MONO       (1u << 0)
 #define TIMER_SOFT_SURF_SOFT_MONO  (1u << 1)
 #define TIMER_SOFT_SURF_APIC_SRC   (1u << 2)
@@ -115,6 +158,8 @@
 #define TIMER_SOFT_SURF_INTERP     (1u << 5)
 #define TIMER_SOFT_SURF_FUTEX_COUP (1u << 6)
 #define TIMER_SOFT_SURF_HANDOFF    (1u << 7)
+/* Eth poll ownership: run-loop only (never timer IRQ). Dual DoD B residual. */
+#define TIMER_SOFT_SURF_ETH_RUNLOOP (1u << 8)
 /* Honesty: bit never claims full x2APIC ICR/timer product replace. */
 #define TIMER_SOFT_SURF_X2_FULL    0u
 
@@ -138,12 +183,12 @@ static u64          g_u64QuantumTicks;
 static u64          g_u64PitTicks;
 static u64          g_u64ApicMonoTicks;
 static u64          g_u64SourceSwitch;
-static u64          g_u64PitDemotions;      /* PIT→APIC soft demotions */
+static u64          g_u64PitDemotions;      /* PIT->APIC soft demotions */
 static u64          g_u64MonoPrefLogs;      /* mono preference soft log emits */
 
 /*
  * Soft timer inventory extras (Wave 10 base + Wave 13 path + Wave 20 deepen;
- * file-local). Emission + path tallies only — never hard product gates. wrap OK.
+ * file-local). Emission + path tallies only - never hard product gates. wrap OK.
  * greppable: timer: soft
  * greppable: timer: soft apic mono
  */
@@ -160,7 +205,7 @@ static u64          g_u64SoftTickApic;      /* timer_tick_apic entries */
 static u64          g_u64SoftTickPitEoi;    /* timer_tick always-EOI path */
 static u64          g_u64SoftHandoffCalls;  /* timer_set_apic_source entries */
 static u64          g_u64SoftHandoffSkip;   /* set_apic_source npt==0 skip */
-static u64          g_u64SoftHandoffFirst;  /* first PIT→APIC handoff */
+static u64          g_u64SoftHandoffFirst;  /* first PIT->APIC handoff */
 static u64          g_u64SoftSnapMono;      /* mono_soft_snapshot fills */
 static u64          g_u64SoftSnapMonoNull;  /* mono snapshot null out */
 static u64          g_u64SoftSnapPreempt;   /* preempt_soft_snapshot fills */
@@ -202,11 +247,11 @@ inb(u16 u16Port)
     return u8Val;
 }
 
-/* isr_stubs.S — IRQ0 after PIC remap (vector 32); PIC 1–15 share spurious */
+/* isr_stubs.S - IRQ0 after PIC remap (vector 32); PIC 1-15 share spurious */
 extern void irq_stub_0(void);
 extern void irq_stub_pic_spurious(void);
 
-/* Soft count of unhandled / spurious PIC IRQs (vectors 33–47). */
+/* Soft count of unhandled / spurious PIC IRQs (vectors 33-47). */
 static volatile u64 g_u64SoftPicSpurious;
 
 static void
@@ -239,19 +284,18 @@ timer_tick(void)
 {
     /*
      * Mono preference: when APIC/x2APIC timer source is armed, jiffies/mono
-     * advance only from timer_tick_apic. PIT IRQ0 is soft-fallback only —
+     * advance only from timer_tick_apic. PIT IRQ0 is soft-fallback only -
      * still EOI the PIC if a stray IRQ arrives, but do not advance mono.
      *
-     * Lab NIC: ALWAYS net_eth_poll on any timer IRQ (PIT or APIC). G752: if
-     * APIC handoff masks PIT and APIC IRQs are quiet, poll was dead after M0
-     * (panel n= frozen). Poll is cheap; dual-path is intentional.
+     * H1 / Dual DoD B residual (Soft!=product):
+     *   NEVER call net_eth_poll on this IRQ stack.
+     *   Fault class: timer IRQ -> net_eth_poll -> net_tcp_poll / soft residual
+     *   -> stack smash -> #PF I=1 wild RIP. Timer still wakes HLT; sched run
+     *   loop owns eth poll every pass (full thr stack). net_eth_irq=0.
+     *   net_eth_poll=run_loop_only. No soft inventory / kprintf here.
+     *   No net_eth.h - this unit cannot call net_eth_poll by construction.
      */
     timer_soft_inc(&g_u64SoftTickPitEoi);
-    {
-        extern void net_eth_poll(void);
-
-        net_eth_poll();
-    }
     if (!g_fApicSource) {
         g_u64Jiffies++;
         g_u64PitTicks++;
@@ -264,11 +308,18 @@ timer_tick(void)
         g_u64SoftPitStray++;
     }
     outb(PIC1_CMD, PIC_EOI);
+    /* H1: net_eth_poll never - run-loop only (Dual DoD B residual). */
 }
 
 void
 timer_tick_apic(void)
 {
+    /*
+     * APIC mono tick (BSP). Same side effects as PIT mono path, no PIC EOI.
+     * H1 / Dual DoD B residual: NEVER net_eth_poll here (IRQ stack smash).
+     * Eth poll ownership = scheduler_run thr stack only. Soft!=product.
+     * No net_eth.h - cannot call net_eth_poll by construction.
+     */
     timer_soft_inc(&g_u64SoftTickApic);
     g_u64Jiffies++;
     g_u64ApicMonoTicks++;
@@ -276,11 +327,7 @@ timer_tick_apic(void)
     timer_soft_inc(&g_u64SoftFutexCoupled);
     quantum_tick();
     revoke_hygiene_tick();
-    {
-        extern void net_eth_poll(void);
-
-        net_eth_poll();
-    }
+    /* H1: net_eth_poll never - run-loop only (see timer_tick Dual DoD B). */
 }
 
 void
@@ -337,7 +384,7 @@ timer_preempt_check(void)
     }
 }
 
-/* C entry from irq_stub_0 (PIC timer) */
+/* C entry from irq_stub_0 (PIC timer). H1: no net_eth_poll - timer_tick only. */
 void
 irq_timer_handler(void)
 {
@@ -345,7 +392,7 @@ irq_timer_handler(void)
 }
 
 /*
- * C entry from irq_stub_pic_spurious (PIC IRQs 1–15 → vectors 33–47).
+ * C entry from irq_stub_pic_spurious (PIC IRQs 1-15 -> vectors 33-47).
  * G752: after sti, PIC may deliver spurious IRQ7 (vec 39). Must have a
  * present gate + EOI or CPU raises #GP on the missing IDT entry.
  */
@@ -355,7 +402,7 @@ irq_pic_spurious_handler(void)
     if (g_u64SoftPicSpurious < ~0ull) {
         g_u64SoftPicSpurious++;
     }
-    /* Slave then master EOI covers IRQ8–15 and is harmless for master-only. */
+    /* Slave then master EOI covers IRQ8-15 and is harmless for master-only. */
     outb(PIC2_CMD, PIC_EOI);
     outb(PIC1_CMD, PIC_EOI);
 }
@@ -455,7 +502,7 @@ timer_init(void)
     g_u32SliceLeft = 5;
     /*
      * Program PIC+PIT with IRQ0 masked and IF left clear. Do NOT sti here.
-     * G752: any early sti in timer_init raced IRQ0 → kernel fault halt
+     * G752: any early sti in timer_init raced IRQ0 -> kernel fault halt
      * (RIP in timer_init / kprintf setup). IRQs enabled later via
      * timer_irq_enable() after APIC init.
      */
@@ -464,8 +511,8 @@ timer_init(void)
     pit_set_hz(GJ_TIMER_HZ);
     idt_set_gate(32, (void *)irq_stub_0, 0x8E);
     /*
-     * Install present gates for PIC IRQs 1–15 (vectors 33–47) BEFORE any
-     * later sti. Missing gate 39 → #GP on spurious IRQ7 (G752 STATUS
+     * Install present gates for PIC IRQs 1-15 (vectors 33-47) BEFORE any
+     * later sti. Missing gate 39 -> #GP on spurious IRQ7 (G752 STATUS
      * FAULT vec=13 err=0x13b rip=timer_irq_enable+sti).
      */
     {
@@ -527,13 +574,15 @@ timer_set_apic_source(u64 u64NsecPerTick)
         timer_soft_inc(&g_u64SoftHandoffFirst);
     }
     /*
-     * Prefer APIC for mono/jiffies. Keep PIT IRQ0 unmasked so lab net_eth_poll
-     * still runs if LAPIC timer IRQs are quiet (G752: n= frozen after M0 when
-     * PIT was fully masked). Mono still only advances from timer_tick_apic.
+     * Prefer APIC for mono/jiffies. Keep PIT IRQ0 unmasked so HLT still wakes
+     * if LAPIC timer IRQs are quiet (G752: frozen after M0 when PIT was fully
+     * masked). H1 / Dual DoD B residual: net_eth_poll is NOT on IRQ - sched
+     * run loop only (net_eth_poll=run_loop_only). Mono still only advances
+     * from timer_tick_apic. Soft!=product.
      */
     g_fApicSource = 1;
     outb(PIC2_DATA, 0xFF);
-    outb(PIC1_DATA, 0xFE); /* IRQ0 unmasked — poll path; mono not advanced */
+    outb(PIC1_DATA, 0xFE); /* IRQ0 unmasked - wake HLT; mono not advanced */
 
     /* Greppable mono preference + demotion lamps (product / smoke). */
     timer_mono_pref_soft_log();
@@ -544,9 +593,9 @@ timer_set_apic_source(u64 u64NsecPerTick)
                 (unsigned long)g_u64NsecPerTick,
                 (unsigned long)g_u64SourceSwitch,
                 (unsigned long)g_u64PitDemotions);
+        /* Soft inventory: first handoff only (paired with timer_init; capped). */
+        timer_soft_inventory_log();
     }
-    /* Wave 15: soft inventory after PIT→APIC handoff (apic mono preferred). */
-    timer_soft_inventory_log();
 }
 
 int
@@ -604,7 +653,7 @@ timer_mono_nsec_soft(void)
     u32Cur = apic_timer_cur_count();
     /*
      * LAPIC timer counts down from INIT to 0 each period.
-     * Elapsed fraction ≈ (INIT - CUR) / INIT; clamp CUR to INIT.
+     * Elapsed fraction ~= (INIT - CUR) / INIT; clamp CUR to INIT.
      */
     if (u32Cur > u32Init) {
         u32Cur = u32Init;
@@ -677,11 +726,11 @@ timer_preempt_soft_snapshot(struct gj_timer_preempt_soft *pOut)
 /**
  * Mono clock source preference soft log (APIC preferred when armed).
  * Prefix-stable markers:
- *   timer: mono source APIC soft …  — mono prefers APIC/x2APIC timer
- *   timer: mono source PIT soft …   — early boot / unarmed APIC path
- *   timer: pit demoted soft …       — PIT soft-fallback only (IRQ0 masked)
- *   timer: apic mono preferred PASS — product lamp when source is APIC
- *   timer: x2apic mono replace soft PARTIAL|… — honesty on full replace
+ *   timer: mono source APIC soft ...  - mono prefers APIC/x2APIC timer
+ *   timer: mono source PIT soft ...   - early boot / unarmed APIC path
+ *   timer: pit demoted soft ...       - PIT soft-fallback only (IRQ0 masked)
+ *   timer: apic mono preferred PASS - product lamp when source is APIC
+ *   timer: x2apic mono replace soft PARTIAL|... - honesty on full replace
  *
  * Never hard-gates boot; pure telemetry. Preserves quantum/preempt soft.
  * greppable: timer: mono source
@@ -746,11 +795,12 @@ timer_mono_pref_soft_log(void)
 
     if (fApic != 0) {
         /*
-         * PIT demoted: soft-fallback only — no mono advance from IRQ0.
+         * PIT demoted: soft-fallback only - no mono advance from IRQ0.
          * Grep: timer: pit demoted soft
          */
-        kprintf("timer: pit demoted soft irq0_masked=1 mono_advance=0 "
-                "soft_fallback=1 demotions=%lu switches=%lu "
+        /* IRQ0 stays unmasked so HLT still wakes; mono advance remains APIC. */
+        kprintf("timer: pit demoted soft irq0_masked=0 irq0_hlt_wake=1 "
+                "mono_advance=0 soft_fallback=1 demotions=%lu switches=%lu "
                 "vector_pit=32 vector_apic=48 pit_stray=%lu\n",
                 (unsigned long)g_u64PitDemotions,
                 (unsigned long)g_u64SourceSwitch,
@@ -767,7 +817,7 @@ timer_mono_pref_soft_log(void)
      * Honesty: full x2APIC ICR/timer replace of PIT remains PARTIAL while
      * the hardware product path is incomplete. APIC mono preference (even
      * with x2APIC mode on + INIT armed) does not claim complete 8259/PIT
-     * product exit — ICR/timer replace is still partial today.
+     * product exit - ICR/timer replace is still partial today.
      * Grep: timer: x2apic mono replace soft
      */
     if (fApic != 0) {
@@ -784,12 +834,12 @@ timer_mono_pref_soft_log(void)
             (unsigned)(fX2Supp != 0 ? 1u : 0u),
             (unsigned)u32Init, (unsigned)u32Cur);
 
-    /* Wave 13: twin soft apic mono axis under timer: soft … */
+    /* Wave 13: twin soft apic mono axis under timer: soft ... */
     timer_soft_apic_mono_log();
 }
 
 /**
- * Wave 13 exclusive: greppable "timer: soft apic mono …" deepen.
+ * Wave 13 exclusive: greppable "timer: soft apic mono ..." deepen.
  * Preference + demotion + LAPIC INIT/CUR + honesty; never hard-gates.
  * greppable: timer: soft apic mono
  * greppable: timer: apic mono preferred PASS
@@ -869,8 +919,9 @@ timer_soft_apic_mono_log(void)
     /* Twin lamp under soft prefix (legacy bare lamp kept in mono_pref). */
     if (fApic != 0) {
         kprintf("timer: soft apic mono preferred PASS\n");
+        /* irq0_masked=0: HLT wake; mono still only from timer_tick_apic. */
         kprintf("timer: soft apic mono %s init_armed=%u cur_live=%u "
-                "pit_mono_advance=0 irq0_masked=1\n",
+                "pit_mono_advance=0 irq0_masked=0 irq0_hlt_wake=1\n",
                 szVerdict,
                 (unsigned)(u32Init >= 2u ? 1u : 0u),
                 (unsigned)(u32Init >= 2u && u32Cur <= u32Init ? 1u : 0u));
@@ -884,9 +935,9 @@ timer_soft_apic_mono_log(void)
 
 /**
  * Greppable soft timer inventory (Wave 10 base + Wave 13 path + Wave 15 deepen).
- * Prefix-stable markers (timer: soft …). Primary field names stay stable;
- * Wave 15 adds complementary sub-lines only. Never allocates; safe from
- * boot soft-smoke / timer_soft_log. Soft ≠ full x2APIC ICR/timer product.
+ * Cap: TIMER_SOFT_INV_CAP emits - init + PIT->APIC handoff only (never tick,
+ * never timer_soft_log). Multi-line complementary stamps collapsed to a few
+ * dense rollups (G752 panel / COM1 storm guard). Soft != full x2APIC product.
  * greppable: timer: soft
  */
 static void
@@ -908,13 +959,17 @@ timer_soft_inventory_log(void)
     int fX2En;
     int fX2Supp;
     int fInterpLive;
-    u32 u32LampReady;
-    u32 u32LampApic;
-    u32 u32LampX2;
-    u32 u32LampInterp;
-    u32 u32LampQuantum;
-    u32 u32LampHandoff;
-    u32 u32LampFutex;
+
+    /* Cap: init + handoff only; later callers (soft_log, re-handoff) skip. */
+    if (g_u64SoftInventoryLogs >= (u64)TIMER_SOFT_INV_CAP) {
+        return;
+    }
+    /* Panel path (dead COM1): skip multi-line dump entirely. */
+    if (serial_thre_dead() != 0u) {
+        kprintf("timer: soft inventory SKIP (panel path cap)\n");
+        timer_soft_inc(&g_u64SoftInventoryLogs);
+        return;
+    }
 
     timer_mono_soft_snapshot(&stMono);
     timer_preempt_soft_snapshot(&stPre);
@@ -972,29 +1027,27 @@ timer_soft_inventory_log(void)
               TIMER_SOFT_SURF_APIC_SRC | TIMER_SOFT_SURF_PREEMPT |
               TIMER_SOFT_SURF_PIT_FALL | TIMER_SOFT_SURF_INTERP |
               TIMER_SOFT_SURF_FUTEX_COUP | TIMER_SOFT_SURF_HANDOFF |
-              TIMER_SOFT_SURF_X2_FULL;
+              TIMER_SOFT_SURF_ETH_RUNLOOP | TIMER_SOFT_SURF_X2_FULL;
 
-    u32LampReady = stMono.u32Ready != 0 ? 1u : 0u;
-    u32LampApic = fApic != 0 ? 1u : 0u;
-    u32LampX2 = fX2En != 0 ? 1u : 0u;
-    u32LampInterp = fInterpLive != 0 ? 1u : 0u;
-    u32LampQuantum = stPre.u32Quantum > 0 ? 1u : 0u;
-    u32LampHandoff = g_u64SourceSwitch > 0 ? 1u : 0u;
-    u32LampFutex = g_u64SoftFutexCoupled > 0 ? 1u : 0u;
-
-    /* Grep: timer: soft inventory — Wave 16 appends wave= only; keys stable. */
+    /*
+     * Collapsed inventory (storm guard; cap=init+handoff). H1 eth tokens once;
+     * lean residual surface below owns dual_dod_b detail.
+     * Grep: timer: soft inventory | net_eth_poll=run_loop_only | net_eth_irq=0
+     */
     kprintf("timer: soft inventory ready=%u src=%s hz=%u quantum=%u "
-            "jiffies=%lu npt=%lu logs=%lu "
+            "jiffies=%lu npt=%lu logs=%lu/%u "
             "g_timer_mono=1 soft_mono=1 apic_src=1 preempt=1 "
-            "apic_pref=1 pit_fallback=1 wave=%u\n",
+            "apic_pref=1 pit_fallback=1 cap=init_handoff "
+            "net_eth_irq=0 net_eth_poll=run_loop_only "
+            "irq0_hlt_wake=1 soft_ne_product=1 storm=0\n",
             (unsigned)stMono.u32Ready, szSrc, (unsigned)u32Hz,
             (unsigned)stPre.u32Quantum,
             (unsigned long)stMono.u64Jiffies,
             (unsigned long)stMono.u64NsecPerTick,
             (unsigned long)g_u64SoftInventoryLogs,
-            (unsigned)TIMER_SOFT_WAVE);
+            (unsigned)TIMER_SOFT_INV_CAP);
 
-    /* Grep: timer: soft mono */
+    /* Grep: timer: soft mono | timer: soft preempt | timer: soft source */
     kprintf("timer: soft mono coarse=%lu soft=%lu delta=%lu "
             "jiffies=%lu npt=%lu pit_ticks=%lu apic_ticks=%lu switches=%lu "
             "samples=%lu interp=%lu coarse_only=%lu clamp=%lu\n",
@@ -1010,8 +1063,6 @@ timer_soft_inventory_log(void)
             (unsigned long)g_u64SoftMonoInterp,
             (unsigned long)g_u64SoftMonoCoarseOnly,
             (unsigned long)g_u64SoftMonoClamp);
-
-    /* Grep: timer: soft preempt */
     kprintf("timer: soft preempt quantum=%u slice_left=%u preempts=%lu "
             "yields=%lu checks=%lu hits=%lu check_yields=%lu sets=%lu "
             "q_ticks=%lu\n",
@@ -1023,12 +1074,11 @@ timer_soft_inventory_log(void)
             (unsigned long)stPre.u64PreemptCheckYields,
             (unsigned long)stPre.u64QuantumSets,
             (unsigned long)stPre.u64QuantumTicks);
-
-    /* Grep: timer: soft source — preferred APIC; PIT soft-fallback when demoted */
+    /* irq0_masked=0 after handoff: HLT wake; mono only from APIC tick. */
     kprintf("timer: soft source=%s apic=%u preferred=%s pit_soft_fallback=%u "
             "init_cnt=%u cur_cnt=%u vector_pit=32 vector_apic=48 "
             "switches=%lu demotions=%lu pit_stray=%lu "
-            "x2apic_en=%u x2apic_supp=%u\n",
+            "x2apic_en=%u x2apic_supp=%u irq0_masked=0 irq0_hlt_wake=1\n",
             szSrc, (unsigned)(fApic != 0 ? 1u : 0u),
             szPreferred,
             (unsigned)(fApic != 0 ? 1u : 0u),
@@ -1039,1176 +1089,130 @@ timer_soft_inventory_log(void)
             (unsigned)(fX2En != 0 ? 1u : 0u),
             (unsigned)(fX2Supp != 0 ? 1u : 0u));
 
-    /* Grep: timer: soft handoff — PIT→APIC demotion / switch axis */
+    /*
+     * Collapsed handoff + interpolate + path (was 3 storm lines).
+     * Grep: timer: soft handoff | timer: soft interpolate | timer: soft path
+     */
     kprintf("timer: soft handoff switches=%lu demotions=%lu "
             "apic_src=%u preferred=%s pit_soft_fallback=%u "
-            "irq0_masked=%u mono_from_pit=%u mono_from_apic=%u "
-            "pit_stray=%lu npt=%lu\n",
+            "irq0_masked=0 irq0_hlt_wake=1 mono_from_pit=%u mono_from_apic=%u "
+            "pit_stray=%lu npt=%lu "
+            "interp_live=%u elapsed=%u frac_ppm=%u delta_nsec=%lu "
+            "path=coarse_mono+soft_mono+apic_pref+pit_fallback+preempt+"
+            "futex full_x2apic_icr_timer_replace=0 wave=%u via=timer.c\n",
             (unsigned long)stMono.u64SourceSwitch,
             (unsigned long)g_u64PitDemotions,
             (unsigned)(fApic != 0 ? 1u : 0u),
             szPreferred,
             (unsigned)(fApic != 0 ? 1u : 0u),
-            (unsigned)(fApic != 0 ? 1u : 0u),
             (unsigned)(fApic != 0 ? 0u : 1u),
             (unsigned)(fApic != 0 ? 1u : 0u),
             (unsigned long)g_u64SoftPitStray,
-            (unsigned long)stMono.u64NsecPerTick);
-
-    /* Grep: timer: soft interpolate — LAPIC CUR soft mono path */
-    kprintf("timer: soft interpolate live=%u init_cnt=%u cur_cnt=%u "
-            "elapsed=%u frac_ppm=%u delta_nsec=%lu samples=%lu "
-            "interp_ok=%lu coarse_only=%lu clamp=%lu "
-            "apic_src=%u npt=%lu\n",
+            (unsigned long)stMono.u64NsecPerTick,
             (unsigned)(fInterpLive != 0 ? 1u : 0u),
-            (unsigned)u32Init, (unsigned)u32Cur,
             (unsigned)u32Elapsed, (unsigned)u32FracPpm,
             (unsigned long)u64SoftDelta,
-            (unsigned long)g_u64SoftMonoSamples,
-            (unsigned long)g_u64SoftMonoInterp,
-            (unsigned long)g_u64SoftMonoCoarseOnly,
-            (unsigned long)g_u64SoftMonoClamp,
-            (unsigned)(fApic != 0 ? 1u : 0u),
-            (unsigned long)stMono.u64NsecPerTick);
-
-    /*
-     * Grep: timer: soft path
-     * Honesty catalog: product surface vs open full x2APIC ICR/timer replace.
-     * Soft inventory ≠ full x2APIC timer product (PARTIAL remains).
-     */
-    kprintf("timer: soft path coarse_mono=1 soft_mono=1 apic_pref=1 "
-            "pit_fallback=1 preempt_quantum=1 futex_timer_check=1 "
-            "full_x2apic_icr_timer_replace=0 claim_ "
-            "wave=%u via=timer.c\n",
             (unsigned)TIMER_SOFT_WAVE);
 
-    /* Wave 13 apic mono deepen (twin under soft inventory). */
+    /* Wave 13 apic mono deepen (twin under soft inventory; parent-capped). */
     timer_soft_apic_mono_log();
 
     /*
-     * Wave 15 complementary sub-lines (kept; never reshape primary).
+     * Collapsed complementary rollup (Wave 15-16 stamps were multi-line storm).
+     * Grep: timer: soft lamps | stats | vectors | quantum | futex | honesty |
+     *       surface | exclusive | claim | ratio | eoi | deepen
      */
-    /* Grep: timer: soft lamps */
     kprintf("timer: soft lamps ready=%u apic=%u x2=%u x2_supp=%u "
-            "interp=%u quantum=%u handoff=%u futex=%u "
-            "pit_active=%u preferred=%s\n",
-            (unsigned)u32LampReady, (unsigned)u32LampApic,
-            (unsigned)u32LampX2, (unsigned)(fX2Supp != 0 ? 1u : 0u),
-            (unsigned)u32LampInterp, (unsigned)u32LampQuantum,
-            (unsigned)u32LampHandoff, (unsigned)u32LampFutex,
+            "interp=%u quantum=%u handoff=%u futex=%u pit_active=%u "
+            "preferred=%s "
+            "stats tick_pit=%lu tick_apic=%lu tick_pit_eoi=%lu "
+            "handoff_calls=%lu handoff_first=%lu futex_coupled=%lu "
+            "inv_logs=%lu apic_mono_logs=%lu "
+            "vectors pit=32 apic=48 irq0_eoi=1 pic_mask_after_handoff=0 "
+            "pit_mono_advance=%u apic_mono_advance=%u "
+            "eoi pit_eoi=%lu irq0_masked=0 irq0_hlt_wake=1 wave=%u\n",
+            (unsigned)(stMono.u32Ready != 0 ? 1u : 0u),
+            (unsigned)(fApic != 0 ? 1u : 0u),
+            (unsigned)(fX2En != 0 ? 1u : 0u),
+            (unsigned)(fX2Supp != 0 ? 1u : 0u),
+            (unsigned)(fInterpLive != 0 ? 1u : 0u),
+            (unsigned)(stPre.u32Quantum > 0 ? 1u : 0u),
+            (unsigned)(g_u64SourceSwitch > 0 ? 1u : 0u),
+            (unsigned)(g_u64SoftFutexCoupled > 0 ? 1u : 0u),
             (unsigned)(fApic != 0 ? 0u : (g_fTimerReady ? 1u : 0u)),
-            szPreferred);
-
-    /* Grep: timer: soft stats */
-    kprintf("timer: soft stats tick_pit=%lu tick_apic=%lu tick_pit_eoi=%lu "
-            "handoff_calls=%lu handoff_skip=%lu handoff_first=%lu "
-            "snap_mono=%lu snap_mono_null=%lu snap_preempt=%lu "
-            "snap_preempt_null=%lu sleep=%lu sleep_guard=%lu "
-            "soft_log=%lu init=%lu futex_coupled=%lu "
-            "inv_logs=%lu apic_mono_logs=%lu wave=%u\n",
+            szPreferred,
             (unsigned long)g_u64SoftTickPit,
             (unsigned long)g_u64SoftTickApic,
             (unsigned long)g_u64SoftTickPitEoi,
             (unsigned long)g_u64SoftHandoffCalls,
-            (unsigned long)g_u64SoftHandoffSkip,
             (unsigned long)g_u64SoftHandoffFirst,
-            (unsigned long)g_u64SoftSnapMono,
-            (unsigned long)g_u64SoftSnapMonoNull,
-            (unsigned long)g_u64SoftSnapPreempt,
-            (unsigned long)g_u64SoftSnapPreemptNull,
-            (unsigned long)g_u64SoftSleepCalls,
-            (unsigned long)g_u64SoftSleepGuard,
-            (unsigned long)g_u64SoftLogCalls,
-            (unsigned long)g_u64SoftInitCalls,
             (unsigned long)g_u64SoftFutexCoupled,
             (unsigned long)g_u64SoftInventoryLogs,
             (unsigned long)g_u64SoftApicMonoLogs,
-            (unsigned)TIMER_SOFT_WAVE);
-
-    /* Grep: timer: soft vectors */
-    kprintf("timer: soft vectors pit=32 apic=48 irq0_eoi=1 "
-            "pit_mono_advance=%u apic_mono_advance=%u "
-            "pic_mask_after_handoff=%u spur_eoi=%u\n",
             (unsigned)(fApic != 0 ? 0u : 1u),
             (unsigned)(fApic != 0 ? 1u : 0u),
-            (unsigned)(fApic != 0 ? 1u : 0u),
-            (unsigned)(fApic != 0 ? 1u : 0u));
-
-    /* Grep: timer: soft quantum */
-    kprintf("timer: soft quantum ticks=%u slice_left=%u preempts=%lu "
-            "yield_req=%lu checks=%lu hits=%lu check_yields=%lu "
-            "sets=%lu q_ticks=%lu default=5 hz=%u\n",
-            (unsigned)stPre.u32Quantum, (unsigned)stPre.u32SliceLeft,
-            (unsigned long)stPre.u64Preempts,
-            (unsigned long)stPre.u64YieldRequests,
-            (unsigned long)stPre.u64PreemptChecks,
-            (unsigned long)stPre.u64PreemptCheckHits,
-            (unsigned long)stPre.u64PreemptCheckYields,
-            (unsigned long)stPre.u64QuantumSets,
-            (unsigned long)stPre.u64QuantumTicks,
-            (unsigned)u32Hz);
-
-    /* Grep: timer: soft futex — mono tick → futex_timer_check coupling */
-    kprintf("timer: soft futex coupled=%lu tick_pit=%lu tick_apic=%lu "
-            "path=timer_tick|timer_tick_apic hard_gate=0\n",
-            (unsigned long)g_u64SoftFutexCoupled,
-            (unsigned long)g_u64SoftTickPit,
-            (unsigned long)g_u64SoftTickApic);
+            (unsigned long)g_u64SoftTickPitEoi,
+            (unsigned)TIMER_SOFT_WAVE);
 
     /*
-     * Grep: timer: soft honesty
-     * Explicit: soft inventory deepen ≠ full x2APIC ICR/timer product.
-     * xAPIC mono handoff alone remains PARTIAL.
+     * Honesty rollup (x2APIC partial claim). Dual DoD B residual tokens live
+     * on the lean residual + eth lamps below - not restated here (storm lean).
+     * Grep: timer: soft honesty | soft_ne_product
      */
     kprintf("timer: soft honesty soft_ne_full_x2apic=1 "
             "full_x2apic_icr_timer_replace=0 apic_src=%u x2apic_en=%u "
             "x2apic_supp=%u claim=PARTIAL product_complete=0 "
-            "wave=%u unit=timer.c\n",
+            "surface bits=0x%x exclusive=1 unit=timer.c "
+            "ratio tick_pit=%lu tick_apic=%lu pit_stray=%lu handoff=%lu "
+            "interp=%lu futex_coupled=%lu "
+            "deepen areas=inventory,mono,preempt,source,apic_mono,path,"
+            "handoff,interpolate,eth,residual,lamps,stats,vectors,quantum,"
+            "futex,honesty,surface,exclusive,claim,ratio,eoi "
+            "cap=%u logs=%lu hard_gate=0 soft_ne_product=1\n",
             (unsigned)(fApic != 0 ? 1u : 0u),
             (unsigned)(fX2En != 0 ? 1u : 0u),
             (unsigned)(fX2Supp != 0 ? 1u : 0u),
-            (unsigned)TIMER_SOFT_WAVE);
-
-    /* Grep: timer: soft surface — bit catalog of soft product surfaces */
-    kprintf("timer: soft surface bits=0x%x mono=1 soft_mono=1 apic_src=1 "
-            "preempt=1 pit_fallback=1 interp=1 futex_coup=1 handoff=1 "
-            "x2_full_replace=0 wave=%u\n",
-            (unsigned)u32Surf, (unsigned)TIMER_SOFT_WAVE);
-
-    /*
-     * Wave 16 complementary sub-lines (kept; never reshape primary).
-     */
-    /* Grep: timer: soft exclusive */
-    kprintf("timer: soft exclusive wave=%u exclusive=1 soft=1 "
-            "unit=timer.c hard_gate=0 product_complete=0 "
-            "soft_ne_full_x2apic=1\n",
-            (unsigned)TIMER_SOFT_WAVE);
-
-    /* Grep: timer: soft claim — product claim bounds (soft-only) */
-    kprintf("timer: soft claim coarse_mono=1 soft_mono=1 apic_pref=1 "
-            "pit_fallback=1 preempt_quantum=1 futex_timer_check=1 "
-            "vector_pit=32 vector_apic=48 full_x2apic_icr_timer_replace=0 "
-            "claim=PARTIAL wave=%u\n",
-            (unsigned)TIMER_SOFT_WAVE);
-
-    /* Grep: timer: soft ratio — pit/apic/handoff/interp path ratios */
-    kprintf("timer: soft ratio tick_pit=%lu tick_apic=%lu "
-            "pit_stray=%lu handoff=%lu demotions=%lu "
-            "interp=%lu coarse_only=%lu clamp=%lu "
-            "futex_coupled=%lu sleep_guard=%lu wave=%u\n",
+            (unsigned)u32Surf,
             (unsigned long)g_u64SoftTickPit,
             (unsigned long)g_u64SoftTickApic,
             (unsigned long)g_u64SoftPitStray,
             (unsigned long)g_u64SourceSwitch,
-            (unsigned long)g_u64PitDemotions,
             (unsigned long)g_u64SoftMonoInterp,
-            (unsigned long)g_u64SoftMonoCoarseOnly,
-            (unsigned long)g_u64SoftMonoClamp,
             (unsigned long)g_u64SoftFutexCoupled,
-            (unsigned long)g_u64SoftSleepGuard,
-            (unsigned)TIMER_SOFT_WAVE);
-
-    /* Grep: timer: soft eoi — PIC EOI + spur policy lamps */
-    kprintf("timer: soft eoi pit_eoi=%lu spur_eoi=%u irq0_masked=%u "
-            "apic_src=%u mono_from_pit=%u mono_from_apic=%u "
-            "pic1_eoi=1 wave=%u\n",
-            (unsigned long)g_u64SoftTickPitEoi,
-            (unsigned)(fApic != 0 ? 1u : 0u),
-            (unsigned)(fApic != 0 ? 1u : 0u),
-            (unsigned)(fApic != 0 ? 1u : 0u),
-            (unsigned)(fApic != 0 ? 0u : 1u),
-            (unsigned)(fApic != 0 ? 1u : 0u),
-            (unsigned)TIMER_SOFT_WAVE);
+            (unsigned)TIMER_SOFT_INV_CAP,
+            (unsigned long)g_u64SoftInventoryLogs);
 
     /*
-     * Wave 17 complementary sub-lines (kept) (never reshape primary).
-     * Return surfaces only — soft inventory; never hard-gates product paths.
+     * Lean Dual DoD A/B / H1 residual (Soft!=product; inventory-capped only).
+     * Two greppable lines max - no stamp storms, no version stamp.
+     * Compile-time TIMER_H1_* locks + run-loop-only ownership; never product close.
+     * Grep: timer: soft eth | timer: soft residual dual_dod_b
+     * Grep: net_eth_poll=run_loop_only | net_eth_irq=0 | dual_dod_b | G-AC-1
+     * Grep: fault_class=H1_irq_stack_smash | TIMER_H1_ | soft_ne_product=1
      */
-    /* Grep: timer: soft return — Wave 17 API return surfaces (kept) */
-    kprintf("timer: soft return ready=%u apic_src=%u mono=1 soft_mono=1 "
-            "preempt=1 futex=1 product_kernel=OPEN hard_gate=0 "
-            "wave=%u soft PASS\n",
-            (unsigned)stMono.u32Ready,
-            (unsigned)(fApic != 0 ? 1u : 0u),
-            (unsigned)TIMER_SOFT_WAVE);
-
-    /* Grep: timer: soft return selftest — Wave 17 terminal return surface (kept) */
-    kprintf("timer: soft return selftest inv_ret=1 product_kernel=OPEN "
-            "multi_server=0 x2_full_replace=0 wave=%u soft PASS\n",
-            (unsigned)TIMER_SOFT_WAVE);
-
-    /* Grep: timer: soft retmap — Wave 17 return-surface map (kept) */
-    kprintf("timer: soft retmap init=1 tick=1 mono=1 sleep=1 "
-            "soft_inv=1 deepen=1 product=OPEN wave=%u soft PASS\n",
-            (unsigned)TIMER_SOFT_WAVE);
-
-    /*
-     * ---- Wave 18 complementary surfaces (kept) (never reshape primary).
-     * Return surfaces only — soft inventory; never hard-gates product paths.
-     */
-    /* Grep: timer: soft return rate — Wave 19 ok/fail rate lamps */
-    kprintf("timer: soft return rate soft_inv=1 selftest=1 retmap=1 "
-            "product_kernel=OPEN hard_gate=0 wave=%u "
-            "(return rate; Soft≠product)\n",
-            (unsigned)TIMER_SOFT_WAVE);
-
-    /* Grep: timer: soft retcode — Wave 19 retcode catalog */
-    kprintf("timer: soft retcode ok=1 fail=1 inval=1 busy=1 "
-            "selftest=1 retmap=1 product=OPEN soft_ne_product=1 wave=%u "
-            "(retcode catalog; Soft≠product)\n",
-            (unsigned)TIMER_SOFT_WAVE);
-
-    /* Grep: timer: soft deepen — wave stamp + area catalog */
-    /*
-     * ---- Wave 19 complementary surfaces (kept) (never reshape primary).
-     * Return surfaces only — soft inventory; never hard-gates product paths.
-     */
-    /* Grep: timer: soft retclass — Wave 19 return-class taxonomy (kept) */
-    kprintf("timer: soft retclass ok|fail|inval|nodev|busy|nomem "
-            "soft_only=1 product_gate=0 wave=%u "
-            "(retclass taxonomy; Soft≠product)\n",
-            (unsigned)TIMER_SOFT_WAVE);
-    /* Grep: timer: soft retlane — Wave 19 return-lane catalog (kept) */
-    kprintf("timer: soft retlane inv|selftest|rate|retcode|retmap|class "
-            "product_kernel=OPEN soft_ne_product=1 wave=%u "
-            "(retlane catalog; Soft≠product)\n",
-            (unsigned)TIMER_SOFT_WAVE);
-    /*
-     * ---- Wave 20 complementary surfaces (kept) (never reshape primary).
-     * Return surfaces only — soft inventory; never hard-gates product paths.
-     */
-    /* Grep: timer: soft retbound — Wave 20 return-bound honesty (kept) */
-    kprintf("timer: soft retbound soft_only=1 product_gate=0 hard_gate=0 "
-            "never_blocks_m0=1 wave=%u "
-            "(retbound honesty; Soft≠product)\n",
-            (unsigned)TIMER_SOFT_WAVE);
-    /* Grep: timer: soft retseal — Wave 20 seal stamp (kept) */
-    kprintf("timer: soft retseal exclusive=1 soft_ne_product=1 "
-            "product_kernel=OPEN wave=%u "
-            "(retseal stamp; Soft≠product)\n",
-            (unsigned)TIMER_SOFT_WAVE);
-            /*
-             * ---- Wave 21 complementary surfaces (kept) (never reshape primary).
-             * Return surfaces only — soft inventory; never hard-gates product paths.
-            */
-            /* Grep: timer: soft retpulse — Wave 21 return-pulse honesty (kept) */
-            kprintf("timer: soft retpulse soft_only=1 product_gate=0 soft_ne_product=1 "
-                    "never_blocks_m0=1 wave=%u "
-                    "(retpulse honesty; Soft≠product)\n",
-                    (unsigned)TIMER_SOFT_WAVE);
-            /* Grep: timer: soft retmark — Wave 21 mark stamp (kept) */
-            kprintf("timer: soft retmark exclusive=1 soft_ne_product=1 "
-                    "product_kernel=OPEN wave=%u "
-                    "(retmark stamp; Soft≠product)\n",
-                    (unsigned)TIMER_SOFT_WAVE);
-            /*
-             * ---- Wave 22 complementary surfaces (kept) (never reshape primary).
-             * Return surfaces only — soft inventory; never hard-gates product paths.
-            */
-            /* Grep: timer: soft retphase — Wave 22 return-phase honesty (kept) */
-            kprintf("timer: soft retphase soft_only=1 product_gate=0 soft_ne_product=1 "
-                    "never_blocks_m0=1 wave=%u "
-                    "(retphase honesty; Soft≠product)\n",
-                    (unsigned)TIMER_SOFT_WAVE);
-            /* Grep: timer: soft retbadge — Wave 22 badge stamp (kept) */
-            kprintf("timer: soft retbadge exclusive=1 soft_ne_product=1 "
-                    "product_kernel=OPEN wave=%u "
-                    "(retbadge stamp; Soft≠product)\n",
-                    (unsigned)TIMER_SOFT_WAVE);
-/*
- * ---- Wave 23 complementary surfaces (kept) (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
-            */
-            /* Grep: timer: soft rettoken — Wave 23 return-token honesty (kept) */
-            kprintf("timer: soft rettoken soft_only=1 product_gate=0 soft_ne_product=1 "
-                    "never_blocks_m0=1 wave=%u "
-                    "(rettoken honesty; Soft≠product)\n",
-                    (unsigned)TIMER_SOFT_WAVE);
-            /* Grep: timer: soft retcrest — Wave 23 crest stamp (kept) */
-            kprintf("timer: soft retcrest exclusive=1 soft_ne_product=1 "
-                    "product_kernel=OPEN wave=%u "
-                    "(retcrest stamp; Soft≠product)\n",
-                    (unsigned)TIMER_SOFT_WAVE);
-            /*
-             * ---- Wave 24 complementary surfaces (kept) (never reshape primary).
-             * Return surfaces only — soft inventory; never hard-gates product paths.
-             */
-            /* Grep: timer: soft retvault — Wave 24 return-vault honesty (kept) */
-            kprintf("timer: soft retvault soft_only=1 product_gate=0 soft_ne_product=1 "
-                    "never_blocks_m0=1 wave=%u "
-                    "(retvault honesty; Soft≠product)\n",
-                    (unsigned)TIMER_SOFT_WAVE);
-            /* Grep: timer: soft retbanner — Wave 24 banner stamp (kept) */
-            kprintf("timer: soft retbanner exclusive=1 soft_ne_product=1 "
-                    "product_kernel=OPEN wave=%u "
-                    "(retbanner stamp; Soft≠product)\n",
-                    (unsigned)TIMER_SOFT_WAVE);
-            /*
-             * ---- Wave 25 complementary surfaces (kept) (never reshape primary).
-             * Return surfaces only — soft inventory; never hard-gates product paths.
-             */
-            /* Grep: timer: soft retledger — Wave 25 return-ledger honesty (kept) */
-            kprintf("timer: soft retledger soft_only=1 product_gate=0 soft_ne_product=1 "
-                    "never_blocks_m0=1 wave=%u "
-                    "(retledger honesty; Soft≠product)\n",
-                    (unsigned)TIMER_SOFT_WAVE);
-            /* Grep: timer: soft retbeacon — Wave 25 beacon stamp (kept) */
-            kprintf("timer: soft retbeacon exclusive=1 soft_ne_product=1 "
-                    "product_kernel=OPEN wave=%u "
-                    "(retbeacon stamp; Soft≠product)\n",
-                    (unsigned)TIMER_SOFT_WAVE);
-            /*
-             * ---- Wave 26 complementary surfaces (kept) (never reshape primary).
-             * Return surfaces only — soft inventory; never hard-gates product paths.
-             */
-            /* Grep: timer: soft retcipher — Wave 26 return-cipher honesty (kept) */
-            kprintf("timer: soft retcipher soft_only=1 product_gate=0 soft_ne_product=1 "
-                    "never_blocks_m0=1 wave=%u "
-                    "(retcipher honesty; Soft≠product)\n",
-                    (unsigned)TIMER_SOFT_WAVE);
-            /* Grep: timer: soft retflame — Wave 26 flame stamp (kept) */
-            kprintf("timer: soft retflame exclusive=1 soft_ne_product=1 "
-                    "product_kernel=OPEN wave=%u "
-                    "(retflame stamp; Soft≠product)\n",
-                    (unsigned)TIMER_SOFT_WAVE);
-                    /*
-                     * ---- Wave 27 complementary surfaces (kept) (never reshape primary).
-                     * Return surfaces only — soft inventory; never hard-gates product paths.
-                     */
-                    /* Grep: timer: soft retprism — Wave 27 return-prism honesty (kept) */
-                    kprintf("timer: soft retprism soft_only=1 product_gate=0 soft_ne_product=1 "
-                            "never_blocks_m0=1 wave=%u "
-                            "(retprism honesty; Soft≠product)\n",
-                            (unsigned)TIMER_SOFT_WAVE);
-                    /* Grep: timer: soft retforge — Wave 27 forge stamp (kept) */
-                    kprintf("timer: soft retforge exclusive=1 soft_ne_product=1 "
-                            "product_kernel=OPEN wave=%u "
-                            "(retforge stamp; Soft≠product)\n",
-                            (unsigned)TIMER_SOFT_WAVE);
-                            /*
-                             * ---- Wave 28 complementary surfaces (kept) (never reshape primary).
-                             * Return surfaces only — soft inventory; never hard-gates product paths.
-                             */
-                            /* Grep: timer: soft retshard — Wave 28 return-shard honesty (kept) */
-                            kprintf("timer: soft retshard soft_only=1 product_gate=0 soft_ne_product=1 "
-                                "never_blocks_m0=1 wave=%u "
-                                "(retshard honesty; Soft≠product)\n",
-                                (unsigned)TIMER_SOFT_WAVE);
-                            /* Grep: timer: soft retcrown — Wave 28 crown stamp (kept) */
-                            kprintf("timer: soft retcrown exclusive=1 soft_ne_product=1 "
-                                "product_kernel=OPEN wave=%u "
-                                "(retcrown stamp; Soft≠product)\n",
-                                (unsigned)TIMER_SOFT_WAVE);
-                                /*
-                             * ---- Wave 29 complementary surfaces (kept) (never reshape primary).
-                             * Return surfaces only — soft inventory; never hard-gates product paths.
-                             */
-                            /* Grep: timer: soft retglyph — Wave 29 return-glyph honesty (kept) */
-                            kprintf("timer: soft retglyph soft_only=1 product_gate=0 soft_ne_product=1 "
-                                    "never_blocks_m0=1 wave=%u "
-                                    "(retglyph honesty; Soft≠product)\n",
-                                    (unsigned)TIMER_SOFT_WAVE);
-                            /* Grep: timer: soft retscepter — Wave 29 scepter stamp (kept) */
-                            kprintf("timer: soft retscepter exclusive=1 soft_ne_product=1 "
-                                    "product_kernel=OPEN wave=%u "
-                                    "(retscepter stamp; Soft≠product)\n",
-                                    (unsigned)TIMER_SOFT_WAVE);
-                                /*
-                             * ---- Wave 30 complementary surfaces (kept) (never reshape primary).
-                             * Return surfaces only — soft inventory; never hard-gates product paths.
-                             */
-                            /* Grep: timer: soft retsigil — Wave 30 return-sigil honesty (kept) */
-                            kprintf("timer: soft retsigil soft_only=1 product_gate=0 soft_ne_product=1 "
-                                    "never_blocks_m0=1 wave=%u "
-                                    "(retsigil honesty; Soft≠product)\n",
-                                    (unsigned)TIMER_SOFT_WAVE);
-                            /* Grep: timer: soft retemblem — Wave 30 emblem stamp (kept) */
-                            kprintf("timer: soft retemblem exclusive=1 soft_ne_product=1 "
-                                    "product_kernel=OPEN wave=%u "
-                                    "(retemblem stamp; Soft≠product)\n",
-                                    (unsigned)TIMER_SOFT_WAVE);
-                            /*
-                             * ---- Wave 31 complementary surfaces (kept) (never reshape primary).
-                             * Return surfaces only — soft inventory; never hard-gates product paths.
-                             */
-                            /* Grep: timer: soft retaegis — Wave 31 return-aegis honesty (kept) */
-                            kprintf("timer: soft retaegis soft_only=1 product_gate=0 soft_ne_product=1 "
-                                    "never_blocks_m0=1 wave=%u "
-                                    "(retaegis honesty; Soft≠product)\n",
-                                    (unsigned)TIMER_SOFT_WAVE);
-                            /* Grep: timer: soft retsigil — Wave 30 return-sigil honesty (kept) */
-                            kprintf("timer: soft retsigil soft_only=1 product_gate=0 soft_ne_product=1 "
-                                    "never_blocks_m0=1 wave=%u "
-                                    "(retsigil honesty; Soft≠product)\n",
-                                    (unsigned)TIMER_SOFT_WAVE);
-                            /* Grep: timer: soft retmantle — Wave 31 mantle stamp (kept) */
-                            kprintf("timer: soft retmantle exclusive=1 soft_ne_product=1 "
-                                    "product_kernel=OPEN wave=%u "
-                                    "(retmantle stamp; Soft≠product)\n",
-                                    (unsigned)TIMER_SOFT_WAVE);
-/*
- * ---- Wave 32 complementary surfaces (kept) (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: timer: soft retbulwark — Wave 32 return-bulwark honesty (kept) */
-kprintf("timer: soft retbulwark soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=%u "
-        "(retbulwark honesty; Soft≠product)\n",
-        (unsigned)TIMER_SOFT_WAVE);
-/* Grep: timer: soft retpanoply — Wave 32 panoply stamp (kept) */
-kprintf("timer: soft retpanoply exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=%u "
-        "(retpanoply stamp; Soft≠product)\n",
-        (unsigned)TIMER_SOFT_WAVE);
-/*
- * ---- Wave 33 complementary surfaces (kept) (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: timer: soft retbastion — Wave 33 return-bastion honesty (kept) */
-kprintf("timer: soft retbastion soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=%u "
-        "(retbastion honesty; Soft≠product)\n",
-        (unsigned)TIMER_SOFT_WAVE);
-/* Grep: timer: soft retcitadel — Wave 33 citadel stamp (kept) */
-kprintf("timer: soft retcitadel exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=%u "
-        "(retcitadel stamp; Soft≠product)\n",
-        (unsigned)TIMER_SOFT_WAVE);
-/*
- * ---- Wave 34 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: timer: soft retredoubt — Wave 34 return-redoubt honesty */
-kprintf("timer: soft retredoubt soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=%u "
-        "(retredoubt honesty; Soft≠product)\n",
-        (unsigned)TIMER_SOFT_WAVE);
-/* Grep: timer: soft retkeep — Wave 34 exclusive keep stamp */
-kprintf("timer: soft retkeep exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=%u "
-        "(retkeep stamp; Soft≠product)\n",
-        (unsigned)TIMER_SOFT_WAVE);
-/*
- * ---- Wave 35 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: timer: soft retfortress — Wave 35 return-fortress honesty */
-kprintf("timer: soft retfortress soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=%u "
-        "(retfortress honesty; Soft≠product)\n",
-        (unsigned)TIMER_SOFT_WAVE);
-/* Grep: timer: soft retpalace — Wave 35 exclusive palace stamp */
-kprintf("timer: soft retpalace exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=%u "
-        "(retpalace stamp; Soft≠product)\n",
-        (unsigned)TIMER_SOFT_WAVE);
-/*
- * ---- Wave 36 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: timer: soft rethold — Wave 36 return-hold honesty */
-kprintf("timer: soft rethold soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=%u "
-        "(rethold honesty; Soft≠product)\n",
-        (unsigned)TIMER_SOFT_WAVE);
-/* Grep: timer: soft retspire — Wave 36 exclusive spire stamp */
-kprintf("timer: soft retspire exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=%u "
-        "(retspire stamp; Soft≠product)\n",
-        (unsigned)TIMER_SOFT_WAVE);
-/*
- * ---- Wave 37 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: timer: soft retwall — Wave 37 return-wall honesty */
-kprintf("timer: soft retwall soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=%u "
-        "(retwall honesty; Soft≠product)\n",
-        (unsigned)TIMER_SOFT_WAVE);
-/* Grep: timer: soft retgate — Wave 37 exclusive gate stamp */
-kprintf("timer: soft retgate exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=%u "
-        "(retgate stamp; Soft≠product)\n",
-        (unsigned)TIMER_SOFT_WAVE);
-/*
- * ---- Wave 38 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: timer: soft retmoat — Wave 38 return-moat honesty */
-kprintf("timer: soft retmoat soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=%u "
-        "(retmoat honesty; Soft≠product)\n",
-        (unsigned)TIMER_SOFT_WAVE);
-/* Grep: timer: soft retower — Wave 38 exclusive tower stamp */
-kprintf("timer: soft retower exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=%u "
-        "(retower stamp; Soft≠product)\n",
-        (unsigned)TIMER_SOFT_WAVE);
-                            
-/*
- * ---- Wave 39 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: timer: soft retbarbican — Wave 39 return-barbican honesty */
-kprintf("timer: soft retbarbican soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=%u "
-        "(retbarbican honesty; Soft≠product)\n",
-        (unsigned)TIMER_SOFT_WAVE);
-/* Grep: timer: soft retglacis — Wave 39 exclusive glacis stamp */
-kprintf("timer: soft retglacis exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=%u "
-        "(retglacis stamp; Soft≠product)\n",
-        (unsigned)TIMER_SOFT_WAVE);
-/*
- * ---- Wave 40 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: timer: soft retcurtain — Wave 40 return-curtain honesty */
-kprintf("timer: soft retcurtain soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=%u "
-        "(retcurtain honesty; Soft≠product)\n",
-        (unsigned)TIMER_SOFT_WAVE);
-/* Grep: timer: soft retparapet — Wave 40 exclusive parapet stamp */
-kprintf("timer: soft retparapet exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=%u "
-        "(retparapet stamp; Soft≠product)\n",
-        (unsigned)TIMER_SOFT_WAVE);
-/*
- * ---- Wave 41 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: timer: soft retravelin — Wave 41 return-travelin honesty */
-kprintf("timer: soft retravelin soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=%u "
-        "(retravelin honesty; Soft≠product)\n",
-        (unsigned)TIMER_SOFT_WAVE);
-/* Grep: timer: soft retditch — Wave 41 exclusive ditch stamp */
-kprintf("timer: soft retditch exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=%u "
-        "(retditch stamp; Soft≠product)\n",
-        (unsigned)TIMER_SOFT_WAVE);
-/*
- * ---- Wave 42 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: timer: soft retportcullis — Wave 42 return-portcullis honesty */
-kprintf("timer: soft retportcullis soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=%u "
-        "(retportcullis honesty; Soft≠product)\n",
-        (unsigned)TIMER_SOFT_WAVE);
-/* Grep: timer: soft retbattlement — Wave 42 exclusive battlement stamp */
-kprintf("timer: soft retbattlement exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=%u "
-        "(retbattlement stamp; Soft≠product)\n",
-        (unsigned)TIMER_SOFT_WAVE);
-/*
- * ---- Wave 43 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: timer: soft retmachicolation — Wave 43 return-machicolation honesty */
-kprintf("timer: soft retmachicolation soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=%u "
-        "(retmachicolation honesty; Soft≠product)\n",
-        (unsigned)TIMER_SOFT_WAVE);
-/* Grep: timer: soft retarrowslit — Wave 43 exclusive arrowslit stamp */
-kprintf("timer: soft retarrowslit exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=%u "
-        "(retarrowslit stamp; Soft≠product)\n",
-        (unsigned)TIMER_SOFT_WAVE);
-
-/*
- * ---- Wave 44 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: timer: soft retmerlon — Wave 44 return-merlon honesty */
-kprintf("timer: soft retmerlon soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=%u "
-        "(retmerlon honesty; Soft≠product)\n",
-        (unsigned)TIMER_SOFT_WAVE);
-/* Grep: timer: soft retembrasure — Wave 44 exclusive embrasure stamp */
-kprintf("timer: soft retembrasure exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=%u "
-        "(retembrasure stamp; Soft≠product)\n",
-        (unsigned)TIMER_SOFT_WAVE);
-
-/*
- * ---- Wave 45 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: timer: soft retkeepgate — Wave 45 return-keepgate honesty */
-kprintf("timer: soft retkeepgate soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=%u "
-        "(retkeepgate honesty; Soft≠product)\n",
-        (unsigned)TIMER_SOFT_WAVE);
-/* Grep: timer: soft retouterward — Wave 45 exclusive outerward stamp */
-kprintf("timer: soft retouterward exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=%u "
-        "(retouterward stamp; Soft≠product)\n",
-        (unsigned)TIMER_SOFT_WAVE);
-
-/*
- * ---- Wave 46 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: timer: soft retbailey — Wave 46 return-bailey honesty */
-kprintf("timer: soft retbailey soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=%u "
-        "(retbailey honesty; Soft≠product)\n",
-        (unsigned)TIMER_SOFT_WAVE);
-/* Grep: timer: soft retpostern — Wave 46 exclusive postern stamp */
-kprintf("timer: soft retpostern exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=%u "
-        "(retpostern stamp; Soft≠product)\n",
-        (unsigned)TIMER_SOFT_WAVE);
-
-/*
- * ---- Wave 47 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: timer: soft retinnerward — Wave 47 return-innerward honesty */
-kprintf("timer: soft retinnerward soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=118 "
-        "(retinnerward honesty; Soft≠product)\n");
-/* Grep: timer: soft retdonjon — Wave 47 exclusive donjon stamp */
-kprintf("timer: soft retdonjon exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=118 "
-        "(retdonjon stamp; Soft≠product)\n");
-
-/*
- * ---- Wave 48 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: timer: soft retchevaux — Wave 48 return-chevaux honesty */
-kprintf("timer: soft retchevaux soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=118 "
-        "(retchevaux honesty; Soft≠product)\n");
-/* Grep: timer: soft retpalisade — Wave 48 exclusive palisade stamp */
-kprintf("timer: soft retpalisade exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=118 "
-        "(retpalisade stamp; Soft≠product)\n");
-
-/*
- * ---- Wave 49 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: timer: soft retglacisgate — Wave 49 return-glacisgate honesty */
-kprintf("timer: soft retglacisgate soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=118 "
-        "(retglacisgate honesty; Soft≠product)\n");
-/* Grep: timer: soft retoutwork — Wave 49 exclusive outwork stamp */
-kprintf("timer: soft retoutwork exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=118 "
-        "(retoutwork stamp; Soft≠product)\n");
-/*
- * ---- Wave 50 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: timer: soft retsally — Wave 50 return-sally honesty */
-kprintf("timer: soft retsally soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=118 "
-        "(retsally honesty; Soft≠product)\n");
-/* Grep: timer: soft retcounterscarp — Wave 50 exclusive counterscarp stamp */
-kprintf("timer: soft retcounterscarp exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=118 "
-        "(retcounterscarp stamp; Soft≠product)\n");
-/*
- * ---- Wave 51 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: timer: soft retfosse — Wave 51 return-fosse honesty */
-kprintf("timer: soft retfosse soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=118 "
-        "(retfosse honesty; Soft≠product)\n");
-/* Grep: timer: soft retcoveredway — Wave 51 exclusive coveredway stamp */
-kprintf("timer: soft retcoveredway exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=118 "
-        "(retcoveredway stamp; Soft≠product)\n");
-
-/*
- * ---- Wave 52 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: timer: soft rettenaille — Wave 52 return-tenaille honesty */
-kprintf("timer: soft rettenaille soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=118 "
-        "(rettenaille honesty; Soft≠product)\n");
-/* Grep: timer: soft retdemilune — Wave 52 exclusive demilune stamp */
-kprintf("timer: soft retdemilune exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=118 "
-        "(retdemilune stamp; Soft≠product)\n");
-/*
- * ---- Wave 53 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: timer: soft retravelin — Wave 53 return-travelin honesty */
-kprintf("timer: soft retravelin soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=118 "
-        "(retravelin honesty; Soft≠product)\n");
-/* Grep: timer: soft retlunette — Wave 53 exclusive lunette stamp */
-kprintf("timer: soft retlunette exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=118 "
-        "(retlunette stamp; Soft≠product)\n");
-/*
- * ---- Wave 54 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: timer: soft retcaponier — Wave 54 return-caponier honesty */
-kprintf("timer: soft retcaponier soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=118 "
-        "(retcaponier honesty; Soft≠product)\n");
-/* Grep: timer: soft retredan — Wave 54 exclusive redan stamp */
-kprintf("timer: soft retredan exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=118 "
-        "(retredan stamp; Soft≠product)\n");
-/*
- * ---- Wave 55 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: timer: soft retflank — Wave 55 return-flank honesty */
-kprintf("timer: soft retflank soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=118 "
-        "(retflank honesty; Soft≠product)\n");
-/* Grep: timer: soft retface — Wave 55 exclusive face stamp */
-kprintf("timer: soft retface exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=118 "
-        "(retface stamp; Soft≠product)\n");
-/*
- * ---- Wave 56 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: timer: soft retgorge — Wave 56 return-gorge honesty */
-kprintf("timer: soft retgorge soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=118 "
-        "(retgorge honesty; Soft≠product)\n");
-/* Grep: timer: soft retshoulder — Wave 56 exclusive shoulder stamp */
-kprintf("timer: soft retshoulder exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=118 "
-        "(retshoulder stamp; Soft≠product)\n");
-/*
- * ---- Wave 57 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: timer: soft retraverse — Wave 57 return-traverse honesty */
-kprintf("timer: soft retraverse soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=118 "
-        "(retraverse honesty; Soft≠product)\n");
-/* Grep: timer: soft retcasemate — Wave 57 exclusive casemate stamp */
-kprintf("timer: soft retcasemate exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=118 "
-        "(retcasemate stamp; Soft≠product)\n");
-
-/*
- * ---- Wave 58 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: timer: soft retorillon — Wave 58 return-orillon honesty */
-kprintf("timer: soft retorillon soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=118 "
-        "(retorillon honesty; Soft≠product)\n");
-/* Grep: timer: soft retbonnette — Wave 58 exclusive bonnette stamp */
-kprintf("timer: soft retbonnette exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=118 "
-        "(retbonnette stamp; Soft≠product)\n");
-
-/*
- * ---- Wave 59 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: timer: soft retcrownwork — Wave 59 return-crownwork honesty */
-kprintf("timer: soft retcrownwork soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=118 "
-        "(retcrownwork honesty; Soft≠product)\n");
-/* Grep: timer: soft rethornwork — Wave 59 exclusive hornwork stamp */
-kprintf("timer: soft rethornwork exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=118 "
-        "(rethornwork stamp; Soft≠product)\n");
-
-/*
- * ---- Wave 60 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: timer: soft retplace — Wave 60 return-place honesty */
-kprintf("timer: soft retplace soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=118 "
-        "(retplace honesty; Soft≠product)\n");
-/* Grep: timer: soft retenvelope — Wave 60 exclusive envelope stamp */
-kprintf("timer: soft retenvelope exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=118 "
-        "(retenvelope stamp; Soft≠product)\n");
-
-
-
-
-
-
-
-
-
-/*
- * ---- Wave 61 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: timer: soft retcounterguard — Wave 61 return-counterguard honesty */
-kprintf("timer: soft retcounterguard soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=118 "
-        "(retcounterguard honesty; Soft≠product)\n");
-/* Grep: timer: soft retcoveredface — Wave 61 exclusive coveredface stamp */
-kprintf("timer: soft retcoveredface exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=118 "
-        "(retcoveredface stamp; Soft≠product)\n");
-/*
- * ---- Wave 62 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: timer: soft retbastionface — Wave 62 return-bastionface honesty */
-kprintf("timer: soft retbastionface soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=118 "
-        "(retbastionface honesty; Soft≠product)\n");
-/* Grep: timer: soft retcurtainangle — Wave 62 exclusive curtainangle stamp */
-kprintf("timer: soft retcurtainangle exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=118 "
-        "(retcurtainangle stamp; Soft≠product)\n");
-/*
- * ---- Wave 63 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: timer: soft retdoubletenaille — Wave 63 return-doubletenaille honesty */
-kprintf("timer: soft retdoubletenaille soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=118 "
-        "(retdoubletenaille honesty; Soft≠product)\n");
-/* Grep: timer: soft retplaceofarms — Wave 63 exclusive placeofarms stamp */
-kprintf("timer: soft retplaceofarms exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=118 "
-        "(retplaceofarms stamp; Soft≠product)\n");
- /*
-  * ---- Wave 64 exclusive complementary surfaces (never reshape primary).
-  * Return surfaces only — soft inventory; never hard-gates product paths.
-  */
- /* Grep: timer: soft retreentrant — Wave 64 return-reentrant honesty */
-kprintf("timer: soft retreentrant soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=118 "
-        "(retreentrant honesty; Soft≠product)\n");
- /* Grep: timer: soft retsallyport — Wave 64 exclusive sallyport stamp */
-kprintf("timer: soft retsallyport exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=118 "
-        "(retsallyport stamp; Soft≠product)\n");
- /*
-  * ---- Wave 65 exclusive complementary surfaces (never reshape primary).
-  * Return surfaces only — soft inventory; never hard-gates product paths.
-  */
- /* Grep: timer: soft retgorgeangle — Wave 65 return-gorgeangle honesty */
-kprintf("timer: soft retgorgeangle soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=118 "
-        "(retgorgeangle honesty; Soft≠product)\n");
- /* Grep: timer: soft retshoulderangle — Wave 65 exclusive shoulderangle stamp */
-kprintf("timer: soft retshoulderangle exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=118 "
-        "(retshoulderangle stamp; Soft≠product)\n");
- /*
-  * ---- Wave 66 exclusive complementary surfaces (never reshape primary).
-  * Return surfaces only — soft inventory; never hard-gates product paths.
-  */
- /* Grep: timer: soft retflankangle — Wave 66 return-flankangle honesty */
- kprintf("timer: soft retflankangle soft_only=1 product_gate=0 soft_ne_product=1 "
-         "never_blocks_m0=1 wave=118 "
-         "(retflankangle honesty; Soft≠product)\n");
- /* Grep: timer: soft retfaceangle — Wave 66 exclusive faceangle stamp */
- kprintf("timer: soft retfaceangle exclusive=1 soft_ne_product=1 "
-         "product_kernel=OPEN wave=118 "
-         "(retfaceangle stamp; Soft≠product)\n");
-/*
- * ---- Wave 67 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: timer: soft retcaponierangle — Wave 67 return-caponierangle honesty */
-kprintf("timer: soft retcaponierangle soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=118 "
-        "(retcaponierangle honesty; Soft≠product)\n");
-/* Grep: timer: soft retredanangle — Wave 67 exclusive redanangle stamp */
-kprintf("timer: soft retredanangle exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=118 "
-        "(retredanangle stamp; Soft≠product)\n");
-/*
- * ---- Wave 68 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: timer: soft retlunetteangle — Wave 68 return-lunetteangle honesty */
-kprintf("timer: soft retlunetteangle soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=118 "
-        "(retlunetteangle honesty; Soft≠product)\n");
-/* Grep: timer: soft rettenailleangle — Wave 68 exclusive tenailleangle stamp */
-kprintf("timer: soft rettenailleangle exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=118 "
-        "(rettenailleangle stamp; Soft≠product)\n");
-/*
- * ---- Wave 69 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: timer: soft retdemiluneangle — Wave 69 return-demiluneangle honesty */
-kprintf("timer: soft retdemiluneangle soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=118 "
-        "(retdemiluneangle honesty; Soft≠product)\n");
-/* Grep: timer: soft retcoveredwayangle — Wave 69 exclusive coveredwayangle stamp */
-kprintf("timer: soft retcoveredwayangle exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=118 "
-        "(retcoveredwayangle stamp; Soft≠product)\n");
-/*
- * ---- Wave 70 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: timer: soft retfosseangle — Wave 70 return-fosseangle honesty */
-kprintf("timer: soft retfosseangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=118 (retfosseangle honesty; Soft≠product)\n");
-/* Grep: timer: soft retcounterscarple — Wave 70 exclusive counterscarple stamp */
-kprintf("timer: soft retcounterscarple exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=118 (retcounterscarple stamp; Soft≠product)\n");
-/*
- * ---- Wave 71 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: timer: soft retsallyportangle — Wave 71 return-sallyportangle honesty */
-kprintf("timer: soft retsallyportangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=118 (retsallyportangle honesty; Soft≠product)\n");
-/* Grep: timer: soft retreentrantangle — Wave 71 exclusive reentrantangle stamp */
-kprintf("timer: soft retreentrantangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=118 (retreentrantangle stamp; Soft≠product)\n");
-/*
- * ---- Wave 72 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: timer: soft retplaceofarmsangle — Wave 72 return-placeofarmsangle honesty */
-kprintf("timer: soft retplaceofarmsangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=118 (retplaceofarmsangle honesty; Soft≠product)\n");
-/* Grep: timer: soft retdoubletenailleangle — Wave 72 exclusive doubletenailleangle stamp */
-kprintf("timer: soft retdoubletenailleangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=118 (retdoubletenailleangle stamp; Soft≠product)\n");
-/* Grep: timer: soft retcurtainface — Wave 73 return-curtainface honesty */
-kprintf("timer: soft retcurtainface soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=118 (retcurtainface honesty; Soft≠product)\n");
-/* Grep: timer: soft retbastionangle — Wave 73 exclusive bastionangle stamp */
-kprintf("timer: soft retbastionangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=118 (retbastionangle stamp; Soft≠product)\n");
-/* Grep: timer: soft retglacisangle — Wave 74 return-glacisangle honesty */
-kprintf("timer: soft retglacisangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=118 (retglacisangle honesty; Soft≠product)\n");
-/* Grep: timer: soft retparapetangle — Wave 74 exclusive parapetangle stamp */
-kprintf("timer: soft retparapetangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=118 (retparapetangle stamp; Soft≠product)\n");
-/* Grep: timer: soft retmoatangle — Wave 75 return-moatangle honesty */
-kprintf("timer: soft retmoatangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=118 (retmoatangle honesty; Soft≠product)\n");
-/* Grep: timer: soft retowerangle — Wave 75 exclusive towerangle stamp */
-kprintf("timer: soft retowerangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=118 (retowerangle stamp; Soft≠product)\n");
-/* Grep: timer: soft retgateangle — Wave 76 return-gateangle honesty */
-kprintf("timer: soft retgateangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=118 (retgateangle honesty; Soft≠product)\n");
-/* Grep: timer: soft retwallangle — Wave 76 exclusive wallangle stamp */
-kprintf("timer: soft retwallangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=118 (retwallangle stamp; Soft≠product)\n");
-/* Grep: timer: soft retspireangle — Wave 77 return-spireangle honesty */
-kprintf("timer: soft retspireangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=118 (retspireangle honesty; Soft≠product)\n");
-/* Grep: timer: soft retholdangle — Wave 77 exclusive holdangle stamp */
-kprintf("timer: soft retholdangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=118 (retholdangle stamp; Soft≠product)\n");
-/* Grep: timer: soft retpalaceangle — Wave 78 return-palaceangle honesty */
-kprintf("timer: soft retpalaceangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=118 (retpalaceangle honesty; Soft≠product)\n");
-/* Grep: timer: soft retfortressangle — Wave 78 exclusive fortressangle stamp */
-kprintf("timer: soft retfortressangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=118 (retfortressangle stamp; Soft≠product)\n");
-/* Grep: timer: soft retkeepangle — Wave 79 return-keepangle honesty */
-kprintf("timer: soft retkeepangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=118 (retkeepangle honesty; Soft≠product)\n");
-/* Grep: timer: soft retredoubtangle — Wave 79 exclusive redoubtangle stamp */
-kprintf("timer: soft retredoubtangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=118 (retredoubtangle stamp; Soft≠product)\n");
-/* Grep: timer: soft retcitadelangle — Wave 80 return-citadelangle honesty */
-kprintf("timer: soft retcitadelangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=118 (retcitadelangle honesty; Soft≠product)\n");
-/* Grep: timer: soft retbastionkeep — Wave 80 exclusive bastionkeep stamp */
-kprintf("timer: soft retbastionkeep exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=118 (retbastionkeep stamp; Soft≠product)\n");
-/* Grep: timer: soft retpanoplyangle — Wave 81 return-panoplyangle honesty */
-kprintf("timer: soft retpanoplyangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=118 (retpanoplyangle honesty; Soft≠product)\n");
-/* Grep: timer: soft retbulwarkangle — Wave 81 exclusive bulwarkangle stamp */
-kprintf("timer: soft retbulwarkangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=118 (retbulwarkangle stamp; Soft≠product)\n");
-/* Grep: timer: soft retmantleangle — Wave 82 return-mantleangle honesty */
-kprintf("timer: soft retmantleangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=118 (retmantleangle honesty; Soft≠product)\n");
-/* Grep: timer: soft retaegisangle — Wave 82 exclusive aegisangle stamp */
-kprintf("timer: soft retaegisangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=118 (retaegisangle stamp; Soft≠product)\n");
-/* Grep: timer: soft retemblemangle — Wave 83 return-emblemangle honesty */
-kprintf("timer: soft retemblemangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=118 (retemblemangle honesty; Soft≠product)\n");
-/* Grep: timer: soft retsigilangle — Wave 83 exclusive sigilangle stamp */
-kprintf("timer: soft retsigilangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=118 (retsigilangle stamp; Soft≠product)\n");
-/* Grep: timer: soft retscepterangle — Wave 84 return-scepterangle honesty */
-kprintf("timer: soft retscepterangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=118 (retscepterangle honesty; Soft≠product)\n");
-/* Grep: timer: soft retglyphangle — Wave 84 exclusive glyphangle stamp */
-kprintf("timer: soft retglyphangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=118 (retglyphangle stamp; Soft≠product)\n");
-/* Grep: timer: soft retcrownangle — Wave 85 return-crownangle honesty */
-kprintf("timer: soft retcrownangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=118 (retcrownangle honesty; Soft≠product)\n");
-/* Grep: timer: soft retshardangle — Wave 85 exclusive shardangle stamp */
-kprintf("timer: soft retshardangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=118 (retshardangle stamp; Soft≠product)\n");
-/* Grep: timer: soft retforgeangle — Wave 86 return-forgeangle honesty */
-kprintf("timer: soft retforgeangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=118 (retforgeangle honesty; Soft≠product)\n");
-/* Grep: timer: soft retprismangle — Wave 86 exclusive prismangle stamp */
-kprintf("timer: soft retprismangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=118 (retprismangle stamp; Soft≠product)\n");
-/* Grep: timer: soft retflameangle — Wave 87 return-flameangle honesty */
-kprintf("timer: soft retflameangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=118 (retflameangle honesty; Soft≠product)\n");
-/* Grep: timer: soft retcipherangle — Wave 87 exclusive cipherangle stamp */
-kprintf("timer: soft retcipherangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=118 (retcipherangle stamp; Soft≠product)\n");
-/* Grep: timer: soft retbeaconangle — Wave 88 return-beaconangle honesty */
-kprintf("timer: soft retbeaconangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=118 (retbeaconangle honesty; Soft≠product)\n");
-/* Grep: timer: soft retledgerangle — Wave 88 exclusive ledgerangle stamp */
-kprintf("timer: soft retledgerangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=118 (retledgerangle stamp; Soft≠product)\n");
-/* Grep: timer: soft retbannerangle — Wave 89 return-bannerangle honesty */
-kprintf("timer: soft retbannerangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=118 (retbannerangle honesty; Soft≠product)\n");
-/* Grep: timer: soft retvaultangle — Wave 89 exclusive vaultangle stamp */
-kprintf("timer: soft retvaultangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=118 (retvaultangle stamp; Soft≠product)\n");
-/* Grep: timer: soft retcrestangle — Wave 90 return-crestangle honesty */
-kprintf("timer: soft retcrestangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=118 (retcrestangle honesty; Soft≠product)\n");
-/* Grep: timer: soft rettokenangle — Wave 90 exclusive tokenangle stamp */
-kprintf("timer: soft rettokenangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=118 (rettokenangle stamp; Soft≠product)\n");
-/* Grep: timer: soft retbadgeangle — Wave 91 return-badgeangle honesty */
-kprintf("timer: soft retbadgeangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=118 (retbadgeangle honesty; Soft≠product)\n");
-/* Grep: timer: soft retphaseangle — Wave 91 exclusive phaseangle stamp */
-kprintf("timer: soft retphaseangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=118 (retphaseangle stamp; Soft≠product)\n");
-/* Grep: timer: soft retmarkangle — Wave 92 return-markangle honesty */
-kprintf("timer: soft retmarkangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=118 (retmarkangle honesty; Soft≠product)\n");
-/* Grep: timer: soft retpulseangle — Wave 92 exclusive pulseangle stamp */
-kprintf("timer: soft retpulseangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=118 (retpulseangle stamp; Soft≠product)\n");
-
-/* Grep: timer: soft retsealangle — Wave 93 return-sealangle honesty */
-kprintf("timer: soft retsealangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=118 (retsealangle honesty; Soft≠product)\n");
-/* Grep: timer: soft retboundangle — Wave 93 exclusive boundangle stamp */
-kprintf("timer: soft retboundangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=118 (retboundangle stamp; Soft≠product)\n");
-/* Grep: timer: soft retstemangle — Wave 94 return-stemangle honesty */
-kprintf("timer: soft retstemangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=118 (retstemangle honesty; Soft≠product)\n");
-/* Grep: timer: soft retbladeangle — Wave 94 exclusive bladeangle stamp */
-kprintf("timer: soft retbladeangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=118 (retbladeangle stamp; Soft≠product)\n");
-/* Grep: timer: soft retchordangle — Wave 95 return-chordangle honesty */
-kprintf("timer: soft retchordangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=118 (retchordangle honesty; Soft≠product)\n");
-/* Grep: timer: soft retarcangle — Wave 95 exclusive arcangle stamp */
-kprintf("timer: soft retarcangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=118 (retarcangle stamp; Soft≠product)\n");
-/* Grep: timer: soft retsectorangle — Wave 96 return-sectorangle honesty */
-kprintf("timer: soft retsectorangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=118 (retsectorangle honesty; Soft≠product)\n");
-/* Grep: timer: soft retwedgeangle — Wave 96 exclusive wedgeangle stamp */
-kprintf("timer: soft retwedgeangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=118 (retwedgeangle stamp; Soft≠product)\n");
-/* Grep: timer: soft retradiusangle — Wave 97 return-radiusangle honesty */
-kprintf("timer: soft retradiusangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=118 (retradiusangle honesty; Soft≠product)\n");
-/* Grep: timer: soft retdiameterangle — Wave 97 exclusive diameterangle stamp */
-kprintf("timer: soft retdiameterangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=118 (retdiameterangle stamp; Soft≠product)\n");
-/* Grep: timer: soft retcircumangle — Wave 98 return-circumangle honesty */
-kprintf("timer: soft retcircumangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=118 (retcircumangle honesty; Soft≠product)\n");
-/* Grep: timer: soft retellipseangle — Wave 98 exclusive ellipseangle stamp */
-kprintf("timer: soft retellipseangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=118 (retellipseangle stamp; Soft≠product)\n");
-/* Grep: timer: soft rethyperangle — Wave 99 return-hyperangle honesty */
-kprintf("timer: soft rethyperangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=118 (rethyperangle honesty; Soft≠product)\n");
-/* Grep: timer: soft retparabolaangle — Wave 99 exclusive parabolaangle stamp */
-kprintf("timer: soft retparabolaangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=118 (retparabolaangle stamp; Soft≠product)\n");
-/* Grep: timer: soft retspiralangle — Wave 100 return-spiralangle honesty */
-kprintf("timer: soft retspiralangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=118 (retspiralangle honesty; Soft≠product)\n");
-/* Grep: timer: soft rethelixangle — Wave 100 exclusive helixangle stamp */
-kprintf("timer: soft rethelixangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=118 (rethelixangle stamp; Soft≠product)\n");
-/* Grep: timer: soft rettorusangle — Wave 101 return-torusangle honesty */
-kprintf("timer: soft rettorusangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=118 (rettorusangle honesty; Soft≠product)\n");
-/* Grep: timer: soft retknotangle — Wave 101 exclusive knotangle stamp */
-kprintf("timer: soft retknotangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=118 (retknotangle stamp; Soft≠product)\n");
-/* Grep: timer: soft retmoebiusangle — Wave 102 return-moebiusangle honesty */
-kprintf("timer: soft retmoebiusangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=118 (retmoebiusangle honesty; Soft≠product)\n");
-/* Grep: timer: soft retkleinangle — Wave 102 exclusive kleinangle stamp */
-kprintf("timer: soft retkleinangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=118 (retkleinangle stamp; Soft≠product)\n");
-/* Grep: timer: soft retprojectangle — Wave 103 return-projectangle honesty */
-kprintf("timer: soft retprojectangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=118 (retprojectangle honesty; Soft≠product)\n");
-/* Grep: timer: soft retaffineangle — Wave 103 exclusive affineangle stamp */
-kprintf("timer: soft retaffineangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=118 (retaffineangle stamp; Soft≠product)\n");
-/* Grep: timer: soft retlinearangle — Wave 104 return-linearangle honesty */
-kprintf("timer: soft retlinearangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=118 (retlinearangle honesty; Soft≠product)\n");
-/* Grep: timer: soft retbilinearangle — Wave 104 exclusive bilinearangle stamp */
-kprintf("timer: soft retbilinearangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=118 (retbilinearangle stamp; Soft≠product)\n");
-/* Grep: timer: soft retquadraticangle — Wave 105 return-quadraticangle honesty */
-kprintf("timer: soft retquadraticangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=118 (retquadraticangle honesty; Soft≠product)\n");
-/* Grep: timer: soft retcubicangle — Wave 105 exclusive cubicangle stamp */
-kprintf("timer: soft retcubicangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=118 (retcubicangle stamp; Soft≠product)\n");
-/* Grep: timer: soft retquarticangle — Wave 106 return-quarticangle honesty */
-kprintf("timer: soft retquarticangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=118 (retquarticangle honesty; Soft≠product)\n");
-/* Grep: timer: soft retquinticangle — Wave 106 exclusive quinticangle stamp */
-kprintf("timer: soft retquinticangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=118 (retquinticangle stamp; Soft≠product)\n");
-/* Grep: timer: soft retsplineangle — Wave 107 return-splineangle honesty */
-kprintf("timer: soft retsplineangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=118 (retsplineangle honesty; Soft≠product)\n");
-/* Grep: timer: soft retbezierangle — Wave 107 exclusive bezierangle stamp */
-kprintf("timer: soft retbezierangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=118 (retbezierangle stamp; Soft≠product)\n");
-/* Grep: timer: soft rethurmitangle — Wave 108 return-hermitangle honesty */
-kprintf("timer: soft rethurmitangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=118 (rethurmitangle honesty; Soft≠product)\n");
-/* Grep: timer: soft retcatmullangle — Wave 108 exclusive catmullangle stamp */
-kprintf("timer: soft retcatmullangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=118 (retcatmullangle stamp; Soft≠product)\n");
-/* Grep: timer: soft retnurbsangle — Wave 109 return-nurbsangle honesty */
-kprintf("timer: soft retnurbsangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=118 (retnurbsangle honesty; Soft≠product)\n");
-/* Grep: timer: soft retbsplineangle — Wave 109 exclusive bsplineangle stamp */
-kprintf("timer: soft retbsplineangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=118 (retbsplineangle stamp; Soft≠product)\n");
-/* Grep: timer: soft retmeshangle — Wave 110 return-meshangle honesty */
-kprintf("timer: soft retmeshangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=118 (retmeshangle honesty; Soft≠product)\n");
-/* Grep: timer: soft retgridangle — Wave 110 exclusive gridangle stamp */
-kprintf("timer: soft retgridangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=118 (retgridangle stamp; Soft≠product)\n");
-/* Grep: timer: soft retvoxelangle — Wave 111 return-voxelangle honesty */
-kprintf("timer: soft retvoxelangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=118 (retvoxelangle honesty; Soft≠product)\n");
-/* Grep: timer: soft rettexelangle — Wave 111 exclusive texelangle stamp */
-kprintf("timer: soft rettexelangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=118 (rettexelangle stamp; Soft≠product)\n");
-/* Grep: timer: soft retfragmentangle — Wave 112 return-fragmentangle honesty */
-kprintf("timer: soft retfragmentangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=118 (retfragmentangle honesty; Soft≠product)\n");
-/* Grep: timer: soft retvertexangle — Wave 112 exclusive vertexangle stamp */
-kprintf("timer: soft retvertexangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=118 (retvertexangle stamp; Soft≠product)\n");
-/* Grep: timer: soft retshaderangle — Wave 113 return-shaderangle honesty */
-kprintf("timer: soft retshaderangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=118 (retshaderangle honesty; Soft≠product)\n");
-/* Grep: timer: soft retpipelineangle — Wave 113 exclusive pipelineangle stamp */
-kprintf("timer: soft retpipelineangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=118 (retpipelineangle stamp; Soft≠product)\n");
-/* Grep: timer: soft retframebufferangle — Wave 114 return-framebufferangle honesty */
-kprintf("timer: soft retframebufferangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=118 (retframebufferangle honesty; Soft≠product)\n");
-/* Grep: timer: soft retswapchainangle — Wave 114 exclusive swapchainangle stamp */
-kprintf("timer: soft retswapchainangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=118 (retswapchainangle stamp; Soft≠product)\n");
-/* Grep: timer: soft retpresentangle — Wave 115 return-presentangle honesty */
-kprintf("timer: soft retpresentangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=118 (retpresentangle honesty; Soft≠product)\n");
-/* Grep: timer: soft retvsyncangle — Wave 115 exclusive vsyncangle stamp */
-kprintf("timer: soft retvsyncangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=118 (retvsyncangle stamp; Soft≠product)\n");
-/* Grep: timer: soft retfenceangle — Wave 116 return-fenceangle honesty */
-kprintf("timer: soft retfenceangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=118 (retfenceangle honesty; Soft≠product)\n");
-/* Grep: timer: soft retsemaphoreangle — Wave 116 exclusive semaphoreangle stamp */
-kprintf("timer: soft retsemaphoreangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=118 (retsemaphoreangle stamp; Soft≠product)\n");
-/* Grep: timer: soft retmutexangle — Wave 117 return-mutexangle honesty */
-kprintf("timer: soft retmutexangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=118 (retmutexangle honesty; Soft≠product)\n");
-/* Grep: timer: soft retcondangle — Wave 117 exclusive condangle stamp */
-kprintf("timer: soft retcondangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=118 (retcondangle stamp; Soft≠product)\n");
-/* Grep: timer: soft retbarrierangle — Wave 118 return-barrierangle honesty */
-kprintf("timer: soft retbarrierangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=118 (retbarrierangle honesty; Soft≠product)\n");
-/* Grep: timer: soft retatomicangle — Wave 118 exclusive atomicangle stamp */
-kprintf("timer: soft retatomicangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=118 (retatomicangle stamp; Soft≠product)\n");
-/* Grep: timer: soft retqueueangle — Wave 119 return-queueangle honesty */
-kprintf("timer: soft retqueueangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=119 (retqueueangle honesty; Soft≠product)\n");
-/* Grep: timer: soft reteventangle — Wave 119 exclusive eventangle stamp */
-kprintf("timer: soft reteventangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=119 (reteventangle stamp; Soft≠product)\n");
-/* Grep: timer: soft retchannelangle — Wave 120 return-channelangle honesty */
-kprintf("timer: soft retchannelangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=120 (retchannelangle honesty; Soft≠product)\n");
-/* Grep: timer: soft retmailboxangle — Wave 120 exclusive mailboxangle stamp */
-kprintf("timer: soft retmailboxangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=120 (retmailboxangle stamp; Soft≠product)\n");
-/* Grep: timer: soft retstreamangle — Wave 121 return-streamangle honesty */
-kprintf("timer: soft retstreamangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=121 (retstreamangle honesty; Soft≠product)\n");
-/* Grep: timer: soft retpacketangle — Wave 121 exclusive packetangle stamp */
-kprintf("timer: soft retpacketangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=121 (retpacketangle stamp; Soft≠product)\n");
-/* Grep: timer: soft retframeangle — Wave 122 return-frameangle honesty */
-kprintf("timer: soft retframeangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=122 (retframeangle honesty; Soft≠product)\n");
-/* Grep: timer: soft retwindowangle — Wave 122 exclusive windowangle stamp */
-kprintf("timer: soft retwindowangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=122 (retwindowangle stamp; Soft≠product)\n");
-/* Grep: timer: soft retlayerangle — Wave 123 return-layerangle honesty */
-kprintf("timer: soft retlayerangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=123 (retlayerangle honesty; Soft≠product)\n");
-/* Grep: timer: soft retcanvasangle — Wave 123 exclusive canvasangle stamp */
-kprintf("timer: soft retcanvasangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=123 (retcanvasangle stamp; Soft≠product)\n");
-/* Grep: timer: soft retbrushangle — Wave 124 return-brushangle honesty */
-kprintf("timer: soft retbrushangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=124 (retbrushangle honesty; Soft≠product)\n");
-/* Grep: timer: soft retinkangle — Wave 124 exclusive inkangle stamp */
-kprintf("timer: soft retinkangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=124 (retinkangle stamp; Soft≠product)\n");
-/* Grep: timer: soft retpaletteangle — Wave 125 return-paletteangle honesty */
-kprintf("timer: soft retpaletteangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=125 (retpaletteangle honesty; Soft≠product)\n");
-/* Grep: timer: soft retstrokeangle — Wave 125 exclusive strokeangle stamp */
-kprintf("timer: soft retstrokeangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=125 (retstrokeangle stamp; Soft≠product)\n");
-/* Grep: timer: soft retgradientangle — Wave 126 return-gradientangle honesty */
-kprintf("timer: soft retgradientangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=126 (retgradientangle honesty; Soft≠product)\n");
-/* Grep: timer: soft retblendangle — Wave 126 exclusive blendangle stamp */
-kprintf("timer: soft retblendangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=126 (retblendangle stamp; Soft≠product)\n");
-                            kprintf("timer: soft deepen wave=%u areas=inventory,mono,preempt,,retclass,retlane"
-            "source,apic_mono,path,handoff,interpolate,"
-            "lamps,stats,vectors,quantum,futex,honesty,surface,"
-            "exclusive,claim,ratio,eoi,return,return_selftest,retmap,return_rate,retcode "
-            "logs=%lu apic_mono_logs=%lu ready=%u apic_src=%u "
-            "unit=timer.c only hard_gate=0\n",
-            (unsigned)TIMER_SOFT_WAVE,
-            (unsigned long)g_u64SoftInventoryLogs,
-            (unsigned long)g_u64SoftApicMonoLogs,
-            (unsigned)stMono.u32Ready,
-            (unsigned)(fApic != 0 ? 1u : 0u));
+    kprintf("timer: soft eth net_eth_poll=run_loop_only net_eth_irq=%u "
+            "tick_path=%u tick_apic_path=%u irq_timer_handler=%u "
+            "owner=scheduler_run stack=thr fault_class=H1_irq_stack_smash "
+            "surf_eth_runloop=1 thr_only=%u G-AC-1=1 soft_ne_product=1 "
+            "dual=MIT_OR_Apache-2.0\n",
+            (unsigned)TIMER_H1_NET_ETH_IRQ,
+            (unsigned)TIMER_H1_TICK_PATH,
+            (unsigned)TIMER_H1_TICK_APIC_PATH,
+            (unsigned)TIMER_H1_IRQ_HANDLER,
+            (unsigned)TIMER_H1_RUN_LOOP_ONLY);
+    kprintf("timer: soft residual dual_dod_a=OPEN dual_dod_b=OPEN "
+            "net_eth_poll=run_loop_only net_eth_irq=%u "
+            "owner=scheduler_run never_on_timer_irq=1 "
+            "product_sshd_tcp22=OPEN eth_poll_irq=%u lean_checks=%u "
+            "soft_ne_product=1 G-AC-1=1 storm=0 Soft!=product "
+            "agent!=close dual=MIT_OR_Apache-2.0\n",
+            (unsigned)TIMER_H1_NET_ETH_IRQ,
+            (unsigned)TIMER_H1_ETH_POLL_IRQ,
+            (unsigned)TIMER_H1_LEAN_CHECKS);
 
     /*
-     * Soft lamp only — ready + non-zero quantum. Never hard-gates boot.
+     * Soft lamp only - ready + non-zero quantum. Never hard-gates boot.
      * Grep: timer: soft PASS | timer: soft FAIL
-     * Does not touch preemption quantum product lamp (main.c).
      */
     fSoftPass = 0;
     if (stMono.u32Ready != 0 && stPre.u32Quantum > 0) {
@@ -2279,12 +1283,10 @@ timer_soft_log(void)
     /*
      * Mono source preference deepen: APIC preferred when armed; PIT
      * soft-fallback + honesty on partial x2APIC ICR/timer replace.
-     * Wave 13 also emits timer: soft apic mono … from mono_pref.
+     * Wave 13 also emits timer: soft apic mono ... from mono_pref.
+     * Soft inventory is NOT here - init + first handoff only (cap; storm guard).
      */
     timer_mono_pref_soft_log();
-
-    /* Wave 19 exclusive: greppable timer: soft … inventory rollup. */
-    timer_soft_inventory_log();
 }
 
 void

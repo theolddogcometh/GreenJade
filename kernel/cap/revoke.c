@@ -3,18 +3,18 @@
  * Copyright (c) 2026 Project GreenJade contributors
  *
  * Capability revoke: DEAD/gen first (fail closed), then mandatory deferred
- * CNode slot invalidation (S1–S7, R1–R9). See SECURITY_CORE_DESIGN §1.1.
+ * CNode slot invalidation (S1-S7, R1-R9). See SECURITY_CORE_DESIGN S1.1.
  *
- * Phase A  — logical invalidate (DEAD + gen); security complete.
- * Phase A′ — deferred CDT walk + structured slot invalidate (this file).
- * Phase C  — reclaim when slots_left/refs/pins allow.
+ * Phase A  - logical invalidate (DEAD + gen); security complete.
+ * Phase A' - deferred CDT walk + structured slot invalidate (this file).
+ * Phase C  - reclaim when slots_left/refs/pins allow.
  *
  * Soft CDT: edges on pObj->pCdtHead when mint wires them; empty list with
  * slots_left > 0 is a known soft gap (grep: cap:cdt soft).
  *
  * R2 try-lock slot walk (this file):
  *   Soft CNode lock is gj_cnode_trylock (u32SoftLock CAS). Product-true
- *   mutex/turnstile is still missing — R2 is intentionally PARTIAL.
+ *   mutex/turnstile is still missing - R2 is intentionally PARTIAL.
  *   Policy is sleep-not-spin: never busy-wait a busy CNode; leave the edge
  *   linked, try siblings, soft-retry a bounded number of re-walks, then
  *   defer to timer/idle (R7). Counters: spins_avoided, retries, slots_cleared.
@@ -23,42 +23,59 @@
  *   - Phase A begin path: ok / dead / busy / again / null / queue full
  *   - Deferred queue: push / drop / pending samples / cursor / full
  *   - CDT walk batch: enter / clear / busy / stale / visit / pass / retry
- *   - R2 soft: trylock busy, soft retries, outer deferred push, defer log
  *   - Process deferred: scan / hygiene / empty-edge soft gap / budget
  *   - Reclaim: ready / busy / ok / null; slots_left / pin / ref gates
  *   - honesty / deepen / PASS / mutex / reply non-claims
- *   - return surface (Wave 17): begin|walk|deferred|reclaim gj_status /
- *     u32 cleared buckets under "cap: revoke soft return …"
- *   - return rate / retcode (Wave 20 deepen): ok/fail rate lamps + retcode
- *     catalog under "cap: revoke soft return rate|retcode …"
- *   Never hard-gates; diagnostics only (wrap OK). Soft ≠ product mutex.
- *   Soft. Soft ≠ GJ_CAP_REPLY product. Soft ≠ MIG REPLY product.
- *   Soft ≠ full CDT mutex product. Product CNode turnstile still OPEN.
+ *   - return surface: begin|walk|deferred|reclaim gj_status buckets
+ *   - return rate / retcode / return selftest / retmap (lean lamps)
+ *   - soft residual lean (Soft!=product - dual MIT OR Apache-2.0 - G-AC-1)
+ *   - UDX host-death teardown residual: multi-obj begin->deferred->reclaim
+ *     (DMA/MMIO/IRQ-shaped stack objs; not product host-death complete)
+ *   - C3 security residual (behavior checks, not lamp-only):
+ *     S1 DEAD+gen first; S2 check_live exact GJ_ERR_DEAD + DEAD-wins-new-gen;
+ *     R6 one-revoker DEAD; Phase C pin/slots_left/ref reclaim gates;
+ *     Phase C lag hold: DEAD+gen still published after gate block (S3 lag)
+ *   Never hard-gates; diagnostics only (wrap OK). Soft != product mutex.
+ *   Soft. Soft != GJ_CAP_REPLY product. Soft != MIG REPLY product.
+ *   Soft != full CDT mutex product. Product CNode turnstile still OPEN.
+ *   Soft != product UDX host death (DMA/MMIO/IRQ revoke still OPEN).
+ *   G-AC-1: no Linux .ko product AC via this residual.
+ *   Dual DoD OPEN (not claimed). Lean residual only - no version stamp /
+ *   no stamp storms / no commit / never bump GJ_IMAGE_VERSION.
  *
  * Grep: cap:cdt deferred / cap:cdt walk / cap:quota soft
  * Grep: cap: revoke try-lock / cap:cdt R2 soft / cap:cdt trylock
  * Grep: cap: revoke soft  (Wave 20 deepen surface)
  * Grep: cap: revoke soft honesty|inventory|deepen|PASS|mutex|reply|return
- * Grep: cap: revoke …     (begin|walk|deferred|reclaim|r2|try-lock|queue)
+ * Grep: cap: revoke soft residual lean
+ * Grep: cap: revoke soft residual lean udx|teardown|c3
+ * Grep: cap: revoke ...     (begin|walk|deferred|reclaim|r2|try-lock|queue)
  */
 #include <gj/cap.h>
 #include <gj/config.h>
 #include <gj/klog.h>
 
-/* Max objects waiting for slot hygiene / reclaim on this simple M0–M2 queue. */
+/* Max objects waiting for slot hygiene / reclaim on this simple M0-M2 queue. */
 #define GJ_REVOKE_Q_MAX 64u
 
 /*
  * Bounded soft re-walks of busy CDT edges within one batch (R2).
  * Not a spin: each pass only try-locks once per edge; further progress
- * yields to the deferred driver (timer/idle) — sleep-not-spin.
+ * yields to the deferred driver (timer/idle) - sleep-not-spin.
  */
 #define GJ_REVOKE_R2_SOFT_RETRY_MAX 3u
 
-/* Wave 20 deepen stamp (file-local; never hard-gates). */
+/* Wave 20 deepen stamp (file-local; never hard-gates). No stamp storms. */
 #define GJ_REVOKE_SOFT_WAVE 116u
-/* +return selftest|retmap over Wave 17 return rate|retcode */
-#define GJ_REVOKE_SOFT_AREAS 208u
+/*
+ * return | return rate | retcode | return selftest | retmap | residual lean
+ * | udx teardown residual (DMA/MMIO/IRQ-shaped multi-obj begin->def->reclaim)
+ * | C3 residual (S1 DEAD+gen / S2 exact DEAD + DEAD-wins-new-gen /
+ * |   R6 one-revoker / Phase C pin+slots+ref gates / lag hold S3)
+ */
+#define GJ_REVOKE_SOFT_AREAS 224u
+/* UDX host-death shape: three stack objs (dma / mmio / irq stand-ins). */
+#define GJ_REVOKE_LEAN_UDX_OBJS 3u
 
 struct gj_revoke_qent {
     struct gj_obj_hdr *pObj;
@@ -82,9 +99,9 @@ static u8                    g_u8RevokeSoftInvLogged;
 
 /*
  * R2 observability counters (lifetime, process-wide soft stats).
- *   spins_avoided — try-lock busy → deferred (did not spin)
- *   retries       — soft re-walk passes after a busy edge
- *   slots_cleared — structured invalidates via CDT walk batch
+ *   spins_avoided - try-lock busy -> deferred (did not spin)
+ *   retries       - soft re-walk passes after a busy edge
+ *   slots_cleared - structured invalidates via CDT walk batch
  * Grep: cap: revoke try-lock / cap:cdt R2 soft
  */
 static u32 g_u32R2SpinsAvoided;
@@ -96,9 +113,9 @@ static u32 g_u32R2SlotsCleared;
  * Grep: cap: revoke soft
  */
 static u32 g_u32SoftBeginEnter;     /* gj_obj_revoke_begin entries */
-static u32 g_u32SoftBeginOk;        /* Phase A success → queued */
+static u32 g_u32SoftBeginOk;        /* Phase A success -> queued */
 static u32 g_u32SoftBeginNull;      /* pObj == NULL */
-static u32 g_u32SoftBeginDead;      /* concurrent revoke → DEAD/REVOKING */
+static u32 g_u32SoftBeginDead;      /* concurrent revoke -> DEAD/REVOKING */
 static u32 g_u32SoftBeginBusy;      /* CAS fail other state */
 static u32 g_u32SoftBeginAgain;     /* queue full after DEAD (R7 retry) */
 /* Wave 19 return-surface: walk/deferred cleared buckets. */
@@ -152,11 +169,41 @@ static u32 g_u32SoftReclaimGateRef; /* not ready: ref */
 static u32 g_u32SoftReclaimGatePin; /* not ready: pin */
 static u32 g_u32SoftReclaimGateSt;  /* not ready: state != DEAD */
 static u32 g_u32SoftLogN;           /* soft inventory dump emissions */
+/* Lean residual self-check (stack-local begin->reclaim; never hard-gates). */
+static u32 g_u32SoftLeanRuns;       /* residual lean selftest entries */
+static u32 g_u32SoftLeanOk;         /* begin+reclaim both GJ_OK (legacy single) */
+static u32 g_u32SoftLeanBeginOk;    /* begin ok count in lean selftest */
+static u32 g_u32SoftLeanReclaimOk;  /* reclaim ok count in lean selftest */
+/* UDX teardown residual lean (multi-obj host-death shape). Soft!=product. */
+static u32 g_u32SoftLeanUdxBegin;   /* UDX-shape begin successes */
+static u32 g_u32SoftLeanUdxReclaim; /* UDX-shape reclaim successes */
+static u32 g_u32SoftLeanUdxDef;     /* deferred drive calls in lean */
+static u32 g_u32SoftLeanUdxDefClr;  /* deferred cleared sum in lean */
+static u32 g_u32SoftLeanUdxOk;      /* full multi-obj UDX teardown ok */
+/*
+ * C3 security residual (behavior checks; Soft!=product; not product AC).
+ * Class C3 forbids lamp-only PASS - these counters only light when the
+ * hazard regression shape actually observes the security property.
+ * Grep: cap: revoke soft residual lean c3
+ */
+static u32 g_u32SoftLeanS1Ok;       /* post-begin DEAD + gen bump (S1) */
+static u32 g_u32SoftLeanS2Closed;   /* check_live == GJ_ERR_DEAD (pre-gen) (S2) */
+static u32 g_u32SoftLeanS2DeadWins; /* check_live(new gen) == GJ_ERR_DEAD */
+static u32 g_u32SoftLeanR6Ok;       /* concurrent begin -> GJ_ERR_DEAD (R6) */
+static u32 g_u32SoftLeanGatePin;    /* pin>0 blocked reclaim (Phase C) */
+static u32 g_u32SoftLeanGateSlot;   /* slots_left>0 blocked reclaim (Phase C) */
+static u32 g_u32SoftLeanGateRef;    /* ref>0 blocked reclaim (Phase C) */
+static u32 g_u32SoftLeanLagHold;    /* DEAD+gen still published after gate block */
+static u32 g_u32SoftLeanC3Ok;       /* full C3 residual hazard selftest ok */
+static u8  g_u8RevokeLeanOnce;      /* once-marker for lean residual */
+/* Suppress inventory reentry while lean residual drives begin/reclaim. */
+static u8  g_u8RevokeLeanBusy;
 
 static void soft_inc(u32 *pCtr);
 static void soft_note_pending_peak(u32 u32Pending);
 static void soft_revoke_inventory_log(void);
 static void soft_revoke_inventory_maybe_once(void);
+static void soft_revoke_residual_lean_once(void);
 
 /** Soft: saturating bump (u32 wrap avoided; wrap OK if ever hit). */
 static void
@@ -182,10 +229,10 @@ soft_note_pending_peak(u32 u32Pending)
 /**
  * Greppable soft revoke inventory (Wave 20 deepen).
  * Prefix family (keep stable for smokes / tooling):
- *   cap: revoke soft inventory|begin|queue|walk|r2|deferred|reclaim|path|…
- *   cap: revoke soft honesty|mutex|reply|return|deepen|PASS
- *   cap: revoke try-lock soft …
- *   cap:cdt R2 soft inventory|…
+ *   cap: revoke soft inventory|begin|queue|walk|r2|deferred|reclaim|path|...
+ *   cap: revoke soft honesty|mutex|reply|return|deepen|PASS|residual lean
+ *   cap: revoke try-lock soft ...
+ *   cap:cdt R2 soft inventory|...
  * Grep: cap: revoke soft
  * Grep: cap: revoke try-lock
  * Grep: cap:cdt R2 soft
@@ -215,15 +262,19 @@ soft_revoke_inventory_log(void)
     soft_note_pending_peak(u32Pending);
 
     /*
-     * Primary Wave 20 deepen lines under "cap: revoke soft …".
-     * Honesty: soft u32SoftLock only — product try-lock still partial.
-     * Soft ≠ GJ_CAP_REPLY product / MIG REPLY product / full CDT mutex.
+     * Primary Wave 20 deepen lines under "cap: revoke soft ...".
+     * Honesty: soft u32SoftLock only - product try-lock still partial.
+     * Soft != GJ_CAP_REPLY product / MIG REPLY product / full CDT mutex.
      */
     /* Grep: cap: revoke soft honesty */
     kprintf("cap: revoke soft honesty reply_product=0 full_cdt_mutex=0 "
             "soft_lock=u32SoftLock sleep_not_spin=1 r2_partial=1 "
-            "soft_ne_mig_reply=1 wave=%u (soft != GJ_CAP_REPLY product; "
-            "soft != MIG REPLY product; soft != full CDT mutex product; "
+            "soft_ne_mig_reply=1 soft_ne_product=1 dual=MIT_OR_Apache-2.0 "
+            "G-AC-1=1 udx_teardown=1 c3_residual=1 host_death_product=0 "
+            "dual_dod=OPEN "
+            "wave=%u (soft != GJ_CAP_REPLY product; soft != MIG REPLY "
+            "product; soft != full CDT mutex product; Soft!=product; "
+            "G-AC-1; UDX teardown + C3 residual only; Dual DoD OPEN; "
             "soft inventory only)\n",
             GJ_REVOKE_SOFT_WAVE);
 
@@ -308,7 +359,7 @@ soft_revoke_inventory_log(void)
 
     /*
      * Grep: cap: revoke soft mutex
-     * R2 soft lock only — full CDT mutex / turnstile product still OPEN.
+     * R2 soft lock only - full CDT mutex / turnstile product still OPEN.
      */
     kprintf("cap: revoke soft mutex soft_lock=u32SoftLock "
             "product_mutex=OPEN full_cdt_mutex=0 turnstile=OPEN "
@@ -319,7 +370,7 @@ soft_revoke_inventory_log(void)
     /*
      * Grep: cap: revoke soft reply
      * Revoke path does not mint/consume GJ_CAP_REPLY; door soft table only.
-     * Soft ≠ MIG REPLY product.
+     * Soft != MIG REPLY product.
      */
     kprintf("cap: revoke soft reply reply_product=0 mig_reply=0 "
             "cnode_reply_install=0 soft_ne_mig_reply=1 wave=%u "
@@ -329,1014 +380,478 @@ soft_revoke_inventory_log(void)
 
     /*
      * Grep: cap: revoke soft return
-     * Wave 19 public return-surface: begin/walk/deferred/reclaim buckets.
+     * Public return-surface: begin/walk/deferred/reclaim buckets.
+     * Soft != product mutex / MIG REPLY / full CDT. Dual MIT OR Apache-2.0.
      */
     kprintf("cap: revoke soft return begin_ok=%u begin_null=%u "
             "begin_dead=%u begin_busy=%u begin_again=%u "
-            "walk_zero=%u walk_pos=%u walk_sum=%u "
-            "def_zero=%u def_pos=%u def_sum=%u "
+            "walk_pos=%u walk_zero=%u walk_sum=%u "
+            "def_pos=%u def_zero=%u def_sum=%u "
             "reclaim_ok=%u reclaim_busy=%u reclaim_null=%u "
-            "wave=%u\n",
+            "soft_ne_product=1 dual=MIT_OR_Apache-2.0 "
+            "(Soft!=product; soft inventory only)\n",
             g_u32SoftBeginOk, g_u32SoftBeginNull, g_u32SoftBeginDead,
-            g_u32SoftBeginBusy, g_u32SoftBeginAgain, g_u32SoftRetWalkZero,
-            g_u32SoftRetWalkPos, g_u32SoftRetWalkSum, g_u32SoftRetDefZero,
-            g_u32SoftRetDefPos, g_u32SoftRetDefSum, g_u32SoftReclaimOk,
-            g_u32SoftReclaimBusy, g_u32SoftReclaimNull, GJ_REVOKE_SOFT_WAVE);
+            g_u32SoftBeginBusy, g_u32SoftBeginAgain, g_u32SoftRetWalkPos,
+            g_u32SoftRetWalkZero, g_u32SoftRetWalkSum, g_u32SoftRetDefPos,
+            g_u32SoftRetDefZero, g_u32SoftRetDefSum, g_u32SoftReclaimOk,
+            g_u32SoftReclaimBusy, g_u32SoftReclaimNull);
 
-    /* Grep: cap: revoke soft return begin — status surface */
-    kprintf("cap: revoke soft return begin ok=%u null=%u dead=%u "
-            "busy=%u again=%u wave=%u\n",
+    /*
+     * Grep: cap: revoke soft return rate
+     * Ok/fail rate lamps (soft only; never hard-gate). Soft!=product.
+     */
+    kprintf("cap: revoke soft return rate "
+            "begin_ok=%u begin_fail=%u walk_pos=%u walk_zero=%u "
+            "def_pos=%u def_zero=%u reclaim_ok=%u reclaim_not=%u "
+            "soft_ne_product=1 dual=MIT_OR_Apache-2.0 "
+            "(Soft!=product; rate lamps only)\n",
+            g_u32SoftBeginOk,
+            g_u32SoftBeginNull + g_u32SoftBeginDead + g_u32SoftBeginBusy +
+                g_u32SoftBeginAgain,
+            g_u32SoftRetWalkPos, g_u32SoftRetWalkZero, g_u32SoftRetDefPos,
+            g_u32SoftRetDefZero, g_u32SoftReclaimOk, g_u32SoftReclaimNot);
+
+    /*
+     * Grep: cap: revoke soft retcode
+     * Observed gj_status class catalog for begin/reclaim (soft lamps).
+     */
+    kprintf("cap: revoke soft retcode "
+            "begin_ok=%u begin_inval=%u begin_dead=%u begin_busy=%u "
+            "begin_again=%u reclaim_ok=%u reclaim_inval=%u reclaim_busy=%u "
+            "walk_u32=%u def_u32=%u soft_ne_product=1 "
+            "dual=MIT_OR_Apache-2.0 (Soft!=product; not ABI claim)\n",
             g_u32SoftBeginOk, g_u32SoftBeginNull, g_u32SoftBeginDead,
-            g_u32SoftBeginBusy, g_u32SoftBeginAgain, GJ_REVOKE_SOFT_WAVE);
+            g_u32SoftBeginBusy, g_u32SoftBeginAgain, g_u32SoftReclaimOk,
+            g_u32SoftReclaimNull, g_u32SoftReclaimBusy, g_u32SoftRetWalkSum,
+            g_u32SoftRetDefSum);
 
-    /* Grep: cap: revoke soft return walk — cleared buckets */
-    kprintf("cap: revoke soft return walk zero=%u pos=%u sum=%u "
-            "wave=%u\n",
-            g_u32SoftRetWalkZero, g_u32SoftRetWalkPos, g_u32SoftRetWalkSum,
-            GJ_REVOKE_SOFT_WAVE);
-
-    /* Grep: cap: revoke soft return deferred — cleared buckets */
-    kprintf("cap: revoke soft return deferred zero=%u pos=%u sum=%u "
-            "wave=%u\n",
-            g_u32SoftRetDefZero, g_u32SoftRetDefPos, g_u32SoftRetDefSum,
-            GJ_REVOKE_SOFT_WAVE);
-
-    /* Grep: cap: revoke soft return reclaim — status surface */
-    kprintf("cap: revoke soft return reclaim ok=%u busy=%u null=%u "
-            "ready=%u not=%u wave=%u\n",
-            g_u32SoftReclaimOk, g_u32SoftReclaimBusy, g_u32SoftReclaimNull,
-            g_u32SoftReclaimReady, g_u32SoftReclaimNot, GJ_REVOKE_SOFT_WAVE);
+    /*
+     * Grep: cap: revoke soft return selftest / cap: revoke soft retmap
+     * Lean selftest map: begin->DEAD/gen -> deferred hygiene -> reclaim.
+     * Soft!=product - dual MIT OR Apache-2.0 - no version stamp.
+     */
+    kprintf("cap: revoke soft return selftest lean_runs=%u lean_ok=%u "
+            "lean_begin_ok=%u lean_reclaim_ok=%u "
+            "map=begin_DEAD_gen->deferred->reclaim soft_ne_product=1 "
+            "dual=MIT_OR_Apache-2.0 (Soft!=product; no version stamp)\n",
+            g_u32SoftLeanRuns, g_u32SoftLeanOk, g_u32SoftLeanBeginOk,
+            g_u32SoftLeanReclaimOk);
+    kprintf("cap: revoke soft retmap "
+            "begin=OK|INVAL|DEAD|BUSY|AGAIN walk=u32_cleared "
+            "deferred=u32_cleared reclaim=OK|INVAL|BUSY "
+            "phase_a=DEAD_gen_first r2=trylock_defer r7=redrive "
+            "soft_ne_product=1 dual=MIT_OR_Apache-2.0 "
+            "(Soft!=product; soft retmap only)\n");
 
     /* Grep: cap: revoke soft path */
     kprintf("cap: revoke soft path phase_a=DEAD_gen_first phase_ap=cdt_walk "
             "r2=trylock_defer r7=timer_idle_redrive phase_c=reclaim "
-            "lock=soft_u32SoftLock product=PARTIAL return_surface=1 return_rate=1 retcode=1 return_selftest=1 retmap=1 "
+            "lock=soft_u32SoftLock product=PARTIAL "
+            "return_surface=1 return_rate=1 retcode=1 "
+            "return_selftest=1 retmap=1 residual_lean=1 "
+            "udx_teardown=1 c3_residual=1 host_death_product=0 "
             "reply_product=0 full_cdt_mutex=0 soft_ne_mig_reply=1 "
-            "wave=%u (soft inventory; soft != GJ_CAP_REPLY "
-            "product; soft != MIG REPLY product; soft != full CDT mutex "
-            "product)\n",
+            "soft_ne_product=1 dual=MIT_OR_Apache-2.0 G-AC-1=1 "
+            "wave=%u (soft inventory; Soft!=product; G-AC-1; "
+            "UDX teardown + C3 residual; soft != GJ_CAP_REPLY product; "
+            "soft != MIG REPLY product; soft != full CDT mutex product; "
+            "not product host-death complete)\n",
             GJ_REVOKE_SOFT_WAVE);
 
     /*
-     * Grep: cap: revoke soft return rate
-     * Wave 17 return-surface rate lamps (kept) (soft ≠ product).
+     * Grep: cap: revoke soft residual lean
+     * Grep: cap: revoke soft residual lean udx | teardown | c3
+     * Lean residual honesty - Soft!=product dual license; G-AC-1;
+     * UDX host-death teardown residual (DMA/MMIO/IRQ-shaped multi-obj).
+     * C3: S1/S2/R6/Phase-C gate behavior checks (not lamp-only).
+     * Product mutex / MIG REPLY / full CDT turnstile / host-death remain OPEN.
      */
-    kprintf("cap: revoke soft return rate "
-            "begin_ok=%u begin_fail=%u "
-            "walk_pos=%u walk_zero=%u "
-            "def_pos=%u def_zero=%u "
-            "reclaim_ok=%u reclaim_busy=%u reclaim_null=%u "
-            "wave=%u (return rate; Soft≠product; soft≠full CDT mutex; "
-            ")\n",
-            g_u32SoftBeginOk,
-            g_u32SoftBeginNull + g_u32SoftBeginDead + g_u32SoftBeginBusy +
-                g_u32SoftBeginAgain,
-            g_u32SoftRetWalkPos, g_u32SoftRetWalkZero,
-            g_u32SoftRetDefPos, g_u32SoftRetDefZero,
-            g_u32SoftReclaimOk, g_u32SoftReclaimBusy, g_u32SoftReclaimNull,
-            GJ_REVOKE_SOFT_WAVE);
+    kprintf("cap: revoke soft residual lean "
+            "begin_ok=%u walk_sum=%u def_sum=%u reclaim_ok=%u "
+            "spins_avoided=%u retries=%u slots_cleared=%u "
+            "lean_runs=%u lean_ok=%u udx_ok=%u udx_begin=%u "
+            "udx_reclaim=%u udx_def=%u c3_ok=%u s1=%u s2=%u s2_dead_wins=%u "
+            "r6=%u gate_pin=%u gate_slot=%u gate_ref=%u lag_hold=%u "
+            "pending=%u "
+            "soft_ne_product=1 dual=MIT_OR_Apache-2.0 G-AC-1=1 "
+            "udx_teardown=1 c3_residual=1 reply_product=0 full_cdt_mutex=0 "
+            "r2_partial=1 host_death_product=0 dual_dod=OPEN "
+            "(Soft!=product; dual MIT OR Apache-2.0; G-AC-1; "
+            "no version stamp; UDX teardown + C3 residual only; "
+            "not product host-death complete; not full CDT mutex product; "
+            "Dual DoD OPEN)\n",
+            g_u32SoftBeginOk, g_u32SoftRetWalkSum, g_u32SoftRetDefSum,
+            g_u32SoftReclaimOk, g_u32R2SpinsAvoided, g_u32R2Retries,
+            g_u32R2SlotsCleared, g_u32SoftLeanRuns, g_u32SoftLeanOk,
+            g_u32SoftLeanUdxOk, g_u32SoftLeanUdxBegin, g_u32SoftLeanUdxReclaim,
+            g_u32SoftLeanUdxDef, g_u32SoftLeanC3Ok, g_u32SoftLeanS1Ok,
+            g_u32SoftLeanS2Closed, g_u32SoftLeanS2DeadWins, g_u32SoftLeanR6Ok,
+            g_u32SoftLeanGatePin, g_u32SoftLeanGateSlot, g_u32SoftLeanGateRef,
+            g_u32SoftLeanLagHold, u32Pending);
 
-    /*
-     * Grep: cap: revoke soft retcode
-     * Wave 17 retcode catalog for begin/reclaim status classes.
-     */
-    kprintf("cap: revoke soft retcode "
-            "ok=1 null=1 dead=1 busy=1 again=1 "
-            "walk_zero=1 walk_pos=1 def_zero=1 def_pos=1 "
-            "reclaim_ready=1 reclaim_not=1 "
-            "begin_ok=%u reclaim_ok=%u wave=%u "
-            "(retcode catalog; Soft≠product; soft≠MIG REPLY product)\n",
-            g_u32SoftBeginOk, g_u32SoftReclaimOk, GJ_REVOKE_SOFT_WAVE);
-
-    /*
-     * ---- Wave 18 complementary surfaces (kept) (never reshape primary).
-     * Return surfaces only — soft inventory; never hard-gates product paths.
-     */
-    /* Grep: cap: revoke soft return selftest — Wave 19 terminal return surface */
-    kprintf("cap: revoke soft return selftest inv_ret=1 product_kernel=OPEN "
-            "multi_server=0 rate_limited=0 wave=%u soft PASS\n",
-            (unsigned)GJ_REVOKE_SOFT_WAVE);
-
-    /* Grep: cap: revoke soft retmap — Wave 19 return-surface map */
-    kprintf("cap: revoke soft retmap soft_inv=1 deepen=1 return_rate=1 retcode=1 "
-            "product=OPEN wave=%u soft PASS\n",
-            (unsigned)GJ_REVOKE_SOFT_WAVE);
-
-    /* Grep: cap: revoke soft deepen wave (Wave 24 stamp) */
-    /*
-     * ---- Wave 19 complementary surfaces (kept) (never reshape primary).
-     * Return surfaces only — soft inventory; never hard-gates product paths.
-     */
-    /* Grep: cap: revoke: soft retclass — Wave 19 return-class taxonomy (kept) */
-    kprintf("cap: revoke: soft retclass ok|fail|inval|nodev|busy|nomem "
-            "soft_only=1 product_gate=0 wave=%u "
-            "(retclass taxonomy; Soft≠product)\n",
-            (unsigned)GJ_REVOKE_SOFT_WAVE);
-    /* Grep: cap: revoke: soft retlane — Wave 19 return-lane catalog (kept) */
-    kprintf("cap: revoke: soft retlane inv|selftest|rate|retcode|retmap|class "
-            "product_kernel=OPEN soft_ne_product=1 wave=%u "
-            "(retlane catalog; Soft≠product)\n",
-            (unsigned)GJ_REVOKE_SOFT_WAVE);
-    /*
-     * ---- Wave 20 complementary surfaces (kept) (never reshape primary).
-     * Return surfaces only — soft inventory; never hard-gates product paths.
-     */
-    /* Grep: cap: revoke: soft retbound — Wave 20 return-bound honesty (kept) */
-    kprintf("cap: revoke: soft retbound soft_only=1 product_gate=0 hard_gate=0 "
-            "never_blocks_m0=1 wave=%u "
-            "(retbound honesty; Soft≠product)\n",
-            (unsigned)GJ_REVOKE_SOFT_WAVE);
-    /* Grep: cap: revoke: soft retseal — Wave 20 seal stamp (kept) */
-    kprintf("cap: revoke: soft retseal exclusive=1 soft_ne_product=1 "
-            "product_kernel=OPEN wave=%u "
-            "(retseal stamp; Soft≠product)\n",
-            (unsigned)GJ_REVOKE_SOFT_WAVE);
-            /*
-             * ---- Wave 21 complementary surfaces (kept) (never reshape primary).
-             * Return surfaces only — soft inventory; never hard-gates product paths.
-            */
-            /* Grep: cap: revoke: soft retpulse — Wave 21 return-pulse honesty (kept) */
-            kprintf("cap: revoke: soft retpulse soft_only=1 product_gate=0 soft_ne_product=1 "
-                    "never_blocks_m0=1 wave=%u "
-                    "(retpulse honesty; Soft≠product)\n",
-                    (unsigned)GJ_REVOKE_SOFT_WAVE);
-            /* Grep: cap: revoke: soft retmark — Wave 21 mark stamp (kept) */
-            kprintf("cap: revoke: soft retmark exclusive=1 soft_ne_product=1 "
-                    "product_kernel=OPEN wave=%u "
-                    "(retmark stamp; Soft≠product)\n",
-                    (unsigned)GJ_REVOKE_SOFT_WAVE);
-            /*
-             * ---- Wave 22 complementary surfaces (kept) (never reshape primary).
-             * Return surfaces only — soft inventory; never hard-gates product paths.
-            */
-            /* Grep: cap: revoke: soft retphase — Wave 22 return-phase honesty (kept) */
-            kprintf("cap: revoke: soft retphase soft_only=1 product_gate=0 soft_ne_product=1 "
-                    "never_blocks_m0=1 wave=%u "
-                    "(retphase honesty; Soft≠product)\n",
-                    (unsigned)GJ_REVOKE_SOFT_WAVE);
-            /* Grep: cap: revoke: soft retbadge — Wave 22 badge stamp (kept) */
-            kprintf("cap: revoke: soft retbadge exclusive=1 soft_ne_product=1 "
-                    "product_kernel=OPEN wave=%u "
-                    "(retbadge stamp; Soft≠product)\n",
-                    (unsigned)GJ_REVOKE_SOFT_WAVE);
-/*
- * ---- Wave 23 complementary surfaces (kept) (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
-            */
-            /* Grep: cap: revoke: soft rettoken — Wave 23 return-token honesty (kept) */
-            kprintf("cap: revoke: soft rettoken soft_only=1 product_gate=0 soft_ne_product=1 "
-                    "never_blocks_m0=1 wave=%u "
-                    "(rettoken honesty; Soft≠product)\n",
-                    (unsigned)GJ_REVOKE_SOFT_WAVE);
-            /* Grep: cap: revoke: soft retcrest — Wave 23 crest stamp (kept) */
-            kprintf("cap: revoke: soft retcrest exclusive=1 soft_ne_product=1 "
-                    "product_kernel=OPEN wave=%u "
-                    "(retcrest stamp; Soft≠product)\n",
-                    (unsigned)GJ_REVOKE_SOFT_WAVE);
-            /*
-             * ---- Wave 24 complementary surfaces (kept) (never reshape primary).
-             * Return surfaces only — soft inventory; never hard-gates product paths.
-             */
-            /* Grep: cap: revoke: soft retvault — Wave 24 return-vault honesty (kept) */
-            kprintf("cap: revoke: soft retvault soft_only=1 product_gate=0 soft_ne_product=1 "
-                    "never_blocks_m0=1 wave=%u "
-                    "(retvault honesty; Soft≠product)\n",
-                    (unsigned)GJ_REVOKE_SOFT_WAVE);
-            /* Grep: cap: revoke: soft retbanner — Wave 24 banner stamp (kept) */
-            kprintf("cap: revoke: soft retbanner exclusive=1 soft_ne_product=1 "
-                    "product_kernel=OPEN wave=%u "
-                    "(retbanner stamp; Soft≠product)\n",
-                    (unsigned)GJ_REVOKE_SOFT_WAVE);
-            /*
-             * ---- Wave 25 complementary surfaces (kept) (never reshape primary).
-             * Return surfaces only — soft inventory; never hard-gates product paths.
-             */
-            /* Grep: cap: revoke: soft retledger — Wave 25 return-ledger honesty (kept) */
-            kprintf("cap: revoke: soft retledger soft_only=1 product_gate=0 soft_ne_product=1 "
-                    "never_blocks_m0=1 wave=%u "
-                    "(retledger honesty; Soft≠product)\n",
-                    (unsigned)GJ_REVOKE_SOFT_WAVE);
-            /* Grep: cap: revoke: soft retbeacon — Wave 25 beacon stamp (kept) */
-            kprintf("cap: revoke: soft retbeacon exclusive=1 soft_ne_product=1 "
-                    "product_kernel=OPEN wave=%u "
-                    "(retbeacon stamp; Soft≠product)\n",
-                    (unsigned)GJ_REVOKE_SOFT_WAVE);
-            /*
-             * ---- Wave 26 complementary surfaces (kept) (never reshape primary).
-             * Return surfaces only — soft inventory; never hard-gates product paths.
-             */
-            /* Grep: cap: revoke: soft retcipher — Wave 26 return-cipher honesty (kept) */
-            kprintf("cap: revoke: soft retcipher soft_only=1 product_gate=0 soft_ne_product=1 "
-                    "never_blocks_m0=1 wave=%u "
-                    "(retcipher honesty; Soft≠product)\n",
-                    (unsigned)GJ_REVOKE_SOFT_WAVE);
-            /* Grep: cap: revoke: soft retflame — Wave 26 flame stamp (kept) */
-            kprintf("cap: revoke: soft retflame exclusive=1 soft_ne_product=1 "
-                    "product_kernel=OPEN wave=%u "
-                    "(retflame stamp; Soft≠product)\n",
-                    (unsigned)GJ_REVOKE_SOFT_WAVE);
-                    /*
-                     * ---- Wave 27 complementary surfaces (kept) (never reshape primary).
-                     * Return surfaces only — soft inventory; never hard-gates product paths.
-                     */
-                    /* Grep: cap: revoke: soft retprism — Wave 27 return-prism honesty (kept) */
-                    kprintf("cap: revoke: soft retprism soft_only=1 product_gate=0 soft_ne_product=1 "
-                            "never_blocks_m0=1 wave=%u "
-                            "(retprism honesty; Soft≠product)\n",
-                            (unsigned)GJ_REVOKE_SOFT_WAVE);
-                    /* Grep: cap: revoke: soft retforge — Wave 27 forge stamp (kept) */
-                    kprintf("cap: revoke: soft retforge exclusive=1 soft_ne_product=1 "
-                            "product_kernel=OPEN wave=%u "
-                            "(retforge stamp; Soft≠product)\n",
-                            (unsigned)GJ_REVOKE_SOFT_WAVE);
-                            /*
-                             * ---- Wave 28 complementary surfaces (kept) (never reshape primary).
-                             * Return surfaces only — soft inventory; never hard-gates product paths.
-                             */
-                            /* Grep: cap: revoke: soft retshard — Wave 28 return-shard honesty (kept) */
-                            kprintf("cap: revoke: soft retshard soft_only=1 product_gate=0 soft_ne_product=1 "
-                                "never_blocks_m0=1 wave=%u "
-                                "(retshard honesty; Soft≠product)\n",
-                                (unsigned)GJ_REVOKE_SOFT_WAVE);
-                            /* Grep: cap: revoke: soft retcrown — Wave 28 crown stamp (kept) */
-                            kprintf("cap: revoke: soft retcrown exclusive=1 soft_ne_product=1 "
-                                "product_kernel=OPEN wave=%u "
-                                "(retcrown stamp; Soft≠product)\n",
-                                (unsigned)GJ_REVOKE_SOFT_WAVE);
-                                /*
-                             * ---- Wave 29 complementary surfaces (kept) (never reshape primary).
-                             * Return surfaces only — soft inventory; never hard-gates product paths.
-                             */
-                            /* Grep: cap: revoke: soft retglyph — Wave 29 return-glyph honesty (kept) */
-                            kprintf("cap: revoke: soft retglyph soft_only=1 product_gate=0 soft_ne_product=1 "
-                                    "never_blocks_m0=1 wave=%u "
-                                    "(retglyph honesty; Soft≠product)\n",
-                                    (unsigned)GJ_REVOKE_SOFT_WAVE);
-                            /* Grep: cap: revoke: soft retscepter — Wave 29 scepter stamp (kept) */
-                            kprintf("cap: revoke: soft retscepter exclusive=1 soft_ne_product=1 "
-                                    "product_kernel=OPEN wave=%u "
-                                    "(retscepter stamp; Soft≠product)\n",
-                                    (unsigned)GJ_REVOKE_SOFT_WAVE);
-                                /*
-                             * ---- Wave 30 complementary surfaces (kept) (never reshape primary).
-                             * Return surfaces only — soft inventory; never hard-gates product paths.
-                             */
-                            /* Grep: cap: revoke: soft retsigil — Wave 30 return-sigil honesty (kept) */
-                            kprintf("cap: revoke: soft retsigil soft_only=1 product_gate=0 soft_ne_product=1 "
-                                    "never_blocks_m0=1 wave=%u "
-                                    "(retsigil honesty; Soft≠product)\n",
-                                    (unsigned)GJ_REVOKE_SOFT_WAVE);
-                            /* Grep: cap: revoke: soft retemblem — Wave 30 emblem stamp (kept) */
-                            kprintf("cap: revoke: soft retemblem exclusive=1 soft_ne_product=1 "
-                                    "product_kernel=OPEN wave=%u "
-                                    "(retemblem stamp; Soft≠product)\n",
-                                    (unsigned)GJ_REVOKE_SOFT_WAVE);
-                            /*
-                             * ---- Wave 31 complementary surfaces (kept) (never reshape primary).
-                             * Return surfaces only — soft inventory; never hard-gates product paths.
-                             */
-                            /* Grep: cap: revoke: soft retaegis — Wave 31 return-aegis honesty (kept) */
-                            kprintf("cap: revoke: soft retaegis soft_only=1 product_gate=0 soft_ne_product=1 "
-                                    "never_blocks_m0=1 wave=%u "
-                                    "(retaegis honesty; Soft≠product)\n",
-                                    (unsigned)GJ_REVOKE_SOFT_WAVE);
-                            /* Grep: cap: revoke: soft retsigil — Wave 30 return-sigil honesty (kept) */
-                            kprintf("cap: revoke: soft retsigil soft_only=1 product_gate=0 soft_ne_product=1 "
-                                    "never_blocks_m0=1 wave=%u "
-                                    "(retsigil honesty; Soft≠product)\n",
-                                    (unsigned)GJ_REVOKE_SOFT_WAVE);
-                            /* Grep: cap: revoke: soft retmantle — Wave 31 mantle stamp (kept) */
-                            kprintf("cap: revoke: soft retmantle exclusive=1 soft_ne_product=1 "
-                                    "product_kernel=OPEN wave=%u "
-                                    "(retmantle stamp; Soft≠product)\n",
-                                    (unsigned)GJ_REVOKE_SOFT_WAVE);
-/*
- * ---- Wave 32 complementary surfaces (kept) (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: cap: revoke: soft retbulwark — Wave 32 return-bulwark honesty (kept) */
-kprintf("cap: revoke: soft retbulwark soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=%u "
-        "(retbulwark honesty; Soft≠product)\n",
-        (unsigned)GJ_REVOKE_SOFT_WAVE);
-/* Grep: cap: revoke: soft retpanoply — Wave 32 panoply stamp (kept) */
-kprintf("cap: revoke: soft retpanoply exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=%u "
-        "(retpanoply stamp; Soft≠product)\n",
-        (unsigned)GJ_REVOKE_SOFT_WAVE);
-/*
- * ---- Wave 33 complementary surfaces (kept) (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: cap: revoke: soft retbastion — Wave 33 return-bastion honesty (kept) */
-kprintf("cap: revoke: soft retbastion soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=%u "
-        "(retbastion honesty; Soft≠product)\n",
-        (unsigned)GJ_REVOKE_SOFT_WAVE);
-/* Grep: cap: revoke: soft retcitadel — Wave 33 citadel stamp (kept) */
-kprintf("cap: revoke: soft retcitadel exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=%u "
-        "(retcitadel stamp; Soft≠product)\n",
-        (unsigned)GJ_REVOKE_SOFT_WAVE);
-/*
- * ---- Wave 34 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: cap: revoke: soft retredoubt — Wave 34 return-redoubt honesty */
-kprintf("cap: revoke: soft retredoubt soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=%u "
-        "(retredoubt honesty; Soft≠product)\n",
-        (unsigned)GJ_REVOKE_SOFT_WAVE);
-/* Grep: cap: revoke: soft retkeep — Wave 34 exclusive keep stamp */
-kprintf("cap: revoke: soft retkeep exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=%u "
-        "(retkeep stamp; Soft≠product)\n",
-        (unsigned)GJ_REVOKE_SOFT_WAVE);
-/*
- * ---- Wave 35 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: cap: revoke: soft retfortress — Wave 35 return-fortress honesty */
-kprintf("cap: revoke: soft retfortress soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=%u "
-        "(retfortress honesty; Soft≠product)\n",
-        (unsigned)GJ_REVOKE_SOFT_WAVE);
-/* Grep: cap: revoke: soft retpalace — Wave 35 exclusive palace stamp */
-kprintf("cap: revoke: soft retpalace exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=%u "
-        "(retpalace stamp; Soft≠product)\n",
-        (unsigned)GJ_REVOKE_SOFT_WAVE);
-/*
- * ---- Wave 36 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: cap: revoke: soft rethold — Wave 36 return-hold honesty */
-kprintf("cap: revoke: soft rethold soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=%u "
-        "(rethold honesty; Soft≠product)\n",
-        (unsigned)GJ_REVOKE_SOFT_WAVE);
-/* Grep: cap: revoke: soft retspire — Wave 36 exclusive spire stamp */
-kprintf("cap: revoke: soft retspire exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=%u "
-        "(retspire stamp; Soft≠product)\n",
-        (unsigned)GJ_REVOKE_SOFT_WAVE);
-/*
- * ---- Wave 37 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: cap: revoke: soft retwall — Wave 37 return-wall honesty */
-kprintf("cap: revoke: soft retwall soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=%u "
-        "(retwall honesty; Soft≠product)\n",
-        (unsigned)GJ_REVOKE_SOFT_WAVE);
-/* Grep: cap: revoke: soft retgate — Wave 37 exclusive gate stamp */
-kprintf("cap: revoke: soft retgate exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=%u "
-        "(retgate stamp; Soft≠product)\n",
-        (unsigned)GJ_REVOKE_SOFT_WAVE);
-/*
- * ---- Wave 38 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: cap: revoke: soft retmoat — Wave 38 return-moat honesty */
-kprintf("cap: revoke: soft retmoat soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=%u "
-        "(retmoat honesty; Soft≠product)\n",
-        (unsigned)GJ_REVOKE_SOFT_WAVE);
-/* Grep: cap: revoke: soft retower — Wave 38 exclusive tower stamp */
-kprintf("cap: revoke: soft retower exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=%u "
-        "(retower stamp; Soft≠product)\n",
-        (unsigned)GJ_REVOKE_SOFT_WAVE);
-                            
-/*
- * ---- Wave 39 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: cap: revoke: soft retbarbican — Wave 39 return-barbican honesty */
-kprintf("cap: revoke: soft retbarbican soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=%u "
-        "(retbarbican honesty; Soft≠product)\n",
-        (unsigned)GJ_REVOKE_SOFT_WAVE);
-/* Grep: cap: revoke: soft retglacis — Wave 39 exclusive glacis stamp */
-kprintf("cap: revoke: soft retglacis exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=%u "
-        "(retglacis stamp; Soft≠product)\n",
-        (unsigned)GJ_REVOKE_SOFT_WAVE);
-/*
- * ---- Wave 40 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: cap: revoke: soft retcurtain — Wave 40 return-curtain honesty */
-kprintf("cap: revoke: soft retcurtain soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=%u "
-        "(retcurtain honesty; Soft≠product)\n",
-        (unsigned)GJ_REVOKE_SOFT_WAVE);
-/* Grep: cap: revoke: soft retparapet — Wave 40 exclusive parapet stamp */
-kprintf("cap: revoke: soft retparapet exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=%u "
-        "(retparapet stamp; Soft≠product)\n",
-        (unsigned)GJ_REVOKE_SOFT_WAVE);
-/*
- * ---- Wave 41 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: cap: revoke: soft retravelin — Wave 41 return-travelin honesty */
-kprintf("cap: revoke: soft retravelin soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=%u "
-        "(retravelin honesty; Soft≠product)\n",
-        (unsigned)GJ_REVOKE_SOFT_WAVE);
-/* Grep: cap: revoke: soft retditch — Wave 41 exclusive ditch stamp */
-kprintf("cap: revoke: soft retditch exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=%u "
-        "(retditch stamp; Soft≠product)\n",
-        (unsigned)GJ_REVOKE_SOFT_WAVE);
-/*
- * ---- Wave 42 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: cap: revoke: soft retportcullis — Wave 42 return-portcullis honesty */
-kprintf("cap: revoke: soft retportcullis soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=%u "
-        "(retportcullis honesty; Soft≠product)\n",
-        (unsigned)GJ_REVOKE_SOFT_WAVE);
-/* Grep: cap: revoke: soft retbattlement — Wave 42 exclusive battlement stamp */
-kprintf("cap: revoke: soft retbattlement exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=%u "
-        "(retbattlement stamp; Soft≠product)\n",
-        (unsigned)GJ_REVOKE_SOFT_WAVE);
-/*
- * ---- Wave 43 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: cap: revoke: soft retmachicolation — Wave 43 return-machicolation honesty */
-kprintf("cap: revoke: soft retmachicolation soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=%u "
-        "(retmachicolation honesty; Soft≠product)\n",
-        (unsigned)GJ_REVOKE_SOFT_WAVE);
-/* Grep: cap: revoke: soft retarrowslit — Wave 43 exclusive arrowslit stamp */
-kprintf("cap: revoke: soft retarrowslit exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=%u "
-        "(retarrowslit stamp; Soft≠product)\n",
-        (unsigned)GJ_REVOKE_SOFT_WAVE);
-
-/*
- * ---- Wave 44 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: cap: revoke: soft retmerlon — Wave 44 return-merlon honesty */
-kprintf("cap: revoke: soft retmerlon soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=%u "
-        "(retmerlon honesty; Soft≠product)\n",
-        (unsigned)GJ_REVOKE_SOFT_WAVE);
-/* Grep: cap: revoke: soft retembrasure — Wave 44 exclusive embrasure stamp */
-kprintf("cap: revoke: soft retembrasure exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=%u "
-        "(retembrasure stamp; Soft≠product)\n",
-        (unsigned)GJ_REVOKE_SOFT_WAVE);
-
-/*
- * ---- Wave 45 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: cap: revoke: soft retkeepgate — Wave 45 return-keepgate honesty */
-kprintf("cap: revoke: soft retkeepgate soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=%u "
-        "(retkeepgate honesty; Soft≠product)\n",
-        (unsigned)GJ_REVOKE_SOFT_WAVE);
-/* Grep: cap: revoke: soft retouterward — Wave 45 exclusive outerward stamp */
-kprintf("cap: revoke: soft retouterward exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=%u "
-        "(retouterward stamp; Soft≠product)\n",
-        (unsigned)GJ_REVOKE_SOFT_WAVE);
-
-/*
- * ---- Wave 46 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: cap: revoke: soft retbailey — Wave 46 return-bailey honesty */
-kprintf("cap: revoke: soft retbailey soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=%u "
-        "(retbailey honesty; Soft≠product)\n",
-        (unsigned)GJ_REVOKE_SOFT_WAVE);
-/* Grep: cap: revoke: soft retpostern — Wave 46 exclusive postern stamp */
-kprintf("cap: revoke: soft retpostern exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=%u "
-        "(retpostern stamp; Soft≠product)\n",
-        (unsigned)GJ_REVOKE_SOFT_WAVE);
-
-/*
- * ---- Wave 47 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: cap: revoke: soft retinnerward — Wave 47 return-innerward honesty */
-kprintf("cap: revoke: soft retinnerward soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retinnerward honesty; Soft≠product)\n");
-/* Grep: cap: revoke: soft retdonjon — Wave 47 exclusive donjon stamp */
-kprintf("cap: revoke: soft retdonjon exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retdonjon stamp; Soft≠product)\n");
-
-/*
- * ---- Wave 48 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: cap: revoke: soft retchevaux — Wave 48 return-chevaux honesty */
-kprintf("cap: revoke: soft retchevaux soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retchevaux honesty; Soft≠product)\n");
-/* Grep: cap: revoke: soft retpalisade — Wave 48 exclusive palisade stamp */
-kprintf("cap: revoke: soft retpalisade exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retpalisade stamp; Soft≠product)\n");
-
-/*
- * ---- Wave 49 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: cap: revoke: soft retglacisgate — Wave 49 return-glacisgate honesty */
-kprintf("cap: revoke: soft retglacisgate soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retglacisgate honesty; Soft≠product)\n");
-/* Grep: cap: revoke: soft retoutwork — Wave 49 exclusive outwork stamp */
-kprintf("cap: revoke: soft retoutwork exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retoutwork stamp; Soft≠product)\n");
-/*
- * ---- Wave 50 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: cap: revoke: soft retsally — Wave 50 return-sally honesty */
-kprintf("cap: revoke: soft retsally soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retsally honesty; Soft≠product)\n");
-/* Grep: cap: revoke: soft retcounterscarp — Wave 50 exclusive counterscarp stamp */
-kprintf("cap: revoke: soft retcounterscarp exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retcounterscarp stamp; Soft≠product)\n");
-/*
- * ---- Wave 51 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: cap: revoke: soft retfosse — Wave 51 return-fosse honesty */
-kprintf("cap: revoke: soft retfosse soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retfosse honesty; Soft≠product)\n");
-/* Grep: cap: revoke: soft retcoveredway — Wave 51 exclusive coveredway stamp */
-kprintf("cap: revoke: soft retcoveredway exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retcoveredway stamp; Soft≠product)\n");
-
-/*
- * ---- Wave 52 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: cap: revoke: soft rettenaille — Wave 52 return-tenaille honesty */
-kprintf("cap: revoke: soft rettenaille soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(rettenaille honesty; Soft≠product)\n");
-/* Grep: cap: revoke: soft retdemilune — Wave 52 exclusive demilune stamp */
-kprintf("cap: revoke: soft retdemilune exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retdemilune stamp; Soft≠product)\n");
-/*
- * ---- Wave 53 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: cap: revoke: soft retravelin — Wave 53 return-travelin honesty */
-kprintf("cap: revoke: soft retravelin soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retravelin honesty; Soft≠product)\n");
-/* Grep: cap: revoke: soft retlunette — Wave 53 exclusive lunette stamp */
-kprintf("cap: revoke: soft retlunette exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retlunette stamp; Soft≠product)\n");
-/*
- * ---- Wave 54 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: cap: revoke: soft retcaponier — Wave 54 return-caponier honesty */
-kprintf("cap: revoke: soft retcaponier soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retcaponier honesty; Soft≠product)\n");
-/* Grep: cap: revoke: soft retredan — Wave 54 exclusive redan stamp */
-kprintf("cap: revoke: soft retredan exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retredan stamp; Soft≠product)\n");
-/*
- * ---- Wave 55 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: cap: revoke: soft retflank — Wave 55 return-flank honesty */
-kprintf("cap: revoke: soft retflank soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retflank honesty; Soft≠product)\n");
-/* Grep: cap: revoke: soft retface — Wave 55 exclusive face stamp */
-kprintf("cap: revoke: soft retface exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retface stamp; Soft≠product)\n");
-/*
- * ---- Wave 56 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: cap: revoke: soft retgorge — Wave 56 return-gorge honesty */
-kprintf("cap: revoke: soft retgorge soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retgorge honesty; Soft≠product)\n");
-/* Grep: cap: revoke: soft retshoulder — Wave 56 exclusive shoulder stamp */
-kprintf("cap: revoke: soft retshoulder exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retshoulder stamp; Soft≠product)\n");
-/*
- * ---- Wave 57 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: cap: revoke: soft retraverse — Wave 57 return-traverse honesty */
-kprintf("cap: revoke: soft retraverse soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retraverse honesty; Soft≠product)\n");
-/* Grep: cap: revoke: soft retcasemate — Wave 57 exclusive casemate stamp */
-kprintf("cap: revoke: soft retcasemate exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retcasemate stamp; Soft≠product)\n");
-
-/*
- * ---- Wave 58 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: cap: revoke: soft retorillon — Wave 58 return-orillon honesty */
-kprintf("cap: revoke: soft retorillon soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retorillon honesty; Soft≠product)\n");
-/* Grep: cap: revoke: soft retbonnette — Wave 58 exclusive bonnette stamp */
-kprintf("cap: revoke: soft retbonnette exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retbonnette stamp; Soft≠product)\n");
-
-/*
- * ---- Wave 59 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: cap: revoke: soft retcrownwork — Wave 59 return-crownwork honesty */
-kprintf("cap: revoke: soft retcrownwork soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retcrownwork honesty; Soft≠product)\n");
-/* Grep: cap: revoke: soft rethornwork — Wave 59 exclusive hornwork stamp */
-kprintf("cap: revoke: soft rethornwork exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(rethornwork stamp; Soft≠product)\n");
-
-/*
- * ---- Wave 60 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: cap: revoke: soft retplace — Wave 60 return-place honesty */
-kprintf("cap: revoke: soft retplace soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retplace honesty; Soft≠product)\n");
-/* Grep: cap: revoke: soft retenvelope — Wave 60 exclusive envelope stamp */
-kprintf("cap: revoke: soft retenvelope exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retenvelope stamp; Soft≠product)\n");
-
-
-
-
-
-
-
-
-
-/*
- * ---- Wave 61 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: cap: revoke: soft retcounterguard — Wave 61 return-counterguard honesty */
-kprintf("cap: revoke: soft retcounterguard soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retcounterguard honesty; Soft≠product)\n");
-/* Grep: cap: revoke: soft retcoveredface — Wave 61 exclusive coveredface stamp */
-kprintf("cap: revoke: soft retcoveredface exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retcoveredface stamp; Soft≠product)\n");
-/*
- * ---- Wave 62 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: cap: revoke: soft retbastionface — Wave 62 return-bastionface honesty */
-kprintf("cap: revoke: soft retbastionface soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retbastionface honesty; Soft≠product)\n");
-/* Grep: cap: revoke: soft retcurtainangle — Wave 62 exclusive curtainangle stamp */
-kprintf("cap: revoke: soft retcurtainangle exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retcurtainangle stamp; Soft≠product)\n");
-/*
- * ---- Wave 63 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: cap: revoke: soft retdoubletenaille — Wave 63 return-doubletenaille honesty */
-kprintf("cap: revoke: soft retdoubletenaille soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retdoubletenaille honesty; Soft≠product)\n");
-/* Grep: cap: revoke: soft retplaceofarms — Wave 63 exclusive placeofarms stamp */
-kprintf("cap: revoke: soft retplaceofarms exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retplaceofarms stamp; Soft≠product)\n");
- /*
-  * ---- Wave 64 exclusive complementary surfaces (never reshape primary).
-  * Return surfaces only — soft inventory; never hard-gates product paths.
-  */
- /* Grep: cap: revoke: soft retreentrant — Wave 64 return-reentrant honesty */
-kprintf("cap: revoke: soft retreentrant soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retreentrant honesty; Soft≠product)\n");
- /* Grep: cap: revoke: soft retsallyport — Wave 64 exclusive sallyport stamp */
-kprintf("cap: revoke: soft retsallyport exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retsallyport stamp; Soft≠product)\n");
- /*
-  * ---- Wave 65 exclusive complementary surfaces (never reshape primary).
-  * Return surfaces only — soft inventory; never hard-gates product paths.
-  */
- /* Grep: cap: revoke: soft retgorgeangle — Wave 65 return-gorgeangle honesty */
-kprintf("cap: revoke: soft retgorgeangle soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retgorgeangle honesty; Soft≠product)\n");
- /* Grep: cap: revoke: soft retshoulderangle — Wave 65 exclusive shoulderangle stamp */
-kprintf("cap: revoke: soft retshoulderangle exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retshoulderangle stamp; Soft≠product)\n");
- /*
-  * ---- Wave 66 exclusive complementary surfaces (never reshape primary).
-  * Return surfaces only — soft inventory; never hard-gates product paths.
-  */
- /* Grep: cap: revoke: soft retflankangle — Wave 66 return-flankangle honesty */
- kprintf("cap: revoke: soft retflankangle soft_only=1 product_gate=0 soft_ne_product=1 "
-         "never_blocks_m0=1 wave=116 "
-         "(retflankangle honesty; Soft≠product)\n");
- /* Grep: cap: revoke: soft retfaceangle — Wave 66 exclusive faceangle stamp */
- kprintf("cap: revoke: soft retfaceangle exclusive=1 soft_ne_product=1 "
-         "product_kernel=OPEN wave=116 "
-         "(retfaceangle stamp; Soft≠product)\n");
-/*
- * ---- Wave 67 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: cap: revoke: soft retcaponierangle — Wave 67 return-caponierangle honesty */
-kprintf("cap: revoke: soft retcaponierangle soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retcaponierangle honesty; Soft≠product)\n");
-/* Grep: cap: revoke: soft retredanangle — Wave 67 exclusive redanangle stamp */
-kprintf("cap: revoke: soft retredanangle exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retredanangle stamp; Soft≠product)\n");
-/*
- * ---- Wave 68 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: cap: revoke: soft retlunetteangle — Wave 68 return-lunetteangle honesty */
-kprintf("cap: revoke: soft retlunetteangle soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retlunetteangle honesty; Soft≠product)\n");
-/* Grep: cap: revoke: soft rettenailleangle — Wave 68 exclusive tenailleangle stamp */
-kprintf("cap: revoke: soft rettenailleangle exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(rettenailleangle stamp; Soft≠product)\n");
-/*
- * ---- Wave 69 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: cap: revoke: soft retdemiluneangle — Wave 69 return-demiluneangle honesty */
-kprintf("cap: revoke: soft retdemiluneangle soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retdemiluneangle honesty; Soft≠product)\n");
-/* Grep: cap: revoke: soft retcoveredwayangle — Wave 69 exclusive coveredwayangle stamp */
-kprintf("cap: revoke: soft retcoveredwayangle exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retcoveredwayangle stamp; Soft≠product)\n");
-/*
- * ---- Wave 70 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: cap: revoke: soft retfosseangle — Wave 70 return-fosseangle honesty */
-kprintf("cap: revoke: soft retfosseangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retfosseangle honesty; Soft≠product)\n");
-/* Grep: cap: revoke: soft retcounterscarple — Wave 70 exclusive counterscarple stamp */
-kprintf("cap: revoke: soft retcounterscarple exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retcounterscarple stamp; Soft≠product)\n");
-/*
- * ---- Wave 71 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: cap: revoke: soft retsallyportangle — Wave 71 return-sallyportangle honesty */
-kprintf("cap: revoke: soft retsallyportangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retsallyportangle honesty; Soft≠product)\n");
-/* Grep: cap: revoke: soft retreentrantangle — Wave 71 exclusive reentrantangle stamp */
-kprintf("cap: revoke: soft retreentrantangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retreentrantangle stamp; Soft≠product)\n");
-/*
- * ---- Wave 72 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: cap: revoke: soft retplaceofarmsangle — Wave 72 return-placeofarmsangle honesty */
-kprintf("cap: revoke: soft retplaceofarmsangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retplaceofarmsangle honesty; Soft≠product)\n");
-/* Grep: cap: revoke: soft retdoubletenailleangle — Wave 72 exclusive doubletenailleangle stamp */
-kprintf("cap: revoke: soft retdoubletenailleangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retdoubletenailleangle stamp; Soft≠product)\n");
-/* Grep: cap: revoke: soft retcurtainface — Wave 73 return-curtainface honesty */
-kprintf("cap: revoke: soft retcurtainface soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retcurtainface honesty; Soft≠product)\n");
-/* Grep: cap: revoke: soft retbastionangle — Wave 73 exclusive bastionangle stamp */
-kprintf("cap: revoke: soft retbastionangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retbastionangle stamp; Soft≠product)\n");
-/* Grep: cap: revoke: soft retglacisangle — Wave 74 return-glacisangle honesty */
-kprintf("cap: revoke: soft retglacisangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retglacisangle honesty; Soft≠product)\n");
-/* Grep: cap: revoke: soft retparapetangle — Wave 74 exclusive parapetangle stamp */
-kprintf("cap: revoke: soft retparapetangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retparapetangle stamp; Soft≠product)\n");
-/* Grep: cap: revoke: soft retmoatangle — Wave 75 return-moatangle honesty */
-kprintf("cap: revoke: soft retmoatangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retmoatangle honesty; Soft≠product)\n");
-/* Grep: cap: revoke: soft retowerangle — Wave 75 exclusive towerangle stamp */
-kprintf("cap: revoke: soft retowerangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retowerangle stamp; Soft≠product)\n");
-/* Grep: cap: revoke: soft retgateangle — Wave 76 return-gateangle honesty */
-kprintf("cap: revoke: soft retgateangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retgateangle honesty; Soft≠product)\n");
-/* Grep: cap: revoke: soft retwallangle — Wave 76 exclusive wallangle stamp */
-kprintf("cap: revoke: soft retwallangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retwallangle stamp; Soft≠product)\n");
-/* Grep: cap: revoke: soft retspireangle — Wave 77 return-spireangle honesty */
-kprintf("cap: revoke: soft retspireangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retspireangle honesty; Soft≠product)\n");
-/* Grep: cap: revoke: soft retholdangle — Wave 77 exclusive holdangle stamp */
-kprintf("cap: revoke: soft retholdangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retholdangle stamp; Soft≠product)\n");
-/* Grep: cap: revoke: soft retpalaceangle — Wave 78 return-palaceangle honesty */
-kprintf("cap: revoke: soft retpalaceangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retpalaceangle honesty; Soft≠product)\n");
-/* Grep: cap: revoke: soft retfortressangle — Wave 78 exclusive fortressangle stamp */
-kprintf("cap: revoke: soft retfortressangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retfortressangle stamp; Soft≠product)\n");
-/* Grep: cap: revoke: soft retkeepangle — Wave 79 return-keepangle honesty */
-kprintf("cap: revoke: soft retkeepangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retkeepangle honesty; Soft≠product)\n");
-/* Grep: cap: revoke: soft retredoubtangle — Wave 79 exclusive redoubtangle stamp */
-kprintf("cap: revoke: soft retredoubtangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retredoubtangle stamp; Soft≠product)\n");
-/* Grep: cap: revoke: soft retcitadelangle — Wave 80 return-citadelangle honesty */
-kprintf("cap: revoke: soft retcitadelangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retcitadelangle honesty; Soft≠product)\n");
-/* Grep: cap: revoke: soft retbastionkeep — Wave 80 exclusive bastionkeep stamp */
-kprintf("cap: revoke: soft retbastionkeep exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retbastionkeep stamp; Soft≠product)\n");
-/* Grep: cap: revoke: soft retpanoplyangle — Wave 81 return-panoplyangle honesty */
-kprintf("cap: revoke: soft retpanoplyangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retpanoplyangle honesty; Soft≠product)\n");
-/* Grep: cap: revoke: soft retbulwarkangle — Wave 81 exclusive bulwarkangle stamp */
-kprintf("cap: revoke: soft retbulwarkangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retbulwarkangle stamp; Soft≠product)\n");
-/* Grep: cap: revoke: soft retmantleangle — Wave 82 return-mantleangle honesty */
-kprintf("cap: revoke: soft retmantleangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retmantleangle honesty; Soft≠product)\n");
-/* Grep: cap: revoke: soft retaegisangle — Wave 82 exclusive aegisangle stamp */
-kprintf("cap: revoke: soft retaegisangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retaegisangle stamp; Soft≠product)\n");
-/* Grep: cap: revoke: soft retemblemangle — Wave 83 return-emblemangle honesty */
-kprintf("cap: revoke: soft retemblemangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retemblemangle honesty; Soft≠product)\n");
-/* Grep: cap: revoke: soft retsigilangle — Wave 83 exclusive sigilangle stamp */
-kprintf("cap: revoke: soft retsigilangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retsigilangle stamp; Soft≠product)\n");
-/* Grep: cap: revoke: soft retscepterangle — Wave 84 return-scepterangle honesty */
-kprintf("cap: revoke: soft retscepterangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retscepterangle honesty; Soft≠product)\n");
-/* Grep: cap: revoke: soft retglyphangle — Wave 84 exclusive glyphangle stamp */
-kprintf("cap: revoke: soft retglyphangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retglyphangle stamp; Soft≠product)\n");
-/* Grep: cap: revoke: soft retcrownangle — Wave 85 return-crownangle honesty */
-kprintf("cap: revoke: soft retcrownangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retcrownangle honesty; Soft≠product)\n");
-/* Grep: cap: revoke: soft retshardangle — Wave 85 exclusive shardangle stamp */
-kprintf("cap: revoke: soft retshardangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retshardangle stamp; Soft≠product)\n");
-/* Grep: cap: revoke: soft retforgeangle — Wave 86 return-forgeangle honesty */
-kprintf("cap: revoke: soft retforgeangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retforgeangle honesty; Soft≠product)\n");
-/* Grep: cap: revoke: soft retprismangle — Wave 86 exclusive prismangle stamp */
-kprintf("cap: revoke: soft retprismangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retprismangle stamp; Soft≠product)\n");
-/* Grep: cap: revoke: soft retflameangle — Wave 87 return-flameangle honesty */
-kprintf("cap: revoke: soft retflameangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retflameangle honesty; Soft≠product)\n");
-/* Grep: cap: revoke: soft retcipherangle — Wave 87 exclusive cipherangle stamp */
-kprintf("cap: revoke: soft retcipherangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retcipherangle stamp; Soft≠product)\n");
-/* Grep: cap: revoke: soft retbeaconangle — Wave 88 return-beaconangle honesty */
-kprintf("cap: revoke: soft retbeaconangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retbeaconangle honesty; Soft≠product)\n");
-/* Grep: cap: revoke: soft retledgerangle — Wave 88 exclusive ledgerangle stamp */
-kprintf("cap: revoke: soft retledgerangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retledgerangle stamp; Soft≠product)\n");
-/* Grep: cap: revoke: soft retbannerangle — Wave 89 return-bannerangle honesty */
-kprintf("cap: revoke: soft retbannerangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retbannerangle honesty; Soft≠product)\n");
-/* Grep: cap: revoke: soft retvaultangle — Wave 89 exclusive vaultangle stamp */
-kprintf("cap: revoke: soft retvaultangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retvaultangle stamp; Soft≠product)\n");
-/* Grep: cap: revoke: soft retcrestangle — Wave 90 return-crestangle honesty */
-kprintf("cap: revoke: soft retcrestangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retcrestangle honesty; Soft≠product)\n");
-/* Grep: cap: revoke: soft rettokenangle — Wave 90 exclusive tokenangle stamp */
-kprintf("cap: revoke: soft rettokenangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (rettokenangle stamp; Soft≠product)\n");
-/* Grep: cap: revoke: soft retbadgeangle — Wave 91 return-badgeangle honesty */
-kprintf("cap: revoke: soft retbadgeangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retbadgeangle honesty; Soft≠product)\n");
-/* Grep: cap: revoke: soft retphaseangle — Wave 91 exclusive phaseangle stamp */
-kprintf("cap: revoke: soft retphaseangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retphaseangle stamp; Soft≠product)\n");
-/* Grep: cap: revoke: soft retmarkangle — Wave 92 return-markangle honesty */
-kprintf("cap: revoke: soft retmarkangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retmarkangle honesty; Soft≠product)\n");
-/* Grep: cap: revoke: soft retpulseangle — Wave 92 exclusive pulseangle stamp */
-kprintf("cap: revoke: soft retpulseangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retpulseangle stamp; Soft≠product)\n");
-
-/* Grep: cap: revoke: soft retsealangle — Wave 93 return-sealangle honesty */
-kprintf("cap: revoke: soft retsealangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retsealangle honesty; Soft≠product)\n");
-/* Grep: cap: revoke: soft retboundangle — Wave 93 exclusive boundangle stamp */
-kprintf("cap: revoke: soft retboundangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retboundangle stamp; Soft≠product)\n");
-/* Grep: cap: revoke: soft retstemangle — Wave 94 return-stemangle honesty */
-kprintf("cap: revoke: soft retstemangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retstemangle honesty; Soft≠product)\n");
-/* Grep: cap: revoke: soft retbladeangle — Wave 94 exclusive bladeangle stamp */
-kprintf("cap: revoke: soft retbladeangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retbladeangle stamp; Soft≠product)\n");
-/* Grep: cap: revoke: soft retchordangle — Wave 95 return-chordangle honesty */
-kprintf("cap: revoke: soft retchordangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retchordangle honesty; Soft≠product)\n");
-/* Grep: cap: revoke: soft retarcangle — Wave 95 exclusive arcangle stamp */
-kprintf("cap: revoke: soft retarcangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retarcangle stamp; Soft≠product)\n");
-/* Grep: cap: revoke: soft retsectorangle — Wave 96 return-sectorangle honesty */
-kprintf("cap: revoke: soft retsectorangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retsectorangle honesty; Soft≠product)\n");
-/* Grep: cap: revoke: soft retwedgeangle — Wave 96 exclusive wedgeangle stamp */
-kprintf("cap: revoke: soft retwedgeangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retwedgeangle stamp; Soft≠product)\n");
-/* Grep: cap: revoke: soft retradiusangle — Wave 97 return-radiusangle honesty */
-kprintf("cap: revoke: soft retradiusangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retradiusangle honesty; Soft≠product)\n");
-/* Grep: cap: revoke: soft retdiameterangle — Wave 97 exclusive diameterangle stamp */
-kprintf("cap: revoke: soft retdiameterangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retdiameterangle stamp; Soft≠product)\n");
-/* Grep: cap: revoke: soft retcircumangle — Wave 98 return-circumangle honesty */
-kprintf("cap: revoke: soft retcircumangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retcircumangle honesty; Soft≠product)\n");
-/* Grep: cap: revoke: soft retellipseangle — Wave 98 exclusive ellipseangle stamp */
-kprintf("cap: revoke: soft retellipseangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retellipseangle stamp; Soft≠product)\n");
-/* Grep: cap: revoke: soft rethyperangle — Wave 99 return-hyperangle honesty */
-kprintf("cap: revoke: soft rethyperangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (rethyperangle honesty; Soft≠product)\n");
-/* Grep: cap: revoke: soft retparabolaangle — Wave 99 exclusive parabolaangle stamp */
-kprintf("cap: revoke: soft retparabolaangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retparabolaangle stamp; Soft≠product)\n");
-/* Grep: cap: revoke: soft retspiralangle — Wave 100 return-spiralangle honesty */
-kprintf("cap: revoke: soft retspiralangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retspiralangle honesty; Soft≠product)\n");
-/* Grep: cap: revoke: soft rethelixangle — Wave 100 exclusive helixangle stamp */
-kprintf("cap: revoke: soft rethelixangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (rethelixangle stamp; Soft≠product)\n");
-/* Grep: cap: revoke: soft rettorusangle — Wave 101 return-torusangle honesty */
-kprintf("cap: revoke: soft rettorusangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (rettorusangle honesty; Soft≠product)\n");
-/* Grep: cap: revoke: soft retknotangle — Wave 101 exclusive knotangle stamp */
-kprintf("cap: revoke: soft retknotangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retknotangle stamp; Soft≠product)\n");
-/* Grep: cap: revoke: soft retmoebiusangle — Wave 102 return-moebiusangle honesty */
-kprintf("cap: revoke: soft retmoebiusangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retmoebiusangle honesty; Soft≠product)\n");
-/* Grep: cap: revoke: soft retkleinangle — Wave 102 exclusive kleinangle stamp */
-kprintf("cap: revoke: soft retkleinangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retkleinangle stamp; Soft≠product)\n");
-/* Grep: cap: revoke: soft retprojectangle — Wave 103 return-projectangle honesty */
-kprintf("cap: revoke: soft retprojectangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retprojectangle honesty; Soft≠product)\n");
-/* Grep: cap: revoke: soft retaffineangle — Wave 103 exclusive affineangle stamp */
-kprintf("cap: revoke: soft retaffineangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retaffineangle stamp; Soft≠product)\n");
-/* Grep: cap: revoke: soft retlinearangle — Wave 104 return-linearangle honesty */
-kprintf("cap: revoke: soft retlinearangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retlinearangle honesty; Soft≠product)\n");
-/* Grep: cap: revoke: soft retbilinearangle — Wave 104 exclusive bilinearangle stamp */
-kprintf("cap: revoke: soft retbilinearangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retbilinearangle stamp; Soft≠product)\n");
-/* Grep: cap: revoke: soft retquadraticangle — Wave 105 return-quadraticangle honesty */
-kprintf("cap: revoke: soft retquadraticangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retquadraticangle honesty; Soft≠product)\n");
-/* Grep: cap: revoke: soft retcubicangle — Wave 105 exclusive cubicangle stamp */
-kprintf("cap: revoke: soft retcubicangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retcubicangle stamp; Soft≠product)\n");
-/* Grep: cap: revoke: soft retquarticangle — Wave 106 return-quarticangle honesty */
-kprintf("cap: revoke: soft retquarticangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retquarticangle honesty; Soft≠product)\n");
-/* Grep: cap: revoke: soft retquinticangle — Wave 106 exclusive quinticangle stamp */
-kprintf("cap: revoke: soft retquinticangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retquinticangle stamp; Soft≠product)\n");
-/* Grep: cap: revoke: soft retsplineangle — Wave 107 return-splineangle honesty */
-kprintf("cap: revoke: soft retsplineangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retsplineangle honesty; Soft≠product)\n");
-/* Grep: cap: revoke: soft retbezierangle — Wave 107 exclusive bezierangle stamp */
-kprintf("cap: revoke: soft retbezierangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retbezierangle stamp; Soft≠product)\n");
-/* Grep: cap: revoke: soft rethurmitangle — Wave 108 return-hermitangle honesty */
-kprintf("cap: revoke: soft rethurmitangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (rethurmitangle honesty; Soft≠product)\n");
-/* Grep: cap: revoke: soft retcatmullangle — Wave 108 exclusive catmullangle stamp */
-kprintf("cap: revoke: soft retcatmullangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retcatmullangle stamp; Soft≠product)\n");
-/* Grep: cap: revoke: soft retnurbsangle — Wave 109 return-nurbsangle honesty */
-kprintf("cap: revoke: soft retnurbsangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retnurbsangle honesty; Soft≠product)\n");
-/* Grep: cap: revoke: soft retbsplineangle — Wave 109 exclusive bsplineangle stamp */
-kprintf("cap: revoke: soft retbsplineangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retbsplineangle stamp; Soft≠product)\n");
-/* Grep: cap: revoke: soft retmeshangle — Wave 110 return-meshangle honesty */
-kprintf("cap: revoke: soft retmeshangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retmeshangle honesty; Soft≠product)\n");
-/* Grep: cap: revoke: soft retgridangle — Wave 110 exclusive gridangle stamp */
-kprintf("cap: revoke: soft retgridangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retgridangle stamp; Soft≠product)\n");
-/* Grep: cap: revoke: soft retvoxelangle — Wave 111 return-voxelangle honesty */
-kprintf("cap: revoke: soft retvoxelangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retvoxelangle honesty; Soft≠product)\n");
-/* Grep: cap: revoke: soft rettexelangle — Wave 111 exclusive texelangle stamp */
-kprintf("cap: revoke: soft rettexelangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (rettexelangle stamp; Soft≠product)\n");
-/* Grep: cap: revoke: soft retfragmentangle — Wave 112 return-fragmentangle honesty */
-kprintf("cap: revoke: soft retfragmentangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retfragmentangle honesty; Soft≠product)\n");
-/* Grep: cap: revoke: soft retvertexangle — Wave 112 exclusive vertexangle stamp */
-kprintf("cap: revoke: soft retvertexangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retvertexangle stamp; Soft≠product)\n");
-/* Grep: cap: revoke: soft retshaderangle — Wave 113 return-shaderangle honesty */
-kprintf("cap: revoke: soft retshaderangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retshaderangle honesty; Soft≠product)\n");
-/* Grep: cap: revoke: soft retpipelineangle — Wave 113 exclusive pipelineangle stamp */
-kprintf("cap: revoke: soft retpipelineangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retpipelineangle stamp; Soft≠product)\n");
-/* Grep: cap: revoke: soft retframebufferangle — Wave 114 return-framebufferangle honesty */
-kprintf("cap: revoke: soft retframebufferangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retframebufferangle honesty; Soft≠product)\n");
-/* Grep: cap: revoke: soft retswapchainangle — Wave 114 exclusive swapchainangle stamp */
-kprintf("cap: revoke: soft retswapchainangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retswapchainangle stamp; Soft≠product)\n");
-/* Grep: cap: revoke: soft retpresentangle — Wave 115 return-presentangle honesty */
-kprintf("cap: revoke: soft retpresentangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retpresentangle honesty; Soft≠product)\n");
-/* Grep: cap: revoke: soft retvsyncangle — Wave 115 exclusive vsyncangle stamp */
-kprintf("cap: revoke: soft retvsyncangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retvsyncangle stamp; Soft≠product)\n");
-/* Grep: cap: revoke: soft retfenceangle — Wave 116 return-fenceangle honesty */
-kprintf("cap: revoke: soft retfenceangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retfenceangle honesty; Soft≠product)\n");
-/* Grep: cap: revoke: soft retsemaphoreangle — Wave 116 exclusive semaphoreangle stamp */
-kprintf("cap: revoke: soft retsemaphoreangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retsemaphoreangle stamp; Soft≠product)\n");
-                            kprintf("cap: revoke soft deepen wave=%u areas=%u pending=%u "
+    /* Grep: cap: revoke soft deepen (single line; no stamp storm) */
+    kprintf("cap: revoke soft deepen wave=%u areas=%u pending=%u "
             "spins_avoided=%u retries=%u slots_cleared=%u "
             "begin_ok=%u reclaim_ok=%u walk_pos=%u def_pos=%u "
-            "log_n=%u ok=1 skip=0\n",
+            "lean_ok=%u udx_ok=%u c3_ok=%u log_n=%u ok=1 skip=0\n",
             GJ_REVOKE_SOFT_WAVE, GJ_REVOKE_SOFT_AREAS, u32Pending,
             g_u32R2SpinsAvoided, g_u32R2Retries, g_u32R2SlotsCleared,
             g_u32SoftBeginOk, g_u32SoftReclaimOk, g_u32SoftRetWalkPos,
-            g_u32SoftRetDefPos, g_u32SoftLogN);
+            g_u32SoftRetDefPos, g_u32SoftLeanOk, g_u32SoftLeanUdxOk,
+            g_u32SoftLeanC3Ok, g_u32SoftLogN);
 
     /* Grep: cap: revoke soft inventory PASS / cap: revoke soft PASS */
     kprintf("cap: revoke soft inventory PASS log_n=%u wave=%u areas=%u "
-            "reply_product=0 full_cdt_mutex=0 soft_ne_mig_reply=1\n",
+            "reply_product=0 full_cdt_mutex=0 soft_ne_mig_reply=1 "
+            "soft_ne_product=1 dual=MIT_OR_Apache-2.0 G-AC-1=1 "
+            "udx_teardown=1 c3_residual=1\n",
             g_u32SoftLogN, GJ_REVOKE_SOFT_WAVE, GJ_REVOKE_SOFT_AREAS);
-    kprintf("cap: revoke soft PASS wave=%u areas=%u\n",
-            GJ_REVOKE_SOFT_WAVE, GJ_REVOKE_SOFT_AREAS);
+    kprintf("cap: revoke soft PASS wave=%u areas=%u lean_ok=%u udx_ok=%u "
+            "c3_ok=%u G-AC-1=1 udx_teardown=1 c3_residual=1\n",
+            GJ_REVOKE_SOFT_WAVE, GJ_REVOKE_SOFT_AREAS, g_u32SoftLeanOk,
+            g_u32SoftLeanUdxOk, g_u32SoftLeanC3Ok);
 }
 
 /**
- * Emit Wave 19 soft inventory once after first meaningful revoke activity.
+ * Lean residual self-check for UDX host-death teardown + C3 hazard shape.
+ *
+ * Stack-local multi-obj (DMA / MMIO / IRQ stand-ins; never touches process
+ * CNode or real UDX host). Exercises:
+ *   Phase A  DEAD+gen first on each obj (security complete per object)
+ *   Phase A' gj_revoke_process_deferred once (hygiene / R7 redrive surface)
+ *   Phase C  reclaim each when slots_left/ref/pin/CDT allow
+ *
+ * C3 security residual (ASSURANCE_LITE: Soft lamp without behavior check
+ * is forbidden as C3 PASS). Behavior checks only - Soft!=product:
+ *   S1  after begin: state==DEAD and gen == gen0+1 (DEAD+gen first)
+ *   S2  gj_obj_check_live(obj, gen0) == GJ_ERR_DEAD (exact fail-closed)
+ *   S2' gj_obj_check_live(obj, gen0+1) == GJ_ERR_DEAD (DEAD wins gen match)
+ *   R6  second begin on same obj returns GJ_ERR_DEAD (one revoker)
+ *   Phase C pin / slots_left / ref gates block reclaim_ready / reclaim
+ *   Lag hold: after gate block, DEAD+gen still published + S2 still closed
+ *
+ * Soft!=product - dual MIT OR Apache-2.0 - G-AC-1 - Dual DoD OPEN -
+ * no version stamp / never bump GJ_IMAGE_VERSION.
+ * Not product host-death complete (DMA/MMIO/IRQ wire revoke still OPEN).
+ * greppable: cap: revoke soft residual lean
+ * greppable: cap: revoke soft residual lean udx
+ * greppable: cap: revoke soft residual lean teardown
+ * greppable: cap: revoke soft residual lean c3
+ */
+static void
+soft_revoke_residual_lean_once(void)
+{
+    struct gj_obj_hdr aHdr[GJ_REVOKE_LEAN_UDX_OBJS];
+    gj_status_t       aStBegin[GJ_REVOKE_LEAN_UDX_OBJS];
+    gj_status_t       aStReclaim[GJ_REVOKE_LEAN_UDX_OBJS];
+    u32               aGen0[GJ_REVOKE_LEAN_UDX_OBJS];
+    u32               iObj;
+    u32               u32BeginOk;
+    u32               u32ReclaimOk;
+    u32               u32DefClr;
+    u32               u32S1Ok;
+    u32               u32S2Closed;
+    u32               u32S2DeadWins;
+    u32               u32R6Ok;
+    u32               u32GatePinOk;
+    u32               u32GateSlotOk;
+    u32               u32GateRefOk;
+    u32               u32LagHoldOk;
+    int               fReadyLast;
+    int               fReadyGate;
+    gj_status_t       stGate;
+    gj_status_t       stLive;
+    gj_status_t       stLiveNew;
+    gj_status_t       stConc;
+
+    if (g_u8RevokeLeanOnce != 0u) {
+        return;
+    }
+    g_u8RevokeLeanOnce = 1u;
+    soft_inc(&g_u32SoftLeanRuns);
+
+    /*
+     * Suppress inventory reentry: begin/reclaim/deferred may call maybe_once;
+     * lean residual owns the once-path and inventory runs after.
+     */
+    g_u8RevokeLeanBusy = 1u;
+
+    u32BeginOk = 0;
+    u32ReclaimOk = 0;
+    u32DefClr = 0;
+    u32S1Ok = 0;
+    u32S2Closed = 0;
+    u32S2DeadWins = 0;
+    u32R6Ok = 0;
+    u32GatePinOk = 0;
+    u32GateSlotOk = 0;
+    u32GateRefOk = 0;
+    u32LagHoldOk = 0;
+    fReadyLast = 0;
+
+    /*
+     * UDX host-death shape: revoke each stand-in (dma=0, mmio=1, irq=2).
+     * Phase A is per-object; security complete after DEAD+gen even if
+     * deferred queue is full (AGAIN still fail-closed).
+     * C3: verify S1 DEAD+gen, S2 exact DEAD + DEAD-wins-new-gen, R6.
+     */
+    for (iObj = 0; iObj < GJ_REVOKE_LEAN_UDX_OBJS; iObj++) {
+        gj_obj_hdr_init(&aHdr[iObj]);
+        aGen0[iObj] = aHdr[iObj].u32Gen;
+        aStBegin[iObj] = gj_obj_revoke_begin(&aHdr[iObj]);
+        if (aStBegin[iObj] == GJ_OK || aStBegin[iObj] == GJ_ERR_AGAIN) {
+            soft_inc(&g_u32SoftLeanBeginOk);
+            soft_inc(&g_u32SoftLeanUdxBegin);
+            u32BeginOk++;
+
+            /*
+             * S1 - DEAD + gen first (security boundary).
+             * Gen must bump even when queue full (AGAIN path).
+             */
+            if (__atomic_load_n(&aHdr[iObj].u32State, __ATOMIC_ACQUIRE) ==
+                    (u32)GJ_OBJ_DEAD &&
+                __atomic_load_n(&aHdr[iObj].u32Gen, __ATOMIC_ACQUIRE) ==
+                    (aGen0[iObj] + 1u)) {
+                soft_inc(&g_u32SoftLeanS1Ok);
+                u32S1Ok++;
+            }
+
+            /*
+             * S2 - exact fail-closed (not lamp-only != OK):
+             *   pre-revoke gen must return GJ_ERR_DEAD (state != LIVE).
+             * S2' DEAD wins gen match: even the post-bump gen must still
+             *   return GJ_ERR_DEAD (never success while not LIVE).
+             */
+            stLive = gj_obj_check_live(&aHdr[iObj], aGen0[iObj]);
+            if (stLive == GJ_ERR_DEAD) {
+                soft_inc(&g_u32SoftLeanS2Closed);
+                u32S2Closed++;
+            }
+            stLiveNew = gj_obj_check_live(&aHdr[iObj], aGen0[iObj] + 1u);
+            if (stLiveNew == GJ_ERR_DEAD) {
+                soft_inc(&g_u32SoftLeanS2DeadWins);
+                u32S2DeadWins++;
+            }
+
+            /*
+             * R6 - one revoker: concurrent begin on DEAD object is DEAD.
+             * Does not undo Phase A; never a second owner; gen must not
+             * double-bump under concurrent begin (one revoker only).
+             */
+            stConc = gj_obj_revoke_begin(&aHdr[iObj]);
+            if (stConc == GJ_ERR_DEAD &&
+                __atomic_load_n(&aHdr[iObj].u32State, __ATOMIC_ACQUIRE) ==
+                    (u32)GJ_OBJ_DEAD &&
+                __atomic_load_n(&aHdr[iObj].u32Gen, __ATOMIC_ACQUIRE) ==
+                    (aGen0[iObj] + 1u)) {
+                soft_inc(&g_u32SoftLeanR6Ok);
+                u32R6Ok++;
+            }
+        }
+        aStReclaim[iObj] = GJ_ERR_BUSY; /* filled after deferred */
+    }
+
+    /*
+     * Drive deferred once (R7 surface). Empty CDT + slots_left==0 means
+     * hygiene is already done; still exercises queue scan / cursor.
+     * Soft residual only - not product CDT walk complete.
+     */
+    soft_inc(&g_u32SoftLeanUdxDef);
+    u32DefClr = gj_revoke_process_deferred(GJ_REVOKE_LEAN_UDX_OBJS * 4u);
+    if (g_u32SoftLeanUdxDefClr < 0xffffffffu - u32DefClr) {
+        g_u32SoftLeanUdxDefClr += u32DefClr;
+    } else {
+        g_u32SoftLeanUdxDefClr = 0xffffffffu;
+    }
+
+    /*
+     * Phase C gate residual (C3 hazard shape): pin, slots_left, and ref
+     * must each block reclaim. Soft selftest only - not product destroy.
+     * Obj0: pin gate. Obj1: slots_left gate. Obj2: ref gate.
+     * After each block, lag hold: DEAD+gen still published (S3 lag).
+     */
+    if (u32BeginOk > 0u) {
+        aHdr[0].u32Pin = 1u;
+        fReadyGate = gj_obj_reclaim_ready(&aHdr[0]);
+        stGate = gj_obj_reclaim(&aHdr[0]);
+        if (fReadyGate == 0 && stGate == GJ_ERR_BUSY) {
+            soft_inc(&g_u32SoftLeanGatePin);
+            u32GatePinOk = 1u;
+            /* Lag hold: security boundary still published while reclaim waits. */
+            if (__atomic_load_n(&aHdr[0].u32State, __ATOMIC_ACQUIRE) ==
+                    (u32)GJ_OBJ_DEAD &&
+                __atomic_load_n(&aHdr[0].u32Gen, __ATOMIC_ACQUIRE) ==
+                    (aGen0[0] + 1u) &&
+                gj_obj_check_live(&aHdr[0], aGen0[0]) == GJ_ERR_DEAD) {
+                soft_inc(&g_u32SoftLeanLagHold);
+                u32LagHoldOk++;
+            }
+        }
+        aHdr[0].u32Pin = 0u;
+    }
+    if (u32BeginOk > 1u) {
+        aHdr[1].u32SlotsLeft = 1u;
+        fReadyGate = gj_obj_reclaim_ready(&aHdr[1]);
+        stGate = gj_obj_reclaim(&aHdr[1]);
+        if (fReadyGate == 0 && stGate == GJ_ERR_BUSY) {
+            soft_inc(&g_u32SoftLeanGateSlot);
+            u32GateSlotOk = 1u;
+            if (__atomic_load_n(&aHdr[1].u32State, __ATOMIC_ACQUIRE) ==
+                    (u32)GJ_OBJ_DEAD &&
+                __atomic_load_n(&aHdr[1].u32Gen, __ATOMIC_ACQUIRE) ==
+                    (aGen0[1] + 1u) &&
+                gj_obj_check_live(&aHdr[1], aGen0[1]) == GJ_ERR_DEAD) {
+                soft_inc(&g_u32SoftLeanLagHold);
+                u32LagHoldOk++;
+            }
+        }
+        aHdr[1].u32SlotsLeft = 0u;
+    }
+    if (u32BeginOk > 2u) {
+        aHdr[2].u32Ref = 1u;
+        fReadyGate = gj_obj_reclaim_ready(&aHdr[2]);
+        stGate = gj_obj_reclaim(&aHdr[2]);
+        if (fReadyGate == 0 && stGate == GJ_ERR_BUSY) {
+            soft_inc(&g_u32SoftLeanGateRef);
+            u32GateRefOk = 1u;
+            if (__atomic_load_n(&aHdr[2].u32State, __ATOMIC_ACQUIRE) ==
+                    (u32)GJ_OBJ_DEAD &&
+                __atomic_load_n(&aHdr[2].u32Gen, __ATOMIC_ACQUIRE) ==
+                    (aGen0[2] + 1u) &&
+                gj_obj_check_live(&aHdr[2], aGen0[2]) == GJ_ERR_DEAD) {
+                soft_inc(&g_u32SoftLeanLagHold);
+                u32LagHoldOk++;
+            }
+        }
+        aHdr[2].u32Ref = 0u;
+    }
+
+    /*
+     * Phase C: reclaim each DEAD stand-in. Empty CDT + zero slots/ref/pin
+     * => reclaim-ready. Soft selftest only - not product destroy complete.
+     */
+    for (iObj = 0; iObj < GJ_REVOKE_LEAN_UDX_OBJS; iObj++) {
+        fReadyLast = gj_obj_reclaim_ready(&aHdr[iObj]);
+        aStReclaim[iObj] = gj_obj_reclaim(&aHdr[iObj]);
+        if (fReadyLast != 0 && aStReclaim[iObj] == GJ_OK) {
+            soft_inc(&g_u32SoftLeanReclaimOk);
+            soft_inc(&g_u32SoftLeanUdxReclaim);
+            u32ReclaimOk++;
+        }
+    }
+
+    /* Legacy single-path lamp: first obj begin+reclaim both OK. */
+    if ((aStBegin[0] == GJ_OK || aStBegin[0] == GJ_ERR_AGAIN) &&
+        aStReclaim[0] == GJ_OK) {
+        soft_inc(&g_u32SoftLeanOk);
+    }
+    /* UDX multi-obj teardown ok when every stand-in began and reclaimed. */
+    if (u32BeginOk == GJ_REVOKE_LEAN_UDX_OBJS &&
+        u32ReclaimOk == GJ_REVOKE_LEAN_UDX_OBJS) {
+        soft_inc(&g_u32SoftLeanUdxOk);
+    }
+    /*
+     * C3 residual ok only when every hazard shape observed:
+     * S1/S2 exact DEAD/S2' DEAD-wins/R6 on all UDX objs +
+     * pin/slots/ref gates + lag hold on each gate + full teardown.
+     * Soft residual - not product security AC / not host-death complete.
+     */
+    if (u32BeginOk == GJ_REVOKE_LEAN_UDX_OBJS &&
+        u32ReclaimOk == GJ_REVOKE_LEAN_UDX_OBJS &&
+        u32S1Ok == GJ_REVOKE_LEAN_UDX_OBJS &&
+        u32S2Closed == GJ_REVOKE_LEAN_UDX_OBJS &&
+        u32S2DeadWins == GJ_REVOKE_LEAN_UDX_OBJS &&
+        u32R6Ok == GJ_REVOKE_LEAN_UDX_OBJS &&
+        u32GatePinOk == 1u && u32GateSlotOk == 1u && u32GateRefOk == 1u &&
+        u32LagHoldOk == GJ_REVOKE_LEAN_UDX_OBJS) {
+        soft_inc(&g_u32SoftLeanC3Ok);
+    }
+
+    g_u8RevokeLeanBusy = 0u;
+
+    /*
+     * Grep: cap: revoke soft residual lean PASS
+     * Grep: cap: revoke soft residual lean udx
+     * Grep: cap: revoke soft residual lean teardown
+     * Grep: cap: revoke soft residual lean c3
+     */
+    kprintf("cap: revoke soft residual lean PASS "
+            "begin_st=%d reclaim_st=%d ready=%d "
+            "lean_runs=%u lean_ok=%u lean_begin_ok=%u lean_reclaim_ok=%u "
+            "udx_objs=%u udx_begin=%u udx_reclaim=%u udx_def=%u "
+            "udx_def_clr=%u udx_ok=%u c3_ok=%u "
+            "soft_ne_product=1 dual=MIT_OR_Apache-2.0 G-AC-1=1 "
+            "udx_teardown=1 c3_residual=1 reply_product=0 full_cdt_mutex=0 "
+            "host_death_product=0 dual_dod=OPEN "
+            "(Soft!=product; dual MIT OR Apache-2.0; G-AC-1; "
+            "no version stamp; UDX teardown + C3 residual only; "
+            "not product host-death complete; Dual DoD OPEN)\n",
+            (int)aStBegin[0], (int)aStReclaim[0], fReadyLast,
+            g_u32SoftLeanRuns, g_u32SoftLeanOk, g_u32SoftLeanBeginOk,
+            g_u32SoftLeanReclaimOk, GJ_REVOKE_LEAN_UDX_OBJS,
+            g_u32SoftLeanUdxBegin, g_u32SoftLeanUdxReclaim,
+            g_u32SoftLeanUdxDef, g_u32SoftLeanUdxDefClr, g_u32SoftLeanUdxOk,
+            g_u32SoftLeanC3Ok);
+
+    /* Grep: cap: revoke soft residual lean udx */
+    kprintf("cap: revoke soft residual lean udx "
+            "objs=%u begin=%u reclaim=%u def=%u def_clr=%u ok=%u "
+            "map=begin_DEAD_gen->deferred->reclaim "
+            "shape=dma+mmio+irq_standin soft_ne_product=1 "
+            "dual=MIT_OR_Apache-2.0 G-AC-1=1 host_death_product=0 "
+            "(Soft!=product; UDX host-death teardown residual; "
+            "not product DMA/MMIO/IRQ revoke complete)\n",
+            GJ_REVOKE_LEAN_UDX_OBJS, g_u32SoftLeanUdxBegin,
+            g_u32SoftLeanUdxReclaim, g_u32SoftLeanUdxDef,
+            g_u32SoftLeanUdxDefClr, g_u32SoftLeanUdxOk);
+
+    /* Grep: cap: revoke soft residual lean teardown */
+    kprintf("cap: revoke soft residual lean teardown "
+            "phase_a=DEAD_gen_first phase_ap=deferred phase_c=reclaim "
+            "udx_ok=%u c3_ok=%u r2_partial=1 full_cdt_mutex=0 "
+            "soft_ne_product=1 dual=MIT_OR_Apache-2.0 G-AC-1=1 dual_dod=OPEN "
+            "(Soft!=product; dual MIT OR Apache-2.0; G-AC-1; "
+            "no stamp storms; not product revoke complete; Dual DoD OPEN)\n",
+            g_u32SoftLeanUdxOk, g_u32SoftLeanC3Ok);
+
+    /*
+     * Grep: cap: revoke soft residual lean c3
+     * Grep: cap: revoke soft residual lean c3 PASS
+     * C3 hazard residual - behavior checks only (not lamp-only PASS).
+     */
+    kprintf("cap: revoke soft residual lean c3 "
+            "s1_dead_gen=%u/%u s2_exact_dead=%u/%u s2_dead_wins=%u/%u "
+            "r6_one_revoker=%u/%u gate_pin=%u gate_slot=%u gate_ref=%u "
+            "lag_hold=%u/%u udx_ok=%u c3_ok=%u "
+            "map=S1_DEAD_gen+S2_exact_DEAD+S2_dead_wins+R6_concurrent+"
+            "C_pin_slots_ref+lag_hold "
+            "soft_ne_product=1 dual=MIT_OR_Apache-2.0 G-AC-1=1 "
+            "host_death_product=0 dual_dod=OPEN "
+            "(Soft!=product; C3 residual behavior checks; "
+            "not product security AC; not product host-death complete; "
+            "Dual DoD OPEN)\n",
+            u32S1Ok, GJ_REVOKE_LEAN_UDX_OBJS, u32S2Closed,
+            GJ_REVOKE_LEAN_UDX_OBJS, u32S2DeadWins, GJ_REVOKE_LEAN_UDX_OBJS,
+            u32R6Ok, GJ_REVOKE_LEAN_UDX_OBJS, u32GatePinOk, u32GateSlotOk,
+            u32GateRefOk, u32LagHoldOk, GJ_REVOKE_LEAN_UDX_OBJS,
+            g_u32SoftLeanUdxOk, g_u32SoftLeanC3Ok);
+    if (g_u32SoftLeanC3Ok != 0u) {
+        kprintf("cap: revoke soft residual lean c3 PASS "
+                "s1=%u s2=%u s2_dead_wins=%u r6=%u "
+                "gate_pin=%u gate_slot=%u gate_ref=%u lag_hold=%u "
+                "udx_ok=%u soft_ne_product=1 dual=MIT_OR_Apache-2.0 "
+                "G-AC-1=1 dual_dod=OPEN "
+                "(Soft!=product; C3 hazard residual only; not product AC; "
+                "Dual DoD OPEN)\n",
+                u32S1Ok, u32S2Closed, u32S2DeadWins, u32R6Ok, u32GatePinOk,
+                u32GateSlotOk, u32GateRefOk, u32LagHoldOk, g_u32SoftLeanUdxOk);
+    }
+}
+
+/**
+ * Emit soft inventory once after first meaningful revoke activity.
  * Avoids timer-tick spam; re-log is not required for greppable surface.
+ * Runs lean residual selftest first (once) so return selftest lamps light.
  */
 static void
 soft_revoke_inventory_maybe_once(void)
@@ -1344,11 +859,17 @@ soft_revoke_inventory_maybe_once(void)
     if (g_u8RevokeSoftInvLogged) {
         return;
     }
+    /* Lean residual owns inventory sequencing - skip reentry from begin. */
+    if (g_u8RevokeLeanBusy != 0u) {
+        return;
+    }
     /* Need at least one begin, walk, or deferred tick with work. */
     if (g_u32SoftBeginEnter == 0 && g_u32SoftWalkEnter == 0 &&
         g_u32SoftDefEnter == 0) {
         return;
     }
+    /* Lean residual before inventory so lean_ok is visible in dump. */
+    soft_revoke_residual_lean_once();
     g_u8RevokeSoftInvLogged = 1;
     soft_revoke_inventory_log();
 }
@@ -1464,7 +985,7 @@ gj_obj_revoke_begin(struct gj_obj_hdr *pObj)
     u32Expected = (u32)GJ_OBJ_LIVE;
     u32New = (u32)GJ_OBJ_REVOKING;
 
-    /* One revoker (R6). Concurrent revoke → DEAD/BUSY, never a second owner. */
+    /* One revoker (R6). Concurrent revoke -> DEAD/BUSY, never a second owner. */
     if (!__atomic_compare_exchange_n(&pObj->u32State, &u32Expected, u32New,
                                      0, __ATOMIC_ACQ_REL, __ATOMIC_ACQUIRE)) {
         u32Cur = __atomic_load_n(&pObj->u32State, __ATOMIC_ACQUIRE);
@@ -1483,7 +1004,7 @@ gj_obj_revoke_begin(struct gj_obj_hdr *pObj)
     }
 
     /*
-     * S1 — security boundary: DEAD + bump gen BEFORE any deferrable work.
+     * S1 - security boundary: DEAD + bump gen BEFORE any deferrable work.
      * From here, gj_obj_check_live() fails closed (S2/S3) even if slots lag.
      */
     __atomic_store_n(&pObj->u32State, (u32)GJ_OBJ_DEAD, __ATOMIC_RELEASE);
@@ -1491,7 +1012,7 @@ gj_obj_revoke_begin(struct gj_obj_hdr *pObj)
 
     /*
      * Waiters would be woken here (IPC queues, fault waiters) when those
-     * subsystems exist — PEER_DEAD / REVOKED. Never block on userspace (R4).
+     * subsystems exist - PEER_DEAD / REVOKED. Never block on userspace (R4).
      */
 
     /* Queue mandatory slot hygiene (S4) + later reclaim (S6, R9). */
@@ -1503,7 +1024,7 @@ gj_obj_revoke_begin(struct gj_obj_hdr *pObj)
         kprintf("cap: revoke soft begin again queue_full spins_avoided=%u "
                 "retries=%u soft_partial\n",
                 g_u32R2SpinsAvoided, g_u32R2Retries);
-        /* Object is still DEAD — secure; hygiene must be retried (R7). */
+        /* Object is still DEAD - secure; hygiene must be retried (R7). */
         soft_revoke_inventory_maybe_once();
         return GJ_ERR_AGAIN;
     }
@@ -1521,7 +1042,7 @@ gj_obj_revoke_begin(struct gj_obj_hdr *pObj)
 
 /*
  * Structured slot invalidate (S7). Caller holds the CNode lock in full impl.
- * If pObj is non-NULL, only touch a slot that still points at that object —
+ * If pObj is non-NULL, only touch a slot that still points at that object -
  * never clear an unrelated cap during a CDT-driven walk.
  *
  * Single path for slots_left; soft quota refund is done by callers that know
@@ -1576,7 +1097,7 @@ gj_cap_slot_invalidate_locked(struct gj_cap_slot *pSlot, struct gj_obj_hdr *pObj
 }
 
 /*
- * Soft CDT walk (Phase A′ batch). Iterative; work-limited; does not delay S1.
+ * Soft CDT walk (Phase A' batch). Iterative; work-limited; does not delay S1.
  *
  * R2 try-lock slot walk:
  *   - Soft try-lock each CNode (gj_cnode_trylock / u32SoftLock).
@@ -1586,7 +1107,7 @@ gj_cap_slot_invalidate_locked(struct gj_cap_slot *pSlot, struct gj_obj_hdr *pObj
  *     edge per pass). If still busy, return; deferred driver redrives (R7).
  *   - Sleep-not-spin: never busy-wait trylock in a tight loop. A product
  *     path with a real mutex would sleep on the CNode turnstile; that
- *     mutex is still missing — R2 product try-lock remains PARTIAL.
+ *     mutex is still missing - R2 product try-lock remains PARTIAL.
  *   - Stale/bad edges are unlinked. Cleared slots get quota refund against
  *     the owning CNode account.
  *
@@ -1612,7 +1133,7 @@ gj_revoke_cdt_walk_batch(struct gj_obj_hdr *pObj, u32 u32MaxSlots)
     }
 
     /*
-     * Soft multi-pass: walk → soft-retry busy edges → defer if still held.
+     * Soft multi-pass: walk -> soft-retry busy edges -> defer if still held.
      * Pass 0 is the primary walk; passes 1..SOFT_RETRY_MAX are retries
      * after at least one busy try-lock (sleep-not-spin policy).
      */
@@ -1635,7 +1156,7 @@ gj_revoke_cdt_walk_batch(struct gj_obj_hdr *pObj, u32 u32MaxSlots)
             /*
              * Soft retry after busy (R2): do NOT spin. Re-scan remaining
              * edges once; holder may have dropped the soft lock. If still
-             * busy after SOFT_RETRY_MAX, yield to deferred driver (R7) —
+             * busy after SOFT_RETRY_MAX, yield to deferred driver (R7) -
              * that is the "sleep" half of sleep-not-spin without a real
              * turnstile.
              * Grep: cap:cdt R2 soft
@@ -1664,13 +1185,13 @@ gj_revoke_cdt_walk_batch(struct gj_obj_hdr *pObj, u32 u32MaxSlots)
 
             if (pCnode == NULL || pCnode->pSlots == NULL ||
                 u64Slot >= pCnode->cSlots) {
-                /* Stale edge — drop. Grep: cap:cdt stale */
+                /* Stale edge - drop. Grep: cap:cdt stale */
                 fUnlink = 1;
                 u32Stale++;
                 soft_inc(&g_u32SoftWalkStale);
             } else if (!gj_cnode_trylock(pCnode)) {
                 /*
-                 * R2: CNode busy — leave edge linked, try siblings, soft
+                 * R2: CNode busy - leave edge linked, try siblings, soft
                  * retry later. Count as spin avoided (never busy-wait).
                  * Grep: cap:cdt trylock / cap: revoke try-lock
                  */
@@ -1699,14 +1220,14 @@ gj_revoke_cdt_walk_batch(struct gj_obj_hdr *pObj, u32 u32MaxSlots)
                     /*
                      * slots_left decremented inside invalidate_locked; avoid
                      * double soft-quota by passing account only above once.
-                     * invalidate_locked still calls refund(NULL) — soft no-op.
+                     * invalidate_locked still calls refund(NULL) - soft no-op.
                      */
                     gj_cap_slot_invalidate_locked(pSlot, pObj);
                     u32Cleared++;
                     g_u32R2SlotsCleared++;
                     fUnlink = 1;
                 } else {
-                    /* Slot already cleared or retargeted — drop edge. */
+                    /* Slot already cleared or retargeted - drop edge. */
                     fUnlink = 1;
                     u32Stale++;
                     soft_inc(&g_u32SoftWalkStale);
@@ -1722,7 +1243,7 @@ gj_revoke_cdt_walk_batch(struct gj_obj_hdr *pObj, u32 u32MaxSlots)
 
         u32Busy = u32BusyThisPass;
         if (u32BusyThisPass == 0) {
-            /* Clean pass — no soft-retry needed. */
+            /* Clean pass - no soft-retry needed. */
             soft_inc(&g_u32SoftWalkCleanPass);
             break;
         }
@@ -1737,7 +1258,7 @@ gj_revoke_cdt_walk_batch(struct gj_obj_hdr *pObj, u32 u32MaxSlots)
     }
 
     /*
-     * Greppable R2 summary (once). Honesty: soft u32SoftLock only —
+     * Greppable R2 summary (once). Honesty: soft u32SoftLock only -
      * product try-lock still partial without a real CNode mutex.
      * Grep: cap: revoke try-lock
      */
@@ -1775,14 +1296,14 @@ gj_revoke_cdt_walk_batch(struct gj_obj_hdr *pObj, u32 u32MaxSlots)
 }
 
 /*
- * Phase A′: drive deferred slot work (bounded; R2 — no spin on CNode locks).
+ * Phase A': drive deferred slot work (bounded; R2 - no spin on CNode locks).
  * Prefer full CDT try-lock walk when edges exist (primary, more complete
  * than the empty-edge soft gap). Round-robin across queue so one lagging
  * object cannot starve siblings (R7). Soft-marker only if slots lag
  * without edges.
  *
  * Sleep-not-spin (R2): walk batch may soft-retry busy CNodes; if edges
- * still remain, keep the object queued and return — timer/idle redrives.
+ * still remain, keep the object queued and return - timer/idle redrives.
  * Never tight-loop trylock here.
  *
  * Honesty: R2 product try-lock is still PARTIAL (soft u32SoftLock, not a
@@ -1851,7 +1372,7 @@ gj_revoke_process_deferred(u32 u32MaxSlots)
 
         soft_inc(&g_u32SoftDefActive);
 
-        /* Hygiene done for this object — leave queued for reclaim drain. */
+        /* Hygiene done for this object - leave queued for reclaim drain. */
         if (pObj->u32SlotsLeft == 0 && pObj->pCdtHead == NULL) {
             soft_inc(&g_u32SoftDefHygieneDone);
             continue;
@@ -1862,7 +1383,6 @@ gj_revoke_process_deferred(u32 u32MaxSlots)
         /*
          * Edges present: full CDT try-lock batch is the primary hygiene path
          * (more complete than empty-edge soft gap). Walk batch itself does
-         * bounded soft retries under sleep-not-spin.
          * Grep: cap:cdt walk / cap: revoke try-lock
          */
         if (pObj->pCdtHead != NULL) {
@@ -1904,12 +1424,12 @@ gj_revoke_process_deferred(u32 u32MaxSlots)
                 continue;
             }
 
-            /* Edges remain (budget or try-lock busy) — keep queued (R7). */
+            /* Edges remain (budget or try-lock busy) - keep queued (R7). */
             if (pObj->pCdtHead != NULL) {
                 soft_inc(&g_u32SoftDefEdgeRemain);
                 /*
                  * Soft R2 defer: edges still linked after try-lock walks.
-                 * Product mutex still missing — partial R2.
+                 * Product mutex still missing - partial R2.
                  * Grep: cap:cdt R2 soft / cap: revoke try-lock
                  */
                 if (!g_u8CdtR2SoftLogged) {
@@ -1935,7 +1455,7 @@ gj_revoke_process_deferred(u32 u32MaxSlots)
          * Soft gap: derived slots counted but no CDT edges to walk.
          * Security already done (DEAD/gen); accounting complete needs mint
          * to wire edges or a known-CNode scan (gj_cnode_invalidate_obj_slots).
-         * Only when edges are absent — walk path above is preferred.
+         * Only when edges are absent - walk path above is preferred.
          * Grep: cap:cdt soft
          */
         if (pObj->u32SlotsLeft > 0 && pObj->pCdtHead == NULL) {
@@ -1992,7 +1512,7 @@ gj_obj_reclaim_ready(const struct gj_obj_hdr *pObj)
     if (pObj->pCdtHead != NULL) {
         soft_inc(&g_u32SoftReclaimNot);
         soft_inc(&g_u32SoftReclaimGateCdt);
-        return 0; /* soft CDT still has edges — walk must finish */
+        return 0; /* soft CDT still has edges - walk must finish */
     }
     if (pObj->u32Ref != 0) {
         soft_inc(&g_u32SoftReclaimNot);

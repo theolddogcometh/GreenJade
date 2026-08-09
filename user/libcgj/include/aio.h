@@ -21,6 +21,16 @@
  * ---------
  * Full POSIX/Linux completeness; stubs and soft fills may return ENOSYS
  * until the hybrid ABI path is wired. See docs/GLIBC_COMPAT.md.
+ *
+ * Soft residual (C2 libcgj aio.h; Soft!=product; G-AC-1; Dual DoD A/B OPEN):
+ *   soft     = aiocb/aioinit decls + aio_read/write/error/return/cancel/suspend/
+ *              fsync/init (+64) surface; freestanding pread/pwrite fill-in may
+ *              soft-complete without kernel AIO rings (ENOSYS/soft path OK)
+ *   product  = UDX/DDI + hot/cold ABI hosts; not freestanding class; not .ko AC
+ *   honesty  = header decls != product async I/O completeness; agent PASS !=
+ *              Dual DoD close; stamp-free bar honesty (no version stamp)
+ *   law      = dual MIT OR Apache-2.0; no GPL; H2 no stamp storms
+ * greppable: libcgj: aio soft residual Soft!=product
  */
 #pragma once
 

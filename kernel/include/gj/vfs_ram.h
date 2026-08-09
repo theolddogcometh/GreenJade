@@ -10,21 +10,21 @@
  * eventfd, epoll, timerfd, signalfd, pidfd, inotify, and io_uring soft fds.
  * Independent of the vfs_door LBA mini-FS (different FD namespace).
  *
- * Capacity (vfs_ram.c — soft product limits, not ABI):
+ * Capacity (vfs_ram.c - soft product limits, not ABI):
  *   VFS_MAX_FILES 64, VFS_MAX_FDS 96, path ≤128, file data ≤32 KiB
  *   (room for packaged ld-gj.so.1 ~30 KiB + small ELFs)
- *   pipes 16×2 KiB; eventfd/epoll/timerfd/signalfd/inotify fixed tables
+ *   pipes 16x2 KiB; eventfd/epoll/timerfd/signalfd/inotify fixed tables
  *
  * Block mounts (optional, after device probe):
- *   vfs_ram_mount_blk  → /dev/vda over virtio-blk (sector R/W)
- *   vfs_ram_mount_scsi → /dev/sda over scsi_mid LUN0 READ10 path
+ *   vfs_ram_mount_blk  -> /dev/vda over virtio-blk (sector R/W)
+ *   vfs_ram_mount_scsi -> /dev/sda over scsi_mid LUN0 READ10 path
  *
  * FD policy:
- *   open returns fd ≥ 3 or -errno; kinds RAM/BLK/SCSI/PIPE/EVENTFD/…
+ *   open returns fd ≥ 3 or -errno; kinds RAM/BLK/SCSI/PIPE/EVENTFD/...
  *   poll/epoll readiness via vfs_ram_poll_mask (Linux-shaped ERR/HUP bits);
  *   net_lo (64..79) / net_tcp (96..111) routed out of table for mixed sets
  *
- * Greppable: vfs_ram / cold FS / linux: io_uring … via this surface
+ * Greppable: vfs_ram / cold FS / linux: io_uring ... via this surface
  */
 #pragma once
 
@@ -34,7 +34,7 @@
 void vfs_ram_init(void);
 
 /**
- * Mount virtio-blk (if ready) as /dev/vda — open/read/write/lseek over sectors.
+ * Mount virtio-blk (if ready) as /dev/vda - open/read/write/lseek over sectors.
  * Call after virtio_blk_probe. No-op if block device not ready.
  */
 void vfs_ram_mount_blk(void);
@@ -95,12 +95,12 @@ i64 vfs_ram_getdents64(i64 i64Fd, void *pBuf, size_t cb);
 i64 vfs_ram_pread(i64 i64Fd, void *pBuf, size_t cb, u64 u64Off);
 i64 vfs_ram_pwrite(i64 i64Fd, const void *pBuf, size_t cb, u64 u64Off);
 
-/** dup / dup2 — clone fd table entry (kind + offset shared soft). */
+/** dup / dup2 - clone fd table entry (kind + offset shared soft). */
 i64 vfs_ram_dup(i64 i64Fd);
 i64 vfs_ram_dup2(i64 i64Old, i64 i64New);
 
 /**
- * readlink: limited known symlinks (/proc/self/exe → /bin/greenjade).
+ * readlink: limited known symlinks (/proc/self/exe -> /bin/greenjade).
  * Returns bytes written (no NUL) or -errno.
  */
 i64 vfs_ram_readlink(const char *szPath, char *pBuf, size_t cb);
@@ -151,7 +151,7 @@ i64 vfs_ram_dup_from(i64 i64Fd, i64 i64Min);
 i64 vfs_ram_fd_path(i64 i64Fd, char *pBuf, size_t cb);
 
 /**
- * Create a symlink entry (path → target). Limited table for bring-up.
+ * Create a symlink entry (path -> target). Limited table for bring-up.
  * Returns 0 or -errno.
  */
 i64 vfs_ram_symlink(const char *szTarget, const char *szLink);
@@ -202,14 +202,14 @@ i64 vfs_ram_bytes_readable(i64 i64Fd);
  */
 i64 vfs_ram_sendfile(i64 i64Out, i64 i64In, u64 *pOff, size_t cb);
 
-/** epoll_create1 — returns epoll fd or -errno. */
+/** epoll_create1 - returns epoll fd or -errno. */
 i64 vfs_ram_epoll_create1(int nFlags);
 
 /**
  * epoll_ctl: nOp 1=ADD 2=DEL 3=MOD.
  * u32Events: EPOLLIN=1 EPOLLOUT=4 EPOLLERR=8 EPOLLHUP=0x10;
  *            EPOLLRDHUP=0x2000 EPOLLONESHOT=0x40000000 (honoured in wait).
- * Target fd may be vfs_ram special/pipe/eventfd/… or net_lo / net_tcp
+ * Target fd may be vfs_ram special/pipe/eventfd/... or net_lo / net_tcp
  * (mixed interest lists for daemon loops). Nested epoll rejected soft.
  */
 i64 vfs_ram_epoll_ctl(i64 i64Ep, int nOp, i64 i64Fd, u32 u32Events, u64 u64Data);
@@ -217,7 +217,7 @@ i64 vfs_ram_epoll_ctl(i64 i64Ep, int nOp, i64 i64Fd, u32 u32Events, u64 u64Data)
 /**
  * epoll_wait: fill packed {u32 events; u64 data} records (12 bytes each).
  * nTimeout ignored (non-blocking probe). EPOLLONESHOT disables after fire.
- * Readiness via vfs_ram_poll_mask (net route + pipe/eventfd/… bits).
+ * Readiness via vfs_ram_poll_mask (net route + pipe/eventfd/... bits).
  * Returns ready count or -errno.
  */
 i64 vfs_ram_epoll_wait(i64 i64Ep, void *pEvents, int nMax, int nTimeout);
@@ -261,14 +261,14 @@ i64 vfs_ram_copy_file_range(i64 i64In, u64 *pOffIn, i64 i64Out, u64 *pOffOut,
  *
  * Bits: EPOLLIN=1 EPOLLOUT=4 EPOLLERR=8 EPOLLHUP=0x10 EPOLLRDHUP=0x2000.
  * ERR/HUP/RDHUP are returned even when not present in u32Want (Linux-shaped).
- * u32Want==0 → default interest EPOLLIN|EPOLLOUT for the table that owns fd.
+ * u32Want==0 -> default interest EPOLLIN|EPOLLOUT for the table that owns fd.
  *
  * Routing (ABI-first mixed sets for daemon loops):
- *   vfs_ram live fd  → pipes, eventfd, timerfd, signalfd, inotify, pidfd,
+ *   vfs_ram live fd  -> pipes, eventfd, timerfd, signalfd, inotify, pidfd,
  *                      io_uring, blk/scsi, ram files (epoll_ready_mask shape)
- *   net_tcp fd_ok    → net_tcp_poll_mask (RX / accept / write window / close)
- *   net_lo  fd_ok    → net_lo_poll_mask  (RX / accept / ring space / shut)
- *   unknown          → EPOLLERR|EPOLLHUP
+ *   net_tcp fd_ok    -> net_tcp_poll_mask (RX / accept / write window / close)
+ *   net_lo  fd_ok    -> net_lo_poll_mask  (RX / accept / ring space / shut)
+ *   unknown          -> EPOLLERR|EPOLLHUP
  *
  * Regular/block files always ready for IN|OUT among the requested bits.
  * Soft greppable once: "vfs_ram: soft poll net route PASS" on first net hit.

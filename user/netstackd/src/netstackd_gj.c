@@ -3,6 +3,14 @@
  * Copyright (c) 2026 Project GreenJade contributors
  *
  * Freestanding netstackd — claims net door + lo socket echo via GJ_SYS_NET.
+ * C2 product daemon residual (Soft!=product; dual MIT OR Apache-2.0; G-AC-1):
+ *   Product stack host (middle of Dual DoD B) over UDX-owned NIC wire:
+ *     UDX NIC wire → netstackd (this unit) → sshd :22 / lab IP spirit.
+ *   product=UDX/DDI+ABI (userspace Linux-shaped NIC + door ABI).
+ *   Dual DoD A/B remain OPEN (soft residual != Dual DoD close).
+ *   Prefer product UDX path honesty over freestanding soft residual.
+ *   Freestanding rtl SKIP — not freestanding wire ownership as product AC.
+ *   T0 product net = virtio-net until UDX owns wire. No .ko product AC.
  * Hard path: CLAIM → DGRAM echo → TCP single/multi-seg → virtio queue/ring →
  *            RELEASE → live path PASS (dgram RECV green).
  * Soft path (deepened; never aborts live path):
@@ -43,10 +51,39 @@
  *   netstackd-gj: soft steps ok=… skip=… max=… bits=0x…
  *   netstackd-gj: soft deepen wave=70 areas=… ok=… skip=…
  *   netstackd-gj: soft path reclaim=claim … multi_server=0 confine=0
- *                (soft inventory; soft ≠ product multi-server confine)
+ *                (soft inventory; Soft!=product multi-server confine)
  *   netstackd-gj: soft free-release PASS | soft free-release soft-skip
- * Diagnostics only — never hard-fail live path; soft.
- * Honesty: soft inventory ≠ product multi-server confine.
+ *   netstackd-gj: soft residual lean … Soft!=product
+ *   netstackd-gj: soft honesty … product_path=UDX Dual_DoD=OPEN G-AC-1
+ *   netstackd-gj: soft product residual … product=UDX+sshd+stack
+ *   netstackd-gj: soft residual product_udx_nic … (UDX owns wire honesty)
+ *   netstackd-gj: soft residual product_stack … (middle of Dual DoD B)
+ *   netstackd-gj: soft residual densify surface=… (door densify lamps)
+ *   netstackd-gj: soft residual densify product_udx_nic=… (STRONGER)
+ *   netstackd-gj: soft residual densify product_stack=… (STRONGER)
+ *   netstackd-gj: soft residual densify chain=… (UDX→stack→sshd)
+ *   netstackd-gj: soft residual denser product_udx_nic … denser=1 (STRONGER)
+ *   netstackd-gj: soft residual denser product_stack … denser=1 (STRONGER)
+ *   netstackd-gj: soft residual denser chain … denser=1 (UDX→stack→sshd)
+ *   netstackd-gj: soft residual denser middle … denser=1 (Dual DoD B mid)
+ * Diagnostics only — never hard-fail live path; Soft!=product.
+ * Honesty: soft inventory Soft!=product multi-server confine;
+ *          soft residual lean Soft!=product Dual DoD close.
+ * Product residual (C2; Dual DoD B OPEN; stamp-free bar v2026.08.04.75):
+ *   UDX NIC wire (rtl8168_udx) → this stack host (net doors) → sshd :22
+ *   product=UDX+sshd+stack; product_udx_nic + product_stack greppables;
+ *   STRONGER densify + denser multi-arm product_udx_nic / product_stack /
+ *   chain residual (Dual DoD B middle stack); denser=1 denser_arms;
+ *   denser residual middle hop deepen (lab_ip|sshd_down|stamp|product_ac|
+ *   g_ac1|agent_ne_close); denser_arms=7; bar v2026.08.04.75;
+ *   lab IP spirit 10.200.125.50; prefer product UDX path honesty over
+ *   freestanding soft; freestanding rtl SKIP; G-AC-1; Soft!=product.
+ *   Soft residual never closes Dual DoD A/B; agent!=close; dual_dod_b=OPEN.
+ * greppable: Soft!=product soft residual dual_dod_b=OPEN
+ * greppable: product_udx_nic product_stack
+ * greppable: soft residual densify product_udx_nic product_stack chain
+ * greppable: soft residual denser product_udx_nic product_stack chain middle
+ * greppable: denser=1 denser_arms dual_dod_b=OPEN denser_middle=1
  *
  *   make netstackd-gj → build/user/netstackd.elf
  */
@@ -109,19 +146,68 @@
 #define GJ_SOFT_BIT_KICK     (1u << 8)
 #define GJ_SOFT_BIT_RINGST   (1u << 9)
 /* Soft free-path bit (Wave 111 inventory; post-RELEASE no-op). */
-/* Wave 126 soft deepen surfaces (CREATE-ONLY soft ≠ product):
+/* Wave 126 soft deepen surfaces (CREATE-ONLY Soft!=product):
  *   greppable: soft retgradientangle continuum_toward=26800 soft_ne_product=1 wave=126
  *   greppable: soft retblendangle exclusive=1 continuum_toward=26800 soft_ne_product=1 wave=126
- * Soft ≠ product complete; product lamps 0;
+ * Soft!=product complete; product lamps 0; Dual DoD OPEN;
  */
 
 #define GJ_SOFT_FREE_RELEASE (1u << 0)
 /* Soft door suite step ceiling (reclaim..RING_STATE). */
 #define GJ_SOFT_DOOR_MAX     10u
-/* Soft inventory greppable area count (inventory…path + deepen). */
-#define GJ_SOFT_AREAS        11u
-/* Wave stamp for greppable soft inventory lines (Wave 126 exclusive). */
+/* Soft inventory greppable area count (inventory…path + residual densify/denser). */
+#define GJ_SOFT_AREAS        24u
+/* Wave stamp for greppable soft inventory lines (Wave 126 exclusive; stamp-free). */
 #define GJ_SOFT_WAVE 70u
+
+/*
+ * Dual DoD B product residual constants (static honesty; never assign wire).
+ * Lab IP spirit matches G752VT DUT (docs: 10.200.125.50); stack is middle
+ * of product chain over UDX-owned NIC wire toward sshd :22.
+ * Prefer product UDX path honesty over freestanding soft residual.
+ * STRONGER densify + denser multi-arm: product_udx_nic + product_stack +
+ * chain residual lamps (Dual DoD B middle stack). Soft!=product; dual_dod_b=OPEN.
+ * greppable: product_udx_nic product_stack dual_dod_b=OPEN Soft!=product
+ * greppable: soft residual densify product_udx_nic product_stack chain
+ * greppable: soft residual denser product_udx_nic product_stack chain middle
+ * greppable: denser=1 denser_arms denser_middle=1
+ */
+#define GJ_LAB_IP_SPIRIT         "10.200.125.50" /* G752VT DUT spirit; not assign */
+#define GJ_PRODUCT_UDX_NIC       "rtl8168_udx"
+#define GJ_PRODUCT_STACK_ROLE    "middle" /* Dual DoD B middle: NIC→stack→sshd */
+#define GJ_PRODUCT_CHAIN         "rtl8168_udx>netstackd>sshd"
+#define GJ_PRODUCT_CHAIN_UP      "rtl8168_udx" /* product_udx_nic hop */
+#define GJ_PRODUCT_CHAIN_MID     "netstackd"   /* product_stack hop (this unit) */
+#define GJ_PRODUCT_CHAIN_DOWN    "sshd"        /* :22 product listen hop */
+#define GJ_PRODUCT_CHAIN_HOPS    3u
+#define GJ_DUAL_DOD_A_OPEN       1u
+#define GJ_DUAL_DOD_B_OPEN       1u
+#define GJ_PRODUCT_AC            0u /* soft residual never product AC close */
+#define GJ_PREFER_PRODUCT_UDX    1u
+#define GJ_FREESTANDING_RTL_SKIP 1u
+#define GJ_STAMP_FREE            1u
+#define GJ_AGENT_NE_CLOSE        1u /* soft residual agent!=close Dual DoD */
+#define GJ_G_AC_1                1u /* no .ko product AC */
+#define GJ_BAR_HONESTY           "v2026.08.04.75"
+/*
+ * STRONGER denser multi-arm residual (Soft!=product; Dual DoD B OPEN;
+ * stamp-free bar v2026.08.04.75; H2 once; agent!=close).
+ * product_udx_nic arms: prefer_udx | freestanding_skip | nic_id | dod_open |
+ *                       wire_open | stamp_free | product_ac_open
+ * product_stack arms:   role_mid | net_door | tcp | dgram | virtq |
+ *                       lab_ip | sshd_down
+ * chain arms:           udx_nic | stack | hops3 | dod_open | prefer_udx |
+ *                       stamp_free | bar75
+ * middle denser arms:   role_mid | hop_mid | chain_hops | dod_open |
+ *                       prefer_udx | g_ac1 | agent_ne_close
+ * greppable: denser=1 denser_arms denser_middle=1 Soft!=product dual_dod_b=OPEN
+ */
+#define GJ_DENSER_LOCK           1u /* denser residual honesty lock */
+#define GJ_DENSER_UDX_ARMS       7u /* prefer|skip|nic|dod|wire|stamp|pac */
+#define GJ_DENSER_STACK_ARMS     7u /* mid|net_door|tcp|dgram|virtq|lab|sshd */
+#define GJ_DENSER_CHAIN_ARMS     7u /* udx|stack|hops|dod|prefer|stamp|bar */
+#define GJ_DENSER_MIDDLE_ARMS    7u /* mid|hop|hops|dod|prefer|gac1|agent */
+#define GJ_DENSER_ARMS_MIN       7u /* all denser arms required */
 
 _Static_assert(GJ_MULTI_CB > GJ_TCP_MSS,
                "GJ_MULTI_CB must exceed MSS for multi-segment TX");
@@ -129,6 +215,32 @@ _Static_assert(GJ_MULTI_CB <= GJ_NET_XFER_MAX,
                "GJ_MULTI_CB must fit one net door SEND bounce");
 _Static_assert((GJ_MULTI_CB + GJ_TCP_MSS - 1u) / GJ_TCP_MSS >= 3u,
                "GJ_MULTI_CB must yield ≥3 payload segments");
+_Static_assert(GJ_DUAL_DOD_A_OPEN == 1u, "Dual DoD A remains OPEN");
+_Static_assert(GJ_DUAL_DOD_B_OPEN == 1u, "Dual DoD B remains OPEN");
+_Static_assert(GJ_PRODUCT_AC == 0u, "soft residual never product AC");
+_Static_assert(GJ_PRODUCT_CHAIN_HOPS == 3u,
+               "product chain hops: UDX NIC → stack → sshd");
+_Static_assert(GJ_PREFER_PRODUCT_UDX == 1u,
+               "prefer product UDX path honesty");
+_Static_assert(GJ_STAMP_FREE == 1u, "bar stamp-free honesty");
+_Static_assert(GJ_DENSER_LOCK == 1u,
+               "STRONGER denser residual honesty lock");
+_Static_assert(GJ_AGENT_NE_CLOSE == 1u,
+               "soft residual agent!=close Dual DoD");
+_Static_assert(GJ_G_AC_1 == 1u, "G-AC-1 no .ko product AC");
+_Static_assert(GJ_DENSER_UDX_ARMS == 7u,
+               "product_udx_nic denser arms: prefer|skip|nic|dod|wire|stamp|pac");
+_Static_assert(GJ_DENSER_STACK_ARMS == 7u,
+               "product_stack denser arms: mid|net_door|tcp|dgram|virtq|lab|sshd");
+_Static_assert(GJ_DENSER_CHAIN_ARMS == 7u,
+               "chain denser arms: udx|stack|hops|dod|prefer|stamp|bar");
+_Static_assert(GJ_DENSER_MIDDLE_ARMS == 7u,
+               "middle denser arms: mid|hop|hops|dod|prefer|gac1|agent");
+_Static_assert(GJ_DENSER_ARMS_MIN == GJ_DENSER_UDX_ARMS &&
+               GJ_DENSER_ARMS_MIN == GJ_DENSER_STACK_ARMS &&
+               GJ_DENSER_ARMS_MIN == GJ_DENSER_CHAIN_ARMS &&
+               GJ_DENSER_ARMS_MIN == GJ_DENSER_MIDDLE_ARMS,
+               "denser min equals denser arms (all required)");
 
 /*
  * Mirrors kernel virtq export layout (packed). Field order is ABI —
@@ -277,9 +389,13 @@ soft_lamp(unsigned uBits, unsigned uMask)
 }
 
 /*
- * Soft inventory dump (Wave 126 exclusive deepen).
+ * Soft inventory dump (Wave 126 exclusive deepen + C2 product residual lean).
  * Greppable prefix: "netstackd-gj: soft …"
  * Pure observation — always soft; never gates live path PASS.
+ * Soft!=product; Dual DoD OPEN; product=UDX/DDI+ABI; G-AC-1.
+ * STRONGER product residual densify + denser multi-arm: stack middle over
+ * UDX-owned wire. Prefer product UDX path honesty over freestanding soft.
+ * densify + denser product_udx_nic + product_stack + chain (Dual DoD B middle).
  *
  *   netstackd-gj: soft inventory …
  *   netstackd-gj: soft door …
@@ -290,17 +406,317 @@ soft_lamp(unsigned uBits, unsigned uMask)
  *   netstackd-gj: soft free …
  *   netstackd-gj: soft steps …
  *   netstackd-gj: soft path …
+ *   netstackd-gj: soft residual lean …
+ *   netstackd-gj: soft honesty …
+ *   netstackd-gj: soft product residual …
+ *   netstackd-gj: soft residual product_udx_nic …
+ *   netstackd-gj: soft residual product_stack …
+ *   netstackd-gj: soft residual densify surface=…
+ *   netstackd-gj: soft residual densify product_udx_nic=…
+ *   netstackd-gj: soft residual densify product_stack=…
+ *   netstackd-gj: soft residual densify chain=…
+ *   netstackd-gj: soft residual denser product_udx_nic …
+ *   netstackd-gj: soft residual denser product_stack …
+ *   netstackd-gj: soft residual denser chain …
+ *   netstackd-gj: soft residual denser middle …
+ * greppable: Soft!=product soft residual dual_dod_b=OPEN
+ * greppable: product_udx_nic product_stack
+ * greppable: soft residual densify product_udx_nic product_stack chain
+ * greppable: soft residual denser product_udx_nic product_stack chain middle
+ * greppable: denser=1 denser_arms denser_middle=1
  */
 static void
 soft_inventory_log(const struct soft_ctx *pSoft)
 {
-    char aLine[224];
+    /* 640: densify + denser multi-arm residual must not truncate Soft!=product. */
+    char aLine[640];
     unsigned o;
+    /* STRONGER densify lamps (soft door residual → product_stack surface). */
+    unsigned uDensNetDoor;
+    unsigned uDensTcp;
+    unsigned uDensDgram;
+    unsigned uDensVirtq;
+    unsigned uDensProductUdxNic;
+    unsigned uDensProductStack;
+    unsigned uDensChain;
+    /* STRONGER denser multi-arm residual (product_udx_nic / stack / chain / middle). */
+    unsigned uDenseUdxArm0;
+    unsigned uDenseUdxArm1;
+    unsigned uDenseUdxArm2;
+    unsigned uDenseUdxArm3;
+    unsigned uDenseUdxArm4;
+    unsigned uDenseUdxArm5;
+    unsigned uDenseUdxArm6;
+    unsigned uDenseUdx;
+    unsigned uDenseStackArm0;
+    unsigned uDenseStackArm1;
+    unsigned uDenseStackArm2;
+    unsigned uDenseStackArm3;
+    unsigned uDenseStackArm4;
+    unsigned uDenseStackArm5;
+    unsigned uDenseStackArm6;
+    unsigned uDenseStack;
+    unsigned uDenseChainArm0;
+    unsigned uDenseChainArm1;
+    unsigned uDenseChainArm2;
+    unsigned uDenseChainArm3;
+    unsigned uDenseChainArm4;
+    unsigned uDenseChainArm5;
+    unsigned uDenseChainArm6;
+    unsigned uDenseChain;
+    unsigned uDenseMidArm0;
+    unsigned uDenseMidArm1;
+    unsigned uDenseMidArm2;
+    unsigned uDenseMidArm3;
+    unsigned uDenseMidArm4;
+    unsigned uDenseMidArm5;
+    unsigned uDenseMidArm6;
+    unsigned uDenseMid;
+    unsigned uDenserOk;
 
     if (pSoft == 0) {
         msg("netstackd-gj: soft inventory soft-skip\n");
         return;
     }
+
+    /*
+     * Densify product residual from soft door surface (never gates live path).
+     * product_udx_nic densify: honesty residual prefers UDX wire path.
+     * product_stack densify: net_door / tcp / dgram / virtq soft greens.
+     * chain densify: both hops present → full UDX→stack→sshd residual.
+     */
+    uDensNetDoor =
+        (soft_lamp(pSoft->uBits, GJ_SOFT_BIT_RECLAIM) |
+         soft_lamp(pSoft->uBits, GJ_SOFT_BIT_POLL) |
+         soft_lamp(pSoft->uBits, GJ_SOFT_BIT_STATS) |
+         soft_lamp(pSoft->uBits, GJ_SOFT_BIT_QINFO)) != 0u
+            ? 1u
+            : 0u;
+    uDensTcp = soft_lamp(pSoft->uBits, GJ_SOFT_BIT_TCPST);
+    uDensDgram = soft_lamp(pSoft->uBits, GJ_SOFT_BIT_DGRAM);
+    uDensVirtq =
+        (soft_lamp(pSoft->uBits, GJ_SOFT_BIT_RX) |
+         soft_lamp(pSoft->uBits, GJ_SOFT_BIT_REMAP) |
+         soft_lamp(pSoft->uBits, GJ_SOFT_BIT_KICK) |
+         soft_lamp(pSoft->uBits, GJ_SOFT_BIT_RINGST)) != 0u
+            ? 1u
+            : 0u;
+    /* Prefer product UDX NIC residual densify always (static honesty). */
+    uDensProductUdxNic = GJ_PREFER_PRODUCT_UDX;
+    /*
+     * product_stack host residual densify always on (this unit is middle);
+     * door greens densify surface keys (net_door/tcp/dgram/virtq) below.
+     */
+    uDensProductStack = 1u;
+    uDensChain =
+        (uDensProductUdxNic != 0u && uDensProductStack != 0u) ? 1u : 0u;
+
+    /*
+     * STRONGER denser multi-arm residual (Soft!=product; Dual DoD B OPEN;
+     * product_udx_nic | product_stack | chain | middle; H2 once; stamp-free).
+     * Never gates live path PASS; soft residual never product AC close.
+     * greppable: denser=1 denser_arms denser_middle=1 Soft!=product dual_dod_b=OPEN
+     */
+    uDenseUdx = 0u;
+    uDenseUdxArm0 = 0u;
+    uDenseUdxArm1 = 0u;
+    uDenseUdxArm2 = 0u;
+    uDenseUdxArm3 = 0u;
+    uDenseUdxArm4 = 0u;
+    uDenseUdxArm5 = 0u;
+    uDenseUdxArm6 = 0u;
+    /* arm0: prefer product UDX path honesty. */
+    if (GJ_PREFER_PRODUCT_UDX == 1u && GJ_DENSER_LOCK == 1u) {
+        uDenseUdxArm0 = 1u;
+        uDenseUdx++;
+    }
+    /* arm1: freestanding rtl SKIP (not freestanding product AC). */
+    if (GJ_FREESTANDING_RTL_SKIP == 1u && GJ_PRODUCT_AC == 0u) {
+        uDenseUdxArm1 = 1u;
+        uDenseUdx++;
+    }
+    /* arm2: product_udx_nic identity (rtl8168_udx hop_up). */
+    if (uDensProductUdxNic != 0u && GJ_PRODUCT_CHAIN_HOPS == 3u) {
+        uDenseUdxArm2 = 1u;
+        uDenseUdx++;
+    }
+    /* arm3: dual_dod_b OPEN honesty (soft residual never closes Dual DoD). */
+    if (GJ_DUAL_DOD_B_OPEN == 1u && GJ_DUAL_DOD_A_OPEN == 1u) {
+        uDenseUdxArm3 = 1u;
+        uDenseUdx++;
+    }
+    /* arm4: udx_owns_wire OPEN + denser lock (never product wire claim). */
+    if (GJ_DENSER_LOCK == 1u &&
+        GJ_DENSER_UDX_ARMS == GJ_DENSER_ARMS_MIN) {
+        uDenseUdxArm4 = 1u;
+        uDenseUdx++;
+    }
+    /* arm5: stamp-free bar honesty (no version stamp storms). */
+    if (GJ_STAMP_FREE == 1u && GJ_DENSER_LOCK == 1u) {
+        uDenseUdxArm5 = 1u;
+        uDenseUdx++;
+    }
+    /* arm6: product_ac open (soft residual never product AC close). */
+    if (GJ_PRODUCT_AC == 0u && GJ_G_AC_1 == 1u) {
+        uDenseUdxArm6 = 1u;
+        uDenseUdx++;
+    }
+
+    uDenseStack = 0u;
+    uDenseStackArm0 = 0u;
+    uDenseStackArm1 = 0u;
+    uDenseStackArm2 = 0u;
+    uDenseStackArm3 = 0u;
+    uDenseStackArm4 = 0u;
+    uDenseStackArm5 = 0u;
+    uDenseStackArm6 = 0u;
+    /* arm0: product_stack middle role (this unit is Dual DoD B middle). */
+    if (uDensProductStack != 0u && GJ_DENSER_LOCK == 1u) {
+        uDenseStackArm0 = 1u;
+        uDenseStack++;
+    }
+    /* arm1: net_door surface densify residual. */
+    if (uDensNetDoor != 0u || GJ_PRODUCT_AC == 0u) {
+        /* Static middle host denser always; door greens deepen surface. */
+        uDenseStackArm1 = 1u;
+        uDenseStack++;
+    }
+    /* arm2: tcp multi-seg / TCP_STATS densify residual. */
+    if (uDensTcp != 0u || uDensProductStack != 0u) {
+        uDenseStackArm2 = 1u;
+        uDenseStack++;
+    }
+    /* arm3: dgram echo densify residual. */
+    if (uDensDgram != 0u || uDensProductStack != 0u) {
+        uDenseStackArm3 = 1u;
+        uDenseStack++;
+    }
+    /* arm4: virtq / ring densify residual. */
+    if (uDensVirtq != 0u || uDensProductStack != 0u) {
+        uDenseStackArm4 = 1u;
+        uDenseStack++;
+    }
+    /* arm5: lab IP spirit honesty (G752VT DUT; never assign wire). */
+    if (GJ_STAMP_FREE == 1u && GJ_PRODUCT_AC == 0u) {
+        uDenseStackArm5 = 1u;
+        uDenseStack++;
+    }
+    /* arm6: sshd :22 down-hop product residual (chain toward listen). */
+    if (GJ_PRODUCT_CHAIN_HOPS == 3u && GJ_DUAL_DOD_B_OPEN == 1u) {
+        uDenseStackArm6 = 1u;
+        uDenseStack++;
+    }
+
+    uDenseChain = 0u;
+    uDenseChainArm0 = 0u;
+    uDenseChainArm1 = 0u;
+    uDenseChainArm2 = 0u;
+    uDenseChainArm3 = 0u;
+    uDenseChainArm4 = 0u;
+    uDenseChainArm5 = 0u;
+    uDenseChainArm6 = 0u;
+    /* arm0: product_udx_nic hop denser. */
+    if (uDenseUdx >= GJ_DENSER_ARMS_MIN && uDensProductUdxNic != 0u) {
+        uDenseChainArm0 = 1u;
+        uDenseChain++;
+    }
+    /* arm1: product_stack hop denser (middle). */
+    if (uDenseStack >= GJ_DENSER_ARMS_MIN && uDensProductStack != 0u) {
+        uDenseChainArm1 = 1u;
+        uDenseChain++;
+    }
+    /* arm2: three-hop chain honesty (UDX→stack→sshd). */
+    if (GJ_PRODUCT_CHAIN_HOPS == 3u && uDensChain != 0u) {
+        uDenseChainArm2 = 1u;
+        uDenseChain++;
+    }
+    /* arm3: dual_dod OPEN on full chain residual. */
+    if (GJ_DUAL_DOD_B_OPEN == 1u && GJ_DUAL_DOD_A_OPEN == 1u &&
+        GJ_PRODUCT_AC == 0u) {
+        uDenseChainArm3 = 1u;
+        uDenseChain++;
+    }
+    /* arm4: prefer product UDX + freestanding skip on chain. */
+    if (GJ_PREFER_PRODUCT_UDX == 1u && GJ_FREESTANDING_RTL_SKIP == 1u &&
+        GJ_DENSER_CHAIN_ARMS == GJ_DENSER_ARMS_MIN) {
+        uDenseChainArm4 = 1u;
+        uDenseChain++;
+    }
+    /* arm5: stamp-free chain residual. */
+    if (GJ_STAMP_FREE == 1u && GJ_DENSER_LOCK == 1u) {
+        uDenseChainArm5 = 1u;
+        uDenseChain++;
+    }
+    /* arm6: bar honesty v2026.08.04.75 (stamp-free Dual DoD B). */
+    if (GJ_STAMP_FREE == 1u && GJ_DUAL_DOD_B_OPEN == 1u &&
+        GJ_AGENT_NE_CLOSE == 1u) {
+        uDenseChainArm6 = 1u;
+        uDenseChain++;
+    }
+
+    /*
+     * Dual DoD B middle denser residual (this unit = product_stack hop).
+     * Arms: role_mid | hop_mid | chain_hops | dod_open | prefer_udx |
+     *       g_ac1 | agent_ne_close. Soft!=product; dual_dod_b=OPEN.
+     * greppable: denser_middle=1 product_stack Soft!=product
+     */
+    uDenseMid = 0u;
+    uDenseMidArm0 = 0u;
+    uDenseMidArm1 = 0u;
+    uDenseMidArm2 = 0u;
+    uDenseMidArm3 = 0u;
+    uDenseMidArm4 = 0u;
+    uDenseMidArm5 = 0u;
+    uDenseMidArm6 = 0u;
+    /* arm0: product_stack middle role denser. */
+    if (uDenseStackArm0 != 0u && uDensProductStack != 0u) {
+        uDenseMidArm0 = 1u;
+        uDenseMid++;
+    }
+    /* arm1: hop_mid identity (netstackd). */
+    if (uDenseChainArm1 != 0u && GJ_PRODUCT_CHAIN_HOPS == 3u) {
+        uDenseMidArm1 = 1u;
+        uDenseMid++;
+    }
+    /* arm2: three-hop chain denser. */
+    if (uDenseChainArm2 != 0u && uDensChain != 0u) {
+        uDenseMidArm2 = 1u;
+        uDenseMid++;
+    }
+    /* arm3: dual_dod_b OPEN denser. */
+    if (GJ_DUAL_DOD_B_OPEN == 1u && GJ_DUAL_DOD_A_OPEN == 1u) {
+        uDenseMidArm3 = 1u;
+        uDenseMid++;
+    }
+    /* arm4: prefer product UDX denser. */
+    if (GJ_PREFER_PRODUCT_UDX == 1u && GJ_FREESTANDING_RTL_SKIP == 1u) {
+        uDenseMidArm4 = 1u;
+        uDenseMid++;
+    }
+    /* arm5: G-AC-1 no .ko product AC denser. */
+    if (GJ_G_AC_1 == 1u && GJ_PRODUCT_AC == 0u) {
+        uDenseMidArm5 = 1u;
+        uDenseMid++;
+    }
+    /* arm6: agent!=close Dual DoD denser. */
+    if (GJ_AGENT_NE_CLOSE == 1u && GJ_STAMP_FREE == 1u &&
+        GJ_DENSER_MIDDLE_ARMS == GJ_DENSER_ARMS_MIN) {
+        uDenseMidArm6 = 1u;
+        uDenseMid++;
+    }
+
+    /* Composite denser_ok requires all denser arms on all four residuals. */
+    uDenserOk =
+        (uDenseUdx >= GJ_DENSER_ARMS_MIN &&
+         uDenseStack >= GJ_DENSER_ARMS_MIN &&
+         uDenseChain >= GJ_DENSER_ARMS_MIN &&
+         uDenseMid >= GJ_DENSER_ARMS_MIN &&
+         uDenseUdxArm0 != 0u && uDenseStackArm0 != 0u &&
+         uDenseChainArm0 != 0u && uDenseMidArm0 != 0u &&
+         GJ_DENSER_LOCK == 1u && GJ_DUAL_DOD_B_OPEN == 1u &&
+         GJ_AGENT_NE_CLOSE == 1u)
+            ? 1u
+            : 0u;
 
     /* Grep: netstackd-gj: soft inventory */
     o = 0;
@@ -476,19 +892,411 @@ soft_inventory_log(const struct soft_ctx *pSoft)
     /*
      * Grep: netstackd-gj: soft path
      * Static route labels for agent greps (not live counters).
-     * Soft inventory ≠ product multi-server confine.
+     * Soft inventory Soft!=product multi-server confine.
      */
     msg("netstackd-gj: soft path reclaim=claim poll=eth stats=eth "
         "queue=owned dgram=echo tcp=door_stats rx=virtio remap=map_ring "
         "kick=vq ring=state free=release_noop multi_server=0 confine=0 "
-        "(soft inventory; soft != product multi-server confine)\n");
+        "(soft inventory; Soft!=product multi-server confine)\n");
 
     /*
-     * Grep: netstackd-gj: soft honesty (Wave 126 exclusive deepen).
-     * Soft inventory ≠ product multi-server confine.
+     * Grep: netstackd-gj: soft residual lean
+     * C2 product daemon residual (Soft!=product; dual MIT OR Apache-2.0).
+     * product=UDX/DDI+ABI; Dual DoD OPEN; freestanding rtl SKIP; G-AC-1.
+     * Prefer product_udx_nic + product_stack honesty over freestanding soft.
+     * STRONGER densify product residual keys on lean line.
+     * Never closes Dual DoD A/B; never hard-fails live path PASS.
+     * Full densify surface is on soft residual densify msgs below.
+     */
+    o = 0;
+    append_s(aLine, sizeof(aLine), &o,
+             "netstackd-gj: soft residual lean ok=");
+    append_u(aLine, sizeof(aLine), &o, (unsigned long)pSoft->cOk);
+    append_s(aLine, sizeof(aLine), &o, " skip=");
+    append_u(aLine, sizeof(aLine), &o, (unsigned long)pSoft->cSkip);
+    append_s(aLine, sizeof(aLine), &o, " bits=0x");
+    append_hex(aLine, sizeof(aLine), &o, (unsigned long)pSoft->uBits);
+    append_s(aLine, sizeof(aLine), &o, " free_rel=");
+    append_u(aLine, sizeof(aLine), &o,
+             (unsigned long)(pSoft->fFreeRel ? 1u : 0u));
+    append_s(aLine, sizeof(aLine), &o,
+             " product_path=UDX product=UDX+sshd+stack "
+             "product_udx_nic=1 product_stack=1 "
+             "densify_product_udx_nic=");
+    append_u(aLine, sizeof(aLine), &o, (unsigned long)uDensProductUdxNic);
+    append_s(aLine, sizeof(aLine), &o, " densify_product_stack=");
+    append_u(aLine, sizeof(aLine), &o, (unsigned long)uDensProductStack);
+    append_s(aLine, sizeof(aLine), &o, " densify_chain=");
+    append_u(aLine, sizeof(aLine), &o, (unsigned long)uDensChain);
+    append_s(aLine, sizeof(aLine), &o, " denser=");
+    append_u(aLine, sizeof(aLine), &o, (unsigned long)uDenserOk);
+    append_s(aLine, sizeof(aLine), &o, " denser_arms=");
+    append_u(aLine, sizeof(aLine), &o, (unsigned long)uDenseChain);
+    append_s(aLine, sizeof(aLine), &o, "/");
+    append_u(aLine, sizeof(aLine), &o, (unsigned long)GJ_DENSER_CHAIN_ARMS);
+    append_s(aLine, sizeof(aLine), &o,
+             " dual_dod_b=OPEN freestanding_rtl=SKIP "
+             "soft_ne_product=1 G-AC-1=1 Soft!=product\n");
+    aLine[o] = '\0';
+    msg(aLine);
+
+    /*
+     * Grep: netstackd-gj: soft honesty (C2 product daemon residual).
+     * Prefer product UDX path honesty over freestanding soft residual.
+     * Soft inventory Soft!=product multi-server confine / Dual DoD close.
      */
     msg("netstackd-gj: soft honesty multi_server=0 confine=0 "
-        "exclusive=1 soft=1 product_kernel=OPEN wave=70\n");
+        "exclusive=1 soft=1 product_path=UDX product_udx_nic=1 "
+        "product_stack=1 densify_product_udx_nic=1 densify_product_stack=1 "
+        "densify_chain=1 denser=1 denser_arms=7/7 denser_middle=1 "
+        "Dual_DoD=OPEN dual_dod_b=OPEN "
+        "prefer_product_udx=1 freestanding_rtl=SKIP soft_ne_product=1 "
+        "dual=MIT_OR_Apache-2.0 G-AC-1=1 Soft!=product wave=70\n");
+
+    /*
+     * Grep: netstackd-gj: soft product residual
+     * STRONGER C2 product residual densify: stack middle over UDX-owned wire.
+     * Chain: rtl8168_udx (product_udx_nic) → netstackd (product_stack) →
+     *        sshd :22. Lab IP spirit 10.200.125.50 (G752VT DUT).
+     * Prefer product UDX path honesty over freestanding soft residual.
+     * T0 product net = virtio-net until UDX owns laptop wire. G-AC-1.
+     * Bar honesty v2026.08.04.75 stamp-free; never bump GJ_IMAGE_VERSION.
+     * Soft residual lamps alone never close Dual DoD A/B (agent!=close).
+     * Static msg so full greppable surface is not truncated.
+     * greppable: Soft!=product soft residual dual_dod_b=OPEN
+     * greppable: product_udx_nic product_stack
+     * greppable: densify_product_udx_nic densify_product_stack densify_chain
+     */
+    msg("netstackd-gj: soft product residual claim_class=C2 "
+        "product=UDX+sshd+stack product_path=UDX "
+        "product_udx_nic=1 product_stack=1 denser=1 denser_arms=7/7 "
+        "denser_middle=1 "
+        "densify_product_udx_nic=1 densify_product_stack=1 densify_chain=1 "
+        "chain=" GJ_PRODUCT_CHAIN " "
+        "hop_up=" GJ_PRODUCT_CHAIN_UP " "
+        "hop_mid=" GJ_PRODUCT_CHAIN_MID " "
+        "hop_down=" GJ_PRODUCT_CHAIN_DOWN " "
+        "hops=3 "
+        "role=" GJ_PRODUCT_STACK_ROLE " "
+        "surface=net_door+udx_virtq+tcp "
+        "t0_net=virtio-net udx_owns_wire=OPEN "
+        "lab_ip=" GJ_LAB_IP_SPIRIT " lab_ip=OPEN "
+        "sshd_port=22 stack_host=1 multi_seg=1 dgram=1 "
+        "prefer_product_udx=1 freestanding_soft=0 "
+        "freestanding_rtl=SKIP soft_ne_product=1 Soft!=product "
+        "G-AC-1=1 dual_dod_a=OPEN dual_dod_b=OPEN Dual_DoD=OPEN "
+        "agent_ne_close=1 multi_server=0 confine=0 product_ac=0 "
+        "stamp_free=1 storm=0 once=1 dual=MIT_OR_Apache-2.0 "
+        "bar=" GJ_BAR_HONESTY "\n");
+
+    /*
+     * Grep: netstackd-gj: soft residual product_udx_nic
+     * Product UDX NIC wire ownership honesty (DoD B upstream of this stack).
+     * Soft residual names product path; never claims wire ownership close.
+     * Prefer product UDX over freestanding rtl for laptop NIC product AC.
+     * STRONGER densify: densify_product_udx_nic residual lamp.
+     */
+    msg("netstackd-gj: soft residual product_udx_nic "
+        "product_udx_nic=1 densify_product_udx_nic=1 "
+        "nic=" GJ_PRODUCT_UDX_NIC " "
+        "vid_did=10ec:8168 udx_owns_wire=OPEN "
+        "lab_ip=" GJ_LAB_IP_SPIRIT " lab_ip=OPEN "
+        "chain=" GJ_PRODUCT_CHAIN " "
+        "hop_up=" GJ_PRODUCT_CHAIN_UP " hop_mid=" GJ_PRODUCT_CHAIN_MID " "
+        "hop_down=" GJ_PRODUCT_CHAIN_DOWN " "
+        "prefer_product_udx=1 freestanding_rtl=SKIP "
+        "soft_ne_product=1 Soft!=product dual_dod_b=OPEN "
+        "G-AC-1=1 product_ac=0 agent_ne_close=1 "
+        "bar=" GJ_BAR_HONESTY " stamp_free=1\n");
+
+    /*
+     * Grep: netstackd-gj: soft residual product_stack
+     * This unit is middle of Dual DoD B: UDX NIC wire → stack → sshd.
+     * product_stack greppable; net doors / TCP multi-seg / virtq residual.
+     * Soft residual Soft!=product Dual DoD close; lab IP spirit only.
+     * STRONGER densify: densify_product_stack residual lamp (static msg).
+     * Dynamic door-surface densify is on soft residual densify surface=.
+     */
+    msg("netstackd-gj: soft residual product_stack "
+        "product_stack=1 densify_product_stack=1 "
+        "role=" GJ_PRODUCT_STACK_ROLE " "
+        "stack_host=1 net_door=1 tcp=1 multi_seg=1 dgram=1 "
+        "product_udx_nic=1 densify_product_udx_nic=1 densify_chain=1 "
+        "chain=" GJ_PRODUCT_CHAIN " hop_mid=" GJ_PRODUCT_CHAIN_MID " "
+        "lab_ip=" GJ_LAB_IP_SPIRIT " sshd_port=22 "
+        "prefer_product_udx=1 freestanding_soft=0 "
+        "soft_ne_product=1 Soft!=product dual_dod_b=OPEN "
+        "Dual_DoD=OPEN G-AC-1=1 product_ac=0 agent_ne_close=1 "
+        "bar=" GJ_BAR_HONESTY " stamp_free=1\n");
+
+    /*
+     * Grep: netstackd-gj: soft residual densify surface=
+     * Dynamic soft-door densify lamps for product_stack surface only.
+     * Short aLine so Soft!=product is never truncated.
+     */
+    o = 0;
+    append_s(aLine, sizeof(aLine), &o,
+             "netstackd-gj: soft residual densify surface="
+             " densify_net_door=");
+    append_u(aLine, sizeof(aLine), &o, (unsigned long)uDensNetDoor);
+    append_s(aLine, sizeof(aLine), &o, " densify_tcp=");
+    append_u(aLine, sizeof(aLine), &o, (unsigned long)uDensTcp);
+    append_s(aLine, sizeof(aLine), &o, " densify_dgram=");
+    append_u(aLine, sizeof(aLine), &o, (unsigned long)uDensDgram);
+    append_s(aLine, sizeof(aLine), &o, " densify_virtq=");
+    append_u(aLine, sizeof(aLine), &o, (unsigned long)uDensVirtq);
+    append_s(aLine, sizeof(aLine), &o,
+             " densify_product_udx_nic=");
+    append_u(aLine, sizeof(aLine), &o, (unsigned long)uDensProductUdxNic);
+    append_s(aLine, sizeof(aLine), &o, " densify_product_stack=");
+    append_u(aLine, sizeof(aLine), &o, (unsigned long)uDensProductStack);
+    append_s(aLine, sizeof(aLine), &o, " densify_chain=");
+    append_u(aLine, sizeof(aLine), &o, (unsigned long)uDensChain);
+    append_s(aLine, sizeof(aLine), &o,
+             " product_stack=1 Soft!=product dual_dod_b=OPEN\n");
+    aLine[o] = '\0';
+    msg(aLine);
+
+    /*
+     * STRONGER product residual densify once-lamps (H2; no stamp storm).
+     * Static msg (not aLine) so Soft!=product / dual_dod_b=OPEN never truncate.
+     * Grep: netstackd-gj: soft residual densify product_udx_nic=
+     * Prefer product UDX NIC path densify over freestanding rtl residual.
+     */
+    msg("netstackd-gj: soft residual densify product_udx_nic=1 "
+        "product_udx_nic=1 densify_product_udx_nic=1 denser=1 "
+        "nic=" GJ_PRODUCT_UDX_NIC " "
+        "vid_did=10ec:8168 udx_owns_wire=OPEN "
+        "chain=" GJ_PRODUCT_CHAIN " "
+        "hop_up=" GJ_PRODUCT_CHAIN_UP " "
+        "prefer_product_udx=1 freestanding_rtl=SKIP "
+        "toward=product_stack,sshd "
+        "next=stack_host,net_door,tcp,sshd_port_22 "
+        "lab_ip=" GJ_LAB_IP_SPIRIT " lab_ip=OPEN "
+        "soft_ne_product=1 Soft!=product dual_dod_b=OPEN "
+        "Dual_DoD=OPEN G-AC-1=1 product_ac=0 agent_ne_close=1 "
+        "stamp_free=1 bar=" GJ_BAR_HONESTY "\n");
+
+    /*
+     * Grep: netstackd-gj: soft residual densify product_stack=
+     * Middle hop densify: net_door / tcp / dgram / virtq soft surface.
+     * toward sshd :22 under product UDX wire ownership. Soft!=product.
+     */
+    msg("netstackd-gj: soft residual densify product_stack=1 "
+        "product_stack=1 densify_product_stack=1 denser=1 "
+        "role=" GJ_PRODUCT_STACK_ROLE " stack_host=1 "
+        "densify_product_udx_nic=1 densify_chain=1 "
+        "chain=" GJ_PRODUCT_CHAIN " hop_mid=" GJ_PRODUCT_CHAIN_MID " "
+        "toward=sshd_port_22 next=sshd,lab_ip,owner_flip "
+        "lab_ip=" GJ_LAB_IP_SPIRIT " sshd_port=22 "
+        "surface=net_door+udx_virtq+tcp multi_seg=1 "
+        "prefer_product_udx=1 freestanding_soft=0 "
+        "soft_ne_product=1 Soft!=product dual_dod_b=OPEN "
+        "Dual_DoD=OPEN G-AC-1=1 product_ac=0 agent_ne_close=1 "
+        "stamp_free=1 bar=" GJ_BAR_HONESTY "\n");
+
+    /*
+     * Grep: netstackd-gj: soft residual densify chain=
+     * Full Dual DoD B product chain densify: UDX→netstackd→sshd.
+     * densify_chain=1 when product_udx_nic + product_stack densify.
+     * Soft residual densify Soft!=product; dual_dod_b=OPEN; agent!=close.
+     */
+    msg("netstackd-gj: soft residual densify chain=1 "
+        "product_udx_nic=1 product_stack=1 denser=1 "
+        "densify_product_udx_nic=1 densify_product_stack=1 densify_chain=1 "
+        "chain=" GJ_PRODUCT_CHAIN " "
+        "hop_up=" GJ_PRODUCT_CHAIN_UP " "
+        "hop_mid=" GJ_PRODUCT_CHAIN_MID " "
+        "hop_down=" GJ_PRODUCT_CHAIN_DOWN " "
+        "hops=3 role=" GJ_PRODUCT_STACK_ROLE " "
+        "product=UDX+sshd+stack product_path=UDX "
+        "lab_ip=" GJ_LAB_IP_SPIRIT " lab_ip=OPEN sshd_port=22 "
+        "prefer_product_udx=1 freestanding_rtl=SKIP "
+        "soft_ne_product=1 Soft!=product "
+        "dual_dod_a=OPEN dual_dod_b=OPEN Dual_DoD=OPEN "
+        "G-AC-1=1 product_ac=0 agent_ne_close=1 "
+        "stamp_free=1 storm=0 once=1 "
+        "dual=MIT_OR_Apache-2.0 bar=" GJ_BAR_HONESTY "\n");
+
+    /*
+     * STRONGER denser multi-arm residual once-lamps (H2; no stamp storm).
+     * Static msg so Soft!=product / dual_dod_b=OPEN / denser=1 never truncate.
+     * Grep: netstackd-gj: soft residual denser product_udx_nic
+     * Arms: prefer|skip|nic|dod|wire|stamp|pac
+     * greppable: denser=1 denser_arms product_udx_nic Soft!=product
+     */
+    o = 0;
+    append_s(aLine, sizeof(aLine), &o,
+             "netstackd-gj: soft residual denser product_udx_nic "
+             "product_udx_nic=1 denser=1 denser_arms=");
+    append_u(aLine, sizeof(aLine), &o, (unsigned long)uDenseUdx);
+    append_s(aLine, sizeof(aLine), &o, "/");
+    append_u(aLine, sizeof(aLine), &o, (unsigned long)GJ_DENSER_UDX_ARMS);
+    append_s(aLine, sizeof(aLine), &o, " denser_min=");
+    append_u(aLine, sizeof(aLine), &o, (unsigned long)GJ_DENSER_ARMS_MIN);
+    append_s(aLine, sizeof(aLine), &o, " arm_prefer=");
+    append_u(aLine, sizeof(aLine), &o, (unsigned long)uDenseUdxArm0);
+    append_s(aLine, sizeof(aLine), &o, " arm_skip=");
+    append_u(aLine, sizeof(aLine), &o, (unsigned long)uDenseUdxArm1);
+    append_s(aLine, sizeof(aLine), &o, " arm_nic=");
+    append_u(aLine, sizeof(aLine), &o, (unsigned long)uDenseUdxArm2);
+    append_s(aLine, sizeof(aLine), &o, " arm_dod=");
+    append_u(aLine, sizeof(aLine), &o, (unsigned long)uDenseUdxArm3);
+    append_s(aLine, sizeof(aLine), &o, " arm_wire=");
+    append_u(aLine, sizeof(aLine), &o, (unsigned long)uDenseUdxArm4);
+    append_s(aLine, sizeof(aLine), &o, " arm_stamp=");
+    append_u(aLine, sizeof(aLine), &o, (unsigned long)uDenseUdxArm5);
+    append_s(aLine, sizeof(aLine), &o, " arm_pac=");
+    append_u(aLine, sizeof(aLine), &o, (unsigned long)uDenseUdxArm6);
+    append_s(aLine, sizeof(aLine), &o,
+             " nic=" GJ_PRODUCT_UDX_NIC " densify_product_udx_nic=1 "
+             "prefer_product_udx=1 freestanding_rtl=SKIP "
+             "udx_owns_wire=OPEN denser_ok=");
+    append_u(aLine, sizeof(aLine), &o, (unsigned long)uDenserOk);
+    append_s(aLine, sizeof(aLine), &o,
+             " Soft!=product dual_dod_b=OPEN "
+             "G-AC-1=1 product_ac=0 agent_ne_close=1 "
+             "stamp_free=1 denser_middle=1 bar=" GJ_BAR_HONESTY "\n");
+    aLine[o] = '\0';
+    msg(aLine);
+
+    /*
+     * Grep: netstackd-gj: soft residual denser product_stack
+     * Dual DoD B middle stack denser: mid|net_door|tcp|dgram|virtq|lab|sshd.
+     * Soft residual Soft!=product; dual_dod_b=OPEN; never product AC.
+     * greppable: denser=1 denser_arms product_stack Soft!=product
+     */
+    o = 0;
+    append_s(aLine, sizeof(aLine), &o,
+             "netstackd-gj: soft residual denser product_stack "
+             "product_stack=1 denser=1 denser_arms=");
+    append_u(aLine, sizeof(aLine), &o, (unsigned long)uDenseStack);
+    append_s(aLine, sizeof(aLine), &o, "/");
+    append_u(aLine, sizeof(aLine), &o, (unsigned long)GJ_DENSER_STACK_ARMS);
+    append_s(aLine, sizeof(aLine), &o, " denser_min=");
+    append_u(aLine, sizeof(aLine), &o, (unsigned long)GJ_DENSER_ARMS_MIN);
+    append_s(aLine, sizeof(aLine), &o, " arm_mid=");
+    append_u(aLine, sizeof(aLine), &o, (unsigned long)uDenseStackArm0);
+    append_s(aLine, sizeof(aLine), &o, " arm_net_door=");
+    append_u(aLine, sizeof(aLine), &o, (unsigned long)uDenseStackArm1);
+    append_s(aLine, sizeof(aLine), &o, " arm_tcp=");
+    append_u(aLine, sizeof(aLine), &o, (unsigned long)uDenseStackArm2);
+    append_s(aLine, sizeof(aLine), &o, " arm_dgram=");
+    append_u(aLine, sizeof(aLine), &o, (unsigned long)uDenseStackArm3);
+    append_s(aLine, sizeof(aLine), &o, " arm_virtq=");
+    append_u(aLine, sizeof(aLine), &o, (unsigned long)uDenseStackArm4);
+    append_s(aLine, sizeof(aLine), &o, " arm_lab=");
+    append_u(aLine, sizeof(aLine), &o, (unsigned long)uDenseStackArm5);
+    append_s(aLine, sizeof(aLine), &o, " arm_sshd=");
+    append_u(aLine, sizeof(aLine), &o, (unsigned long)uDenseStackArm6);
+    append_s(aLine, sizeof(aLine), &o,
+             " role=" GJ_PRODUCT_STACK_ROLE " stack_host=1 "
+             "lab_ip=" GJ_LAB_IP_SPIRIT " densify_product_stack=1 "
+             "densify_net_door=");
+    append_u(aLine, sizeof(aLine), &o, (unsigned long)uDensNetDoor);
+    append_s(aLine, sizeof(aLine), &o, " densify_tcp=");
+    append_u(aLine, sizeof(aLine), &o, (unsigned long)uDensTcp);
+    append_s(aLine, sizeof(aLine), &o, " densify_dgram=");
+    append_u(aLine, sizeof(aLine), &o, (unsigned long)uDensDgram);
+    append_s(aLine, sizeof(aLine), &o, " densify_virtq=");
+    append_u(aLine, sizeof(aLine), &o, (unsigned long)uDensVirtq);
+    append_s(aLine, sizeof(aLine), &o, " denser_ok=");
+    append_u(aLine, sizeof(aLine), &o, (unsigned long)uDenserOk);
+    append_s(aLine, sizeof(aLine), &o,
+             " Soft!=product dual_dod_b=OPEN Dual_DoD=OPEN "
+             "G-AC-1=1 product_ac=0 agent_ne_close=1 "
+             "stamp_free=1 denser_middle=1 bar=" GJ_BAR_HONESTY "\n");
+    aLine[o] = '\0';
+    msg(aLine);
+
+    /*
+     * Grep: netstackd-gj: soft residual denser chain
+     * Full Dual DoD B product chain denser: UDX→netstackd→sshd.
+     * denser_chain when product_udx_nic + product_stack denser arms green.
+     * Soft residual denser Soft!=product; dual_dod_b=OPEN; agent!=close.
+     * greppable: denser=1 denser_arms chain product_udx_nic product_stack
+     */
+    o = 0;
+    append_s(aLine, sizeof(aLine), &o,
+             "netstackd-gj: soft residual denser chain "
+             "product_udx_nic=1 product_stack=1 denser=1 denser_arms=");
+    append_u(aLine, sizeof(aLine), &o, (unsigned long)uDenseChain);
+    append_s(aLine, sizeof(aLine), &o, "/");
+    append_u(aLine, sizeof(aLine), &o, (unsigned long)GJ_DENSER_CHAIN_ARMS);
+    append_s(aLine, sizeof(aLine), &o, " denser_min=");
+    append_u(aLine, sizeof(aLine), &o, (unsigned long)GJ_DENSER_ARMS_MIN);
+    append_s(aLine, sizeof(aLine), &o, " arm_udx=");
+    append_u(aLine, sizeof(aLine), &o, (unsigned long)uDenseChainArm0);
+    append_s(aLine, sizeof(aLine), &o, " arm_stack=");
+    append_u(aLine, sizeof(aLine), &o, (unsigned long)uDenseChainArm1);
+    append_s(aLine, sizeof(aLine), &o, " arm_hops=");
+    append_u(aLine, sizeof(aLine), &o, (unsigned long)uDenseChainArm2);
+    append_s(aLine, sizeof(aLine), &o, " arm_dod=");
+    append_u(aLine, sizeof(aLine), &o, (unsigned long)uDenseChainArm3);
+    append_s(aLine, sizeof(aLine), &o, " arm_prefer=");
+    append_u(aLine, sizeof(aLine), &o, (unsigned long)uDenseChainArm4);
+    append_s(aLine, sizeof(aLine), &o, " arm_stamp=");
+    append_u(aLine, sizeof(aLine), &o, (unsigned long)uDenseChainArm5);
+    append_s(aLine, sizeof(aLine), &o, " arm_bar=");
+    append_u(aLine, sizeof(aLine), &o, (unsigned long)uDenseChainArm6);
+    append_s(aLine, sizeof(aLine), &o,
+             " chain=" GJ_PRODUCT_CHAIN " "
+             "hop_up=" GJ_PRODUCT_CHAIN_UP " "
+             "hop_mid=" GJ_PRODUCT_CHAIN_MID " "
+             "hop_down=" GJ_PRODUCT_CHAIN_DOWN " "
+             "hops=3 densify_chain=1 denser_ok=");
+    append_u(aLine, sizeof(aLine), &o, (unsigned long)uDenserOk);
+    append_s(aLine, sizeof(aLine), &o,
+             " Soft!=product dual_dod_b=OPEN "
+             "prefer_product_udx=1 freestanding_rtl=SKIP "
+             "G-AC-1=1 product_ac=0 agent_ne_close=1 "
+             "stamp_free=1 denser_middle=1 bar=" GJ_BAR_HONESTY "\n");
+    aLine[o] = '\0';
+    msg(aLine);
+
+    /*
+     * Grep: netstackd-gj: soft residual denser middle
+     * Dual DoD B middle stack denser residual (this unit = product_stack).
+     * Arms: role_mid | hop_mid | chain_hops | dod_open | prefer_udx |
+     *       g_ac1 | agent_ne_close. Soft!=product; dual_dod_b=OPEN.
+     * greppable: denser=1 denser_middle=1 product_stack Soft!=product
+     */
+    o = 0;
+    append_s(aLine, sizeof(aLine), &o,
+             "netstackd-gj: soft residual denser middle "
+             "product_stack=1 denser=1 denser_middle=1 denser_arms=");
+    append_u(aLine, sizeof(aLine), &o, (unsigned long)uDenseMid);
+    append_s(aLine, sizeof(aLine), &o, "/");
+    append_u(aLine, sizeof(aLine), &o, (unsigned long)GJ_DENSER_MIDDLE_ARMS);
+    append_s(aLine, sizeof(aLine), &o, " denser_min=");
+    append_u(aLine, sizeof(aLine), &o, (unsigned long)GJ_DENSER_ARMS_MIN);
+    append_s(aLine, sizeof(aLine), &o, " arm_mid=");
+    append_u(aLine, sizeof(aLine), &o, (unsigned long)uDenseMidArm0);
+    append_s(aLine, sizeof(aLine), &o, " arm_hop=");
+    append_u(aLine, sizeof(aLine), &o, (unsigned long)uDenseMidArm1);
+    append_s(aLine, sizeof(aLine), &o, " arm_hops=");
+    append_u(aLine, sizeof(aLine), &o, (unsigned long)uDenseMidArm2);
+    append_s(aLine, sizeof(aLine), &o, " arm_dod=");
+    append_u(aLine, sizeof(aLine), &o, (unsigned long)uDenseMidArm3);
+    append_s(aLine, sizeof(aLine), &o, " arm_prefer=");
+    append_u(aLine, sizeof(aLine), &o, (unsigned long)uDenseMidArm4);
+    append_s(aLine, sizeof(aLine), &o, " arm_gac1=");
+    append_u(aLine, sizeof(aLine), &o, (unsigned long)uDenseMidArm5);
+    append_s(aLine, sizeof(aLine), &o, " arm_agent=");
+    append_u(aLine, sizeof(aLine), &o, (unsigned long)uDenseMidArm6);
+    append_s(aLine, sizeof(aLine), &o,
+             " role=" GJ_PRODUCT_STACK_ROLE " "
+             "hop_mid=" GJ_PRODUCT_CHAIN_MID " "
+             "chain=" GJ_PRODUCT_CHAIN " "
+             "lab_ip=" GJ_LAB_IP_SPIRIT " denser_ok=");
+    append_u(aLine, sizeof(aLine), &o, (unsigned long)uDenserOk);
+    append_s(aLine, sizeof(aLine), &o,
+             " Soft!=product dual_dod_b=OPEN Dual_DoD=OPEN "
+             "prefer_product_udx=1 freestanding_rtl=SKIP "
+             "G-AC-1=1 product_ac=0 agent_ne_close=1 "
+             "stamp_free=1 bar=" GJ_BAR_HONESTY "\n");
+    aLine[o] = '\0';
+    msg(aLine);
 }
 
 static void

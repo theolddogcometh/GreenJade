@@ -11,11 +11,26 @@
  *   ChaCha20         — RFC 8439 quarter-round stream cipher
  *   Poly1305         — RFC 8439 one-time authenticator (soft AEAD leg)
  *   Host identity    — seeded product key + HMAC-SHA256 of exchange hash H
- *   Soft self-check  — RFC 8439 2.5.2 Poly1305 test vector at hostkey init
+ *   Soft self-check  — residual lean deepen at hostkey init (Soft!=product):
+ *                      Poly1305 RFC 8439 2.5.2, X25519 RFC 7748 6.1 (pk+DH),
+ *                      SHA-256 FIPS empty+"abc"+multi-block, HMAC-SHA256
+ *                      RFC 4231 TC1+TC6 (short + key_len>64), ChaCha20
+ *                      RFC 8439 2.4.2, memeq_ct equal/reject, hostkey
+ *                      sign/verify of fixed H-shaped digest, plus
+ *                      functional residual crypto suite for product sshd
+ *                      host path: RFC 4253 §7.2 KDF A–F, product MAC shape
+ *                      (seq||pkt → SHA-256 → HMAC), ChaCha20+MAC roundtrip
+ *                      soft, offline hostpath chain (ECDH→H→sign→KDF→
+ *                      enc/MAC). Soft inventory PASS != host nc banner proof
+ *                      (dual_dod_b stays OPEN until DUT L3). G-AC-1; product
+ *                      path = UDX (not rtl).
  *
- * Soft inventory (Wave 126 exclusive deepen — greppable when hostkey init runs
- * via sshd-gj: soft crypto …). multi_server=0 confine=0; soft ≠ product
- * multi-server confine. This unit is freestanding pure C only.
+ * Soft inventory (exclusive lean residual — greppable when hostkey init runs
+ * via sshd-gj). multi_server=0 confine=0; Soft!=product multi-server confine.
+ * Dual DoD B: crypto residual_lean ready for eth KEX after banner; soft
+ * self-check residual lean deepen != host nc banner proof.
+ * Product path once UDX/L2 = UDX over net doors (not freestanding rtl).
+ * This unit is freestanding pure C only.
  *
  * Used by freestanding KEX: curve25519-sha256@libssh.org, NEWKEYS key
  * derivation (RFC 4253 7.2), and post-NEWKEYS channel encrypt/MAC.
@@ -26,22 +41,47 @@
 #include <stddef.h>
 #include <stdint.h>
 
-/* Wave 126 exclusive soft inventory stamp (observability; never hard-gates). */
-/* Wave 126 soft deepen surfaces (CREATE-ONLY soft ≠ product):
- *   greppable: soft retgradientangle continuum_toward=26800 soft_ne_product=1 wave=126
- *   greppable: soft retblendangle exclusive=1 continuum_toward=26800 soft_ne_product=1 wave=126
- * Soft ≠ product complete; product lamps 0;
+/* Exclusive soft inventory stamp (observability; never hard-gates Dual DoD B). */
+/* Soft deepen surfaces (CREATE-ONLY Soft!=product; residual_lean for DoD B):
+ * Soft!= product complete; product lamps 0; dual_dod_b=OPEN;
+ * crypto_ne_host_banner=1; product_path=UDX; not_freestanding_rtl=1;
+ * soft self-check residual lean deepen
+ * (poly+x25519+sha256+hmac+hmac_long+chacha+memeq+hostkey+kdf+mac+hostpath).
+ * Functional residual crypto suite = product sshd host path offline chain.
+ * Soft inventory PASS != host nc banner / Dual DoD B close (G-AC-1).
+ * BAR v2026.08.04.75 stamp-free (wave surface only; no image stamp bump).
  */
 
-#define SSH_CRYPTO_SOFT_WAVE 70u
+#define SSH_CRYPTO_SOFT_WAVE 75u
 
-/* Grep surface: ssh_crypto: soft deepen product_kernel=OPEN wave=70 multi_server=0 confine=0 */
+/* Grep surface: ssh_crypto: soft deepen product_kernel=OPEN wave=75 multi_server=0 confine=0 */
 static const char g_szSshCryptoSoftDeepen[] =
-	"ssh_crypto: soft deepen product_kernel=OPEN wave=70 multi_server=0 confine=0 "
-	" exclusive=1 soft=1\n";
+	"ssh_crypto: soft deepen product_kernel=OPEN wave=75 multi_server=0 confine=0 "
+	" exclusive=1 soft=1 residual_lean=1 selfcheck_deepen=1 Soft!=product\n";
 static const char g_szSshCryptoSoftHonesty[] =
 	"ssh_crypto: soft honesty multi_server=0 confine=0 "
-	"exclusive=1 soft=1 product_kernel=OPEN wave=70\n";
+	"exclusive=1 soft=1 product_kernel=OPEN wave=75 residual_lean=1 Soft!=product "
+	"crypto_ne_host_banner=1 dual_dod_b=OPEN G-AC-1=1\n";
+/* Dual DoD B lean residual honesty — Soft!=product; never closes host banner. */
+/* Grep: ssh_crypto: soft residual lean dual_dod_b=OPEN residual_lean=1 */
+static const char g_szSshCryptoSoftDodB[] =
+	"ssh_crypto: soft residual lean dual_dod_b=OPEN residual_lean=1 "
+	"Soft!=product product_path=UDX not_freestanding_rtl=1 "
+	"crypto_ne_host_banner=1 soft_listen_ne_host_banner=1 exclusive=1 "
+	"dual=MIT_OR_Apache-2.0 G-AC-1=1 wave=75\n";
+/* Grep: ssh_crypto: soft residual lean deepen selfcheck residual_lean=1 */
+static const char g_szSshCryptoSoftSelfcheckDeepen[] =
+	"ssh_crypto: soft residual lean deepen selfcheck residual_lean=1 "
+	"poly=1 x25519=1 sha256=1 hmac=1 hmac_long=1 chacha=1 memeq=1 hostkey=1 "
+	"kdf=1 mac=1 hostpath=1 Soft!=product dual_dod_b=OPEN "
+	"crypto_ne_host_banner=1 exclusive=1 "
+	"dual=MIT_OR_Apache-2.0 G-AC-1=1 wave=75\n";
+/* Grep: ssh_crypto: soft residual lean deepen functional residual_lean=1 */
+static const char g_szSshCryptoSoftFunctional[] =
+	"ssh_crypto: soft residual lean deepen functional residual_lean=1 "
+	"kdf=1 mac=1 hostpath=1 suite=1 Soft!=product dual_dod_b=OPEN "
+	"crypto_ne_host_banner=1 product_path=UDX not_freestanding_rtl=1 "
+	"exclusive=1 dual=MIT_OR_Apache-2.0 G-AC-1=1 wave=75\n";
 
 /* ---- SHA-256 (FIPS 180-4) ----------------------------------------------- */
 
@@ -222,6 +262,9 @@ gj_ssh_sha256(const void *data, size_t len, uint8_t out[32])
  * matches the classic public-domain Montgomery ladder form (TweetNaCl-
  * style), rewritten as GreenJade product C. Not OpenSSH source.
  */
+/* Forward: stack secret wipe used after ladder (defined with CT helpers). */
+static void bytes_wipe(uint8_t *p, size_t n);
+
 typedef int64_t gf[16];
 
 static void
@@ -409,6 +452,8 @@ gj_ssh_x25519(uint8_t *q, const uint8_t *n, const uint8_t *p)
 	inv25519(c, c);
 	M(a, a, c);
 	pack25519(q, a);
+	/* Soft residual: wipe clamped scalar from stack (Soft!=product). */
+	bytes_wipe(z, sizeof(z));
 }
 
 /* ---- Constant-time helpers + wipe --------------------------------------- */
@@ -484,10 +529,11 @@ gj_ssh_hmac_sha256(const uint8_t *key, size_t key_len, const uint8_t *data,
 
 /* ---- ChaCha20 (RFC 8439, 256-bit key) ----------------------------------- */
 
+/* RFC 8439 quarter-round uses 32-bit left rotate (ROTL), not ROTR. */
 static uint32_t
-rr(uint32_t v, int n)
+rl(uint32_t v, int n)
 {
-	return (v >> n) | (v << (32 - n));
+	return (v << n) | (v >> (32 - n));
 }
 
 /* RFC 8439 quarter-round (column/diagonal rounds use this). */
@@ -496,16 +542,16 @@ chacha_qr(uint32_t *a, uint32_t *b, uint32_t *c, uint32_t *d)
 {
 	*a += *b;
 	*d ^= *a;
-	*d = rr(*d, 16);
+	*d = rl(*d, 16);
 	*c += *d;
 	*b ^= *c;
-	*b = rr(*b, 12);
+	*b = rl(*b, 12);
 	*a += *b;
 	*d ^= *a;
-	*d = rr(*d, 8);
+	*d = rl(*d, 8);
 	*c += *d;
 	*b ^= *c;
-	*b = rr(*b, 7);
+	*b = rl(*b, 7);
 }
 
 static void
@@ -575,6 +621,9 @@ gj_ssh_chacha20_xor(const uint8_t key[32], const uint8_t nonce[12],
 		off += n;
 		st[12]++;
 	}
+	/* Lean residual: wipe key schedule / keystream block from stack. */
+	bytes_wipe((uint8_t *)st, sizeof(st));
+	bytes_wipe((uint8_t *)blk, sizeof(blk));
 }
 
 /* ---- Poly1305 (RFC 8439 2.5) ------------------------------------------- */
@@ -846,8 +895,274 @@ gj_ssh_poly1305(const uint8_t key[32], const uint8_t *pMsg, size_t cbMsg,
 }
 
 /*
+ * FIPS 180-4 SHA-256 empty + "abc" + multi-block digests (soft residual lean).
+ * Multi-block covers transform residual used by exchange hash H / KDF.
+ * Returns 1 on match, 0 on mismatch. Does not use network.
+ * Soft!=product; residual only — not Dual DoD B close.
+ */
+static int
+ssh_crypto_sha256_selfcheck(void)
+{
+	/* SHA-256("") = e3b0c442…7852b855 */
+	static const uint8_t aExpEmpty[32] = {
+	    0xe3, 0xb0, 0xc4, 0x42, 0x98, 0xfc, 0x1c, 0x14, 0x9a, 0xfb,
+	    0xf4, 0xc8, 0x99, 0x6f, 0xb9, 0x24, 0x27, 0xae, 0x41, 0xe4,
+	    0x64, 0x9b, 0x93, 0x4c, 0xa4, 0x95, 0x99, 0x1b, 0x78, 0x52,
+	    0xb8, 0x55
+	};
+	/* SHA-256("abc") = ba7816bf…0015ad (FIPS 180-4) */
+	static const uint8_t aExpAbc[32] = {
+	    0xba, 0x78, 0x16, 0xbf, 0x8f, 0x01, 0xcf, 0xea, 0x41, 0x41,
+	    0x40, 0xde, 0x5d, 0xae, 0x22, 0x23, 0xb0, 0x03, 0x61, 0xa3,
+	    0x96, 0x17, 0x7a, 0x9c, 0xb4, 0x10, 0xff, 0x61, 0xf2, 0x00,
+	    0x15, 0xad
+	};
+	/* SHA-256(56-byte multi-block) = 248d6a61…19db06c1 (FIPS 180-4) */
+	static const uint8_t aMulti[] =
+	    "abcdbcdecdefdefgefghfghighijhijkijkljklmklmnlmnomnopnopq";
+	static const uint8_t aExpMulti[32] = {
+	    0x24, 0x8d, 0x6a, 0x61, 0xd2, 0x06, 0x38, 0xb8, 0xe5, 0xc0,
+	    0x26, 0x93, 0x0c, 0x3e, 0x60, 0x39, 0xa3, 0x3c, 0xe4, 0x59,
+	    0x64, 0xff, 0x21, 0x67, 0xf6, 0xec, 0xed, 0xd4, 0x19, 0xdb,
+	    0x06, 0xc1
+	};
+	uint8_t aDig[32];
+	int fOk;
+
+	gj_ssh_sha256("", 0, aDig);
+	fOk = gj_ssh_memeq_ct(aDig, aExpEmpty, 32);
+	gj_ssh_sha256("abc", 3, aDig);
+	fOk = fOk && gj_ssh_memeq_ct(aDig, aExpAbc, 32);
+	/* Multi-block residual (len=56 spans first transform + final). */
+	if ((sizeof(aMulti) - 1u) != 56u) {
+		return 0;
+	}
+	gj_ssh_sha256(aMulti, 56, aDig);
+	fOk = fOk && gj_ssh_memeq_ct(aDig, aExpMulti, 32);
+	bytes_wipe(aDig, sizeof(aDig));
+	return fOk;
+}
+
+/*
+ * Constant-time memeq residual (MAC / Poly1305 tag reject path).
+ * Soft!=product; residual only — not Dual DoD B / host banner close.
+ */
+static int
+ssh_crypto_memeq_selfcheck(void)
+{
+	static const uint8_t aA[8] = {
+	    0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08
+	};
+	static const uint8_t aB[8] = {
+	    0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08
+	};
+	static const uint8_t aC[8] = {
+	    0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x09
+	};
+	int fOk;
+
+	fOk = gj_ssh_memeq_ct(aA, aB, 8);
+	fOk = fOk && !gj_ssh_memeq_ct(aA, aC, 8);
+	/* Empty compare is equal (no early-exit path). */
+	fOk = fOk && gj_ssh_memeq_ct(aA, aB, 0);
+	return fOk;
+}
+
+/*
+ * RFC 7748 §6.1 X25519 Alice pk + Alice/Bob shared secret (soft residual lean).
+ * KEX primitive for Dual DoD B eth session after banner.
+ * Soft!=product; does not close dual_dod_b / host nc banner.
+ */
+static int
+ssh_crypto_x25519_selfcheck(void)
+{
+	/* Alice private (RFC 7748 6.1) */
+	static const uint8_t aSkA[32] = {
+	    0x77, 0x07, 0x6d, 0x0a, 0x73, 0x18, 0xa5, 0x7d, 0x3c, 0x16,
+	    0xc1, 0x72, 0x51, 0xb2, 0x66, 0x45, 0xdf, 0x4c, 0x2f, 0x87,
+	    0xeb, 0xc0, 0x99, 0x2a, 0xb1, 0x77, 0xfb, 0xa5, 0x1d, 0xb9,
+	    0x2c, 0x2a
+	};
+	/* Alice public X25519(a, 9) */
+	static const uint8_t aPkAExp[32] = {
+	    0x85, 0x20, 0xf0, 0x09, 0x89, 0x30, 0xa7, 0x54, 0x74, 0x8b,
+	    0x7d, 0xdc, 0xb4, 0x3e, 0xf7, 0x5a, 0x0d, 0xbf, 0x3a, 0x0d,
+	    0x26, 0x38, 0x1a, 0xf4, 0xeb, 0xa4, 0xa9, 0x8e, 0xaa, 0x9b,
+	    0x4e, 0x6a
+	};
+	/* Bob private (RFC 7748 6.1) */
+	static const uint8_t aSkB[32] = {
+	    0x5d, 0xab, 0x08, 0x7e, 0x62, 0x4a, 0x8a, 0x4b, 0x79, 0xe1,
+	    0x7f, 0x8b, 0x83, 0x80, 0x0e, 0xe6, 0x6f, 0x3b, 0xb1, 0x29,
+	    0x26, 0x18, 0xb6, 0xfd, 0x1c, 0x2f, 0x8b, 0x27, 0xff, 0x88,
+	    0xe0, 0xeb
+	};
+	/* Bob public X25519(b, 9) */
+	static const uint8_t aPkBExp[32] = {
+	    0xde, 0x9e, 0xdb, 0x7d, 0x7b, 0x7d, 0xc1, 0xb4, 0xd3, 0x5b,
+	    0x61, 0xc2, 0xec, 0xe4, 0x35, 0x37, 0x3f, 0x83, 0x43, 0xc8,
+	    0x5b, 0x78, 0x67, 0x4d, 0xad, 0xfc, 0x7e, 0x14, 0x6f, 0x88,
+	    0x2b, 0x4f
+	};
+	/* Shared secret X25519(a, B) = X25519(b, A) */
+	static const uint8_t aSharedExp[32] = {
+	    0x4a, 0x5d, 0x9d, 0x5b, 0xa4, 0xce, 0x2d, 0xe1, 0x72, 0x8e,
+	    0x3b, 0xf4, 0x80, 0x35, 0x0f, 0x25, 0xe0, 0x7e, 0x21, 0xc9,
+	    0x47, 0xd1, 0x9e, 0x33, 0x76, 0xf0, 0x9b, 0x3c, 0x1e, 0x16,
+	    0x17, 0x42
+	};
+	uint8_t aBase[32];
+	uint8_t aPkA[32];
+	uint8_t aPkB[32];
+	uint8_t aSharedA[32];
+	uint8_t aSharedB[32];
+	unsigned iByte;
+	int fOk;
+
+	for (iByte = 0; iByte < 32; iByte++) {
+		aBase[iByte] = 0;
+	}
+	aBase[0] = 9;
+	gj_ssh_x25519(aPkA, aSkA, aBase);
+	fOk = gj_ssh_memeq_ct(aPkA, aPkAExp, 32);
+	gj_ssh_x25519(aPkB, aSkB, aBase);
+	fOk = fOk && gj_ssh_memeq_ct(aPkB, aPkBExp, 32);
+	/* Dual shared-secret match (curve25519 KEX residual lean). */
+	gj_ssh_x25519(aSharedA, aSkA, aPkB);
+	gj_ssh_x25519(aSharedB, aSkB, aPkA);
+	fOk = fOk && gj_ssh_memeq_ct(aSharedA, aSharedExp, 32);
+	fOk = fOk && gj_ssh_memeq_ct(aSharedB, aSharedExp, 32);
+	fOk = fOk && gj_ssh_memeq_ct(aSharedA, aSharedB, 32);
+	bytes_wipe(aBase, sizeof(aBase));
+	bytes_wipe(aPkA, sizeof(aPkA));
+	bytes_wipe(aPkB, sizeof(aPkB));
+	bytes_wipe(aSharedA, sizeof(aSharedA));
+	bytes_wipe(aSharedB, sizeof(aSharedB));
+	return fOk;
+}
+
+/*
+ * RFC 4231 Test Case 1 + TC6 — HMAC-SHA256 (soft residual lean deepen).
+ * TC1: short key. TC6: key_len > 64 exercises hash-key-first residual
+ * (hostkey / MAC path never uses long keys live, but the branch must
+ * stay correct for clean-room completeness). Soft!=product; residual
+ * only — not Dual DoD B / host banner close.
+ */
+static int
+ssh_crypto_hmac_selfcheck(void)
+{
+	/* Key = 0x0b × 20; Data = "Hi There" (RFC 4231 TC1) */
+	static const uint8_t aKey[20] = {
+	    0x0b, 0x0b, 0x0b, 0x0b, 0x0b, 0x0b, 0x0b, 0x0b, 0x0b, 0x0b,
+	    0x0b, 0x0b, 0x0b, 0x0b, 0x0b, 0x0b, 0x0b, 0x0b, 0x0b, 0x0b
+	};
+	static const uint8_t aData[] = "Hi There";
+	static const uint8_t aExp[32] = {
+	    0xb0, 0x34, 0x4c, 0x61, 0xd8, 0xdb, 0x38, 0x53, 0x5c, 0xa8,
+	    0xaf, 0xce, 0xaf, 0x0b, 0xf1, 0x2b, 0x88, 0x1d, 0xc2, 0x00,
+	    0xc9, 0x83, 0x3d, 0xa7, 0x26, 0xe9, 0x37, 0x6c, 0x2e, 0x32,
+	    0xcf, 0xf7
+	};
+	/* RFC 4231 TC6: key = 0xaa × 131 (key_len > block); hash key first. */
+	static const uint8_t aKeyLong[131] = {
+	    0xaa, 0xaa, 0xaa, 0xaa, 0xaa, 0xaa, 0xaa, 0xaa, 0xaa, 0xaa,
+	    0xaa, 0xaa, 0xaa, 0xaa, 0xaa, 0xaa, 0xaa, 0xaa, 0xaa, 0xaa,
+	    0xaa, 0xaa, 0xaa, 0xaa, 0xaa, 0xaa, 0xaa, 0xaa, 0xaa, 0xaa,
+	    0xaa, 0xaa, 0xaa, 0xaa, 0xaa, 0xaa, 0xaa, 0xaa, 0xaa, 0xaa,
+	    0xaa, 0xaa, 0xaa, 0xaa, 0xaa, 0xaa, 0xaa, 0xaa, 0xaa, 0xaa,
+	    0xaa, 0xaa, 0xaa, 0xaa, 0xaa, 0xaa, 0xaa, 0xaa, 0xaa, 0xaa,
+	    0xaa, 0xaa, 0xaa, 0xaa, 0xaa, 0xaa, 0xaa, 0xaa, 0xaa, 0xaa,
+	    0xaa, 0xaa, 0xaa, 0xaa, 0xaa, 0xaa, 0xaa, 0xaa, 0xaa, 0xaa,
+	    0xaa, 0xaa, 0xaa, 0xaa, 0xaa, 0xaa, 0xaa, 0xaa, 0xaa, 0xaa,
+	    0xaa, 0xaa, 0xaa, 0xaa, 0xaa, 0xaa, 0xaa, 0xaa, 0xaa, 0xaa,
+	    0xaa, 0xaa, 0xaa, 0xaa, 0xaa, 0xaa, 0xaa, 0xaa, 0xaa, 0xaa,
+	    0xaa, 0xaa, 0xaa, 0xaa, 0xaa, 0xaa, 0xaa, 0xaa, 0xaa, 0xaa,
+	    0xaa, 0xaa, 0xaa, 0xaa, 0xaa, 0xaa, 0xaa, 0xaa, 0xaa, 0xaa,
+	    0xaa
+	};
+	static const uint8_t aDataLong[] =
+	    "Test Using Larger Than Block-Size Key - Hash Key First";
+	static const uint8_t aExpLong[32] = {
+	    0x60, 0xe4, 0x31, 0x59, 0x1e, 0xe0, 0xb6, 0x7f, 0x0d, 0x8a,
+	    0x26, 0xaa, 0xcb, 0xf5, 0xb7, 0x7f, 0x8e, 0x0b, 0xc6, 0x21,
+	    0x37, 0x28, 0xc5, 0x14, 0x05, 0x46, 0x04, 0x0f, 0x0e, 0xe3,
+	    0x7f, 0x54
+	};
+	uint8_t aTag[32];
+	int fOk;
+
+	if (sizeof(aKeyLong) != 131u) {
+		return 0;
+	}
+	gj_ssh_hmac_sha256(aKey, sizeof(aKey), aData, sizeof(aData) - 1, aTag);
+	fOk = gj_ssh_memeq_ct(aTag, aExp, 32);
+	/* Long-key residual: key_len > 64 → SHA-256(key) then HMAC. */
+	gj_ssh_hmac_sha256(aKeyLong, sizeof(aKeyLong), aDataLong,
+			   sizeof(aDataLong) - 1, aTag);
+	fOk = fOk && gj_ssh_memeq_ct(aTag, aExpLong, 32);
+	bytes_wipe(aTag, sizeof(aTag));
+	return fOk;
+}
+
+/*
+ * RFC 8439 §2.4.2 ChaCha20 encryption test vector (soft residual lean deepen).
+ * Soft!=product; residual only — not Dual DoD B / host banner close.
+ */
+static int
+ssh_crypto_chacha20_selfcheck(void)
+{
+	static const uint8_t aKey[32] = {
+	    0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09,
+	    0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f, 0x10, 0x11, 0x12, 0x13,
+	    0x14, 0x15, 0x16, 0x17, 0x18, 0x19, 0x1a, 0x1b, 0x1c, 0x1d,
+	    0x1e, 0x1f
+	};
+	/* Nonce = 00:00:00:00:00:00:00:4a:00:00:00:00 ; counter = 1 */
+	static const uint8_t aNonce[12] = {
+	    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x4a, 0x00, 0x00,
+	    0x00, 0x00
+	};
+	static const uint8_t aPlain[] =
+	    "Ladies and Gentlemen of the class of '99: If I could offer you "
+	    "only one tip for the future, sunscreen would be it.";
+	static const uint8_t aCtExp[114] = {
+	    0x6e, 0x2e, 0x35, 0x9a, 0x25, 0x68, 0xf9, 0x80, 0x41, 0xba,
+	    0x07, 0x28, 0xdd, 0x0d, 0x69, 0x81, 0xe9, 0x7e, 0x7a, 0xec,
+	    0x1d, 0x43, 0x60, 0xc2, 0x0a, 0x27, 0xaf, 0xcc, 0xfd, 0x9f,
+	    0xae, 0x0b, 0xf9, 0x1b, 0x65, 0xc5, 0x52, 0x47, 0x33, 0xab,
+	    0x8f, 0x59, 0x3d, 0xab, 0xcd, 0x62, 0xb3, 0x57, 0x16, 0x39,
+	    0xd6, 0x24, 0xe6, 0x51, 0x52, 0xab, 0x8f, 0x53, 0x0c, 0x35,
+	    0x9f, 0x08, 0x61, 0xd8, 0x07, 0xca, 0x0d, 0xbf, 0x50, 0x0d,
+	    0x6a, 0x61, 0x56, 0xa3, 0x8e, 0x08, 0x8a, 0x22, 0xb6, 0x5e,
+	    0x52, 0xbc, 0x51, 0x4d, 0x16, 0xcc, 0xf8, 0x06, 0x81, 0x8c,
+	    0xe9, 0x1a, 0xb7, 0x79, 0x37, 0x36, 0x5a, 0xf9, 0x0b, 0xbf,
+	    0x74, 0xa3, 0x5b, 0xe6, 0xb4, 0x0b, 0x8e, 0xed, 0xf2, 0x78,
+	    0x5e, 0x42, 0x87, 0x4d
+	};
+	uint8_t aBuf[114];
+	unsigned iByte;
+	int fOk;
+
+	/* sizeof(aPlain)-1 must be 114 (RFC 8439 2.4.2 plaintext length). */
+	if ((sizeof(aPlain) - 1u) != 114u) {
+		return 0;
+	}
+	for (iByte = 0; iByte < 114; iByte++) {
+		aBuf[iByte] = aPlain[iByte];
+	}
+	gj_ssh_chacha20_xor(aKey, aNonce, 1u, aBuf, 114);
+	fOk = gj_ssh_memeq_ct(aBuf, aCtExp, 114);
+	/* Invert restores plaintext (lean residual: xor twice). */
+	gj_ssh_chacha20_xor(aKey, aNonce, 1u, aBuf, 114);
+	fOk = fOk && gj_ssh_memeq_ct(aBuf, aPlain, 114);
+	bytes_wipe(aBuf, sizeof(aBuf));
+	return fOk;
+}
+
+/*
  * RFC 8439 2.5.2 test vector (soft self-check).
  * Returns 1 on match, 0 on mismatch. Does not use network.
+ * Also live-touches Dual DoD B residual_lean greppable strings.
  */
 int
 gj_ssh_poly1305_selfcheck(void)
@@ -868,9 +1183,12 @@ gj_ssh_poly1305_selfcheck(void)
 	uint8_t aTag[16];
 
 	gj_ssh_poly1305(aKey, aMsg, sizeof(aMsg) - 1, aTag);
-	/* Soft inventory touch (Wave 126): keep greppable strings live. */
+	/* Soft inventory touch: keep greppable residual strings live. */
 	if (g_szSshCryptoSoftDeepen[0] == '\0' ||
 	    g_szSshCryptoSoftHonesty[0] == '\0' ||
+	    g_szSshCryptoSoftDodB[0] == '\0' ||
+	    g_szSshCryptoSoftSelfcheckDeepen[0] == '\0' ||
+	    g_szSshCryptoSoftFunctional[0] == '\0' ||
 	    SSH_CRYPTO_SOFT_WAVE == 0u) {
 		return 0;
 	}
@@ -883,11 +1201,389 @@ gj_ssh_poly1305_selfcheck(void)
  * injection lands). Public key is X25519(sk, basepoint); signatures of
  * exchange hash H are HMAC-SHA256(sk, H) for the live KEX smoke path.
  * Not OpenSSH host key blobs; product-owned dual MIT/Apache code.
+ *
+ * Soft residual lean deepen (Dual DoD B): RFC/FIPS self-checks run once
+ * at init (poly + x25519 pk/DH + sha256 + hmac + chacha + memeq + hostkey).
+ * Soft inventory PASS != host nc banner on eth :22 (dual_dod_b=OPEN;
+ * crypto_ne_host_banner).
  */
 static uint8_t g_host_sk[32];
 static uint8_t g_host_pk[32];
 static int g_host_ready;
 static int g_poly_ok;
+static int g_x25519_ok; /* RFC 7748 6.1 pk+DH; Soft!=product */
+static int g_sha256_ok; /* FIPS empty+abc+multi; Soft!=product */
+static int g_hmac_ok;   /* RFC 4231 TC1+TC6 (hmac_long); Soft!=product */
+static int g_chacha_ok; /* RFC 8439 2.4.2; Soft!=product */
+static int g_memeq_ok;  /* memeq_ct equal/reject; Soft!=product */
+static int g_hostkey_ok; /* product hostkey sign/verify; Soft!=product */
+static int g_kdf_ok;      /* KDF selfcheck residual; Soft!=product */
+static int g_mac_ok;      /* MAC selfcheck residual; Soft!=product */
+static int g_hostpath_ok; /* hostpath selfcheck residual; Soft!=product */
+static int g_residual_lean_ok; /* aggregate soft self-check residual lean */
+
+/*
+ * Product host identity residual lean: sign/verify fixed H-shaped digest
+ * after sk/pk seed (ECDH_REPLY hostkey path). Requires g_host_sk ready.
+ * Soft!=product; residual only — not Dual DoD B / host banner close.
+ */
+static int
+ssh_crypto_hostkey_selfcheck(void)
+{
+	/* Fixed 32-byte stand-in for exchange hash H (not a wire value). */
+	static const uint8_t aMsg[32] = {
+	    0x47, 0x72, 0x65, 0x65, 0x6e, 0x4a, 0x61, 0x64, /* GreenJad */
+	    0x65, 0x2d, 0x48, 0x2d, 0x73, 0x65, 0x6c, 0x66, /* e-H-self */
+	    0x63, 0x68, 0x65, 0x63, 0x6b, 0x2d, 0x76, 0x31, /* check-v1 */
+	    0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07
+	};
+	uint8_t aSig[32];
+	uint8_t aTag[32];
+	uint8_t aBad[32];
+	unsigned iByte;
+	int fOk;
+	int fPkNz;
+
+	/* Host public key must be non-zero after X25519(sk, 9). */
+	fPkNz = 0;
+	for (iByte = 0; iByte < 32; iByte++) {
+		if (g_host_pk[iByte] != 0) {
+			fPkNz = 1;
+			break;
+		}
+	}
+	if (!fPkNz) {
+		return 0;
+	}
+	/* Sign = HMAC-SHA256(sk, msg); same path as gj_ssh_hostkey_sign. */
+	gj_ssh_hmac_sha256(g_host_sk, 32, aMsg, 32, aSig);
+	gj_ssh_hmac_sha256(g_host_sk, 32, aMsg, 32, aTag);
+	fOk = gj_ssh_memeq_ct(aTag, aSig, 32);
+	/* Negative residual: one-byte corrupt tag must fail memeq_ct. */
+	for (iByte = 0; iByte < 32; iByte++) {
+		aBad[iByte] = aSig[iByte];
+	}
+	aBad[0] ^= 0x01u;
+	fOk = fOk && !gj_ssh_memeq_ct(aBad, aSig, 32);
+	bytes_wipe(aSig, sizeof(aSig));
+	bytes_wipe(aTag, sizeof(aTag));
+	bytes_wipe(aBad, sizeof(aBad));
+	return fOk;
+}
+
+/*
+ * RFC 4253 §7.2 KDF residual (product host path NEWKEYS key arm).
+ * Ki = HASH(K || H || X || session_id), X in {'A'..'F'}.
+ * Soft checks: determinism (same input → same key twice) and pairwise
+ * distinctness across A–F (product enc/IV/int keys must not collide).
+ * Soft!=product; residual only — not Dual DoD B / host banner close.
+ */
+static int
+ssh_crypto_kdf_selfcheck(void)
+{
+	/* Fixed offline K / H / sid stand-ins (not wire values). */
+	static const uint8_t aK[32] = {
+	    0x4a, 0x5d, 0x9d, 0x5b, 0xa4, 0xce, 0x2d, 0xe1, 0x72, 0x8e,
+	    0x3b, 0xf4, 0x80, 0x35, 0x0f, 0x25, 0xe0, 0x7e, 0x21, 0xc9,
+	    0x47, 0xd1, 0x9e, 0x33, 0x76, 0xf0, 0x9b, 0x3c, 0x1e, 0x16,
+	    0x17, 0x42
+	};
+	static const uint8_t aH[32] = {
+	    0x47, 0x4a, 0x2d, 0x4b, 0x44, 0x46, 0x2d, 0x48, /* GJ-KDF-H */
+	    0x2d, 0x73, 0x65, 0x6c, 0x66, 0x63, 0x68, 0x6b, /* -selfchk */
+	    0x2d, 0x76, 0x31, 0x00, 0x01, 0x02, 0x03, 0x04, /* -v1.... */
+	    0x05, 0x06, 0x07, 0x08, 0x09, 0x0a, 0x0b, 0x0c
+	};
+	uint8_t aBuf[97];
+	uint8_t aKeys[6][32];
+	uint8_t aAgain[32];
+	unsigned iByte;
+	unsigned iKey;
+	unsigned jKey;
+	int fOk = 1;
+
+	for (iByte = 0; iByte < 32; iByte++) {
+		aBuf[iByte] = aK[iByte];
+		aBuf[32 + iByte] = aH[iByte];
+		aBuf[65 + iByte] = aH[iByte]; /* sid = H offline */
+	}
+	for (iKey = 0; iKey < 6; iKey++) {
+		aBuf[64] = (uint8_t)('A' + iKey);
+		gj_ssh_sha256(aBuf, 97, aKeys[iKey]);
+		/* Determinism residual: recompute once more. */
+		gj_ssh_sha256(aBuf, 97, aAgain);
+		fOk = fOk && gj_ssh_memeq_ct(aKeys[iKey], aAgain, 32);
+	}
+	/* Pairwise distinctness A..F (product IV/enc/int legs). */
+	for (iKey = 0; iKey < 6 && fOk; iKey++) {
+		for (jKey = iKey + 1; jKey < 6; jKey++) {
+			if (gj_ssh_memeq_ct(aKeys[iKey], aKeys[jKey], 32)) {
+				fOk = 0;
+				break;
+			}
+		}
+	}
+	bytes_wipe(aBuf, sizeof(aBuf));
+	bytes_wipe(aAgain, sizeof(aAgain));
+	for (iKey = 0; iKey < 6; iKey++) {
+		bytes_wipe(aKeys[iKey], 32);
+	}
+	return fOk;
+}
+
+/*
+ * Product MAC residual (post-NEWKEYS integrity path shape).
+ * product_mac: HMAC-SHA256(int_key, SHA256(seq_be32 || packet)).
+ * Soft checks: determinism + one-byte corrupt reject via memeq_ct.
+ * Soft!=product; residual only — not Dual DoD B / host banner close.
+ */
+static int
+ssh_crypto_mac_selfcheck(void)
+{
+	static const uint8_t aIntKey[32] = {
+	    0xe0, 0xe1, 0xe2, 0xe3, 0xe4, 0xe5, 0xe6, 0xe7, 0xe8, 0xe9,
+	    0xea, 0xeb, 0xec, 0xed, 0xee, 0xef, 0xf0, 0xf1, 0xf2, 0xf3,
+	    0xf4, 0xf5, 0xf6, 0xf7, 0xf8, 0xf9, 0xfa, 0xfb, 0xfc, 0xfd,
+	    0xfe, 0xff
+	};
+	/* Minimal SSH binary packet stand-in (len||pad||type||payload). */
+	static const uint8_t aPkt[16] = {
+	    0x00, 0x00, 0x00, 0x0c, 0x06, 0x5e, /* CHANNEL_DATA soft */
+	    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x04,
+	    0x4f, 0x4b
+	};
+	uint8_t aSeq[4];
+	uint8_t aInner[32];
+	uint8_t aMac1[32];
+	uint8_t aMac2[32];
+	uint8_t aBad[32];
+	struct sha256_ctx hx;
+	unsigned iByte;
+	int fOk;
+
+	/* seq = 1 (product post-NEWKEYS first encrypted packet soft). */
+	aSeq[0] = 0;
+	aSeq[1] = 0;
+	aSeq[2] = 0;
+	aSeq[3] = 1;
+	gj_ssh_sha256_init(&hx);
+	gj_ssh_sha256_update(&hx, aSeq, 4);
+	gj_ssh_sha256_update(&hx, aPkt, sizeof(aPkt));
+	gj_ssh_sha256_final(&hx, aInner);
+	gj_ssh_hmac_sha256(aIntKey, 32, aInner, 32, aMac1);
+	/* Determinism: same key+inner → same tag. */
+	gj_ssh_hmac_sha256(aIntKey, 32, aInner, 32, aMac2);
+	fOk = gj_ssh_memeq_ct(aMac1, aMac2, 32);
+	/* Negative residual: corrupt tag must fail constant-time compare. */
+	for (iByte = 0; iByte < 32; iByte++) {
+		aBad[iByte] = aMac1[iByte];
+	}
+	aBad[31] ^= 0x80u;
+	fOk = fOk && !gj_ssh_memeq_ct(aBad, aMac1, 32);
+	bytes_wipe(aInner, sizeof(aInner));
+	bytes_wipe(aMac1, sizeof(aMac1));
+	bytes_wipe(aMac2, sizeof(aMac2));
+	bytes_wipe(aBad, sizeof(aBad));
+	bytes_wipe(aSeq, sizeof(aSeq));
+	return fOk;
+}
+
+/*
+ * Functional residual crypto suite — product sshd host path offline chain.
+ * Mirrors freestanding KEX → NEWKEYS → encrypted channel crypto shape:
+ *   1. X25519 dual shared-secret match (curve25519-sha256 KEX)
+ *   2. Exchange hash H = SHA-256(cli||srv||pk_c||pk_s||K||host_pk) soft
+ *   3. Hostkey HMAC-SHA256(sk, H) sign + verify + corrupt reject
+ *   4. RFC 4253 §7.2 KDF A–F distinct + deterministic
+ *   5. ChaCha20 body xor (enc leg) + invert restore
+ *   6. Product MAC shape (int leg) over seq||pkt
+ * Soft!=product; Soft PASS != host nc banner; dual_dod_b stays OPEN.
+ * Grep: ssh_crypto: soft residual lean deepen functional residual_lean=1
+ */
+static int
+ssh_crypto_hostpath_selfcheck(void)
+{
+	static const uint8_t aSkS[32] = {
+	    0x71, 0x72, 0x73, 0x74, 0x75, 0x76, 0x77, 0x78, 0x79, 0x7a,
+	    0x7b, 0x7c, 0x7d, 0x7e, 0x7f, 0x80, 0x81, 0x82, 0x83, 0x84,
+	    0x85, 0x86, 0x87, 0x88, 0x89, 0x8a, 0x8b, 0x8c, 0x8d, 0x8e,
+	    0x8f, 0x90
+	};
+	static const uint8_t aSkC[32] = {
+	    0x91, 0x92, 0x93, 0x94, 0x95, 0x96, 0x97, 0x98, 0x99, 0x9a,
+	    0x9b, 0x9c, 0x9d, 0x9e, 0x9f, 0xa0, 0xa1, 0xa2, 0xa3, 0xa4,
+	    0xa5, 0xa6, 0xa7, 0xa8, 0xa9, 0xaa, 0xab, 0xac, 0xad, 0xae,
+	    0xaf, 0xb0
+	};
+	static const char szCli[] = "SSH-2.0-GreenJade_smoke";
+	static const char szSrv[] = "SSH-2.0-GreenJade_sshd";
+	uint8_t aBase[32];
+	uint8_t aClampS[32];
+	uint8_t aClampC[32];
+	uint8_t aPkS[32];
+	uint8_t aPkC[32];
+	uint8_t aSharedS[32];
+	uint8_t aSharedC[32];
+	uint8_t aH[32];
+	uint8_t aSig[32];
+	uint8_t aTag[32];
+	uint8_t aBad[32];
+	uint8_t aKdfBuf[97];
+	uint8_t aEnc[32];
+	uint8_t aInt[32];
+	uint8_t aIv[12];
+	uint8_t aBody[16];
+	uint8_t aPlain[16];
+	uint8_t aMac[32];
+	uint8_t aInner[32];
+	uint8_t aSeq[4];
+	struct sha256_ctx hx;
+	unsigned iByte;
+	int fOk;
+
+	/* --- 1. X25519 dual shared (product KEX residual) --- */
+	for (iByte = 0; iByte < 32; iByte++) {
+		aBase[iByte] = 0;
+		aClampS[iByte] = aSkS[iByte];
+		aClampC[iByte] = aSkC[iByte];
+	}
+	aBase[0] = 9;
+	aClampS[0] &= 248;
+	aClampS[31] &= 127;
+	aClampS[31] |= 64;
+	aClampC[0] &= 248;
+	aClampC[31] &= 127;
+	aClampC[31] |= 64;
+	gj_ssh_x25519(aPkS, aClampS, aBase);
+	gj_ssh_x25519(aPkC, aClampC, aBase);
+	gj_ssh_x25519(aSharedS, aClampS, aPkC);
+	gj_ssh_x25519(aSharedC, aClampC, aPkS);
+	fOk = gj_ssh_memeq_ct(aSharedS, aSharedC, 32);
+
+	/* --- 2. Soft exchange hash H (product host-path composition) --- */
+	if (fOk) {
+		gj_ssh_sha256_init(&hx);
+		gj_ssh_sha256_update(&hx, szCli, sizeof(szCli) - 1);
+		gj_ssh_sha256_update(&hx, szSrv, sizeof(szSrv) - 1);
+		gj_ssh_sha256_update(&hx, aPkC, 32);
+		gj_ssh_sha256_update(&hx, aPkS, 32);
+		gj_ssh_sha256_update(&hx, aSharedS, 32);
+		gj_ssh_sha256_update(&hx, g_host_pk, 32);
+		gj_ssh_sha256_final(&hx, aH);
+		/* H must be non-zero after multi-chunk update. */
+		{
+			uint8_t uOr = 0;
+
+			for (iByte = 0; iByte < 32; iByte++) {
+				uOr |= aH[iByte];
+			}
+			fOk = fOk && (uOr != 0);
+		}
+	}
+
+	/* --- 3. Hostkey sign/verify of H (ECDH_REPLY residual) --- */
+	if (fOk) {
+		gj_ssh_hmac_sha256(g_host_sk, 32, aH, 32, aSig);
+		gj_ssh_hmac_sha256(g_host_sk, 32, aH, 32, aTag);
+		fOk = gj_ssh_memeq_ct(aSig, aTag, 32);
+		for (iByte = 0; iByte < 32; iByte++) {
+			aBad[iByte] = aSig[iByte];
+		}
+		aBad[15] ^= 0x40u;
+		fOk = fOk && !gj_ssh_memeq_ct(aBad, aSig, 32);
+	}
+
+	/* --- 4. KDF A–F (NEWKEYS key arm residual) --- */
+	if (fOk) {
+		uint8_t aKA[32];
+		uint8_t aKF[32];
+		uint8_t aAgain[32];
+
+		for (iByte = 0; iByte < 32; iByte++) {
+			aKdfBuf[iByte] = aSharedS[iByte];
+			aKdfBuf[32 + iByte] = aH[iByte];
+			aKdfBuf[65 + iByte] = aH[iByte];
+		}
+		aKdfBuf[64] = 'A';
+		gj_ssh_sha256(aKdfBuf, 97, aAgain);
+		/* IV from A (first 12 bytes); enc from D; int from F. */
+		for (iByte = 0; iByte < 12; iByte++) {
+			aIv[iByte] = aAgain[iByte];
+		}
+		aKdfBuf[64] = 'D';
+		gj_ssh_sha256(aKdfBuf, 97, aEnc);
+		aKdfBuf[64] = 'F';
+		gj_ssh_sha256(aKdfBuf, 97, aInt);
+		aKdfBuf[64] = 'A';
+		gj_ssh_sha256(aKdfBuf, 97, aKA);
+		aKdfBuf[64] = 'F';
+		gj_ssh_sha256(aKdfBuf, 97, aKF);
+		fOk = gj_ssh_memeq_ct(aKA, aAgain, 32) &&
+		      gj_ssh_memeq_ct(aKF, aInt, 32) &&
+		      !gj_ssh_memeq_ct(aEnc, aInt, 32) &&
+		      !gj_ssh_memeq_ct(aKA, aEnc, 32);
+		bytes_wipe(aKA, sizeof(aKA));
+		bytes_wipe(aKF, sizeof(aKF));
+		bytes_wipe(aAgain, sizeof(aAgain));
+	}
+
+	/* --- 5. ChaCha20 body xor + invert (encrypted channel residual) --- */
+	if (fOk) {
+		for (iByte = 0; iByte < 16; iByte++) {
+			aPlain[iByte] = (uint8_t)(0x40 + iByte);
+			aBody[iByte] = aPlain[iByte];
+		}
+		gj_ssh_chacha20_xor(aEnc, aIv, 0u, aBody, 16);
+		/* Ciphertext must differ from plaintext for non-zero keystream. */
+		fOk = !gj_ssh_memeq_ct(aBody, aPlain, 16);
+		gj_ssh_chacha20_xor(aEnc, aIv, 0u, aBody, 16);
+		fOk = fOk && gj_ssh_memeq_ct(aBody, aPlain, 16);
+	}
+
+	/* --- 6. Product MAC over seq||pkt (integrity residual) --- */
+	if (fOk) {
+		aSeq[0] = 0;
+		aSeq[1] = 0;
+		aSeq[2] = 0;
+		aSeq[3] = 0;
+		gj_ssh_sha256_init(&hx);
+		gj_ssh_sha256_update(&hx, aSeq, 4);
+		gj_ssh_sha256_update(&hx, aBody, 16);
+		gj_ssh_sha256_final(&hx, aInner);
+		gj_ssh_hmac_sha256(aInt, 32, aInner, 32, aMac);
+		gj_ssh_hmac_sha256(aInt, 32, aInner, 32, aTag);
+		fOk = gj_ssh_memeq_ct(aMac, aTag, 32);
+		aMac[0] ^= 0x01u;
+		fOk = fOk && !gj_ssh_memeq_ct(aMac, aTag, 32);
+	}
+
+	/* Keep functional honesty string live (no dead-strip). */
+	if (g_szSshCryptoSoftFunctional[0] == '\0') {
+		fOk = 0;
+	}
+
+	bytes_wipe(aBase, sizeof(aBase));
+	bytes_wipe(aClampS, sizeof(aClampS));
+	bytes_wipe(aClampC, sizeof(aClampC));
+	bytes_wipe(aPkS, sizeof(aPkS));
+	bytes_wipe(aPkC, sizeof(aPkC));
+	bytes_wipe(aSharedS, sizeof(aSharedS));
+	bytes_wipe(aSharedC, sizeof(aSharedC));
+	bytes_wipe(aH, sizeof(aH));
+	bytes_wipe(aSig, sizeof(aSig));
+	bytes_wipe(aTag, sizeof(aTag));
+	bytes_wipe(aBad, sizeof(aBad));
+	bytes_wipe(aKdfBuf, sizeof(aKdfBuf));
+	bytes_wipe(aEnc, sizeof(aEnc));
+	bytes_wipe(aInt, sizeof(aInt));
+	bytes_wipe(aIv, sizeof(aIv));
+	bytes_wipe(aBody, sizeof(aBody));
+	bytes_wipe(aPlain, sizeof(aPlain));
+	bytes_wipe(aMac, sizeof(aMac));
+	bytes_wipe(aInner, sizeof(aInner));
+	bytes_wipe(aSeq, sizeof(aSeq));
+	return fOk;
+}
 
 void
 gj_ssh_hostkey_init(void)
@@ -905,8 +1601,30 @@ gj_ssh_hostkey_init(void)
 	}
 	base[0] = 9; /* RFC 7748 base point u=9 */
 
-	/* Soft crypto inventory: Poly1305 RFC vector before identity seed */
+	/*
+	 * Soft crypto residual lean deepen (Dual DoD B prep, Soft!=product):
+	 * Poly1305 + X25519 (pk+DH) + SHA-256 + HMAC + ChaCha20 + memeq
+	 * before identity seed; hostkey + functional host-path suite after.
+	 * Soft PASS != host nc banner proof.
+	 * Grep: ssh_crypto: soft residual lean dual_dod_b=OPEN residual_lean=1
+	 * Grep: ssh_crypto: soft residual lean deepen selfcheck residual_lean=1
+	 * Grep: ssh_crypto: soft residual lean deepen functional residual_lean=1
+	 */
 	g_poly_ok = gj_ssh_poly1305_selfcheck();
+	g_x25519_ok = ssh_crypto_x25519_selfcheck();
+	g_sha256_ok = ssh_crypto_sha256_selfcheck();
+	g_hmac_ok = ssh_crypto_hmac_selfcheck();
+	g_chacha_ok = ssh_crypto_chacha20_selfcheck();
+	g_memeq_ok = ssh_crypto_memeq_selfcheck();
+	g_residual_lean_ok = g_poly_ok && g_x25519_ok && g_sha256_ok &&
+			     g_hmac_ok && g_chacha_ok && g_memeq_ok;
+	/* Keep DoD B / deepen / functional honesty strings live (no strip). */
+	if (g_szSshCryptoSoftDodB[0] == '\0' ||
+	    g_szSshCryptoSoftSelfcheckDeepen[0] == '\0' ||
+	    g_szSshCryptoSoftFunctional[0] == '\0') {
+		g_poly_ok = 0;
+		g_residual_lean_ok = 0;
+	}
 
 	/* Permanent product identity: SHA-256(label || "prod") → clamped sk */
 	gj_ssh_sha256_init(&hx);
@@ -918,7 +1636,31 @@ gj_ssh_hostkey_init(void)
 	g_host_sk[31] &= 127;
 	g_host_sk[31] |= 64;
 	gj_ssh_x25519(g_host_pk, g_host_sk, base);
+	bytes_wipe(base, sizeof(base));
+	/* Product hostkey residual lean (ECDH_REPLY sign/verify path). */
+	g_hostkey_ok = ssh_crypto_hostkey_selfcheck();
+	/* Functional residual crypto suite: KDF + MAC + hostpath chain. */
+	g_kdf_ok = ssh_crypto_kdf_selfcheck();
+	g_mac_ok = ssh_crypto_mac_selfcheck();
+	g_hostpath_ok = ssh_crypto_hostpath_selfcheck();
+	g_residual_lean_ok = g_residual_lean_ok && g_hostkey_ok && g_kdf_ok &&
+			     g_mac_ok && g_hostpath_ok;
+	/* Soft residual lean deepen gate: all vectors must pass for poly lamp. */
+	if (!g_residual_lean_ok) {
+		g_poly_ok = 0;
+	}
 	g_host_ready = 1;
+	/* Soft residual lamps are inventory-only (not public API; Soft!=product). */
+	(void)g_x25519_ok;
+	(void)g_sha256_ok;
+	(void)g_hmac_ok;
+	(void)g_chacha_ok;
+	(void)g_memeq_ok;
+	(void)g_hostkey_ok;
+	(void)g_kdf_ok;
+	(void)g_mac_ok;
+	(void)g_hostpath_ok;
+	(void)g_residual_lean_ok;
 }
 
 /* 1 if Poly1305 RFC 2.5.2 vector matched at hostkey_init, else 0. */

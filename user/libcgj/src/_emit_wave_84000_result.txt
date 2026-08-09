@@ -1,0 +1,4 @@
+created=0 already_existed=4000 planned=4000 range=80001..84000
+pattern=25850 simple identity + decade lamps (*91-*00) at each hundred
+note=CREATE-ONLY O_EXCL. No Makefile/kernel/docs touch. Soft only; bar3_ready=0 product_score=0 at each *00 decade.
+status=full range present; re-run O_EXCL is a no-op (all EEXIST)

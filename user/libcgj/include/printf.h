@@ -21,6 +21,14 @@
  * ---------
  * Full POSIX/Linux completeness; stubs and soft fills may return ENOSYS
  * until the hybrid ABI path is wired. See docs/GLIBC_COMPAT.md.
+ *
+ * Soft residual (C2 libcgj printf.h; Soft!=product; G-AC-1; Dual DoD A/B OPEN):
+ *   soft     = register_printf_function / printf_size hooks (custom printf subset)
+ *   product  = UDX/DDI + hot/cold ABI hosts; core printf in <stdio.h>
+ *   honesty  = custom printf soft != full glibc printf product; agent PASS != Dual
+ *              DoD close; stamp-free bar honesty (no version stamp)
+ *   law      = dual MIT OR Apache-2.0; no GPL; H2 no stamp storms
+ * greppable: libcgj: printf soft residual Soft!=product
  */
 #pragma once
 

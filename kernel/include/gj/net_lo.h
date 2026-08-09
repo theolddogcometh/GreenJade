@@ -5,12 +5,21 @@
  * Loopback socket table for cold Linux net path (pre-full-netstackd).
  * Pure C11 freestanding, dual MIT OR Apache-2.0.
  *
+ * Exclusive residual lean (this unit + net_lo.c only; Soft!=product):
+ *   GOAL: lean loopback residual for L3 soft tests without freestanding NIC.
+ *   DGRAM / AF_UNIX / residual STREAM pair - no eth, no rtl, no virtio wire.
+ *   Soft!=product. G-AC-1 (no Linux .ko product AC). Dual MIT OR Apache-2.0.
+ *   No version stamp. No stamp storms. Never product netstack / OpenSSH gate.
+ *   greppable: net: lo soft residual lean
+ *   greppable: Soft!=product | soft_ne_product=1 | G-AC-1
+ *   greppable: l3_soft=1 | freestanding_nic=0 | freestanding_rtl=0 | local_abi=1
+ *
  * Product STREAM multi-seg path uses net_tcp via the door; this module
  * owns DGRAM + non-TCP STREAM fallback, AF_UNIX-shaped sockets, and the
- * SOL_SOCKET subset exercised by cold personality / sshd smokes.
+ * SOL_SOCKET subset exercised by cold personality / L3 soft local smokes.
  *
  * FD layout (avoid vfs_ram 3..31 collision):
- *   FDs 64..79 → 16 slots (NET_LO_MAX). net_lo_fd_ok is the ownership test.
+ *   FDs 64..79 -> 16 slots (NET_LO_MAX). net_lo_fd_ok is the ownership test.
  *
  * Soft product deepenings (v1):
  *   - listen backlog stored/clamped (NET_LO_BACKLOG_MAX=8); connect rejects
@@ -35,7 +44,7 @@
 void net_lo_init(void);
 
 /**
- * socket(AF_INET|AF_UNIX, SOCK_STREAM/DGRAM, 0) → fd or -errno.
+ * socket(AF_INET|AF_UNIX, SOCK_STREAM/DGRAM, 0) -> fd or -errno.
  * proto ignored for bring-up. EMFILE when table full.
  */
 i64 net_lo_socket(int nDomain, int nType, int nProto);
@@ -78,18 +87,18 @@ int net_lo_fd_ok(i64 i64Fd);
  * POLLIN:  RX data, accept pending, or EOF (local RD shut / peer half-close).
  * POLLOUT: can send (WR open and peer/self ring has space).
  * POLLHUP: both directions shut, or peer gone with no remaining RX.
- * Cold poll/epoll path query — does not touch vfs_ram or protonrt.
- * ERR/HUP always surface; IN/OUT filtered by u32Want (0 → default IN|OUT).
+ * Cold poll/epoll path query - does not touch vfs_ram or protonrt.
+ * ERR/HUP always surface; IN/OUT filtered by u32Want (0 -> default IN|OUT).
  */
 u32 net_lo_poll_mask(i64 i64Fd, u32 u32Want);
 
-/** shutdown: how 0=RD 1=WR 2=RDWR — mark half-closed; does not free slot. */
+/** shutdown: how 0=RD 1=WR 2=RDWR - mark half-closed; does not free slot. */
 i64 net_lo_shutdown(i64 i64Fd, int nHow);
 
 /**
  * getsockopt/setsockopt: SOL_SOCKET subset
  * (TYPE, ERROR, REUSEADDR/PORT, BROADCAST, KEEPALIVE, SND/RCVBUF,
- *  LINGER soft, ACCEPTCONN). Other levels → -ENOPROTOOPT soft.
+ *  LINGER soft, ACCEPTCONN). Other levels -> -ENOPROTOOPT soft.
  */
 i64 net_lo_getsockopt(i64 i64Fd, int nLevel, int nOpt, void *pVal, u32 *pLen);
 i64 net_lo_setsockopt(i64 i64Fd, int nLevel, int nOpt, const void *pVal, u32 u32Len);

@@ -55,6 +55,17 @@
  *   - Optional: fold these soft gates into cgj_dyn_smoke.c /
  *     cgj_smoke.c continuum soft blocks (same skip-if-missing rule).
  *   - Soft gates; bar3 still open (gj_bar3_ready_14500 == 0).
+ *
+ * Soft residual (C0 libcgj soft test; Soft!=product; G-AC-1; Dual DoD A/B OPEN):
+ *   soft path  = skip-if-missing dyn/direct continuum KATs; SOFT-SKIP if no SO
+ *   product    = UDX/DDI Dual DoD A/B (OPEN; agent PASS != close Dual DoD)
+ *   honesty    = Soft!=product; bar3/product_score remain 0; stamp-free bar
+ *   catalog    = shell/libcgj green + continuum + batch markers for m14500
+ *   hazard     = H1 N/A; H2 once-lamp spirit; H3 thr_exit residual OPEN
+ *   Bar honesty v2026.08.04.75. NEVER bump GJ_IMAGE_VERSION from this unit.
+ * greppable: libcgj: soft residual m14500
+ * greppable: libcgj: soft residual m14500 Soft!=product
+ * Dual MIT OR Apache-2.0. No GPL. G-AC-1. Dual DoD A/B OPEN.
  */
 
 #define _GNU_SOURCE
@@ -226,6 +237,8 @@ main(void)
 		return 1;
 	}
 	printf("libcgj: soft m14500 DIRECT PASS (all 11 lamps + markers)\n");
+	printf("libcgj: soft residual m14500 Soft!=product "
+	       "dual_dod=OPEN G-AC-1 agent!=close bar=v2026.08.04.75\n");
 	return 0;
 #else
 	void *h = NULL;
@@ -250,6 +263,8 @@ main(void)
 		        "libcgj: soft m14500 skip (dlopen fail: %s)\n",
 		        dlerror());
 		printf("libcgj: soft m14500 SOFT-SKIP (no product SO)\n");
+		printf("libcgj: soft residual m14500 Soft!=product "
+		       "dual_dod=OPEN SOFT-SKIP G-AC-1 bar=v2026.08.04.75\n");
 		return 0;
 	}
 
@@ -298,6 +313,8 @@ main(void)
 	printf("libcgj: soft m14500 PASS path=%s checked=%d "
 	       "(soft-skip unexported/missing; bar3 still open)\n",
 	       szPath, nChecked);
+	printf("libcgj: soft residual m14500 Soft!=product "
+	       "dual_dod=OPEN G-AC-1 agent!=close bar=v2026.08.04.75\n");
 	(void)dlclose(h);
 	return 0;
 #endif

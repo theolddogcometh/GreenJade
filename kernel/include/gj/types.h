@@ -11,28 +11,28 @@
  *
  * Design intent
  * -------------
- * Short names (u8/u32/…) keep hot paths and struct layouts readable without
+ * Short names (u8/u32/...) keep hot paths and struct layouts readable without
  * sacrificing fixed width. Address and status aliases force a single spelling
  * for physical/virtual addresses and return codes across PMM, VMM, caps, IPC.
  *
  * Include rules (freestanding)
  * ----------------------------
- * Only <stdint.h>, <stddef.h>, <stdbool.h> — no hosted libc. Safe from early
+ * Only <stdint.h>, <stddef.h>, <stdbool.h> - no hosted libc. Safe from early
  * boot, interrupt context, and user libgj builds that share the same surface.
  *
  * Naming crosswalk (STYLE.md Systems Hungarian)
  * ---------------------------------------------
- *   u8/u16/u32/u64, i8/…/i64  → variable prefixes match type width
- *   gj_vaddr_t                → va…   (virtual address)
- *   gj_paddr_t                → pa…   (physical address)
- *   gj_status_t               → st…   (0 = OK, negative GJ_ERR_*)
- *   struct gj_cap_ref         → ref… / cap… (not a bare integer; see gj/cap.h)
+ *   u8/u16/u32/u64, i8/.../i64  -> variable prefixes match type width
+ *   gj_vaddr_t                -> va...   (virtual address)
+ *   gj_paddr_t                -> pa...   (physical address)
+ *   gj_status_t               -> st...   (0 = OK, negative GJ_ERR_*)
+ *   struct gj_cap_ref         -> ref... / cap... (not a bare integer; see gj/cap.h)
  *
  * Non-goals
  * ---------
  * Capability handles are NOT typedef'd here as a single integer. Scheme A uses
- * struct gj_cap_ref { u64 slot; u32 gen } so stale handles fail closed — see
- * docs/CAP_ADDRESSING.md and docs/SECURITY_CORE_DESIGN.md (S1–S2).
+ * struct gj_cap_ref { u64 slot; u32 gen } so stale handles fail closed - see
+ * docs/CAP_ADDRESSING.md and docs/SECURITY_CORE_DESIGN.md (S1-S2).
  */
 #pragma once
 
@@ -78,14 +78,14 @@ typedef uintptr_t gj_vaddr_t;
  * Always 64-bit so multi-TiB machines and high MMIO do not force a later ABI
  * break (see GJ_PMM_MAX_PHYS_TIB / HHDM in gj/config.h). Zero is a valid PA
  * only where the caller documents it (e.g. "0 means allocation failure" for
- * some PMM helpers — check that API; do not assume globally).
+ * some PMM helpers - check that API; do not assume globally).
  *
  * Hungarian: paBase, paPage, paKernelStart.
  */
 typedef uint64_t  gj_paddr_t;
 
 /*
- * Capability user handle is struct gj_cap_ref (slot u64 + gen u32) — see gj/cap.h.
+ * Capability user handle is struct gj_cap_ref (slot u64 + gen u32) - see gj/cap.h.
  * Deliberately not a typedef here: packing into one u64 invited silent stale use.
  */
 

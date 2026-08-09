@@ -3,18 +3,23 @@
  * Copyright (c) 2026 Project GreenJade contributors
  *
  * Userspace SCSI mid-layer public API (product path, pure C11).
+ * Product = UDX/DDI+ABI: CDB builders, sense decode, scsi_mid_submit over
+ * GJ_SYS_SCSI door when ready, scsi_mid_stats. C2 product daemon residual
+ * link surface is this header only (H1 submit, H2 sense, H3 stats).
  *
- * Ownership (target): CDB build, LUN routing, sense, timeouts, soft LUN
- * policy → HBA host via door when present. Kernel interim may still mirror
- * CDB helpers until mid ownership is fully userspace; DMA/IRQ windows stay
- * in the kernel.
+ * Ownership (target): CDB build, LUN routing, sense, timeouts, and door
+ * policy to HBA host when present. Kernel interim may still mirror CDB
+ * helpers until mid ownership is fully userspace; DMA/IRQ windows stay in
+ * the kernel.
  *
- * Soft path: when no door/HBA is available (host CI or freestanding no-HBA),
- * a tiny software LUN answers TUR / INQUIRY / MODE SENSE / READ CAPACITY /
- * READ10 / WRITE10 / SYNC / REQUEST SENSE so mid smokes stay green.
+ * Soft path != product: when no door/HBA is available (host CI or
+ * freestanding no-HBA), a tiny software LUN answers TUR / INQUIRY /
+ * MODE SENSE / READ CAPACITY / READ10 / WRITE10 / SYNC / REQUEST SENSE so
+ * mid smokes stay green. Soft is bring-up/CI only; product daemon must
+ * prefer the door UDX path.
  *
  * Dual license: MIT OR Apache-2.0 (see tree LICENSE). Clean-room C only —
- * no Linux kernel source.
+ * no Linux kernel source. No GPL.
  */
 #pragma once
 
@@ -28,7 +33,7 @@ extern "C" {
 #define SCSI_MID_CDB_MAX   16
 #define SCSI_MID_SENSE_MAX 32
 
-/* Soft LUN geometry (product userspace soft path; interim bring-up). */
+/* Soft LUN geometry (Soft != product; interim CI/bring-up only). */
 #define SCSI_MID_SOFT_SECTORS  64u
 #define SCSI_MID_SOFT_SEC_SIZE 512u
 
@@ -85,7 +90,10 @@ struct scsi_io {
     int      iStatus; /* 0 ok, non-zero fail / SCSI status otherwise */
 };
 
-/** Soft / mid stats snapshot (product STATS-shaped surface). */
+/**
+ * Mid stats snapshot (product STATS-shaped DDI surface for C2 daemon).
+ * u32Soft reports whether Soft is active; Soft != product path itself.
+ */
 struct scsi_mid_stats {
     uint32_t u32IoOk;   /* successful soft or door submits */
     uint32_t u32IoFail; /* rejected / CHECK / unsupported */
@@ -136,11 +144,12 @@ int scsi_mid_soft_submit(struct scsi_io *pIo);
 int scsi_mid_stats(struct scsi_mid_stats *pOut);
 
 /**
- * Submit SCSI I/O built in pIo.
+ * Product submit (UDX/DDI+ABI): SCSI I/O built in pIo.
  *
- * Freestanding GJ (SCSI_HAS_SYS): map CDB opcode → GJ_SCSI_OP_* over
- * GJ_SYS_SCSI when the door is ready; else fall through to soft LUN.
- * Host-only / no door: soft LUN (after scsi_mid_soft_init, or auto-arm).
+ * Freestanding GJ (SCSI_HAS_SYS): map CDB opcode to GJ_SCSI_OP_* over
+ * GJ_SYS_SCSI when the door is ready (product path); else fall through to
+ * soft LUN (Soft != product). Host-only / no door: soft LUN (after
+ * scsi_mid_soft_init, or auto-arm).
  *
  * Returns 0 on success, -1 on failure / unsupported.
  * Sets pIo->iStatus and sense on CHECK-shaped soft failures.

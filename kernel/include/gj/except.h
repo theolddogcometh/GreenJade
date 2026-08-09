@@ -3,7 +3,7 @@
  * Copyright (c) 2026 Project GreenJade contributors
  *
  * Exception port (SEH/signal-shaped delivery for Proton game tasks).
- * PCB-owned, separate from pager (Apple §12 / PROTON A0–A1).
+ * PCB-owned, separate from pager (Apple §12 / PROTON A0-A1).
  * Pure C11 freestanding; dual MIT OR Apache-2.0.
  *
  * -------------------------------------------------------------------------
@@ -14,7 +14,7 @@
  * Deliberately separate from the default pager endpoint (fault protocol in
  * gj/fault.h) so SEH/signal delivery does not alias page-in.
  *
- * Soft v1 deepen (register/deliver) — greppable: EXCEPT_PORT_SOFT
+ * Soft v1 deepen (register/deliver) - greppable: EXCEPT_PORT_SOFT
  * --------------------------------------------------------------------
  *   - One pending slot per process (overwrite coalesces; u32Count advances).
  *   - register thr=0 soft-unregisters; thr!=0 binds handler + live.
@@ -25,17 +25,17 @@
  * Block / wake tags (on &pProc->excPort)
  * -------------------------------------
  *   greppable: EXCEPT_TAG_HANDLER · EXCEPT_TAG_FAULT
- *   HANDLER — exception-port waiter (except_port_wait)
- *   FAULT   — faulting user thr parked after soft deliver (trap uses 1)
+ *   HANDLER - exception-port waiter (except_port_wait)
+ *   FAULT   - faulting user thr parked after soft deliver (trap uses 1)
  *
  * Fail-closed policy
  * ------------------
- * deliver returns 0 when port not live or process dead → caller kills thr.
+ * deliver returns 0 when port not live or process dead -> caller kills thr.
  * take/drop return -1 on bad PCB; 0 when empty; 1 on success.
  *
  * Related: gj/process.h (excPort fields), gj/thread.h (block/wake),
  *          gj/fault.h (pager path; distinct), gj/trap.h
- * docs/APPLE_CHANNEL_REMAINING.md §12 · docs/PROTON_PERSONALITY.md A0–A1
+ * docs/APPLE_CHANNEL_REMAINING.md §12 · docs/PROTON_PERSONALITY.md A0-A1
  * docs/SECURITY_CORE_DESIGN.md (dead process / no hang)
  */
 #pragma once
@@ -49,8 +49,8 @@ struct gj_process;
  * thread_block / thread_wake tags on &pProc->excPort.
  * greppable: EXCEPT_TAG_HANDLER · EXCEPT_TAG_FAULT
  *
- * HANDLER — exception-port waiter (except_port_wait).
- * FAULT   — faulting user thr parked after soft deliver (trap uses 1).
+ * HANDLER - exception-port waiter (except_port_wait).
+ * FAULT   - faulting user thr parked after soft deliver (trap uses 1).
  */
 #define EXCEPT_TAG_HANDLER 0u
 #define EXCEPT_TAG_FAULT   1u
@@ -80,8 +80,8 @@ void except_port_init(struct gj_process *pProc);
 /**
  * Soft register / rebind exception sink.
  * greppable: EXCEPT_PORT_REGISTER_SOFT
- *   u32ThrId != 0 → live, handler thr = id (pending cleared on bind).
- *   u32ThrId == 0 → soft unregister (live clear; pending drop).
+ *   u32ThrId != 0 -> live, handler thr = id (pending cleared on bind).
+ *   u32ThrId == 0 -> soft unregister (live clear; pending drop).
  * Returns GJ_OK or GJ_ERR_INVAL / GJ_ERR_DEAD.
  */
 gj_status_t except_port_register(struct gj_process *pProc, u32 u32ThrId);

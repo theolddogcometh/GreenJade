@@ -77,6 +77,7 @@ kernel/drv/net_l2.c \
 	kernel/drv/xhci_msc.c \
 	kernel/drv/fb_console.c \
 	kernel/drv/ps2_probe.c \
+	kernel/drv/platform_power.c \
 	kernel/drv/pci_msix.c \
 	kernel/drv/irq_msix.c \
 kernel/drv/devmgr_soft.c \
@@ -128,6 +129,9 @@ S_SRCS := \
 	kernel/proc/sessiond_embed.S \
 	kernel/proc/netstackd_embed.S \
 	kernel/proc/sshd_embed.S \
+	kernel/proc/ddi_host_embed.S \
+	kernel/proc/rtl8168_udx_embed.S \
+	kernel/proc/xhci_udx_embed.S \
 	kernel/proc/storaged_embed.S \
 	kernel/proc/scsi_mid_embed.S \
 	kernel/proc/hda_client_embed.S \
@@ -174,7 +178,7 @@ UDX_EXAMPLE := $(BUILD)/udx_skeleton
 
 UDX_CFLAGS := -std=c11 -Wall -Wextra -Werror -Iuser/udx/include -Iuser/udx/src -O2 -g
 
-.PHONY: all clean run license udx udx-example ddi-host-gj drivers-udx uefi-stub uefi greenjade.efi ovmf smoke stage-esp stage-rootfs install-img install-usb live-iso hwtest-img install-hwtest-usb linux-hwtest-img install-linux-hwtest hwtest-ssh-setup steam-fetch steam-stage steam-host-prep steam-host-prep-all steam-to-persist steam-to-rootfs userland vulkan-icd sessiond sessiond-gj netstackd netstackd-gj sshd sshd-gj storaged storaged-gj shell-gj ld-gj libcgj libgj-so libgj-gnu vfsd-gj personality-gj
+.PHONY: all clean run license udx udx-example udx-fs ddi-host-gj drivers-udx uefi-stub uefi greenjade.efi ovmf smoke stage-esp stage-rootfs install-img install-usb live-iso hwtest-img install-hwtest-usb linux-hwtest-img install-linux-hwtest hwtest-ssh-setup steam-fetch steam-stage steam-host-prep steam-host-prep-all steam-to-persist steam-to-rootfs userland vulkan-icd sessiond sessiond-gj netstackd netstackd-gj sshd sshd-gj storaged storaged-gj shell-gj ld-gj libcgj libgj-so libgj-gnu vfsd-gj personality-gj
 
 all: $(KERNEL)
 
@@ -495,20 +499,46 @@ $(PERSONALITY_GJ_ELF): user/personality/personality_gj.c $(LIBGJ) user/init/user
 	@echo "built $@"
 
 # ---------------------------------------------------------------------------
-# UDX soft driver hosts (Linux host-libc lab) — ESP pack via stage-udx-drivers
+# UDX soft driver hosts — freestanding product path (option 3 Dual DoD B/A)
 # Operator path:
 #   make drivers-udx personality-gj
 #   make stage-esp          # packs EFI/GREENJADE/drivers/{ddi_host,rtl8168_udx,xhci_udx}
 #   make hwtest-img         # when mtools/sgdisk/etc present
 # Soft ≠ product T1 NIC/USB. Dual MIT OR Apache-2.0; no GPL .ko.
+# Host-libc lab: make udx-example / make -C user/drivers/rtl8168_udx (HOST).
+# Freestanding: libudx-fs.a (no UDX_HOST_LIBC) + static user.ld + libgj.
 # ---------------------------------------------------------------------------
 DDI_HOST_BIN    := $(BUILD)/user/drivers/ddi_host
 RTL8168_UDX_BIN := $(BUILD)/user/drivers/rtl8168_udx
 XHCI_UDX_BIN    := $(BUILD)/user/drivers/xhci_udx
+RTL8168_UDX_HOST := $(BUILD)/user/drivers/rtl8168_udx.host
+UDX_FS_LIB      := $(BUILD)/libudx-fs.a
+UDX_FS_CFLAGS   := $(USER_CFLAGS) -Iuser/udx/include -Iuser/udx/src \
+	-Iuser/libgj/include
+UDX_FS_OBJS     := \
+	$(BUILD)/user/udx-fs/core.o \
+	$(BUILD)/user/udx-fs/host.o \
+	$(BUILD)/user/udx-fs/pci.o \
+	$(BUILD)/user/udx-fs/irq.o \
+	$(BUILD)/user/udx-fs/dma.o \
+	$(BUILD)/user/udx-fs/mmio.o \
+	$(BUILD)/user/udx-fs/work.o
 
-.PHONY: ddi-host-gj drivers-udx
+.PHONY: ddi-host-gj drivers-udx udx-fs
 ddi-host-gj: $(DDI_HOST_BIN)
 	@echo "ddi-host-gj: $(DDI_HOST_BIN)"
+
+udx-fs: $(UDX_FS_LIB)
+	@echo "udx-fs: $(UDX_FS_LIB)"
+
+$(BUILD)/user/udx-fs/%.o: user/udx/src/%.c
+	@mkdir -p $(dir $@)
+	$(CC) $(UDX_FS_CFLAGS) -c -o $@ $<
+
+$(UDX_FS_LIB): $(UDX_FS_OBJS)
+	@mkdir -p $(dir $@)
+	ar rcs $@ $(UDX_FS_OBJS)
+	@echo "built $@  (freestanding libudx; no UDX_HOST_LIBC)"
 
 # Freestanding NATIVE DDI host (GJ_SYS_DDI scan/bind for G752 IDs). Soft≠product.
 $(DDI_HOST_BIN): user/drivers/ddi_host_gj/ddi_host_gj.c $(LIBGJ) user/init/user.ld \
@@ -530,15 +560,32 @@ $(DDI_HOST_BIN): user/drivers/ddi_host_gj/ddi_host_gj.c $(LIBGJ) user/init/user.
 drivers-udx: $(DDI_HOST_BIN) $(RTL8168_UDX_BIN) $(XHCI_UDX_BIN)
 	@echo "drivers-udx: $(DDI_HOST_BIN) $(RTL8168_UDX_BIN) $(XHCI_UDX_BIN)"
 
-$(RTL8168_UDX_BIN): $(UDX_LIB) user/drivers/rtl8168_udx/rtl8168_udx.c \
+# Freestanding product rtl8168_udx (option 3 Dual DoD B): static + libudx-fs + libgj.
+# Embed + stage-esp use this binary (not host-libc inject lab).
+$(RTL8168_UDX_BIN): user/drivers/rtl8168_udx/rtl8168_udx.c \
+		user/drivers/rtl8168_udx/rtl8168_udx_regs.h \
+		$(UDX_FS_LIB) $(LIBGJ) user/init/user.ld
+	@mkdir -p $(dir $@) $(BUILD)/user/drivers
+	$(CC) $(UDX_FS_CFLAGS) -c -o $(BUILD)/user/drivers/rtl8168_udx.o \
+		user/drivers/rtl8168_udx/rtl8168_udx.c
+	$(LD) $(USER_LDFLAGS) -o $@ $(BUILD)/user/drivers/rtl8168_udx.o \
+		$(UDX_FS_LIB) $(LIBGJ)
+	@test -f $@ || (echo "drivers-udx: FAIL missing $@" >&2; exit 1)
+	@echo "built $@  (freestanding rtl8168_udx; option3 product program)"
+
+# Optional host-libc soft lab (inject 10ec:8168; product program SKIP).
+# Builds into drivers-host/ so freestanding embed binary is never overwritten.
+$(RTL8168_UDX_HOST): $(UDX_LIB) user/drivers/rtl8168_udx/rtl8168_udx.c \
 		user/drivers/rtl8168_udx/Makefile
-	@mkdir -p $(dir $@)
+	@mkdir -p $(dir $@) $(BUILD)/user/drivers-host
 	$(MAKE) -C user/drivers/rtl8168_udx \
 		UDX_LIB=$(abspath $(UDX_LIB)) \
 		UDX_INC=$(abspath user/udx/include) \
-		BUILD=$(abspath $(BUILD)/user/drivers)
-	@test -f $@ || (echo "drivers-udx: FAIL missing $@" >&2; exit 1)
-	@echo "built $@"
+		BUILD=$(abspath $(BUILD)/user/drivers-host)
+	@test -f $(BUILD)/user/drivers-host/rtl8168_udx || \
+		(echo "rtl8168_udx.host: FAIL" >&2; exit 1)
+	cp -f $(BUILD)/user/drivers-host/rtl8168_udx $@
+	@echo "built $@  (host-libc soft lab; optional)"
 
 $(XHCI_UDX_BIN): $(UDX_LIB) user/drivers/xhci_udx/xhci_udx.c \
 		user/drivers/xhci_udx/Makefile
@@ -27634,6 +27681,9 @@ $(BUILD)/kernel/proc/ld_gj_embed.o: $(LD_GJ_ELF)
 $(BUILD)/kernel/proc/sessiond_embed.o: $(SESSIOND_GJ_ELF)
 $(BUILD)/kernel/proc/netstackd_embed.o: $(NETSTACKD_GJ_ELF)
 $(BUILD)/kernel/proc/sshd_embed.o: $(SSHD_GJ_ELF)
+$(BUILD)/kernel/proc/ddi_host_embed.o: $(DDI_HOST_BIN)
+$(BUILD)/kernel/proc/rtl8168_udx_embed.o: $(RTL8168_UDX_BIN)
+$(BUILD)/kernel/proc/xhci_udx_embed.o: $(XHCI_UDX_BIN)
 $(BUILD)/kernel/proc/storaged_embed.o: $(STORAGED_GJ_ELF)
 $(BUILD)/kernel/proc/scsi_mid_embed.o: $(SCSI_MID_GJ_ELF)
 $(BUILD)/kernel/proc/hda_client_embed.o: $(HDA_CLIENT_GJ_ELF)
@@ -27645,6 +27695,9 @@ kernel/proc/ld_gj_embed.S: $(LD_GJ_ELF)
 kernel/proc/sessiond_embed.S: $(SESSIOND_GJ_ELF)
 kernel/proc/netstackd_embed.S: $(NETSTACKD_GJ_ELF)
 kernel/proc/sshd_embed.S: $(SSHD_GJ_ELF)
+kernel/proc/ddi_host_embed.S: $(DDI_HOST_BIN)
+kernel/proc/rtl8168_udx_embed.S: $(RTL8168_UDX_BIN)
+kernel/proc/xhci_udx_embed.S: $(XHCI_UDX_BIN)
 kernel/proc/storaged_embed.S: $(STORAGED_GJ_ELF)
 kernel/proc/scsi_mid_embed.S: $(SCSI_MID_GJ_ELF)
 kernel/proc/hda_client_embed.S: $(HDA_CLIENT_GJ_ELF)
@@ -27748,3 +27801,13 @@ $(BUILD)/aarch64/shared/sched_coop.o: kernel/shared/sched_coop.c
 #       `make ddi-host-gj` → build/user/drivers/ddi_host (skeleton product name).
 #       `make drivers-udx` → ddi_host + rtl8168_udx + xhci_udx under build/user/drivers/.
 
+
+image-version:
+	./scripts/gj-image-version.sh --report
+
+# Assurance lite process checks (docs/ASSURANCE_LITE.md) — L1 only, not Dual DoD close.
+# greppable: assurance: lite | gj-assurance-check | test what you fly
+.PHONY: assurance-check image-version
+assurance-check:
+	chmod +x scripts/gj-assurance-check.sh
+	./scripts/gj-assurance-check.sh

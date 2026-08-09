@@ -33,7 +33,7 @@
  *   u64KernelPhys/Bytes loaded KERNEL.ELF span           0 (image is the ELF)
  *   u32Mb2InfoPhys     0                                 Multiboot2 info phys
  *   u64SoftMediaPhys/Bytes  optional UEFI ESP .ko blob   0 (dev Multiboot)
- *                           (LoaderData pages; soft≠product D4 media)
+ *                           (LoaderData pages; soft!=product D4 media)
  *
  * u32Flags may be stamped by the filler or derived in boot_info_set_global().
  * Consumers should prefer flags when present, but still tolerate flags==0 and
@@ -53,9 +53,9 @@
  * Soft = greppable observability + classify helpers; never hard-fails the
  * product path. Callers may ignore soft_* return codes.
  *
- *   boot_info_soft_memmap()  — walk EFI MD array; count usable reclaim types
- *   boot_info_soft_gop_ok()  — soft FB geometry sanity (base/size/bpp)
- *   boot_info_soft_log()     — serial markers (call after serial_init)
+ *   boot_info_soft_memmap()  - walk EFI MD array; count usable reclaim types
+ *   boot_info_soft_gop_ok()  - soft FB geometry sanity (base/size/bpp)
+ *   boot_info_soft_log()     - serial markers (call after serial_init)
  *
  * EFI types soft-reclaimed as usable RAM (must match kmain_uefi + stub):
  *   LoaderCode/Data, BootServicesCode/Data, Conventional, ACPIReclaim
@@ -63,17 +63,17 @@
  * from freelist until soft module load consumes the blob.
  *
  * Grep markers (kernel side, kprintf after serial_init):
- *   boot: handoff soft PASS|PARTIAL|STUB …
- *   boot: memmap soft PASS|SKIP|REJECT …
- *   boot: GOP soft PASS|SKIP|REJECT …
- *   boot: soft media PASS|SKIP …
- *   boot: identity soft PASS …          (identity_map.c)
+ *   boot: handoff soft PASS|PARTIAL|STUB ...
+ *   boot: memmap soft PASS|SKIP|REJECT ...
+ *   boot: GOP soft PASS|SKIP|REJECT ...
+ *   boot: soft media PASS|SKIP ...
+ *   boot: identity soft PASS ...          (identity_map.c)
  *
  * Grep markers (EFI stub COM1, prefix GJ-EFI:):
- *   GJ-EFI: GOP soft PASS|SKIP …
- *   GJ-EFI: memmap soft PASS|REJECT …
- *   GJ-EFI: handoff soft PASS|PARTIAL …
- *   GJ-EFI: soft media PASS|SKIP|FAIL …
+ *   GJ-EFI: GOP soft PASS|SKIP ...
+ *   GJ-EFI: memmap soft PASS|REJECT ...
+ *   GJ-EFI: handoff soft PASS|PARTIAL ...
+ *   GJ-EFI: soft media PASS|SKIP|FAIL ...
  *
  * greppable: boot: handoff soft
  * greppable: boot: memmap soft
@@ -166,7 +166,7 @@ struct gj_boot_info {
     u32  u32Mb2InfoPhys; /* Multiboot2 info phys (0 if UEFI) */
     u32  u32Pad;         /* keep struct 8-byte aligned */
     /*
-     * Soft media handoff (D4 / Soft≠product; G-AC-1).
+     * Soft media handoff (D4 / Soft!=product; G-AC-1).
      * UEFI stub may LoadFile \linux-drivers\modules\r8169.ko into
      * AllocatePages(LOADER_DATA) before ExitBootServices. Phys ptr is
      * identity-mapped; PMM must reserve the span so freelist does not

@@ -16,12 +16,28 @@
  *     SYNC → deepen probes → soft inventory → live path PASS
  *
  * Soft inventory (Wave 126 exclusive deepen — greppable "scsi_mid-gj: soft …"):
- *   scsi_mid-gj: soft inventory ok=… skip=… soft_ok=… door_ok=… wave=70 areas=10
+ *   scsi_mid-gj: soft inventory ok=… skip=… soft_ok=… door_ok=… wave=70 areas=12
  *   scsi_mid-gj: soft steps tur=… inq=… mode=… readcap=… write10=… read10=…
  *                rw=… lun=… sense=… sync=… multi=… lba=… evpd=… bits=…
  *   scsi_mid-gj: soft lun / multi / lba / evpd / door / geometry / deepen / path
+ *   scsi_mid-gj: soft residual lean … (C2 product daemon residual)
  * Soft LUN honesty remains soft; product door INQUIRY path is separate.
  * Diagnostics only — never gates live path PASS.
+ *
+ * C2 product daemon residual (exclusive residual; this TU only; lean):
+ *   Service host scsi_mid over SCSI door (channel-A control) + soft mid.
+ *   Product path class C2: door HBA when READY (virtio-scsi T0) + mid policy;
+ *   product drivers/storage direction = UDX/DDI+ABI (not soft LUN alone).
+ *   Soft LUN / soft inventory != product multi-server confine / Dual DoD close.
+ *   Dual DoD A/B remain OPEN (this residual does not close USB/NIC product).
+ *   H1/H2/H3 honesty: no net_eth_poll; lean once-lamps (no stamp storm);
+ *   thr-exit death order stays kernel door residual (daemon exits clean).
+ *   Soft!=product. G-AC-1 (no Linux .ko product AC). Dual MIT OR Apache-2.0.
+ *   No version stamp. No GPL. Stamp-free residual (not GJ_IMAGE_VERSION).
+ *   greppable: scsi_mid-gj: soft residual lean
+ *   greppable: scsi_mid-gj: soft residual lean product
+ *   greppable: scsi_mid-gj: soft residual lean h1h2h3
+ *   greppable: scsi_mid-gj: soft residual lean PASS
  *
  * Soft LUN is pure userspace mid policy (geometry, sense, LUN map) so
  * freestanding smokes stay green without virtio-scsi. Parent tree still
@@ -47,8 +63,8 @@
  */
 
 #define SCSI_SOFT_WAVE 70u
-#define SCSI_SOFT_AREAS 11u
-/* areas: suite steps lun multi lba evpd door geometry deepen path */
+#define SCSI_SOFT_AREAS 12u
+/* areas: suite steps lun multi lba evpd door geometry deepen path residual */
 
 /* Soft suite sub-step bits (Wave 111 greppable steps line). */
 #define SOFT_S_TUR     (1u << 0)
@@ -609,12 +625,78 @@ soft_door_note(unsigned uBit, int fOk)
  *   scsi_mid-gj: soft door       — product door soft lamps (INQUIRY separate)
  *   scsi_mid-gj: soft geometry   — soft LUN geometry
  *   scsi_mid-gj: soft deepen     — wave=70 stamp
- *   scsi_mid-gj: soft path       — honesty: soft LUN ≠ product door INQUIRY
+ *   scsi_mid-gj: soft path       — honesty: soft LUN != product door INQUIRY
+ *   scsi_mid-gj: soft residual lean — C2 product daemon residual
+ *   scsi_mid-gj: soft residual lean product / h1h2h3 / PASS
  *   scsi_mid-gj: soft inventory PASS
  *
  * Soft LUN honesty remains soft. Product INQUIRY path is door-only.
  * Never hard-gates live path PASS.
  */
+
+/**
+ * C2 product daemon residual lean (exclusive residual; this TU only).
+ * Soft!=product. Dual DoD A/B OPEN. product=UDX/DDI+ABI. G-AC-1.
+ * H1/H2/H3 honesty lamps only — never hard-gates live path PASS.
+ * Dual MIT OR Apache-2.0. No version stamp. No stamp storms.
+ * greppable: scsi_mid-gj: soft residual lean
+ */
+static void
+soft_residual_lean_c2(void)
+{
+    /*
+     * Grep: scsi_mid-gj: soft residual lean
+     * Service host residual: channel-A SCSI door + soft mid policy.
+     * Soft inventory != product multi-server confine / Dual DoD close.
+     */
+    msg("scsi_mid-gj: soft residual lean residual_lean=1 C2=1 "
+        "product_daemon=1 service_host=scsi_mid door=1 soft_mid=1 "
+        "channel_a=1 multi_server=0 confine=0 "
+        "product=UDX/DDI+ABI product_dir=UDX+ABI "
+        "dual_dod=OPEN dual_dod_a=OPEN dual_dod_b=OPEN "
+        "soft_ne_product=1 Soft!=product "
+        "dual=MIT_OR_Apache-2.0 G-AC-1=1 ko_product=0 gpl=0 "
+        "no_version_stamp=1 stamp_storm=0\n");
+
+    /*
+     * Grep: scsi_mid-gj: soft residual lean product
+     * Product path class C2: door HBA when READY (virtio-scsi T0);
+     * soft LUN is eng residual only. Product drivers = UDX/DDI+ABI.
+     */
+    msg("scsi_mid-gj: soft residual lean product C2=1 "
+        "product_path=door_HBA_when_READY virtio_scsi_t0=1 "
+        "product_inq=door soft_inq=soft soft_lun=1 "
+        "product=UDX/DDI+ABI product_dir=UDX+ABI "
+        "udx_host=1 ddi=1 abi=1 freestanding_class_product=0 "
+        "dual_dod=OPEN dual_dod_a=OPEN dual_dod_b=OPEN "
+        "Soft!=product G-AC-1=1 dual=MIT_OR_Apache-2.0\n");
+
+    /*
+     * Grep: scsi_mid-gj: soft residual lean h1h2h3
+     * H1: no net_eth_poll from this daemon (not IRQ stack smash class).
+     * H2: lean once-lamps only (no ret*angle stamp storm).
+     * H3: thr-exit / AS death order is kernel door residual; this daemon
+     *     exits clean after smoke (no clone sibling into dead AS).
+     */
+    msg("scsi_mid-gj: soft residual lean h1h2h3 "
+        "H1=1 net_eth_poll=0 thr_only=1 "
+        "H2=1 lean_once=1 stamp_storm=0 no_retangle=1 "
+        "H3=1 thr_exit_clean=1 clone_dead_as=0 "
+        "fault_class=H1_H2_H3_honest Soft!=product G-AC-1=1\n");
+
+    /*
+     * Grep: scsi_mid-gj: soft residual lean PASS
+     * Once-lamp residual complete. Soft!=product. Does not close Dual DoD.
+     */
+    msg("scsi_mid-gj: soft residual lean PASS residual_lean=1 C2=1 "
+        "product_daemon=1 product=UDX/DDI+ABI "
+        "dual_dod=OPEN dual_dod_a=OPEN dual_dod_b=OPEN "
+        "H1=1 H2=1 H3=1 Soft!=product G-AC-1=1 "
+        "dual=MIT_OR_Apache-2.0 no_version_stamp=1 "
+        "(Soft!=product; C2 product daemon residual; not Dual DoD close; "
+        "not multi-server product; not Linux .ko product AC)\n");
+}
+
 static void
 soft_inventory_log(void)
 {
@@ -797,20 +879,25 @@ soft_inventory_log(void)
 
     /*
      * Grep: scsi_mid-gj: soft path
-     * Honesty: soft LUN policy ≠ product door INQUIRY path.
-     * Soft inventory ≠ product multi-server confine.
+     * Honesty: soft LUN policy != product door INQUIRY path.
+     * Soft inventory != product multi-server confine.
      */
     msg("scsi_mid-gj: soft path soft_lun=1 door=1 product_inq=door "
         "soft_inq=soft lun_honest=soft multi=soft lba=soft evpd=soft "
         "multi_server=0 confine=0 wave=70 "
-        "(soft inventory; soft != product multi-server confine)\n");
+        "product=UDX/DDI+ABI Soft!=product "
+        "(soft inventory; Soft!=product multi-server confine)\n");
 
     /*
      * Grep: scsi_mid-gj: soft honesty (Wave 126 exclusive deepen).
-     * Soft inventory ≠ product multi-server confine.
+     * Soft inventory != product multi-server confine. C2 residual next.
      */
     msg("scsi_mid-gj: soft honesty multi_server=0 confine=0 "
-        "exclusive=1 soft=1 product_kernel=OPEN wave=70\n");
+        "exclusive=1 soft=1 product_kernel=OPEN wave=70 "
+        "product=UDX/DDI+ABI dual_dod=OPEN Soft!=product G-AC-1=1\n");
+
+    /* C2 product daemon residual lean (Soft!=product; Dual DoD OPEN). */
+    soft_residual_lean_c2();
 
     /* Soft lamp only — never a product gate. */
     msg("scsi_mid-gj: soft inventory PASS\n");

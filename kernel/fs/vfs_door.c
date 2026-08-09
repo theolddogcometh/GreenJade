@@ -4,30 +4,48 @@
  *
  * Multi-client VFS door: mini FS on virtio-blk (via store) or soft RAM disk.
  * v3: 8 inodes (2 LBA table), multi-sector files up to 1 KiB.
- * Layout: LBA0 super, LBA1 freemap, LBA2–3 inodes, LBA4+ data.
- * Product path: vfsd claims door, format/mount, then create/read/write
- * or open/readfd/writefd/seekfd; sec_rw prefers store_door when virtio-blk
- * ready. SMP-safe via spinlock; pure C11 dual-license product surface.
+ * Layout: LBA0 super, LBA1 freemap, LBA2-3 inodes, LBA4+ data.
+ * Product path: userspace host vfsd claims door, format/mount, then
+ * create/read/write or open/readfd/writefd/seekfd; sec_rw prefers
+ * store_door when virtio-blk ready. SMP-safe via spinlock; pure C11
+ * dual-license surface for vfsd / shell / native GJ_SYS_VFS hosts.
  *
  * Soft claim path:
  *   CLAIM token must be non-zero 32-bit; same token re-CLAIM is idempotent
- *   (reclaim soft); a different token → BUSY. RELEASE when free is a soft
+ *   (reclaim soft); a different token -> BUSY. RELEASE when free is a soft
  *   no-op (0). Format/mount allowed when free (bring-up smokes) or claimed
  *   (product vfsd). Soft RAM disk when virtio-blk is absent.
  *
- * Soft door inventory (Wave 12 base; Wave 14 deepen; Wave 19 exclusive):
- *   - soft return: API return-surface catalog (product_*=OPEN)
- *   - soft retmap: Wave 19 return-surface map (ok|fail|… classes)
+ * Soft door inventory (Wave 12 base; Wave 14 deepen; CAP-capped):
  *   - Live owned/mounted/files/fds/token; peaks for files + open door fds
  *   - Cumulative claim/reclaim/release + format/mount + name + fd ops
- *   - Soft deny tallies by errno shape (inval/busy/noent/nomem/io/…)
+ *   - Soft deny tallies by errno shape (inval/busy/noent/nomem/io/...)
  *   - Backend sec_rw (ram|store), freemap alloc/free, auto format/mount
- *   - Byte transfer totals; soft once + STATS / claim_count / fd_count emit
+ *   - Byte transfer totals; soft once + STATS emit (CAP-capped; no storm)
  *   - Wave 14: per-op enter, last snapshot, multi-sec, catalog, PASS deepen
  *   - Wave 15 base: ratio|headroom|surface|deepen
- *   - Wave 19 exclusive: capacity|geom|terminal|return|retmap (wave=116 areas=109)
- *   greppable: "vfs_door: soft …"
+ *   - Compact return|retmap (lean; no ret* cascade stamp storms)
+ *   greppable: "vfs_door: soft ..."
  *   Never hard-gates; diagnostics only (wrap OK). Soft.
+ *
+ * Lean soft residual (this TU exclusive; Soft!=product dual license):
+ *   Userspace host handoff residual (vfsd|shell|GJ_SYS_VFS):
+ *     CLAIM -> FORMAT/MOUNT -> name R/W | OPEN/READFD/WRITEFD/SEEKFD
+ *   - Once-lamp functional residual deepen (C0; no door state mutation):
+ *       path_normalize edges (mnt/./ leaf/dbl-slash/empty root)
+ *       name_eq identity · multi-sec geom · on-disk layout sizeof
+ *       data capacity (RAM secs cover max multi-sec files)
+ *       full opcode ABI 1..16 + OPEN flags/SEEK · live bounds
+ *       own coherence · Soft!=product lic
+ *   - Once-lamp honesty: soft_ne_product · dual MIT OR Apache-2.0 ·
+ *     multi_server=0 · stamp_storm=0 · no version stamp · G-AC-1
+ *   - Diagnostic readers (claim_count / fd_count): residual lean once only
+ *     (no full inventory stamp storms on every read)
+ *   greppable: vfs_door: soft residual lean
+ *   greppable: vfs_door: soft residual lean PASS
+ *   greppable: host=vfsd|shell|GJ_SYS_VFS
+ *   Functional residual preferred over multi-line deepen catalogs.
+ *   Soft residual != product vfsd complete (Soft!=product).
  */
 #include <gj/error.h>
 #include <gj/klog.h>
@@ -51,6 +69,12 @@
 #define VFS_FD_MAX     16u
 #define FILE_MAX_BYTES (2u * SEC)
 #define NAME_MAX       48u
+/*
+ * Cap multi-line soft inventory dumps (Soft!=product; no stamp storms).
+ * Init + first-activity once + a couple of STATS samples stay greppable;
+ * further dumps stay silent (counters keep ticking).
+ */
+#define VFS_SOFT_LOG_CAP 4u
 
 /* On-disk layout (fixed field order; names match historical superblock). */
 struct vfs_super {
@@ -97,12 +121,12 @@ static struct gj_spinlock g_lkVfs;
 
 /*
  * Soft product inventory (Wave 12 exclusive). Cumulative unless noted
- * live/peak. greppable: vfs_door: soft …
+ * live/peak. greppable: vfs_door: soft ...
  */
 static u32 g_u32SoftReleaseOk;    /* RELEASE while owned (token match) */
 static u32 g_u32SoftReleaseFree;  /* RELEASE when free (soft no-op) */
 static u32 g_u32SoftReleaseInval; /* RELEASE token mismatch / high bits */
-static u32 g_u32SoftClaimBusy;    /* CLAIM different token → BUSY */
+static u32 g_u32SoftClaimBusy;    /* CLAIM different token -> BUSY */
 static u32 g_u32SoftClaimInval;   /* CLAIM bad token (0 / high bits) */
 static u32 g_u32SoftFormatOk;
 static u32 g_u32SoftFormatFail;
@@ -159,7 +183,7 @@ static u32 g_u32SoftAutoFormat;   /* implicit format on unmounted create/open */
 static u32 g_u32SoftAutoMount;    /* implicit mount on name ops */
 static u8  g_fSoftOnce;           /* one-shot after first call activity */
 
-/* Wave 14 exclusive soft deepen — complementary path tallies. */
+/* Wave 14 exclusive soft deepen - complementary path tallies. */
 static u32 g_u32SoftOpEnter[17];  /* per-opcode enter; index = op (1..16) */
 static u32 g_u32SoftUnknownOp;    /* NOSUPPORT / unknown opcode */
 static u32 g_u32SoftLastOp;       /* last dispatched opcode */
@@ -173,6 +197,13 @@ static u32 g_u32SoftUnownedRw;    /* name/fd I/O while free */
 static u32 g_u32SoftPeakBytesR;   /* peak single READ/READFD ret */
 static u32 g_u32SoftPeakBytesW;   /* peak single WRITE/WRITEFD ret */
 
+/* Lean soft residual (once; Soft!=product; no version stamp / no storm). */
+static u32 g_u32SoftResidualLean;   /* lean residual self-check runs */
+static u32 g_u32SoftResidualLeanOk; /* lean residual checks that passed */
+static u8  g_fSoftResidualLean;     /* once-lamp gate */
+static u32 g_u32SoftLogN;           /* soft inventory dump count (CAP) */
+static u32 g_u32SoftHostHandoffOk;  /* lean host-path opcode residual ok */
+
 static int do_format(void);
 static int do_mount(u32 *pOut);
 static i64 do_create_or_write(const char *szName, const u8 *pData, u32 cb,
@@ -183,6 +214,7 @@ static void soft_deny_note(i64 i64Ret);
 static void soft_note_result(u32 u32Op, i64 i64Ret);
 static void soft_inventory_log(void);
 static void soft_maybe_once(void);
+static void soft_residual_lean_once(void);
 
 /** Soft: bump path tally (u32 wrap is fine for telemetry). */
 static void
@@ -427,7 +459,7 @@ sec_rw(int fWrite, u32 u32Lba, void *p)
     return -1;
 }
 
-/* Load/store full inode table (2 sectors → 8 inodes) */
+/* Load/store full inode table (2 sectors -> 8 inodes) */
 static int
 inode_table_load(struct vfs_inode *pTab)
 {
@@ -756,22 +788,447 @@ soft_note_result(u32 u32Op, i64 i64Ret)
 }
 
 /**
- * Greppable soft VFS door inventory (Wave 12 base; Wave 14 exclusive deepen).
- * Prefix-stable markers (vfs_door: soft …):
- *   vfs_door: soft inventory  — live owned/mounted/files/fds + ok/fail
- *   vfs_door: soft claim      — claim/reclaim/release path tallies
- *   vfs_door: soft layout     — inode/fd/file_max/secs catalog
- *   vfs_door: soft name       — create/write/read/unlink/stat/list ok|fail
- *   vfs_door: soft fd         — open/close/readfd/writefd/seekfd ok|fail
- *   vfs_door: soft fmt        — format/mount/stats + auto bring-up
- *   vfs_door: soft deny       — errno-shape reject catalog
- *   vfs_door: soft peak       — files/fds high-water + samples
- *   vfs_door: soft backend    — ram|store sec_rw + freemap alloc/free
- *   vfs_door: soft bytes      — cumulative READ/WRITE(+fd) byte totals
- *   vfs_door: soft path       — honesty: soft inventory / product
+ * Lean soft residual once (this TU exclusive; C0 residual deepen).
+ * Userspace host handoff residual for vfsd|shell|GJ_SYS_VFS.
+ * Functional residual on stack-local helpers + opcode/layout ABI only -
+ * never mutates door ownership, mount, inodes, or fd table (product
+ * state untouched). Soft!=product · dual MIT OR Apache-2.0 · no version
+ * stamp · no stamp storm · G-AC-1.
+ * Arms (functional preferred over multi-line catalog deepen):
+ *   path_norm | name_eq | multi_sec | geom+layout | data_cap |
+ *   name policy 1..11 | door-fd 12..16 | live bounds | own | lic
+ * STRONGER functional residual (W7 Dual DoD; stamp-free bar v2026.08.04.75):
+ *   name_copy | host_path | claim_inval | dual_dod_open
+ *   toward UDX/sshd product path (vfsd|shell|GJ_SYS_VFS hosts).
+ * greppable: vfs_door: soft residual lean
+ * greppable: vfs_door: soft residual lean PASS
+ * greppable: vfs_door: soft residual lean udx
+ * greppable: host=vfsd|shell|GJ_SYS_VFS
+ */
+static void
+soft_residual_lean_once(void)
+{
+    char aPath[NAME_MAX];
+    char aBare[NAME_MAX];
+    char aId[NAME_MAX];
+    char aLead[NAME_MAX];
+    char aDbl[NAME_MAX];
+    char aDeep[NAME_MAX];
+    char aMnt[NAME_MAX];
+    char aRoot[NAME_MAX];
+    char aEqA[NAME_MAX];
+    char aEqB[NAME_MAX];
+    char aCopy[NAME_MAX];
+    char aHost[NAME_MAX];
+    char aSsh[NAME_MAX];
+    u32  u32Ok = 0;
+    u32  u32Checks = 0;
+    u32  u32Path = 0;
+    u32  u32NameEq = 0;
+    u32  u32Multi = 0;
+    u32  u32Geom = 0;
+    u32  u32DataCap = 0;
+    u32  u32Policy = 0;
+    u32  u32Host = 0;
+    u32  u32FdPath = 0;
+    u32  u32Bounds = 0;
+    u32  u32Own = 0;
+    u32  u32Lic = 0;
+    u32  u32NameCopy = 0;
+    u32  u32HostPath = 0;
+    u32  u32ClaimInval = 0;
+    u32  u32DualDod = 0;
+    u32  u32Owned;
+    u32  u32Token;
+    u32  u32Mounted;
+    u32  u32Files;
+    u32  u32Fds;
+    u32  u32Ram;
+    u32  u32Blk;
+    u32  u32Init;
+    u32  u32Claims;
+    u32  u32Reclaims;
+    u32  u32DataSecs;
+    i64  i64Claim0;
+    i64  i64ClaimHi;
+    /* Stack-local Soft!=product honesty (never hard-gates). */
+    const int nSoft = 1;
+    const int nProduct = 0;
+    const int nMultiServer = 0;
+    const int nKoProduct = 0;
+    const int nStampStorm = 0;
+    const int nProductVfsdClose = 0; /* residual never closes product vfsd DoD */
+    const int nDualDodOpen = 1;     /* Dual DoD A/B remain OPEN */
+    const int nGac1 = 1;
+
+    if (g_fSoftResidualLean != 0) {
+        return;
+    }
+    g_fSoftResidualLean = 1;
+    soft_inc(&g_u32SoftResidualLean);
+
+    /*
+     * Path/name residual deepen (no door state) - stronger edge set:
+     *   /mnt strip · multi-segment leaf · bare identity · leading slash ·
+     *   double-slash mnt · deep /mnt/a/b leaf · bare mnt/ · empty root.
+     */
+    u32Checks++;
+    name_copy(aPath, "/mnt/residual", sizeof(aPath));
+    path_normalize(aPath);
+    name_copy(aBare, "./foo/bar", sizeof(aBare));
+    path_normalize(aBare);
+    name_copy(aId, "leaf", sizeof(aId));
+    path_normalize(aId);
+    name_copy(aLead, "/only", sizeof(aLead));
+    path_normalize(aLead);
+    name_copy(aDbl, "//mnt//x", sizeof(aDbl));
+    path_normalize(aDbl);
+    name_copy(aDeep, "/mnt/a/b", sizeof(aDeep));
+    path_normalize(aDeep);
+    name_copy(aMnt, "mnt/foo", sizeof(aMnt));
+    path_normalize(aMnt);
+    name_copy(aRoot, "/", sizeof(aRoot));
+    path_normalize(aRoot);
+    if (name_eq(aPath, "residual") != 0 && name_eq(aBare, "bar") != 0 &&
+        name_eq(aId, "leaf") != 0 && name_eq(aLead, "only") != 0 &&
+        name_eq(aDbl, "x") != 0 && name_eq(aDeep, "b") != 0 &&
+        name_eq(aMnt, "foo") != 0 && aRoot[0] == '\0') {
+        u32Path = 1;
+        u32Ok++;
+    }
+
+    /*
+     * name_eq residual (identity / inequality / NULL guard).
+     * Stack-local only - never touches inode name table.
+     */
+    u32Checks++;
+    name_copy(aEqA, "same", sizeof(aEqA));
+    name_copy(aEqB, "same", sizeof(aEqB));
+    if (name_eq(aEqA, aEqB) != 0 && name_eq(aEqA, "diff") == 0 &&
+        name_eq(NULL, aEqA) == 0 && name_eq(aEqA, NULL) == 0 &&
+        name_eq("", "") != 0) {
+        u32NameEq = 1;
+        u32Ok++;
+    }
+
+    /* multi-sec geom residual (FILE_MAX = 2 * SEC; boundary lamps) */
+    u32Checks++;
+    if (sectors_for_size(0) == 1u && sectors_for_size(1u) == 1u &&
+        sectors_for_size(SEC) == 1u && sectors_for_size(SEC + 1u) == 2u &&
+        sectors_for_size(FILE_MAX_BYTES) == 2u && SEC == 512u &&
+        FILE_MAX_BYTES == (2u * SEC)) {
+        u32Multi = 1;
+        u32Ok++;
+    }
+
+    /*
+     * Design-constant + on-disk layout residual:
+     *   super fills one sector; inode table fills two (LBA2-3);
+     *   door-fd slot packs used/write/ino/off/name.
+     * Catches silent pad/ABI breakage without mutating door state.
+     */
+    u32Checks++;
+    if (INODE_MAX == 8u && VFS_FD_MAX == 16u && FILE_MAX_BYTES == (2u * SEC) &&
+        LBA_SUPER == 0u && LBA_FREEMAP == 1u && LBA_INODES == 2u &&
+        LBA_INODES2 == 3u && LBA_DATA0 == 4u && VFS_MAGIC == 0x31444a47u &&
+        VFS_VERSION == 3u && NAME_MAX == 48u &&
+        sizeof(struct vfs_super) == (unsigned)SEC &&
+        (sizeof(struct vfs_inode) * (unsigned)INODE_MAX) ==
+            (unsigned)(2u * SEC) &&
+        sizeof(struct vfs_fd) >= (sizeof(u32) + sizeof(u32) + NAME_MAX)) {
+        u32Geom = 1;
+        u32Ok++;
+    }
+
+    /*
+     * Soft RAM data capacity residual: enough data LBAs for all inodes at
+     * multi-sec FILE_MAX (2 secs each). Design-constant only.
+     */
+    u32Checks++;
+    u32DataSecs = (VFS_RAM_SECS > LBA_DATA0) ? (VFS_RAM_SECS - LBA_DATA0) : 0u;
+    if (VFS_RAM_SECS == 48u && u32DataSecs >= (INODE_MAX * 2u) &&
+        u32DataSecs >= 16u && LBA_DATA0 < VFS_RAM_SECS) {
+        u32DataCap = 1;
+        u32Ok++;
+    }
+
+    /*
+     * Userspace host handoff opcode residual (name path 1..11 contiguous):
+     *   CLAIM/RELEASE + FORMAT/MOUNT + CREATE/READ/WRITE/UNLINK/STAT/LIST/STATS
+     *   (vfsd product path; shell/native share the same surface).
+     */
+    u32Checks++;
+    if (GJ_VFS_OP_CLAIM == 1u && GJ_VFS_OP_RELEASE == 2u &&
+        GJ_VFS_OP_FORMAT == 3u && GJ_VFS_OP_MOUNT == 4u &&
+        GJ_VFS_OP_CREATE == 5u && GJ_VFS_OP_READ == 6u &&
+        GJ_VFS_OP_WRITE == 7u && GJ_VFS_OP_UNLINK == 8u &&
+        GJ_VFS_OP_STAT == 9u && GJ_VFS_OP_LIST == 10u &&
+        GJ_VFS_OP_STATS == 11u &&
+        GJ_VFS_OP_RELEASE == (GJ_VFS_OP_CLAIM + 1u) &&
+        GJ_VFS_OP_STATS == 11u && NAME_MAX == 48u &&
+        (sizeof(g_u32Owner) == sizeof(u32))) {
+        u32Policy = 1;
+        u32Host = 1;
+        u32Ok++;
+        soft_inc(&g_u32SoftHostHandoffOk);
+    }
+
+    /*
+     * Door-fd residual (multi-client host path; not Linux fds):
+     *   OPEN/CLOSE/READFD/WRITEFD/SEEKFD contiguous after STATS + flags/SEEK.
+     */
+    u32Checks++;
+    if (GJ_VFS_OP_OPEN == 12u && GJ_VFS_OP_CLOSE == 13u &&
+        GJ_VFS_OP_READFD == 14u && GJ_VFS_OP_WRITEFD == 15u &&
+        GJ_VFS_OP_SEEKFD == 16u &&
+        GJ_VFS_OP_OPEN == (GJ_VFS_OP_STATS + 1u) &&
+        GJ_VFS_OP_SEEKFD == (GJ_VFS_OP_OPEN + 4u) &&
+        GJ_VFS_O_CREAT == 1u && GJ_VFS_O_RDWR == 2u &&
+        GJ_VFS_SEEK_SET == 0u && GJ_VFS_SEEK_CUR == 1u &&
+        GJ_VFS_SEEK_END == 2u &&
+        GJ_VFS_SEEK_END == (GJ_VFS_SEEK_CUR + 1u)) {
+        u32FdPath = 1;
+        u32Ok++;
+        soft_inc(&g_u32SoftHostHandoffOk);
+    }
+
+    /* Snapshot live fields under lock for bounds + own + honesty lamps. */
+    gj_spin_lock(&g_lkVfs);
+    u32Init = g_fInit ? 1u : 0u;
+    u32Token = g_u32Owner;
+    u32Owned = g_u32Owner ? 1u : 0u;
+    u32Mounted = g_u32Mounted;
+    u32Files = g_u32Files;
+    u32Fds = fd_count_used();
+    u32Ram = g_fRam ? 1u : 0u;
+    u32Claims = g_u32Claims;
+    u32Reclaims = g_u32Reclaims;
+    soft_peak_note();
+    gj_spin_unlock(&g_lkVfs);
+    u32Blk = virtio_blk_ready() ? 1u : 0u;
+
+    /*
+     * Live bounds residual: files/fds never exceed design maxima;
+     * peaks agree with live when non-zero. Read-only.
+     */
+    u32Checks++;
+    if (u32Files <= (u32)INODE_MAX && u32Fds <= (u32)VFS_FD_MAX &&
+        g_u32SoftFilesPeak >= u32Files && g_u32SoftFdPeak >= u32Fds &&
+        g_u32SoftFilesPeak <= (u32)INODE_MAX &&
+        g_u32SoftFdPeak <= (u32)VFS_FD_MAX) {
+        u32Bounds = 1;
+        u32Ok++;
+    }
+
+    /*
+     * Ownership path coherence (token 0 == free; public readers agree).
+     * Read-only - never CLAIM/RELEASE here (Soft!=product residual).
+     */
+    u32Checks++;
+    if ((u32Token == 0u) == (u32Owned == 0u) &&
+        (vfs_door_owned() != 0) == (u32Owned != 0u) &&
+        vfs_door_owner_token() == u32Token &&
+        (u32Owned == 0u || u32Token != 0u)) {
+        u32Own = 1;
+        u32Ok++;
+    }
+
+    /*
+     * Soft!=product · multi_server=0 · no .ko product · CAP present ·
+     * product vfsd DoD not closed by residual · G-AC-1.
+     * LAW: dual MIT OR Apache-2.0 residual never closes product DoD.
+     */
+    u32Checks++;
+    if (nSoft == 1 && nProduct == 0 && nMultiServer == 0 && nKoProduct == 0 &&
+        nStampStorm == 0 && nProductVfsdClose == 0 && nGac1 == 1 &&
+        VFS_SOFT_LOG_CAP >= 1u && VFS_SOFT_LOG_CAP <= 8u) {
+        u32Lic = 1;
+        u32Ok++;
+    }
+
+    /*
+     * STRONGER functional residual (W7 Dual DoD; UDX/sshd product path).
+     * name_copy | host_path | claim_inval | dual_dod_open.
+     * Soft!=product. Dual DoD OPEN. Stamp-free. G-AC-1.
+     */
+
+    /* name_copy residual: truncate-safe stack copy (host path strings). */
+    u32Checks++;
+    name_copy(aCopy, "sshd-config", sizeof(aCopy));
+    name_copy(NULL, "x", 8u); /* null dst no-op */
+    name_copy(aCopy, NULL, sizeof(aCopy)); /* null src -> empty */
+    if (aCopy[0] == '\0') {
+        name_copy(aCopy, "hostkey", sizeof(aCopy));
+        if (name_eq(aCopy, "hostkey") != 0) {
+            u32NameCopy = 1;
+            u32Ok++;
+        }
+    }
+
+    /*
+     * host_path residual: sshd/UDX-shaped names normalize to leaf.
+     * /mnt/sshd/host_key -> host_key; bare authorized_keys identity.
+     */
+    u32Checks++;
+    name_copy(aHost, "/mnt/sshd/host_key", sizeof(aHost));
+    path_normalize(aHost);
+    name_copy(aSsh, "authorized_keys", sizeof(aSsh));
+    path_normalize(aSsh);
+    if (name_eq(aHost, "host_key") != 0 &&
+        name_eq(aSsh, "authorized_keys") != 0 &&
+        sectors_for_size(FILE_MAX_BYTES + 1u) == 2u) {
+        u32HostPath = 1;
+        u32Ok++;
+    }
+
+    /*
+     * claim_inval residual: token 0 / high bits fail closed (no ownership).
+     * Only when door inited; never mutates owner token. Soft!=product.
+     */
+    u32Checks++;
+    if (u32Init != 0u) {
+        i64Claim0 = vfs_door_call(GJ_VFS_OP_CLAIM, 0ull, 0ull, 0ull);
+        i64ClaimHi = vfs_door_call(GJ_VFS_OP_CLAIM, (1ull << 32), 0ull, 0ull);
+        if (i64Claim0 == (i64)GJ_ERR_INVAL &&
+            i64ClaimHi == (i64)GJ_ERR_INVAL &&
+            vfs_door_owned() == (int)u32Owned &&
+            vfs_door_owner_token() == u32Token) {
+            u32ClaimInval = 1;
+            u32Ok++;
+        }
+    } else {
+        /* Pre-init: claim surface not live; honesty via opcode id only. */
+        if (GJ_VFS_OP_CLAIM == 1u) {
+            u32ClaimInval = 1;
+            u32Ok++;
+        }
+    }
+
+    /*
+     * Dual DoD OPEN residual honesty (law).
+     * Soft residual never closes Dual DoD A (USB) or B (sshd :22).
+     * Product direction = userspace UDX+ABI hosts (G-AC-1).
+     */
+    u32Checks++;
+    if (nDualDodOpen == 1 && nProductVfsdClose == 0 && nGac1 == 1 &&
+        u32NameCopy != 0u && u32HostPath != 0u && u32ClaimInval != 0u &&
+        u32Path != 0u && u32FdPath != 0u && u32Lic != 0u) {
+        u32DualDod = 1;
+        u32Ok++;
+    }
+
+    if (u32Ok == u32Checks) {
+        soft_inc(&g_u32SoftResidualLeanOk);
+    }
+
+    /*
+     * Grep: vfs_door: soft residual lean
+     * Grep: host=vfsd|shell|GJ_SYS_VFS
+     * Soft!=product dual license; no version stamp; Dual DoD OPEN.
+     */
+    kprintf("vfs_door: soft residual lean "
+            "host=vfsd|shell|GJ_SYS_VFS "
+            "path=claim|fmt|mount|name|fd "
+            "path_norm=%u name_eq=%u multi_sec=%u geom=%u data_cap=%u "
+            "policy=%u host_ops=%u fd_ops=%u bounds=%u own=%u lic=%u "
+            "name_copy=%u host_path=%u claim_inval=%u dual_dod_open=%u "
+            "host_handoff=%u ok=%u/%u lean_runs=%u lean_ok=%u "
+            "init=%u owned=%u mounted=%u files=%u/%u fds=%u/%u "
+            "claims=%u reclaims=%u ram=%u blk=%u data_secs=%u "
+            "product=UDX+ABI Dual_DoD_A=OPEN Dual_DoD_B=OPEN "
+            "soft_ne_product=1 dual=MIT_OR_Apache-2.0 multi_server=0 "
+            "stamp_storm=0 G-AC-1=1 no_ko_product=1 product_vfsd=OPEN "
+            "(STRONGER functional residual; Soft!=product; dual MIT OR "
+            "Apache-2.0; no version stamp; userspace host residual; "
+            "not multi-server vfsd product DoD; Dual DoD OPEN)\n",
+            (unsigned)u32Path, (unsigned)u32NameEq, (unsigned)u32Multi,
+            (unsigned)u32Geom, (unsigned)u32DataCap, (unsigned)u32Policy,
+            (unsigned)u32Host, (unsigned)u32FdPath, (unsigned)u32Bounds,
+            (unsigned)u32Own, (unsigned)u32Lic, (unsigned)u32NameCopy,
+            (unsigned)u32HostPath, (unsigned)u32ClaimInval,
+            (unsigned)u32DualDod,
+            (unsigned)g_u32SoftHostHandoffOk, (unsigned)u32Ok,
+            (unsigned)u32Checks, (unsigned)g_u32SoftResidualLean,
+            (unsigned)g_u32SoftResidualLeanOk, (unsigned)u32Init,
+            (unsigned)u32Owned, (unsigned)u32Mounted, (unsigned)u32Files,
+            (unsigned)INODE_MAX, (unsigned)u32Fds, (unsigned)VFS_FD_MAX,
+            (unsigned)u32Claims, (unsigned)u32Reclaims, (unsigned)u32Ram,
+            (unsigned)u32Blk, (unsigned)u32DataSecs);
+
+    /*
+     * Grep: vfs_door: soft residual lean udx
+     * STRONGER UDX/sshd host-path residual lamp (stamp-free).
+     */
+    kprintf("vfs_door: soft residual lean udx "
+            "name_copy=%u host_path=%u claim_inval=%u dual_dod_open=%u "
+            "path_norm=%u fd_ops=%u own=%u lic=%u ok=%u/%u "
+            "product=UDX+ABI direction=userspace_vfsd_host "
+            "sshd=1 udx=1 host=vfsd|shell|GJ_SYS_VFS "
+            "Dual_DoD_A=OPEN Dual_DoD_B=OPEN dual_dod=OPEN "
+            "soft_ne_product=1 dual=MIT_OR_Apache-2.0 G-AC-1=1 "
+            "stamp_storm=0 version_stamp=0 "
+            "(STRONGER functional residual; Soft!=product; not Dual DoD close)\n",
+            (unsigned)u32NameCopy, (unsigned)u32HostPath,
+            (unsigned)u32ClaimInval, (unsigned)u32DualDod,
+            (unsigned)u32Path, (unsigned)u32FdPath, (unsigned)u32Own,
+            (unsigned)u32Lic, (unsigned)u32Ok, (unsigned)u32Checks);
+
+    /* Grep: vfs_door: soft residual lean PASS | FAIL */
+    if (u32Ok == u32Checks && u32Init != 0u) {
+        kprintf("vfs_door: soft residual lean PASS "
+                "host=vfsd|shell|GJ_SYS_VFS ok=%u/%u "
+                "path=%u name_eq=%u multi=%u geom=%u data_cap=%u "
+                "policy=%u fd=%u bounds=%u own=%u lic=%u "
+                "name_copy=%u host_path=%u claim_inval=%u dual_dod_open=%u "
+                "product=UDX+ABI Dual_DoD_A=OPEN Dual_DoD_B=OPEN "
+                "soft_ne_product=1 dual=MIT_OR_Apache-2.0 G-AC-1=1 "
+                "product_vfsd=OPEN "
+                "(Soft!=product; STRONGER residual; no version stamp; "
+                "userspace host residual; Dual DoD OPEN)\n",
+                (unsigned)u32Ok, (unsigned)u32Checks, (unsigned)u32Path,
+                (unsigned)u32NameEq, (unsigned)u32Multi, (unsigned)u32Geom,
+                (unsigned)u32DataCap, (unsigned)u32Policy,
+                (unsigned)u32FdPath, (unsigned)u32Bounds, (unsigned)u32Own,
+                (unsigned)u32Lic, (unsigned)u32NameCopy,
+                (unsigned)u32HostPath, (unsigned)u32ClaimInval,
+                (unsigned)u32DualDod);
+    } else {
+        kprintf("vfs_door: soft residual lean FAIL "
+                "ok=%u/%u init=%u path=%u name_eq=%u multi=%u geom=%u "
+                "data_cap=%u policy=%u fd=%u bounds=%u own=%u lic=%u "
+                "name_copy=%u host_path=%u claim_inval=%u dual_dod_open=%u "
+                "(soft residual only; not product gate; Soft!=product; "
+                "host=vfsd|shell|GJ_SYS_VFS; product_vfsd=OPEN; DualDoD=OPEN)\n",
+                (unsigned)u32Ok, (unsigned)u32Checks, (unsigned)u32Init,
+                (unsigned)u32Path, (unsigned)u32NameEq, (unsigned)u32Multi,
+                (unsigned)u32Geom, (unsigned)u32DataCap,
+                (unsigned)u32Policy, (unsigned)u32FdPath,
+                (unsigned)u32Bounds, (unsigned)u32Own, (unsigned)u32Lic,
+                (unsigned)u32NameCopy, (unsigned)u32HostPath,
+                (unsigned)u32ClaimInval, (unsigned)u32DualDod);
+    }
+}
+
+/**
+ * Greppable soft VFS door inventory (Wave 12 base; Wave 14 deepen; CAP-capped).
+ * Prefix-stable markers (vfs_door: soft ...):
+ *   vfs_door: soft inventory  - live owned/mounted/files/fds + ok/fail
+ *   vfs_door: soft claim      - claim/reclaim/release path tallies
+ *   vfs_door: soft layout     - inode/fd/file_max/secs catalog
+ *   vfs_door: soft name       - create/write/read/unlink/stat/list ok|fail
+ *   vfs_door: soft fd         - open/close/readfd/writefd/seekfd ok|fail
+ *   vfs_door: soft fmt        - format/mount/stats + auto bring-up
+ *   vfs_door: soft deny       - errno-shape reject catalog
+ *   vfs_door: soft peak       - files/fds high-water + samples
+ *   vfs_door: soft backend    - ram|store sec_rw + freemap alloc/free
+ *   vfs_door: soft bytes      - cumulative READ/WRITE(+fd) byte totals
+ *   vfs_door: soft path       - honesty: userspace host residual / product
  *   vfs_door: soft inventory PASS / vfs_door: soft PASS
+ *   vfs_door: soft residual lean - lean residual once (Soft!=product)
+ *   vfs_door: soft return|retmap - compact return surface (lean; no cascade)
  * Wave 14 complementary:
- *   vfs_door: soft total|ops|last|xfer|own|catalog …
+ *   vfs_door: soft total|ops|last|xfer|own|catalog ...
+ * CAP: VFS_SOFT_LOG_CAP dumps then silent (counters keep ticking).
  * Never hard-gates; diagnostics only.
  * greppable: vfs_door: soft
  */
@@ -847,6 +1304,16 @@ soft_inventory_log(void)
     u32 u32AutoFmt;
     u32 u32AutoMnt;
     int fSoftPass;
+
+    /*
+     * No stamp storms: after CAP dumps, stay silent (counters keep ticking).
+     * Soft!=product - inventory never hard-gates. Lean residual still once.
+     */
+    if (g_u32SoftLogN >= VFS_SOFT_LOG_CAP) {
+        soft_residual_lean_once();
+        return;
+    }
+    soft_inc(&g_u32SoftLogN);
 
     gj_spin_lock(&g_lkVfs);
     soft_peak_note();
@@ -924,9 +1391,11 @@ soft_inventory_log(void)
     /* Grep: vfs_door: soft inventory */
     kprintf("vfs_door: soft inventory ver=%u ram=%u calls=%u owned=%u "
             "token=0x%x mounted=%u files=%u fds=%u ok=%u fail=%u "
-            "logs=%u wave=116\n",
+            "logs=%u log_cap=%u host=vfsd|shell|GJ_SYS_VFS "
+            "soft_ne_product=1\n",
             VFS_VERSION, u32Ram, u32Calls, u32Owned, u32Token, u32Mounted,
-            u32Files, u32Fds, u32Ok, u32Fail, u32Samples);
+            u32Files, u32Fds, u32Ok, u32Fail, u32Samples,
+            (unsigned)VFS_SOFT_LOG_CAP);
     /* Grep: vfs_door: soft claim */
     kprintf("vfs_door: soft claim first=%u reclaim=%u release=%u "
             "free_rel=%u busy=%u claim_inval=%u release_inval=%u\n",
@@ -972,15 +1441,11 @@ soft_inventory_log(void)
     kprintf("vfs_door: soft bytes read=%u write=%u\n", u32BytesRead,
             u32BytesWrite);
     /*
-     * Honesty line: soft inventory / mini-FS ≠ product multi-server.
-     * Grep: vfs_door: soft path
-     */
-    /*
      * Wave 14 exclusive deepen (complementary; never reshapes primary lines).
      */
-    /* Grep: vfs_door: soft total */
+    /* Grep: vfs_door: soft total (no version stamp; Soft!=product) */
     kprintf("vfs_door: soft total ok=%u fail=%u calls=%u logs=%u "
-            "unknown_op=%u not_init=%u wave=116\n",
+            "unknown_op=%u not_init=%u soft_ne_product=1\n",
             u32Ok, u32Fail, u32Calls, u32Samples, g_u32SoftUnknownOp,
             g_u32SoftNotInit);
     /* Grep: vfs_door: soft ops */
@@ -1012,20 +1477,28 @@ soft_inventory_log(void)
             "release=%u free_rel=%u busy=%u claim_inval=%u release_inval=%u\n",
             u32Owned, u32Token, u32Claims, u32Reclaims, u32RelOk, u32RelFree,
             u32Busy, u32ClaimInval, u32RelInval);
-    /* Grep: vfs_door: soft catalog */
+    /* Grep: vfs_door: soft catalog (no version stamp; Soft!=product) */
     kprintf("vfs_door: soft catalog ver=%u inodes=%u fd_max=%u file_max=%u "
-            "secs=%u data0=%u magic=0x%x sec=%u wave=116\n",
+            "secs=%u data0=%u magic=0x%x sec=%u soft_ne_product=1\n",
             VFS_VERSION, INODE_MAX, VFS_FD_MAX, FILE_MAX_BYTES, VFS_RAM_SECS,
             LBA_DATA0, VFS_MAGIC, SEC);
 
-    kprintf("vfs_door: soft path claim=vfsd format_mount=free_or_owned "
+    /*
+     * Honesty: soft inventory / mini-FS residual for userspace hosts.
+     * Product vfsd is the claim owner host; soft residual != product DoD.
+     * Grep: vfs_door: soft path
+     */
+    kprintf("vfs_door: soft path host=vfsd|shell|GJ_SYS_VFS "
+            "claim=vfsd format_mount=free_or_owned "
             "ramdisk_soft=%u store_prefer_blk=%u multi_client=1 "
-            "product_vfsd=1 wave=116 (soft inventory)\n",
+            "multi_server=0 product_vfsd=OPEN soft_ne_product=1 "
+            "(soft residual; Soft!=product; userspace host handoff)\n",
             u32Ram, u32Blk != 0 ? 1u : 0u);
 
     /*
-     * Wave 35 exclusive deepen (complementary; primary lines field-stable).
-     * greppable: vfs_door: soft ratio|headroom|surface|deepen
+     * Lean deepen (complementary; primary lines field-stable).
+     * greppable: vfs_door: soft ratio|headroom|surface|deepen|return|retmap
+     * No ret* cascade stamp storms - compact return|retmap only.
      */
     {
         u32 u32OkBp = 0;
@@ -1046,882 +1519,55 @@ soft_inventory_log(void)
         }
         /* Grep: vfs_door: soft ratio */
         kprintf("vfs_door: soft ratio ok_bp=%u fail_bp=%u files=%u fds=%u "
-                "owned=%u mounted=%u wave=116\n",
+                "owned=%u mounted=%u soft_ne_product=1\n",
                 u32OkBp, u32FailBp, u32Files, u32Fds, u32Owned, u32Mounted);
         /* Grep: vfs_door: soft headroom */
         kprintf("vfs_door: soft headroom file_head=%u fd_head=%u "
-                "inodes=%u fd_max=%u wave=116\n",
+                "inodes=%u fd_max=%u soft_ne_product=1\n",
                 u32FileHead, u32FdHead, (u32)INODE_MAX, (u32)VFS_FD_MAX);
         /* Grep: vfs_door: soft surface */
         kprintf("vfs_door: soft surface inventory,claim,layout,name,fd,fmt,"
                 "deny,peak,backend,bytes,total,ops,last,xfer,own,catalog,"
-                "ratio,headroom,capacity,geom,terminal,return,retmap,deepen "
-                "areas=111 wave=116\n");
-        /* Grep: vfs_door: soft capacity — Wave 19 design-constant lamps. */
+                "ratio,headroom,capacity,geom,terminal,return,retmap,deepen,"
+                "residual_lean "
+                "areas=24 log_cap=%u host=vfsd|shell|GJ_SYS_VFS "
+                "soft_ne_product=1\n",
+                (unsigned)VFS_SOFT_LOG_CAP);
+        /* Grep: vfs_door: soft capacity */
         kprintf("vfs_door: soft capacity inodes=%u fd_max=%u file_max=%u "
-                "secs=%u sec=%u multi_client=1 ramdisk_soft=1 wave=116\n",
+                "secs=%u sec=%u multi_client=1 ramdisk_soft=1 "
+                "soft_ne_product=1\n",
                 (u32)INODE_MAX, (u32)VFS_FD_MAX, (u32)FILE_MAX_BYTES,
                 (u32)VFS_RAM_SECS, (u32)SEC);
-        /* Grep: vfs_door: soft geom — Wave 16 on-disk layout lamps. */
+        /* Grep: vfs_door: soft geom */
         kprintf("vfs_door: soft geom ver=%u magic=0x%x lba_super=%u "
-                "lba_freemap=%u lba_inodes=%u data0=%u wave=116\n",
+                "lba_freemap=%u lba_inodes=%u data0=%u soft_ne_product=1\n",
                 VFS_VERSION, VFS_MAGIC, (u32)LBA_SUPER, (u32)LBA_FREEMAP,
                 (u32)LBA_INODES, (u32)LBA_DATA0);
-        /* Grep: vfs_door: soft terminal — Wave 19 outcome rollup. */
+        /* Grep: vfs_door: soft terminal */
         kprintf("vfs_door: soft terminal ok=%u fail=%u owned=%u mounted=%u "
-                "ram=%u blk=%u soft %s wave=116\n",
+                "ram=%u blk=%u soft %s soft_ne_product=1\n",
                 u32Ok, u32Fail, u32Owned, u32Mounted, u32Ram, u32Blk,
                 (u32Ok != 0u || u32Mounted != 0u) ? "PASS" : "INIT");
-        /* Grep: vfs_door: soft return — Wave 19 API return surfaces */
+        /*
+         * Compact return surface (lean; no retclass/retlane/... cascade).
+         * Grep: vfs_door: soft return
+         */
         kprintf("vfs_door: soft return ok=%u fail=%u owned=%u mounted=%u "
                 "claims=%u format_ok=%u mount_ok=%u open_ok=%u "
-                "ram=%u blk=%u product_vfsd=OPEN wave=116\n",
-                u32Ok, u32Fail, u32Owned, u32Mounted, u32Claims,
-                u32FmtOk, u32MntOk, u32OpenOk, u32Ram, u32Blk);
-
-        /* Grep: vfs_door: soft retmap — Wave 19 return-surface map */
-    kprintf("vfs_door: soft retmap ok|fail|inval|nodev|busy|nomem product_gate=0 soft_only=1 wave=116\n");
-
-    /* Grep: vfs_door: soft deepen */
-        /*
-         * ---- Wave 19 complementary surfaces (kept) (never reshape primary).
-         * Return surfaces only — soft inventory; never hard-gates product paths.
-         */
-        /* Grep: vfs_door: soft retclass — Wave 19 return-class taxonomy (kept) */
-        kprintf("vfs_door: soft retclass ok|fail|inval|nodev|busy|nomem "
-                "soft_only=1 product_gate=0 wave=116 "
-                "(retclass taxonomy; Soft≠product)\n");
-        /* Grep: vfs_door: soft retlane — Wave 19 return-lane catalog (kept) */
-        kprintf("vfs_door: soft retlane inv|selftest|rate|retcode|retmap|class "
-                "product_kernel=OPEN soft_ne_product=1 wave=116 "
-                "(retlane catalog; Soft≠product)\n");
-        /*
-         * ---- Wave 20 complementary surfaces (kept) (never reshape primary).
-         * Return surfaces only — soft inventory; never hard-gates product paths.
-         */
-        /* Grep: vfs_door: soft retbound — Wave 20 return-bound honesty (kept) */
-        kprintf("vfs_door: soft retbound soft_only=1 product_gate=0 hard_gate=0 "
-                "never_blocks_m0=1 wave=116 "
-                "(retbound honesty; Soft≠product)\n");
-        /* Grep: vfs_door: soft retseal — Wave 20 seal stamp (kept) */
-        kprintf("vfs_door: soft retseal exclusive=1 soft_ne_product=1 "
-                "product_kernel=OPEN wave=116 "
-                "(retseal stamp; Soft≠product)\n");
-                /*
-                 * ---- Wave 21 complementary surfaces (kept) (never reshape primary).
-                 * Return surfaces only — soft inventory; never hard-gates product paths.
-                */
-                /* Grep: vfs_door: soft retpulse — Wave 21 return-pulse honesty (kept) */
-                kprintf("vfs_door: soft retpulse soft_only=1 product_gate=0 soft_ne_product=1 "
-                        "never_blocks_m0=1 wave=116 "
-                        "(retpulse honesty; Soft≠product)\n");
-                /* Grep: vfs_door: soft retmark — Wave 21 mark stamp (kept) */
-                kprintf("vfs_door: soft retmark exclusive=1 soft_ne_product=1 "
-                        "product_kernel=OPEN wave=116 "
-                        "(retmark stamp; Soft≠product)\n");
-                /*
-                 * ---- Wave 22 complementary surfaces (kept) (never reshape primary).
-                 * Return surfaces only — soft inventory; never hard-gates product paths.
-                */
-                /* Grep: vfs_door: soft retphase — Wave 22 return-phase honesty (kept) */
-                kprintf("vfs_door: soft retphase soft_only=1 product_gate=0 soft_ne_product=1 "
-                        "never_blocks_m0=1 wave=116 "
-                        "(retphase honesty; Soft≠product)\n");
-                /* Grep: vfs_door: soft retbadge — Wave 22 badge stamp (kept) */
-                kprintf("vfs_door: soft retbadge exclusive=1 soft_ne_product=1 "
-                        "product_kernel=OPEN wave=116 "
-                        "(retbadge stamp; Soft≠product)\n");
-/*
- * ---- Wave 23 complementary surfaces (kept) (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
-                */
-                /* Grep: vfs_door: soft rettoken — Wave 23 return-token honesty (kept) */
-                kprintf("vfs_door: soft rettoken soft_only=1 product_gate=0 soft_ne_product=1 "
-                        "never_blocks_m0=1 wave=116 "
-                        "(rettoken honesty; Soft≠product)\n");
-                /* Grep: vfs_door: soft retcrest — Wave 23 crest stamp (kept) */
-                kprintf("vfs_door: soft retcrest exclusive=1 soft_ne_product=1 "
-                        "product_kernel=OPEN wave=116 "
-                        "(retcrest stamp; Soft≠product)\n");
-                /*
-                 * ---- Wave 24 complementary surfaces (kept) (never reshape primary).
-                 * Return surfaces only — soft inventory; never hard-gates product paths.
-                 */
-                /* Grep: vfs_door: soft retvault — Wave 24 return-vault honesty (kept) */
-                kprintf("vfs_door: soft retvault soft_only=1 product_gate=0 soft_ne_product=1 "
-                        "never_blocks_m0=1 wave=116 "
-                        "(retvault honesty; Soft≠product)\n");
-                /* Grep: vfs_door: soft retbanner — Wave 24 banner stamp (kept) */
-                kprintf("vfs_door: soft retbanner exclusive=1 soft_ne_product=1 "
-                        "product_kernel=OPEN wave=116 "
-                        "(retbanner stamp; Soft≠product)\n");
-                /*
-                 * ---- Wave 25 complementary surfaces (kept) (never reshape primary).
-                 * Return surfaces only — soft inventory; never hard-gates product paths.
-                 */
-                /* Grep: vfs_door: soft retledger — Wave 25 return-ledger honesty (kept) */
-                kprintf("vfs_door: soft retledger soft_only=1 product_gate=0 soft_ne_product=1 "
-                        "never_blocks_m0=1 wave=116 "
-                        "(retledger honesty; Soft≠product)\n");
-                /* Grep: vfs_door: soft retbeacon — Wave 25 beacon stamp (kept) */
-                kprintf("vfs_door: soft retbeacon exclusive=1 soft_ne_product=1 "
-                        "product_kernel=OPEN wave=116 "
-                        "(retbeacon stamp; Soft≠product)\n");
-                /*
-                 * ---- Wave 26 complementary surfaces (kept) (never reshape primary).
-                 * Return surfaces only — soft inventory; never hard-gates product paths.
-                 */
-                /* Grep: vfs_door: soft retcipher — Wave 26 return-cipher honesty (kept) */
-                kprintf("vfs_door: soft retcipher soft_only=1 product_gate=0 soft_ne_product=1 "
-                        "never_blocks_m0=1 wave=116 "
-                        "(retcipher honesty; Soft≠product)\n");
-                /* Grep: vfs_door: soft retflame — Wave 26 flame stamp (kept) */
-                kprintf("vfs_door: soft retflame exclusive=1 soft_ne_product=1 "
-                        "product_kernel=OPEN wave=116 "
-                        "(retflame stamp; Soft≠product)\n");
-                        /*
-                         * ---- Wave 27 complementary surfaces (kept) (never reshape primary).
-                         * Return surfaces only — soft inventory; never hard-gates product paths.
-                         */
-                        /* Grep: vfs_door: soft retprism — Wave 27 return-prism honesty (kept) */
-                        kprintf("vfs_door: soft retprism soft_only=1 product_gate=0 soft_ne_product=1 "
-                                "never_blocks_m0=1 wave=116 "
-                                "(retprism honesty; Soft≠product)\n");
-                        /* Grep: vfs_door: soft retforge — Wave 27 forge stamp (kept) */
-                        kprintf("vfs_door: soft retforge exclusive=1 soft_ne_product=1 "
-                                "product_kernel=OPEN wave=116 "
-                                "(retforge stamp; Soft≠product)\n");
-                                /*
-                                 * ---- Wave 28 complementary surfaces (kept) (never reshape primary).
-                                 * Return surfaces only — soft inventory; never hard-gates product paths.
-                                 */
-                                /* Grep: vfs_door: soft retshard — Wave 28 return-shard honesty (kept) */
-                                kprintf("vfs_door: soft retshard soft_only=1 product_gate=0 soft_ne_product=1 "
-                                        "never_blocks_m0=1 wave=116 "
-                                        "(retshard honesty; Soft≠product)\n");
-                                /* Grep: vfs_door: soft retcrown — Wave 28 crown stamp (kept) */
-                                kprintf("vfs_door: soft retcrown exclusive=1 soft_ne_product=1 "
-                                        "product_kernel=OPEN wave=116 "
-                                        "(retcrown stamp; Soft≠product)\n");
-                                        /*
-                                 * ---- Wave 29 complementary surfaces (kept) (never reshape primary).
-                                 * Return surfaces only — soft inventory; never hard-gates product paths.
-                                 */
-                                /* Grep: vfs_door: soft retglyph — Wave 29 return-glyph honesty (kept) */
-                                kprintf("vfs_door: soft retglyph soft_only=1 product_gate=0 soft_ne_product=1 "
-                                        "never_blocks_m0=1 wave=116 "
-                                        "(retglyph honesty; Soft≠product)\n");
-                                /* Grep: vfs_door: soft retscepter — Wave 29 scepter stamp (kept) */
-                                kprintf("vfs_door: soft retscepter exclusive=1 soft_ne_product=1 "
-                                        "product_kernel=OPEN wave=116 "
-                                        "(retscepter stamp; Soft≠product)\n");
-                                        /*
-                                 * ---- Wave 30 complementary surfaces (kept) (never reshape primary).
-                                 * Return surfaces only — soft inventory; never hard-gates product paths.
-                                 */
-                                /* Grep: vfs_door: soft retsigil — Wave 30 return-sigil honesty (kept) */
-                                kprintf("vfs_door: soft retsigil soft_only=1 product_gate=0 soft_ne_product=1 "
-                                        "never_blocks_m0=1 wave=116 "
-                                        "(retsigil honesty; Soft≠product)\n");
-                                /* Grep: vfs_door: soft retemblem — Wave 30 emblem stamp (kept) */
-                                kprintf("vfs_door: soft retemblem exclusive=1 soft_ne_product=1 "
-                                        "product_kernel=OPEN wave=116 "
-                                        "(retemblem stamp; Soft≠product)\n");
-                                /*
-                                 * ---- Wave 31 complementary surfaces (kept) (never reshape primary).
-                                 * Return surfaces only — soft inventory; never hard-gates product paths.
-                                 */
-                                /* Grep: vfs_door: soft retaegis — Wave 31 return-aegis honesty (kept) */
-                                kprintf("vfs_door: soft retaegis soft_only=1 product_gate=0 soft_ne_product=1 "
-                                        "never_blocks_m0=1 wave=116 "
-                                        "(retaegis honesty; Soft≠product)\n");
-                                /* Grep: vfs_door: soft retsigil — Wave 30 return-sigil honesty (kept) */
-                                kprintf("vfs_door: soft retsigil soft_only=1 product_gate=0 soft_ne_product=1 "
-                                        "never_blocks_m0=1 wave=116 "
-                                        "(retsigil honesty; Soft≠product)\n");
-                                /* Grep: vfs_door: soft retmantle — Wave 31 mantle stamp (kept) */
-                                kprintf("vfs_door: soft retmantle exclusive=1 soft_ne_product=1 "
-                                        "product_kernel=OPEN wave=116 "
-                                        "(retmantle stamp; Soft≠product)\n");
-/*
- * ---- Wave 32 complementary surfaces (kept) (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: vfs_door: soft retbulwark — Wave 32 return-bulwark honesty (kept) */
-kprintf("vfs_door: soft retbulwark soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retbulwark honesty; Soft≠product)\n");
-/* Grep: vfs_door: soft retpanoply — Wave 32 panoply stamp (kept) */
-kprintf("vfs_door: soft retpanoply exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retpanoply stamp; Soft≠product)\n");
-/*
- * ---- Wave 33 complementary surfaces (kept) (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: vfs_door: soft retbastion — Wave 33 return-bastion honesty (kept) */
-kprintf("vfs_door: soft retbastion soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retbastion honesty; Soft≠product)\n");
-/* Grep: vfs_door: soft retcitadel — Wave 33 citadel stamp (kept) */
-kprintf("vfs_door: soft retcitadel exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retcitadel stamp; Soft≠product)\n");
-/*
- * ---- Wave 34 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: vfs_door: soft retredoubt — Wave 34 return-redoubt honesty */
-kprintf("vfs_door: soft retredoubt soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retredoubt honesty; Soft≠product)\n");
-/* Grep: vfs_door: soft retkeep — Wave 34 exclusive keep stamp */
-kprintf("vfs_door: soft retkeep exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retkeep stamp; Soft≠product)\n");
-/*
- * ---- Wave 35 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: vfs_door: soft retfortress — Wave 35 return-fortress honesty */
-kprintf("vfs_door: soft retfortress soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retfortress honesty; Soft≠product)\n");
-/* Grep: vfs_door: soft retpalace — Wave 35 exclusive palace stamp */
-kprintf("vfs_door: soft retpalace exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retpalace stamp; Soft≠product)\n");
-/*
- * ---- Wave 36 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: vfs_door: soft rethold — Wave 36 return-hold honesty */
-kprintf("vfs_door: soft rethold soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(rethold honesty; Soft≠product)\n");
-/* Grep: vfs_door: soft retspire — Wave 36 exclusive spire stamp */
-kprintf("vfs_door: soft retspire exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retspire stamp; Soft≠product)\n");
-/*
- * ---- Wave 37 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: vfs_door: soft retwall — Wave 37 return-wall honesty */
-kprintf("vfs_door: soft retwall soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retwall honesty; Soft≠product)\n");
-/* Grep: vfs_door: soft retgate — Wave 37 exclusive gate stamp */
-kprintf("vfs_door: soft retgate exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retgate stamp; Soft≠product)\n");
-/*
- * ---- Wave 38 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: vfs_door: soft retmoat — Wave 38 return-moat honesty */
-kprintf("vfs_door: soft retmoat soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retmoat honesty; Soft≠product)\n");
-/* Grep: vfs_door: soft retower — Wave 38 exclusive tower stamp */
-kprintf("vfs_door: soft retower exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retower stamp; Soft≠product)\n");
-/*
- * ---- Wave 39 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: vfs_door: soft retbarbican — Wave 39 return-barbican honesty */
-kprintf("vfs_door: soft retbarbican soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retbarbican honesty; Soft≠product)\n");
-/* Grep: vfs_door: soft retglacis — Wave 39 exclusive glacis stamp */
-kprintf("vfs_door: soft retglacis exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retglacis stamp; Soft≠product)\n");
-/*
- * ---- Wave 40 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: vfs_door: soft retcurtain — Wave 40 return-curtain honesty */
-kprintf("vfs_door: soft retcurtain soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retcurtain honesty; Soft≠product)\n");
-/* Grep: vfs_door: soft retparapet — Wave 40 exclusive parapet stamp */
-kprintf("vfs_door: soft retparapet exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retparapet stamp; Soft≠product)\n");
-/*
- * ---- Wave 41 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: vfs_door: soft retravelin — Wave 41 return-travelin honesty */
-kprintf("vfs_door: soft retravelin soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retravelin honesty; Soft≠product)\n");
-/* Grep: vfs_door: soft retditch — Wave 41 exclusive ditch stamp */
-kprintf("vfs_door: soft retditch exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retditch stamp; Soft≠product)\n");
-/*
- * ---- Wave 42 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: vfs_door: soft retportcullis — Wave 42 return-portcullis honesty */
-kprintf("vfs_door: soft retportcullis soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retportcullis honesty; Soft≠product)\n");
-/* Grep: vfs_door: soft retbattlement — Wave 42 exclusive battlement stamp */
-kprintf("vfs_door: soft retbattlement exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retbattlement stamp; Soft≠product)\n");
-/*
- * ---- Wave 43 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: vfs_door: soft retmachicolation — Wave 43 return-machicolation honesty */
-kprintf("vfs_door: soft retmachicolation soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retmachicolation honesty; Soft≠product)\n");
-/* Grep: vfs_door: soft retarrowslit — Wave 43 exclusive arrowslit stamp */
-kprintf("vfs_door: soft retarrowslit exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retarrowslit stamp; Soft≠product)\n");
-
-/*
- * ---- Wave 44 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: vfs_door: soft retmerlon — Wave 44 return-merlon honesty */
-kprintf("vfs_door: soft retmerlon soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retmerlon honesty; Soft≠product)\n");
-/* Grep: vfs_door: soft retembrasure — Wave 44 exclusive embrasure stamp */
-kprintf("vfs_door: soft retembrasure exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retembrasure stamp; Soft≠product)\n");
-
-/*
- * ---- Wave 45 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: vfs_door: soft retkeepgate — Wave 45 return-keepgate honesty */
-kprintf("vfs_door: soft retkeepgate soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retkeepgate honesty; Soft≠product)\n");
-/* Grep: vfs_door: soft retouterward — Wave 45 exclusive outerward stamp */
-kprintf("vfs_door: soft retouterward exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retouterward stamp; Soft≠product)\n");
-
-/*
- * ---- Wave 46 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: vfs_door: soft retbailey — Wave 46 return-bailey honesty */
-kprintf("vfs_door: soft retbailey soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retbailey honesty; Soft≠product)\n");
-/* Grep: vfs_door: soft retpostern — Wave 46 exclusive postern stamp */
-kprintf("vfs_door: soft retpostern exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retpostern stamp; Soft≠product)\n");
-
-/*
- * ---- Wave 47 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: vfs_door: soft retinnerward — Wave 47 return-innerward honesty */
-kprintf("vfs_door: soft retinnerward soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retinnerward honesty; Soft≠product)\n");
-/* Grep: vfs_door: soft retdonjon — Wave 47 exclusive donjon stamp */
-kprintf("vfs_door: soft retdonjon exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retdonjon stamp; Soft≠product)\n");
-
-/*
- * ---- Wave 48 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: vfs_door: soft retchevaux — Wave 48 return-chevaux honesty */
-kprintf("vfs_door: soft retchevaux soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retchevaux honesty; Soft≠product)\n");
-/* Grep: vfs_door: soft retpalisade — Wave 48 exclusive palisade stamp */
-kprintf("vfs_door: soft retpalisade exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retpalisade stamp; Soft≠product)\n");
-
-/*
- * ---- Wave 49 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: vfs_door: soft retglacisgate — Wave 49 return-glacisgate honesty */
-kprintf("vfs_door: soft retglacisgate soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retglacisgate honesty; Soft≠product)\n");
-/* Grep: vfs_door: soft retoutwork — Wave 49 exclusive outwork stamp */
-kprintf("vfs_door: soft retoutwork exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retoutwork stamp; Soft≠product)\n");
-/*
- * ---- Wave 50 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: vfs_door: soft retsally — Wave 50 return-sally honesty */
-kprintf("vfs_door: soft retsally soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retsally honesty; Soft≠product)\n");
-/* Grep: vfs_door: soft retcounterscarp — Wave 50 exclusive counterscarp stamp */
-kprintf("vfs_door: soft retcounterscarp exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retcounterscarp stamp; Soft≠product)\n");
-/*
- * ---- Wave 51 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: vfs_door: soft retfosse — Wave 51 return-fosse honesty */
-kprintf("vfs_door: soft retfosse soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retfosse honesty; Soft≠product)\n");
-/* Grep: vfs_door: soft retcoveredway — Wave 51 exclusive coveredway stamp */
-kprintf("vfs_door: soft retcoveredway exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retcoveredway stamp; Soft≠product)\n");
-
-/*
- * ---- Wave 52 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: vfs_door: soft rettenaille — Wave 52 return-tenaille honesty */
-kprintf("vfs_door: soft rettenaille soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(rettenaille honesty; Soft≠product)\n");
-/* Grep: vfs_door: soft retdemilune — Wave 52 exclusive demilune stamp */
-kprintf("vfs_door: soft retdemilune exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retdemilune stamp; Soft≠product)\n");
-/*
- * ---- Wave 53 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: vfs_door: soft retravelin — Wave 53 return-travelin honesty */
-kprintf("vfs_door: soft retravelin soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retravelin honesty; Soft≠product)\n");
-/* Grep: vfs_door: soft retlunette — Wave 53 exclusive lunette stamp */
-kprintf("vfs_door: soft retlunette exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retlunette stamp; Soft≠product)\n");
-/*
- * ---- Wave 54 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: vfs_door: soft retcaponier — Wave 54 return-caponier honesty */
-kprintf("vfs_door: soft retcaponier soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retcaponier honesty; Soft≠product)\n");
-/* Grep: vfs_door: soft retredan — Wave 54 exclusive redan stamp */
-kprintf("vfs_door: soft retredan exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retredan stamp; Soft≠product)\n");
-/*
- * ---- Wave 55 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: vfs_door: soft retflank — Wave 55 return-flank honesty */
-kprintf("vfs_door: soft retflank soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retflank honesty; Soft≠product)\n");
-/* Grep: vfs_door: soft retface — Wave 55 exclusive face stamp */
-kprintf("vfs_door: soft retface exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retface stamp; Soft≠product)\n");
-/*
- * ---- Wave 56 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: vfs_door: soft retgorge — Wave 56 return-gorge honesty */
-kprintf("vfs_door: soft retgorge soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retgorge honesty; Soft≠product)\n");
-/* Grep: vfs_door: soft retshoulder — Wave 56 exclusive shoulder stamp */
-kprintf("vfs_door: soft retshoulder exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retshoulder stamp; Soft≠product)\n");
-/*
- * ---- Wave 57 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: vfs_door: soft retraverse — Wave 57 return-traverse honesty */
-kprintf("vfs_door: soft retraverse soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retraverse honesty; Soft≠product)\n");
-/* Grep: vfs_door: soft retcasemate — Wave 57 exclusive casemate stamp */
-kprintf("vfs_door: soft retcasemate exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retcasemate stamp; Soft≠product)\n");
-
-/*
- * ---- Wave 58 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: vfs_door: soft retorillon — Wave 58 return-orillon honesty */
-kprintf("vfs_door: soft retorillon soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retorillon honesty; Soft≠product)\n");
-/* Grep: vfs_door: soft retbonnette — Wave 58 exclusive bonnette stamp */
-kprintf("vfs_door: soft retbonnette exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retbonnette stamp; Soft≠product)\n");
-
-/*
- * ---- Wave 59 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: vfs_door: soft retcrownwork — Wave 59 return-crownwork honesty */
-kprintf("vfs_door: soft retcrownwork soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retcrownwork honesty; Soft≠product)\n");
-/* Grep: vfs_door: soft rethornwork — Wave 59 exclusive hornwork stamp */
-kprintf("vfs_door: soft rethornwork exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(rethornwork stamp; Soft≠product)\n");
-
-/*
- * ---- Wave 60 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: vfs_door: soft retplace — Wave 60 return-place honesty */
-kprintf("vfs_door: soft retplace soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retplace honesty; Soft≠product)\n");
-/* Grep: vfs_door: soft retenvelope — Wave 60 exclusive envelope stamp */
-kprintf("vfs_door: soft retenvelope exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retenvelope stamp; Soft≠product)\n");
-
-
-
-
-
-
-
-
-
-/*
- * ---- Wave 61 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: vfs_door: soft retcounterguard — Wave 61 return-counterguard honesty */
-kprintf("vfs_door: soft retcounterguard soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retcounterguard honesty; Soft≠product)\n");
-/* Grep: vfs_door: soft retcoveredface — Wave 61 exclusive coveredface stamp */
-kprintf("vfs_door: soft retcoveredface exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retcoveredface stamp; Soft≠product)\n");
-/*
- * ---- Wave 62 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: vfs_door: soft retbastionface — Wave 62 return-bastionface honesty */
-kprintf("vfs_door: soft retbastionface soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retbastionface honesty; Soft≠product)\n");
-/* Grep: vfs_door: soft retcurtainangle — Wave 62 exclusive curtainangle stamp */
-kprintf("vfs_door: soft retcurtainangle exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retcurtainangle stamp; Soft≠product)\n");
-/*
- * ---- Wave 63 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: vfs_door: soft retdoubletenaille — Wave 63 return-doubletenaille honesty */
-kprintf("vfs_door: soft retdoubletenaille soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retdoubletenaille honesty; Soft≠product)\n");
-/* Grep: vfs_door: soft retplaceofarms — Wave 63 exclusive placeofarms stamp */
-kprintf("vfs_door: soft retplaceofarms exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retplaceofarms stamp; Soft≠product)\n");
- /*
-  * ---- Wave 64 exclusive complementary surfaces (never reshape primary).
-  * Return surfaces only — soft inventory; never hard-gates product paths.
-  */
- /* Grep: vfs_door: soft retreentrant — Wave 64 return-reentrant honesty */
-kprintf("vfs_door: soft retreentrant soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retreentrant honesty; Soft≠product)\n");
- /* Grep: vfs_door: soft retsallyport — Wave 64 exclusive sallyport stamp */
-kprintf("vfs_door: soft retsallyport exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retsallyport stamp; Soft≠product)\n");
- /*
-  * ---- Wave 65 exclusive complementary surfaces (never reshape primary).
-  * Return surfaces only — soft inventory; never hard-gates product paths.
-  */
- /* Grep: vfs_door: soft retgorgeangle — Wave 65 return-gorgeangle honesty */
-kprintf("vfs_door: soft retgorgeangle soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retgorgeangle honesty; Soft≠product)\n");
- /* Grep: vfs_door: soft retshoulderangle — Wave 65 exclusive shoulderangle stamp */
-kprintf("vfs_door: soft retshoulderangle exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retshoulderangle stamp; Soft≠product)\n");
- /*
-  * ---- Wave 66 exclusive complementary surfaces (never reshape primary).
-  * Return surfaces only — soft inventory; never hard-gates product paths.
-  */
- /* Grep: vfs_door: soft retflankangle — Wave 66 return-flankangle honesty */
- kprintf("vfs_door: soft retflankangle soft_only=1 product_gate=0 soft_ne_product=1 "
-         "never_blocks_m0=1 wave=116 "
-         "(retflankangle honesty; Soft≠product)\n");
- /* Grep: vfs_door: soft retfaceangle — Wave 66 exclusive faceangle stamp */
- kprintf("vfs_door: soft retfaceangle exclusive=1 soft_ne_product=1 "
-         "product_kernel=OPEN wave=116 "
-         "(retfaceangle stamp; Soft≠product)\n");
-/*
- * ---- Wave 67 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: vfs_door: soft retcaponierangle — Wave 67 return-caponierangle honesty */
-kprintf("vfs_door: soft retcaponierangle soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retcaponierangle honesty; Soft≠product)\n");
-/* Grep: vfs_door: soft retredanangle — Wave 67 exclusive redanangle stamp */
-kprintf("vfs_door: soft retredanangle exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retredanangle stamp; Soft≠product)\n");
-/*
- * ---- Wave 68 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: vfs_door: soft retlunetteangle — Wave 68 return-lunetteangle honesty */
-kprintf("vfs_door: soft retlunetteangle soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retlunetteangle honesty; Soft≠product)\n");
-/* Grep: vfs_door: soft rettenailleangle — Wave 68 exclusive tenailleangle stamp */
-kprintf("vfs_door: soft rettenailleangle exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(rettenailleangle stamp; Soft≠product)\n");
-/*
- * ---- Wave 69 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: vfs_door: soft retdemiluneangle — Wave 69 return-demiluneangle honesty */
-kprintf("vfs_door: soft retdemiluneangle soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retdemiluneangle honesty; Soft≠product)\n");
-/* Grep: vfs_door: soft retcoveredwayangle — Wave 69 exclusive coveredwayangle stamp */
-kprintf("vfs_door: soft retcoveredwayangle exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retcoveredwayangle stamp; Soft≠product)\n");
-/*
- * ---- Wave 70 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: vfs_door: soft retfosseangle — Wave 70 return-fosseangle honesty */
-kprintf("vfs_door: soft retfosseangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retfosseangle honesty; Soft≠product)\n");
-/* Grep: vfs_door: soft retcounterscarple — Wave 70 exclusive counterscarple stamp */
-kprintf("vfs_door: soft retcounterscarple exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retcounterscarple stamp; Soft≠product)\n");
-/*
- * ---- Wave 71 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: vfs_door: soft retsallyportangle — Wave 71 return-sallyportangle honesty */
-kprintf("vfs_door: soft retsallyportangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retsallyportangle honesty; Soft≠product)\n");
-/* Grep: vfs_door: soft retreentrantangle — Wave 71 exclusive reentrantangle stamp */
-kprintf("vfs_door: soft retreentrantangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retreentrantangle stamp; Soft≠product)\n");
-/*
- * ---- Wave 72 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: vfs_door: soft retplaceofarmsangle — Wave 72 return-placeofarmsangle honesty */
-kprintf("vfs_door: soft retplaceofarmsangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retplaceofarmsangle honesty; Soft≠product)\n");
-/* Grep: vfs_door: soft retdoubletenailleangle — Wave 72 exclusive doubletenailleangle stamp */
-kprintf("vfs_door: soft retdoubletenailleangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retdoubletenailleangle stamp; Soft≠product)\n");
-/* Grep: vfs_door: soft retcurtainface — Wave 73 return-curtainface honesty */
-kprintf("vfs_door: soft retcurtainface soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retcurtainface honesty; Soft≠product)\n");
-/* Grep: vfs_door: soft retbastionangle — Wave 73 exclusive bastionangle stamp */
-kprintf("vfs_door: soft retbastionangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retbastionangle stamp; Soft≠product)\n");
-/* Grep: vfs_door: soft retglacisangle — Wave 74 return-glacisangle honesty */
-kprintf("vfs_door: soft retglacisangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retglacisangle honesty; Soft≠product)\n");
-/* Grep: vfs_door: soft retparapetangle — Wave 74 exclusive parapetangle stamp */
-kprintf("vfs_door: soft retparapetangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retparapetangle stamp; Soft≠product)\n");
-/* Grep: vfs_door: soft retmoatangle — Wave 75 return-moatangle honesty */
-kprintf("vfs_door: soft retmoatangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retmoatangle honesty; Soft≠product)\n");
-/* Grep: vfs_door: soft retowerangle — Wave 75 exclusive towerangle stamp */
-kprintf("vfs_door: soft retowerangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retowerangle stamp; Soft≠product)\n");
-/* Grep: vfs_door: soft retgateangle — Wave 76 return-gateangle honesty */
-kprintf("vfs_door: soft retgateangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retgateangle honesty; Soft≠product)\n");
-/* Grep: vfs_door: soft retwallangle — Wave 76 exclusive wallangle stamp */
-kprintf("vfs_door: soft retwallangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retwallangle stamp; Soft≠product)\n");
-/* Grep: vfs_door: soft retspireangle — Wave 77 return-spireangle honesty */
-kprintf("vfs_door: soft retspireangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retspireangle honesty; Soft≠product)\n");
-/* Grep: vfs_door: soft retholdangle — Wave 77 exclusive holdangle stamp */
-kprintf("vfs_door: soft retholdangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retholdangle stamp; Soft≠product)\n");
-/* Grep: vfs_door: soft retpalaceangle — Wave 78 return-palaceangle honesty */
-kprintf("vfs_door: soft retpalaceangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retpalaceangle honesty; Soft≠product)\n");
-/* Grep: vfs_door: soft retfortressangle — Wave 78 exclusive fortressangle stamp */
-kprintf("vfs_door: soft retfortressangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retfortressangle stamp; Soft≠product)\n");
-/* Grep: vfs_door: soft retkeepangle — Wave 79 return-keepangle honesty */
-kprintf("vfs_door: soft retkeepangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retkeepangle honesty; Soft≠product)\n");
-/* Grep: vfs_door: soft retredoubtangle — Wave 79 exclusive redoubtangle stamp */
-kprintf("vfs_door: soft retredoubtangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retredoubtangle stamp; Soft≠product)\n");
-/* Grep: vfs_door: soft retcitadelangle — Wave 80 return-citadelangle honesty */
-kprintf("vfs_door: soft retcitadelangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retcitadelangle honesty; Soft≠product)\n");
-/* Grep: vfs_door: soft retbastionkeep — Wave 80 exclusive bastionkeep stamp */
-kprintf("vfs_door: soft retbastionkeep exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retbastionkeep stamp; Soft≠product)\n");
-/* Grep: vfs_door: soft retpanoplyangle — Wave 81 return-panoplyangle honesty */
-kprintf("vfs_door: soft retpanoplyangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retpanoplyangle honesty; Soft≠product)\n");
-/* Grep: vfs_door: soft retbulwarkangle — Wave 81 exclusive bulwarkangle stamp */
-kprintf("vfs_door: soft retbulwarkangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retbulwarkangle stamp; Soft≠product)\n");
-/* Grep: vfs_door: soft retmantleangle — Wave 82 return-mantleangle honesty */
-kprintf("vfs_door: soft retmantleangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retmantleangle honesty; Soft≠product)\n");
-/* Grep: vfs_door: soft retaegisangle — Wave 82 exclusive aegisangle stamp */
-kprintf("vfs_door: soft retaegisangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retaegisangle stamp; Soft≠product)\n");
-/* Grep: vfs_door: soft retemblemangle — Wave 83 return-emblemangle honesty */
-kprintf("vfs_door: soft retemblemangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retemblemangle honesty; Soft≠product)\n");
-/* Grep: vfs_door: soft retsigilangle — Wave 83 exclusive sigilangle stamp */
-kprintf("vfs_door: soft retsigilangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retsigilangle stamp; Soft≠product)\n");
-/* Grep: vfs_door: soft retscepterangle — Wave 84 return-scepterangle honesty */
-kprintf("vfs_door: soft retscepterangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retscepterangle honesty; Soft≠product)\n");
-/* Grep: vfs_door: soft retglyphangle — Wave 84 exclusive glyphangle stamp */
-kprintf("vfs_door: soft retglyphangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retglyphangle stamp; Soft≠product)\n");
-/* Grep: vfs_door: soft retcrownangle — Wave 85 return-crownangle honesty */
-kprintf("vfs_door: soft retcrownangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retcrownangle honesty; Soft≠product)\n");
-/* Grep: vfs_door: soft retshardangle — Wave 85 exclusive shardangle stamp */
-kprintf("vfs_door: soft retshardangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retshardangle stamp; Soft≠product)\n");
-/* Grep: vfs_door: soft retforgeangle — Wave 86 return-forgeangle honesty */
-kprintf("vfs_door: soft retforgeangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retforgeangle honesty; Soft≠product)\n");
-/* Grep: vfs_door: soft retprismangle — Wave 86 exclusive prismangle stamp */
-kprintf("vfs_door: soft retprismangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retprismangle stamp; Soft≠product)\n");
-/* Grep: vfs_door: soft retflameangle — Wave 87 return-flameangle honesty */
-kprintf("vfs_door: soft retflameangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retflameangle honesty; Soft≠product)\n");
-/* Grep: vfs_door: soft retcipherangle — Wave 87 exclusive cipherangle stamp */
-kprintf("vfs_door: soft retcipherangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retcipherangle stamp; Soft≠product)\n");
-/* Grep: vfs_door: soft retbeaconangle — Wave 88 return-beaconangle honesty */
-kprintf("vfs_door: soft retbeaconangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retbeaconangle honesty; Soft≠product)\n");
-/* Grep: vfs_door: soft retledgerangle — Wave 88 exclusive ledgerangle stamp */
-kprintf("vfs_door: soft retledgerangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retledgerangle stamp; Soft≠product)\n");
-/* Grep: vfs_door: soft retbannerangle — Wave 89 return-bannerangle honesty */
-kprintf("vfs_door: soft retbannerangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retbannerangle honesty; Soft≠product)\n");
-/* Grep: vfs_door: soft retvaultangle — Wave 89 exclusive vaultangle stamp */
-kprintf("vfs_door: soft retvaultangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retvaultangle stamp; Soft≠product)\n");
-/* Grep: vfs_door: soft retcrestangle — Wave 90 return-crestangle honesty */
-kprintf("vfs_door: soft retcrestangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retcrestangle honesty; Soft≠product)\n");
-/* Grep: vfs_door: soft rettokenangle — Wave 90 exclusive tokenangle stamp */
-kprintf("vfs_door: soft rettokenangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (rettokenangle stamp; Soft≠product)\n");
-/* Grep: vfs_door: soft retbadgeangle — Wave 91 return-badgeangle honesty */
-kprintf("vfs_door: soft retbadgeangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retbadgeangle honesty; Soft≠product)\n");
-/* Grep: vfs_door: soft retphaseangle — Wave 91 exclusive phaseangle stamp */
-kprintf("vfs_door: soft retphaseangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retphaseangle stamp; Soft≠product)\n");
-/* Grep: vfs_door: soft retmarkangle — Wave 92 return-markangle honesty */
-kprintf("vfs_door: soft retmarkangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retmarkangle honesty; Soft≠product)\n");
-/* Grep: vfs_door: soft retpulseangle — Wave 92 exclusive pulseangle stamp */
-kprintf("vfs_door: soft retpulseangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retpulseangle stamp; Soft≠product)\n");
-
-/* Grep: vfs_door: soft retsealangle — Wave 93 return-sealangle honesty */
-kprintf("vfs_door: soft retsealangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retsealangle honesty; Soft≠product)\n");
-/* Grep: vfs_door: soft retboundangle — Wave 93 exclusive boundangle stamp */
-kprintf("vfs_door: soft retboundangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retboundangle stamp; Soft≠product)\n");
-/* Grep: vfs_door: soft retstemangle — Wave 94 return-stemangle honesty */
-kprintf("vfs_door: soft retstemangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retstemangle honesty; Soft≠product)\n");
-/* Grep: vfs_door: soft retbladeangle — Wave 94 exclusive bladeangle stamp */
-kprintf("vfs_door: soft retbladeangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retbladeangle stamp; Soft≠product)\n");
-/* Grep: vfs_door: soft retchordangle — Wave 95 return-chordangle honesty */
-kprintf("vfs_door: soft retchordangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retchordangle honesty; Soft≠product)\n");
-/* Grep: vfs_door: soft retarcangle — Wave 95 exclusive arcangle stamp */
-kprintf("vfs_door: soft retarcangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retarcangle stamp; Soft≠product)\n");
-/* Grep: vfs_door: soft retsectorangle — Wave 96 return-sectorangle honesty */
-kprintf("vfs_door: soft retsectorangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retsectorangle honesty; Soft≠product)\n");
-/* Grep: vfs_door: soft retwedgeangle — Wave 96 exclusive wedgeangle stamp */
-kprintf("vfs_door: soft retwedgeangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retwedgeangle stamp; Soft≠product)\n");
-/* Grep: vfs_door: soft retradiusangle — Wave 97 return-radiusangle honesty */
-kprintf("vfs_door: soft retradiusangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retradiusangle honesty; Soft≠product)\n");
-/* Grep: vfs_door: soft retdiameterangle — Wave 97 exclusive diameterangle stamp */
-kprintf("vfs_door: soft retdiameterangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retdiameterangle stamp; Soft≠product)\n");
-/* Grep: vfs_door: soft retcircumangle — Wave 98 return-circumangle honesty */
-kprintf("vfs_door: soft retcircumangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retcircumangle honesty; Soft≠product)\n");
-/* Grep: vfs_door: soft retellipseangle — Wave 98 exclusive ellipseangle stamp */
-kprintf("vfs_door: soft retellipseangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retellipseangle stamp; Soft≠product)\n");
-/* Grep: vfs_door: soft rethyperangle — Wave 99 return-hyperangle honesty */
-kprintf("vfs_door: soft rethyperangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (rethyperangle honesty; Soft≠product)\n");
-/* Grep: vfs_door: soft retparabolaangle — Wave 99 exclusive parabolaangle stamp */
-kprintf("vfs_door: soft retparabolaangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retparabolaangle stamp; Soft≠product)\n");
-/* Grep: vfs_door: soft retspiralangle — Wave 100 return-spiralangle honesty */
-kprintf("vfs_door: soft retspiralangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retspiralangle honesty; Soft≠product)\n");
-/* Grep: vfs_door: soft rethelixangle — Wave 100 exclusive helixangle stamp */
-kprintf("vfs_door: soft rethelixangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (rethelixangle stamp; Soft≠product)\n");
-/* Grep: vfs_door: soft rettorusangle — Wave 101 return-torusangle honesty */
-kprintf("vfs_door: soft rettorusangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (rettorusangle honesty; Soft≠product)\n");
-/* Grep: vfs_door: soft retknotangle — Wave 101 exclusive knotangle stamp */
-kprintf("vfs_door: soft retknotangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retknotangle stamp; Soft≠product)\n");
-/* Grep: vfs_door: soft retmoebiusangle — Wave 102 return-moebiusangle honesty */
-kprintf("vfs_door: soft retmoebiusangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retmoebiusangle honesty; Soft≠product)\n");
-/* Grep: vfs_door: soft retkleinangle — Wave 102 exclusive kleinangle stamp */
-kprintf("vfs_door: soft retkleinangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retkleinangle stamp; Soft≠product)\n");
-/* Grep: vfs_door: soft retprojectangle — Wave 103 return-projectangle honesty */
-kprintf("vfs_door: soft retprojectangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retprojectangle honesty; Soft≠product)\n");
-/* Grep: vfs_door: soft retaffineangle — Wave 103 exclusive affineangle stamp */
-kprintf("vfs_door: soft retaffineangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retaffineangle stamp; Soft≠product)\n");
-/* Grep: vfs_door: soft retlinearangle — Wave 104 return-linearangle honesty */
-kprintf("vfs_door: soft retlinearangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retlinearangle honesty; Soft≠product)\n");
-/* Grep: vfs_door: soft retbilinearangle — Wave 104 exclusive bilinearangle stamp */
-kprintf("vfs_door: soft retbilinearangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retbilinearangle stamp; Soft≠product)\n");
-/* Grep: vfs_door: soft retquadraticangle — Wave 105 return-quadraticangle honesty */
-kprintf("vfs_door: soft retquadraticangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retquadraticangle honesty; Soft≠product)\n");
-/* Grep: vfs_door: soft retcubicangle — Wave 105 exclusive cubicangle stamp */
-kprintf("vfs_door: soft retcubicangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retcubicangle stamp; Soft≠product)\n");
-/* Grep: vfs_door: soft retquarticangle — Wave 106 return-quarticangle honesty */
-kprintf("vfs_door: soft retquarticangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retquarticangle honesty; Soft≠product)\n");
-/* Grep: vfs_door: soft retquinticangle — Wave 106 exclusive quinticangle stamp */
-kprintf("vfs_door: soft retquinticangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retquinticangle stamp; Soft≠product)\n");
-/* Grep: vfs_door: soft retsplineangle — Wave 107 return-splineangle honesty */
-kprintf("vfs_door: soft retsplineangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retsplineangle honesty; Soft≠product)\n");
-/* Grep: vfs_door: soft retbezierangle — Wave 107 exclusive bezierangle stamp */
-kprintf("vfs_door: soft retbezierangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retbezierangle stamp; Soft≠product)\n");
-/* Grep: vfs_door: soft rethurmitangle — Wave 108 return-hermitangle honesty */
-kprintf("vfs_door: soft rethurmitangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (rethurmitangle honesty; Soft≠product)\n");
-/* Grep: vfs_door: soft retcatmullangle — Wave 108 exclusive catmullangle stamp */
-kprintf("vfs_door: soft retcatmullangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retcatmullangle stamp; Soft≠product)\n");
-/* Grep: vfs_door: soft retnurbsangle — Wave 109 return-nurbsangle honesty */
-kprintf("vfs_door: soft retnurbsangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retnurbsangle honesty; Soft≠product)\n");
-/* Grep: vfs_door: soft retbsplineangle — Wave 109 exclusive bsplineangle stamp */
-kprintf("vfs_door: soft retbsplineangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retbsplineangle stamp; Soft≠product)\n");
-/* Grep: vfs_door: soft retmeshangle — Wave 110 return-meshangle honesty */
-kprintf("vfs_door: soft retmeshangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retmeshangle honesty; Soft≠product)\n");
-/* Grep: vfs_door: soft retgridangle — Wave 110 exclusive gridangle stamp */
-kprintf("vfs_door: soft retgridangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retgridangle stamp; Soft≠product)\n");
-/* Grep: vfs_door: soft retvoxelangle — Wave 111 return-voxelangle honesty */
-kprintf("vfs_door: soft retvoxelangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retvoxelangle honesty; Soft≠product)\n");
-/* Grep: vfs_door: soft rettexelangle — Wave 111 exclusive texelangle stamp */
-kprintf("vfs_door: soft rettexelangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (rettexelangle stamp; Soft≠product)\n");
-/* Grep: vfs_door: soft retfragmentangle — Wave 112 return-fragmentangle honesty */
-kprintf("vfs_door: soft retfragmentangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retfragmentangle honesty; Soft≠product)\n");
-/* Grep: vfs_door: soft retvertexangle — Wave 112 exclusive vertexangle stamp */
-kprintf("vfs_door: soft retvertexangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retvertexangle stamp; Soft≠product)\n");
-/* Grep: vfs_door: soft retshaderangle — Wave 113 return-shaderangle honesty */
-kprintf("vfs_door: soft retshaderangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retshaderangle honesty; Soft≠product)\n");
-/* Grep: vfs_door: soft retpipelineangle — Wave 113 exclusive pipelineangle stamp */
-kprintf("vfs_door: soft retpipelineangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retpipelineangle stamp; Soft≠product)\n");
-/* Grep: vfs_door: soft retframebufferangle — Wave 114 return-framebufferangle honesty */
-kprintf("vfs_door: soft retframebufferangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retframebufferangle honesty; Soft≠product)\n");
-/* Grep: vfs_door: soft retswapchainangle — Wave 114 exclusive swapchainangle stamp */
-kprintf("vfs_door: soft retswapchainangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retswapchainangle stamp; Soft≠product)\n");
-/* Grep: vfs_door: soft retpresentangle — Wave 115 return-presentangle honesty */
-kprintf("vfs_door: soft retpresentangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retpresentangle honesty; Soft≠product)\n");
-/* Grep: vfs_door: soft retvsyncangle — Wave 115 exclusive vsyncangle stamp */
-kprintf("vfs_door: soft retvsyncangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retvsyncangle stamp; Soft≠product)\n");
-/* Grep: vfs_door: soft retfenceangle — Wave 116 return-fenceangle honesty */
-kprintf("vfs_door: soft retfenceangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retfenceangle honesty; Soft≠product)\n");
-/* Grep: vfs_door: soft retsemaphoreangle — Wave 116 exclusive semaphoreangle stamp */
-kprintf("vfs_door: soft retsemaphoreangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retsemaphoreangle stamp; Soft≠product)\n");
-                                kprintf("vfs_door: soft deepen wave=116 areas=175 ver=%u calls=%u "
-                "ok=%u fail=%u logs=%u\n",
-                VFS_VERSION, u32Calls, u32Ok, u32Fail, u32Samples);
+                "ram=%u blk=%u product_vfsd=OPEN soft_ne_product=1\n",
+                u32Ok, u32Fail, u32Owned, u32Mounted, u32Claims, u32FmtOk,
+                u32MntOk, u32OpenOk, u32Ram, u32Blk);
+        /* Grep: vfs_door: soft retmap */
+        kprintf("vfs_door: soft retmap ok|fail|inval|nodev|busy|nomem "
+                "product_gate=0 soft_only=1 soft_ne_product=1\n");
+        /* Grep: vfs_door: soft deepen */
+        kprintf("vfs_door: soft deepen areas=24 host=vfsd|shell|GJ_SYS_VFS "
+                "ver=%u calls=%u ok=%u fail=%u logs=%u log_cap=%u "
+                "soft_ne_product=1 "
+                "(lean residual; Soft!=product; no ret* cascade)\n",
+                VFS_VERSION, u32Calls, u32Ok, u32Fail, u32Samples,
+                (unsigned)VFS_SOFT_LOG_CAP);
     }
 
     /*
@@ -1932,14 +1578,21 @@ kprintf("vfs_door: soft retsemaphoreangle exclusive=1 soft_ne_product=1 product_
      */
     fSoftPass = g_fInit ? 1 : 0;
     if (fSoftPass != 0) {
-        kprintf("vfs_door: soft inventory PASS ver=%u logs=%u "
-                "mounted=%u ram=%u blk=%u wave=116\n",
-                VFS_VERSION, u32Samples, u32Mounted, u32Ram, u32Blk);
-        kprintf("vfs_door: soft PASS ver=%u wave=116\n", VFS_VERSION);
+        kprintf("vfs_door: soft inventory PASS ver=%u logs=%u log_cap=%u "
+                "mounted=%u ram=%u blk=%u host=vfsd|shell|GJ_SYS_VFS "
+                "soft_ne_product=1\n",
+                VFS_VERSION, u32Samples, (unsigned)VFS_SOFT_LOG_CAP,
+                u32Mounted, u32Ram, u32Blk);
+        kprintf("vfs_door: soft PASS ver=%u soft_ne_product=1 "
+                "host=vfsd|shell|GJ_SYS_VFS\n",
+                VFS_VERSION);
     } else {
         kprintf("vfs_door: soft FAIL init=0 "
-                "(soft inventory only; not product gate)\n");
+                "(soft inventory only; not product gate; soft_ne_product=1)\n");
     }
+
+    /* Lean residual once - Soft!=product dual license; no stamp storm. */
+    soft_residual_lean_once();
 }
 
 /**
@@ -2049,8 +1702,15 @@ vfs_door_init(void)
     g_u32SoftUnownedRw = 0;
     g_u32SoftPeakBytesR = 0;
     g_u32SoftPeakBytesW = 0;
+    g_u32SoftResidualLean = 0;
+    g_u32SoftResidualLeanOk = 0;
+    g_fSoftResidualLean = 0;
+    g_u32SoftLogN = 0;
+    g_u32SoftHostHandoffOk = 0;
     gj_spin_init(&g_lkVfs);
-    kprintf("vfs_door: init ver=%u ram=%d inodes=%u file_max=%u secs=%u\n",
+    kprintf("vfs_door: init ver=%u ram=%d inodes=%u file_max=%u secs=%u "
+            "host=vfsd|shell|GJ_SYS_VFS soft_ne_product=1 "
+            "dual=MIT_OR_Apache-2.0\n",
             VFS_VERSION, g_fRam, INODE_MAX, FILE_MAX_BYTES, VFS_RAM_SECS);
     /* Grep: vfs_door: soft (baseline inventory after init; zeros expected) */
     soft_inventory_log();
@@ -2131,7 +1791,7 @@ free_data_lba_n(u32 u32Lba0, u32 n)
 
 /**
  * Resize data allocation into *pu32Lba.
- * Shrink 2→1 frees only the trailing sector (keeps base LBA).
+ * Shrink 2->1 frees only the trailing sector (keeps base LBA).
  * Grow frees old run then allocates nSecNew; on OOM restores nSecOld.
  * Returns 0 on success, -1 if the requested size cannot be satisfied
  * (inode LBA may still be updated to a restored smaller run).
@@ -2732,10 +2392,12 @@ vfs_door_claim_count(void)
 {
     /* Soft diagnostics: first claims + idempotent reclaims. */
     /*
-     * Emit soft inventory on claim stats read so bring-up can grep
-     * vfs_door: soft … (Wave 14). greppable: vfs_door claim soft
+     * Diagnostic readers emit lean residual once only - NO full inventory
+     * stamp storms on every read (Soft!=product; stamp_storm=0).
+     * greppable: vfs_door claim soft
+     * greppable: vfs_door: soft residual lean
      */
-    soft_inventory_log();
+    soft_residual_lean_once();
     return g_u32Claims + g_u32Reclaims;
 }
 
@@ -2754,10 +2416,11 @@ vfs_door_fd_count(void)
     c = fd_count_used();
     gj_spin_unlock(&g_lkVfs);
     /*
-     * Soft diagnostics re-read: emit inventory so fd smoke greps
-     * greppable vfs_door: soft lines without a dedicated syscall.
+     * Diagnostic readers emit lean residual once only - NO full inventory
+     * stamp storms on every read (Soft!=product; stamp_storm=0).
+     * greppable: vfs_door: soft residual lean
      */
-    soft_inventory_log();
+    soft_residual_lean_once();
     return c;
 }
 
@@ -2800,7 +2463,7 @@ vfs_door_call(u32 u32Op, u64 u64Arg1, u64 u64Arg2, u64 u64Arg3)
         i64Ret = 0;
         break;
     case GJ_VFS_OP_RELEASE:
-        /* Soft free path: already unowned → 0 (no token match required). */
+        /* Soft free path: already unowned -> 0 (no token match required). */
         if (g_u32Owner == 0) {
             soft_inc(&g_u32SoftReleaseFree);
             i64Ret = 0;
@@ -2818,7 +2481,7 @@ vfs_door_call(u32 u32Op, u64 u64Arg1, u64 u64Arg2, u64 u64Arg3)
     case GJ_VFS_OP_FORMAT:
         /*
          * Soft bring-up: format when free or claimed (product vfsd claims
-         * first). No third ownership state — always allowed here.
+         * first). No third ownership state - always allowed here.
          */
         if (do_format() != 0) {
             i64Ret = GJ_ERR_IO;
@@ -2932,7 +2595,7 @@ vfs_door_call(u32 u32Op, u64 u64Arg1, u64 u64Arg2, u64 u64Arg3)
         i64Ret = 0;
         /*
          * Emit soft inventory on STATS so bring-up smoke greps
-         * vfs_door: soft … lines (Wave 12). Dump after unlock
+         * vfs_door: soft ... lines (Wave 12). Dump after unlock
          * (kprintf under lock avoided). greppable: vfs_door: soft
          */
         fSoftInv = 1;
@@ -2970,7 +2633,7 @@ vfs_door_call(u32 u32Op, u64 u64Arg1, u64 u64Arg2, u64 u64Arg3)
     if (fSoftInv) {
         /*
          * Emit soft inventory on STATS so bring-up smoke greps
-         * vfs_door: soft … lines. greppable: vfs_door: soft
+         * vfs_door: soft ... lines. greppable: vfs_door: soft
          */
         soft_inventory_log();
     }

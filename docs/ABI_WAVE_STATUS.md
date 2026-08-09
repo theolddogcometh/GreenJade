@@ -2,7 +2,7 @@
 
 | Field | Value |
 |-------|--------|
-| **As of** | 2026-08-04 lab panel/serial: `PROBE SOFT` · `NET R0 B132` · hybrid ON · `L2 BR 0` · USB MSC **NOT READY** · xHCI **SKIP BUILTIN**; **parallel goals** (TODO Current track): net FS ping · USB FS MSC · NIC hybrid · USB module · DDI/UDX; Soft ≠ product · **G-AC-1** |
+| **As of** | 2026-08-08 · flash bar **v2026.08.04.93** · Dual DoD ([TODO.md](TODO.md) Current track): **A** Linux-shaped **USB UDX OPEN** · **B** Linux-shaped **NIC UDX OPEN** (not freestanding close); freestanding class **SKIP** default; soft **SKIP exec all .ko** (`freestanding_no_exec`); eng residual: hybrid **SOFT gate0** / prior freestanding ICMP / R0–R1 / soft listen **:22** ≠ product; **MEM_PLACE** Option A soft + **PURE_C_CONCURRENCY** house rules; NIC product residual dig in flight; Soft ≠ product · **G-AC-1** |
 | **Law** | Dual **MIT OR Apache-2.0** only; **no GPL** in tree; **G-AC-1** — **not** Linux `.ko`; **Linux-SHAPED UDX** only |
 | **Normative pivot** | [ABI_FIRST_PIVOT.md](ABI_FIRST_PIVOT.md) |
 | **Coding backlog** | [TODO.md](TODO.md) § *Current track* |
@@ -14,46 +14,104 @@
 | **Module path** | [LINUX_MODULE_PATH.md](LINUX_MODULE_PATH.md) — soft loader / staged `.ko`; **not** product AC |
 | **pci_dev plan** | [PCI_DEV_SOFT_LAYOUT.md](PCI_DEV_SOFT_LAYOUT.md) — hostish **0xb40** Strategy A (real probe soft PASS) |
 
-**Honesty rule:** greppable soft PASS / scaffold / soft bridge ≠ product DoD. Bar3: [STEAM_BAR3_STATUS.md](STEAM_BAR3_STATUS.md). T0 product net = **virtio**. Freestanding `xhci_msc` / `rtl8168` = **lab soft only**. Soft `NETDEV SOFT ≥1` ≠ TX/RX. Soft L2 bridge ON ≠ freestanding MMIO handoff. Real probe `ST=0` ≠ product datapath. **G-AC-1:** staged / soft-loaded Linux `.ko` ≠ product claim. **Soft ≠ product.**
+**Honesty rule:** greppable soft PASS / scaffold / soft bridge ≠ product DoD. Dual laptop DoD (**A** Linux-shaped USB UDX · **B** Linux-shaped NIC UDX) stays **OPEN** until DUT proof — soft lamps do not close either. Bar3: [STEAM_BAR3_STATUS.md](STEAM_BAR3_STATUS.md). T0 product net = **virtio**. Freestanding `xhci_msc` / `rtl8168` = **SKIP default** (not product; not dual-DoD close). Soft `NETDEV SOFT ≥1` ≠ TX/RX. Soft L2 bridge ON ≠ freestanding MMIO handoff. Real probe `ST=0` ≠ product datapath. Soft listen **:22** ≠ host banner ≠ DoD **B** close. **G-AC-1:** staged / soft-loaded Linux `.ko` ≠ product claim. Soft **SKIP exec** all `.ko` (`freestanding_no_exec`) ≠ product driver path. **Soft ≠ product.** No test-panel photo IDs in public docs.
+
+**G-AC-1 restated (2026-08-06):** **No Linux `.ko` binary runs in the kernel** as product. Product drivers = **userspace** Linux-shaped hosts over **hot + cold** ABI / DDI·UDX. Soft kernel path with **`freestanding_no_exec`** = eng residual (no in-kernel `.ko` init), **not** “never use Linux drivers.” In-kernel “r8169 owns the wire” is **not** product AC. Freestanding rtl/USB are **demoted** (default **SKIP**) — Dual DoD **B** is **not** freestanding net climb; close only via UDX NIC bind/wire. See [TODO.md](TODO.md) · [ABI_FIRST_PIVOT.md](ABI_FIRST_PIVOT.md).
 
 ---
 
-## Wave note — 2026-08-04 (parallel goals; lab panel/serial)
+## Wave note — 2026-08-08 · flash bar **v2026.08.04.93** (ABI/UDX Dual DoD; freestanding demoted)
 
-**Parallel (TODO Current track):** (1) net FS ping **blocking** (2) USB FS MSC (3) NIC hybrid (4) USB module (5) DDI/UDX. Soft ≠ product · **G-AC-1** · dual **MIT OR Apache-2.0**.
+**Dual DoD (normative: [TODO.md](TODO.md) § Current track):** **A** Linux-shaped **USB** via **UDX/DDI** (`xhci_udx` …) **OPEN**. **B** Linux-shaped **NIC** via **UDX/DDI** (`rtl8168_udx` …) **OPEN** until userspace host binds `10ec:8168` and owns wire (lab IP / stack / sshd). **Not** freestanding MSC / freestanding rtl R-climb / in-kernel `.ko` wire. Soft ≠ product · **G-AC-1** · dual **MIT OR Apache-2.0**.
 
-### Current lamps
+**Progress note (Soft≠product):** **MEM_PLACE** Option A soft residual landed · **PURE_C_CONCURRENCY** house rules codified · Dual DoD **A/B still OPEN** · NIC product residual dig **in flight** (not freestanding climb; not Dual DoD close).
+
+### Image identity
+
+| Item | Fact |
+|------|------|
+| **STATUS title / flash bar** | **STATUS (static) v2026.08.04.93** (fly this cut) |
+| **Prior soft-land stamp** | **v2026.08.04.16** (soft SKIP exec all `.ko` / `freestanding_no_exec`) — eng residual notes below |
+| **Macro** | `GJ_IMAGE_VERSION` in `kernel/include/gj/config.h` (override at build if needed) |
+| **Serial** | `main: image version=…` |
+| **Operator use** | Confirm DUT flash matches the expected cut before claiming lamps or DoD progress |
+| **Next stamp** | **No invent next N** — bump only on real flashable cut |
+
+### DUT STATUS (fly this cut — aligns [TODO.md](TODO.md) Current track)
+
+| Item | DUT / fly status |
+|------|------------------|
+| **Flash bar** | **STATUS (static) v2026.08.04.93** |
+| **Soft ≠ product** | Soft lamps ≠ product close |
+| **G-AC-1** | No Linux `.ko` in-kernel as product |
+| **Freestanding rtl** | **SKIP** (`GJ_RTL8168_PROBE=0`) — not Dual DoD **B** |
+| **Freestanding USB** | **SKIP** (`GJ_XHCI_MSC_PROBE=0`) — not Dual DoD **A** |
+| **Soft `.ko` init** | **SKIP exec** all staged `.ko` (`freestanding_no_exec`) |
+| **Dual DoD A** | **UDX product OPEN** (`xhci_udx` + DDI) |
+| **Dual DoD B** | **UDX product OPEN** (`rtl8168_udx` + DDI; wire / stack / sshd) |
+| **T0 product net** | **virtio-net** until UDX owns laptop wire |
+| **Bar3** | [STEAM_BAR3_STATUS.md](STEAM_BAR3_STATUS.md) only (**OPEN**) |
+
+### Stamp **v2026.08.04.16** (prior soft-land cut; fly flash bar **v2026.08.04.93**)
+
+| Item | Fact |
+|------|------|
+| **soft SKIP exec all .ko** | Soft path **SKIP exec** of **all** staged Linux **`.ko`** — reason/mode **`freestanding_no_exec`**; **G-AC-1**; not product AC |
+| **Dual DoD A/B** | Both **OPEN** until DUT proof |
+| **Docs** | No test-panel photo IDs |
+| **Claim** | **Soft ≠ product** · **G-AC-1** |
+
+### Prior stamp **v2026.08.04.7** (superseded soft lands)
+
+| Item | Fact |
+|------|------|
+| **TX short-frame BM/slot** | Freestanding TX short-frame BM/slot path |
+| **ICMP multi-try** | Multi-try ICMP for re-verify after flash (earlier 0% once still stands; ≠ continuous product) |
+| **soft listen :22** | Soft listen on **:22** — **not** host banner; **not** Dual DoD **B** close (DoD **B** = UDX NIC) |
+| **soft dep virtual usbcore/scsi_mod** | Virtual soft deps for USB/SCSI module seed (DoD **A** soft only) |
+| **xHCI GET_CONFIG soft-align** | Stage-15 GET_CONFIG soft-align on xHCI path |
+| **hold14 freestanding R mirror** | hold14 freestanding R mirror |
+| **hold6 force refresh** | hold6 force refresh |
+| **Dual DoD A/B** | Both **OPEN** until DUT proof |
+| **Docs** | No test-panel photo IDs |
+| **Claim** | **Soft ≠ product** · **G-AC-1** |
+
+### Current lamps / net honesty
 
 | Lamp | Value |
 |------|--------|
-| **PROBE** | `PROBE SOFT` |
-| **NET** | `R0 B132` (not live RX path) |
-| **hybrid** | ON |
-| **hold14** | `L2 BR 0` |
-| **USB MSC** | **NOT READY** |
-| **xHCI** | **SKIP BUILTIN** |
+| **PROBE** | Often `PROBE SOFT` at **gate0** (EMU; no REAL BAR for 8168) — soft eng residual |
+| **NET** | Eng residual: recent `R0`/`R1`; earlier freestanding **ICMP PROVEN** once. **≠** Dual DoD **B** close. Product wire = **UDX NIC** |
+| **hybrid** | **SOFT gate0** eng residual when freestanding opt-in; default freestanding **SKIP** (`GJ_RTL8168_PROBE=0`) |
+| **soft init** | **SKIP exec all .ko** (`freestanding_no_exec`) — **G-AC-1** |
+| **hold6** | force refresh (prior .7) — eng residual |
+| **hold14 / L2 BR** | freestanding R mirror (prior .7) — **not** product path |
+| **USB MSC freestanding** | Default **SKIP**; **not** DoD **A** close. DoD **A** = **`xhci_udx`** + DDI |
+| **xHCI freestanding** | **SKIP BUILTIN** / default probe **0** — demoted residual |
+| **UDX hosts** | `rtl8168_udx` / `xhci_udx` skeletons in tree; product TX/RX · BOT **OPEN** (Dual DoD **A/B**) |
+| **sshd :22** | soft listen **:22** eng residual; host banner on laptop wire closes only with **UDX NIC** (DoD **B**) |
 
-### Prior proven (hybrid 4a eng)
+### Prior proven (hybrid 4a eng + ICMP)
 
 | Lamp | Value |
 |------|--------|
 | **NETDEV** | `NETDEV SOFT 1` |
-| **PROBE** | `PROBE 10EC:8168 REAL` · `REG=1 MATCH=1 ST=0` |
-| **ksym** | **N=295** |
+| **PROBE** | `PROBE 10EC:8168 REAL` · `REG=1 MATCH=1 ST=0` (when REAL gated on) |
+| **ksym** | **N=295** (was **N=289**) |
 | **MOD** | `MOD R8169 INIT=0` |
-| **hold14** | **`L2 BR RX=2 TX=0`** (live; RX≡`R2`) |
+| **hold14** | **`L2 BR RX=2 TX=0`** when RX live; freestanding R mirror since **v2026.08.04.7** |
 | **hold15** | **`HYBRID WIRE=FS SOFT=R8169`** |
-| **NET** | `10.200.125.50 UP T4/F0/B924/R2` |
+| **NET (earlier)** | `10.200.125.50` + freestanding **ICMP PROVEN** |
 | **xHCI** | `MOD XHCI PCI SKIP BUILTIN` |
 
 | Item | Fact |
 |------|------|
-| **Proven HW** | **Hybrid 4a eng PASS** — Linux soft r8169 + freestanding wire + L2 RX live (`HYBRID WIRE=FS SOFT=R8169` · `L2 BR RX=2`) |
-| **Current lab** | SOFT probe · L2 BR 0 · MSC NOT READY; ping blocking |
-| **Prior** | REAL+SOFT1 stable (ksym was **N=289**) |
-| **Not proven** | Full `.ko` wire (4b); product AC; USB MSC stick; freestanding ping this boot |
-| **Next** | Five parallel goals — not single-threaded 4b-only |
-| **Claim** | **Soft ≠ product.** Hybrid eng ≠ product / bar3. **G-AC-1.** |
+| **Earlier HW** | Freestanding **ICMP** + hybrid 4a eng (historical; freestanding demoted from product track) |
+| **Current track** | Flash bar **v2026.08.04.93**; Dual DoD **A/B** = **UDX OPEN**; freestanding class **SKIP**; soft **SKIP exec** all **`.ko`** (`freestanding_no_exec`); MEM_PLACE Option A soft + PURE_C house rules; NIC residual dig in flight |
+| **Prior soft** | REAL+SOFT1 stable when REAL gated; ksym N=289→295 — eng residual only |
+| **Not proven / not product** | Full `.ko` wire (4b); freestanding rtl/USB as product; UDX product TX/RX · BOT; sshd **:22** on laptop via UDX; soft listen ≠ product; soft **SKIP exec** `.ko` ≠ product driver path |
+| **Next** | Dual DoD **A** `xhci_udx` + **B** `rtl8168_udx` over hot+cold ABI / DDI caps — **not** freestanding R-climb / 4b thrash |
+| **Claim** | **Soft ≠ product.** Hybrid eng ≠ product / bar3. Freestanding ≠ Dual DoD close. **G-AC-1.** |
 
 ### Prior proven + regression (same week)
 
@@ -87,10 +145,10 @@ Also: boot/runtime **bar3 honesty spam** stripped from kprintf → [STEAM_BAR3_S
 | `rtl8168_udx` clean-room skeleton | Yes | **Soft class host** | **No** product TX/RX |
 | `xhci_udx` clean-room skeleton | Yes | **Soft class host** | **No** product BOT/MSC |
 | virtio-net / virtio-blk T0 | Yes | Product T0 path | CI/smoke gate |
-| In-kernel `xhci_msc` | Yes | Lab soft scaffold | **Never** T1 from stage count |
-| In-kernel `rtl8168` | Yes | Lab soft only | **Never** T0 product net |
+| In-kernel `xhci_msc` | Yes | Freestanding residual; default **SKIP** | **Never** Dual DoD **A** / T1 from stage count |
+| In-kernel `rtl8168` | Yes | Freestanding residual; default **SKIP** | **Never** Dual DoD **B** / T0 product net |
 | Linux `.ko` / GPL drivers | **Forbidden** as product AC | **G-AC-1** | **Never** bar3-by-`.ko` — UDX shape for product |
-| Soft module path (r8169) | Yes | **Soft eng track** | REAL+SOFT1 stable; waves 1–3 code land; freestanding owns MMIO at gate0; **D7 OPEN** |
+| Soft module path (r8169) | Yes | **Soft eng residual** | REAL+SOFT1 lamps; **not** product AC; **D7** eng OPEN only |
 | Soft firmware ksym | Yes | **Soft eng** | `-ENOENT` + null fw; **≠** real `.fw` load |
 | Hostish `pci_dev` **0xb40** | Soft PASS probe | **REAL+SOFT1 stable** | next = gate1 sole-owner → Option B / phase4 |
 | D4 media boot | Yes | **PARTIAL** | ESP+UEFI `source=media`; embed fallback; await lab panel/serial for `source=media` |
@@ -212,12 +270,12 @@ Also: boot/runtime **bar3 honesty spam** stripped from kprintf → [STEAM_BAR3_S
 | Dual MIT OR Apache-2.0 | Project license |
 | No GPL source in GreenJade tree | Enforced by policy |
 | No Linux `.ko` product acceptance criterion | **G-AC-1** — forbidden; product = **Linux-SHAPED UDX** |
-| T0 net product | **virtio-net** only |
-| `xhci_msc` / freestanding USB MSC | Soft/lab scaffold |
-| `rtl8168` in-kernel | Soft/lab only — not product NIC |
-| `rtl8168_udx` / `xhci_udx` | Clean-room **soft skeletons** — not product TX/RX/BOT |
-| Product TX/RX · BOT · live IRQ | **OPEN** |
-| Linux inventory media PASS | Operator DUT map only ≠ freestanding T1 |
+| T0 net product | **virtio-net** until UDX owns real HW |
+| `xhci_msc` / freestanding USB MSC | Default **SKIP** — demoted residual; **not** Dual DoD **A** |
+| `rtl8168` in-kernel freestanding | Default **SKIP** — demoted residual; **not** Dual DoD **B** |
+| `rtl8168_udx` / `xhci_udx` | Clean-room **soft skeletons** — product TX/RX/BOT **OPEN** (Dual DoD A/B) |
+| Product TX/RX · BOT · live IRQ | **OPEN** (UDX + DDI caps) |
+| Linux inventory media PASS | Operator DUT map only ≠ freestanding T1 · ≠ Dual DoD close |
 
 ---
 
@@ -239,10 +297,10 @@ Order matches [ABI_FIRST_PIVOT.md](ABI_FIRST_PIVOT.md). Soft scaffolds **already
 |---|------|---------|-----------|
 | M1 | Soft netdev bind | **`NETDEV SOFT 1`** | Soft done |
 | M2 | Hostish real probe | **PASS** REAL+SOFT1 stable | Soft done; soft ≠ product |
-| M3 | **D7** MMIO handoff / datapath | phase0 live; 1–3 stubs gate0; reverse TX soft; freestanding owns MMIO | **Next:** gate1 sole-owner · Option B ndo_open · phase4 wire |
-| M4 | Soft firmware | `-ENOENT` null fw | Real `.fw` load |
+| M3 | **D7** MMIO handoff / datapath | Eng residual only; freestanding demoted | **Not** Dual DoD close; product wire = UDX NIC |
+| M4 | Soft firmware | `-ENOENT` null fw | Eng residual |
 | M5 | D4 media | **PARTIAL** `source=media` + embed | await lab panel/serial; GJ-PERSIST ext4 still OPEN |
-| M6 | xHCI `.ko` | **SKIP builtin** | Optional; not blocking NIC |
+| M6 | xHCI / r8169 `.ko` in-kernel | **G-AC-1** forbid as product | Product = UDX hosts only |
 
 **Already soft-landed (deepen, don’t invent):**
 
@@ -271,21 +329,21 @@ Order matches [ABI_FIRST_PIVOT.md](ABI_FIRST_PIVOT.md). Soft scaffolds **already
 ### 5.2 Wave D short DoD vs remaining
 
 ```text
-WAVE D + SOFT BIND DONE              STILL OPEN
+WAVE D + SOFT BIND DONE              STILL OPEN (Dual DoD A/B = UDX)
 ──────────────────────────────       ────────────────────────────────
-GJ_SYS_DDI=103 (ddi_door.c)          Product TX/RX (rtl8168_udx / .ko)
-Real soft PCI scan (devmgr_soft)     Product xHCI BOT/MSC (xhci_udx)
+GJ_SYS_DDI=103 (ddi_door.c)          Product TX/RX (`rtl8168_udx` UDX)
+Real soft PCI scan (devmgr_soft)     Product xHCI BOT/MSC (`xhci_udx`)
 UDX SCAN/GET/OPEN/MAP_BAR bind       Live IRQ / kernel notify product
 vmm_map_user_device (user MMIO)      Full CNode MMIO/IRQ/DMA cap mint
 Clean-room rtl8168_udx + xhci_udx    Multi-server devmgr match graph
-r8169 NETDEV SOFT 1                  Net/USB datapath (TX/RX · BOT)
-PROBE 10ec:8168 REAL ST=0            **D7** net datapath / MMIO handoff
-REG=1 MATCH=1 (prior EMU)            Freestanding still owns MMIO
+r8169 NETDEV SOFT 1 (eng residual)   Net/USB datapath via UDX (TX/RX · BOT)
+PROBE 10ec:8168 REAL ST=0 (eng)      Dual DoD B: UDX owns wire / stack / sshd
+REG=1 MATCH=1 (prior EMU eng)        Dual DoD A: UDX USB host path
 G-AC-1: UDX shape, not .ko product   bar3; G-PERS product default
-Soft laptop smoke lamps              Product sshd on laptop NIC
+Soft laptop smoke lamps              Freestanding class = SKIP (demoted)
 ```
 
-*Secondary (explicit non-gaps for thrash): freestanding xHCI stage count and rtl8168 OWN recovery are **not** product bars under this pivot.*
+*Secondary (explicit non-gaps for thrash): freestanding xHCI stage count, rtl8168 OWN recovery, freestanding :22 climb, and in-kernel `.ko` wire are **not** product bars / Dual DoD close under this pivot.*
 
 ---
 

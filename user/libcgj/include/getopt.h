@@ -18,6 +18,15 @@
  * Non-goals
  * ---------
  * Full argp (see <argp.h>) feature parity in this header.
+ *
+ * Soft residual (C2 libcgj getopt.h; Soft!=product; G-AC-1; Dual DoD A/B OPEN):
+ *   soft     = getopt/getopt_long/getopt_long_only + optarg/optind/opterr/optopt
+ *              + struct option; GNU argv permutation expected by tools
+ *   product  = UDX/DDI + hot/cold ABI hosts; not freestanding class; not .ko AC
+ *   honesty  = CLI parse soft != product argp completeness; agent PASS != Dual
+ *              DoD close; stamp-free bar honesty (no version stamp)
+ *   law      = dual MIT OR Apache-2.0; no GPL; H2 no stamp storms
+ * greppable: libcgj: getopt soft residual Soft!=product
  */
 #pragma once
 

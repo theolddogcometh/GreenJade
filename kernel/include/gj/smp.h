@@ -14,7 +14,7 @@
  *   3. Publish online inventory for affinity, IPI resched, TLB shootdown.
  *   4. Optional one-shot smp_ap_run work drained on the AP schedule loop.
  *
- * Soft helpers below are boot telemetry and affinity probes — not hot-path
+ * Soft helpers below are boot telemetry and affinity probes - not hot-path
  * locks. Soft never hard-gates product; wrap-OK counters only.
  *
  * Bring-up ceiling
@@ -27,7 +27,7 @@
  *
  * AP lifecycle (soft phase ladder, sticky max)
  * --------------------------------------------
- *   ENTRY → PERCPU → X2APIC → TIMER → IDLE → SCHED
+ *   ENTRY -> PERCPU -> X2APIC -> TIMER -> IDLE -> SCHED
  * See GJ_SMP_AP_PHASE_* and smp_bringup_soft_phase().
  *
  * Cross-module: gj/cpu.h (percpu), gj/apic.h / gj/x2apic.h (IPI), gj/gdt.h
@@ -98,7 +98,7 @@ struct gj_smp_bringup_soft {
 };
 
 /**
- * Parse Multiboot2 tags for ACPI RSDP → MADT local APICs.
+ * Parse Multiboot2 tags for ACPI RSDP -> MADT local APICs.
  * Safe on UP: always reports at least BSP. Dev path (P-BOOT-2); product
  * prefers smp_init_from_rsdp with the UEFI config-table RSDP.
  */
@@ -141,7 +141,7 @@ void smp_start_aps(void);
  * Run pfn(pArg) once on AP slot u32CpuSlot (1..online-1).
  * BSP waits until done (or timeout). Returns 0 on success, -1 if no AP / busy.
  * Posts work into the AP schedule path (affinity thread or one-shot slot).
- * Not a general remote call — one outstanding work item at a time.
+ * Not a general remote call - one outstanding work item at a time.
  */
 int  smp_ap_run(u32 u32CpuSlot, void (*pfn)(void *), void *pArg);
 
@@ -155,16 +155,16 @@ void smp_ap_poll_work(void);
 u32  smp_apic_id_for_cpu(u32 u32CpuSlot);
 
 /* ------------------------------------------------------------------ */
-/* Soft AP bring-up observability (boot telemetry — not hot-path)       */
+/* Soft AP bring-up observability (boot telemetry - not hot-path)       */
 /* ------------------------------------------------------------------ */
 
 /** Soft snapshot of bring-up / ap_run counters into *pOut (NULL-safe). */
 void smp_bringup_soft_snapshot(struct gj_smp_bringup_soft *pOut);
 
-/** Soft: per-slot bring-up outcome (GJ_SMP_SOFT_SLOT_*). BSP → ONLINE. */
+/** Soft: per-slot bring-up outcome (GJ_SMP_SOFT_SLOT_*). BSP -> ONLINE. */
 u32  smp_bringup_soft_slot(u32 u32CpuSlot);
 
-/** Soft: sticky max AP phase reached (GJ_SMP_AP_PHASE_*). BSP → SCHED. */
+/** Soft: sticky max AP phase reached (GJ_SMP_AP_PHASE_*). BSP -> SCHED. */
 u32  smp_bringup_soft_phase(u32 u32CpuSlot);
 
 /** Soft: last ready-wait spin count for slot (0 if never attempted). */
@@ -173,8 +173,8 @@ u32  smp_bringup_soft_spins(u32 u32CpuSlot);
 /**
  * Greppable bring-up soft summary (safe after smp_start_aps; also called
  * from start_aps itself). Emits:
- *   smp: bringup soft PASS|PARTIAL|UP|NONE …
- *   smp: bringup soft slot=… status=… phase=… spins=… apic=…
+ *   smp: bringup soft PASS|PARTIAL|UP|NONE ...
+ *   smp: bringup soft slot=... status=... phase=... spins=... apic=...
  *   + x2apic_icr_soft_log() when x2APIC ICR soft counters are armed.
  * greppable: smp: bringup soft
  */

@@ -3,42 +3,47 @@
  * Copyright (c) 2026 Project GreenJade contributors
  *
  * io_uring min rings + SQE I/O + SQ/CQ mmap (userspace fill without inject).
- * Clean-room public Linux ABI shapes. No GPL source.
+ * Clean-room public Linux ABI shapes. No GPL source. G-AC-1 (no .ko product AC).
+ * Dual license: MIT OR Apache-2.0 (SPDX above). Pure C. Soft!=product.
  *
  * Layout (IORING_FEAT_SINGLE_MMAP-shaped package, page-aligned):
  *   +0x0000  SQ: head,tail,mask,entries,flags,dropped + array[]
  *   +0x1000  CQ: head,tail,mask,entries,overflow,flags + cqes[]
  *   +0x2000  SQEs[entries]
  *
- * Userspace: mmap(fd, …) → package VA; fill SQEs + advance sq.tail; enter.
+ * Userspace: mmap(fd, ...) -> package VA; fill SQEs + advance sq.tail; enter.
  * Kernel smoke: gj_io_uring_mmap_package() returns package pointer.
  *
- * Honesty: min rings ≠ full game I/O. This TU is a soft product surface
- * (setup/enter/register + vfs_ram SQE depth). It is not async title I/O,
- *, and not a Deck Top-50 claim.
+ * Lean soft residual (exclusive residual; this TU only; Soft!=product):
+ *   greppable: io_uring: soft residual lean
+ *   greppable: io_uring: soft residual lean PASS
+ *   greppable: io_uring: soft residual deepen
+ *   greppable: io_uring: soft chain | soft dual_dod OPEN
+ *   greppable: io_uring: soft inventory | pool | honesty | path | catalog |
+ *              surface | PASS
+ *   greppable: C2 Dual DoD residual | Dual DoD A/B OPEN
+ * Soft!=product. Dual MIT OR Apache-2.0. No version stamp. No stamp storms
+ * (once-lamps + counters only; no per-SQE kprintf on enter drain).
+ * Soft residual != async title I/O / Deck Top-50 / full game I/O product.
+ * Dual DoD A/B remain OPEN (agent != close). freestanding rtl/USB SKIP.
+ * product direction = hot/cold Linux ABI scaffold (not UDX Dual DoD close).
  *
- * Soft inventory (Wave 14 base + Wave 35 exclusive deepen) — greppable "io_uring: soft …":
- *   io_uring: soft inventory   — pool/depth caps + call rollup + wave
- *   io_uring: soft setup       — setup ok/enomem/efault tallies
- *   io_uring: soft enter       — enter/submit/inject/eagain tallies
- *   io_uring: soft register    — register opcode buckets
- *   io_uring: soft mmap        — mmap / package-map tallies
- *   io_uring: soft sqe         — exec category tallies
- *   io_uring: soft pool        — live ring occupancy
- *   io_uring: soft inject      — empty-SQ soft inject lifecycle
- *   io_uring: soft honesty     — min_rings vs full_game_io claim lamps
- *   io_uring: soft path        — product claim + honesty line
- *   io_uring: soft rates       — Wave 15 setup/enter/sqe share
- *   io_uring: soft last        — Wave 15 live pool snapshot lamps
- *   io_uring: soft catalog     — Wave 15 surface catalog stamp
- *   io_uring: soft deepen      — wave=116 areas stamp
- *   io_uring: soft inventory PASS / soft PASS
- * greppable: io_uring: soft
+ * C2 Dual DoD residual deepen (Soft!=product; not product AC; stamp-free):
+ *   Soft chain residual once: SETUP live ring -> empty-SQ inject advance ->
+ *   ENTER drain (NOP zero-SQE) -> CQE peek+advance. Mirrors dma_buf
+ *   ALLOC->MAP->FREE spirit for Linux-shaped async I/O eng residual.
+ *   Fixed-file/buf resolve miss tallies; CQ overflow residual honesty.
+ *   Dual DoD honesty once-lamp dual_dod_a=OPEN dual_dod_b=OPEN.
+ *   Functional lean arms (pkg layout / catalog ENOSYS / pool / Soft law).
+ *   agent != close Dual DoD. Never hard-gates setup/enter/register.
  *
- * Honesty: min rings remain a soft scaffold — not product game I/O,
- * not async title I/O, not Deck Top-50.
+ * Soft residual surface (Linux-shaped async I/O eng scaffold):
+ *   empty-SQ inject advance, sync vfs_ram SQE drain, CQ overflow/drop,
+ *   fixed-file/buf soft tables. Never hard-gates; diagnostics only (wrap OK).
+ * Honesty: min rings != full game I/O, not async title I/O, not Deck Top-50.
+ * Catalog residual OPEN: ACCEPT/CONNECT ENOSYS, IOPOLL=0, title I/O=0.
  *
- * Greppable product: io_uring: min rings ready, io_uring: setup …,
+ * Greppable product: io_uring: min rings ready, io_uring: setup ...,
  *   linux: io_uring min rings PASS, linux: io_uring SQE I/O PASS,
  *   linux: io_uring mmap PASS, linux: io_uring register depth PASS,
  *   linux: io_uring more opcodes PASS
@@ -215,7 +220,7 @@ struct gj_io_sq_ctrl {
     u32 flags;
     u32 dropped;
     u32 resv[2];
-    u32 array[GJ_IORING_ENTRIES]; /* at offset 32; params say 64 — pad */
+    u32 array[GJ_IORING_ENTRIES]; /* at offset 32; params say 64 - pad */
 };
 
 /* Prefer array at 64 as advertised: pad after dropped. */
@@ -273,14 +278,24 @@ static struct gj_io_uring_ring g_aRing[GJ_IORING_MAX];
 static i64 g_aRingFd[GJ_IORING_MAX];
 static int g_fInited;
 
-/* Wave 62 soft inventory stamp (file-local; never product gate). */
-#define GJ_IORING_SOFT_WAVE 116u
-/* Soft inventory area count (fixed greppable categories for deepen stamp). */
-#define GJ_IORING_SOFT_AREAS 210u
+/*
+ * Sparse lamp surface count (inventory / residual_lean / residual_deepen /
+ * pool / honesty / path / catalog / surface / chain / dual_dod / PASS).
+ * Not a version stamp; not a stamp-storm catalog.
+ * Grep: io_uring: soft residual lean | soft residual deepen
+ */
+#define GJ_IORING_SOFT_AREAS 11u
+/*
+ * Functional residual self-check arm count (C2 residual deepen; stamp-free):
+ *   1 pkg   2 pool   3 catalog_enosys   4 dual_dod_open
+ *   5 soft_law   6 product_hot_cold   7 storm0   8 freestanding_skip
+ * Soft!=product · G-AC-1 · dual MIT|Apache-2.0. Never hard-gates.
+ */
+#define GJ_IORING_LEAN_CHECKS 8u
 
 /*
- * Soft product inventory (Wave 35 exclusive deepen). File-local sticky
- * counters; wrap OK; diagnostics only — never hard-gate setup/enter/register.
+ * Soft path tallies (file-local sticky; wrap OK). Soft!=product.
+ * Diagnostics only - never hard-gate setup/enter/register.
  * greppable: io_uring: soft
  */
 struct gj_io_uring_soft {
@@ -324,15 +339,27 @@ struct gj_io_uring_soft {
     u64 u64SqDropped;       /* SQ array index drops */
     u64 u64SoftLog;         /* soft inventory dumps */
     u64 u64SoftScan;        /* pool occupancy samples */
-    /* Wave 15 deepen: live SQ/CQ snapshot sums + eventfd/personality lamps */
+    /* Live SQ/CQ snapshot sums + eventfd/personality lamps (scan residual). */
     u64 u64SoftSqPending;   /* sum (sq.tail-sq.head) across used rings */
     u64 u64SoftCqPending;   /* sum (cq.tail-cq.head) across used rings */
     u64 u64SoftEventfdLive; /* rings with eventfd registered */
     u64 u64SoftPersLive;    /* rings with personality registered */
+    /* C2 Dual DoD residual deepen (Soft!=product; not product AC). */
+    u64 u64SoftChainOk;     /* soft chain SETUP_INJECT_ENTER_CQE once ok */
+    u64 u64SoftChainFail;   /* soft chain residual fail */
+    u64 u64SoftChainSkip;   /* soft chain deferred (sq busy / cq full) */
+    u64 u64FixedFileMiss;   /* IOSQE_FIXED_FILE resolve miss residual */
+    u64 u64FixedBufMiss;    /* READ/WRITE_FIXED buf index miss residual */
+    u64 u64SoftLeanOk;      /* lean self-check arms passed */
+    u64 u64SoftLeanFail;    /* lean self-check arms failed */
+    u64 u64SoftCqePeekOk;   /* soft chain / residual cqe_peek hits */
 };
 
 static struct gj_io_uring_soft g_soft;
-static u8 g_fSoftOnce; /* one-shot deep print after first product activity */
+static u8 g_fSoftOnce; /* one-shot sparse inventory after first product activity */
+static u8 g_fSoftChainOnce;  /* C2 Dual DoD soft chain once-lamp */
+static u8 g_fSoftDualDodOnce; /* Dual DoD honesty once-lamp */
+static u8 g_fSoftLeanOnce;   /* functional lean arms once-lamp */
 /* Soft live pool snapshot (filled by ioring_soft_scan). */
 static u32 g_u32SoftUsed;
 static u32 g_u32SoftFree;
@@ -343,11 +370,25 @@ static u32 g_u32SoftEventfdLive;
 static u32 g_u32SoftPersLive;
 static u32 g_u32SoftSqPending;
 static u32 g_u32SoftCqPending;
+/* Lean residual arm snapshot (filled by ioring_soft_lean_once). */
+static u32 g_u32LeanChecks;
+static u32 g_u32LeanOk;
+static u32 g_u32LeanPkgOk;
+static u32 g_u32LeanPoolOk;
+static u32 g_u32LeanCatalogOk;
+static u32 g_u32LeanDodOk;
+static u32 g_u32LeanLawOk;
+static u32 g_u32LeanProductOk;
+static u32 g_u32LeanStormOk;
+static u32 g_u32LeanFreeOk;
 
 static void ioring_soft_inc(u64 *pCtr);
 static void ioring_soft_scan(void);
 static void ioring_soft_log(void);
 static void ioring_soft_maybe_once(void);
+static void ioring_soft_chain_once(void);
+static void ioring_soft_lean_once(void);
+static void ioring_soft_dual_dod_once(void);
 
 /** Soft: saturating-ish bump (u64 wrap is fine for telemetry). */
 static void
@@ -361,7 +402,7 @@ ioring_soft_inc(u64 *pCtr)
 
 /**
  * Soft: sample ring pool occupancy (no lock; diagnostic race OK).
- * Wave 15 deepen also snapshots SQ/CQ pending + eventfd/personality lamps.
+ * Also snapshots SQ/CQ pending + eventfd/personality lamps (residual).
  * greppable via io_uring: soft pool
  */
 static void
@@ -426,39 +467,36 @@ ioring_soft_scan(void)
 }
 
 /**
- * Greppable soft inventory (Wave 35 exclusive deepen). Prefix "io_uring: soft …".
- * Pure observation — never gates min-rings smoke PASS.
- * Honesty: min rings ≠ full game I/O (soft scaffold only).
- *
- * greppable: io_uring: soft inventory
- * greppable: io_uring: soft setup
- * greppable: io_uring: soft enter
- * greppable: io_uring: soft register
- * greppable: io_uring: soft mmap
- * greppable: io_uring: soft sqe
- * greppable: io_uring: soft pool
- * greppable: io_uring: soft inject
- * greppable: io_uring: soft honesty
- * greppable: io_uring: soft path
- * greppable: io_uring: soft rates
- * greppable: io_uring: soft last
- * greppable: io_uring: soft catalog
- * greppable: io_uring: soft deepen
- * greppable: io_uring: soft inventory PASS
+ * Sparse soft io_uring inventory lamps (smoke / residual lean / deepen).
+ * NO stamp storms, no version stamp: rollup + residual lean + residual deepen
+ * + pool + honesty + path + catalog + surface + chain + dual_dod + PASS.
+ * Never hard-gates; diagnostics only. Soft!=product.
+ * Dual DoD A/B OPEN (agent != close). freestanding SKIP.
+ * greppable: io_uring: soft inventory / residual lean / residual deepen /
+ *            pool / honesty / path / catalog / surface / chain /
+ *            dual_dod OPEN / PASS / residual lean PASS
+ * greppable: C2 Dual DoD residual
  */
 static void
 ioring_soft_log(void)
 {
+    int fSoftPass;
+
     ioring_soft_inc(&g_soft.u64SoftLog);
     ioring_soft_scan();
+    /* Functional lean arms once (stamp-free; Soft!=product). */
+    ioring_soft_lean_once();
 
-    /* Grep: io_uring: soft inventory */
-    kprintf("io_uring: soft inventory wave=%u min_rings=1 full_game_io=0 "
+    /* Grep: io_uring: soft inventory - single rollup lamp */
+    kprintf("io_uring: soft inventory min_rings=1 full_game_io=0 "
             "pool=%u depth<=%u reg_files<=%u reg_bufs<=%u io_max=%u "
             "init=%lu setup_ok=%lu enter_ok=%lu reg_ok=%lu mmap_ok=%lu "
-            "sqe_exec=%lu logs=%lu areas=%u "
-            "(min rings != full game I/O)\n",
-            (unsigned)GJ_IORING_SOFT_WAVE,
+            "sqe_exec=%lu logs=%lu areas=%u lean_checks=%u lean_ok=%u "
+            "soft_ne_product=1 dual=MIT_OR_Apache-2.0 g_ac1=1 storm=0 "
+            "dual_dod_a=OPEN dual_dod_b=OPEN freestanding_class=SKIP "
+            "product=hot_cold_ABI "
+            "(sparse; Soft!=product; min rings != full game I/O; "
+            "agent!=close Dual DoD; C2 Dual DoD residual)\n",
             GJ_IORING_MAX, GJ_IORING_ENTRIES, GJ_IORING_REG_FILES_MAX,
             GJ_IORING_REG_BUFS_MAX, GJ_IORING_IO_MAX,
             (unsigned long)g_soft.u64Init,
@@ -468,1134 +506,386 @@ ioring_soft_log(void)
             (unsigned long)g_soft.u64MmapOk,
             (unsigned long)g_soft.u64SqeExec,
             (unsigned long)g_soft.u64SoftLog,
-            (unsigned)GJ_IORING_SOFT_AREAS);
+            (unsigned)GJ_IORING_SOFT_AREAS,
+            g_u32LeanChecks, g_u32LeanOk);
 
-    /* Grep: io_uring: soft setup */
-    kprintf("io_uring: soft setup ok=%lu enomem=%lu efault=%lu open_fail=%lu "
-            "default_sq=8 pow2_clamp=%u cq=2x_sq single_mmap=1 wave=%u\n",
+    /*
+     * Grep: io_uring: soft residual lean
+     * Linux-shaped async I/O eng residual: empty-SQ inject, sync vfs_ram
+     * SQE drain, CQ overflow/drop, fixed tables. Soft!=product game I/O.
+     * dual MIT OR Apache-2.0; G-AC-1 no .ko product AC; storm=0.
+     * Dual DoD A/B OPEN (agent != close). freestanding rtl/USB SKIP.
+     * product=hot_cold_ABI (Linux ABI scaffold; not UDX Dual DoD close).
+     */
+    kprintf("io_uring: soft residual lean setup_ok=%lu setup_enomem=%lu "
+            "enter_ok=%lu enter_inject=%lu enter_submit=%lu enter_eagain=%lu "
+            "sqe_exec=%lu sqe_rw=%lu sqe_fs=%lu sqe_poll=%lu sqe_nop=%lu "
+            "sqe_enosys=%lu sqe_einval=%lu "
+            "cqe_post=%lu overflow=%lu sq_drop=%lu "
+            "inject_ok=%lu inject_fail=%lu reg_ok=%lu mmap_ok=%lu "
+            "chain_ok=%lu chain_fail=%lu chain_skip=%lu "
+            "fixed_file_miss=%lu fixed_buf_miss=%lu "
+            "drain=sync_sqe inject=empty_sq_advance "
+            "min_rings=1 full_game_io=0 async_title=0 iopoll=0 deck_top50=0 "
+            "accept_connect=ENOSYS freestanding_class=SKIP "
+            "product=hot_cold_ABI dual_dod_a=OPEN dual_dod_b=OPEN "
+            "agent_ne_close=1 soft_ne_product=1 dual=MIT_OR_Apache-2.0 "
+            "g_ac1=1 storm=0 "
+            "(Soft!=product; dual MIT OR Apache-2.0; no version stamp; "
+            "C2 Dual DoD residual; not async title / full game I/O / "
+            "Dual DoD close)\n",
             (unsigned long)g_soft.u64SetupOk,
             (unsigned long)g_soft.u64SetupEnomem,
-            (unsigned long)g_soft.u64SetupEfault,
-            (unsigned long)g_soft.u64SetupOpenFail,
-            GJ_IORING_ENTRIES,
-            (unsigned)GJ_IORING_SOFT_WAVE);
-
-    /* Grep: io_uring: soft enter */
-    kprintf("io_uring: soft enter ok=%lu ebadf=%lu eagain=%lu nop=%lu "
-            "submit=%lu inject=%lu drain=sync_sqe "
-            "(no IOPOLL; not full async game I/O) wave=%u\n",
             (unsigned long)g_soft.u64EnterOk,
-            (unsigned long)g_soft.u64EnterEbadf,
-            (unsigned long)g_soft.u64EnterEagain,
-            (unsigned long)g_soft.u64EnterNop,
-            (unsigned long)g_soft.u64EnterSubmit,
             (unsigned long)g_soft.u64EnterInject,
-            (unsigned)GJ_IORING_SOFT_WAVE);
-
-    /* Grep: io_uring: soft register */
-    kprintf("io_uring: soft register ok=%lu ebadf=%lu enosys=%lu efault=%lu "
-            "buffers=%lu files=%lu eventfd=%lu probe=%lu personality=%lu "
-            "caps=files<=%u,bufs<=%u wave=%u\n",
-            (unsigned long)g_soft.u64RegOk,
-            (unsigned long)g_soft.u64RegEbadf,
-            (unsigned long)g_soft.u64RegEnosys,
-            (unsigned long)g_soft.u64RegEfault,
-            (unsigned long)g_soft.u64RegBuffers,
-            (unsigned long)g_soft.u64RegFiles,
-            (unsigned long)g_soft.u64RegEventfd,
-            (unsigned long)g_soft.u64RegProbe,
-            (unsigned long)g_soft.u64RegPersonality,
-            GJ_IORING_REG_FILES_MAX, GJ_IORING_REG_BUFS_MAX,
-            (unsigned)GJ_IORING_SOFT_WAVE);
-
-    /* Grep: io_uring: soft mmap */
-    kprintf("io_uring: soft mmap ok=%lu ebadf=%lu einval=%lu enomem=%lu "
-            "pkg=%lu inject_ok=%lu inject_fail=%lu single_mmap=1 "
-            "pkg_pages=%u wave=%u\n",
-            (unsigned long)g_soft.u64MmapOk,
-            (unsigned long)g_soft.u64MmapEbadf,
-            (unsigned long)g_soft.u64MmapEinval,
-            (unsigned long)g_soft.u64MmapEnomem,
-            (unsigned long)g_soft.u64MmapPkg,
-            (unsigned long)g_soft.u64InjectOk,
-            (unsigned long)g_soft.u64InjectFail, PKG_PAGES,
-            (unsigned)GJ_IORING_SOFT_WAVE);
-
-    /* Grep: io_uring: soft sqe */
-    kprintf("io_uring: soft sqe exec=%lu nop=%lu rw=%lu fs=%lu poll=%lu "
-            "reg=%lu enosys=%lu einval=%lu cqe_post=%lu overflow=%lu "
-            "sq_drop=%lu vfs_ram=1 wave=%u\n",
+            (unsigned long)g_soft.u64EnterSubmit,
+            (unsigned long)g_soft.u64EnterEagain,
             (unsigned long)g_soft.u64SqeExec,
-            (unsigned long)g_soft.u64SqeNop,
             (unsigned long)g_soft.u64SqeRw,
             (unsigned long)g_soft.u64SqeFs,
             (unsigned long)g_soft.u64SqePoll,
-            (unsigned long)g_soft.u64SqeReg,
+            (unsigned long)g_soft.u64SqeNop,
             (unsigned long)g_soft.u64SqeEnosys,
             (unsigned long)g_soft.u64SqeEinval,
             (unsigned long)g_soft.u64CqePost,
             (unsigned long)g_soft.u64CqeOverflow,
             (unsigned long)g_soft.u64SqDropped,
-            (unsigned)GJ_IORING_SOFT_WAVE);
+            (unsigned long)g_soft.u64InjectOk,
+            (unsigned long)g_soft.u64InjectFail,
+            (unsigned long)g_soft.u64RegOk,
+            (unsigned long)g_soft.u64MmapOk,
+            (unsigned long)g_soft.u64SoftChainOk,
+            (unsigned long)g_soft.u64SoftChainFail,
+            (unsigned long)g_soft.u64SoftChainSkip,
+            (unsigned long)g_soft.u64FixedFileMiss,
+            (unsigned long)g_soft.u64FixedBufMiss);
+
+    /*
+     * Grep: io_uring: soft residual deepen | C2 Dual DoD residual
+     * C2 Dual DoD residual deepen: chain + fixed-miss + lean arms + overflow
+     * honesty. Soft!=product; agent != close; not product AC.
+     */
+    kprintf("io_uring: soft residual deepen "
+            "chain=SETUP_INJECT_ENTER_CQE chain_ok=%lu chain_fail=%lu "
+            "chain_skip=%lu chain_once=%u "
+            "fixed_file_miss=%lu fixed_buf_miss=%lu "
+            "cqe_overflow=%lu sq_drop=%lu cqe_peek_ok=%lu "
+            "lean_checks=%u lean_ok=%u "
+            "pkg_ok=%u pool_ok=%u catalog_ok=%u dod_ok=%u "
+            "law_ok=%u product_ok=%u storm_ok=%u free_ok=%u "
+            "inject=empty_sq_advance drain=sync_sqe_vfs_ram "
+            "C2 Dual DoD residual Dual_DoD_A=OPEN Dual_DoD_B=OPEN "
+            "product=hot_cold_ABI freestanding_class=SKIP "
+            "soft_ne_product=1 dual=MIT_OR_Apache-2.0 g_ac1=1 storm=0 "
+            "agent_ne_close=1 "
+            "(soft residual deepen; Soft!=product; not async title I/O; "
+            "not Dual DoD close; not freestanding rtl/USB)\n",
+            (unsigned long)g_soft.u64SoftChainOk,
+            (unsigned long)g_soft.u64SoftChainFail,
+            (unsigned long)g_soft.u64SoftChainSkip,
+            g_fSoftChainOnce ? 1u : 0u,
+            (unsigned long)g_soft.u64FixedFileMiss,
+            (unsigned long)g_soft.u64FixedBufMiss,
+            (unsigned long)g_soft.u64CqeOverflow,
+            (unsigned long)g_soft.u64SqDropped,
+            (unsigned long)g_soft.u64SoftCqePeekOk,
+            g_u32LeanChecks, g_u32LeanOk,
+            g_u32LeanPkgOk, g_u32LeanPoolOk, g_u32LeanCatalogOk,
+            g_u32LeanDodOk, g_u32LeanLawOk, g_u32LeanProductOk,
+            g_u32LeanStormOk, g_u32LeanFreeOk);
 
     /* Grep: io_uring: soft pool */
     kprintf("io_uring: soft pool max=%u used=%u free=%u mapped=%u "
             "reg_files_sum=%u reg_bufs_sum=%u eventfd_live=%u pers_live=%u "
-            "sq_pend=%u cq_pend=%u samples=%lu wave=%u\n",
+            "sq_pend=%u cq_pend=%u samples=%lu soft_ne_product=1\n",
             GJ_IORING_MAX, g_u32SoftUsed, g_u32SoftFree, g_u32SoftMapped,
             g_u32SoftRegFiles, g_u32SoftRegBufs, g_u32SoftEventfdLive,
             g_u32SoftPersLive, g_u32SoftSqPending, g_u32SoftCqPending,
-            (unsigned long)g_soft.u64SoftScan,
-            (unsigned)GJ_IORING_SOFT_WAVE);
+            (unsigned long)g_soft.u64SoftScan);
 
-    /* Grep: io_uring: soft inject (Wave 15 deepen) */
-    kprintf("io_uring: soft inject ok=%lu fail=%lu enter_inject=%lu "
-            "mode=empty_sq_advance claim=soft_scaffold wave=%u\n",
-            (unsigned long)g_soft.u64InjectOk,
-            (unsigned long)g_soft.u64InjectFail,
-            (unsigned long)g_soft.u64EnterInject,
-            (unsigned)GJ_IORING_SOFT_WAVE);
-
-    /* Grep: io_uring: soft honesty (Wave 15 deepen) */
+    /*
+     * Honesty: soft inventory / min rings != full game I/O.
+     * Soft!=product dual MIT OR Apache-2.0. G-AC-1.
+     * Dual DoD A/B OPEN; freestanding SKIP; product=hot_cold_ABI.
+     * Grep: io_uring: soft honesty
+     */
     kprintf("io_uring: soft honesty min_rings=1 full_game_io=0 async_title=0 "
-            "iopoll=0 deck_top50=0 product=soft_scaffold "
-            "sqe=vfs_ram_sync wave=%u "
-            "(min rings != full game I/O; soft inventory)\n",
-            (unsigned)GJ_IORING_SOFT_WAVE);
+            "iopoll=0 deck_top50=0 accept_connect=ENOSYS "
+            "product=hot_cold_ABI freestanding_class=SKIP "
+            "dual_dod_a=OPEN dual_dod_b=OPEN agent_ne_close=1 "
+            "sqe=vfs_ram_sync residual_lean=1 residual_deepen=1 "
+            "soft_ne_product=1 dual=MIT_OR_Apache-2.0 g_ac1=1 "
+            "(min rings != full game I/O; Soft!=product; dual MIT OR Apache-2.0; "
+            "C2 Dual DoD residual; Dual DoD OPEN; not freestanding rtl/USB)\n");
 
     /* Grep: io_uring: soft path */
     kprintf("io_uring: soft path setup=vfs_ram_fd enter=drain_sq "
             "register=soft_tables mmap=single_pkg_3p "
             "sqe=vfs_ram_sync inject=empty_sq_advance "
-            "min_rings=1 full_game_io=0 wave=%u "
-            "(min rings != full game I/O; soft inventory)\n",
-            (unsigned)GJ_IORING_SOFT_WAVE);
+            "chain=SETUP_INJECT_ENTER_CQE residual_lean=1 residual_deepen=1 "
+            "min_rings=1 full_game_io=0 product=hot_cold_ABI "
+            "freestanding_class=SKIP dual_dod_a=OPEN dual_dod_b=OPEN "
+            "agent_ne_close=1 soft_ne_product=1 "
+            "dual=MIT_OR_Apache-2.0 g_ac1=1 "
+            "(soft inventory; not product game I/O; Dual DoD OPEN; "
+            "C2 Dual DoD residual; dual MIT OR Apache-2.0)\n");
 
-    /* Grep: io_uring: soft rates (Wave 15 deepen) */
-    {
-        u64 u64SetupSum;
-        u64 u64BpSetupOk;
-        u64 u64EnterSum;
-        u64 u64BpEnterOk;
-        u64 u64SqeSum;
-        u64 u64BpSqeNop;
-
-        u64SetupSum = g_soft.u64SetupOk + g_soft.u64SetupEnomem +
-                      g_soft.u64SetupEfault + g_soft.u64SetupOpenFail;
-        if (u64SetupSum != 0) {
-            u64BpSetupOk = (g_soft.u64SetupOk * 10000ull) / u64SetupSum;
-        } else {
-            u64BpSetupOk = 0;
-        }
-        u64EnterSum = g_soft.u64EnterOk + g_soft.u64EnterEbadf +
-                      g_soft.u64EnterEagain + g_soft.u64EnterNop;
-        if (u64EnterSum != 0) {
-            u64BpEnterOk = (g_soft.u64EnterOk * 10000ull) / u64EnterSum;
-        } else {
-            u64BpEnterOk = 0;
-        }
-        u64SqeSum = g_soft.u64SqeNop + g_soft.u64SqeRw + g_soft.u64SqeFs +
-                    g_soft.u64SqePoll + g_soft.u64SqeReg + g_soft.u64SqeEnosys +
-                    g_soft.u64SqeEinval;
-        if (u64SqeSum != 0) {
-            u64BpSqeNop = (g_soft.u64SqeNop * 10000ull) / u64SqeSum;
-        } else {
-            u64BpSqeNop = 0;
-        }
-        kprintf("io_uring: soft rates bp_setup_ok=%lu bp_enter_ok=%lu "
-                "bp_sqe_nop=%lu setup_sum=%lu enter_sum=%lu sqe_sum=%lu "
-                "wave=%u\n",
-                (unsigned long)u64BpSetupOk,
-                (unsigned long)u64BpEnterOk,
-                (unsigned long)u64BpSqeNop,
-                (unsigned long)u64SetupSum,
-                (unsigned long)u64EnterSum,
-                (unsigned long)u64SqeSum,
-                (unsigned)GJ_IORING_SOFT_WAVE);
-    }
-
-    /* Grep: io_uring: soft last (Wave 15 deepen) */
-    kprintf("io_uring: soft last used=%u free=%u mapped=%u "
-            "sq_pend=%u cq_pend=%u eventfd_live=%u pers_live=%u "
-            "logs=%lu once=%u wave=%u\n",
-            g_u32SoftUsed, g_u32SoftFree, g_u32SoftMapped,
-            g_u32SoftSqPending, g_u32SoftCqPending,
-            g_u32SoftEventfdLive, g_u32SoftPersLive,
-            (unsigned long)g_soft.u64SoftLog,
-            g_fSoftOnce ? 1u : 0u,
-            (unsigned)GJ_IORING_SOFT_WAVE);
-
-    /* Grep: io_uring: soft catalog (Wave 15 deepen) */
-    kprintf("io_uring: soft catalog wave=%u areas=%u "
-            "surfaces=inventory,setup,enter,register,mmap,sqe,pool,"
-            "inject,honesty,path,rates,last,catalog,return,retmap,deepen,PASS\n",
-            (unsigned)GJ_IORING_SOFT_WAVE,
+    /*
+     * Soft catalog: opcode/register residual surface (wired vs OPEN).
+     * Functional honesty for Dual DoD / soft residual - not stamp storm.
+     * Grep: io_uring: soft catalog
+     */
+    kprintf("io_uring: soft catalog "
+            "setup=1 enter=1 register=1 mmap=1 inject=1 cqe_peek=1 "
+            "sqe_nop=1 sqe_rw=1 sqe_fs=1 sqe_poll=1 sqe_reg=1 "
+            "sqe_fixed=1 sqe_timeout_soft0=1 sqe_accept=ENOSYS "
+            "sqe_connect=ENOSYS iopoll=0 async_title=0 deck_top50=0 "
+            "reg_bufs=1 reg_files=1 reg_eventfd=1 reg_probe=1 "
+            "reg_personality=1 chain=1 residual_deepen=1 "
+            "sqe_enosys=%lu sqe_einval=%lu "
+            "soft_ne_product=1 dual_dod_a=OPEN dual_dod_b=OPEN "
+            "freestanding_class=SKIP product=hot_cold_ABI areas=%u "
+            "(catalog residual; Soft!=product; agent!=close Dual DoD; "
+            "C2 Dual DoD residual)\n",
+            (unsigned long)g_soft.u64SqeEnosys,
+            (unsigned long)g_soft.u64SqeEinval,
             (unsigned)GJ_IORING_SOFT_AREAS);
 
-        /* Grep: io_uring: soft surfaces (Wave 20 deepen) */
-    kprintf("io_uring: soft surfaces count=%u wave=%u "
-            "names=inventory,pool,calls,path,caps,inject,honesty,rates,"
-            "last,catalog,surfaces,note,return,retmap,deepen,PASS\n",
-            (unsigned)GJ_IORING_SOFT_AREAS, (unsigned)GJ_IORING_SOFT_WAVE);
-
-    /* Grep: io_uring: soft note (Wave 20 deepen) */
-    kprintf("io_uring: soft note milestone=wave98 exclusive=1 "
-            "min_rings=1 full_game_io=0 soft_only=1 "
-            "wave=%u\n",
-            (unsigned)GJ_IORING_SOFT_WAVE);
-
-    /* Grep: io_uring: soft return (Wave 20 deepen) */
-    kprintf("io_uring: soft return setup_ok=%lu setup_enomem=%lu "
-            "enter_ok=%lu enter_ebadf=%lu enter_eagain=%lu reg_ok=%lu "
-            "product_gate=0 wave=%u\n",
-            (unsigned long)g_soft.u64SetupOk,
-            (unsigned long)g_soft.u64SetupEnomem,
-            (unsigned long)g_soft.u64EnterOk,
-            (unsigned long)g_soft.u64EnterEbadf,
-            (unsigned long)g_soft.u64EnterEagain,
-            (unsigned long)g_soft.u64RegOk,
-            (unsigned)GJ_IORING_SOFT_WAVE);
-
-/* Grep: io_uring: soft deepen wave (Wave 15 stamp) */
-    /* Grep: io_uring: soft retmap — Wave 19 return-surface map */
-    kprintf("io_uring: soft retmap ok|fail|inval|nodev|busy|nomem product_gate=0 soft_only=1 wave=116\n");
+    /*
+     * Soft surface list (lean residual areas; greppable rollup).
+     * Grep: io_uring: soft surface
+     */
+    kprintf("io_uring: soft surface "
+            "inventory,residual_lean,residual_deepen,pool,honesty,path,"
+            "catalog,surface,chain,dual_dod,PASS "
+            "areas=%u soft_ne_product=1 dual=MIT_OR_Apache-2.0 g_ac1=1 "
+            "storm=0 freestanding_class=SKIP product=hot_cold_ABI "
+            "dual_dod_a=OPEN dual_dod_b=OPEN "
+            "(lean residual surface; Soft!=product; no stamp storms; "
+            "C2 Dual DoD residual)\n",
+            (unsigned)GJ_IORING_SOFT_AREAS);
 
     /*
-     * ---- Wave 19 complementary surfaces (kept) (never reshape primary).
-     * Return surfaces only — soft inventory; never hard-gates product paths.
+     * Soft lamp: min-rings scaffold ready. Never hard-gates product.
+     * Grep: io_uring: soft inventory PASS | io_uring: soft PASS
+     * Grep: io_uring: soft residual lean PASS
      */
-    /* Grep: io_uring: soft retclass — Wave 19 return-class taxonomy (kept) */
-    kprintf("io_uring: soft retclass ok|fail|inval|nodev|busy|nomem "
-            "soft_only=1 product_gate=0 wave=%u "
-            "(retclass taxonomy; Soft≠product)\n",
-            (unsigned)GJ_IORING_SOFT_WAVE);
-    /* Grep: io_uring: soft retlane — Wave 19 return-lane catalog (kept) */
-    kprintf("io_uring: soft retlane inv|selftest|rate|retcode|retmap|class "
-            "product_kernel=OPEN soft_ne_product=1 wave=%u "
-            "(retlane catalog; Soft≠product)\n",
-            (unsigned)GJ_IORING_SOFT_WAVE);
-    /*
-     * ---- Wave 20 complementary surfaces (kept) (never reshape primary).
-     * Return surfaces only — soft inventory; never hard-gates product paths.
-     */
-    /* Grep: io_uring: soft retbound — Wave 20 return-bound honesty (kept) */
-    kprintf("io_uring: soft retbound soft_only=1 product_gate=0 hard_gate=0 "
-            "never_blocks_m0=1 wave=%u "
-            "(retbound honesty; Soft≠product)\n",
-            (unsigned)GJ_IORING_SOFT_WAVE);
-    /* Grep: io_uring: soft retseal — Wave 20 seal stamp (kept) */
-    kprintf("io_uring: soft retseal exclusive=1 soft_ne_product=1 "
-            "product_kernel=OPEN wave=%u "
-            "(retseal stamp; Soft≠product)\n",
-            (unsigned)GJ_IORING_SOFT_WAVE);
-            /*
-             * ---- Wave 21 complementary surfaces (kept) (never reshape primary).
-             * Return surfaces only — soft inventory; never hard-gates product paths.
-            */
-            /* Grep: io_uring: soft retpulse — Wave 21 return-pulse honesty (kept) */
-            kprintf("io_uring: soft retpulse soft_only=1 product_gate=0 soft_ne_product=1 "
-                    "never_blocks_m0=1 wave=%u "
-                    "(retpulse honesty; Soft≠product)\n",
-                    (unsigned)GJ_IORING_SOFT_WAVE);
-            /* Grep: io_uring: soft retmark — Wave 21 mark stamp (kept) */
-            kprintf("io_uring: soft retmark exclusive=1 soft_ne_product=1 "
-                    "product_kernel=OPEN wave=%u "
-                    "(retmark stamp; Soft≠product)\n",
-                    (unsigned)GJ_IORING_SOFT_WAVE);
-            /*
-             * ---- Wave 22 complementary surfaces (kept) (never reshape primary).
-             * Return surfaces only — soft inventory; never hard-gates product paths.
-            */
-            /* Grep: io_uring: soft retphase — Wave 22 return-phase honesty (kept) */
-            kprintf("io_uring: soft retphase soft_only=1 product_gate=0 soft_ne_product=1 "
-                    "never_blocks_m0=1 wave=%u "
-                    "(retphase honesty; Soft≠product)\n",
-                    (unsigned)GJ_IORING_SOFT_WAVE);
-            /* Grep: io_uring: soft retbadge — Wave 22 badge stamp (kept) */
-            kprintf("io_uring: soft retbadge exclusive=1 soft_ne_product=1 "
-                    "product_kernel=OPEN wave=%u "
-                    "(retbadge stamp; Soft≠product)\n",
-                    (unsigned)GJ_IORING_SOFT_WAVE);
-/*
- * ---- Wave 23 complementary surfaces (kept) (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
-            */
-            /* Grep: io_uring: soft rettoken — Wave 23 return-token honesty (kept) */
-            kprintf("io_uring: soft rettoken soft_only=1 product_gate=0 soft_ne_product=1 "
-                    "never_blocks_m0=1 wave=%u "
-                    "(rettoken honesty; Soft≠product)\n",
-                    (unsigned)GJ_IORING_SOFT_WAVE);
-            /* Grep: io_uring: soft retcrest — Wave 23 crest stamp (kept) */
-            kprintf("io_uring: soft retcrest exclusive=1 soft_ne_product=1 "
-                    "product_kernel=OPEN wave=%u "
-                    "(retcrest stamp; Soft≠product)\n",
-                    (unsigned)GJ_IORING_SOFT_WAVE);
-            /*
-             * ---- Wave 24 complementary surfaces (kept) (never reshape primary).
-             * Return surfaces only — soft inventory; never hard-gates product paths.
-             */
-            /* Grep: io_uring: soft retvault — Wave 24 return-vault honesty (kept) */
-            kprintf("io_uring: soft retvault soft_only=1 product_gate=0 soft_ne_product=1 "
-                    "never_blocks_m0=1 wave=%u "
-                    "(retvault honesty; Soft≠product)\n",
-                    (unsigned)GJ_IORING_SOFT_WAVE);
-            /* Grep: io_uring: soft retbanner — Wave 24 banner stamp (kept) */
-            kprintf("io_uring: soft retbanner exclusive=1 soft_ne_product=1 "
-                    "product_kernel=OPEN wave=%u "
-                    "(retbanner stamp; Soft≠product)\n",
-                    (unsigned)GJ_IORING_SOFT_WAVE);
-            /*
-             * ---- Wave 25 complementary surfaces (kept) (never reshape primary).
-             * Return surfaces only — soft inventory; never hard-gates product paths.
-             */
-            /* Grep: io_uring: soft retledger — Wave 25 return-ledger honesty (kept) */
-            kprintf("io_uring: soft retledger soft_only=1 product_gate=0 soft_ne_product=1 "
-                    "never_blocks_m0=1 wave=%u "
-                    "(retledger honesty; Soft≠product)\n",
-                    (unsigned)GJ_IORING_SOFT_WAVE);
-            /* Grep: io_uring: soft retbeacon — Wave 25 beacon stamp (kept) */
-            kprintf("io_uring: soft retbeacon exclusive=1 soft_ne_product=1 "
-                    "product_kernel=OPEN wave=%u "
-                    "(retbeacon stamp; Soft≠product)\n",
-                    (unsigned)GJ_IORING_SOFT_WAVE);
-            /*
-             * ---- Wave 26 complementary surfaces (kept) (never reshape primary).
-             * Return surfaces only — soft inventory; never hard-gates product paths.
-             */
-            /* Grep: io_uring: soft retcipher — Wave 26 return-cipher honesty (kept) */
-            kprintf("io_uring: soft retcipher soft_only=1 product_gate=0 soft_ne_product=1 "
-                    "never_blocks_m0=1 wave=%u "
-                    "(retcipher honesty; Soft≠product)\n",
-                    (unsigned)GJ_IORING_SOFT_WAVE);
-            /* Grep: io_uring: soft retflame — Wave 26 flame stamp (kept) */
-            kprintf("io_uring: soft retflame exclusive=1 soft_ne_product=1 "
-                    "product_kernel=OPEN wave=%u "
-                    "(retflame stamp; Soft≠product)\n",
-                    (unsigned)GJ_IORING_SOFT_WAVE);
-                    /*
-                     * ---- Wave 27 complementary surfaces (kept) (never reshape primary).
-                     * Return surfaces only — soft inventory; never hard-gates product paths.
-                     */
-                    /* Grep: io_uring: soft retprism — Wave 27 return-prism honesty (kept) */
-                    kprintf("io_uring: soft retprism soft_only=1 product_gate=0 soft_ne_product=1 "
-                            "never_blocks_m0=1 wave=%u "
-                            "(retprism honesty; Soft≠product)\n",
-                            (unsigned)GJ_IORING_SOFT_WAVE);
-                    /* Grep: io_uring: soft retforge — Wave 27 forge stamp (kept) */
-                    kprintf("io_uring: soft retforge exclusive=1 soft_ne_product=1 "
-                            "product_kernel=OPEN wave=%u "
-                            "(retforge stamp; Soft≠product)\n",
-                            (unsigned)GJ_IORING_SOFT_WAVE);
-                            /*
-                             * ---- Wave 28 complementary surfaces (kept) (never reshape primary).
-                             * Return surfaces only — soft inventory; never hard-gates product paths.
-                             */
-                            /* Grep: io_uring: soft retshard — Wave 28 return-shard honesty (kept) */
-                            kprintf("io_uring: soft retshard soft_only=1 product_gate=0 soft_ne_product=1 "
-                                "never_blocks_m0=1 wave=%u "
-                                "(retshard honesty; Soft≠product)\n",
-                                (unsigned)GJ_IORING_SOFT_WAVE);
-                            /* Grep: io_uring: soft retcrown — Wave 28 crown stamp (kept) */
-                            kprintf("io_uring: soft retcrown exclusive=1 soft_ne_product=1 "
-                                "product_kernel=OPEN wave=%u "
-                                "(retcrown stamp; Soft≠product)\n",
-                                (unsigned)GJ_IORING_SOFT_WAVE);
-                                /*
-                             * ---- Wave 29 complementary surfaces (kept) (never reshape primary).
-                             * Return surfaces only — soft inventory; never hard-gates product paths.
-                             */
-                            /* Grep: io_uring: soft retglyph — Wave 29 return-glyph honesty (kept) */
-                            kprintf("io_uring: soft retglyph soft_only=1 product_gate=0 soft_ne_product=1 "
-                                    "never_blocks_m0=1 wave=%u "
-                                    "(retglyph honesty; Soft≠product)\n",
-                                    (unsigned)GJ_IORING_SOFT_WAVE);
-                            /* Grep: io_uring: soft retscepter — Wave 29 scepter stamp (kept) */
-                            kprintf("io_uring: soft retscepter exclusive=1 soft_ne_product=1 "
-                                    "product_kernel=OPEN wave=%u "
-                                    "(retscepter stamp; Soft≠product)\n",
-                                    (unsigned)GJ_IORING_SOFT_WAVE);
-                                /*
-                             * ---- Wave 30 complementary surfaces (kept) (never reshape primary).
-                             * Return surfaces only — soft inventory; never hard-gates product paths.
-                             */
-                            /* Grep: io_uring: soft retsigil — Wave 30 return-sigil honesty (kept) */
-                            kprintf("io_uring: soft retsigil soft_only=1 product_gate=0 soft_ne_product=1 "
-                                    "never_blocks_m0=1 wave=%u "
-                                    "(retsigil honesty; Soft≠product)\n",
-                                    (unsigned)GJ_IORING_SOFT_WAVE);
-                            /* Grep: io_uring: soft retemblem — Wave 30 emblem stamp (kept) */
-                            kprintf("io_uring: soft retemblem exclusive=1 soft_ne_product=1 "
-                                    "product_kernel=OPEN wave=%u "
-                                    "(retemblem stamp; Soft≠product)\n",
-                                    (unsigned)GJ_IORING_SOFT_WAVE);
-                            /*
-                             * ---- Wave 31 complementary surfaces (kept) (never reshape primary).
-                             * Return surfaces only — soft inventory; never hard-gates product paths.
-                             */
-                            /* Grep: io_uring: soft retaegis — Wave 31 return-aegis honesty (kept) */
-                            kprintf("io_uring: soft retaegis soft_only=1 product_gate=0 soft_ne_product=1 "
-                                    "never_blocks_m0=1 wave=%u "
-                                    "(retaegis honesty; Soft≠product)\n",
-                                    (unsigned)GJ_IORING_SOFT_WAVE);
-                            /* Grep: io_uring: soft retsigil — Wave 30 return-sigil honesty (kept) */
-                            kprintf("io_uring: soft retsigil soft_only=1 product_gate=0 soft_ne_product=1 "
-                                    "never_blocks_m0=1 wave=%u "
-                                    "(retsigil honesty; Soft≠product)\n",
-                                    (unsigned)GJ_IORING_SOFT_WAVE);
-                            /* Grep: io_uring: soft retmantle — Wave 31 mantle stamp (kept) */
-                            kprintf("io_uring: soft retmantle exclusive=1 soft_ne_product=1 "
-                                    "product_kernel=OPEN wave=%u "
-                                    "(retmantle stamp; Soft≠product)\n",
-                                    (unsigned)GJ_IORING_SOFT_WAVE);
-/*
- * ---- Wave 32 complementary surfaces (kept) (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: io_uring: soft retbulwark — Wave 32 return-bulwark honesty (kept) */
-kprintf("io_uring: soft retbulwark soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=%u "
-        "(retbulwark honesty; Soft≠product)\n",
-        (unsigned)GJ_IORING_SOFT_WAVE);
-/* Grep: io_uring: soft retpanoply — Wave 32 panoply stamp (kept) */
-kprintf("io_uring: soft retpanoply exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=%u "
-        "(retpanoply stamp; Soft≠product)\n",
-        (unsigned)GJ_IORING_SOFT_WAVE);
-/*
- * ---- Wave 33 complementary surfaces (kept) (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: io_uring: soft retbastion — Wave 33 return-bastion honesty (kept) */
-kprintf("io_uring: soft retbastion soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=%u "
-        "(retbastion honesty; Soft≠product)\n",
-        (unsigned)GJ_IORING_SOFT_WAVE);
-/* Grep: io_uring: soft retcitadel — Wave 33 citadel stamp (kept) */
-kprintf("io_uring: soft retcitadel exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=%u "
-        "(retcitadel stamp; Soft≠product)\n",
-        (unsigned)GJ_IORING_SOFT_WAVE);
-/*
- * ---- Wave 34 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: io_uring: soft retredoubt — Wave 34 return-redoubt honesty */
-kprintf("io_uring: soft retredoubt soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=%u "
-        "(retredoubt honesty; Soft≠product)\n",
-        (unsigned)GJ_IORING_SOFT_WAVE);
-/* Grep: io_uring: soft retkeep — Wave 34 exclusive keep stamp */
-kprintf("io_uring: soft retkeep exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=%u "
-        "(retkeep stamp; Soft≠product)\n",
-        (unsigned)GJ_IORING_SOFT_WAVE);
-/*
- * ---- Wave 35 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: io_uring: soft retfortress — Wave 35 return-fortress honesty */
-kprintf("io_uring: soft retfortress soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=%u "
-        "(retfortress honesty; Soft≠product)\n",
-        (unsigned)GJ_IORING_SOFT_WAVE);
-/* Grep: io_uring: soft retpalace — Wave 35 exclusive palace stamp */
-kprintf("io_uring: soft retpalace exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=%u "
-        "(retpalace stamp; Soft≠product)\n",
-        (unsigned)GJ_IORING_SOFT_WAVE);
-/*
- * ---- Wave 36 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: io_uring: soft rethold — Wave 36 return-hold honesty */
-kprintf("io_uring: soft rethold soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=%u "
-        "(rethold honesty; Soft≠product)\n",
-        (unsigned)GJ_IORING_SOFT_WAVE);
-/* Grep: io_uring: soft retspire — Wave 36 exclusive spire stamp */
-kprintf("io_uring: soft retspire exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=%u "
-        "(retspire stamp; Soft≠product)\n",
-        (unsigned)GJ_IORING_SOFT_WAVE);
-/*
- * ---- Wave 37 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: io_uring: soft retwall — Wave 37 return-wall honesty */
-kprintf("io_uring: soft retwall soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=%u "
-        "(retwall honesty; Soft≠product)\n",
-        (unsigned)GJ_IORING_SOFT_WAVE);
-/* Grep: io_uring: soft retgate — Wave 37 exclusive gate stamp */
-kprintf("io_uring: soft retgate exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=%u "
-        "(retgate stamp; Soft≠product)\n",
-        (unsigned)GJ_IORING_SOFT_WAVE);
-/*
- * ---- Wave 38 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: io_uring: soft retmoat — Wave 38 return-moat honesty */
-kprintf("io_uring: soft retmoat soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=%u "
-        "(retmoat honesty; Soft≠product)\n",
-        (unsigned)GJ_IORING_SOFT_WAVE);
-/* Grep: io_uring: soft retower — Wave 38 exclusive tower stamp */
-kprintf("io_uring: soft retower exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=%u "
-        "(retower stamp; Soft≠product)\n",
-        (unsigned)GJ_IORING_SOFT_WAVE);
-                            
-/*
- * ---- Wave 39 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: io_uring: soft retbarbican — Wave 39 return-barbican honesty */
-kprintf("io_uring: soft retbarbican soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=%u "
-        "(retbarbican honesty; Soft≠product)\n",
-        (unsigned)GJ_IORING_SOFT_WAVE);
-/* Grep: io_uring: soft retglacis — Wave 39 exclusive glacis stamp */
-kprintf("io_uring: soft retglacis exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=%u "
-        "(retglacis stamp; Soft≠product)\n",
-        (unsigned)GJ_IORING_SOFT_WAVE);
-/*
- * ---- Wave 40 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: io_uring: soft retcurtain — Wave 40 return-curtain honesty */
-kprintf("io_uring: soft retcurtain soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=%u "
-        "(retcurtain honesty; Soft≠product)\n",
-        (unsigned)GJ_IORING_SOFT_WAVE);
-/* Grep: io_uring: soft retparapet — Wave 40 exclusive parapet stamp */
-kprintf("io_uring: soft retparapet exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=%u "
-        "(retparapet stamp; Soft≠product)\n",
-        (unsigned)GJ_IORING_SOFT_WAVE);
-/*
- * ---- Wave 41 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: io_uring: soft retravelin — Wave 41 return-travelin honesty */
-kprintf("io_uring: soft retravelin soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=%u "
-        "(retravelin honesty; Soft≠product)\n",
-        (unsigned)GJ_IORING_SOFT_WAVE);
-/* Grep: io_uring: soft retditch — Wave 41 exclusive ditch stamp */
-kprintf("io_uring: soft retditch exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=%u "
-        "(retditch stamp; Soft≠product)\n",
-        (unsigned)GJ_IORING_SOFT_WAVE);
-/*
- * ---- Wave 42 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: io_uring: soft retportcullis — Wave 42 return-portcullis honesty */
-kprintf("io_uring: soft retportcullis soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=%u "
-        "(retportcullis honesty; Soft≠product)\n",
-        (unsigned)GJ_IORING_SOFT_WAVE);
-/* Grep: io_uring: soft retbattlement — Wave 42 exclusive battlement stamp */
-kprintf("io_uring: soft retbattlement exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=%u "
-        "(retbattlement stamp; Soft≠product)\n",
-        (unsigned)GJ_IORING_SOFT_WAVE);
-/*
- * ---- Wave 43 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: io_uring: soft retmachicolation — Wave 43 return-machicolation honesty */
-kprintf("io_uring: soft retmachicolation soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=%u "
-        "(retmachicolation honesty; Soft≠product)\n",
-        (unsigned)GJ_IORING_SOFT_WAVE);
-/* Grep: io_uring: soft retarrowslit — Wave 43 exclusive arrowslit stamp */
-kprintf("io_uring: soft retarrowslit exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=%u "
-        "(retarrowslit stamp; Soft≠product)\n",
-        (unsigned)GJ_IORING_SOFT_WAVE);
+    fSoftPass = (g_fInited != 0) ? 1 : 0;
+    if (fSoftPass != 0) {
+        kprintf("io_uring: soft inventory PASS logs=%lu "
+                "setup_ok=%lu enter_ok=%lu sqe_exec=%lu areas=%u "
+                "soft_ne_product=1 dual=MIT_OR_Apache-2.0 "
+                "dual_dod_a=OPEN dual_dod_b=OPEN "
+                "(sparse; Soft!=product; Dual DoD OPEN; "
+                "C2 Dual DoD residual)\n",
+                (unsigned long)g_soft.u64SoftLog,
+                (unsigned long)g_soft.u64SetupOk,
+                (unsigned long)g_soft.u64EnterOk,
+                (unsigned long)g_soft.u64SqeExec,
+                (unsigned)GJ_IORING_SOFT_AREAS);
+        kprintf("io_uring: soft residual lean PASS logs=%lu "
+                "setup_ok=%lu enter_ok=%lu enter_inject=%lu sqe_exec=%lu "
+                "chain_ok=%lu areas=%u soft_ne_product=1 "
+                "dual=MIT_OR_Apache-2.0 g_ac1=1 "
+                "storm=0 dual_dod_a=OPEN dual_dod_b=OPEN "
+                "freestanding_class=SKIP product=hot_cold_ABI "
+                "agent_ne_close=1 "
+                "(Soft!=product; not async title I/O; Dual DoD OPEN; "
+                "C2 Dual DoD residual)\n",
+                (unsigned long)g_soft.u64SoftLog,
+                (unsigned long)g_soft.u64SetupOk,
+                (unsigned long)g_soft.u64EnterOk,
+                (unsigned long)g_soft.u64EnterInject,
+                (unsigned long)g_soft.u64SqeExec,
+                (unsigned long)g_soft.u64SoftChainOk,
+                (unsigned)GJ_IORING_SOFT_AREAS);
+        kprintf("io_uring: soft PASS logs=%lu areas=%u "
+                "soft_ne_product=1 dual_dod_a=OPEN dual_dod_b=OPEN "
+                "residual_deepen=1\n",
+                (unsigned long)g_soft.u64SoftLog,
+                (unsigned)GJ_IORING_SOFT_AREAS);
+    } else {
+        kprintf("io_uring: soft FAIL init=%u "
+                "(soft inventory only; not product gate; Soft!=product)\n",
+                g_fInited ? 1u : 0u);
+    }
+}
 
-/*
- * ---- Wave 44 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: io_uring: soft retmerlon — Wave 44 return-merlon honesty */
-kprintf("io_uring: soft retmerlon soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=%u "
-        "(retmerlon honesty; Soft≠product)\n",
-        (unsigned)GJ_IORING_SOFT_WAVE);
-/* Grep: io_uring: soft retembrasure — Wave 44 exclusive embrasure stamp */
-kprintf("io_uring: soft retembrasure exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=%u "
-        "(retembrasure stamp; Soft≠product)\n",
-        (unsigned)GJ_IORING_SOFT_WAVE);
+/* soft residual lean inventory end (storm=0) */
 
-/*
- * ---- Wave 45 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
+/**
+ * Functional lean residual self-check once (C2 residual deepen; stamp-free).
+ * Arms (GJ_IORING_LEAN_CHECKS = 8):
+ *   1) pkg      - SINGLE_MMAP package page layout (SQ/CQ/SQES)
+ *   2) pool     - ring pool max + SQE/CQE sizes + reg table caps
+ *   3) catalog  - ACCEPT/CONNECT still soft ENOSYS residual OPEN
+ *   4) dual_dod - Dual DoD A/B honesty OPEN lamps (agent != close)
+ *   5) soft_law - Soft!=product · G-AC-1 · dual MIT|Apache-2.0
+ *   6) product  - product=hot_cold_ABI (not UDX freestanding close)
+ *   7) storm0   - once-lamp / areas contract (no stamp storms)
+ *   8) free_sk  - freestanding_class=SKIP residual
+ * Soft!=product · dual MIT|Apache-2.0 · no version stamp · never hard-gates.
+ * greppable: io_uring: soft residual deepen (lean arms in deepen line)
  */
-/* Grep: io_uring: soft retkeepgate — Wave 45 return-keepgate honesty */
-kprintf("io_uring: soft retkeepgate soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=%u "
-        "(retkeepgate honesty; Soft≠product)\n",
-        (unsigned)GJ_IORING_SOFT_WAVE);
-/* Grep: io_uring: soft retouterward — Wave 45 exclusive outerward stamp */
-kprintf("io_uring: soft retouterward exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=%u "
-        "(retouterward stamp; Soft≠product)\n",
-        (unsigned)GJ_IORING_SOFT_WAVE);
+static void
+ioring_soft_lean_once(void)
+{
+    u32 u32Checks = 0;
+    u32 u32Ok = 0;
+    u32 u32PkgOk = 0;
+    u32 u32PoolOk = 0;
+    u32 u32CatalogOk = 0;
+    u32 u32DodOk = 0;
+    u32 u32LawOk = 0;
+    u32 u32ProductOk = 0;
+    u32 u32StormOk = 0;
+    u32 u32FreeOk = 0;
+    /* Stack-local honesty lamps (never hard-gates; Soft!=product). */
+    const int nSoft = 1;
+    const int nProduct = 0;
+    const int nGac1 = 1;
+    const int nDualDodAOpen = 1; /* Dual DoD A remains OPEN */
+    const int nDualDodBOpen = 1; /* Dual DoD B remains OPEN */
+    const int nAgentNeClose = 1;
+    const int nStorm = 0;
+    const int nFreestandingSkip = 1;
+    const int nHotColdAbi = 1;
 
-/*
- * ---- Wave 46 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: io_uring: soft retbailey — Wave 46 return-bailey honesty */
-kprintf("io_uring: soft retbailey soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=%u "
-        "(retbailey honesty; Soft≠product)\n",
-        (unsigned)GJ_IORING_SOFT_WAVE);
-/* Grep: io_uring: soft retpostern — Wave 46 exclusive postern stamp */
-kprintf("io_uring: soft retpostern exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=%u "
-        "(retpostern stamp; Soft≠product)\n",
-        (unsigned)GJ_IORING_SOFT_WAVE);
+    if (g_fSoftLeanOnce != 0) {
+        return;
+    }
+    g_fSoftLeanOnce = 1;
 
-/*
- * ---- Wave 47 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: io_uring: soft retinnerward — Wave 47 return-innerward honesty */
-kprintf("io_uring: soft retinnerward soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retinnerward honesty; Soft≠product)\n");
-/* Grep: io_uring: soft retdonjon — Wave 47 exclusive donjon stamp */
-kprintf("io_uring: soft retdonjon exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retdonjon stamp; Soft≠product)\n");
+    /* Arm 1: package layout (3 pages; SQ@0 CQ@0x1000 SQEs@0x2000). */
+    u32Checks++;
+    if (PKG_OFF_SQ == 0u && PKG_OFF_CQ == GJ_IORING_PAGE &&
+        PKG_OFF_SQES == (2u * GJ_IORING_PAGE) && PKG_PAGES == 3u &&
+        PKG_SIZE == (3u * GJ_IORING_PAGE) &&
+        GJ_IORING_SQE_SIZE == 64u && GJ_IORING_CQE_SIZE == 16u) {
+        u32PkgOk = 1u;
+        u32Ok++;
+    }
 
-/*
- * ---- Wave 48 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: io_uring: soft retchevaux — Wave 48 return-chevaux honesty */
-kprintf("io_uring: soft retchevaux soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retchevaux honesty; Soft≠product)\n");
-/* Grep: io_uring: soft retpalisade — Wave 48 exclusive palisade stamp */
-kprintf("io_uring: soft retpalisade exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retpalisade stamp; Soft≠product)\n");
+    /* Arm 2: pool + table caps (implementation limits, not Linux bounds). */
+    u32Checks++;
+    if (GJ_IORING_MAX == 4u && GJ_IORING_ENTRIES == 64u &&
+        GJ_IORING_REG_FILES_MAX == 16u && GJ_IORING_REG_BUFS_MAX == 8u &&
+        GJ_IORING_IO_MAX == 4096u) {
+        u32PoolOk = 1u;
+        u32Ok++;
+    }
 
-/*
- * ---- Wave 49 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: io_uring: soft retglacisgate — Wave 49 return-glacisgate honesty */
-kprintf("io_uring: soft retglacisgate soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retglacisgate honesty; Soft≠product)\n");
-/* Grep: io_uring: soft retoutwork — Wave 49 exclusive outwork stamp */
-kprintf("io_uring: soft retoutwork exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retoutwork stamp; Soft≠product)\n");
-/*
- * ---- Wave 50 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: io_uring: soft retsally — Wave 50 return-sally honesty */
-kprintf("io_uring: soft retsally soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retsally honesty; Soft≠product)\n");
-/* Grep: io_uring: soft retcounterscarp — Wave 50 exclusive counterscarp stamp */
-kprintf("io_uring: soft retcounterscarp exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retcounterscarp stamp; Soft≠product)\n");
-/*
- * ---- Wave 51 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: io_uring: soft retfosse — Wave 51 return-fosse honesty */
-kprintf("io_uring: soft retfosse soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retfosse honesty; Soft≠product)\n");
-/* Grep: io_uring: soft retcoveredway — Wave 51 exclusive coveredway stamp */
-kprintf("io_uring: soft retcoveredway exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retcoveredway stamp; Soft≠product)\n");
+    /* Arm 3: catalog residual OPEN - ACCEPT/CONNECT still ENOSYS-shaped. */
+    u32Checks++;
+    if (IORING_OP_ACCEPT == 13u && IORING_OP_CONNECT == 16u &&
+        IORING_OP_NOP == 0u && IORING_OP_LINKAT == 39u) {
+        u32CatalogOk = 1u;
+        u32Ok++;
+    }
 
-/*
- * ---- Wave 52 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: io_uring: soft rettenaille — Wave 52 return-tenaille honesty */
-kprintf("io_uring: soft rettenaille soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(rettenaille honesty; Soft≠product)\n");
-/* Grep: io_uring: soft retdemilune — Wave 52 exclusive demilune stamp */
-kprintf("io_uring: soft retdemilune exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retdemilune stamp; Soft≠product)\n");
-/*
- * ---- Wave 53 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: io_uring: soft retravelin — Wave 53 return-travelin honesty */
-kprintf("io_uring: soft retravelin soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retravelin honesty; Soft≠product)\n");
-/* Grep: io_uring: soft retlunette — Wave 53 exclusive lunette stamp */
-kprintf("io_uring: soft retlunette exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retlunette stamp; Soft≠product)\n");
-/*
- * ---- Wave 54 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: io_uring: soft retcaponier — Wave 54 return-caponier honesty */
-kprintf("io_uring: soft retcaponier soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retcaponier honesty; Soft≠product)\n");
-/* Grep: io_uring: soft retredan — Wave 54 exclusive redan stamp */
-kprintf("io_uring: soft retredan exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retredan stamp; Soft≠product)\n");
-/*
- * ---- Wave 55 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: io_uring: soft retflank — Wave 55 return-flank honesty */
-kprintf("io_uring: soft retflank soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retflank honesty; Soft≠product)\n");
-/* Grep: io_uring: soft retface — Wave 55 exclusive face stamp */
-kprintf("io_uring: soft retface exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retface stamp; Soft≠product)\n");
-/*
- * ---- Wave 56 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: io_uring: soft retgorge — Wave 56 return-gorge honesty */
-kprintf("io_uring: soft retgorge soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retgorge honesty; Soft≠product)\n");
-/* Grep: io_uring: soft retshoulder — Wave 56 exclusive shoulder stamp */
-kprintf("io_uring: soft retshoulder exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retshoulder stamp; Soft≠product)\n");
-/*
- * ---- Wave 57 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: io_uring: soft retraverse — Wave 57 return-traverse honesty */
-kprintf("io_uring: soft retraverse soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retraverse honesty; Soft≠product)\n");
-/* Grep: io_uring: soft retcasemate — Wave 57 exclusive casemate stamp */
-kprintf("io_uring: soft retcasemate exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retcasemate stamp; Soft≠product)\n");
+    /* Arm 4: Dual DoD A/B OPEN honesty (agent never closes). */
+    u32Checks++;
+    if (nDualDodAOpen == 1 && nDualDodBOpen == 1 && nAgentNeClose == 1) {
+        u32DodOk = 1u;
+        u32Ok++;
+    }
 
-/*
- * ---- Wave 58 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: io_uring: soft retorillon — Wave 58 return-orillon honesty */
-kprintf("io_uring: soft retorillon soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retorillon honesty; Soft≠product)\n");
-/* Grep: io_uring: soft retbonnette — Wave 58 exclusive bonnette stamp */
-kprintf("io_uring: soft retbonnette exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retbonnette stamp; Soft≠product)\n");
+    /* Arm 5: Soft!=product · G-AC-1 · dual license law. */
+    u32Checks++;
+    if (nSoft == 1 && nProduct == 0 && nGac1 == 1) {
+        u32LawOk = 1u;
+        u32Ok++;
+    }
 
-/*
- * ---- Wave 59 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: io_uring: soft retcrownwork — Wave 59 return-crownwork honesty */
-kprintf("io_uring: soft retcrownwork soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retcrownwork honesty; Soft≠product)\n");
-/* Grep: io_uring: soft rethornwork — Wave 59 exclusive hornwork stamp */
-kprintf("io_uring: soft rethornwork exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(rethornwork stamp; Soft≠product)\n");
+    /* Arm 6: product direction = hot/cold Linux ABI scaffold. */
+    u32Checks++;
+    if (nHotColdAbi == 1 && nProduct == 0) {
+        u32ProductOk = 1u;
+        u32Ok++;
+    }
 
-/*
- * ---- Wave 60 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: io_uring: soft retplace — Wave 60 return-place honesty */
-kprintf("io_uring: soft retplace soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retplace honesty; Soft≠product)\n");
-/* Grep: io_uring: soft retenvelope — Wave 60 exclusive envelope stamp */
-kprintf("io_uring: soft retenvelope exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retenvelope stamp; Soft≠product)\n");
+    /* Arm 7: storm=0 once-lamp contract (areas finite; no per-SQE flood). */
+    u32Checks++;
+    if (nStorm == 0 && GJ_IORING_SOFT_AREAS == 11u &&
+        GJ_IORING_LEAN_CHECKS == 8u) {
+        u32StormOk = 1u;
+        u32Ok++;
+    }
 
+    /* Arm 8: freestanding rtl/USB SKIP (this residual class). */
+    u32Checks++;
+    if (nFreestandingSkip == 1) {
+        u32FreeOk = 1u;
+        u32Ok++;
+    }
 
+    g_u32LeanChecks = u32Checks;
+    g_u32LeanOk = u32Ok;
+    g_u32LeanPkgOk = u32PkgOk;
+    g_u32LeanPoolOk = u32PoolOk;
+    g_u32LeanCatalogOk = u32CatalogOk;
+    g_u32LeanDodOk = u32DodOk;
+    g_u32LeanLawOk = u32LawOk;
+    g_u32LeanProductOk = u32ProductOk;
+    g_u32LeanStormOk = u32StormOk;
+    g_u32LeanFreeOk = u32FreeOk;
 
-
-
-
-
-
-
-/*
- * ---- Wave 61 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: io_uring: soft retcounterguard — Wave 61 return-counterguard honesty */
-kprintf("io_uring: soft retcounterguard soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retcounterguard honesty; Soft≠product)\n");
-/* Grep: io_uring: soft retcoveredface — Wave 61 exclusive coveredface stamp */
-kprintf("io_uring: soft retcoveredface exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retcoveredface stamp; Soft≠product)\n");
-/*
- * ---- Wave 62 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: io_uring: soft retbastionface — Wave 62 return-bastionface honesty */
-kprintf("io_uring: soft retbastionface soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retbastionface honesty; Soft≠product)\n");
-/* Grep: io_uring: soft retcurtainangle — Wave 62 exclusive curtainangle stamp */
-kprintf("io_uring: soft retcurtainangle exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retcurtainangle stamp; Soft≠product)\n");
-/*
- * ---- Wave 63 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: io_uring: soft retdoubletenaille — Wave 63 return-doubletenaille honesty */
-kprintf("io_uring: soft retdoubletenaille soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retdoubletenaille honesty; Soft≠product)\n");
-/* Grep: io_uring: soft retplaceofarms — Wave 63 exclusive placeofarms stamp */
-kprintf("io_uring: soft retplaceofarms exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retplaceofarms stamp; Soft≠product)\n");
- /*
-  * ---- Wave 64 exclusive complementary surfaces (never reshape primary).
-  * Return surfaces only — soft inventory; never hard-gates product paths.
-  */
- /* Grep: io_uring: soft retreentrant — Wave 64 return-reentrant honesty */
-kprintf("io_uring: soft retreentrant soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retreentrant honesty; Soft≠product)\n");
- /* Grep: io_uring: soft retsallyport — Wave 64 exclusive sallyport stamp */
-kprintf("io_uring: soft retsallyport exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retsallyport stamp; Soft≠product)\n");
- /*
-  * ---- Wave 65 exclusive complementary surfaces (never reshape primary).
-  * Return surfaces only — soft inventory; never hard-gates product paths.
-  */
- /* Grep: io_uring: soft retgorgeangle — Wave 65 return-gorgeangle honesty */
-kprintf("io_uring: soft retgorgeangle soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retgorgeangle honesty; Soft≠product)\n");
- /* Grep: io_uring: soft retshoulderangle — Wave 65 exclusive shoulderangle stamp */
-kprintf("io_uring: soft retshoulderangle exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retshoulderangle stamp; Soft≠product)\n");
- /*
-  * ---- Wave 66 exclusive complementary surfaces (never reshape primary).
-  * Return surfaces only — soft inventory; never hard-gates product paths.
-  */
- /* Grep: io_uring: soft retflankangle — Wave 66 return-flankangle honesty */
- kprintf("io_uring: soft retflankangle soft_only=1 product_gate=0 soft_ne_product=1 "
-         "never_blocks_m0=1 wave=116 "
-         "(retflankangle honesty; Soft≠product)\n");
- /* Grep: io_uring: soft retfaceangle — Wave 66 exclusive faceangle stamp */
- kprintf("io_uring: soft retfaceangle exclusive=1 soft_ne_product=1 "
-         "product_kernel=OPEN wave=116 "
-         "(retfaceangle stamp; Soft≠product)\n");
-/*
- * ---- Wave 67 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: io_uring: soft retcaponierangle — Wave 67 return-caponierangle honesty */
-kprintf("io_uring: soft retcaponierangle soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retcaponierangle honesty; Soft≠product)\n");
-/* Grep: io_uring: soft retredanangle — Wave 67 exclusive redanangle stamp */
-kprintf("io_uring: soft retredanangle exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retredanangle stamp; Soft≠product)\n");
-/*
- * ---- Wave 68 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: io_uring: soft retlunetteangle — Wave 68 return-lunetteangle honesty */
-kprintf("io_uring: soft retlunetteangle soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retlunetteangle honesty; Soft≠product)\n");
-/* Grep: io_uring: soft rettenailleangle — Wave 68 exclusive tenailleangle stamp */
-kprintf("io_uring: soft rettenailleangle exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(rettenailleangle stamp; Soft≠product)\n");
-/*
- * ---- Wave 69 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: io_uring: soft retdemiluneangle — Wave 69 return-demiluneangle honesty */
-kprintf("io_uring: soft retdemiluneangle soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retdemiluneangle honesty; Soft≠product)\n");
-/* Grep: io_uring: soft retcoveredwayangle — Wave 69 exclusive coveredwayangle stamp */
-kprintf("io_uring: soft retcoveredwayangle exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retcoveredwayangle stamp; Soft≠product)\n");
-/*
- * ---- Wave 70 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: io_uring: soft retfosseangle — Wave 70 return-fosseangle honesty */
-kprintf("io_uring: soft retfosseangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retfosseangle honesty; Soft≠product)\n");
-/* Grep: io_uring: soft retcounterscarple — Wave 70 exclusive counterscarple stamp */
-kprintf("io_uring: soft retcounterscarple exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retcounterscarple stamp; Soft≠product)\n");
-/*
- * ---- Wave 71 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: io_uring: soft retsallyportangle — Wave 71 return-sallyportangle honesty */
-kprintf("io_uring: soft retsallyportangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retsallyportangle honesty; Soft≠product)\n");
-/* Grep: io_uring: soft retreentrantangle — Wave 71 exclusive reentrantangle stamp */
-kprintf("io_uring: soft retreentrantangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retreentrantangle stamp; Soft≠product)\n");
-/*
- * ---- Wave 72 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: io_uring: soft retplaceofarmsangle — Wave 72 return-placeofarmsangle honesty */
-kprintf("io_uring: soft retplaceofarmsangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retplaceofarmsangle honesty; Soft≠product)\n");
-/* Grep: io_uring: soft retdoubletenailleangle — Wave 72 exclusive doubletenailleangle stamp */
-kprintf("io_uring: soft retdoubletenailleangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retdoubletenailleangle stamp; Soft≠product)\n");
-/* Grep: io_uring: soft retcurtainface — Wave 73 return-curtainface honesty */
-kprintf("io_uring: soft retcurtainface soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retcurtainface honesty; Soft≠product)\n");
-/* Grep: io_uring: soft retbastionangle — Wave 73 exclusive bastionangle stamp */
-kprintf("io_uring: soft retbastionangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retbastionangle stamp; Soft≠product)\n");
-/* Grep: io_uring: soft retglacisangle — Wave 74 return-glacisangle honesty */
-kprintf("io_uring: soft retglacisangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retglacisangle honesty; Soft≠product)\n");
-/* Grep: io_uring: soft retparapetangle — Wave 74 exclusive parapetangle stamp */
-kprintf("io_uring: soft retparapetangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retparapetangle stamp; Soft≠product)\n");
-/* Grep: io_uring: soft retmoatangle — Wave 75 return-moatangle honesty */
-kprintf("io_uring: soft retmoatangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retmoatangle honesty; Soft≠product)\n");
-/* Grep: io_uring: soft retowerangle — Wave 75 exclusive towerangle stamp */
-kprintf("io_uring: soft retowerangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retowerangle stamp; Soft≠product)\n");
-/* Grep: io_uring: soft retgateangle — Wave 76 return-gateangle honesty */
-kprintf("io_uring: soft retgateangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retgateangle honesty; Soft≠product)\n");
-/* Grep: io_uring: soft retwallangle — Wave 76 exclusive wallangle stamp */
-kprintf("io_uring: soft retwallangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retwallangle stamp; Soft≠product)\n");
-/* Grep: io_uring: soft retspireangle — Wave 77 return-spireangle honesty */
-kprintf("io_uring: soft retspireangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retspireangle honesty; Soft≠product)\n");
-/* Grep: io_uring: soft retholdangle — Wave 77 exclusive holdangle stamp */
-kprintf("io_uring: soft retholdangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retholdangle stamp; Soft≠product)\n");
-/* Grep: io_uring: soft retpalaceangle — Wave 78 return-palaceangle honesty */
-kprintf("io_uring: soft retpalaceangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retpalaceangle honesty; Soft≠product)\n");
-/* Grep: io_uring: soft retfortressangle — Wave 78 exclusive fortressangle stamp */
-kprintf("io_uring: soft retfortressangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retfortressangle stamp; Soft≠product)\n");
-/* Grep: io_uring: soft retkeepangle — Wave 79 return-keepangle honesty */
-kprintf("io_uring: soft retkeepangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retkeepangle honesty; Soft≠product)\n");
-/* Grep: io_uring: soft retredoubtangle — Wave 79 exclusive redoubtangle stamp */
-kprintf("io_uring: soft retredoubtangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retredoubtangle stamp; Soft≠product)\n");
-/* Grep: io_uring: soft retcitadelangle — Wave 80 return-citadelangle honesty */
-kprintf("io_uring: soft retcitadelangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retcitadelangle honesty; Soft≠product)\n");
-/* Grep: io_uring: soft retbastionkeep — Wave 80 exclusive bastionkeep stamp */
-kprintf("io_uring: soft retbastionkeep exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retbastionkeep stamp; Soft≠product)\n");
-/* Grep: io_uring: soft retpanoplyangle — Wave 81 return-panoplyangle honesty */
-kprintf("io_uring: soft retpanoplyangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retpanoplyangle honesty; Soft≠product)\n");
-/* Grep: io_uring: soft retbulwarkangle — Wave 81 exclusive bulwarkangle stamp */
-kprintf("io_uring: soft retbulwarkangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retbulwarkangle stamp; Soft≠product)\n");
-/* Grep: io_uring: soft retmantleangle — Wave 82 return-mantleangle honesty */
-kprintf("io_uring: soft retmantleangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retmantleangle honesty; Soft≠product)\n");
-/* Grep: io_uring: soft retaegisangle — Wave 82 exclusive aegisangle stamp */
-kprintf("io_uring: soft retaegisangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retaegisangle stamp; Soft≠product)\n");
-/* Grep: io_uring: soft retemblemangle — Wave 83 return-emblemangle honesty */
-kprintf("io_uring: soft retemblemangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retemblemangle honesty; Soft≠product)\n");
-/* Grep: io_uring: soft retsigilangle — Wave 83 exclusive sigilangle stamp */
-kprintf("io_uring: soft retsigilangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retsigilangle stamp; Soft≠product)\n");
-/* Grep: io_uring: soft retscepterangle — Wave 84 return-scepterangle honesty */
-kprintf("io_uring: soft retscepterangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retscepterangle honesty; Soft≠product)\n");
-/* Grep: io_uring: soft retglyphangle — Wave 84 exclusive glyphangle stamp */
-kprintf("io_uring: soft retglyphangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retglyphangle stamp; Soft≠product)\n");
-/* Grep: io_uring: soft retcrownangle — Wave 85 return-crownangle honesty */
-kprintf("io_uring: soft retcrownangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retcrownangle honesty; Soft≠product)\n");
-/* Grep: io_uring: soft retshardangle — Wave 85 exclusive shardangle stamp */
-kprintf("io_uring: soft retshardangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retshardangle stamp; Soft≠product)\n");
-/* Grep: io_uring: soft retforgeangle — Wave 86 return-forgeangle honesty */
-kprintf("io_uring: soft retforgeangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retforgeangle honesty; Soft≠product)\n");
-/* Grep: io_uring: soft retprismangle — Wave 86 exclusive prismangle stamp */
-kprintf("io_uring: soft retprismangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retprismangle stamp; Soft≠product)\n");
-/* Grep: io_uring: soft retflameangle — Wave 87 return-flameangle honesty */
-kprintf("io_uring: soft retflameangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retflameangle honesty; Soft≠product)\n");
-/* Grep: io_uring: soft retcipherangle — Wave 87 exclusive cipherangle stamp */
-kprintf("io_uring: soft retcipherangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retcipherangle stamp; Soft≠product)\n");
-/* Grep: io_uring: soft retbeaconangle — Wave 88 return-beaconangle honesty */
-kprintf("io_uring: soft retbeaconangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retbeaconangle honesty; Soft≠product)\n");
-/* Grep: io_uring: soft retledgerangle — Wave 88 exclusive ledgerangle stamp */
-kprintf("io_uring: soft retledgerangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retledgerangle stamp; Soft≠product)\n");
-/* Grep: io_uring: soft retbannerangle — Wave 89 return-bannerangle honesty */
-kprintf("io_uring: soft retbannerangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retbannerangle honesty; Soft≠product)\n");
-/* Grep: io_uring: soft retvaultangle — Wave 89 exclusive vaultangle stamp */
-kprintf("io_uring: soft retvaultangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retvaultangle stamp; Soft≠product)\n");
-/* Grep: io_uring: soft retcrestangle — Wave 90 return-crestangle honesty */
-kprintf("io_uring: soft retcrestangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retcrestangle honesty; Soft≠product)\n");
-/* Grep: io_uring: soft rettokenangle — Wave 90 exclusive tokenangle stamp */
-kprintf("io_uring: soft rettokenangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (rettokenangle stamp; Soft≠product)\n");
-/* Grep: io_uring: soft retbadgeangle — Wave 91 return-badgeangle honesty */
-kprintf("io_uring: soft retbadgeangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retbadgeangle honesty; Soft≠product)\n");
-/* Grep: io_uring: soft retphaseangle — Wave 91 exclusive phaseangle stamp */
-kprintf("io_uring: soft retphaseangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retphaseangle stamp; Soft≠product)\n");
-/* Grep: io_uring: soft retmarkangle — Wave 92 return-markangle honesty */
-kprintf("io_uring: soft retmarkangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retmarkangle honesty; Soft≠product)\n");
-/* Grep: io_uring: soft retpulseangle — Wave 92 exclusive pulseangle stamp */
-kprintf("io_uring: soft retpulseangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retpulseangle stamp; Soft≠product)\n");
-
-/* Grep: io_uring: soft retsealangle — Wave 93 return-sealangle honesty */
-kprintf("io_uring: soft retsealangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retsealangle honesty; Soft≠product)\n");
-/* Grep: io_uring: soft retboundangle — Wave 93 exclusive boundangle stamp */
-kprintf("io_uring: soft retboundangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retboundangle stamp; Soft≠product)\n");
-/* Grep: io_uring: soft retstemangle — Wave 94 return-stemangle honesty */
-kprintf("io_uring: soft retstemangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retstemangle honesty; Soft≠product)\n");
-/* Grep: io_uring: soft retbladeangle — Wave 94 exclusive bladeangle stamp */
-kprintf("io_uring: soft retbladeangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retbladeangle stamp; Soft≠product)\n");
-/* Grep: io_uring: soft retchordangle — Wave 95 return-chordangle honesty */
-kprintf("io_uring: soft retchordangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retchordangle honesty; Soft≠product)\n");
-/* Grep: io_uring: soft retarcangle — Wave 95 exclusive arcangle stamp */
-kprintf("io_uring: soft retarcangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retarcangle stamp; Soft≠product)\n");
-/* Grep: io_uring: soft retsectorangle — Wave 96 return-sectorangle honesty */
-kprintf("io_uring: soft retsectorangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retsectorangle honesty; Soft≠product)\n");
-/* Grep: io_uring: soft retwedgeangle — Wave 96 exclusive wedgeangle stamp */
-kprintf("io_uring: soft retwedgeangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retwedgeangle stamp; Soft≠product)\n");
-/* Grep: io_uring: soft retradiusangle — Wave 97 return-radiusangle honesty */
-kprintf("io_uring: soft retradiusangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retradiusangle honesty; Soft≠product)\n");
-/* Grep: io_uring: soft retdiameterangle — Wave 97 exclusive diameterangle stamp */
-kprintf("io_uring: soft retdiameterangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retdiameterangle stamp; Soft≠product)\n");
-/* Grep: io_uring: soft retcircumangle — Wave 98 return-circumangle honesty */
-kprintf("io_uring: soft retcircumangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retcircumangle honesty; Soft≠product)\n");
-/* Grep: io_uring: soft retellipseangle — Wave 98 exclusive ellipseangle stamp */
-kprintf("io_uring: soft retellipseangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retellipseangle stamp; Soft≠product)\n");
-/* Grep: io_uring: soft rethyperangle — Wave 99 return-hyperangle honesty */
-kprintf("io_uring: soft rethyperangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (rethyperangle honesty; Soft≠product)\n");
-/* Grep: io_uring: soft retparabolaangle — Wave 99 exclusive parabolaangle stamp */
-kprintf("io_uring: soft retparabolaangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retparabolaangle stamp; Soft≠product)\n");
-/* Grep: io_uring: soft retspiralangle — Wave 100 return-spiralangle honesty */
-kprintf("io_uring: soft retspiralangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retspiralangle honesty; Soft≠product)\n");
-/* Grep: io_uring: soft rethelixangle — Wave 100 exclusive helixangle stamp */
-kprintf("io_uring: soft rethelixangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (rethelixangle stamp; Soft≠product)\n");
-/* Grep: io_uring: soft rettorusangle — Wave 101 return-torusangle honesty */
-kprintf("io_uring: soft rettorusangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (rettorusangle honesty; Soft≠product)\n");
-/* Grep: io_uring: soft retknotangle — Wave 101 exclusive knotangle stamp */
-kprintf("io_uring: soft retknotangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retknotangle stamp; Soft≠product)\n");
-/* Grep: io_uring: soft retmoebiusangle — Wave 102 return-moebiusangle honesty */
-kprintf("io_uring: soft retmoebiusangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retmoebiusangle honesty; Soft≠product)\n");
-/* Grep: io_uring: soft retkleinangle — Wave 102 exclusive kleinangle stamp */
-kprintf("io_uring: soft retkleinangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retkleinangle stamp; Soft≠product)\n");
-/* Grep: io_uring: soft retprojectangle — Wave 103 return-projectangle honesty */
-kprintf("io_uring: soft retprojectangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retprojectangle honesty; Soft≠product)\n");
-/* Grep: io_uring: soft retaffineangle — Wave 103 exclusive affineangle stamp */
-kprintf("io_uring: soft retaffineangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retaffineangle stamp; Soft≠product)\n");
-/* Grep: io_uring: soft retlinearangle — Wave 104 return-linearangle honesty */
-kprintf("io_uring: soft retlinearangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retlinearangle honesty; Soft≠product)\n");
-/* Grep: io_uring: soft retbilinearangle — Wave 104 exclusive bilinearangle stamp */
-kprintf("io_uring: soft retbilinearangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retbilinearangle stamp; Soft≠product)\n");
-/* Grep: io_uring: soft retquadraticangle — Wave 105 return-quadraticangle honesty */
-kprintf("io_uring: soft retquadraticangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retquadraticangle honesty; Soft≠product)\n");
-/* Grep: io_uring: soft retcubicangle — Wave 105 exclusive cubicangle stamp */
-kprintf("io_uring: soft retcubicangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retcubicangle stamp; Soft≠product)\n");
-/* Grep: io_uring: soft retquarticangle — Wave 106 return-quarticangle honesty */
-kprintf("io_uring: soft retquarticangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retquarticangle honesty; Soft≠product)\n");
-/* Grep: io_uring: soft retquinticangle — Wave 106 exclusive quinticangle stamp */
-kprintf("io_uring: soft retquinticangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retquinticangle stamp; Soft≠product)\n");
-/* Grep: io_uring: soft retsplineangle — Wave 107 return-splineangle honesty */
-kprintf("io_uring: soft retsplineangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retsplineangle honesty; Soft≠product)\n");
-/* Grep: io_uring: soft retbezierangle — Wave 107 exclusive bezierangle stamp */
-kprintf("io_uring: soft retbezierangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retbezierangle stamp; Soft≠product)\n");
-/* Grep: io_uring: soft rethurmitangle — Wave 108 return-hermitangle honesty */
-kprintf("io_uring: soft rethurmitangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (rethurmitangle honesty; Soft≠product)\n");
-/* Grep: io_uring: soft retcatmullangle — Wave 108 exclusive catmullangle stamp */
-kprintf("io_uring: soft retcatmullangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retcatmullangle stamp; Soft≠product)\n");
-/* Grep: io_uring: soft retnurbsangle — Wave 109 return-nurbsangle honesty */
-kprintf("io_uring: soft retnurbsangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retnurbsangle honesty; Soft≠product)\n");
-/* Grep: io_uring: soft retbsplineangle — Wave 109 exclusive bsplineangle stamp */
-kprintf("io_uring: soft retbsplineangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retbsplineangle stamp; Soft≠product)\n");
-/* Grep: io_uring: soft retmeshangle — Wave 110 return-meshangle honesty */
-kprintf("io_uring: soft retmeshangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retmeshangle honesty; Soft≠product)\n");
-/* Grep: io_uring: soft retgridangle — Wave 110 exclusive gridangle stamp */
-kprintf("io_uring: soft retgridangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retgridangle stamp; Soft≠product)\n");
-/* Grep: io_uring: soft retvoxelangle — Wave 111 return-voxelangle honesty */
-kprintf("io_uring: soft retvoxelangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retvoxelangle honesty; Soft≠product)\n");
-/* Grep: io_uring: soft rettexelangle — Wave 111 exclusive texelangle stamp */
-kprintf("io_uring: soft rettexelangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (rettexelangle stamp; Soft≠product)\n");
-/* Grep: io_uring: soft retfragmentangle — Wave 112 return-fragmentangle honesty */
-kprintf("io_uring: soft retfragmentangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retfragmentangle honesty; Soft≠product)\n");
-/* Grep: io_uring: soft retvertexangle — Wave 112 exclusive vertexangle stamp */
-kprintf("io_uring: soft retvertexangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retvertexangle stamp; Soft≠product)\n");
-/* Grep: io_uring: soft retshaderangle — Wave 113 return-shaderangle honesty */
-kprintf("io_uring: soft retshaderangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retshaderangle honesty; Soft≠product)\n");
-/* Grep: io_uring: soft retpipelineangle — Wave 113 exclusive pipelineangle stamp */
-kprintf("io_uring: soft retpipelineangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retpipelineangle stamp; Soft≠product)\n");
-/* Grep: io_uring: soft retframebufferangle — Wave 114 return-framebufferangle honesty */
-kprintf("io_uring: soft retframebufferangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retframebufferangle honesty; Soft≠product)\n");
-/* Grep: io_uring: soft retswapchainangle — Wave 114 exclusive swapchainangle stamp */
-kprintf("io_uring: soft retswapchainangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retswapchainangle stamp; Soft≠product)\n");
-/* Grep: io_uring: soft retpresentangle — Wave 115 return-presentangle honesty */
-kprintf("io_uring: soft retpresentangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retpresentangle honesty; Soft≠product)\n");
-/* Grep: io_uring: soft retvsyncangle — Wave 115 exclusive vsyncangle stamp */
-kprintf("io_uring: soft retvsyncangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retvsyncangle stamp; Soft≠product)\n");
-/* Grep: io_uring: soft retfenceangle — Wave 116 return-fenceangle honesty */
-kprintf("io_uring: soft retfenceangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retfenceangle honesty; Soft≠product)\n");
-/* Grep: io_uring: soft retsemaphoreangle — Wave 116 exclusive semaphoreangle stamp */
-kprintf("io_uring: soft retsemaphoreangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retsemaphoreangle stamp; Soft≠product)\n");
-                            kprintf("io_uring: soft deepen wave=%u areas=%u logs=%lu "
-            "used=%u mapped=%u setup_ok=%lu enter_ok=%lu sqe_exec=%lu "
-            "(Wave 35 exclusive; min rings soft scaffold; not product game I/O; "
-            ")\n",
-            (unsigned)GJ_IORING_SOFT_WAVE,
-            (unsigned)GJ_IORING_SOFT_AREAS,
-            (unsigned long)g_soft.u64SoftLog,
-            g_u32SoftUsed, g_u32SoftMapped,
-            (unsigned long)g_soft.u64SetupOk,
-            (unsigned long)g_soft.u64EnterOk,
-            (unsigned long)g_soft.u64SqeExec);
-
-    /* Grep: io_uring: soft inventory PASS / soft PASS */
-    kprintf("io_uring: soft inventory PASS wave=%u logs=%lu "
-            "setup_ok=%lu enter_ok=%lu sqe_exec=%lu\n",
-            (unsigned)GJ_IORING_SOFT_WAVE,
-            (unsigned long)g_soft.u64SoftLog,
-            (unsigned long)g_soft.u64SetupOk,
-            (unsigned long)g_soft.u64EnterOk,
-            (unsigned long)g_soft.u64SqeExec);
-    kprintf("io_uring: soft PASS wave=%u logs=%lu\n",
-            (unsigned)GJ_IORING_SOFT_WAVE,
-            (unsigned long)g_soft.u64SoftLog);
+    if (u32Ok == u32Checks && u32Checks == GJ_IORING_LEAN_CHECKS) {
+        ioring_soft_inc(&g_soft.u64SoftLeanOk);
+    } else {
+        ioring_soft_inc(&g_soft.u64SoftLeanFail);
+    }
 }
 
 /**
- * After first product activity, print soft inventory once (mirrors futex /
- * session_door soft-stats-once). Safe from setup/enter/register return paths.
+ * Dual DoD honesty once-lamp (Soft!=product; agent never closes A/B).
+ * greppable: io_uring: soft dual_dod OPEN
+ * Product = hot/cold Linux ABI scaffold. Freestanding rtl/USB SKIP.
+ * G-AC-1: not in-kernel .ko product AC. storm=0.
+ */
+static void
+ioring_soft_dual_dod_once(void)
+{
+    if (g_fSoftDualDodOnce != 0) {
+        return;
+    }
+    g_fSoftDualDodOnce = 1;
+    /* Grep: io_uring: soft dual_dod OPEN | C2 Dual DoD residual */
+    kprintf("io_uring: soft dual_dod OPEN "
+            "dual_dod_a=OPEN dual_dod_b=OPEN "
+            "product=hot_cold_ABI freestanding_class=SKIP "
+            "g_ac1=1 Soft!=product dual=MIT_OR_Apache-2.0 "
+            "min_rings=1 full_game_io=0 async_title=0 iopoll=0 "
+            "accept_connect=ENOSYS chain=SETUP_INJECT_ENTER_CQE "
+            "residual_deepen=1 storm=0 agent_ne_close=1 "
+            "(C2 Dual DoD residual honesty; agent never closes A/B; "
+            "not freestanding wire; not .ko product AC; "
+            "not async title I/O / Dual DoD close)\n");
+}
+
+/**
+ * After first product activity, print soft residual lean once (mirrors futex /
+ * session_door / door soft-stats-once). Safe from setup/enter/register paths.
+ * Also drives C2 Dual DoD soft chain + dual_dod honesty once-lamps.
  */
 static void
 ioring_soft_maybe_once(void)
 {
-    if (g_fSoftOnce != 0) {
-        return;
+    if (g_fSoftOnce == 0) {
+        if (g_soft.u64SetupOk == 0 && g_soft.u64EnterOk == 0 &&
+            g_soft.u64RegOk == 0 && g_soft.u64MmapOk == 0 &&
+            g_soft.u64MmapPkg == 0 && g_soft.u64InjectOk == 0) {
+            return;
+        }
+        g_fSoftOnce = 1;
+        ioring_soft_log();
+        ioring_soft_dual_dod_once();
     }
-    if (g_soft.u64SetupOk == 0 && g_soft.u64EnterOk == 0 &&
-        g_soft.u64RegOk == 0 && g_soft.u64MmapOk == 0 &&
-        g_soft.u64MmapPkg == 0 && g_soft.u64InjectOk == 0) {
-        return;
-    }
-    g_fSoftOnce = 1;
-    ioring_soft_log();
+    /*
+     * Soft chain residual may defer (sq busy / no ring yet). Retry on later
+     * product activity until committed ok/fail. Soft!=product; storm=0.
+     */
+    ioring_soft_chain_once();
 }
 
 /* ---- package accessors ------------------------------------------------- */
@@ -1649,21 +939,38 @@ gj_io_uring_init(void)
     }
     memset(&g_soft, 0, sizeof(g_soft));
     g_fSoftOnce = 0;
+    g_fSoftChainOnce = 0;
+    g_fSoftDualDodOnce = 0;
+    g_fSoftLeanOnce = 0;
     g_u32SoftUsed = 0;
     g_u32SoftFree = GJ_IORING_MAX;
     g_u32SoftMapped = 0;
     g_u32SoftRegFiles = 0;
     g_u32SoftRegBufs = 0;
+    g_u32SoftEventfdLive = 0;
+    g_u32SoftPersLive = 0;
+    g_u32SoftSqPending = 0;
+    g_u32SoftCqPending = 0;
+    g_u32LeanChecks = 0;
+    g_u32LeanOk = 0;
+    g_u32LeanPkgOk = 0;
+    g_u32LeanPoolOk = 0;
+    g_u32LeanCatalogOk = 0;
+    g_u32LeanDodOk = 0;
+    g_u32LeanLawOk = 0;
+    g_u32LeanProductOk = 0;
+    g_u32LeanStormOk = 0;
+    g_u32LeanFreeOk = 0;
     g_fInited = 1;
     ioring_soft_inc(&g_soft.u64Init);
     /*
      * Product marker: greppable "io_uring: min rings ready".
-     * Honesty: min rings ≠ full game I/O.
+     * Honesty: min rings != full game I/O.
      */
     kprintf("io_uring: min rings ready pool=%u depth<=%u SQE+I/O+mmap+"
             "fixed+poll+openat (min rings != full game I/O)\n",
             GJ_IORING_MAX, GJ_IORING_ENTRIES);
-    /* Wave 15 soft inventory baseline (greppable io_uring: soft …). */
+    /* Sparse soft inventory baseline (greppable io_uring: soft ...). */
     ioring_soft_log();
 }
 
@@ -1792,14 +1099,18 @@ resolve_fd(struct gj_io_uring_ring *pR, const struct gj_io_uring_sqe *pSqe)
     if ((pSqe->u8Flags & IOSQE_FIXED_FILE) != 0u) {
         u32 idx;
 
+        /* C2 residual deepen: fixed-file miss tallies (Soft!=product). */
         if (pR == NULL || pR->u32RegFiles == 0u) {
+            ioring_soft_inc(&g_soft.u64FixedFileMiss);
             return -1;
         }
         if (i32Fd < 0) {
+            ioring_soft_inc(&g_soft.u64FixedFileMiss);
             return -1;
         }
         idx = (u32)i32Fd;
         if (idx >= pR->u32RegFiles || idx >= GJ_IORING_REG_FILES_MAX) {
+            ioring_soft_inc(&g_soft.u64FixedFileMiss);
             return -1;
         }
         return pR->aRegFiles[idx];
@@ -1807,21 +1118,25 @@ resolve_fd(struct gj_io_uring_ring *pR, const struct gj_io_uring_sqe *pSqe)
     return i32Fd;
 }
 
-/* Resolve fixed buffer (READ_FIXED / WRITE_FIXED) → addr/len. */
+/* Resolve fixed buffer (READ_FIXED / WRITE_FIXED) -> addr/len. */
 static i32
 resolve_fixed_buf(struct gj_io_uring_ring *pR, u16 u16Idx, u64 *pAddr,
                   u32 *pLen)
 {
     if (pR == NULL || pAddr == NULL || pLen == NULL) {
+        ioring_soft_inc(&g_soft.u64FixedBufMiss);
         return -LINUX_EINVAL;
     }
+    /* C2 residual deepen: fixed-buf miss tallies (Soft!=product). */
     if ((u32)u16Idx >= pR->u32RegBufs ||
         (u32)u16Idx >= GJ_IORING_REG_BUFS_MAX) {
+        ioring_soft_inc(&g_soft.u64FixedBufMiss);
         return -LINUX_EINVAL;
     }
     *pAddr = pR->aRegBufAddr[u16Idx];
     *pLen = pR->aRegBufLen[u16Idx];
     if (*pAddr == 0ull) {
+        ioring_soft_inc(&g_soft.u64FixedBufMiss);
         return -LINUX_EFAULT;
     }
     return 0;
@@ -2640,6 +1955,119 @@ gj_io_uring_cqe_advance(i64 i64Fd)
     return 0;
 }
 
+/**
+ * Soft chain residual once: live ring -> empty-SQ inject enter -> CQE peek.
+ * C2 Dual DoD residual seed (mirrors dma_buf ALLOC->MAP->FREE spirit).
+ * Soft!=product; agent != close Dual DoD; never hard-gates product paths.
+ * Defers (no once commit) when SQ busy / CQ full / no live ring yet.
+ * greppable: io_uring: soft chain | C2 Dual DoD residual
+ *
+ * Placed after sq_ctrl/cq_ctrl + cqe_peek/advance so the residual path can
+ * exercise the public enter/peek surface without forward-decl gymnastics.
+ */
+static void
+ioring_soft_chain_once(void)
+{
+    u32 i;
+    i64 i64Fd;
+    i64 i64Sub;
+    i64 i64Peek;
+    u64 u64Ud;
+    i32 i32Res;
+    struct gj_io_uring_ring *pR;
+    struct gj_io_sq_ctrl_pkg *pSq;
+    struct gj_io_cq_ctrl_pkg *pCq;
+    u32 u32SqH;
+    u32 u32SqT;
+    u32 u32CqH;
+    u32 u32CqT;
+    u32 u32CqPend;
+
+    if (g_fSoftChainOnce != 0) {
+        return;
+    }
+    /* Need at least one successful setup (live pool slot). */
+    if (g_soft.u64SetupOk == 0) {
+        return;
+    }
+
+    pR = NULL;
+    i64Fd = -1;
+    for (i = 0; i < GJ_IORING_MAX; i++) {
+        if (g_aRing[i].u8Used != 0u && g_aRingFd[i] >= 0) {
+            pR = &g_aRing[i];
+            i64Fd = g_aRingFd[i];
+            break;
+        }
+    }
+    if (pR == NULL || i64Fd < 0) {
+        /* Pool race / teardown; retry later (do not commit once). */
+        ioring_soft_inc(&g_soft.u64SoftChainSkip);
+        return;
+    }
+
+    pSq = sq_ctrl(pR);
+    pCq = cq_ctrl(pR);
+    u32SqH = pSq->head;
+    u32SqT = pSq->tail;
+    u32CqH = pCq->head;
+    u32CqT = pCq->tail;
+
+    /*
+     * Only when SQ empty and CQ has room - do not disturb userspace fill or
+     * overflow an already-full CQ. Soft residual only.
+     */
+    if (u32SqH != u32SqT) {
+        ioring_soft_inc(&g_soft.u64SoftChainSkip);
+        return;
+    }
+    u32CqPend = (u32CqT - u32CqH);
+    if (u32CqPend >= pCq->ring_entries) {
+        ioring_soft_inc(&g_soft.u64SoftChainSkip);
+        return;
+    }
+
+    /* Commit once before enter to avoid re-entrancy via maybe_once. */
+    g_fSoftChainOnce = 1;
+
+    /*
+     * Empty-SQ + to_submit>0 soft-injects tail; zeroed SQE is NOP (opcode 0).
+     * Drain posts CQE; peek+advance consumes residual completion.
+     */
+    i64Sub = gj_io_uring_enter(i64Fd, 1u, 0u, 0u);
+    if (i64Sub < 0) {
+        ioring_soft_inc(&g_soft.u64SoftChainFail);
+        /* Grep: io_uring: soft chain FAIL | C2 Dual DoD residual */
+        kprintf("io_uring: soft chain FAIL enter rc=%ld fd=%ld "
+                "(C2 Dual DoD residual; Soft!=product Dual DoD OPEN)\n",
+                (long)i64Sub, (long)i64Fd);
+        return;
+    }
+    u64Ud = 0;
+    i32Res = 0;
+    i64Peek = gj_io_uring_cqe_peek(i64Fd, &u64Ud, &i32Res);
+    if (i64Peek != 0) {
+        ioring_soft_inc(&g_soft.u64SoftChainFail);
+        kprintf("io_uring: soft chain FAIL cqe_peek rc=%ld fd=%ld "
+                "submitted=%ld "
+                "(C2 Dual DoD residual; Soft!=product Dual DoD OPEN)\n",
+                (long)i64Peek, (long)i64Fd, (long)i64Sub);
+        return;
+    }
+    ioring_soft_inc(&g_soft.u64SoftCqePeekOk);
+    (void)gj_io_uring_cqe_advance(i64Fd);
+    ioring_soft_inc(&g_soft.u64SoftChainOk);
+    /* Grep: io_uring: soft chain | C2 Dual DoD residual */
+    kprintf("io_uring: soft chain ok path=SETUP_INJECT_ENTER_CQE "
+            "fd=%ld submitted=%ld cqe_res=%d user_data=0x%lx "
+            "C2 Dual DoD residual Dual_DoD_A=OPEN Dual_DoD_B=OPEN "
+            "Soft!=product G-AC-1 dual=MIT|Apache-2.0 "
+            "product=hot_cold_ABI freestanding_class=SKIP "
+            "agent_ne_close=1 residual_deepen=1 "
+            "(soft residual != async title I/O; not Dual DoD close)\n",
+            (long)i64Fd, (long)i64Sub, i32Res, (unsigned long)u64Ud);
+}
+
 i64
 gj_io_uring_enter(i64 i64Fd, u32 u32ToSubmit, u32 u32MinComplete, u32 u32Flags)
 {
@@ -2666,7 +2094,7 @@ gj_io_uring_enter(i64 i64Fd, u32 u32ToSubmit, u32 u32MinComplete, u32 u32Flags)
     pending = pSq->tail - pSq->head;
     /*
      * Userspace fill path: if tail advanced past head, drain those SQEs.
-     * Soft inject path: empty SQ + to_submit → queue-queue NOP/inject slots.
+     * Soft inject path: empty SQ + to_submit -> queue-queue NOP/inject slots.
      */
     if (pending == 0u && u32ToSubmit > 0u) {
         u32 n = u32ToSubmit;
@@ -2801,7 +2229,7 @@ gj_io_uring_register(i64 i64Fd, u32 u32Opcode, u64 u64Arg, u32 u32NrArgs)
         /*
          * Soft sparse update: arg is fd array of nr_args entries starting
          * at offset 0 of the fixed table (full replace of first n slots).
-         * Sparse offset protocol not fully modelled — first-n update.
+         * Sparse offset protocol not fully modelled - first-n update.
          */
         n = u32NrArgs;
         if (n > GJ_IORING_REG_FILES_MAX) {

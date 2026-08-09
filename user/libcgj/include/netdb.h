@@ -13,12 +13,22 @@
  *
  * Design notes
  * ------------
- * AI_*/EAI_*/NI_* constants are Linux/glibc-shaped. Bring-up resolves
+ * AI__star/EAI__star/NI_* constants are Linux/glibc-shaped. Bring-up resolves
  * numeric hosts and "localhost"; other names may fail with EAI_NONAME.
  *
  * Non-goals
  * ---------
  * Full NSS modules and DNSSEC in process.
+ *
+ * Soft residual (C2 libcgj netdb.h; Soft!=product; G-AC-1; Dual DoD A/B OPEN):
+ *   soft     = getaddrinfo/freeaddrinfo/gai_strerror/getnameinfo + hostent/servent;
+ *              numeric + localhost soft resolve; other names may EAI_NONAME
+ *   product  = Dual DoD B = rtl8168_udx + DDI + netstackd (OPEN); freestanding SKIP
+ *   honesty  = resolver soft != product DNS/stack close; agent PASS != Dual DoD
+ *              close; stamp-free bar honesty (no version stamp); G-AC-1 no .ko AC
+ *   law      = dual MIT OR Apache-2.0; no GPL; H1 no net_eth_poll from IRQ;
+ *              H2 no stamp storms
+ * greppable: libcgj: netdb soft residual Soft!=product
  */
 #pragma once
 

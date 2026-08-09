@@ -19,6 +19,15 @@
  * Non-goals
  * ---------
  * Full glibc namespace / auditor / dlmopen isolation semantics on day one.
+ *
+ * Soft residual (C2 libcgj dlfcn.h; Soft!=product; G-AC-1; Dual DoD A/B OPEN):
+ *   soft     = dlopen/dlsym/dlvsym/dlclose/dlerror/dladdr*/dlinfo/dlmopen + RTLD_*
+ *              sentinels; real load owned by ld-gj (soft-fill OK when absent)
+ *   product  = ld-gj dynlink + staged libc.so.6 graphs; not freestanding class
+ *   honesty  = decls != full auditor/namespace product; agent PASS != Dual DoD
+ *              close; stamp-free bar honesty (no version stamp); G-AC-1 no .ko AC
+ *   law      = dual MIT OR Apache-2.0; no GPL; H2 no stamp storms
+ * greppable: libcgj: dlfcn soft residual Soft!=product
  */
 #pragma once
 

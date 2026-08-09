@@ -3,13 +3,15 @@
  * Copyright (c) 2026 Project GreenJade contributors
  *
  * Host-oracle offsets for RHEL-class Linux struct net_device / net_device_ops.
- * Used only for soft module-path experiments (r8169.ko REAL probe + future
- * Option B ndo_open layout readiness). Soft ≠ ABI-stable product.
- * Soft ≠ product AC (G-AC-1). Do not claim layout matches any other kver /
- * CONFIG / RH_KABI rebuild.
+ * Used only for soft module-path / ABI hostability eng residual (r8169.ko
+ * REAL probe inventory + future Option B ndo_open layout readiness).
+ * Soft != ABI-stable product. Soft != product AC (G-AC-1).
+ * Soft residual lean: freestanding rtl default SKIP (GJ_RTL8168_PROBE=0);
+ * product NIC = userspace UDX - never freestanding wire product claim.
+ * Do not claim layout matches any other kver / CONFIG / RH_KABI rebuild.
  *
  * Measured the same way as linux_pci_hostish_off.h (throwaway OOT module +
- * offsetof/sizeof on a lab host with kernel-devel). Numbers only — no Linux
+ * offsetof/sizeof on a lab host with kernel-devel). Numbers only - no Linux
  * GPL source is in this header.
  *
  * Measured: kver=5.14.0-687.15.1.el9_8.x86_64
@@ -21,7 +23,7 @@
  *   Host sizeof(net_device)= 0xaf0; host netdev_ops @+0x08; ndo_open @ ops+0x10
  *   Soft priv base         = +0x800 (after soft front)
  *   Host netdev_priv base  = after aligned sizeof(net_device) ≈ +0xaf0
- *   → Soft priv ≠ host priv. Dual object preferred: soft inventory stays on
+ *   -> Soft priv != host priv. Dual object preferred: soft inventory stays on
  *     soft struct; hostish 0xaf0 blob captures .ko host-offset stores for
  *     Option B readiness (still no ndo_open call by default).
  */
@@ -52,13 +54,13 @@
 #define LINUX_NETDEV_HOSTISH_BLOB_BYTES     0x0c00u /* 3072 ≥ 0xaf0; pad to 0xc00 */
 
 /*
- * Soft bookkeeping front (clean-room) vs host — not interchangeable.
+ * Soft bookkeeping front (clean-room) vs host - not interchangeable.
  * Soft netdev_ops field offset inside soft struct net_device:
  */
-#define LINUX_NETDEV_SOFT_OFF_NETDEV_OPS    0x18u /* soft field; ≠ host 0x08 */
+#define LINUX_NETDEV_SOFT_OFF_NETDEV_OPS    0x18u /* soft field; != host 0x08 */
 
 /*
- * Priv base conflict (document only — fill path uses dual object):
+ * Priv base conflict (document only - fill path uses dual object):
  *   Soft:  (u8 *)nd + LINUX_NETDEV_SOFT_ND_BYTES   (= +0x800)
  *   Host:  (u8 *)nd + aligned_sizeof(net_device)    (≈ +0xaf0)
  * Hostish blob path does NOT move soft priv; Option B must not assume soft
@@ -68,18 +70,20 @@
 #define LINUX_NETDEV_HOSTISH_PRIV_OFF       LINUX_NETDEV_HOSTISH_SIZE_NET_DEVICE
 
 /*
- * Usage (freestanding hostish fill — dual object after register_netdev):
+ * Usage (freestanding hostish fill - dual object after register_netdev):
  *
  *   u8 *pSoft = (u8 *)soft_primary;          // same VA .ko mutated
  *   u8 *pHost = hostish_blob;                // separate 0xc00 pool slot
  *   memset(pHost, 0, LINUX_NETDEV_HOSTISH_BLOB_BYTES);
  *   memcpy(pHost, pSoft, LINUX_NETDEV_HOSTISH_SIZE_NET_DEVICE);
- *   // .ko wrote netdev_ops at host +0x08 into soft slab → recovered here:
+ *   // .ko wrote netdev_ops at host +0x08 into soft slab -> recovered here:
  *   void *ops = *(void **)(pHost + LINUX_NETDEV_HOSTISH_OFF_NETDEV_OPS);
  *   void *open = ops
  *       ? *(void **)((u8 *)ops + LINUX_NETDEV_HOSTISH_OPS_OFF_NDO_OPEN)
  *       : NULL;
  *
  * Gate real .ko ndo_open behind GJ_SOFT_R8169_KO_NDO_OPEN (default 0).
- * Soft≠product. Never call ndo_open from fill/diagnostic path.
+ * Soft!=product. Never call ndo_open from fill/diagnostic path.
+ * No Option B .ko ndo_open product (G-AC-1).
+ * Freestanding rtl SKIP by default; product NIC = UDX userspace (G-AC-1).
  */

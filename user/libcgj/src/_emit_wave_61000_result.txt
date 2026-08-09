@@ -1,0 +1,7 @@
+created=0
+already_existed=1000
+planned=1000
+range=60001..61000
+pattern=25850 simple identity + decade lamps (*91-*00) at each hundred
+note=CREATE-ONLY O_EXCL: full range already present. Emitter at _emit_wave_61000_once.py for re-run. No Makefile/kernel/docs touch. Soft only; product lamps remain open (bar3_ready=0, product_score=0) at each *00 decade.
+samples=graph_batch60001.c (simple), graph_batch60091.c (shell_green_60100), graph_batch60093.c (bar3_ready_60100=0), graph_batch60100.c (capstone), graph_batch60991.c (shell_green_61000), graph_batch60993.c (bar3_ready_61000=0), graph_batch61000.c (capstone)

@@ -32,12 +32,14 @@
  *   greppable: GJ_GNU_SOFT_SURFACE
  *   greppable: GJ_GNU_SOFT_NOTE
  *
- * Soft inventory (Wave 126 exclusive deepen):
+ * Soft inventory (Wave 126 exclusive deepen; C2 lib residual Soft!=product):
  *   libgj-gnu: soft inventory wave=70 surfaces=12 caps=0xf stamp=GNU1
  *   libgj-gnu: soft deepen wave=70 areas=export,stamp,caps,get,id,probe,
  *              touch,inventory,wave,surface,path,note
  *   libgj-gnu: soft path hash=gnu soname=libgj-gnu.so.1
+ *   libgj-gnu: soft residual Soft!=product G-AC-1 dual_dod=OPEN
  * Diagnostics only — never a product bar3 claim; product 0x43 unchanged.
+ * Soft!=product; dual MIT OR Apache-2.0; G-AC-1; Dual DoD OPEN.
  */
 #include <stdint.h>
 
@@ -55,10 +57,11 @@
 #define GJ_GNU_SOFT_CAP_MASK    ((uint32_t)0xfu)
 
 /* Wave 126 exclusive soft inventory stamp. */
-/* Wave 126 soft deepen surfaces (CREATE-ONLY soft ≠ product):
+/* Wave 126 soft deepen surfaces (CREATE-ONLY Soft!=product residual):
  *   greppable: soft retgradientangle continuum_toward=26800 soft_ne_product=1 wave=126
  *   greppable: soft retblendangle exclusive=1 continuum_toward=26800 soft_ne_product=1 wave=126
- * Soft ≠ product complete; product lamps 0;
+ *   greppable: libgj-gnu: soft residual Soft!=product
+ * Soft!=product complete; product lamps 0; G-AC-1; Dual DoD OPEN.
  */
 
 #define GJ_GNU_SOFT_WAVE 70u
@@ -84,6 +87,7 @@ static volatile uint32_t g_u32SoftIdN;
 static volatile uint32_t g_u32SoftInvN;
 static volatile uint32_t g_u32SoftDeepenN;
 static volatile uint32_t g_u32SoftPathN;
+static volatile uint32_t g_u32SoftResidualN;
 
 /*
  * Product soft inventory blob (rodata; greppable).
@@ -95,7 +99,8 @@ static const char g_szGnuSoftInventory[] =
     "export=0x43 stamp=GNU1 caps=0xf "
     "get=1 id=1 probe=1 touch=1 inventory=1 deepen=1 path=1 note=1 "
     "hash=gnu soname=libgj-gnu.so.1 freestanding=1 "
-    "multi_server=0 confine=0";
+    "multi_server=0 confine=0 Soft!=product soft_ne_product=1 "
+    "G-AC-1=1 dual_dod=OPEN dual=MIT_OR_Apache-2.0";
 
 /*
  * Wave 126 soft deepen stamp.
@@ -106,7 +111,9 @@ static const char g_szGnuSoftDeepen[] =
     "libgj-gnu: soft deepen wave=70 areas=12 "
     "export,stamp,caps,get,id,probe,touch,inventory,wave,surface,path,note "
     "product_export=0x43 soft_stamp=GNU1 hot_path=clean "
-    "multi_server=0 confine=0";
+    "multi_server=0 confine=0 "
+    "retgradientangle=1 retblendangle=1 continuum_toward=26800 "
+    "soft_ne_product=1 Soft!=product G-AC-1=1 dual_dod=OPEN wave=126";
 
 /*
  * Soft path honesty line.
@@ -115,15 +122,30 @@ static const char g_szGnuSoftDeepen[] =
 static const char g_szGnuSoftPath[] =
     "libgj-gnu: soft path hash=gnu soname=libgj-gnu.so.1 "
     "export=0x43 freestanding=1 pure_c=1 no_heap=1 "
-    "multi_server=0 confine=0 (soft inventory)";
+    "multi_server=0 confine=0 Soft!=product soft_ne_product=1 "
+    "G-AC-1=1 dual_dod=OPEN (soft inventory)";
 
 /*
- * Soft honesty line (Wave 126 exclusive).
+ * Soft honesty line (Wave 126 exclusive; C2 residual Soft!=product).
  * Grep: libgj-gnu: soft honesty
  */
 static const char g_szGnuSoftHonesty[] =
     "libgj-gnu: soft honesty multi_server=0 confine=0 exclusive=1 "
-    "soft=1 product_kernel=OPEN wave=70";
+    "soft=1 product_kernel=OPEN wave=70 "
+    "retgradientangle=1 retblendangle=1 continuum_toward=26800 "
+    "soft_ne_product=1 Soft!=product G-AC-1=1 dual_dod=OPEN wave=126";
+
+/*
+ * C2 lib soft residual lean honesty (Soft!=product; not product contract).
+ * greppable: libgj-gnu: soft residual
+ * Grep: libgj-gnu: soft residual Soft!=product
+ */
+static const char g_szGnuSoftResidual[] =
+    "libgj-gnu: soft residual Soft!=product soft_ne_product=1 "
+    "product_export=0x43 soft_stamp=GNU1 hash=gnu soname=libgj-gnu.so.1 "
+    "exclusive=1 residual_lean=1 product_lamps=0 bar3=0 "
+    "G-AC-1=1 dual_dod=OPEN dual=MIT_OR_Apache-2.0 "
+    "continuum_toward=26800 wave=126";
 
 /* Soft area name catalog (Wave 111; cold only). */
 static const char *const g_apszGnuSoftAreas[] = {
@@ -248,6 +270,27 @@ const char *
 gj_gnu_soft_honesty(void)
 {
     return g_szGnuSoftHonesty;
+}
+
+/*
+ * C2 lib soft residual lean (Soft!=product; never product contract).
+ * greppable: libgj-gnu: soft residual
+ * Grep: libgj-gnu: soft residual Soft!=product
+ */
+const char *
+gj_gnu_soft_residual(void)
+{
+    g_u32SoftResidualN++;
+    return g_szGnuSoftResidual;
+}
+
+/*
+ * Soft residual call count (cold; wrap OK). Grep: libgj-gnu: soft residual
+ */
+uint32_t
+gj_gnu_soft_residual_count(void)
+{
+    return g_u32SoftResidualN;
 }
 
 /*

@@ -99,3 +99,7 @@ Kernel smoke links the same sources with `GJ_VK_KERNEL_SMOKE` (virtio-gpu + PMM)
 - Descriptor-driven texturing (still GJ bind-texture path)
 
 See also: [ABI-first pivot](../../docs/ABI_FIRST_PIVOT.md) (product direction).
+
+---
+
+**Project:** GreenJade pure-C microkernel · dual **MIT OR Apache-2.0** · Soft≠product · Dual DoD A/B **OPEN**. See [root README](../../README.md). Support: [Patreon — TheOldDog](https://www.patreon.com/cw/TheOldDog).

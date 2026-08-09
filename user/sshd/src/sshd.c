@@ -6,11 +6,20 @@
  * Dual MIT OR Apache-2.0. Clean-room pure C — not an OpenSSH/GPL paste.
  *
  * Listens on 127.0.0.1:2222 by default (override: --port or GJ_SSHD_PORT).
+ * Dual DoD B residual: --bind-any / GJ_SSHD_BIND=any → 0.0.0.0 for lab-wire
+ * accept path (toward sshd live on wire when UDX NIC owns TX/RX). Soft!=product;
+ * host smoke PASS != Dual DoD B close. G-AC-1: no .ko product AC.
  * Soft path only: SSH-2.0 identification + minimal SSH_MSG_KEXINIT.
  * Full crypto / TCP+KEX+NEWKEYS lives in sshd_gj.c + ssh_crypto.c.
  *
  *   make sshd && ./build/sshd --once
  *   ./build/sshd --listen   # then: printf 'SSH-2.0-GreenJade_test\r\n' | nc 127.0.0.1 2222
+ *   ./build/sshd --listen --bind-any --port 22   # lab-wire residual accept
+ *
+ * greppable: sshd: soft residual dual_dod_b
+ * greppable: sshd: soft residual accept
+ * greppable: sshd: soft residual bind-any
+ * greppable: Soft!=product Dual DoD B OPEN
  */
 #include <arpa/inet.h>
 #include <errno.h>
@@ -111,12 +120,18 @@ serve_peer(int hCli, int fVerbose)
 	return 0;
 }
 
+/*
+ * fBindAny=0 → INADDR_LOOPBACK (default host smoke / --once self-connect).
+ * fBindAny=1 → INADDR_ANY (Dual DoD B lab-wire residual accept path).
+ * Soft!=product: bind-any residual != product UDX NIC wire ownership.
+ */
 static int
-bind_listen(int nPort, int *pHSrv)
+bind_listen(int nPort, int fBindAny, int *pHSrv)
 {
 	int hSrv;
 	int nOne = 1;
 	struct sockaddr_in sinAddr;
+	uint32_t u32Addr;
 
 	hSrv = socket(AF_INET, SOCK_STREAM, 0);
 	if (hSrv < 0) {
@@ -126,7 +141,8 @@ bind_listen(int nPort, int *pHSrv)
 	(void)setsockopt(hSrv, SOL_SOCKET, SO_REUSEADDR, &nOne, sizeof(nOne));
 	memset(&sinAddr, 0, sizeof(sinAddr));
 	sinAddr.sin_family = AF_INET;
-	sinAddr.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
+	u32Addr = fBindAny ? INADDR_ANY : INADDR_LOOPBACK;
+	sinAddr.sin_addr.s_addr = htonl(u32Addr);
 	sinAddr.sin_port = htons((uint16_t)nPort);
 	if (bind(hSrv, (struct sockaddr *)&sinAddr, sizeof(sinAddr)) < 0) {
 		perror("bind");
@@ -139,7 +155,14 @@ bind_listen(int nPort, int *pHSrv)
 		return -1;
 	}
 	*pHSrv = hSrv;
-	printf("sshd: listening 127.0.0.1:%d (product host smoke)\n", nPort);
+	if (fBindAny) {
+		printf("sshd: listening 0.0.0.0:%d (lab-wire residual accept; "
+		       "Soft!=product dual_dod_b=OPEN)\n",
+		       nPort);
+	} else {
+		printf("sshd: listening 127.0.0.1:%d (product host smoke)\n",
+		       nPort);
+	}
 	fflush(stdout);
 	return 0;
 }
@@ -162,7 +185,8 @@ run_once_self(int nPort)
 	char aCliBuf[256];
 	ssize_t cb;
 
-	if (bind_listen(nPort, &hSrv) != 0) {
+	/* Self-connect always uses loopback (bind-any would race external). */
+	if (bind_listen(nPort, 0, &hSrv) != 0) {
 		return 1;
 	}
 
@@ -260,16 +284,22 @@ fail:
 }
 
 static int
-run_listen_loop(int nPort)
+run_listen_loop(int nPort, int fBindAny)
 {
 	int hSrv = -1;
 	int hCli = -1;
 	struct sockaddr_in sinPeer;
 	socklen_t cbPeer;
+	char aPeerIp[INET_ADDRSTRLEN];
 
-	if (bind_listen(nPort, &hSrv) != 0) {
+	if (bind_listen(nPort, fBindAny, &hSrv) != 0) {
 		return 1;
 	}
+	/* greppable: sshd: soft residual accept */
+	printf("sshd: soft residual accept ready port=%d bind_any=%d "
+	       "dual_dod_b=OPEN Soft!=product\n",
+	       nPort, fBindAny ? 1 : 0);
+	fflush(stdout);
 
 	for (;;) {
 		cbPeer = sizeof(sinPeer);
@@ -281,6 +311,15 @@ run_listen_loop(int nPort)
 			perror("accept");
 			break;
 		}
+		if (inet_ntop(AF_INET, &sinPeer.sin_addr, aPeerIp,
+			      sizeof(aPeerIp)) == NULL) {
+			aPeerIp[0] = '?';
+			aPeerIp[1] = '\0';
+		}
+		/* greppable: sshd: soft residual accept peer */
+		printf("sshd: soft residual accept peer=%s:%u\n", aPeerIp,
+		       (unsigned)ntohs(sinPeer.sin_port));
+		fflush(stdout);
 		(void)serve_peer(hCli, 1);
 		close(hCli);
 	}
@@ -292,11 +331,13 @@ static void
 usage(const char *szArg0)
 {
 	fprintf(stderr,
-		"Usage: %s [--once] [--port N] [--listen]\n"
+		"Usage: %s [--once] [--port N] [--listen] [--bind-any]\n"
 		"  Host product sshd smoke (POSIX). Default port 2222.\n"
-		"  --once    self-connect loopback smoke (default)\n"
-		"  --listen  stay listening; accept external clients (nc/ssh)\n"
-		"  --port N  bind port (or env GJ_SSHD_PORT)\n",
+		"  --once      self-connect loopback smoke (default)\n"
+		"  --listen    stay listening; accept external clients (nc/ssh)\n"
+		"  --bind-any  listen on 0.0.0.0 (lab-wire residual; Dual DoD B)\n"
+		"  --port N    bind port (or env GJ_SSHD_PORT)\n"
+		"  env GJ_SSHD_BIND=any  same as --bind-any\n",
 		szArg0 != NULL ? szArg0 : "sshd");
 }
 
@@ -306,6 +347,7 @@ main(int argc, char **argv)
 	const char *szEnv;
 	int nPort = 2222;
 	int fListen = 0;
+	int fBindAny = 0;
 	int iArg;
 	long nParsed;
 
@@ -314,6 +356,8 @@ main(int argc, char **argv)
 			fListen = 0;
 		} else if (strcmp(argv[iArg], "--listen") == 0) {
 			fListen = 1;
+		} else if (strcmp(argv[iArg], "--bind-any") == 0) {
+			fBindAny = 1;
 		} else if (strcmp(argv[iArg], "--port") == 0 &&
 			   iArg + 1 < argc) {
 			nParsed = strtol(argv[++iArg], NULL, 10);
@@ -341,6 +385,12 @@ main(int argc, char **argv)
 		}
 		nPort = (int)nParsed;
 	}
+	szEnv = getenv("GJ_SSHD_BIND");
+	if (szEnv != NULL &&
+	    (strcmp(szEnv, "any") == 0 || strcmp(szEnv, "0.0.0.0") == 0 ||
+	     strcmp(szEnv, "*") == 0)) {
+		fBindAny = 1;
+	}
 
 	if (!ak_line_ok("ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAItest") ||
 	    !ak_line_ok("ssh-rsa AAAAB3NzaC1yc2Etest") ||
@@ -351,22 +401,18 @@ main(int argc, char **argv)
 	}
 	printf("sshd: authorized_keys soft PASS\n");
 
-	/* Grep: sshd: soft inventory (Wave 126 exclusive deepen; host smoke) */
-/* Wave 126 soft deepen surfaces (CREATE-ONLY soft ≠ product):
- *   greppable: soft retgradientangle continuum_toward=26800 soft_ne_product=1 wave=126
- *   greppable: soft retblendangle exclusive=1 continuum_toward=26800 soft_ne_product=1 wave=126
- * Soft ≠ product complete; product lamps 0;
- */
-
-	printf("sshd: soft inventory authorized_keys=1 kexinit=soft wave=70 "
-	       "multi_server=0 confine=0\n");
-	printf("sshd: soft deepen product_kernel=OPEN wave=70 areas=1 multi_server=0 confine=0 "
-	       "\n");
-	printf("sshd: soft honesty multi_server=0 confine=0 "
-	       "exclusive=1 soft=1 product_kernel=OPEN wave=70\n");
+	/* Grep: sshd: soft inventory / soft residual dual_dod_b (host smoke) */
+	printf("sshd: soft inventory authorized_keys=1 kexinit=soft "
+	       "multi_server=0 confine=0 Soft!=product\n");
+	printf("sshd: soft residual dual_dod_b=OPEN bind_any=%d port=%d "
+	       "product_path=UDX Soft!=product G-AC-1=1\n",
+	       fBindAny ? 1 : 0, nPort);
+	printf("sshd: soft residual accept path listen=%d once=%d "
+	       "lab_wire=%d Soft!=product\n",
+	       fListen ? 1 : 0, fListen ? 0 : 1, fBindAny ? 1 : 0);
 
 	if (fListen) {
-		return run_listen_loop(nPort);
+		return run_listen_loop(nPort, fBindAny);
 	}
 	return run_once_self(nPort);
 }

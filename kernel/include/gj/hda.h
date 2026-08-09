@@ -22,7 +22,7 @@
  *   - Soft SD format / tag / IOC counters for stream-id bind smokes
  *
  * Greppable product markers (keep stable):
- *   hda: stream path PASS / CORB/BDL path PASS / multi-stream … PASS
+ *   hda: stream path PASS / CORB/BDL path PASS / multi-stream ... PASS
  *   hda: CORB DMA engine PASS / HW CORB path PASS / BDL kick PASS
  *   hda: soft BDL / soft LPIB / stream-id
  */
@@ -68,7 +68,7 @@ u32  hda_stream_bytes_queued(void);
 u32  hda_stream_bytes_played(void);
 u32  hda_stream_underruns(void);
 
-/** Fill silence and play a short pattern — used by smoke. Returns 0 on PASS. */
+/** Fill silence and play a short pattern - used by smoke. Returns 0 on PASS. */
 int  hda_stream_smoke(void);
 
 /* ---- CORB/RIRB software rings + BDL (pre-real-DMA) -------------------- */
@@ -104,7 +104,7 @@ u32  hda_bdl_entries(void);
 /** CORB + BDL smoke sequence; greppable PASS. Returns 0 on success. */
 int  hda_corb_bdl_smoke(void);
 
-/** Run software CORB DMA: process WP-RP verbs from programmed base → RIRB. */
+/** Run software CORB DMA: process WP-RP verbs from programmed base -> RIRB. */
 u32  hda_corb_dma_run(void);
 u32  hda_corb_dma_runs(void);
 

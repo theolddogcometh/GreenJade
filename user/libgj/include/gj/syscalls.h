@@ -20,6 +20,16 @@
  * Soft deepen: numbers, door ops, and flag shapes track kernel door headers
  * (session_door / net_door / store_door / vfs_door). Freestanding product path
  * only — not a libc (see gj/string.h for helpers; do not merge with libcgj).
+ * Soft!=product (ASCII). G-AC-1: no Linux .ko product AC.
+ * Dual DoD A/B OPEN (UDX USB/NIC). Soft DDI lamps do not close Dual DoD.
+ * Greppable: Soft!=product, G-AC-1, Dual DoD OPEN, GJ_SYS_DDI, gj_ddi
+ *
+ * Product residual (C2; stamp-free bar v2026.08.04.75; Soft!=product):
+ *   product=UDX+sshd+stack — net door (GJ_SYS_NET) + DDI (GJ_SYS_DDI)
+ *   seed the freestanding chain: rtl8168_udx → netstackd → sshd :22.
+ *   Thin wrappers only; never claim Dual DoD close / Cap mint product.
+ * greppable: gj_syscalls: soft product residual product=UDX+sshd+stack
+ * greppable: Soft!=product Dual DoD OPEN product=UDX+sshd+stack
  *
  * Calling convention (x86_64 SYSCALL, Linux/GJ shared register layout):
  *   nr → rax; a0..a5 → rdi, rsi, rdx, r10, r8, r9 (not rcx — SYSCALL clobber).
@@ -102,7 +112,15 @@ extern "C" {
 #define GJ_SYS_HDA_STREAM        94
 /** Session door: arg0=GJ_SESS_OP_*; see session_door.h / ops below. */
 #define GJ_SYS_SESSION           95
-/** Net door: arg0=GJ_NET_OP_*; see net_door.h / ops below. */
+/**
+ * Net door: arg0=GJ_NET_OP_*; see net_door.h / ops below.
+ * Product residual seed (Soft!=product; Dual DoD B OPEN):
+ *   freestanding netstackd + sshd use GJ_SYS_NET for CLAIM/SOCKET/BIND/
+ *   LISTEN/ACCEPT/SEND/RECV + virtio/UDX ring ops. product=UDX+sshd+stack
+ *   chain = rtl8168_udx → stack (this door) → sshd :22. Soft door success
+ *   != Dual DoD B close; T0 product net = virtio until UDX owns wire.
+ * greppable: GJ_SYS_NET product=UDX+sshd+stack Dual_DoD_B=OPEN
+ */
 #define GJ_SYS_NET               96
 /** Storage door: arg0=GJ_STORE_OP_*; see store_door.h / ops below. */
 #define GJ_SYS_STORE             97
@@ -145,11 +163,42 @@ extern "C" {
 /**
  * Soft DDI door (nr 103) — userspace Linux-shaped driver hosts.
  * Kernel source of truth: kernel/include/gj/syscall.h + gj/ddi_door.h.
- * Soft≠product: scan/get/open/map_bar/cfg/dma notes (docs/DDI_SOFT.md).
+ * Soft!=product: scan/get/open/map_bar/cfg/dma notes (docs/DDI_SOFT.md).
+ * G-AC-1: no .ko product AC. Dual DoD A/B OPEN (soft DDI != UDX close).
  *   arg0 = GJ_DDI_OP_* / DDI_OP_* (match kernel ddi_door.h)
- * Greppable: GJ_SYS_DDI, gj_ddi, GJ_DDI_OP_
+ * Greppable: Soft!=product, G-AC-1, Dual DoD OPEN, GJ_SYS_DDI, gj_ddi
  */
 #define GJ_SYS_DDI               103
+
+/**
+ * Memobj placement Option A (nr 104/105) — docs/MEM_PLACE_CHANNEL.md.
+ * Soft!=product L0: N replica VAs; userspace races reads; no PA leak.
+ * CREATE_PLACED: arg0=gj_mem_place_req* arg1=cPages arg2=gj_mem_place_out*
+ * MAP_REPLICA:   arg0=name arg1=replica arg2=hint arg3=prot → VA|0
+ * greppable: MEM_PLACE_L0 MEM_PLACE_NO_PA_LEAK Soft!=product
+ */
+#define GJ_SYS_MEMOBJ_CREATE_PLACED 104
+#define GJ_SYS_MEMOBJ_MAP_REPLICA   105
+
+/* ---- Placement structs (mirror kernel gj/memobj.h; Soft residual) ---- */
+#define GJ_MEM_PLACE_DEFAULT       0u
+#define GJ_MEM_PLACE_CHAN_STRIPED  (1u << 1)
+#define GJ_MEM_PLACE_MAX_REPLICAS  4u
+
+struct gj_mem_place_req {
+    unsigned u32Flags;        /* GJ_MEM_PLACE_* */
+    unsigned u32Replicas;     /* 1..MAX */
+    unsigned u32MinChannels;  /* 0 best effort; else hard min soft classes */
+    unsigned u32NodePref;     /* reserved L1; ignore soft */
+};
+
+struct gj_mem_place_out {
+    char     szName[32];
+    unsigned u32Replicas;
+    unsigned u32LogicalPages;
+    unsigned u32Flags;
+    unsigned u32SoftChannels; /* achieved soft L0 class count; never PA */
+};
 
 /* ---- HDA stream ops (arg0 of GJ_SYS_HDA_STREAM) ---- */
 /* Soft PCM path for hda_client: open → write → start → tick* → close. */
@@ -176,8 +225,8 @@ extern "C" {
 /* ---- DDI door ops (arg0 of GJ_SYS_DDI) — match kernel ddi_door.h ---- */
 /*
  * Soft DDI ops for userspace driver hosts (docs/DDI_SOFT.md).
- * Soft≠product. Numbers match kernel DDI_OP_* (do not renumber).
- * Greppable: GJ_DDI_OP_
+ * Soft!=product. G-AC-1. Dual DoD OPEN. Numbers match DDI_OP_* (frozen).
+ * Greppable: Soft!=product, GJ_DDI_OP_, G-AC-1
  */
 #define GJ_DDI_OP_SCAN       1u /* → device count (devmgr_soft_pci_scan) */
 #define GJ_DDI_OP_GET        2u /* arg1=index arg2=user gj_ddi_dev_info* */
@@ -192,6 +241,13 @@ extern "C" {
 /*
  * Claim/release gate multi-client use. Socket ops take door-local handles
  * (not necessarily Linux fds). Ring ops 12..24 are UDX/virtio soft export.
+ *
+ * Product residual (Soft!=product; Dual DoD B OPEN; stamp-free bar
+ * v2026.08.04.75): product=UDX+sshd+stack uses these ops for:
+ *   stack host — CLAIM/SOCKET/BIND/SEND/RECV/TCP multi-seg + ring export
+ *   sshd       — LISTEN/ACCEPT/SEND/RECV on :22 over product net
+ * Soft door green != UDX wire owner / Dual DoD B close (agent!=close).
+ * greppable: gj_syscalls: soft product residual product=UDX+sshd+stack
  */
 #define GJ_NET_OP_POLL        1u /* pump RX/TX soft progress; → events/0 */
 #define GJ_NET_OP_STATS       2u /* arg1=user u32[4] arp,udp,icmp,calls */
@@ -231,6 +287,11 @@ extern "C" {
 #endif
 #define GJ_NET_OP_ACCEPT      25u /* arg1=hListen → new hFd or -errno */
 #define GJ_NET_OP_TCP_STATS   26u /* arg1=user u32[4] soft TCP counters */
+#define GJ_NET_OP_SOCK_POLL   27u /* arg1=fd arg2=want → readiness mask */
+/* UDX L2 soft bridge (Dual DoD B; freestanding rtl SKIP). Soft!=product. */
+#define GJ_NET_OP_ETH_INJECT  28u /* arg1=user frame arg2=len → demux ok */
+#define GJ_NET_OP_ETH_TX_PULL 29u /* arg1=user buf arg2=max → bytes or 0 */
+#define GJ_NET_OP_ETH_UDX_READY 30u /* arg1=1 arm / 0 drop UDX L2 soft */
 
 /* Soft net socket domain/type + bounce — opt-in (see GJ_LIBGJ_NET_RING_OPS). */
 #if defined(GJ_LIBGJ_NET_RING_OPS)
@@ -768,6 +829,19 @@ static inline long gj_net_poll(void)
 {
     return gj_net(GJ_NET_OP_POLL, 0, 0, 0);
 }
+/* UDX L2 soft bridge (Dual DoD B; freestanding rtl SKIP). Soft!=product. */
+static inline long gj_net_eth_udx_ready(int fArm)
+{
+    return gj_net(GJ_NET_OP_ETH_UDX_READY, (long)(fArm ? 1 : 0), 0, 0);
+}
+static inline long gj_net_eth_inject(const void *pFrame, size_t cb)
+{
+    return gj_net(GJ_NET_OP_ETH_INJECT, (long)(uintptr_t)pFrame, (long)cb, 0);
+}
+static inline long gj_net_eth_tx_pull(void *pBuf, size_t cbMax)
+{
+    return gj_net(GJ_NET_OP_ETH_TX_PULL, (long)(uintptr_t)pBuf, (long)cbMax, 0);
+}
 static inline long gj_net_stats(void *pU32x4)
 {
     return gj_net(GJ_NET_OP_STATS, (long)(uintptr_t)pU32x4, 0, 0);
@@ -1041,8 +1115,9 @@ static inline long gj_scsi_stats(void *pU32x2)
 /**
  * Soft DDI door (GJ_SYS_DDI nr 103).
  * Multiplex: op = GJ_DDI_OP_*; match kernel ddi_door.h.
- * Dual MIT OR Apache-2.0. Greppable: gj_ddi, GJ_SYS_DDI, GJ_DDI_OP_
- * Soft≠product (no live MMIO/IRQ/DMA cap mint).
+ * Dual MIT OR Apache-2.0. Soft!=product (no live MMIO/IRQ/DMA cap mint).
+ * G-AC-1: no .ko product AC. Dual DoD A/B OPEN (soft lamps != product close).
+ * Greppable: Soft!=product, G-AC-1, Dual DoD OPEN, gj_ddi, GJ_SYS_DDI
  */
 static inline long gj_ddi(unsigned op, unsigned long a1, unsigned long a2,
                           unsigned long a3)
@@ -1171,6 +1246,30 @@ static inline long gj_memobj_map_named(const char *szName, unsigned long uHint,
 {
     return gj_syscall3(GJ_SYS_MEMOBJ_MAP_NAMED, (long)(uintptr_t)szName,
                        (long)uHint, (long)uProt);
+}
+
+/**
+ * Create a placed multi-replica memobj (Option A; Soft!=product L0).
+ * Kernel diversifies soft channel classes; never returns PA.
+ * @return 0 on success, negative GJ_ERR_* (NOSUPPORT if min channels miss).
+ */
+static inline long gj_memobj_create_placed(const struct gj_mem_place_req *req,
+                                           unsigned cPages,
+                                           struct gj_mem_place_out *out)
+{
+    return gj_syscall3(GJ_SYS_MEMOBJ_CREATE_PLACED, (long)(uintptr_t)req,
+                       (long)cPages, (long)(uintptr_t)out);
+}
+
+/**
+ * Map one replica of a placed object by name.
+ * @return VA on success, 0 on failure (same ABI as MAP_NAMED).
+ */
+static inline long gj_memobj_map_replica(const char *name, unsigned replica,
+                                         unsigned long hint, unsigned prot)
+{
+    return gj_syscall4(GJ_SYS_MEMOBJ_MAP_REPLICA, (long)(uintptr_t)name,
+                       (long)replica, (long)hint, (long)prot);
 }
 
 /* ========================================================================

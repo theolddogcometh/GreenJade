@@ -14,13 +14,13 @@
  *
  * This header is the soft contract for layout and pool observability.
  * Implementation lives in kernel/cpu/cpu.c; asm offsets are consumed by
- * syscall_entry.S and related stubs — treat the leading fields as ABI.
+ * syscall_entry.S and related stubs - treat the leading fields as ABI.
  *
  * Platform profile: docs/X86_64_INTEL_PLATFORM.md P-SMP-1..6, P-ABI-1.
  * Design ceiling: GJ_MAX_CPUS / GJ_CPU_STATIC_MAX in gj/config.h.
  *
  * -------------------------------------------------------------------------
- * Layout contract (asm offsets — do not reorder leading fields)
+ * Layout contract (asm offsets - do not reorder leading fields)
  * -------------------------------------------------------------------------
  *   +0  u64KernelRsp   kernel/syscall stack top (gs:0 on SYSCALL entry)
  *   +8  u64UserRsp     user RSP snapshot (swapgs / sysret path)
@@ -33,10 +33,10 @@
  *
  * Percpu pool
  * -----------
- *   Static BSS  [0 .. GJ_CPU_STATIC_MAX)     — always linked in image
- *   PMM growth  [STATIC_MAX .. GJ_MAX_CPUS)  — cpu_init_ap allocates dyn
+ *   Static BSS  [0 .. GJ_CPU_STATIC_MAX)     - always linked in image
+ *   PMM growth  [STATIC_MAX .. GJ_MAX_CPUS)  - cpu_init_ap allocates dyn
  *
- * Soft inventory (boot telemetry / probes — not hot-path locks)
+ * Soft inventory (boot telemetry / probes - not hot-path locks)
  * ------------------------------------------------------------
  *   cpu_for_id / cpu_slot_online / cpu_dyn_percpu_count
  *   cpu_soft_* snapshot, kind, counters, greppable cpu_soft_log
@@ -71,7 +71,7 @@ struct gj_process;
 /**
  * Soft snapshot of the percpu pool (static BSS + PMM dyn growth).
  * Filled by cpu_soft_snapshot(); safe for BSP telemetry after cpu_init_bsp.
- * All sticky counters are wrap-OK diagnostics — never used as hard gates.
+ * All sticky counters are wrap-OK diagnostics - never used as hard gates.
  */
 struct gj_cpu_soft {
     u32 u32Online;        /* published online count (g_u32NOnline) */
@@ -94,12 +94,12 @@ struct gj_cpu_soft {
 /**
  * Per-CPU control block. One published instance per online logical CPU.
  *
- * Leading six fields are an asm/SYSCALL contract — see file banner.
+ * Leading six fields are an asm/SYSCALL contract - see file banner.
  * aSyscallStack is the early/fallback stack body; after a thread is current,
  * u64KernelRsp is typically retargeted to that thread's kernel stack top.
  */
 struct gj_cpu {
-    /* Must stay at start — asm offsets (syscall_entry.S / swapgs path). */
+    /* Must stay at start - asm offsets (syscall_entry.S / swapgs path). */
     u64                 u64KernelRsp;   /* +0  top of per-CPU syscall/kernel stack */
     u64                 u64UserRsp;     /* +8 */
     u64                 u64UserRip;     /* +16 */
@@ -151,7 +151,7 @@ int  cpu_slot_online(u32 u32CpuId);
 u32  cpu_dyn_percpu_count(void);
 
 /* ------------------------------------------------------------------ */
-/* Soft percpu pool observability (boot telemetry — not hot-path)       */
+/* Soft percpu pool observability (boot telemetry - not hot-path)       */
 /* ------------------------------------------------------------------ */
 
 /** Soft snapshot of pool / counter inventory into *pOut (NULL-safe). */
@@ -189,8 +189,8 @@ int  cpu_soft_gs_sane(void);
 
 /**
  * Greppable percpu soft summary. Emits:
- *   cpu: soft PASS|UP|PARTIAL online=… static=… dyn=… oom=… …
- *   cpu: soft slot=… kind=… kstack=… cr3=… thr=…
+ *   cpu: soft PASS|UP|PARTIAL online=... static=... dyn=... oom=... ...
+ *   cpu: soft slot=... kind=... kstack=... cr3=... thr=...
  * Safe any time after cpu_init_bsp; also invoked from BSP/AP soft paths.
  * greppable: cpu: soft
  */

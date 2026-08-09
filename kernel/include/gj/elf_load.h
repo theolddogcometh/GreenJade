@@ -8,30 +8,54 @@
  * -------------------------------------------------------------------------
  * Role
  * -------------------------------------------------------------------------
- * Kernel product path for Linux-shaped ET_EXEC/ET_DYN images:
- *   probe → load PT_LOAD → SO map (DT_NEEDED) → relocs → auxv handoff
- *   → INTERP-first (ld-gj) when PT_INTERP present.
+ * Kernel product path for Linux-shaped ET_EXEC/ET_DYN userspace images:
+ *   probe -> load PT_LOAD -> SO map (DT_NEEDED) -> relocs -> auxv handoff
+ *   -> INTERP-first (ld-gj) when PT_INTERP present.
+ * Serves UDX hosts and other Linux-shaped userspace binaries (not .ko).
+ * G-AC-1: no Linux .ko binary runs in-kernel as product via this path.
  *
  * Product pipeline
  * ----------------
- *   elf_probe_image          — validate + collect INTERP/NEEDED (no map)
- *   elf_load_image[_bias]    — map PT_LOAD + relative relocs
- *   elf_resolve_needed_vfs   — soft path openability of DT_NEEDED
- *   elf_load_needed_sos      — map SOs into pProc; fills SO registry
- *   elf_fill_auxv            — PCB auxv pairs for dynlinker
+ *   elf_probe_image          - validate + collect INTERP/NEEDED (no map)
+ *   elf_load_image[_bias]    - map PT_LOAD + relative relocs
+ *   elf_resolve_needed_vfs   - soft path openability of DT_NEEDED
+ *   elf_load_needed_sos      - map SOs into pProc; fills SO registry
+ *   elf_fill_auxv            - PCB auxv pairs for dynlinker
  *   elf_publish_handoff      - map GJ_LD_HANDOFF_VA + seed /proc/self/auxv etc
- *   elf_apply_interp_first   — start entry = INTERP; rewrite user thr
- *   elf_ld_handoff_verify    — smoke: magic/entry/phdr live
+ *   elf_apply_interp_first   - start entry = INTERP; rewrite user thr
+ *   elf_ld_handoff_verify    - smoke: magic/entry/phdr live
  *
  * Fixed handoff VAs (high user band)
  * ----------------------------------
- *   GJ_LD_HANDOFF_VA / STACK / RANDOM — away from PE 0x400000 and typical
+ *   GJ_LD_HANDOFF_VA / STACK / RANDOM - away from PE 0x400000 and typical
  *   ELF load biases so PE and ELF smokes do not collide.
  *
+ * Soft residual (lean; Soft!=product; never hard-gates; C0 eng only)
+ * -----------------------------------------------------------------
+ * greppable (see elf_load.c inventory; once after first activity):
+ *   "elf: soft residual" | "elf: soft residual lean" |
+ *   "elf: soft residual lean udx" | "elf: soft residual lean PASS" |
+ *   "elf: soft residual udx" | "elf: soft inventory" | "elf: soft PASS"
+ *   "elf_load: soft residual" | "elf_load: soft residual lean" |
+ *   "elf_load: soft residual lean udx" |
+ *   "elf_load: soft residual lean PASS" |
+ *   "elf_load: soft residual udx" | "elf_load: soft inventory" |
+ *   "elf_load: soft PASS"
+ * UDX host load residual (Wave 118 lean deepen):
+ *   host=userspace linux_shaped=1 host_load=userspace_elf
+ *   path=probe|load|so|reloc|auxv|handoff|interp
+ *   product_dir=UDX+ABI freestanding_class_product=0
+ *   ko_product=0 G-AC-1=1 udx_confine_product=OPEN
+ * Soft!=product · dual MIT OR Apache-2.0 · no version stamp · storm=0.
+ * Serves UDX hosts as userspace ELF only — never Linux .ko product (G-AC-1).
+ *
  * greppable: GJ_ELF_INFO_ GJ_LD_HANDOFF GJ_AT_ elf_interp_soft
+ * greppable: product_dir=UDX+ABI host_load=userspace_elf ko_product=0
  * Related: gj/process.h (PCB exec fields), gj/user_task.h, gj/spawn.h,
- *          user/ld-gj (userspace dynlinker consumer of handoff).
- * docs/GLIBC_COMPAT.md · docs/LINUX_ABI_HYBRID.md
+ *          user/ld-gj (userspace dynlinker consumer of handoff),
+ *          user/udx (Linux-shaped userspace driver host surface).
+ * docs/GLIBC_COMPAT.md · docs/LINUX_ABI_HYBRID.md · docs/UDX_LINUX_PORTER.md
+ * docs/ASSURANCE_LITE.md (G-AC-1 · Soft!=product)
  */
 #pragma once
 
@@ -121,15 +145,15 @@ struct gj_ld_so_ent {
 };
 
 /**
- * Kernel→ld-gj handoff page (mapped at GJ_LD_HANDOFF_VA).
+ * Kernel->ld-gj handoff page (mapped at GJ_LD_HANDOFF_VA).
  * Magic must be GJ_LD_HANDOFF_MAGIC before ld-gj trusts fields.
  * aAuxv is flat key/value pairs (not terminated until AT_NULL pair written).
  */
 struct gj_ld_handoff {
     u64  u64Magic;
-    u64  u64Entry;      /* AT_ENTRY — main binary */
+    u64  u64Entry;      /* AT_ENTRY - main binary */
     u64  u64Interp;     /* interpreter entry (ld-gj) */
-    u64  u64Base;       /* AT_BASE — interpreter base */
+    u64  u64Base;       /* AT_BASE - interpreter base */
     u64  u64Phdr;       /* AT_PHDR */
     u64  u64Phent;
     u64  u64Phnum;
@@ -189,7 +213,7 @@ u32 elf_load_needed_sos(struct gj_process *pProc, const struct gj_elf_info *pInf
 
 /**
  * INTERP-first: set pProc start entry/stack; rewrite user threads of pProc.
- * u64Stack 0 → GJ_LD_STACK_VA. Returns 0 on success.
+ * u64Stack 0 -> GJ_LD_STACK_VA. Returns 0 on success.
  * After this, first user thr enters ld-gj, not main.
  */
 gj_status_t elf_apply_interp_first(struct gj_process *pProc,

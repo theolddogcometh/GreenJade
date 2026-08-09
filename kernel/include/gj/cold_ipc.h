@@ -10,16 +10,34 @@
  * Role
  * -------------------------------------------------------------------------
  * Bridge from gj_linux_syscall_dispatch COLD classification to a personality
- * that can implement openat/read/… without putting full VFS in the kernel
- * hot path. Product preference is doors (door_call ↔ personality server);
+ * that can implement openat/read/... without putting full VFS in the kernel
+ * hot path. Product preference is doors (door_call <-> personality server);
  * bring-up also supports an in-process sync service and a fixed-depth queue.
+ *
+ * Used by Linux personality + UDX/DDI userspace driver hosts (apps path):
+ *   cold submit -> doors or service -> personality / UDX host (not .ko).
+ *   G-AC-1: no Linux .ko product AC; Soft!=product dual MIT OR Apache-2.0.
  *
  * Submit preference (soft mode flags)
  * -----------------------------------
- *   SERVICE_FIRST (default bring-up): service → doors → queue
- *   DOORS_FIRST:                      doors → service → queue
+ *   SERVICE_FIRST (default bring-up): service -> doors -> queue
+ *   DOORS_FIRST:                      doors -> service -> queue
  * Paths gated by MODE_SERVICE / MODE_DOORS / MODE_QUEUE.
  * MODE_REQUIRE_SERVER: doors only when pServer live (avoids hang on stale ep).
+ *
+ * Lean residual (C0 soft / eng - Soft!=product dual license)
+ * ---------------------------------------------------------
+ *   Audience: personality apps + UDX/DDI userspace driver hosts.
+ *   door_call_timeout + queue park honour mono deadlines (0 = block).
+ *   Queue: untimed = thread_block+schedule; timed = yield-poll mono.
+ *   Personality is single_server only (door_recv OR queue drain; not multi).
+ *   Soft inventory CAP-capped; residual once-lamp only (no stamp storms).
+ *   Soft!=product / G-AC-1 / dual MIT OR Apache-2.0. (ASCII Soft!=product)
+ *   No version stamp. No product DoD / bar3 claim.
+ *   greppable: cold_ipc: soft residual lean
+ *   greppable: cold_ipc: residual
+ *   greppable: cold_ipc: soft residual lean host=userspace_driver
+ *   greppable: cold_ipc: soft residual lean host=udx_personality
  *
  * Soft deepen surfaces (no redesign)
  * ----------------------------------
@@ -33,11 +51,11 @@
  *
  * Lifecycle of a queue slot
  * -------------------------
- *   FREE → PENDING (submit) → CLAIMED (dequeue) → DONE (reply) → FREE
+ *   FREE -> PENDING (submit) -> CLAIMED (dequeue) -> DONE (reply) -> FREE
  * Soft: reply also accepts PENDING (service path may skip CLAIMED).
  *
  * Related: gj/linux_dispatch.h, gj/linux_abi.h, gj/syscall.h (GJ_SYS_COLD_*),
- *          gj/door.h (product doors), docs/LINUX_ABI_HYBRID.md §cold,
+ *          gj/door.h (product doors), docs/LINUX_ABI_HYBRID.md (cold),
  *          docs/PROTON_PERSONALITY.md
  */
 #pragma once
@@ -107,7 +125,7 @@ struct gj_cold_ipc_stats {
     u64 u64QueueHits;
     u64 u64Enosys;
     u64 u64Inval;
-    u64 u64QueueFull;     /* submit_queue → -EAGAIN */
+    u64 u64QueueFull;     /* submit_queue -> -EAGAIN */
     u64 u64Dequeues;      /* successful soft claim */
     u64 u64DequeueEmpty;
     u64 u64Replies;       /* successful reply */
@@ -133,18 +151,26 @@ void cold_ipc_init(void);
 
 /**
  * Submit cold syscall. Product order honours soft mode flags:
- *   SERVICE_FIRST (default bring-up): service → doors → queue
- *   DOORS_FIRST: doors → service → queue
+ *   SERVICE_FIRST (default bring-up): service -> doors -> queue
+ *   DOORS_FIRST: doors -> service -> queue
  * Paths gated by MODE_SERVICE / MODE_DOORS / MODE_QUEUE.
  * MODE_REQUIRE_SERVER: doors only when pServer live (default).
- * u64TimeoutNsec reserved (0 = default).
  *
- * Returns Linux-style i64 (handler result or -ENOSYS / -EAGAIN / -EINVAL).
+ * u64TimeoutNsec - residual timeout (doors + legacy queue):
+ *   0 = no deadline (block until reply / service return)
+ *   N = relative nsec from timer_mono_nsec; converted to absolute mono
+ *       deadline for door_call_timeout and queue park (G-COLD residual).
+ *   Sync service path ignores timeout (runs to completion).
+ *   Expired -> -LINUX_ETIMEDOUT (landed reply never demoted on same arm).
+ *   Queue path parks via thread_block+schedule (G-COLD-3; no product spin).
+ *
+ * Returns Linux-style i64 (handler result or -ENOSYS / -EAGAIN / -EINVAL /
+ * -ETIMEDOUT). Soft!=product dual license (MIT OR Apache-2.0).
  */
 i64 cold_ipc_submit(struct gj_linux_regs *pRegs, u64 u64TimeoutNsec);
 
 /**
- * Personality: soft-claim next PENDING into *pOut (state → CLAIMED).
+ * Personality: soft-claim next PENDING into *pOut (state -> CLAIMED).
  * Returns 1 if claimed, 0 if empty / null.
  */
 int cold_ipc_dequeue(struct gj_cold_request *pOut);
@@ -163,7 +189,7 @@ int  cold_ipc_personality_attached(void);
 /**
  * Register in-process cold service (libprotonrt early / tests).
  * Soft: sets personality attached when pfn non-NULL; bumps service gen.
- * pfn NULL clears the service binding (soft unbind; gen → 0).
+ * pfn NULL clears the service binding (soft unbind; gen -> 0).
  */
 void cold_ipc_set_service(i64 (*pfn)(struct gj_linux_regs *pRegs, void *pCtx),
                           void *pCtx);
@@ -216,12 +242,12 @@ u32 cold_ipc_queue_depth(void);
 
 /**
  * Soft doors enable toggle (ABI-stable).
- * fEnable != 0 → OR MODE_DOORS; fEnable == 0 → clear MODE_DOORS.
+ * fEnable != 0 -> OR MODE_DOORS; fEnable == 0 -> clear MODE_DOORS.
  * Other soft flags preserved.
  */
 void cold_ipc_set_doors_mode(int fEnable);
 
-/** Soft replace full mode mask (0 still legal — all paths off → ENOSYS). */
+/** Soft replace full mode mask (0 still legal - all paths off -> ENOSYS). */
 void cold_ipc_set_mode_flags(u32 u32Flags);
 
 /** Soft OR bits into mode mask. */
@@ -244,7 +270,8 @@ void cold_ipc_stats_reset(void);
 
 /**
  * Kernel thread entry: door_recv loop + service + door_reply (bring-up).
- * Stand-in for userspace personality process until G-PERS maps protonrt-user.
+ * Stand-in for userspace personality / UDX door host (apps + driver hosts)
+ * until G-PERS maps protonrt-user. Soft!=product; G-AC-1 no .ko product.
  */
 void cold_personality_server(void *pArg);
 
@@ -257,7 +284,7 @@ i64 cold_ipc_service_local(struct gj_linux_regs *pRegs);
 /*
  * Native GJ_SYS numbers for personality (also in syscall.h).
  * Duplicated so cold_ipc consumers need not include the full native table.
- * Do not diverge — syscall.h is authoritative for the frozen number set.
+ * Do not diverge - syscall.h is authoritative for the frozen number set.
  */
 #define GJ_SYS_COLD_DEQUEUE 80
 #define GJ_SYS_COLD_REPLY   81

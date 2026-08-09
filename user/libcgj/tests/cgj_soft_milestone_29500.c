@@ -137,6 +137,16 @@
  *   - Optional: fold these soft gates into cgj_dyn_smoke.c /
  *     cgj_smoke.c continuum soft blocks (same skip-if-missing rule).
  *   - Soft gates; bar3 still open (gj_bar3_ready_29500 == 0).
+ *
+ * Soft residual deepen (C0 libcgj soft test; Soft!=product; G-AC-1;
+ * dual MIT OR Apache-2.0; Dual DoD A/B OPEN; agent PASS != close DoD):
+ *   honesty residual — host soft KATs != product UDX/DDI Dual DoD close
+ *   lamp residual    — bar3_ready=0 product_score=0 stay OPEN
+ *   catalog residual — 11 u32 lamps + decade batch markers skip-if-missing
+ *   G-AC-1           — no Linux .ko product AC; freestanding class SKIP
+ *   stamp-free       — bar honesty v2026.08.04.75; never invent .76
+ * greppable: libcgj: soft residual m29500
+ * greppable: Soft!=product G-AC-1 Dual DoD OPEN
  */
 
 #define _GNU_SOURCE
@@ -307,7 +317,8 @@ main(void)
 		        "libcgj: soft m29500 DIRECT FAIL fails=%d\n", nFail);
 		return 1;
 	}
-	printf("libcgj: soft m29500 DIRECT PASS (all 11 lamps + markers)\n");
+	printf("libcgj: soft residual m29500 DIRECT PASS "
+	       "(11 lamps + markers; Soft!=product; Dual DoD OPEN)\n");
 	return 0;
 #else
 	void *h = NULL;
@@ -327,11 +338,13 @@ main(void)
 		/*
 		 * Soft: product SO not built yet is not a hard fail for this
 		 * CREATE-ONLY host probe. Report skip and exit 0.
+		 * Soft!=product; Dual DoD A/B OPEN; G-AC-1; agent!=close.
 		 */
 		fprintf(stderr,
 		        "libcgj: soft m29500 skip (dlopen fail: %s)\n",
 		        dlerror());
-		printf("libcgj: soft m29500 SOFT-SKIP (no product SO)\n");
+		printf("libcgj: soft residual m29500 SOFT-SKIP "
+		       "(no product SO; Soft!=product; Dual DoD OPEN)\n");
 		return 0;
 	}
 
@@ -377,8 +390,9 @@ main(void)
 		return 2;
 	}
 
-	printf("libcgj: soft m29500 PASS path=%s checked=%d "
-	       "(soft-skip unexported/missing; bar3 still open)\n",
+	printf("libcgj: soft residual m29500 PASS path=%s checked=%d "
+	       "(Soft!=product; bar3 open; Dual DoD OPEN; G-AC-1; "
+	       "agent!=close)\n",
 	       szPath, nChecked);
 	(void)dlclose(h);
 	return 0;

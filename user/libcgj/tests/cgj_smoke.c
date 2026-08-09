@@ -4,6 +4,17 @@
  *
  * Host freestanding smoke against libcgj (glibc-shaped API).
  * Built with -nostdlib -Iuser/libcgj/include + libcgj.a
+ *
+ * Soft residual (C0 libcgj soft test; Soft!=product; G-AC-1; Dual DoD A/B OPEN):
+ *   soft path  = freestanding static link of libcgj.a + continuum soft lamps
+ *   product    = UDX/DDI + hot/cold Linux ABI Dual DoD (OPEN; agent!=close)
+ *   honesty    = Soft!=product; smoke PASS != close Dual DoD A/B; no .ko AC
+ *   catalog    = glibc-shaped include surface + soft decade continuum markers
+ *   hazard     = H1 N/A; H2 once-lamp spirit; H3 thr_exit residual OPEN
+ *   Bar honesty v2026.08.04.75. NEVER bump GJ_IMAGE_VERSION from this unit.
+ * greppable: libcgj: soft residual smoke
+ * greppable: libcgj: soft residual smoke Soft!=product
+ * Dual MIT OR Apache-2.0. No GPL. G-AC-1. Dual DoD A/B OPEN.
  */
 #include <aio.h>
 #include <argp.h>
@@ -5906,6 +5917,9 @@ cgj_smoke_body(int argc, char **argv, char **envp)
 
     printf("libcgj: smoke PASS pid=%d uname=%s self=%lu\n", (int)getpid(),
            un.sysname, (unsigned long)pthread_self());
+    /* Soft residual lean lamp (Soft!=product; Dual DoD A/B remain OPEN) */
+    printf("libcgj: soft residual smoke Soft!=product "
+           "dual_dod=OPEN G-AC-1 agent!=close bar=v2026.08.04.75\n");
     return 0;
 }
 

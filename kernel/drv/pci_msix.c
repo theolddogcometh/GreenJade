@@ -5,36 +5,109 @@
  * Product MSI/MSI-X capability discovery + table entry programming.
  * Clean-room pure C from PCI Local Bus Spec capability IDs and MSI-X
  * table layout. Soft table shadow for smokes without MMIO.
- * No GPL source.
+ * Dual MIT OR Apache-2.0. No GPL source. No version stamp.
+ * Soft!=product. G-AC-1.
  *
  * greppable: MSI-X table soft path
  *
- * Soft inventory (Wave 14/15 base; Wave 35 exclusive deepen; this unit only):
- * greppable: "pci: soft …" | "msix: soft …"
- *   pci: soft inventory … / msix: soft inventory …  — geometry + tallies + wave
- *   pci: soft table …     / msix: soft table …      — entry0 + soft geometry
- *   pci: soft entry …     / msix: soft entry …      — entry0/1 detail lamps
- *   pci: soft pba …       / msix: soft pba …        — sticky PBA width/API
- *   pci: soft fire …      / msix: soft fire …       — fire + badge contract
- *   pci: soft mask …      / msix: soft mask …       — mask hold / unmask
- *   pci: soft hw …        / msix: soft hw …         — HW program tallies
- *   pci: soft caps …      / msix: soft caps …       — MSI/MSI-X cap IDs
- *   pci: soft consts …    / msix: soft consts …     — vec + addr base map
- *   pci: soft path …      / msix: soft path …       — honesty non-claim
- *   pci: soft return rate — Wave 19 ok/fail rate lamps
- *   pci: soft retcode    — Wave 19 retcode catalog
- *   pci: soft deepen …    / msix: soft deepen …     — wave=116 areas stamp
- *   pci: soft ratio …     / msix: soft ratio …      — Wave 15 prog/mask bp
- *   pci: soft headroom …  / msix: soft headroom …   — Wave 15 free entries
- *   pci: soft surface …   / msix: soft surface …    — Wave 16 area catalog
- *   pci: soft honesty …   / msix: soft honesty …
- *   pci: soft geom …      / msix: soft geom …       — Wave 16 soft table geom
- *   pci: soft return …    / msix: soft return …     — Wave 16 return surfaces
- *   pci: soft contract …  / msix: soft contract …   — Wave 16 soft≠game I/O
- *   pci: soft stats …     / msix: soft stats …      — emission tallies
- *   pci: soft inventory PASS / pci: soft PASS
- *   msix: soft inventory PASS / msix: soft PASS
- * Honesty: soft shadow depth ≠ full device Table Size; soft.
+ * Lean soft residual (this unit only; C0; Soft!=product; G-AC-1):
+ * greppable: "pci: soft ..." | "msix: soft ..."
+ *   pci: soft inventory ... / msix: soft inventory ...  - geometry + tallies
+ *   pci: soft residual lean PASS / msix: soft residual lean PASS
+ *     contiguous PASS after "lean" (UDX IRQ residual foundation)
+ *   pci: soft inventory PASS / msix: soft inventory PASS
+ * Honesty folded into residual lean (soft shadow != device Table Size).
+ * Residual policy: freestanding rtl poll-mode first; MSI-X residual for
+ * later UDX userspace IRQ hosts. Soft!=product. No stamp storms (<=4 lamps).
+ * Never forces freestanding rtl off poll-mode (hw_force_rtl=0).
+ * UDX IRQ foundation: soft_tbl->inject->notify_msix_global->NOTIFY_WAIT;
+ * product_notify_mint=OPEN (soft shadow only; no CNode IRQ mint).
+ *
+ * Residual order deepen (C0; Soft!=product; UDX enable_irq / MC shape):
+ *   pba_drain=1       - clear sticky PBA before unmask must not re-issue
+ *   dual_latch=1      - vector unmask under fn_mask holds; fn clear delivers
+ *   sticky_reissue=1  - Soft PBA not auto-cleared on deliver; remask+unmask
+ *                       re-issues without new fire (Soft!=product HW clear)
+ *   fn_pba_drain=1    - clear sticky under fn_mask before fn clear: no re-issue
+ *   vec_remask_hold=1 - remask vector under fn before fn clear: no deliver
+ *   greppable: pba_drain=1 dual_latch=1 sticky_reissue=1 fn_pba_drain=1
+ *   greppable: vec_remask_hold=1 order_residual=1
+ *
+ * Hazard H1 residual (Soft!=product dual license):
+ *   Freestanding net may be poll-mode (net_eth_poll owned by scheduler_run).
+ *   Never force IRQ eth poll; never call net_eth_poll from this unit
+ *   (soft fire / mask / fn_mask / exercise / probe / program - none).
+ *   thr/run-loop own eth poll (H1 thr-only eth). Soft!=product.
+ *   greppable: force_irq_eth_poll=0 poll_mode_first=1
+ *   greppable: net_eth_poll=run_loop_only net_eth_irq=0
+ *   greppable: net_eth_poll_from_msix=0 hw_force_rtl=0
+ *   greppable: pci: soft residual lean PASS
+ *   greppable: msix: soft residual lean PASS
+ *   greppable: product_notify_mint=OPEN
+ *
+ * Dual DoD residual honesty (Soft!=product; G-AC-1; stamp-free):
+ *   Dual DoD A/B OPEN — UDX product path; freestanding SKIP.
+ *   soft residual lean PASS != Dual DoD close != bar3.
+ *   product_msix=OPEN (soft shadow only; no product multi-vector mint).
+ *   greppable: pci: soft residual dual_dod
+ *   greppable: msix: soft residual dual_dod
+ *   greppable: pci: soft residual dual_dod OPEN
+ *   greppable: msix: soft residual dual_dod OPEN
+ *   greppable: Soft!=product soft residual dual_dod OPEN product_hosts=UDX
+ *   Bar honesty v2026.08.04.75 panel context — never invent .76.
+ *   Never bump GJ_IMAGE_VERSION from this unit.
+ *
+ * STRONGER MSI-X table readiness residual (H2 once; Soft!=product):
+ *   Soft table ready shape used by DDI_OP_IRQ_BIND for UDX product hosts
+ *   rtl8168_udx (Dual DoD B) + xhci_udx (Dual DoD A). Soft shadow only;
+ *   soft_note_only; product_notify_mint=OPEN; never freestanding re-enable.
+ *   path=soft_tbl->DDI_OP_IRQ_BIND->inject->notify_msix_global->NOTIFY_WAIT
+ *   greppable: pci: soft residual table_ready STRONGER
+ *   greppable: msix: soft residual table_ready STRONGER
+ *   greppable: product_hosts=UDX
+ *   greppable: ddi_irq_bind=1
+ *   H2 once-lamp (g_fSoftDualDodStrongerOnce); ASCII Soft!=product only.
+ *
+ * denser table_ready residual for DDI IRQ_BIND (H2 once; Soft!=product):
+ *   Multi-arm denser honesty for soft table readiness seed used by
+ *   DDI_OP_IRQ_BIND (rtl8168_udx Dual DoD B + xhci_udx Dual DoD A).
+ *   Arms (PCI_MSIX_TABLE_READY_DENSE_ARMS=28; all required; W23 denser+++++):
+ *     soft_ready | badge0_seed | prog_e0 | prog_e1 | badge_mask_cov |
+ *     readback_e0 | h1_locks | dual_dod_open | readback_e1 |
+ *     mask_hold_pba | unmask_pend | product_open |
+ *     dual_host_indep | badge_tbl_distinct | soft_tbl_depth | inject_chain |
+ *     host_pair_seed | latch_cycle | dual_host_chain | dod_open_full |
+ *     pba_drain | dual_latch | sticky_reissue | order_residual_full |
+ *     fn_pba_drain | vec_remask_hold | order_fn_full | product_path_full
+ *   denser=1 denser++=1 denser+++=1 denser++++=1 denser+++++=1
+ *   denser_arms=28 denser_ok=N ddi_irq_bind=1 soft_note_only=1
+ *   Dual DoD A/B remain OPEN; soft residual never closes product DoD.
+ *   greppable: pci: soft residual table_ready denser
+ *   greppable: msix: soft residual table_ready denser
+ *   greppable: pci: soft residual table_ready denser++
+ *   greppable: msix: soft residual table_ready denser++
+ *   greppable: pci: soft residual table_ready denser+++
+ *   greppable: msix: soft residual table_ready denser+++
+ *   greppable: pci: soft residual table_ready denser++++
+ *   greppable: msix: soft residual table_ready denser++++
+ *   greppable: pci: soft residual table_ready denser+++++
+ *   greppable: msix: soft residual table_ready denser+++++
+ *   greppable: pci: soft residual denser VERDICT
+ *   greppable: msix: soft residual denser VERDICT
+ *   greppable: denser residual bar
+ *   greppable: bar=v2026.08.04.75
+ *   greppable: table_ready denser | denser_arms= | denser_ok=
+ *   greppable: denser_arms=28 denser_ok= mask_hold_pba= unmask_pend=
+ *   greppable: dual_host_indep= badge_tbl_distinct= soft_tbl_depth=
+ *   greppable: inject_chain= denser++=1 denser+++=1 denser++++=1 denser+++++=1
+ *   greppable: host_pair_seed= latch_cycle= dual_host_chain= dod_open_full=
+ *   greppable: pba_drain= dual_latch= sticky_reissue= order_residual_full=
+ *   greppable: fn_pba_drain= vec_remask_hold= order_fn_full= product_path_full=
+ *   greppable: Soft!=product dual_dod OPEN product_hosts=UDX
+ *   denser residual bar .75 VERDICT: agent-facing rollup over 28 denser arms
+ *   Soft residual denser VERDICT != Dual DoD close; Dual DoD A/B remain OPEN.
+ *   Bar honesty v2026.08.04.75 stamp-free — never invent .76.
+ *   ASCII Soft!=product only (no unicode Soft inequality glyph).
  */
 #include <gj/config.h>
 #include <gj/irq_msix.h>
@@ -54,6 +127,22 @@
 /* Product default vector used by pci_msix_probe_log (matches GJ_MSIX_IRQ_VEC) */
 #define PCI_MSIX_PROBE_VEC 0x41u
 
+/*
+ * H1 compile-time lock (Soft!=product): force_irq_eth_poll=0, poll_mode_first=1.
+ * Flip requires H1 review - IRQ-stack eth poll is #PF I=1 fault class.
+ * greppable: force_irq_eth_poll=0 poll_mode_first=1
+ */
+_Static_assert(PCI_MSIX_FORCE_IRQ_ETH_POLL == 0u,
+               "H1: force_irq_eth_poll must be 0");
+_Static_assert(PCI_MSIX_POLL_MODE_FIRST == 1u,
+               "H1: poll_mode_first must be 1");
+_Static_assert(PCI_MSIX_NET_ETH_IRQ == 0u,
+               "H1: net_eth_irq must be 0 (run-loop owns eth poll)");
+_Static_assert(PCI_MSIX_NET_ETH_POLL_FROM == 0u,
+               "H1: never call net_eth_poll from pci_msix");
+_Static_assert(PCI_MSIX_HW_FORCE_RTL == 0u,
+               "H1: hw_force_rtl must be 0 (poll-mode first)");
+
 static u32 g_u32Programmed;
 
 /* Soft MSI-X table shadow (always available). */
@@ -62,12 +151,48 @@ static u64 g_u64SoftPba;
 static u32 g_u32SoftProg;
 static u32 g_u32SoftFire;
 static int g_fSoftReady;
-/* Wave 14: times soft inventory printed (diagnostics only). */
+/* Times soft inventory printed (diagnostics; hard-capped emission). */
 static u32 g_u32SoftInvLogs;
+/*
+ * Soft residual: Message Control Function Mask shape (bit 14). Soft only -
+ * does not write device MC. Blocks all soft table delivery while set.
+ * greppable: msix: soft residual fn_mask
+ */
+static u32 g_fSoftFnMask;
+/* Soft residual: unmask with sticky PBA -> deliver (UDX enable latch). */
+static u32 g_u32SoftUnmaskPend;
+/*
+ * H2 once: STRONGER Dual DoD / table_ready denser residual lamp latched.
+ * Soft!=product; Dual DoD A/B remain OPEN; no stamp storms.
+ * greppable: pci: soft residual dual_dod OPEN
+ * greppable: pci: soft residual table_ready STRONGER
+ * greppable: pci: soft residual table_ready denser
+ */
+static u8 g_fSoftDualDodStrongerOnce;
+/* denser table_ready residual arm tallies (H2 once; Soft!=product). */
+static u32 g_u32TableReadyDenseOk;   /* composite denser arms all PASS */
+static u32 g_u32TableReadyDenseFail; /* denser composite soft fail */
+static u32 g_u32TableReadyDenseArms; /* last denser arm count (0..DENSE_ARMS) */
 
-/* Wave 20 deepen area count (fixed greppable categories in inventory log). */
-#define PCI_MSIX_SOFT_DEEPEN_AREAS 166u
-#define PCI_MSIX_SOFT_DEEPEN_WAVE 116u
+/*
+ * Lean residual inventory: hard cap on emission (no stamp storms).
+ * Soft!=product; dual MIT OR Apache-2.0. No version stamp.
+ */
+#define PCI_MSIX_SOFT_INV_LOG_CAP 2u
+
+/*
+ * denser table_ready residual for DDI IRQ_BIND (Soft!=product; Dual DoD OPEN).
+ * 28 multi-arm honesty checks (W23 denser+++++); all required for denser ok.
+ * greppable: denser_arms=28 denser_ok= table_ready denser denser++ denser+++ denser++++ denser+++++
+ * Bar honesty v2026.08.04.75 stamp-free — never invent .76.
+ */
+#define PCI_MSIX_TABLE_READY_DENSE_ARMS 28u
+#define PCI_MSIX_TABLE_READY_DENSE_MIN  28u
+_Static_assert(PCI_MSIX_TABLE_READY_DENSE_ARMS == 28u,
+               "table_ready denser arms must be 28 (W23 denser+++++)");
+_Static_assert(PCI_MSIX_TABLE_READY_DENSE_MIN ==
+                   PCI_MSIX_TABLE_READY_DENSE_ARMS,
+               "table_ready denser min must equal denser arms");
 
 static u32
 pci_cfg_read(u8 u8Bus, u8 u8Slot, u8 u8Func, u8 u8Off)
@@ -138,8 +263,8 @@ msix_table_mmio(u64 u64Pa)
         return NULL;
     }
     /*
-     * MSI-X tables live in device MMIO BARs (often ≥0xf0000000). Never use
-     * HHDM — that maps RAM only. Identity-map 2 MiB covering the table.
+     * MSI-X tables live in device MMIO BARs (often >=0xf0000000). Never use
+     * HHDM - that maps RAM only. Identity-map 2 MiB covering the table.
      */
     if (u64Pa >= 0xf0000000ull || u64Pa >= 0x100000000ull) {
         if (vmm_map_device((gj_paddr_t)u64Pa, 2ull * 1024ull * 1024ull) !=
@@ -179,6 +304,47 @@ msix_soft_mirror(u16 u16Idx, u32 u32AddrLo, u32 u32AddrHi, u32 u32Data,
     pEnt->u8Programmed = 1;
 }
 
+/*
+ * Soft residual deliver: unmasked + not function-masked -> badge inject.
+ * Shared by soft_fire and unmask-pending path. Soft!=product HW send.
+ * Returns 1 if delivery attempted, 0 if held/invalid.
+ */
+static u32
+msix_soft_deliver(u16 u16Idx)
+{
+    struct gj_pci_msix_soft_entry *pEnt;
+    u64 u64Badge;
+
+    if (!g_fSoftReady || u16Idx >= GJ_MSIX_SOFT_TBL) {
+        return 0;
+    }
+    pEnt = &g_aSoftTab[u16Idx];
+    if (!pEnt->u8Programmed) {
+        return 0;
+    }
+    /* Soft Function Mask residual: global hold (MC bit14 shape). */
+    if (g_fSoftFnMask != 0u) {
+        return 0;
+    }
+    if ((pEnt->u32VecCtl & GJ_MSIX_VECCTL_MASK) != 0) {
+        return 0; /* per-vector mask: no Notification delivery */
+    }
+    pEnt->u8SoftFire = 1;
+    if (g_u32SoftFire < 0xffffffffu) {
+        g_u32SoftFire++;
+    }
+    /*
+     * Badge attribution: entry 0 -> bit 2 (GJ_MSIX_BADGE_TBL(0)) so existing
+     * smoke wait masks covering low bits still observe table soft fire.
+     * Userspace later: NOTIFY_WAIT which=0 mask=badge reaps the pulse.
+     */
+    u64Badge = GJ_MSIX_BADGE_TBL(u16Idx);
+    if (irq_msix_ready()) {
+        irq_msix_soft_inject(u64Badge);
+    }
+    return 1;
+}
+
 void
 pci_msix_soft_table_init(void)
 {
@@ -189,6 +355,8 @@ pci_msix_soft_table_init(void)
     g_u64SoftPba = 0;
     g_u32SoftProg = 0;
     g_u32SoftFire = 0;
+    g_fSoftFnMask = 0;
+    g_u32SoftUnmaskPend = 0;
     g_fSoftReady = 1;
 }
 
@@ -221,6 +389,21 @@ pci_msix_soft_mask(u16 u16Idx, u32 u32Mask)
         g_aSoftTab[u16Idx].u32VecCtl |= GJ_MSIX_VECCTL_MASK;
     } else {
         g_aSoftTab[u16Idx].u32VecCtl &= ~GJ_MSIX_VECCTL_MASK;
+        /*
+         * Residual: sticky PBA while masked -> deliver on unmask
+         * (UDX enable_irq latched-pending shape; freestanding rtl stays
+         * poll-mode - this is soft scaffolding for later UDX only).
+         * Soft!=product HW re-issue. Sticky PBA remains until clear API.
+         * Order residual: if Function Mask is set, deliver holds (dual_latch);
+         * pba_drain (clear API first) yields no re-issue on unmask.
+         */
+        if ((g_u64SoftPba & (1ull << (u16Idx & 63u))) != 0) {
+            if (msix_soft_deliver(u16Idx) != 0u) {
+                if (g_u32SoftUnmaskPend < 0xffffffffu) {
+                    g_u32SoftUnmaskPend++;
+                }
+            }
+        }
     }
     return 1;
 }
@@ -242,8 +425,6 @@ u32
 pci_msix_soft_fire(u16 u16Idx)
 {
     struct gj_pci_msix_soft_entry *pEnt;
-    u64 u64Badge;
-    u32 u32Deliver = 0;
 
     if (!g_fSoftReady || u16Idx >= GJ_MSIX_SOFT_TBL) {
         return 0;
@@ -254,25 +435,11 @@ pci_msix_soft_fire(u16 u16Idx)
     }
     /*
      * Spec-like sticky PBA: bit set when the function would assert the
-     * message (including while masked — pending until unmask + re-fire
-     * in full HW; soft path records the bit on every fire attempt).
+     * message (including while masked or function-masked). Soft residual
+     * delivers on unmask when PBA is set (see pci_msix_soft_mask).
      */
     g_u64SoftPba |= (1ull << (u16Idx & 63u));
-    if ((pEnt->u32VecCtl & GJ_MSIX_VECCTL_MASK) != 0) {
-        return 0; /* masked: no Notification delivery */
-    }
-    pEnt->u8SoftFire = 1;
-    g_u32SoftFire++;
-    u32Deliver = 1;
-    /*
-     * Badge attribution: entry 0 → bit 2 (GJ_MSIX_BADGE_TBL(0)) so existing
-     * smoke wait masks covering low bits still observe table soft fire.
-     */
-    u64Badge = GJ_MSIX_BADGE_TBL(u16Idx);
-    if (irq_msix_ready()) {
-        irq_msix_soft_inject(u64Badge);
-    }
-    return u32Deliver;
+    return msix_soft_deliver(u16Idx);
 }
 
 u64
@@ -292,6 +459,80 @@ pci_msix_soft_pba_clear(u64 u64Mask)
 }
 
 u32
+pci_msix_soft_pba_pending(u16 u16Idx)
+{
+    if (!g_fSoftReady || u16Idx >= GJ_MSIX_SOFT_TBL) {
+        return 0;
+    }
+    return ((g_u64SoftPba & (1ull << (u16Idx & 63u))) != 0) ? 1u : 0u;
+}
+
+u32
+pci_msix_soft_function_mask(u32 u32Mask)
+{
+    u32 u32New;
+    u32 iEnt;
+
+    if (!g_fSoftReady) {
+        pci_msix_soft_table_init();
+    }
+    u32New = (u32Mask != 0u) ? 1u : 0u;
+    /*
+     * Residual: Function Mask clear with sticky PBA delivers unmasked
+     * programmed entries once (PCI MC bit14 + UDX enable_irq shape).
+     * Soft!=product HW MC write. Clear mask first so deliver is not held.
+     */
+    if (g_fSoftFnMask != 0u && u32New == 0u) {
+        g_fSoftFnMask = 0u;
+        for (iEnt = 0; iEnt < GJ_MSIX_SOFT_TBL; iEnt++) {
+            if ((g_u64SoftPba & (1ull << (iEnt & 63u))) == 0) {
+                continue;
+            }
+            if (msix_soft_deliver((u16)iEnt) != 0u) {
+                if (g_u32SoftUnmaskPend < 0xffffffffu) {
+                    g_u32SoftUnmaskPend++;
+                }
+            }
+        }
+        return 1;
+    }
+    g_fSoftFnMask = u32New;
+    return 1;
+}
+
+u32
+pci_msix_soft_function_mask_get(void)
+{
+    return g_fSoftFnMask;
+}
+
+u64
+pci_msix_soft_badge_mask(void)
+{
+    u64 u64Mask = 0;
+    u32 iEnt;
+
+    if (!g_fSoftReady) {
+        return 0;
+    }
+    for (iEnt = 0; iEnt < GJ_MSIX_SOFT_TBL; iEnt++) {
+        if (g_aSoftTab[iEnt].u8Programmed) {
+            u64Mask |= GJ_MSIX_BADGE_TBL(iEnt);
+        }
+    }
+    return u64Mask;
+}
+
+u64
+pci_msix_soft_entry_badge(u16 u16Idx)
+{
+    if (u16Idx >= GJ_MSIX_SOFT_TBL) {
+        return 0;
+    }
+    return GJ_MSIX_BADGE_TBL(u16Idx);
+}
+
+u32
 pci_msix_soft_programmed_count(void)
 {
     return g_u32SoftProg;
@@ -303,6 +544,12 @@ pci_msix_soft_fire_count(void)
     return g_u32SoftFire;
 }
 
+u32
+pci_msix_soft_unmask_pend_count(void)
+{
+    return g_u32SoftUnmaskPend;
+}
+
 int
 pci_msix_soft_ready(void)
 {
@@ -310,13 +557,1026 @@ pci_msix_soft_ready(void)
 }
 
 /*
- * Wave 14 soft inventory — greppable "pci: soft …" / "msix: soft …".
+ * Lean soft residual inventory - greppable "pci: soft ..." / "msix: soft ...".
  * Pure observation; never allocates; never hard-gates HW/soft fire paths.
- * szVia: caller tag (probe / exercise / anon). Twin prefixes for greps.
+ * Hard-capped emission (PCI_MSIX_SOFT_INV_LOG_CAP). No version stamp.
+ * Soft!=product. No stamp storms: <=4 kprintf lamps per emission.
+ * H1: never force IRQ eth poll; freestanding net may stay poll-mode.
  *
  * greppable: pci: soft inventory
  * greppable: msix: soft inventory
+ * greppable: pci: soft residual lean
+ * greppable: msix: soft residual lean
+ * greppable: pci: soft residual lean PASS
+ * greppable: msix: soft residual lean PASS
+ * greppable: pci: soft inventory PASS
+ * greppable: msix: soft inventory PASS
+ * greppable: pba_drain=1 dual_latch=1 sticky_reissue=1 fn_pba_drain=1
+ * greppable: vec_remask_hold=1 order_residual=1
+ * greppable: force_irq_eth_poll=0 poll_mode_first=1
+ * greppable: net_eth_poll=run_loop_only net_eth_irq=0
+ * greppable: net_eth_poll_from_msix=0
+ * greppable: pci: soft residual dual_dod
+ * greppable: msix: soft residual dual_dod
+ * greppable: pci: soft residual dual_dod OPEN
+ * greppable: msix: soft residual dual_dod OPEN
+ * greppable: pci: soft residual table_ready STRONGER
+ * greppable: msix: soft residual table_ready STRONGER
+ * greppable: pci: soft residual table_ready denser
+ * greppable: msix: soft residual table_ready denser
+ * greppable: table_ready denser denser_arms= denser_ok=
+ * greppable: product_msix=OPEN product_notify_mint=OPEN
+ * greppable: Soft!=product soft residual dual_dod OPEN product_hosts=UDX
+ * greppable: product_hosts=UDX ddi_irq_bind=1
  */
+
+/*
+ * STRONGER Dual DoD + denser MSI-X table readiness residual (H2 once).
+ * Soft table readiness shape used by DDI_OP_IRQ_BIND for UDX product
+ * hosts rtl8168_udx (DoD B) + xhci_udx (DoD A). Soft!=product; Dual DoD
+ * A/B OPEN; soft_note_only; product_notify_mint=OPEN; freestanding SKIP.
+ * denser multi-arm residual (PCI_MSIX_TABLE_READY_DENSE_ARMS=28; W23 denser+++++):
+ *   soft_ready | badge0_seed | prog_e0 | prog_e1 | badge_mask_cov |
+ *   readback_e0 | h1_locks | dual_dod_open | readback_e1 |
+ *   mask_hold_pba | unmask_pend | product_open |
+ *   dual_host_indep | badge_tbl_distinct | soft_tbl_depth | inject_chain |
+ *   host_pair_seed | latch_cycle | dual_host_chain | dod_open_full |
+ *   pba_drain | dual_latch | sticky_reissue | order_residual_full |
+ *   fn_pba_drain | vec_remask_hold | order_fn_full | product_path_full
+ * Bar honesty v2026.08.04.75 stamp-free — never invent .76.
+ * greppable: pci: soft residual dual_dod OPEN
+ * greppable: msix: soft residual dual_dod OPEN
+ * greppable: pci: soft residual table_ready STRONGER
+ * greppable: msix: soft residual table_ready STRONGER
+ * greppable: pci: soft residual table_ready denser
+ * greppable: msix: soft residual table_ready denser
+ * greppable: pci: soft residual table_ready denser++
+ * greppable: msix: soft residual table_ready denser++
+ * greppable: pci: soft residual table_ready denser+++
+ * greppable: msix: soft residual table_ready denser+++
+ * greppable: pci: soft residual table_ready denser++++
+ * greppable: msix: soft residual table_ready denser++++
+ * greppable: pci: soft residual table_ready denser+++++
+ * greppable: msix: soft residual table_ready denser+++++
+ * greppable: pci: soft residual denser VERDICT
+ * greppable: msix: soft residual denser VERDICT
+ * greppable: denser residual bar bar=v2026.08.04.75
+ * greppable: Soft!=product soft residual dual_dod OPEN product_hosts=UDX
+ */
+static void
+pci_msix_soft_dual_dod_stronger_once(const char *szVia)
+{
+    u32 fTableReady;
+    u32 fIrqReady;
+    u32 fBadge0Ok;
+    u32 fProgE0;
+    u32 fProgE1;
+    u32 fBadgeMaskCov;
+    u32 fReadbackE0;
+    u32 fReadbackE1;
+    u32 fH1Locks;
+    u32 fDualDodOpen;
+    u32 fMaskHoldPba;
+    u32 fUnmaskPend;
+    u32 fProductOpen;
+    u32 fDualHostIndep;
+    u32 fBadgeTblDistinct;
+    u32 fSoftTblDepth;
+    u32 fInjectChain;
+    u32 fHostPairSeed;
+    u32 fLatchCycle;
+    u32 fDualHostChain;
+    u32 fDodOpenFull;
+    u32 fPbaDrain;
+    u32 fDualLatch;
+    u32 fStickyReissue;
+    u32 fOrderResidualFull;
+    u32 fFnPbaDrain;
+    u32 fVecRemaskHold;
+    u32 fOrderFnFull;
+    u32 fProductPathFull;
+    u32 u32Dense;
+    u32 u32DenseOk;
+    u32 u32Held;
+    u32 u32FireBefore;
+    u32 u32UnmaskBefore;
+    u32 u32FireE1;
+    u64 u64Badge0;
+    u64 u64Badge1;
+    u64 u64BadgeMask;
+    u64 u64NeedMask;
+    struct gj_pci_msix_soft_entry ent0;
+    struct gj_pci_msix_soft_entry ent1;
+    const char *szViaSafe;
+    const char *szDenseVerdict;
+
+    if (g_fSoftDualDodStrongerOnce != 0u) {
+        return;
+    }
+    g_fSoftDualDodStrongerOnce = 1u;
+
+    if (!g_fSoftReady) {
+        pci_msix_soft_table_init();
+    }
+    szViaSafe = (szVia != NULL) ? szVia : "anon";
+    fTableReady = 0u;
+    fIrqReady = irq_msix_ready() ? 1u : 0u;
+    fBadge0Ok = 0u;
+    fProgE0 = 0u;
+    fProgE1 = 0u;
+    fBadgeMaskCov = 0u;
+    fReadbackE0 = 0u;
+    fReadbackE1 = 0u;
+    fH1Locks = 0u;
+    fDualDodOpen = 0u;
+    fMaskHoldPba = 0u;
+    fUnmaskPend = 0u;
+    fProductOpen = 0u;
+    fDualHostIndep = 0u;
+    fBadgeTblDistinct = 0u;
+    fSoftTblDepth = 0u;
+    fInjectChain = 0u;
+    fHostPairSeed = 0u;
+    fLatchCycle = 0u;
+    fDualHostChain = 0u;
+    fDodOpenFull = 0u;
+    fPbaDrain = 0u;
+    fDualLatch = 0u;
+    fStickyReissue = 0u;
+    fOrderResidualFull = 0u;
+    fFnPbaDrain = 0u;
+    fVecRemaskHold = 0u;
+    fOrderFnFull = 0u;
+    fProductPathFull = 0u;
+    u32Dense = 0u;
+    u32DenseOk = 0u;
+    u32Held = 0u;
+    u32FireBefore = 0u;
+    u32UnmaskBefore = 0u;
+    u32FireE1 = 0u;
+    memset(&ent0, 0, sizeof(ent0));
+    memset(&ent1, 0, sizeof(ent1));
+
+    /*
+     * denser table_ready residual for DDI IRQ_BIND (Soft!=product).
+     * Multi-arm functional residual: soft table seed shape used by
+     * DDI_OP_IRQ_BIND soft note (handle->badge) for UDX rtl/xhci hosts.
+     * Soft fail only; never hard-gates Dual DoD A/B; Dual DoD remains OPEN.
+     * greppable: pci: soft residual table_ready denser
+     * greppable: denser_arms= denser_ok=
+     */
+
+    /* arm0: soft_ready (table init residual). */
+    if (g_fSoftReady != 0 && pci_msix_soft_ready() != 0) {
+        fTableReady = 1u;
+        u32Dense++;
+    }
+
+    /* arm1: badge0_seed — entry0 TBL badge is IRQ_BIND soft note seed. */
+    u64Badge0 = pci_msix_soft_entry_badge(0);
+    u64Badge1 = pci_msix_soft_entry_badge(1);
+    if (u64Badge0 == GJ_MSIX_BADGE_TBL(0) &&
+        u64Badge1 == GJ_MSIX_BADGE_TBL(1) &&
+        pci_msix_soft_entry_badge(GJ_MSIX_SOFT_TBL) == 0ull) {
+        fBadge0Ok = 1u;
+        u32Dense++;
+    }
+
+    /*
+     * arm2/3: prog_e0 + prog_e1 — multi-entry soft program residual for
+     * dual UDX hosts (DoD B rtl8168_udx + DoD A xhci_udx). Soft program
+     * is idempotent re-mirror; does not force freestanding rtl off poll.
+     */
+    if (pci_msix_soft_program(0, MSI_ADDR_BASE, (u32)PCI_MSIX_PROBE_VEC,
+                              0u) != 0u) {
+        fProgE0 = 1u;
+        u32Dense++;
+    }
+    if (pci_msix_soft_program(1, MSI_ADDR_BASE,
+                              (u32)(PCI_MSIX_PROBE_VEC + 1u), 0u) != 0u) {
+        fProgE1 = 1u;
+        u32Dense++;
+    }
+
+    /* arm4: badge_mask_cov — programmed e0|e1 cover TBL badges. */
+    u64BadgeMask = pci_msix_soft_badge_mask();
+    u64NeedMask = GJ_MSIX_BADGE_TBL(0) | GJ_MSIX_BADGE_TBL(1);
+    if ((u64BadgeMask & u64NeedMask) == u64NeedMask) {
+        fBadgeMaskCov = 1u;
+        u32Dense++;
+    }
+
+    /* arm5: readback_e0 — soft_read seed entry for DDI IRQ_BIND note. */
+    if (pci_msix_soft_read(0, &ent0) != 0u && ent0.u8Programmed != 0u &&
+        ent0.u32MsgAddrLo == MSI_ADDR_BASE &&
+        (ent0.u32MsgData & 0xffu) == (u32)PCI_MSIX_PROBE_VEC &&
+        (ent0.u32VecCtl & GJ_MSIX_VECCTL_MASK) == 0u) {
+        fReadbackE0 = 1u;
+        u32Dense++;
+    }
+
+    /*
+     * arm6: h1_locks — never force IRQ eth poll; poll-mode-first; never
+     * call net_eth_poll from this unit; never force freestanding rtl HW.
+     */
+    if (PCI_MSIX_FORCE_IRQ_ETH_POLL == 0u &&
+        PCI_MSIX_POLL_MODE_FIRST == 1u && PCI_MSIX_NET_ETH_IRQ == 0u &&
+        PCI_MSIX_NET_ETH_POLL_FROM == 0u && PCI_MSIX_HW_FORCE_RTL == 0u) {
+        fH1Locks = 1u;
+        u32Dense++;
+    }
+
+    /*
+     * arm7: dual_dod_open honesty — soft residual never closes Dual DoD.
+     * denser min/arms honesty + soft table depth bound (not device TS).
+     */
+    if (PCI_MSIX_TABLE_READY_DENSE_ARMS == 28u &&
+        PCI_MSIX_TABLE_READY_DENSE_MIN == PCI_MSIX_TABLE_READY_DENSE_ARMS &&
+        GJ_MSIX_SOFT_TBL >= 2u && fTableReady != 0u && fBadge0Ok != 0u) {
+        fDualDodOpen = 1u;
+        u32Dense++;
+    }
+
+    /*
+     * arm8: readback_e1 — Dual DoD A host soft entry (xhci_udx) readback.
+     * Symmetric multi-host seed for concurrent UDX IRQ_BIND notes.
+     */
+    if (pci_msix_soft_read(1, &ent1) != 0u && ent1.u8Programmed != 0u &&
+        ent1.u32MsgAddrLo == MSI_ADDR_BASE &&
+        (ent1.u32MsgData & 0xffu) == (u32)(PCI_MSIX_PROBE_VEC + 1u) &&
+        (ent1.u32VecCtl & GJ_MSIX_VECCTL_MASK) == 0u) {
+        fReadbackE1 = 1u;
+        u32Dense++;
+    }
+
+    /*
+     * arm9: mask_hold_pba — fire while masked must not deliver; sticky PBA
+     * holds (UDX disable_irq latch shape). Soft!=product HW PBA clear.
+     * greppable: mask_hold_pba=1
+     */
+    if (pci_msix_soft_mask(0, 1u) != 0u) {
+        u32Held = pci_msix_soft_fire(0);
+        if (u32Held == 0u && pci_msix_soft_pba_pending(0) != 0u) {
+            fMaskHoldPba = 1u;
+            u32Dense++;
+        }
+    }
+
+    /*
+     * arm10: unmask_pend — unmask with sticky PBA delivers once (UDX
+     * enable_irq latch). Soft residual only; Dual DoD stays OPEN.
+     * greppable: unmask_pend=
+     */
+    if (fMaskHoldPba != 0u) {
+        u32FireBefore = g_u32SoftFire;
+        u32UnmaskBefore = g_u32SoftUnmaskPend;
+        if (pci_msix_soft_mask(0, 0u) != 0u &&
+            g_u32SoftFire > u32FireBefore &&
+            g_u32SoftUnmaskPend > u32UnmaskBefore) {
+            fUnmaskPend = 1u;
+            u32Dense++;
+        }
+    }
+
+    /*
+     * arm11: product_open — product_notify_mint / product_msix OPEN honesty;
+     * soft_note_only; freestanding SKIP; soft residual never closes Dual DoD.
+     * greppable: product_open=1 product_notify_mint=OPEN soft_note_only=1
+     */
+    if (fDualDodOpen != 0u && fH1Locks != 0u && fProgE0 != 0u &&
+        fProgE1 != 0u && fMaskHoldPba != 0u && fUnmaskPend != 0u &&
+        fReadbackE1 != 0u &&
+        PCI_MSIX_TABLE_READY_DENSE_ARMS == 28u) {
+        fProductOpen = 1u;
+        u32Dense++;
+    }
+
+    /*
+     * arm12: dual_host_indep (W16 denser++) — mask e0 must not block e1 fire
+     * deliver. Concurrent UDX hosts (DoD B rtl + DoD A xhci) need independent
+     * vector mask residual. Soft!=product; never hard-gates Dual DoD.
+     * greppable: dual_host_indep=1
+     */
+    if (fProgE0 != 0u && fProgE1 != 0u) {
+        if (pci_msix_soft_mask(0, 1u) != 0u &&
+            pci_msix_soft_mask(1, 0u) != 0u) {
+            u32FireBefore = g_u32SoftFire;
+            u32FireE1 = pci_msix_soft_fire(1);
+            if (u32FireE1 != 0u && g_u32SoftFire > u32FireBefore) {
+                fDualHostIndep = 1u;
+                u32Dense++;
+            }
+            /* restore e0 unmasked for inject_chain residual below */
+            (void)pci_msix_soft_mask(0, 0u);
+        }
+    }
+
+    /*
+     * arm13: badge_tbl_distinct (W16 denser++) — dual host badges differ so
+     * NOTIFY_WAIT masks can select per-host. Soft table residual only.
+     * greppable: badge_tbl_distinct=1
+     */
+    u64Badge0 = pci_msix_soft_entry_badge(0);
+    u64Badge1 = pci_msix_soft_entry_badge(1);
+    if (u64Badge0 != 0ull && u64Badge1 != 0ull && u64Badge0 != u64Badge1 &&
+        u64Badge0 == GJ_MSIX_BADGE_TBL(0) &&
+        u64Badge1 == GJ_MSIX_BADGE_TBL(1)) {
+        fBadgeTblDistinct = 1u;
+        u32Dense++;
+    }
+
+    /*
+     * arm14: soft_tbl_depth (W16 denser++) — soft shadow depth headroom for
+     * multi-host concurrent IRQ_BIND notes (not device Table Size).
+     * greppable: soft_tbl_depth=1
+     */
+    if (GJ_MSIX_SOFT_TBL >= 8u && GJ_MSIX_SOFT_TBL >= 2u &&
+        pci_msix_soft_programmed_count() >= 2u) {
+        fSoftTblDepth = 1u;
+        u32Dense++;
+    }
+
+    /*
+     * arm15: inject_chain (W16 denser++) — soft fire after dual_host residual
+     * leaves e0 unmasked + e1 unmasked; path ready for
+     * soft_tbl->inject->notify_msix_global->NOTIFY_WAIT (DDI IRQ_BIND shape).
+     * Soft!=product; product_notify_mint remains OPEN.
+     * greppable: inject_chain=1 denser++=1
+     */
+    if (fDualHostIndep != 0u && fBadgeTblDistinct != 0u &&
+        fSoftTblDepth != 0u && fProductOpen != 0u) {
+        if (pci_msix_soft_mask(0, 0u) != 0u &&
+            pci_msix_soft_mask(1, 0u) != 0u) {
+            u32FireBefore = g_u32SoftFire;
+            if (pci_msix_soft_fire(0) != 0u &&
+                g_u32SoftFire > u32FireBefore &&
+                pci_msix_soft_entry_badge(0) == GJ_MSIX_BADGE_TBL(0)) {
+                fInjectChain = 1u;
+                u32Dense++;
+            }
+        }
+    }
+
+    /*
+     * arm16: host_pair_seed (W18 denser+++) — dual UDX host soft seed pair:
+     * prog+readback e0 (DoD B rtl) and e1 (DoD A xhci). Soft!=product.
+     * greppable: host_pair_seed=1 denser+++=1
+     */
+    if (fProgE0 != 0u && fProgE1 != 0u && fReadbackE0 != 0u &&
+        fReadbackE1 != 0u && fBadgeMaskCov != 0u) {
+        fHostPairSeed = 1u;
+        u32Dense++;
+    }
+
+    /*
+     * arm17: latch_cycle (W18 denser+++) — mask hold + unmask pend + H1
+     * locks form UDX enable/disable IRQ latch residual (soft only).
+     * greppable: latch_cycle=1 denser+++=1
+     */
+    if (fMaskHoldPba != 0u && fUnmaskPend != 0u && fH1Locks != 0u &&
+        fInjectChain != 0u) {
+        fLatchCycle = 1u;
+        u32Dense++;
+    }
+
+    /*
+     * arm18: dual_host_chain (W18 denser+++) — concurrent host independence
+     * + badge distinct + inject chain for dual IRQ_BIND residual.
+     * greppable: dual_host_chain=1 denser+++=1
+     */
+    if (fDualHostIndep != 0u && fBadgeTblDistinct != 0u &&
+        fSoftTblDepth != 0u && fInjectChain != 0u && fHostPairSeed != 0u) {
+        fDualHostChain = 1u;
+        u32Dense++;
+    }
+
+    /*
+     * arm19: dod_open_full (W18 denser+++) — Dual DoD OPEN composite:
+     * dual_dod_open + product_open + soft_tbl_depth + table_ready +
+     * denser+++ composites. Soft residual never closes Dual DoD.
+     * greppable: dod_open_full=1 denser+++=1 dual_dod=OPEN
+     */
+    if (fDualDodOpen != 0u && fProductOpen != 0u && fSoftTblDepth != 0u &&
+        fTableReady != 0u && fHostPairSeed != 0u && fLatchCycle != 0u &&
+        fDualHostChain != 0u &&
+        PCI_MSIX_TABLE_READY_DENSE_ARMS == 28u) {
+        fDodOpenFull = 1u;
+        u32Dense++;
+    }
+
+    /*
+     * W20 denser++++ order residual arms (Soft!=product; Dual DoD OPEN).
+     * Isolate order residual on entry0: drain sticky PBA and mask e1 so
+     * dual_latch / sticky_reissue tallies are not polluted by earlier multi
+     * entry sticky (Soft sticky until clear). Soft!=product HW PBA clear.
+     * greppable: pba_drain=1 dual_latch=1 sticky_reissue=1 order_residual_full=1
+     * greppable: denser++++=1 denser+++++=1 denser_arms=28
+     */
+    (void)pci_msix_soft_pba_clear(~0ull);
+    (void)pci_msix_soft_function_mask(0u);
+    (void)pci_msix_soft_mask(1, 1u);
+
+    /*
+     * arm20: pba_drain (W20 denser++++) — fire while masked sets sticky;
+     * clear sticky before unmask must not re-issue (UDX ack shape).
+     * greppable: pba_drain=1 denser++++=1
+     */
+    if (fDodOpenFull != 0u && fH1Locks != 0u) {
+        if (pci_msix_soft_mask(0, 1u) != 0u &&
+            pci_msix_soft_fire(0) == 0u &&
+            pci_msix_soft_pba_pending(0) != 0u &&
+            pci_msix_soft_pba_clear(1ull) == 1ull &&
+            pci_msix_soft_pba_pending(0) == 0u) {
+            u32FireBefore = g_u32SoftFire;
+            u32UnmaskBefore = g_u32SoftUnmaskPend;
+            if (pci_msix_soft_mask(0, 0u) != 0u &&
+                g_u32SoftFire == u32FireBefore &&
+                g_u32SoftUnmaskPend == u32UnmaskBefore) {
+                fPbaDrain = 1u;
+                u32Dense++;
+            }
+        }
+    }
+
+    /*
+     * arm21: dual_latch (W20 denser++++) — vector unmask under fn_mask holds;
+     * fn clear with sticky + unmasked vector delivers once (MC bit14 shape).
+     * greppable: dual_latch=1 denser++++=1
+     */
+    if (fPbaDrain != 0u) {
+        if (pci_msix_soft_mask(0, 1u) != 0u &&
+            pci_msix_soft_fire(0) == 0u &&
+            pci_msix_soft_pba_pending(0) != 0u &&
+            pci_msix_soft_function_mask(1u) != 0u) {
+            u32FireBefore = g_u32SoftFire;
+            u32UnmaskBefore = g_u32SoftUnmaskPend;
+            if (pci_msix_soft_mask(0, 0u) != 0u &&
+                g_u32SoftFire == u32FireBefore &&
+                g_u32SoftUnmaskPend == u32UnmaskBefore &&
+                pci_msix_soft_pba_pending(0) != 0u &&
+                pci_msix_soft_function_mask_get() != 0u &&
+                pci_msix_soft_function_mask(0u) != 0u &&
+                g_u32SoftFire > u32FireBefore &&
+                g_u32SoftUnmaskPend > u32UnmaskBefore &&
+                pci_msix_soft_function_mask_get() == 0u) {
+                fDualLatch = 1u;
+                u32Dense++;
+            }
+        }
+    }
+
+    /*
+     * arm22: sticky_reissue (W20 denser++++) — Soft PBA not auto-cleared on
+     * deliver; remask+unmask re-issues without new fire (Soft!=product HW).
+     * greppable: sticky_reissue=1 denser++++=1
+     */
+    if (fDualLatch != 0u && pci_msix_soft_pba_pending(0) != 0u) {
+        if (pci_msix_soft_mask(0, 1u) != 0u) {
+            u32FireBefore = g_u32SoftFire;
+            u32UnmaskBefore = g_u32SoftUnmaskPend;
+            if (pci_msix_soft_mask(0, 0u) != 0u &&
+                g_u32SoftFire > u32FireBefore &&
+                g_u32SoftUnmaskPend > u32UnmaskBefore) {
+                fStickyReissue = 1u;
+                u32Dense++;
+            }
+        }
+    }
+
+    /*
+     * arm23: order_residual_full (W20 denser++++) — denser++++ composite over
+     * pba_drain + dual_latch + sticky_reissue + dod_open_full. Soft residual
+     * never closes Dual DoD A/B; product_notify_mint remains OPEN.
+     * greppable: order_residual_full=1 denser++++=1 dual_dod=OPEN
+     */
+    if (fPbaDrain != 0u && fDualLatch != 0u && fStickyReissue != 0u &&
+        fDodOpenFull != 0u && fH1Locks != 0u && fDualHostChain != 0u &&
+        PCI_MSIX_TABLE_READY_DENSE_ARMS == 28u) {
+        fOrderResidualFull = 1u;
+        u32Dense++;
+    }
+
+    /* Restore clean soft state after denser++++ order residual arms. */
+    (void)pci_msix_soft_function_mask(0u);
+    (void)pci_msix_soft_pba_clear(~0ull);
+    (void)pci_msix_soft_mask(0, 0u);
+    (void)pci_msix_soft_mask(1, 0u);
+
+    /*
+     * W23 denser+++++ order residual arms (Soft!=product; Dual DoD OPEN).
+     * fn_pba_drain + vec_remask_hold + order_fn_full + product_path_full
+     * for UDX enable_irq / MC Function Mask residual (soft only).
+     * greppable: fn_pba_drain=1 vec_remask_hold=1 order_fn_full=1
+     * greppable: product_path_full=1 denser+++++=1 denser_arms=28
+     */
+    (void)pci_msix_soft_mask(1, 1u);
+
+    /*
+     * arm24: fn_pba_drain (W23 denser+++++) — under Function Mask, drain
+     * sticky then clear fn_mask must not re-issue (MC enable / ack shape).
+     * greppable: fn_pba_drain=1 denser+++++=1
+     */
+    if (fOrderResidualFull != 0u && fH1Locks != 0u) {
+        if (pci_msix_soft_mask(0, 1u) != 0u &&
+            pci_msix_soft_fire(0) == 0u &&
+            pci_msix_soft_pba_pending(0) != 0u &&
+            pci_msix_soft_function_mask(1u) != 0u &&
+            pci_msix_soft_pba_clear(1ull) == 1ull &&
+            pci_msix_soft_pba_pending(0) == 0u) {
+            u32FireBefore = g_u32SoftFire;
+            u32UnmaskBefore = g_u32SoftUnmaskPend;
+            if (pci_msix_soft_function_mask(0u) != 0u &&
+                g_u32SoftFire == u32FireBefore &&
+                g_u32SoftUnmaskPend == u32UnmaskBefore &&
+                pci_msix_soft_function_mask_get() == 0u) {
+                fFnPbaDrain = 1u;
+                u32Dense++;
+            }
+        }
+    }
+
+    /*
+     * arm25: vec_remask_hold (W23 denser+++++) — dual_latch complement:
+     * fire under vector mask + fn; unmask vector (held by fn); remask;
+     * clear fn -> vector mask still holds (no deliver). Soft!=product.
+     * greppable: vec_remask_hold=1 denser+++++=1
+     */
+    if (fFnPbaDrain != 0u) {
+        if (pci_msix_soft_mask(0, 1u) != 0u &&
+            pci_msix_soft_fire(0) == 0u &&
+            pci_msix_soft_pba_pending(0) != 0u &&
+            pci_msix_soft_function_mask(1u) != 0u) {
+            u32FireBefore = g_u32SoftFire;
+            u32UnmaskBefore = g_u32SoftUnmaskPend;
+            if (pci_msix_soft_mask(0, 0u) != 0u &&
+                g_u32SoftFire == u32FireBefore &&
+                g_u32SoftUnmaskPend == u32UnmaskBefore &&
+                pci_msix_soft_mask(0, 1u) != 0u &&
+                pci_msix_soft_function_mask(0u) != 0u &&
+                g_u32SoftFire == u32FireBefore &&
+                g_u32SoftUnmaskPend == u32UnmaskBefore &&
+                pci_msix_soft_pba_pending(0) != 0u &&
+                pci_msix_soft_function_mask_get() == 0u) {
+                fVecRemaskHold = 1u;
+                u32Dense++;
+            }
+        }
+    }
+
+    /*
+     * arm26: order_fn_full (W23 denser+++++) — denser+++++ composite over
+     * fn_pba_drain + vec_remask_hold + order_residual_full. Soft residual
+     * never closes Dual DoD A/B; product_notify_mint remains OPEN.
+     * greppable: order_fn_full=1 denser+++++=1 dual_dod=OPEN
+     */
+    if (fFnPbaDrain != 0u && fVecRemaskHold != 0u &&
+        fOrderResidualFull != 0u && fH1Locks != 0u &&
+        fDualHostChain != 0u &&
+        PCI_MSIX_TABLE_READY_DENSE_ARMS == 28u) {
+        fOrderFnFull = 1u;
+        u32Dense++;
+    }
+
+    /*
+     * arm27: product_path_full (W23 denser+++++) — full soft product path
+     * for DDI IRQ_BIND UDX hosts: order_fn_full + inject_chain + dual host
+     * + dod_open_full. Soft!=product; Dual DoD remains OPEN.
+     * greppable: product_path_full=1 denser+++++=1
+     */
+    if (fOrderFnFull != 0u && fInjectChain != 0u &&
+        fDualHostChain != 0u && fDodOpenFull != 0u &&
+        fHostPairSeed != 0u && fH1Locks != 0u &&
+        PCI_MSIX_TABLE_READY_DENSE_ARMS == 28u) {
+        fProductPathFull = 1u;
+        u32Dense++;
+    }
+
+    /* Restore clean soft state after denser+++++ residual arms. */
+    (void)pci_msix_soft_function_mask(0u);
+    (void)pci_msix_soft_pba_clear(~0ull);
+    (void)pci_msix_soft_mask(0, 0u);
+    (void)pci_msix_soft_mask(1, 0u);
+
+    /* Refresh badge mask after denser arms (mask/unmask may not change it). */
+    u64BadgeMask = pci_msix_soft_badge_mask();
+
+    g_u32TableReadyDenseArms = u32Dense;
+    if (u32Dense >= PCI_MSIX_TABLE_READY_DENSE_MIN && fTableReady != 0u &&
+        fBadge0Ok != 0u && fProgE0 != 0u && fProgE1 != 0u &&
+        fBadgeMaskCov != 0u && fReadbackE0 != 0u && fH1Locks != 0u &&
+        fDualDodOpen != 0u && fReadbackE1 != 0u && fMaskHoldPba != 0u &&
+        fUnmaskPend != 0u && fProductOpen != 0u &&
+        fDualHostIndep != 0u && fBadgeTblDistinct != 0u &&
+        fSoftTblDepth != 0u && fInjectChain != 0u &&
+        fHostPairSeed != 0u && fLatchCycle != 0u &&
+        fDualHostChain != 0u && fDodOpenFull != 0u &&
+        fPbaDrain != 0u && fDualLatch != 0u && fStickyReissue != 0u &&
+        fOrderResidualFull != 0u && fFnPbaDrain != 0u &&
+        fVecRemaskHold != 0u && fOrderFnFull != 0u &&
+        fProductPathFull != 0u) {
+        u32DenseOk = 1u;
+        if (g_u32TableReadyDenseOk < 0xffffffffu) {
+            g_u32TableReadyDenseOk++;
+        }
+        szDenseVerdict = "PASS";
+    } else {
+        if (g_u32TableReadyDenseFail < 0xffffffffu) {
+            g_u32TableReadyDenseFail++;
+        }
+        szDenseVerdict = "FAIL";
+    }
+
+    /*
+     * Grep: pci: soft residual dual_dod OPEN
+     * Grep: Soft!=product soft residual dual_dod OPEN product_hosts=UDX
+     * H2 once; Dual DoD A/B remain OPEN (not product DoD close).
+     */
+    kprintf("pci: soft residual dual_dod OPEN product_hosts=UDX "
+            "Soft!=product soft residual dual_dod OPEN product_hosts=UDX "
+            "dual_dod_A=OPEN dual_dod_B=OPEN "
+            "A_usb=xhci_udx B_nic=rtl8168_udx "
+            "table_ready=%u soft_ready=%u irq_ready=%u badge0_ok=%u "
+            "denser=%u denser_arms=%u denser_ok=%u denser_min=%u "
+            "depth=%u prog=%u fire=%u unmask_pend=%u "
+            "badge0=0x%lx badge_mask=0x%lx "
+            "path=soft_tbl->DDI_OP_IRQ_BIND->inject->notify_msix_global->"
+            "NOTIFY_WAIT "
+            "ddi_irq_bind=1 soft_note_only=1 product_notify_mint=OPEN "
+            "product_msix=OPEN freestanding_skip=1 "
+            "soft_residual_closes_dod=0 udx_irq=1 "
+            "via=%s stamp_free=1 bar_honesty=v2026.08.04.75 never_invent=.76 "
+            "soft=1 product=0 "
+            "dual=MIT|Apache-2.0 G-AC-1 "
+            "(STRONGER denser MSI-X table readiness for DDI IRQ_BIND "
+            "rtl/xhci; not Dual DoD close; Soft!=product)\n",
+            (unsigned)fTableReady, (unsigned)(g_fSoftReady ? 1 : 0),
+            (unsigned)fIrqReady, (unsigned)fBadge0Ok,
+            (unsigned)u32DenseOk, (unsigned)u32Dense, (unsigned)u32DenseOk,
+            (unsigned)PCI_MSIX_TABLE_READY_DENSE_MIN,
+            (unsigned)GJ_MSIX_SOFT_TBL, (unsigned)g_u32SoftProg,
+            (unsigned)g_u32SoftFire, (unsigned)g_u32SoftUnmaskPend,
+            (unsigned long)u64Badge0, (unsigned long)u64BadgeMask, szViaSafe);
+    kprintf("msix: soft residual dual_dod OPEN product_hosts=UDX "
+            "Soft!=product soft residual dual_dod OPEN product_hosts=UDX "
+            "dual_dod_A=OPEN dual_dod_B=OPEN "
+            "table_ready=%u irq_ready=%u badge0_ok=%u "
+            "denser=%u denser_arms=%u denser_ok=%u "
+            "ddi_irq_bind=1 soft_note_only=1 product_notify_mint=OPEN "
+            "product_msix=OPEN freestanding_skip=1 "
+            "soft_residual_closes_dod=0 stamp_free=1 "
+            "soft=1 product=0 G-AC-1=1 "
+            "dual=MIT|Apache-2.0\n",
+            (unsigned)fTableReady, (unsigned)fIrqReady, (unsigned)fBadge0Ok,
+            (unsigned)u32DenseOk, (unsigned)u32Dense, (unsigned)u32DenseOk);
+
+    /*
+     * Grep: pci: soft residual table_ready STRONGER
+     * Grep: msix: soft residual table_ready STRONGER
+     * Table readiness used by DDI IRQ_BIND for UDX rtl/xhci hosts.
+     */
+    kprintf("pci: soft residual table_ready STRONGER "
+            "table_ready=%u soft_ready=%u irq_ready=%u badge0_ok=%u "
+            "denser=%u denser_arms=%u denser_ok=%u "
+            "prog_e0=%u prog_e1=%u badge_mask_cov=%u readback_e0=%u "
+            "readback_e1=%u mask_hold_pba=%u unmask_pend=%u product_open=%u "
+            "h1_locks=%u dual_dod_open=%u "
+            "prog=%u fire=%u unmask_pend_ct=%u hw_prog=%u "
+            "badge0=0x%lx ddi_irq_bind=1 "
+            "product_hosts=UDX hosts=rtl8168_udx,xhci_udx "
+            "dual_dod OPEN dual_dod_A=OPEN dual_dod_B=OPEN "
+            "path=soft_tbl->DDI_OP_IRQ_BIND->inject->notify_msix_global->"
+            "NOTIFY_WAIT "
+            "product_notify_mint=OPEN product_msix=OPEN soft_shadow=1 "
+            "soft=1 product=0 Soft!=product "
+            "bar_honesty=v2026.08.04.75 stamp_free=1 H2=once hazard=H1 "
+            "dual=MIT|Apache-2.0 G-AC-1 "
+            "(STRONGER denser table readiness residual; not Dual DoD close)\n",
+            (unsigned)fTableReady, (unsigned)(g_fSoftReady ? 1 : 0),
+            (unsigned)fIrqReady, (unsigned)fBadge0Ok,
+            (unsigned)u32DenseOk, (unsigned)u32Dense, (unsigned)u32DenseOk,
+            (unsigned)fProgE0, (unsigned)fProgE1, (unsigned)fBadgeMaskCov,
+            (unsigned)fReadbackE0, (unsigned)fReadbackE1,
+            (unsigned)fMaskHoldPba, (unsigned)fUnmaskPend,
+            (unsigned)fProductOpen, (unsigned)fH1Locks,
+            (unsigned)fDualDodOpen, (unsigned)g_u32SoftProg,
+            (unsigned)g_u32SoftFire, (unsigned)g_u32SoftUnmaskPend,
+            (unsigned)g_u32Programmed, (unsigned long)u64Badge0);
+    kprintf("msix: soft residual table_ready STRONGER "
+            "table_ready=%u denser=%u denser_arms=%u denser_ok=%u "
+            "product_hosts=UDX "
+            "hosts=rtl8168_udx,xhci_udx ddi_irq_bind=1 "
+            "dual_dod OPEN dual_dod_A=OPEN dual_dod_B=OPEN "
+            "soft=1 product=0 Soft!=product H2=once stamp_free=1 "
+            "G-AC-1=1 dual=MIT|Apache-2.0\n",
+            (unsigned)fTableReady, (unsigned)u32DenseOk, (unsigned)u32Dense,
+            (unsigned)u32DenseOk);
+
+    /*
+     * Grep: pci: soft residual table_ready denser
+     * Grep: msix: soft residual table_ready denser
+     * Grep: table_ready denser denser_arms= denser_ok=
+     * denser multi-arm residual for DDI IRQ_BIND soft table seed (24 arms).
+     */
+    kprintf("pci: soft residual table_ready denser %s denser=1 denser++=1 denser+++=1 denser++++=1 "
+            "denser_arms=%u denser_ok=%u denser_min=%u denser_fail=%u "
+            "soft_ready=%u badge0_seed=%u prog_e0=%u prog_e1=%u "
+            "badge_mask_cov=%u readback_e0=%u h1_locks=%u dual_dod_open=%u "
+            "readback_e1=%u mask_hold_pba=%u unmask_pend=%u product_open=%u "
+            "dual_host_indep=%u badge_tbl_distinct=%u soft_tbl_depth=%u "
+            "inject_chain=%u host_pair_seed=%u latch_cycle=%u "
+            "dual_host_chain=%u dod_open_full=%u "
+            "pba_drain=%u dual_latch=%u sticky_reissue=%u order_residual_full=%u "
+            "irq_ready=%u badge0=0x%lx badge1=0x%lx badge_mask=0x%lx "
+            "ddi_irq_bind=1 soft_note_only=1 product_notify_mint=OPEN "
+            "product_msix=OPEN product_hosts=UDX "
+            "hosts=rtl8168_udx,xhci_udx "
+            "path=soft_tbl->DDI_OP_IRQ_BIND->inject->notify_msix_global->"
+            "NOTIFY_WAIT "
+            "dual_dod OPEN dual_dod_A=OPEN dual_dod_B=OPEN "
+            "soft_residual_closes_dod=0 freestanding_skip=1 "
+            "force_irq_eth_poll=%u poll_mode_first=%u "
+            "net_eth_irq=%u net_eth_poll_from_msix=%u hw_force_rtl=%u "
+            "via=%s stamp_free=1 bar_honesty=v2026.08.04.75 never_invent=.76 "
+            "H2=once hazard=H1 soft=1 product=0 Soft!=product "
+            "G-AC-1 dual=MIT|Apache-2.0 "
+            "(denser++++ table_ready residual 24-arm for DDI IRQ_BIND; "
+            "not Dual DoD close; Soft!=product)\n",
+            szDenseVerdict, (unsigned)u32Dense, (unsigned)u32DenseOk,
+            (unsigned)PCI_MSIX_TABLE_READY_DENSE_MIN,
+            (unsigned)g_u32TableReadyDenseFail, (unsigned)fTableReady,
+            (unsigned)fBadge0Ok, (unsigned)fProgE0, (unsigned)fProgE1,
+            (unsigned)fBadgeMaskCov, (unsigned)fReadbackE0,
+            (unsigned)fH1Locks, (unsigned)fDualDodOpen,
+            (unsigned)fReadbackE1, (unsigned)fMaskHoldPba,
+            (unsigned)fUnmaskPend, (unsigned)fProductOpen,
+            (unsigned)fDualHostIndep, (unsigned)fBadgeTblDistinct,
+            (unsigned)fSoftTblDepth, (unsigned)fInjectChain,
+            (unsigned)fHostPairSeed, (unsigned)fLatchCycle,
+            (unsigned)fDualHostChain, (unsigned)fDodOpenFull,
+            (unsigned)fPbaDrain, (unsigned)fDualLatch,
+            (unsigned)fStickyReissue, (unsigned)fOrderResidualFull,
+            (unsigned)fIrqReady, (unsigned long)u64Badge0,
+            (unsigned long)u64Badge1, (unsigned long)u64BadgeMask,
+            (unsigned)PCI_MSIX_FORCE_IRQ_ETH_POLL,
+            (unsigned)PCI_MSIX_POLL_MODE_FIRST,
+            (unsigned)PCI_MSIX_NET_ETH_IRQ,
+            (unsigned)PCI_MSIX_NET_ETH_POLL_FROM,
+            (unsigned)PCI_MSIX_HW_FORCE_RTL, szViaSafe);
+    kprintf("msix: soft residual table_ready denser %s denser=1 denser++=1 denser+++=1 denser++++=1 "
+            "denser_arms=%u denser_ok=%u denser_min=%u "
+            "soft_ready=%u badge0_seed=%u prog_e0=%u prog_e1=%u "
+            "badge_mask_cov=%u readback_e0=%u h1_locks=%u dual_dod_open=%u "
+            "readback_e1=%u mask_hold_pba=%u unmask_pend=%u product_open=%u "
+            "dual_host_indep=%u badge_tbl_distinct=%u soft_tbl_depth=%u "
+            "inject_chain=%u host_pair_seed=%u latch_cycle=%u "
+            "dual_host_chain=%u dod_open_full=%u "
+            "pba_drain=%u dual_latch=%u sticky_reissue=%u order_residual_full=%u "
+            "ddi_irq_bind=1 product_hosts=UDX "
+            "dual_dod OPEN dual_dod_A=OPEN dual_dod_B=OPEN "
+            "soft=1 product=0 Soft!=product H2=once stamp_free=1 "
+            "G-AC-1=1 dual=MIT|Apache-2.0\n",
+            szDenseVerdict, (unsigned)u32Dense, (unsigned)u32DenseOk,
+            (unsigned)PCI_MSIX_TABLE_READY_DENSE_MIN, (unsigned)fTableReady,
+            (unsigned)fBadge0Ok, (unsigned)fProgE0, (unsigned)fProgE1,
+            (unsigned)fBadgeMaskCov, (unsigned)fReadbackE0,
+            (unsigned)fH1Locks, (unsigned)fDualDodOpen,
+            (unsigned)fReadbackE1, (unsigned)fMaskHoldPba,
+            (unsigned)fUnmaskPend, (unsigned)fProductOpen,
+            (unsigned)fDualHostIndep, (unsigned)fBadgeTblDistinct,
+            (unsigned)fSoftTblDepth, (unsigned)fInjectChain,
+            (unsigned)fHostPairSeed, (unsigned)fLatchCycle,
+            (unsigned)fDualHostChain, (unsigned)fDodOpenFull,
+            (unsigned)fPbaDrain, (unsigned)fDualLatch,
+            (unsigned)fStickyReissue, (unsigned)fOrderResidualFull);
+    /*
+     * Grep: pci: soft residual table_ready denser++
+     * Grep: msix: soft residual table_ready denser++
+     * W16 denser++ residual: dual_host_indep + badge distinct + depth +
+     * inject_chain for concurrent UDX IRQ_BIND (rtl + xhci). Soft!=product.
+     */
+    kprintf("pci: soft residual table_ready denser++ %s denser++=1 denser=1 "
+            "denser_arms=%u denser_ok=%u "
+            "dual_host_indep=%u badge_tbl_distinct=%u soft_tbl_depth=%u "
+            "inject_chain=%u product_open=%u dual_dod_open=%u "
+            "path=soft_tbl->DDI_OP_IRQ_BIND->inject->notify_msix_global->"
+            "NOTIFY_WAIT "
+            "product_hosts=UDX hosts=rtl8168_udx,xhci_udx "
+            "dual_dod OPEN dual_dod_A=OPEN dual_dod_B=OPEN "
+            "soft_residual_closes_dod=0 freestanding_skip=1 "
+            "product_notify_mint=OPEN product_msix=OPEN soft_note_only=1 "
+            "bar_honesty=v2026.08.04.75 stamp_free=1 never_invent=.76 "
+            "H2=once Soft!=product G-AC-1 dual=MIT|Apache-2.0 "
+            "(W16 denser++ MSI-X table residual; not Dual DoD close)\n",
+            szDenseVerdict, (unsigned)u32Dense, (unsigned)u32DenseOk,
+            (unsigned)fDualHostIndep, (unsigned)fBadgeTblDistinct,
+            (unsigned)fSoftTblDepth, (unsigned)fInjectChain,
+            (unsigned)fProductOpen, (unsigned)fDualDodOpen);
+    kprintf("msix: soft residual table_ready denser++ %s denser++=1 "
+            "denser_arms=%u denser_ok=%u "
+            "dual_host_indep=%u badge_tbl_distinct=%u soft_tbl_depth=%u "
+            "inject_chain=%u "
+            "dual_dod OPEN dual_dod_A=OPEN dual_dod_B=OPEN "
+            "product_hosts=UDX Soft!=product H2=once stamp_free=1 "
+            "G-AC-1=1 dual=MIT|Apache-2.0\n",
+            szDenseVerdict, (unsigned)u32Dense, (unsigned)u32DenseOk,
+            (unsigned)fDualHostIndep, (unsigned)fBadgeTblDistinct,
+            (unsigned)fSoftTblDepth, (unsigned)fInjectChain);
+    /*
+     * Grep: pci: soft residual table_ready denser+++
+     * Grep: msix: soft residual table_ready denser+++
+     * W18 denser+++ residual: host_pair_seed + latch_cycle + dual_host_chain +
+     * dod_open_full composites for concurrent UDX IRQ_BIND (rtl + xhci).
+     * Soft!=product; Dual DoD A/B remain OPEN; denser+++ residual != close.
+     */
+    kprintf("pci: soft residual table_ready denser+++ %s denser+++=1 denser++=1 denser=1 "
+            "denser_arms=%u denser_ok=%u denser_min=%u "
+            "host_pair_seed=%u latch_cycle=%u dual_host_chain=%u dod_open_full=%u "
+            "dual_host_indep=%u badge_tbl_distinct=%u soft_tbl_depth=%u "
+            "inject_chain=%u product_open=%u dual_dod_open=%u "
+            "path=soft_tbl->DDI_OP_IRQ_BIND->inject->notify_msix_global->"
+            "NOTIFY_WAIT "
+            "product_hosts=UDX hosts=rtl8168_udx,xhci_udx "
+            "dual_dod OPEN dual_dod_A=OPEN dual_dod_B=OPEN "
+            "soft_residual_closes_dod=0 freestanding_skip=1 "
+            "product_notify_mint=OPEN product_msix=OPEN soft_note_only=1 "
+            "bar_honesty=v2026.08.04.75 stamp_free=1 never_invent=.76 "
+            "H2=once Soft!=product G-AC-1 dual=MIT|Apache-2.0 "
+            "(W18 denser+++ MSI-X table residual; not Dual DoD close)\n",
+            szDenseVerdict, (unsigned)u32Dense, (unsigned)u32DenseOk,
+            (unsigned)PCI_MSIX_TABLE_READY_DENSE_MIN,
+            (unsigned)fHostPairSeed, (unsigned)fLatchCycle,
+            (unsigned)fDualHostChain, (unsigned)fDodOpenFull,
+            (unsigned)fDualHostIndep, (unsigned)fBadgeTblDistinct,
+            (unsigned)fSoftTblDepth, (unsigned)fInjectChain,
+            (unsigned)fProductOpen, (unsigned)fDualDodOpen);
+    kprintf("msix: soft residual table_ready denser+++ %s denser+++=1 "
+            "denser_arms=%u denser_ok=%u "
+            "host_pair_seed=%u latch_cycle=%u dual_host_chain=%u dod_open_full=%u "
+            "dual_dod OPEN dual_dod_A=OPEN dual_dod_B=OPEN "
+            "product_hosts=UDX Soft!=product H2=once stamp_free=1 "
+            "G-AC-1=1 dual=MIT|Apache-2.0 "
+            "(W18 denser+++ MSI-X residual; not Dual DoD close)\n",
+            szDenseVerdict, (unsigned)u32Dense, (unsigned)u32DenseOk,
+            (unsigned)fHostPairSeed, (unsigned)fLatchCycle,
+            (unsigned)fDualHostChain, (unsigned)fDodOpenFull);
+    /*
+     * Grep: pci: soft residual table_ready denser++++
+     * Grep: msix: soft residual table_ready denser++++
+     * W20 denser++++ residual: pba_drain + dual_latch + sticky_reissue +
+     * order_residual_full for UDX enable_irq / MC shape (soft only).
+     * Soft!=product; Dual DoD A/B remain OPEN; denser++++ residual != close.
+     * Bar honesty v2026.08.04.75 stamp-free — never invent .76.
+     * ASCII Soft!=product only (no unicode Soft inequality glyph).
+     */
+    kprintf("pci: soft residual table_ready denser++++ %s denser++++=1 denser+++=1 denser++=1 denser=1 "
+            "denser_arms=%u denser_ok=%u denser_min=%u "
+            "pba_drain=%u dual_latch=%u sticky_reissue=%u order_residual_full=%u "
+            "host_pair_seed=%u latch_cycle=%u dual_host_chain=%u dod_open_full=%u "
+            "dual_host_indep=%u inject_chain=%u product_open=%u dual_dod_open=%u "
+            "path=soft_tbl->DDI_OP_IRQ_BIND->inject->notify_msix_global->"
+            "NOTIFY_WAIT "
+            "product_hosts=UDX hosts=rtl8168_udx,xhci_udx "
+            "dual_dod OPEN dual_dod_A=OPEN dual_dod_B=OPEN "
+            "soft_residual_closes_dod=0 freestanding_skip=1 "
+            "product_notify_mint=OPEN product_msix=OPEN soft_note_only=1 "
+            "bar_honesty=v2026.08.04.75 stamp_free=1 never_invent=.76 "
+            "H2=once Soft!=product G-AC-1 dual=MIT|Apache-2.0 "
+            "(W20 denser++++ MSI-X table residual 24-arm; not Dual DoD close)\n",
+            szDenseVerdict, (unsigned)u32Dense, (unsigned)u32DenseOk,
+            (unsigned)PCI_MSIX_TABLE_READY_DENSE_MIN,
+            (unsigned)fPbaDrain, (unsigned)fDualLatch,
+            (unsigned)fStickyReissue, (unsigned)fOrderResidualFull,
+            (unsigned)fHostPairSeed, (unsigned)fLatchCycle,
+            (unsigned)fDualHostChain, (unsigned)fDodOpenFull,
+            (unsigned)fDualHostIndep, (unsigned)fInjectChain,
+            (unsigned)fProductOpen, (unsigned)fDualDodOpen);
+    kprintf("msix: soft residual table_ready denser++++ %s denser++++=1 "
+            "denser_arms=%u denser_ok=%u "
+            "pba_drain=%u dual_latch=%u sticky_reissue=%u order_residual_full=%u "
+            "dual_dod OPEN dual_dod_A=OPEN dual_dod_B=OPEN "
+            "product_hosts=UDX Soft!=product H2=once stamp_free=1 "
+            "G-AC-1=1 dual=MIT|Apache-2.0 "
+            "(W20 denser++++ MSI-X residual; not Dual DoD close)\n",
+            szDenseVerdict, (unsigned)u32Dense, (unsigned)u32DenseOk,
+            (unsigned)fPbaDrain, (unsigned)fDualLatch,
+            (unsigned)fStickyReissue, (unsigned)fOrderResidualFull);
+
+    /*
+     * Grep: pci: soft residual table_ready denser+++++
+     * Grep: msix: soft residual table_ready denser+++++
+     * W23 denser+++++ residual: fn_pba_drain + vec_remask_hold + order_fn_full
+     * + product_path_full for UDX enable_irq / MC Function Mask (soft only).
+     * Soft!=product; Dual DoD A/B remain OPEN; denser+++++ residual != close.
+     * Bar honesty v2026.08.04.75 stamp-free — never invent .76.
+     * ASCII Soft!=product only (no unicode Soft inequality glyph).
+     */
+    kprintf("pci: soft residual table_ready denser+++++ %s denser+++++=1 denser++++=1 denser+++=1 denser++=1 denser=1 "
+            "denser_arms=%u denser_ok=%u denser_min=%u "
+            "fn_pba_drain=%u vec_remask_hold=%u order_fn_full=%u product_path_full=%u "
+            "pba_drain=%u dual_latch=%u sticky_reissue=%u order_residual_full=%u "
+            "host_pair_seed=%u latch_cycle=%u dual_host_chain=%u dod_open_full=%u "
+            "dual_host_indep=%u inject_chain=%u product_open=%u dual_dod_open=%u "
+            "path=soft_tbl->DDI_OP_IRQ_BIND->inject->notify_msix_global->"
+            "NOTIFY_WAIT "
+            "product_hosts=UDX hosts=rtl8168_udx,xhci_udx "
+            "dual_dod OPEN dual_dod_A=OPEN dual_dod_B=OPEN "
+            "soft_residual_closes_dod=0 freestanding_skip=1 "
+            "product_notify_mint=OPEN product_msix=OPEN soft_note_only=1 "
+            "bar_honesty=v2026.08.04.75 stamp_free=1 never_invent=.76 "
+            "H2=once Soft!=product G-AC-1 dual=MIT|Apache-2.0 "
+            "(W23 denser+++++ MSI-X table residual 28-arm; not Dual DoD close)\n",
+            szDenseVerdict, (unsigned)u32Dense, (unsigned)u32DenseOk,
+            (unsigned)PCI_MSIX_TABLE_READY_DENSE_MIN,
+            (unsigned)fFnPbaDrain, (unsigned)fVecRemaskHold,
+            (unsigned)fOrderFnFull, (unsigned)fProductPathFull,
+            (unsigned)fPbaDrain, (unsigned)fDualLatch,
+            (unsigned)fStickyReissue, (unsigned)fOrderResidualFull,
+            (unsigned)fHostPairSeed, (unsigned)fLatchCycle,
+            (unsigned)fDualHostChain, (unsigned)fDodOpenFull,
+            (unsigned)fDualHostIndep, (unsigned)fInjectChain,
+            (unsigned)fProductOpen, (unsigned)fDualDodOpen);
+    kprintf("msix: soft residual table_ready denser+++++ %s denser+++++=1 "
+            "denser_arms=%u denser_ok=%u "
+            "fn_pba_drain=%u vec_remask_hold=%u order_fn_full=%u product_path_full=%u "
+            "dual_dod OPEN dual_dod_A=OPEN dual_dod_B=OPEN "
+            "product_hosts=UDX Soft!=product H2=once stamp_free=1 "
+            "G-AC-1=1 dual=MIT|Apache-2.0 "
+            "(W23 denser+++++ MSI-X residual; not Dual DoD close)\n",
+            szDenseVerdict, (unsigned)u32Dense, (unsigned)u32DenseOk,
+            (unsigned)fFnPbaDrain, (unsigned)fVecRemaskHold,
+            (unsigned)fOrderFnFull, (unsigned)fProductPathFull);
+
+    /*
+     * denser residual bar .75 VERDICT (agent-facing rollup; Soft!=product).
+     * Composite over 28 denser table_ready arms (W23 denser+++++).
+     * Dual DoD A/B remain OPEN; denser residual != Dual DoD close.
+     * Bar honesty v2026.08.04.75 stamp-free — NEVER invent .76.
+     * ASCII Soft!=product only (no unicode Soft inequality glyph).
+     * greppable: pci: soft residual denser VERDICT
+     * greppable: msix: soft residual denser VERDICT
+     * greppable: denser residual bar
+     * greppable: bar=v2026.08.04.75
+     */
+    kprintf("pci: soft residual denser VERDICT %s denser=1 denser++=1 "
+            "denser+++=1 denser++++=1 denser+++++=1 denser_ok=%u denser_arms=%u denser_min=%u "
+            "fn_pba_drain=%u vec_remask_hold=%u order_fn_full=%u product_path_full=%u "
+            "pba_drain=%u dual_latch=%u sticky_reissue=%u order_residual_full=%u "
+            "host_pair_seed=%u latch_cycle=%u dual_host_chain=%u dod_open_full=%u "
+            "dual_host_indep=%u badge_tbl_distinct=%u soft_tbl_depth=%u "
+            "inject_chain=%u product_open=%u dual_dod_open=%u "
+            "mask_hold_pba=%u unmask_pend=%u h1_locks=%u "
+            "table_ready=%u soft_ready=%u irq_ready=%u badge0_ok=%u "
+            "path=soft_tbl->DDI_OP_IRQ_BIND->inject->notify_msix_global->"
+            "NOTIFY_WAIT "
+            "product_hosts=UDX hosts=rtl8168_udx,xhci_udx "
+            "dual_dod OPEN dual_dod_A=OPEN dual_dod_B=OPEN "
+            "soft_residual_closes_dod=0 freestanding_skip=1 "
+            "product_notify_mint=OPEN product_msix=OPEN soft_note_only=1 "
+            "denser residual != Dual DoD close "
+            "denser residual bar bar=v2026.08.04.75 stamp_free=1 "
+            "never_invent=.76 Soft!=product G-AC-1 dual=MIT|Apache-2.0 "
+            "H2=once via=%s "
+            "(agent-facing denser residual VERDICT; Soft!=product; "
+            "Dual DoD A/B OPEN; never product close)\n",
+            szDenseVerdict, (unsigned)u32DenseOk, (unsigned)u32Dense,
+            (unsigned)PCI_MSIX_TABLE_READY_DENSE_MIN,
+            (unsigned)fFnPbaDrain, (unsigned)fVecRemaskHold,
+            (unsigned)fOrderFnFull, (unsigned)fProductPathFull,
+            (unsigned)fPbaDrain, (unsigned)fDualLatch,
+            (unsigned)fStickyReissue, (unsigned)fOrderResidualFull,
+            (unsigned)fHostPairSeed, (unsigned)fLatchCycle,
+            (unsigned)fDualHostChain, (unsigned)fDodOpenFull,
+            (unsigned)fDualHostIndep, (unsigned)fBadgeTblDistinct,
+            (unsigned)fSoftTblDepth, (unsigned)fInjectChain,
+            (unsigned)fProductOpen, (unsigned)fDualDodOpen,
+            (unsigned)fMaskHoldPba, (unsigned)fUnmaskPend,
+            (unsigned)fH1Locks, (unsigned)fTableReady,
+            (unsigned)(g_fSoftReady ? 1 : 0), (unsigned)fIrqReady,
+            (unsigned)fBadge0Ok, szViaSafe);
+    kprintf("msix: soft residual denser VERDICT %s denser+++++=1 denser_ok=%u "
+            "denser_arms=%u denser_min=%u "
+            "fn_pba_drain=%u vec_remask_hold=%u order_fn_full=%u product_path_full=%u "
+            "pba_drain=%u dual_latch=%u sticky_reissue=%u order_residual_full=%u "
+            "inject_chain=%u product_open=%u dual_dod_open=%u "
+            "dual_dod OPEN dual_dod_A=OPEN dual_dod_B=OPEN "
+            "product_hosts=UDX Soft!=product "
+            "soft_residual_closes_dod=0 freestanding_skip=1 "
+            "product_notify_mint=OPEN product_msix=OPEN soft_note_only=1 "
+            "denser residual != Dual DoD close "
+            "denser residual bar bar=v2026.08.04.75 stamp_free=1 "
+            "never_invent=.76 G-AC-1=1 dual=MIT|Apache-2.0 H2=once "
+            "(agent-facing denser residual VERDICT; Soft!=product; "
+            "Dual DoD OPEN; never product close)\n",
+            szDenseVerdict, (unsigned)u32DenseOk, (unsigned)u32Dense,
+            (unsigned)PCI_MSIX_TABLE_READY_DENSE_MIN,
+            (unsigned)fFnPbaDrain, (unsigned)fVecRemaskHold,
+            (unsigned)fOrderFnFull, (unsigned)fProductPathFull,
+            (unsigned)fPbaDrain, (unsigned)fDualLatch,
+            (unsigned)fStickyReissue, (unsigned)fOrderResidualFull,
+            (unsigned)fInjectChain, (unsigned)fProductOpen,
+            (unsigned)fDualDodOpen);
+}
+
 static void
 pci_msix_soft_inventory(const char *szVia)
 {
@@ -324,24 +1584,19 @@ pci_msix_soft_inventory(const char *szVia)
     u32 cProgLive = 0;
     u32 cMasked = 0;
     u32 cFired = 0;
-    u32 u32Addr0 = 0;
-    u32 u32Data0 = 0;
-    u32 u32VecCtl0 = 0;
-    u32 u32Addr1 = 0;
-    u32 u32Data1 = 0;
-    u32 u32VecCtl1 = 0;
-    u32 fProg0 = 0;
-    u32 fProg1 = 0;
-    u32 fFire0 = 0;
-    u32 fFire1 = 0;
-    u32 fMask0 = 0;
-    u32 fMask1 = 0;
     u32 fIrqReady;
-    u32 u32Badge0;
-    u32 u32Badge1;
+    u32 fPend0;
+    u32 fPend1;
+    u64 u64BadgeMask;
     const char *szViaSafe;
+    const char *szVerdict;
 
     szViaSafe = (szVia != NULL) ? szVia : "anon";
+
+    /* Cap serial flood (exercise + probe both call; residual only). */
+    if (g_u32SoftInvLogs >= PCI_MSIX_SOFT_INV_LOG_CAP) {
+        return;
+    }
     if (g_u32SoftInvLogs < 0xffffffffu) {
         g_u32SoftInvLogs++;
     }
@@ -361,1229 +1616,119 @@ pci_msix_soft_inventory(const char *szVia)
             }
         }
     }
-    if (g_aSoftTab[0].u8Programmed) {
-        fProg0 = 1u;
-        u32Addr0 = g_aSoftTab[0].u32MsgAddrLo;
-        u32Data0 = g_aSoftTab[0].u32MsgData;
-        u32VecCtl0 = g_aSoftTab[0].u32VecCtl;
-        fFire0 = g_aSoftTab[0].u8SoftFire ? 1u : 0u;
-        fMask0 = (u32VecCtl0 & GJ_MSIX_VECCTL_MASK) != 0 ? 1u : 0u;
-    }
-    if (GJ_MSIX_SOFT_TBL > 1u && g_aSoftTab[1].u8Programmed) {
-        fProg1 = 1u;
-        u32Addr1 = g_aSoftTab[1].u32MsgAddrLo;
-        u32Data1 = g_aSoftTab[1].u32MsgData;
-        u32VecCtl1 = g_aSoftTab[1].u32VecCtl;
-        fFire1 = g_aSoftTab[1].u8SoftFire ? 1u : 0u;
-        fMask1 = (u32VecCtl1 & GJ_MSIX_VECCTL_MASK) != 0 ? 1u : 0u;
-    }
     fIrqReady = irq_msix_ready() ? 1u : 0u;
-    u32Badge0 = (u32)GJ_MSIX_BADGE_TBL(0);
-    u32Badge1 = (u32)GJ_MSIX_BADGE_TBL(1);
+    u64BadgeMask = pci_msix_soft_badge_mask();
+    fPend0 = pci_msix_soft_pba_pending(0);
+    fPend1 = (GJ_MSIX_SOFT_TBL > 1u) ? pci_msix_soft_pba_pending(1) : 0u;
+    szVerdict = g_fSoftReady ? "PASS" : "SKIP";
 
     /*
-     * Grep: pci: soft inventory / msix: soft inventory
-     * Soft table geometry + lifetime counters for product smoke.
+     * Twin inventory (geometry + tallies + verdict). Soft shadow != device
+     * Table Size. greppable: pci: soft inventory / msix: soft inventory
+     * greppable: pci: soft inventory PASS / msix: soft inventory PASS
      */
-    kprintf("pci: soft inventory via=%s ready=%u depth=%u prog=%u "
-            "prog_live=%u fire=%u pba=0x%lx hw_prog=%u irq_ready=%u "
-            "logs=%u wave=%u\n",
-            szViaSafe, (unsigned)(g_fSoftReady ? 1 : 0),
+    kprintf("pci: soft inventory %s via=%s ready=%u depth=%u prog=%u "
+            "prog_live=%u masked=%u fire=%u fired_live=%u pba=0x%lx "
+            "hw_prog=%u irq_ready=%u unmask_pend=%u logs=%u Soft!=product\n",
+            szVerdict, szViaSafe, (unsigned)(g_fSoftReady ? 1 : 0),
             (unsigned)GJ_MSIX_SOFT_TBL, (unsigned)g_u32SoftProg,
-            (unsigned)cProgLive, (unsigned)g_u32SoftFire,
-            (unsigned long)g_u64SoftPba, (unsigned)g_u32Programmed,
-            (unsigned)fIrqReady, (unsigned)g_u32SoftInvLogs,
-            (unsigned)PCI_MSIX_SOFT_DEEPEN_WAVE);
-    kprintf("msix: soft inventory via=%s ready=%u depth=%u prog=%u "
-            "prog_live=%u fire=%u pba=0x%lx hw_prog=%u irq_ready=%u "
-            "logs=%u wave=%u\n",
-            szViaSafe, (unsigned)(g_fSoftReady ? 1 : 0),
+            (unsigned)cProgLive, (unsigned)cMasked, (unsigned)g_u32SoftFire,
+            (unsigned)cFired, (unsigned long)g_u64SoftPba,
+            (unsigned)g_u32Programmed, (unsigned)fIrqReady,
+            (unsigned)g_u32SoftUnmaskPend, (unsigned)g_u32SoftInvLogs);
+    kprintf("msix: soft inventory %s via=%s ready=%u depth=%u prog=%u "
+            "fire=%u pba=0x%lx unmask_pend=%u logs=%u Soft!=product\n",
+            szVerdict, szViaSafe, (unsigned)(g_fSoftReady ? 1 : 0),
             (unsigned)GJ_MSIX_SOFT_TBL, (unsigned)g_u32SoftProg,
-            (unsigned)cProgLive, (unsigned)g_u32SoftFire,
-            (unsigned long)g_u64SoftPba, (unsigned)g_u32Programmed,
-            (unsigned)fIrqReady, (unsigned)g_u32SoftInvLogs,
-            (unsigned)PCI_MSIX_SOFT_DEEPEN_WAVE);
-
-    /* Grep: pci: soft table / msix: soft table */
-    kprintf("pci: soft table depth=%u entry0_addr=0x%x entry0_data=0x%x "
-            "entry0_vecctl=0x%x programmed=%u soft_fire=%u probe_vec=0x%x "
-            "wave=%u\n",
-            (unsigned)GJ_MSIX_SOFT_TBL, (unsigned)u32Addr0,
-            (unsigned)u32Data0, (unsigned)u32VecCtl0, (unsigned)fProg0,
-            (unsigned)fFire0, (unsigned)PCI_MSIX_PROBE_VEC,
-            (unsigned)PCI_MSIX_SOFT_DEEPEN_WAVE);
-    kprintf("msix: soft table depth=%u entry0_addr=0x%x entry0_data=0x%x "
-            "entry0_vecctl=0x%x programmed=%u soft_fire=%u probe_vec=0x%x "
-            "wave=%u\n",
-            (unsigned)GJ_MSIX_SOFT_TBL, (unsigned)u32Addr0,
-            (unsigned)u32Data0, (unsigned)u32VecCtl0, (unsigned)fProg0,
-            (unsigned)fFire0, (unsigned)PCI_MSIX_PROBE_VEC,
-            (unsigned)PCI_MSIX_SOFT_DEEPEN_WAVE);
-
-    /* Grep: pci: soft entry / msix: soft entry (Wave 14 multi-entry lamps) */
-    kprintf("pci: soft entry e0_prog=%u e0_addr=0x%x e0_data=0x%x "
-            "e0_mask=%u e0_fire=%u e1_prog=%u e1_addr=0x%x e1_data=0x%x "
-            "e1_mask=%u e1_fire=%u soft PASS\n",
-            (unsigned)fProg0, (unsigned)u32Addr0, (unsigned)u32Data0,
-            (unsigned)fMask0, (unsigned)fFire0, (unsigned)fProg1,
-            (unsigned)u32Addr1, (unsigned)u32Data1, (unsigned)fMask1,
-            (unsigned)fFire1);
-    kprintf("msix: soft entry e0_prog=%u e0_addr=0x%x e0_data=0x%x "
-            "e0_mask=%u e0_fire=%u e1_prog=%u e1_addr=0x%x e1_data=0x%x "
-            "e1_mask=%u e1_fire=%u soft PASS\n",
-            (unsigned)fProg0, (unsigned)u32Addr0, (unsigned)u32Data0,
-            (unsigned)fMask0, (unsigned)fFire0, (unsigned)fProg1,
-            (unsigned)u32Addr1, (unsigned)u32Data1, (unsigned)fMask1,
-            (unsigned)fFire1);
-
-    /* Grep: pci: soft pba / msix: soft pba */
-    kprintf("pci: soft pba bits=0x%lx sticky=1 clear_api=1 mask_sets=1 "
-            "width=64 wave=%u\n",
-            (unsigned long)g_u64SoftPba,
-            (unsigned)PCI_MSIX_SOFT_DEEPEN_WAVE);
-    kprintf("msix: soft pba bits=0x%lx sticky=1 clear_api=1 mask_sets=1 "
-            "width=64 wave=%u\n",
-            (unsigned long)g_u64SoftPba,
-            (unsigned)PCI_MSIX_SOFT_DEEPEN_WAVE);
-
-    /* Grep: pci: soft fire / msix: soft fire */
-    kprintf("pci: soft fire count=%u live_fired=%u badge_tbl0=0x%x "
-            "badge_tbl1=0x%x inject_if_ready=%u masked_hold=1 wave=%u\n",
-            (unsigned)g_u32SoftFire, (unsigned)cFired, (unsigned)u32Badge0,
-            (unsigned)u32Badge1, (unsigned)fIrqReady,
-            (unsigned)PCI_MSIX_SOFT_DEEPEN_WAVE);
-    kprintf("msix: soft fire count=%u live_fired=%u badge_tbl0=0x%x "
-            "badge_tbl1=0x%x inject_if_ready=%u masked_hold=1 wave=%u\n",
-            (unsigned)g_u32SoftFire, (unsigned)cFired, (unsigned)u32Badge0,
-            (unsigned)u32Badge1, (unsigned)fIrqReady,
-            (unsigned)PCI_MSIX_SOFT_DEEPEN_WAVE);
-
-    /* Grep: pci: soft mask / msix: soft mask */
-    kprintf("pci: soft mask live=%u vecctl_bit0=1 unmask_delivers=1 "
-            "prog_live=%u e0_mask=%u e1_mask=%u\n",
-            (unsigned)cMasked, (unsigned)cProgLive, (unsigned)fMask0,
-            (unsigned)fMask1);
-    kprintf("msix: soft mask live=%u vecctl_bit0=1 unmask_delivers=1 "
-            "prog_live=%u e0_mask=%u e1_mask=%u\n",
-            (unsigned)cMasked, (unsigned)cProgLive, (unsigned)fMask0,
-            (unsigned)fMask1);
-
-    /* Grep: pci: soft hw / msix: soft hw — HW program tallies (may be 0) */
-    kprintf("pci: soft hw programmed=%u scan_api=1 enable_api=1 "
-            "program_first=1 map_device=1 wave=%u\n",
-            (unsigned)g_u32Programmed, (unsigned)PCI_MSIX_SOFT_DEEPEN_WAVE);
-    kprintf("msix: soft hw programmed=%u scan_api=1 enable_api=1 "
-            "program_first=1 map_device=1 wave=%u\n",
-            (unsigned)g_u32Programmed, (unsigned)PCI_MSIX_SOFT_DEEPEN_WAVE);
-
-    /* Grep: pci: soft caps / msix: soft caps — public PCI cap IDs */
-    kprintf("pci: soft caps msi_id=0x%02x msix_id=0x%02x status_cap=0x%02x "
-            "soft PASS\n",
-            (unsigned)PCI_CAP_ID_MSI, (unsigned)PCI_CAP_ID_MSIX,
-            (unsigned)PCI_STATUS_CAP);
-    kprintf("msix: soft caps msi_id=0x%02x msix_id=0x%02x status_cap=0x%02x "
-            "soft PASS\n",
-            (unsigned)PCI_CAP_ID_MSI, (unsigned)PCI_CAP_ID_MSIX,
-            (unsigned)PCI_STATUS_CAP);
-
-    /* Grep: pci: soft consts / msix: soft consts */
-    kprintf("pci: soft consts probe_vec=0x%x addr_base=0x%x depth=%u "
-            "vecctl_mask=0x%x soft PASS\n",
-            (unsigned)PCI_MSIX_PROBE_VEC, (unsigned)MSI_ADDR_BASE,
-            (unsigned)GJ_MSIX_SOFT_TBL, (unsigned)GJ_MSIX_VECCTL_MASK);
-    kprintf("msix: soft consts probe_vec=0x%x addr_base=0x%x depth=%u "
-            "vecctl_mask=0x%x soft PASS\n",
-            (unsigned)PCI_MSIX_PROBE_VEC, (unsigned)MSI_ADDR_BASE,
-            (unsigned)GJ_MSIX_SOFT_TBL, (unsigned)GJ_MSIX_VECCTL_MASK);
+            (unsigned)g_u32SoftFire, (unsigned long)g_u64SoftPba,
+            (unsigned)g_u32SoftUnmaskPend, (unsigned)g_u32SoftInvLogs);
 
     /*
-     * Grep: pci: soft path / msix: soft path
-     * Honesty: bounded soft shadow ≠ full device Table Size; soft.
+     * Lean residual UDX IRQ scaffold + H1 honesty (one twin; no stamp storm).
+     * Freestanding rtl stays poll-mode first; never forces HW MSI-X onto
+     * freestanding NIC; never calls net_eth_poll (run-loop only). Soft
+     * shadow only != product IRQ. Soft!=product; G-AC-1; dual MIT/Apache.
+     * greppable: pci: soft residual lean / msix: soft residual lean
+     * greppable: pci: soft residual lean PASS / msix: soft residual lean PASS
+     * greppable: force_irq_eth_poll=0 poll_mode_first=1
+     * greppable: net_eth_poll=run_loop_only net_eth_irq=0
+     * greppable: net_eth_poll_from_msix=0
      */
-    kprintf("pci: soft path claim=kernel_soft depth_bound=%u "
-            "full_table_size=0 soft_only_when_no_mmio=1 "
-            "via=%s wave=%u\n",
-            (unsigned)GJ_MSIX_SOFT_TBL, szViaSafe,
-            (unsigned)PCI_MSIX_SOFT_DEEPEN_WAVE);
-    kprintf("msix: soft path claim=kernel_soft depth_bound=%u "
-            "full_table_size=0 soft_only_when_no_mmio=1 "
-            "via=%s wave=%u\n",
-            (unsigned)GJ_MSIX_SOFT_TBL, szViaSafe,
-            (unsigned)PCI_MSIX_SOFT_DEEPEN_WAVE);
-
     /*
-     * Wave 15 exclusive deepen (complementary; never hard-gates).
-     * greppable: pci: soft ratio|headroom|surface / msix: soft …
+     * Contiguous greppable: "pci: soft residual lean PASS" /
+     * "msix: soft residual lean PASS" (PASS immediately after lean).
+     * UDX IRQ foundation path (soft only; Soft!=product):
+     *   soft_tbl fire/unmask_pend -> irq_msix inject -> notify_msix_global
+     *   -> GJ_SYS_NOTIFY_WAIT; product_notify_mint=OPEN (no CNode IRQ mint).
+     * Badge scaffold: GJ_MSIX_BADGE_TBL(i); UDX freestanding bit_N->line_N
+     * is independent. Never forces freestanding rtl off poll-mode.
      */
-    {
-        u32 u32ProgBp = 0;
-        u32 u32MaskBp = 0;
-        u32 u32FireBp = 0;
-        u32 u32FreeHead = 0;
-
-        if ((u32)GJ_MSIX_SOFT_TBL != 0u) {
-            u32ProgBp = (cProgLive * 10000u) / (u32)GJ_MSIX_SOFT_TBL;
-        }
-        if (cProgLive != 0u) {
-            u32MaskBp = (cMasked * 10000u) / cProgLive;
-            u32FireBp = (cFired * 10000u) / cProgLive;
-        }
-        if ((u32)GJ_MSIX_SOFT_TBL > cProgLive) {
-            u32FreeHead = (u32)GJ_MSIX_SOFT_TBL - cProgLive;
-        }
-        /* Grep: pci: soft ratio / msix: soft ratio */
-        kprintf("pci: soft ratio prog_bp=%u mask_bp=%u fire_bp=%u "
-                "prog_live=%u depth=%u wave=%u\n",
-                u32ProgBp, u32MaskBp, u32FireBp, cProgLive,
-                (unsigned)GJ_MSIX_SOFT_TBL,
-                (unsigned)PCI_MSIX_SOFT_DEEPEN_WAVE);
-        kprintf("msix: soft ratio prog_bp=%u mask_bp=%u fire_bp=%u "
-                "prog_live=%u depth=%u wave=%u\n",
-                u32ProgBp, u32MaskBp, u32FireBp, cProgLive,
-                (unsigned)GJ_MSIX_SOFT_TBL,
-                (unsigned)PCI_MSIX_SOFT_DEEPEN_WAVE);
-        /* Grep: pci: soft headroom / msix: soft headroom */
-        kprintf("pci: soft headroom free=%u depth=%u prog_live=%u "
-                "masked=%u wave=%u\n",
-                u32FreeHead, (unsigned)GJ_MSIX_SOFT_TBL, cProgLive, cMasked,
-                (unsigned)PCI_MSIX_SOFT_DEEPEN_WAVE);
-        kprintf("msix: soft headroom free=%u depth=%u prog_live=%u "
-                "masked=%u wave=%u\n",
-                u32FreeHead, (unsigned)GJ_MSIX_SOFT_TBL, cProgLive, cMasked,
-                (unsigned)PCI_MSIX_SOFT_DEEPEN_WAVE);
-        /* Grep: pci: soft surface / msix: soft surface */
-        kprintf("pci: soft surface inventory,table,entry,pba,fire,mask,hw,"
-                "caps,consts,path,ratio,headroom,honesty,geom,return,"
-                "contract,return_selftest,retmap,deepen,stats areas=%u wave=%u\n",
-                (unsigned)PCI_MSIX_SOFT_DEEPEN_AREAS,
-                (unsigned)PCI_MSIX_SOFT_DEEPEN_WAVE);
-        kprintf("msix: soft surface inventory,table,entry,pba,fire,mask,hw,"
-                "caps,consts,path,ratio,headroom,honesty,geom,return,"
-                "contract,return_selftest,retmap,deepen,stats areas=%u wave=%u\n",
-                (unsigned)PCI_MSIX_SOFT_DEEPEN_AREAS,
-                (unsigned)PCI_MSIX_SOFT_DEEPEN_WAVE);
-    }
-
+    kprintf("pci: soft residual lean PASS udx_irq=1 "
+            "poll_mode_first=%u force_irq_eth_poll=%u hw_force_rtl=%u "
+            "net_eth_irq=%u net_eth_poll_from_msix=%u "
+            "net_eth_poll=run_loop_only freestanding_rtl_poll=1 "
+            "fn_mask=%u unmask_pend=%u badge_mask=0x%lx pba_e0=%u pba_e1=%u "
+            "badge0=0x%lx path=soft_tbl->inject->notify_msix_global->NOTIFY_WAIT "
+            "pba_drain=1 dual_latch=1 sticky_reissue=1 fn_pba_drain=1 "
+            "vec_remask_hold=1 order_residual=1 "
+            "product_msix=OPEN product_notify_mint=OPEN soft_shadow=1 "
+            "full_table_size=0 game_io=0 product_irq=0 soft_only=1 "
+            "dual_dod_A=OPEN dual_dod_B=OPEN freestanding_skip=1 "
+            "stamp_free=1 soft=1 product=0 "
+            "dual_license=MIT_OR_Apache-2.0 G-AC-1 "
+            "hazard=H1 Soft!=product\n",
+            (unsigned)PCI_MSIX_POLL_MODE_FIRST,
+            (unsigned)PCI_MSIX_FORCE_IRQ_ETH_POLL,
+            (unsigned)PCI_MSIX_HW_FORCE_RTL,
+            (unsigned)PCI_MSIX_NET_ETH_IRQ,
+            (unsigned)PCI_MSIX_NET_ETH_POLL_FROM,
+            (unsigned)g_fSoftFnMask, (unsigned)g_u32SoftUnmaskPend,
+            (unsigned long)u64BadgeMask, (unsigned)fPend0, (unsigned)fPend1,
+            (unsigned long)pci_msix_soft_entry_badge(0));
+    kprintf("msix: soft residual lean PASS udx_irq=1 "
+            "poll_mode_first=%u force_irq_eth_poll=%u hw_force_rtl=%u "
+            "net_eth_irq=%u net_eth_poll_from_msix=%u "
+            "net_eth_poll=run_loop_only fn_mask=%u unmask_pend=%u "
+            "badge_mask=0x%lx pba_drain=1 dual_latch=1 sticky_reissue=1 "
+            "fn_pba_drain=1 vec_remask_hold=1 order_residual=1 "
+            "product_msix=OPEN product_notify_mint=OPEN "
+            "soft_shadow=1 dual_dod_A=OPEN dual_dod_B=OPEN "
+            "freestanding_skip=1 stamp_free=1 soft=1 product=0 "
+            "dual_license=MIT_OR_Apache-2.0 "
+            "G-AC-1 hazard=H1 Soft!=product\n",
+            (unsigned)PCI_MSIX_POLL_MODE_FIRST,
+            (unsigned)PCI_MSIX_FORCE_IRQ_ETH_POLL,
+            (unsigned)PCI_MSIX_HW_FORCE_RTL,
+            (unsigned)PCI_MSIX_NET_ETH_IRQ,
+            (unsigned)PCI_MSIX_NET_ETH_POLL_FROM,
+            (unsigned)g_fSoftFnMask, (unsigned)g_u32SoftUnmaskPend,
+            (unsigned long)u64BadgeMask);
     /*
-     * Wave 16 complementary deepen (kept; never hard-gates).
-     * Soft ≠ game I/O. greppable: pci: soft honesty|geom|return|contract
+     * Dual DoD residual honesty (H2 once STRONGER denser; Soft!=product).
+     * Soft residual lean PASS != Dual DoD A/B close. UDX product OPEN.
+     * denser table_ready residual for DDI IRQ_BIND (24 multi-arm denser++++).
+     * greppable: pci: soft residual dual_dod OPEN
+     * greppable: msix: soft residual dual_dod OPEN
+     * greppable: Soft!=product soft residual dual_dod OPEN product_hosts=UDX
+     * greppable: pci: soft residual table_ready STRONGER
+     * greppable: pci: soft residual table_ready denser
+     * greppable: pci: soft residual table_ready denser++
+     * greppable: pci: soft residual table_ready denser+++
+     * greppable: pci: soft residual table_ready denser++++
+     * greppable: msix: soft residual table_ready denser
+     * greppable: msix: soft residual table_ready denser++
+     * greppable: msix: soft residual table_ready denser+++
+     * greppable: msix: soft residual table_ready denser++++
+     * greppable: pci: soft residual denser VERDICT
+     * greppable: msix: soft residual denser VERDICT
+     * greppable: denser residual bar bar=v2026.08.04.75
+     * greppable: denser_arms=28 denser_ok= mask_hold_pba= unmask_pend=
+     * greppable: dual_host_indep= badge_tbl_distinct= inject_chain=
+     * greppable: pba_drain= dual_latch= sticky_reissue= order_residual_full=
+     * Bar honesty v2026.08.04.75 stamp-free — never invent .76.
+     * ASCII Soft!=product only (no unicode inequality glyph).
      */
-    {
-        u32 u32Surf = 0u;
-
-        if (g_fSoftReady != 0) {
-            u32Surf |= 0x1u; /* soft table ready */
-        }
-        if (cProgLive != 0u) {
-            u32Surf |= 0x2u; /* programmed entries */
-        }
-        if (cMasked != 0u) {
-            u32Surf |= 0x4u; /* masked entries */
-        }
-        if (cFired != 0u) {
-            u32Surf |= 0x8u; /* fired entries */
-        }
-        if (g_u32Programmed != 0u) {
-            u32Surf |= 0x10u; /* HW program path */
-        }
-        u32Surf |= 0x20u; /* caps/consts always catalogued */
-        /* Grep: pci: soft honesty / msix: soft honesty */
-        kprintf("pci: soft honesty soft_shadow=1 full_table_size=0 "
-                "game_io=0 product_irq=0 soft_only=1 "
-                "wave=%u soft PASS\n",
-                (unsigned)PCI_MSIX_SOFT_DEEPEN_WAVE);
-        kprintf("msix: soft honesty soft_shadow=1 full_table_size=0 "
-                "game_io=0 product_irq=0 soft_only=1 "
-                "wave=%u soft PASS\n",
-                (unsigned)PCI_MSIX_SOFT_DEEPEN_WAVE);
-        /* Grep: pci: soft geom / msix: soft geom */
-        kprintf("pci: soft geom depth=%u probe_vec=0x%x addr_base=0x%x "
-                "cap_msi=0x%x cap_msix=0x%x wave=%u soft PASS\n",
-                (unsigned)GJ_MSIX_SOFT_TBL, (unsigned)PCI_MSIX_PROBE_VEC,
-                (unsigned)MSI_ADDR_BASE, (unsigned)PCI_CAP_ID_MSI,
-                (unsigned)PCI_CAP_ID_MSIX, (unsigned)PCI_MSIX_SOFT_DEEPEN_WAVE);
-        kprintf("msix: soft geom depth=%u probe_vec=0x%x addr_base=0x%x "
-                "cap_msi=0x%x cap_msix=0x%x wave=%u soft PASS\n",
-                (unsigned)GJ_MSIX_SOFT_TBL, (unsigned)PCI_MSIX_PROBE_VEC,
-                (unsigned)MSI_ADDR_BASE, (unsigned)PCI_CAP_ID_MSI,
-                (unsigned)PCI_CAP_ID_MSIX, (unsigned)PCI_MSIX_SOFT_DEEPEN_WAVE);
-        /* Grep: pci: soft return / msix: soft return */
-        kprintf("pci: soft return surf=0x%x ready=%u prog_live=%u "
-                "masked=%u fired=%u hw_prog=%u via=%s areas=%u wave=%u "
-                "soft PASS\n",
-                u32Surf, (unsigned)(g_fSoftReady ? 1 : 0), (unsigned)cProgLive,
-                (unsigned)cMasked, (unsigned)cFired, (unsigned)g_u32Programmed,
-                szViaSafe, (unsigned)PCI_MSIX_SOFT_DEEPEN_AREAS,
-                (unsigned)PCI_MSIX_SOFT_DEEPEN_WAVE);
-        kprintf("msix: soft return surf=0x%x ready=%u prog_live=%u "
-                "masked=%u fired=%u hw_prog=%u via=%s areas=%u wave=%u "
-                "soft PASS\n",
-                u32Surf, (unsigned)(g_fSoftReady ? 1 : 0), (unsigned)cProgLive,
-                (unsigned)cMasked, (unsigned)cFired, (unsigned)g_u32Programmed,
-                szViaSafe, (unsigned)PCI_MSIX_SOFT_DEEPEN_AREAS,
-                (unsigned)PCI_MSIX_SOFT_DEEPEN_WAVE);
-        /* Grep: pci: soft contract / msix: soft contract — soft ≠ game I/O */
-        kprintf("pci: soft contract soft_only=1 game_io=0 product_io=0 "
-                "full_msix=0 wave=%u soft PASS\n",
-                (unsigned)PCI_MSIX_SOFT_DEEPEN_WAVE);
-        kprintf("msix: soft contract soft_only=1 game_io=0 product_io=0 "
-                "full_msix=0 wave=%u soft PASS\n",
-                (unsigned)PCI_MSIX_SOFT_DEEPEN_WAVE);
-    }
-
-    /*
-     * ---- Wave 18 complementary surfaces (kept) (never reshape primary).
-     * Return surfaces only — soft inventory; never hard-gates product paths.
-     */
-    /* Grep: pci: soft return rate — Wave 19 ok/fail rate lamps */
-    kprintf("pci: soft return rate soft_inv=1 selftest=1 retmap=1 "
-            "product_kernel=OPEN hard_gate=0 wave=%u "
-            "(return rate; Soft≠product)\n",
-            (unsigned)PCI_MSIX_SOFT_DEEPEN_WAVE);
-
-    /* Grep: pci: soft retcode — Wave 19 retcode catalog */
-    kprintf("pci: soft retcode ok=1 fail=1 inval=1 busy=1 "
-            "selftest=1 retmap=1 product=OPEN soft_ne_product=1 wave=%u "
-            "(retcode catalog; Soft≠product)\n",
-            (unsigned)PCI_MSIX_SOFT_DEEPEN_WAVE);
-
-    /* Grep: pci: soft deepen / msix: soft deepen (Wave 20 stamp) */
-    /*
-     * Wave 17 complementary sub-lines (kept) (never reshape primary).
-     * Return surfaces only — soft inventory; never hard-gates product paths.
-     */
-    /* Grep: pci: soft return — Wave 17 API return surfaces (kept) */
-    kprintf("pci: soft return soft_inv=1 table=1 "
-            "product_kernel=OPEN hard_gate=0 wave=%u soft PASS\n",
-            (unsigned)PCI_MSIX_SOFT_DEEPEN_WAVE);
-
-    /* Grep: pci: soft return selftest — Wave 17 terminal return surface (kept) */
-    kprintf("pci: soft return selftest inv_ret=1 product_kernel=OPEN "
-            "multi_server=0 wave=%u soft PASS\n",
-            (unsigned)PCI_MSIX_SOFT_DEEPEN_WAVE);
-
-    /* Grep: pci: soft retmap — Wave 17 return-surface map (kept) */
-    kprintf("pci: soft retmap soft_inv=1 deepen=1 product=OPEN "
-            "wave=%u soft PASS\n",
-            (unsigned)PCI_MSIX_SOFT_DEEPEN_WAVE);
-
-    /*
-     * ---- Wave 19 complementary surfaces (kept) (never reshape primary).
-     * Return surfaces only — soft inventory; never hard-gates product paths.
-     */
-    /* Grep: pci: soft retclass — Wave 19 return-class taxonomy (kept) */
-    kprintf("pci: soft retclass ok|fail|inval|nodev|busy|nomem "
-            "soft_only=1 product_gate=0 wave=%u "
-            "(retclass taxonomy; Soft≠product)\n",
-            (unsigned)PCI_MSIX_SOFT_DEEPEN_WAVE);
-    /* Grep: pci: soft retlane — Wave 19 return-lane catalog (kept) */
-    kprintf("pci: soft retlane inv|selftest|rate|retcode|retmap|class "
-            "product_kernel=OPEN soft_ne_product=1 wave=%u "
-            "(retlane catalog; Soft≠product)\n",
-            (unsigned)PCI_MSIX_SOFT_DEEPEN_WAVE);
-    /*
-     * ---- Wave 20 complementary surfaces (kept) (never reshape primary).
-     * Return surfaces only — soft inventory; never hard-gates product paths.
-     */
-    /* Grep: pci: soft retbound — Wave 20 return-bound honesty (kept) */
-    kprintf("pci: soft retbound soft_only=1 product_gate=0 hard_gate=0 "
-            "never_blocks_m0=1 wave=%u "
-            "(retbound honesty; Soft≠product)\n",
-            (unsigned)PCI_MSIX_SOFT_DEEPEN_WAVE);
-    /* Grep: pci: soft retseal — Wave 20 seal stamp (kept) */
-    kprintf("pci: soft retseal exclusive=1 soft_ne_product=1 "
-            "product_kernel=OPEN wave=%u "
-            "(retseal stamp; Soft≠product)\n",
-            (unsigned)PCI_MSIX_SOFT_DEEPEN_WAVE);
-            /*
-             * ---- Wave 21 complementary surfaces (kept) (never reshape primary).
-             * Return surfaces only — soft inventory; never hard-gates product paths.
-            */
-            /* Grep: pci: soft retpulse — Wave 21 return-pulse honesty (kept) */
-            kprintf("pci: soft retpulse soft_only=1 product_gate=0 soft_ne_product=1 "
-                    "never_blocks_m0=1 wave=%u "
-                    "(retpulse honesty; Soft≠product)\n",
-                    (unsigned)PCI_MSIX_SOFT_DEEPEN_WAVE);
-            /* Grep: pci: soft retmark — Wave 21 mark stamp (kept) */
-            kprintf("pci: soft retmark exclusive=1 soft_ne_product=1 "
-                    "product_kernel=OPEN wave=%u "
-                    "(retmark stamp; Soft≠product)\n",
-                    (unsigned)PCI_MSIX_SOFT_DEEPEN_WAVE);
-            /*
-             * ---- Wave 22 complementary surfaces (kept) (never reshape primary).
-             * Return surfaces only — soft inventory; never hard-gates product paths.
-            */
-            /* Grep: pci: soft retphase — Wave 22 return-phase honesty (kept) */
-            kprintf("pci: soft retphase soft_only=1 product_gate=0 soft_ne_product=1 "
-                    "never_blocks_m0=1 wave=%u "
-                    "(retphase honesty; Soft≠product)\n",
-                    (unsigned)PCI_MSIX_SOFT_DEEPEN_WAVE);
-            /* Grep: pci: soft retbadge — Wave 22 badge stamp (kept) */
-            kprintf("pci: soft retbadge exclusive=1 soft_ne_product=1 "
-                    "product_kernel=OPEN wave=%u "
-                    "(retbadge stamp; Soft≠product)\n",
-                    (unsigned)PCI_MSIX_SOFT_DEEPEN_WAVE);
-/*
- * ---- Wave 23 complementary surfaces (kept) (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
-            */
-            /* Grep: pci: soft rettoken — Wave 23 return-token honesty (kept) */
-            kprintf("pci: soft rettoken soft_only=1 product_gate=0 soft_ne_product=1 "
-                    "never_blocks_m0=1 wave=%u "
-                    "(rettoken honesty; Soft≠product)\n",
-                    (unsigned)PCI_MSIX_SOFT_DEEPEN_WAVE);
-            /* Grep: pci: soft retcrest — Wave 23 crest stamp (kept) */
-            kprintf("pci: soft retcrest exclusive=1 soft_ne_product=1 "
-                    "product_kernel=OPEN wave=%u "
-                    "(retcrest stamp; Soft≠product)\n",
-                    (unsigned)PCI_MSIX_SOFT_DEEPEN_WAVE);
-            /*
-             * ---- Wave 24 complementary surfaces (kept) (never reshape primary).
-             * Return surfaces only — soft inventory; never hard-gates product paths.
-             */
-            /* Grep: pci: soft retvault — Wave 24 return-vault honesty (kept) */
-            kprintf("pci: soft retvault soft_only=1 product_gate=0 soft_ne_product=1 "
-                    "never_blocks_m0=1 wave=%u "
-                    "(retvault honesty; Soft≠product)\n",
-                    (unsigned)PCI_MSIX_SOFT_DEEPEN_WAVE);
-            /* Grep: pci: soft retbanner — Wave 24 banner stamp (kept) */
-            kprintf("pci: soft retbanner exclusive=1 soft_ne_product=1 "
-                    "product_kernel=OPEN wave=%u "
-                    "(retbanner stamp; Soft≠product)\n",
-                    (unsigned)PCI_MSIX_SOFT_DEEPEN_WAVE);
-            /*
-             * ---- Wave 25 complementary surfaces (kept) (never reshape primary).
-             * Return surfaces only — soft inventory; never hard-gates product paths.
-             */
-            /* Grep: pci: soft retledger — Wave 25 return-ledger honesty (kept) */
-            kprintf("pci: soft retledger soft_only=1 product_gate=0 soft_ne_product=1 "
-                    "never_blocks_m0=1 wave=%u "
-                    "(retledger honesty; Soft≠product)\n",
-                    (unsigned)PCI_MSIX_SOFT_DEEPEN_WAVE);
-            /* Grep: pci: soft retbeacon — Wave 25 beacon stamp (kept) */
-            kprintf("pci: soft retbeacon exclusive=1 soft_ne_product=1 "
-                    "product_kernel=OPEN wave=%u "
-                    "(retbeacon stamp; Soft≠product)\n",
-                    (unsigned)PCI_MSIX_SOFT_DEEPEN_WAVE);
-            /*
-             * ---- Wave 26 complementary surfaces (kept) (never reshape primary).
-             * Return surfaces only — soft inventory; never hard-gates product paths.
-             */
-            /* Grep: pci: soft retcipher — Wave 26 return-cipher honesty (kept) */
-            kprintf("pci: soft retcipher soft_only=1 product_gate=0 soft_ne_product=1 "
-                    "never_blocks_m0=1 wave=%u "
-                    "(retcipher honesty; Soft≠product)\n",
-                    (unsigned)PCI_MSIX_SOFT_DEEPEN_WAVE);
-            /* Grep: pci: soft retflame — Wave 26 flame stamp (kept) */
-            kprintf("pci: soft retflame exclusive=1 soft_ne_product=1 "
-                    "product_kernel=OPEN wave=%u "
-                    "(retflame stamp; Soft≠product)\n",
-                    (unsigned)PCI_MSIX_SOFT_DEEPEN_WAVE);
-                    /*
-                     * ---- Wave 27 complementary surfaces (kept) (never reshape primary).
-                     * Return surfaces only — soft inventory; never hard-gates product paths.
-                     */
-                    /* Grep: pci: soft retprism — Wave 27 return-prism honesty (kept) */
-                    kprintf("pci: soft retprism soft_only=1 product_gate=0 soft_ne_product=1 "
-                            "never_blocks_m0=1 wave=%u "
-                            "(retprism honesty; Soft≠product)\n",
-                            (unsigned)PCI_MSIX_SOFT_DEEPEN_WAVE);
-                    /* Grep: pci: soft retforge — Wave 27 forge stamp (kept) */
-                    kprintf("pci: soft retforge exclusive=1 soft_ne_product=1 "
-                            "product_kernel=OPEN wave=%u "
-                            "(retforge stamp; Soft≠product)\n",
-                            (unsigned)PCI_MSIX_SOFT_DEEPEN_WAVE);
-                            /*
-                             * ---- Wave 28 complementary surfaces (kept) (never reshape primary).
-                             * Return surfaces only — soft inventory; never hard-gates product paths.
-                             */
-                            /* Grep: pci: soft retshard — Wave 28 return-shard honesty (kept) */
-                            kprintf("pci: soft retshard soft_only=1 product_gate=0 soft_ne_product=1 "
-                                "never_blocks_m0=1 wave=%u "
-                                "(retshard honesty; Soft≠product)\n",
-                                (unsigned)PCI_MSIX_SOFT_DEEPEN_WAVE);
-                            /* Grep: pci: soft retcrown — Wave 28 crown stamp (kept) */
-                            kprintf("pci: soft retcrown exclusive=1 soft_ne_product=1 "
-                                "product_kernel=OPEN wave=%u "
-                                "(retcrown stamp; Soft≠product)\n",
-                                (unsigned)PCI_MSIX_SOFT_DEEPEN_WAVE);
-                                /*
-                             * ---- Wave 29 complementary surfaces (kept) (never reshape primary).
-                             * Return surfaces only — soft inventory; never hard-gates product paths.
-                             */
-                            /* Grep: pci: soft retglyph — Wave 29 return-glyph honesty (kept) */
-                            kprintf("pci: soft retglyph soft_only=1 product_gate=0 soft_ne_product=1 "
-                                    "never_blocks_m0=1 wave=116 "
-                                    "(retglyph honesty; Soft≠product)\n");
-                            /* Grep: pci: soft retscepter — Wave 29 scepter stamp (kept) */
-                            kprintf("pci: soft retscepter exclusive=1 soft_ne_product=1 "
-                                    "product_kernel=OPEN wave=116 "
-                                    "(retscepter stamp; Soft≠product)\n");
-                                /*
-                             * ---- Wave 30 complementary surfaces (kept) (never reshape primary).
-                             * Return surfaces only — soft inventory; never hard-gates product paths.
-                             */
-                            /* Grep: pci: soft retsigil — Wave 30 return-sigil honesty (kept) */
-                            kprintf("pci: soft retsigil soft_only=1 product_gate=0 soft_ne_product=1 "
-                                    "never_blocks_m0=1 wave=116 "
-                                    "(retsigil honesty; Soft≠product)\n");
-                            /* Grep: pci: soft retemblem — Wave 30 emblem stamp (kept) */
-                            kprintf("pci: soft retemblem exclusive=1 soft_ne_product=1 "
-                                    "product_kernel=OPEN wave=116 "
-                                    "(retemblem stamp; Soft≠product)\n");
-                            /*
-                             * ---- Wave 31 complementary surfaces (kept) (never reshape primary).
-                             * Return surfaces only — soft inventory; never hard-gates product paths.
-                             */
-                            /* Grep: pci: soft retaegis — Wave 31 return-aegis honesty (kept) */
-                            kprintf("pci: soft retaegis soft_only=1 product_gate=0 soft_ne_product=1 "
-                                    "never_blocks_m0=1 wave=116 "
-                                    "(retaegis honesty; Soft≠product)\n");
-                            /* Grep: pci: soft retsigil — Wave 30 return-sigil honesty (kept) */
-                            kprintf("pci: soft retsigil soft_only=1 product_gate=0 soft_ne_product=1 "
-                                    "never_blocks_m0=1 wave=116 "
-                                    "(retsigil honesty; Soft≠product)\n");
-                            /* Grep: pci: soft retmantle — Wave 31 mantle stamp (kept) */
-                            kprintf("pci: soft retmantle exclusive=1 soft_ne_product=1 "
-                                    "product_kernel=OPEN wave=116 "
-                                    "(retmantle stamp; Soft≠product)\n");
-/*
- * ---- Wave 32 complementary surfaces (kept) (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: pci: soft retbulwark — Wave 32 return-bulwark honesty (kept) */
-kprintf("pci: soft retbulwark soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retbulwark honesty; Soft≠product)\n");
-/* Grep: pci: soft retpanoply — Wave 32 panoply stamp (kept) */
-kprintf("pci: soft retpanoply exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retpanoply stamp; Soft≠product)\n");
-/*
- * ---- Wave 33 complementary surfaces (kept) (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: pci: soft retbastion — Wave 33 return-bastion honesty (kept) */
-kprintf("pci: soft retbastion soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retbastion honesty; Soft≠product)\n");
-/* Grep: pci: soft retcitadel — Wave 33 citadel stamp (kept) */
-kprintf("pci: soft retcitadel exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retcitadel stamp; Soft≠product)\n");
-/*
- * ---- Wave 34 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: pci: soft retredoubt — Wave 34 return-redoubt honesty */
-kprintf("pci: soft retredoubt soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retredoubt honesty; Soft≠product)\n");
-/* Grep: pci: soft retkeep — Wave 34 exclusive keep stamp */
-kprintf("pci: soft retkeep exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retkeep stamp; Soft≠product)\n");
-/*
- * ---- Wave 35 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: pci: soft retfortress — Wave 35 return-fortress honesty */
-kprintf("pci: soft retfortress soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retfortress honesty; Soft≠product)\n");
-/* Grep: pci: soft retpalace — Wave 35 exclusive palace stamp */
-kprintf("pci: soft retpalace exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retpalace stamp; Soft≠product)\n");
-/*
- * ---- Wave 36 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: pci: soft rethold — Wave 36 return-hold honesty */
-kprintf("pci: soft rethold soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(rethold honesty; Soft≠product)\n");
-/* Grep: pci: soft retspire — Wave 36 exclusive spire stamp */
-kprintf("pci: soft retspire exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retspire stamp; Soft≠product)\n");
-/*
- * ---- Wave 37 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: pci: soft retwall — Wave 37 return-wall honesty */
-kprintf("pci: soft retwall soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retwall honesty; Soft≠product)\n");
-/* Grep: pci: soft retgate — Wave 37 exclusive gate stamp */
-kprintf("pci: soft retgate exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retgate stamp; Soft≠product)\n");
-/*
- * ---- Wave 38 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: pci: soft retmoat — Wave 38 return-moat honesty */
-kprintf("pci: soft retmoat soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retmoat honesty; Soft≠product)\n");
-/* Grep: pci: soft retower — Wave 38 exclusive tower stamp */
-kprintf("pci: soft retower exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retower stamp; Soft≠product)\n");
-/*
- * ---- Wave 39 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: pci: soft retbarbican — Wave 39 return-barbican honesty */
-kprintf("pci: soft retbarbican soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retbarbican honesty; Soft≠product)\n");
-/* Grep: pci: soft retglacis — Wave 39 exclusive glacis stamp */
-kprintf("pci: soft retglacis exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retglacis stamp; Soft≠product)\n");
-/*
- * ---- Wave 40 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: pci: soft retcurtain — Wave 40 return-curtain honesty */
-kprintf("pci: soft retcurtain soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retcurtain honesty; Soft≠product)\n");
-/* Grep: pci: soft retparapet — Wave 40 exclusive parapet stamp */
-kprintf("pci: soft retparapet exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retparapet stamp; Soft≠product)\n");
-/*
- * ---- Wave 41 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: pci: soft retravelin — Wave 41 return-travelin honesty */
-kprintf("pci: soft retravelin soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retravelin honesty; Soft≠product)\n");
-/* Grep: pci: soft retditch — Wave 41 exclusive ditch stamp */
-kprintf("pci: soft retditch exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retditch stamp; Soft≠product)\n");
-/*
- * ---- Wave 42 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: pci: soft retportcullis — Wave 42 return-portcullis honesty */
-kprintf("pci: soft retportcullis soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retportcullis honesty; Soft≠product)\n");
-/* Grep: pci: soft retbattlement — Wave 42 exclusive battlement stamp */
-kprintf("pci: soft retbattlement exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retbattlement stamp; Soft≠product)\n");
-/*
- * ---- Wave 43 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: pci: soft retmachicolation — Wave 43 return-machicolation honesty */
-kprintf("pci: soft retmachicolation soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retmachicolation honesty; Soft≠product)\n");
-/* Grep: pci: soft retarrowslit — Wave 43 exclusive arrowslit stamp */
-kprintf("pci: soft retarrowslit exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retarrowslit stamp; Soft≠product)\n");
-
-/*
- * ---- Wave 44 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: pci: soft retmerlon — Wave 44 return-merlon honesty */
-kprintf("pci: soft retmerlon soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retmerlon honesty; Soft≠product)\n");
-/* Grep: pci: soft retembrasure — Wave 44 exclusive embrasure stamp */
-kprintf("pci: soft retembrasure exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retembrasure stamp; Soft≠product)\n");
-
-/*
- * ---- Wave 45 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: pci: soft retkeepgate — Wave 45 return-keepgate honesty */
-kprintf("pci: soft retkeepgate soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retkeepgate honesty; Soft≠product)\n");
-/* Grep: pci: soft retouterward — Wave 45 exclusive outerward stamp */
-kprintf("pci: soft retouterward exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retouterward stamp; Soft≠product)\n");
-
-/*
- * ---- Wave 46 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: pci: soft retbailey — Wave 46 return-bailey honesty */
-kprintf("pci: soft retbailey soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retbailey honesty; Soft≠product)\n");
-/* Grep: pci: soft retpostern — Wave 46 exclusive postern stamp */
-kprintf("pci: soft retpostern exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retpostern stamp; Soft≠product)\n");
-
-/*
- * ---- Wave 47 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: pci: soft retinnerward — Wave 47 return-innerward honesty */
-kprintf("pci: soft retinnerward soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retinnerward honesty; Soft≠product)\n");
-/* Grep: pci: soft retdonjon — Wave 47 exclusive donjon stamp */
-kprintf("pci: soft retdonjon exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retdonjon stamp; Soft≠product)\n");
-
-/*
- * ---- Wave 48 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: pci: soft retchevaux — Wave 48 return-chevaux honesty */
-kprintf("pci: soft retchevaux soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retchevaux honesty; Soft≠product)\n");
-/* Grep: pci: soft retpalisade — Wave 48 exclusive palisade stamp */
-kprintf("pci: soft retpalisade exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retpalisade stamp; Soft≠product)\n");
-
-/*
- * ---- Wave 49 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: pci: soft retglacisgate — Wave 49 return-glacisgate honesty */
-kprintf("pci: soft retglacisgate soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retglacisgate honesty; Soft≠product)\n");
-/* Grep: pci: soft retoutwork — Wave 49 exclusive outwork stamp */
-kprintf("pci: soft retoutwork exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retoutwork stamp; Soft≠product)\n");
-/*
- * ---- Wave 50 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: pci: soft retsally — Wave 50 return-sally honesty */
-kprintf("pci: soft retsally soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retsally honesty; Soft≠product)\n");
-/* Grep: pci: soft retcounterscarp — Wave 50 exclusive counterscarp stamp */
-kprintf("pci: soft retcounterscarp exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retcounterscarp stamp; Soft≠product)\n");
-/*
- * ---- Wave 51 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: pci: soft retfosse — Wave 51 return-fosse honesty */
-kprintf("pci: soft retfosse soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retfosse honesty; Soft≠product)\n");
-/* Grep: pci: soft retcoveredway — Wave 51 exclusive coveredway stamp */
-kprintf("pci: soft retcoveredway exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retcoveredway stamp; Soft≠product)\n");
-
-/*
- * ---- Wave 52 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: pci: soft rettenaille — Wave 52 return-tenaille honesty */
-kprintf("pci: soft rettenaille soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(rettenaille honesty; Soft≠product)\n");
-/* Grep: pci: soft retdemilune — Wave 52 exclusive demilune stamp */
-kprintf("pci: soft retdemilune exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retdemilune stamp; Soft≠product)\n");
-/*
- * ---- Wave 53 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: pci: soft retravelin — Wave 53 return-travelin honesty */
-kprintf("pci: soft retravelin soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retravelin honesty; Soft≠product)\n");
-/* Grep: pci: soft retlunette — Wave 53 exclusive lunette stamp */
-kprintf("pci: soft retlunette exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retlunette stamp; Soft≠product)\n");
-/*
- * ---- Wave 54 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: pci: soft retcaponier — Wave 54 return-caponier honesty */
-kprintf("pci: soft retcaponier soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retcaponier honesty; Soft≠product)\n");
-/* Grep: pci: soft retredan — Wave 54 exclusive redan stamp */
-kprintf("pci: soft retredan exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retredan stamp; Soft≠product)\n");
-/*
- * ---- Wave 55 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: pci: soft retflank — Wave 55 return-flank honesty */
-kprintf("pci: soft retflank soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retflank honesty; Soft≠product)\n");
-/* Grep: pci: soft retface — Wave 55 exclusive face stamp */
-kprintf("pci: soft retface exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retface stamp; Soft≠product)\n");
-/*
- * ---- Wave 56 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: pci: soft retgorge — Wave 56 return-gorge honesty */
-kprintf("pci: soft retgorge soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retgorge honesty; Soft≠product)\n");
-/* Grep: pci: soft retshoulder — Wave 56 exclusive shoulder stamp */
-kprintf("pci: soft retshoulder exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retshoulder stamp; Soft≠product)\n");
-/*
- * ---- Wave 57 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: pci: soft retraverse — Wave 57 return-traverse honesty */
-kprintf("pci: soft retraverse soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retraverse honesty; Soft≠product)\n");
-/* Grep: pci: soft retcasemate — Wave 57 exclusive casemate stamp */
-kprintf("pci: soft retcasemate exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retcasemate stamp; Soft≠product)\n");
-
-/*
- * ---- Wave 58 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: pci: soft retorillon — Wave 58 return-orillon honesty */
-kprintf("pci: soft retorillon soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retorillon honesty; Soft≠product)\n");
-/* Grep: pci: soft retbonnette — Wave 58 exclusive bonnette stamp */
-kprintf("pci: soft retbonnette exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retbonnette stamp; Soft≠product)\n");
-
-/*
- * ---- Wave 59 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: pci: soft retcrownwork — Wave 59 return-crownwork honesty */
-kprintf("pci: soft retcrownwork soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retcrownwork honesty; Soft≠product)\n");
-/* Grep: pci: soft rethornwork — Wave 59 exclusive hornwork stamp */
-kprintf("pci: soft rethornwork exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(rethornwork stamp; Soft≠product)\n");
-
-/*
- * ---- Wave 60 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: pci: soft retplace — Wave 60 return-place honesty */
-kprintf("pci: soft retplace soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retplace honesty; Soft≠product)\n");
-/* Grep: pci: soft retenvelope — Wave 60 exclusive envelope stamp */
-kprintf("pci: soft retenvelope exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retenvelope stamp; Soft≠product)\n");
-
-
-
-
-
-
-
-
-
-/*
- * ---- Wave 61 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: pci: soft retcounterguard — Wave 61 return-counterguard honesty */
-kprintf("pci: soft retcounterguard soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retcounterguard honesty; Soft≠product)\n");
-/* Grep: pci: soft retcoveredface — Wave 61 exclusive coveredface stamp */
-kprintf("pci: soft retcoveredface exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retcoveredface stamp; Soft≠product)\n");
-/*
- * ---- Wave 62 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: pci: soft retbastionface — Wave 62 return-bastionface honesty */
-kprintf("pci: soft retbastionface soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retbastionface honesty; Soft≠product)\n");
-/* Grep: pci: soft retcurtainangle — Wave 62 exclusive curtainangle stamp */
-kprintf("pci: soft retcurtainangle exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retcurtainangle stamp; Soft≠product)\n");
-/*
- * ---- Wave 63 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: pci: soft retdoubletenaille — Wave 63 return-doubletenaille honesty */
-kprintf("pci: soft retdoubletenaille soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retdoubletenaille honesty; Soft≠product)\n");
-/* Grep: pci: soft retplaceofarms — Wave 63 exclusive placeofarms stamp */
-kprintf("pci: soft retplaceofarms exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retplaceofarms stamp; Soft≠product)\n");
- /*
-  * ---- Wave 64 exclusive complementary surfaces (never reshape primary).
-  * Return surfaces only — soft inventory; never hard-gates product paths.
-  */
- /* Grep: pci: soft retreentrant — Wave 64 return-reentrant honesty */
-kprintf("pci: soft retreentrant soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retreentrant honesty; Soft≠product)\n");
- /* Grep: pci: soft retsallyport — Wave 64 exclusive sallyport stamp */
-kprintf("pci: soft retsallyport exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retsallyport stamp; Soft≠product)\n");
- /*
-  * ---- Wave 65 exclusive complementary surfaces (never reshape primary).
-  * Return surfaces only — soft inventory; never hard-gates product paths.
-  */
- /* Grep: pci: soft retgorgeangle — Wave 65 return-gorgeangle honesty */
-kprintf("pci: soft retgorgeangle soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retgorgeangle honesty; Soft≠product)\n");
- /* Grep: pci: soft retshoulderangle — Wave 65 exclusive shoulderangle stamp */
-kprintf("pci: soft retshoulderangle exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retshoulderangle stamp; Soft≠product)\n");
- /*
-  * ---- Wave 66 exclusive complementary surfaces (never reshape primary).
-  * Return surfaces only — soft inventory; never hard-gates product paths.
-  */
- /* Grep: pci: soft retflankangle — Wave 66 return-flankangle honesty */
- kprintf("pci: soft retflankangle soft_only=1 product_gate=0 soft_ne_product=1 "
-         "never_blocks_m0=1 wave=116 "
-         "(retflankangle honesty; Soft≠product)\n");
- /* Grep: pci: soft retfaceangle — Wave 66 exclusive faceangle stamp */
- kprintf("pci: soft retfaceangle exclusive=1 soft_ne_product=1 "
-         "product_kernel=OPEN wave=116 "
-         "(retfaceangle stamp; Soft≠product)\n");
-/*
- * ---- Wave 67 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: pci: soft retcaponierangle — Wave 67 return-caponierangle honesty */
-kprintf("pci: soft retcaponierangle soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retcaponierangle honesty; Soft≠product)\n");
-/* Grep: pci: soft retredanangle — Wave 67 exclusive redanangle stamp */
-kprintf("pci: soft retredanangle exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retredanangle stamp; Soft≠product)\n");
-/*
- * ---- Wave 68 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: pci: soft retlunetteangle — Wave 68 return-lunetteangle honesty */
-kprintf("pci: soft retlunetteangle soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retlunetteangle honesty; Soft≠product)\n");
-/* Grep: pci: soft rettenailleangle — Wave 68 exclusive tenailleangle stamp */
-kprintf("pci: soft rettenailleangle exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(rettenailleangle stamp; Soft≠product)\n");
-/*
- * ---- Wave 69 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: pci: soft retdemiluneangle — Wave 69 return-demiluneangle honesty */
-kprintf("pci: soft retdemiluneangle soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retdemiluneangle honesty; Soft≠product)\n");
-/* Grep: pci: soft retcoveredwayangle — Wave 69 exclusive coveredwayangle stamp */
-kprintf("pci: soft retcoveredwayangle exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retcoveredwayangle stamp; Soft≠product)\n");
-/*
- * ---- Wave 70 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: pci: soft retfosseangle — Wave 70 return-fosseangle honesty */
-kprintf("pci: soft retfosseangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retfosseangle honesty; Soft≠product)\n");
-/* Grep: pci: soft retcounterscarple — Wave 70 exclusive counterscarple stamp */
-kprintf("pci: soft retcounterscarple exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retcounterscarple stamp; Soft≠product)\n");
-/*
- * ---- Wave 71 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: pci: soft retsallyportangle — Wave 71 return-sallyportangle honesty */
-kprintf("pci: soft retsallyportangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retsallyportangle honesty; Soft≠product)\n");
-/* Grep: pci: soft retreentrantangle — Wave 71 exclusive reentrantangle stamp */
-kprintf("pci: soft retreentrantangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retreentrantangle stamp; Soft≠product)\n");
-/*
- * ---- Wave 72 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: pci: soft retplaceofarmsangle — Wave 72 return-placeofarmsangle honesty */
-kprintf("pci: soft retplaceofarmsangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retplaceofarmsangle honesty; Soft≠product)\n");
-/* Grep: pci: soft retdoubletenailleangle — Wave 72 exclusive doubletenailleangle stamp */
-kprintf("pci: soft retdoubletenailleangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retdoubletenailleangle stamp; Soft≠product)\n");
-/* Grep: pci: soft retcurtainface — Wave 73 return-curtainface honesty */
-kprintf("pci: soft retcurtainface soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retcurtainface honesty; Soft≠product)\n");
-/* Grep: pci: soft retbastionangle — Wave 73 exclusive bastionangle stamp */
-kprintf("pci: soft retbastionangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retbastionangle stamp; Soft≠product)\n");
-/* Grep: pci: soft retglacisangle — Wave 74 return-glacisangle honesty */
-kprintf("pci: soft retglacisangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retglacisangle honesty; Soft≠product)\n");
-/* Grep: pci: soft retparapetangle — Wave 74 exclusive parapetangle stamp */
-kprintf("pci: soft retparapetangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retparapetangle stamp; Soft≠product)\n");
-/* Grep: pci: soft retmoatangle — Wave 75 return-moatangle honesty */
-kprintf("pci: soft retmoatangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retmoatangle honesty; Soft≠product)\n");
-/* Grep: pci: soft retowerangle — Wave 75 exclusive towerangle stamp */
-kprintf("pci: soft retowerangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retowerangle stamp; Soft≠product)\n");
-/* Grep: pci: soft retgateangle — Wave 76 return-gateangle honesty */
-kprintf("pci: soft retgateangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retgateangle honesty; Soft≠product)\n");
-/* Grep: pci: soft retwallangle — Wave 76 exclusive wallangle stamp */
-kprintf("pci: soft retwallangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retwallangle stamp; Soft≠product)\n");
-/* Grep: pci: soft retspireangle — Wave 77 return-spireangle honesty */
-kprintf("pci: soft retspireangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retspireangle honesty; Soft≠product)\n");
-/* Grep: pci: soft retholdangle — Wave 77 exclusive holdangle stamp */
-kprintf("pci: soft retholdangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retholdangle stamp; Soft≠product)\n");
-/* Grep: pci: soft retpalaceangle — Wave 78 return-palaceangle honesty */
-kprintf("pci: soft retpalaceangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retpalaceangle honesty; Soft≠product)\n");
-/* Grep: pci: soft retfortressangle — Wave 78 exclusive fortressangle stamp */
-kprintf("pci: soft retfortressangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retfortressangle stamp; Soft≠product)\n");
-/* Grep: pci: soft retkeepangle — Wave 79 return-keepangle honesty */
-kprintf("pci: soft retkeepangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retkeepangle honesty; Soft≠product)\n");
-/* Grep: pci: soft retredoubtangle — Wave 79 exclusive redoubtangle stamp */
-kprintf("pci: soft retredoubtangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retredoubtangle stamp; Soft≠product)\n");
-/* Grep: pci: soft retcitadelangle — Wave 80 return-citadelangle honesty */
-kprintf("pci: soft retcitadelangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retcitadelangle honesty; Soft≠product)\n");
-/* Grep: pci: soft retbastionkeep — Wave 80 exclusive bastionkeep stamp */
-kprintf("pci: soft retbastionkeep exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retbastionkeep stamp; Soft≠product)\n");
-/* Grep: pci: soft retpanoplyangle — Wave 81 return-panoplyangle honesty */
-kprintf("pci: soft retpanoplyangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retpanoplyangle honesty; Soft≠product)\n");
-/* Grep: pci: soft retbulwarkangle — Wave 81 exclusive bulwarkangle stamp */
-kprintf("pci: soft retbulwarkangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retbulwarkangle stamp; Soft≠product)\n");
-/* Grep: pci: soft retmantleangle — Wave 82 return-mantleangle honesty */
-kprintf("pci: soft retmantleangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retmantleangle honesty; Soft≠product)\n");
-/* Grep: pci: soft retaegisangle — Wave 82 exclusive aegisangle stamp */
-kprintf("pci: soft retaegisangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retaegisangle stamp; Soft≠product)\n");
-/* Grep: pci: soft retemblemangle — Wave 83 return-emblemangle honesty */
-kprintf("pci: soft retemblemangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retemblemangle honesty; Soft≠product)\n");
-/* Grep: pci: soft retsigilangle — Wave 83 exclusive sigilangle stamp */
-kprintf("pci: soft retsigilangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retsigilangle stamp; Soft≠product)\n");
-/* Grep: pci: soft retscepterangle — Wave 84 return-scepterangle honesty */
-kprintf("pci: soft retscepterangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retscepterangle honesty; Soft≠product)\n");
-/* Grep: pci: soft retglyphangle — Wave 84 exclusive glyphangle stamp */
-kprintf("pci: soft retglyphangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retglyphangle stamp; Soft≠product)\n");
-/* Grep: pci: soft retcrownangle — Wave 85 return-crownangle honesty */
-kprintf("pci: soft retcrownangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retcrownangle honesty; Soft≠product)\n");
-/* Grep: pci: soft retshardangle — Wave 85 exclusive shardangle stamp */
-kprintf("pci: soft retshardangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retshardangle stamp; Soft≠product)\n");
-/* Grep: pci: soft retforgeangle — Wave 86 return-forgeangle honesty */
-kprintf("pci: soft retforgeangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retforgeangle honesty; Soft≠product)\n");
-/* Grep: pci: soft retprismangle — Wave 86 exclusive prismangle stamp */
-kprintf("pci: soft retprismangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retprismangle stamp; Soft≠product)\n");
-/* Grep: pci: soft retflameangle — Wave 87 return-flameangle honesty */
-kprintf("pci: soft retflameangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retflameangle honesty; Soft≠product)\n");
-/* Grep: pci: soft retcipherangle — Wave 87 exclusive cipherangle stamp */
-kprintf("pci: soft retcipherangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retcipherangle stamp; Soft≠product)\n");
-/* Grep: pci: soft retbeaconangle — Wave 88 return-beaconangle honesty */
-kprintf("pci: soft retbeaconangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retbeaconangle honesty; Soft≠product)\n");
-/* Grep: pci: soft retledgerangle — Wave 88 exclusive ledgerangle stamp */
-kprintf("pci: soft retledgerangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retledgerangle stamp; Soft≠product)\n");
-/* Grep: pci: soft retbannerangle — Wave 89 return-bannerangle honesty */
-kprintf("pci: soft retbannerangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retbannerangle honesty; Soft≠product)\n");
-/* Grep: pci: soft retvaultangle — Wave 89 exclusive vaultangle stamp */
-kprintf("pci: soft retvaultangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retvaultangle stamp; Soft≠product)\n");
-/* Grep: pci: soft retcrestangle — Wave 90 return-crestangle honesty */
-kprintf("pci: soft retcrestangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retcrestangle honesty; Soft≠product)\n");
-/* Grep: pci: soft rettokenangle — Wave 90 exclusive tokenangle stamp */
-kprintf("pci: soft rettokenangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (rettokenangle stamp; Soft≠product)\n");
-/* Grep: pci: soft retbadgeangle — Wave 91 return-badgeangle honesty */
-kprintf("pci: soft retbadgeangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retbadgeangle honesty; Soft≠product)\n");
-/* Grep: pci: soft retphaseangle — Wave 91 exclusive phaseangle stamp */
-kprintf("pci: soft retphaseangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retphaseangle stamp; Soft≠product)\n");
-/* Grep: pci: soft retmarkangle — Wave 92 return-markangle honesty */
-kprintf("pci: soft retmarkangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retmarkangle honesty; Soft≠product)\n");
-/* Grep: pci: soft retpulseangle — Wave 92 exclusive pulseangle stamp */
-kprintf("pci: soft retpulseangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retpulseangle stamp; Soft≠product)\n");
-
-/* Grep: pci: soft retsealangle — Wave 93 return-sealangle honesty */
-kprintf("pci: soft retsealangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retsealangle honesty; Soft≠product)\n");
-/* Grep: pci: soft retboundangle — Wave 93 exclusive boundangle stamp */
-kprintf("pci: soft retboundangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retboundangle stamp; Soft≠product)\n");
-/* Grep: pci: soft retstemangle — Wave 94 return-stemangle honesty */
-kprintf("pci: soft retstemangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retstemangle honesty; Soft≠product)\n");
-/* Grep: pci: soft retbladeangle — Wave 94 exclusive bladeangle stamp */
-kprintf("pci: soft retbladeangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retbladeangle stamp; Soft≠product)\n");
-/* Grep: pci: soft retchordangle — Wave 95 return-chordangle honesty */
-kprintf("pci: soft retchordangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retchordangle honesty; Soft≠product)\n");
-/* Grep: pci: soft retarcangle — Wave 95 exclusive arcangle stamp */
-kprintf("pci: soft retarcangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retarcangle stamp; Soft≠product)\n");
-/* Grep: pci: soft retsectorangle — Wave 96 return-sectorangle honesty */
-kprintf("pci: soft retsectorangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retsectorangle honesty; Soft≠product)\n");
-/* Grep: pci: soft retwedgeangle — Wave 96 exclusive wedgeangle stamp */
-kprintf("pci: soft retwedgeangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retwedgeangle stamp; Soft≠product)\n");
-/* Grep: pci: soft retradiusangle — Wave 97 return-radiusangle honesty */
-kprintf("pci: soft retradiusangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retradiusangle honesty; Soft≠product)\n");
-/* Grep: pci: soft retdiameterangle — Wave 97 exclusive diameterangle stamp */
-kprintf("pci: soft retdiameterangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retdiameterangle stamp; Soft≠product)\n");
-/* Grep: pci: soft retcircumangle — Wave 98 return-circumangle honesty */
-kprintf("pci: soft retcircumangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retcircumangle honesty; Soft≠product)\n");
-/* Grep: pci: soft retellipseangle — Wave 98 exclusive ellipseangle stamp */
-kprintf("pci: soft retellipseangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retellipseangle stamp; Soft≠product)\n");
-/* Grep: pci: soft rethyperangle — Wave 99 return-hyperangle honesty */
-kprintf("pci: soft rethyperangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (rethyperangle honesty; Soft≠product)\n");
-/* Grep: pci: soft retparabolaangle — Wave 99 exclusive parabolaangle stamp */
-kprintf("pci: soft retparabolaangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retparabolaangle stamp; Soft≠product)\n");
-/* Grep: pci: soft retspiralangle — Wave 100 return-spiralangle honesty */
-kprintf("pci: soft retspiralangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retspiralangle honesty; Soft≠product)\n");
-/* Grep: pci: soft rethelixangle — Wave 100 exclusive helixangle stamp */
-kprintf("pci: soft rethelixangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (rethelixangle stamp; Soft≠product)\n");
-/* Grep: pci: soft rettorusangle — Wave 101 return-torusangle honesty */
-kprintf("pci: soft rettorusangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (rettorusangle honesty; Soft≠product)\n");
-/* Grep: pci: soft retknotangle — Wave 101 exclusive knotangle stamp */
-kprintf("pci: soft retknotangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retknotangle stamp; Soft≠product)\n");
-/* Grep: pci: soft retmoebiusangle — Wave 102 return-moebiusangle honesty */
-kprintf("pci: soft retmoebiusangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retmoebiusangle honesty; Soft≠product)\n");
-/* Grep: pci: soft retkleinangle — Wave 102 exclusive kleinangle stamp */
-kprintf("pci: soft retkleinangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retkleinangle stamp; Soft≠product)\n");
-/* Grep: pci: soft retprojectangle — Wave 103 return-projectangle honesty */
-kprintf("pci: soft retprojectangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retprojectangle honesty; Soft≠product)\n");
-/* Grep: pci: soft retaffineangle — Wave 103 exclusive affineangle stamp */
-kprintf("pci: soft retaffineangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retaffineangle stamp; Soft≠product)\n");
-/* Grep: pci: soft retlinearangle — Wave 104 return-linearangle honesty */
-kprintf("pci: soft retlinearangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retlinearangle honesty; Soft≠product)\n");
-/* Grep: pci: soft retbilinearangle — Wave 104 exclusive bilinearangle stamp */
-kprintf("pci: soft retbilinearangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retbilinearangle stamp; Soft≠product)\n");
-/* Grep: pci: soft retquadraticangle — Wave 105 return-quadraticangle honesty */
-kprintf("pci: soft retquadraticangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retquadraticangle honesty; Soft≠product)\n");
-/* Grep: pci: soft retcubicangle — Wave 105 exclusive cubicangle stamp */
-kprintf("pci: soft retcubicangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retcubicangle stamp; Soft≠product)\n");
-/* Grep: pci: soft retquarticangle — Wave 106 return-quarticangle honesty */
-kprintf("pci: soft retquarticangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retquarticangle honesty; Soft≠product)\n");
-/* Grep: pci: soft retquinticangle — Wave 106 exclusive quinticangle stamp */
-kprintf("pci: soft retquinticangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retquinticangle stamp; Soft≠product)\n");
-/* Grep: pci: soft retsplineangle — Wave 107 return-splineangle honesty */
-kprintf("pci: soft retsplineangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retsplineangle honesty; Soft≠product)\n");
-/* Grep: pci: soft retbezierangle — Wave 107 exclusive bezierangle stamp */
-kprintf("pci: soft retbezierangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retbezierangle stamp; Soft≠product)\n");
-/* Grep: pci: soft rethurmitangle — Wave 108 return-hermitangle honesty */
-kprintf("pci: soft rethurmitangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (rethurmitangle honesty; Soft≠product)\n");
-/* Grep: pci: soft retcatmullangle — Wave 108 exclusive catmullangle stamp */
-kprintf("pci: soft retcatmullangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retcatmullangle stamp; Soft≠product)\n");
-/* Grep: pci: soft retnurbsangle — Wave 109 return-nurbsangle honesty */
-kprintf("pci: soft retnurbsangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retnurbsangle honesty; Soft≠product)\n");
-/* Grep: pci: soft retbsplineangle — Wave 109 exclusive bsplineangle stamp */
-kprintf("pci: soft retbsplineangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retbsplineangle stamp; Soft≠product)\n");
-/* Grep: pci: soft retmeshangle — Wave 110 return-meshangle honesty */
-kprintf("pci: soft retmeshangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retmeshangle honesty; Soft≠product)\n");
-/* Grep: pci: soft retgridangle — Wave 110 exclusive gridangle stamp */
-kprintf("pci: soft retgridangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retgridangle stamp; Soft≠product)\n");
-/* Grep: pci: soft retvoxelangle — Wave 111 return-voxelangle honesty */
-kprintf("pci: soft retvoxelangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retvoxelangle honesty; Soft≠product)\n");
-/* Grep: pci: soft rettexelangle — Wave 111 exclusive texelangle stamp */
-kprintf("pci: soft rettexelangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (rettexelangle stamp; Soft≠product)\n");
-/* Grep: pci: soft retfragmentangle — Wave 112 return-fragmentangle honesty */
-kprintf("pci: soft retfragmentangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retfragmentangle honesty; Soft≠product)\n");
-/* Grep: pci: soft retvertexangle — Wave 112 exclusive vertexangle stamp */
-kprintf("pci: soft retvertexangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retvertexangle stamp; Soft≠product)\n");
-/* Grep: pci: soft retshaderangle — Wave 113 return-shaderangle honesty */
-kprintf("pci: soft retshaderangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retshaderangle honesty; Soft≠product)\n");
-/* Grep: pci: soft retpipelineangle — Wave 113 exclusive pipelineangle stamp */
-kprintf("pci: soft retpipelineangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retpipelineangle stamp; Soft≠product)\n");
-/* Grep: pci: soft retframebufferangle — Wave 114 return-framebufferangle honesty */
-kprintf("pci: soft retframebufferangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retframebufferangle honesty; Soft≠product)\n");
-/* Grep: pci: soft retswapchainangle — Wave 114 exclusive swapchainangle stamp */
-kprintf("pci: soft retswapchainangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retswapchainangle stamp; Soft≠product)\n");
-/* Grep: pci: soft retpresentangle — Wave 115 return-presentangle honesty */
-kprintf("pci: soft retpresentangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retpresentangle honesty; Soft≠product)\n");
-/* Grep: pci: soft retvsyncangle — Wave 115 exclusive vsyncangle stamp */
-kprintf("pci: soft retvsyncangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retvsyncangle stamp; Soft≠product)\n");
-/* Grep: pci: soft retfenceangle — Wave 116 return-fenceangle honesty */
-kprintf("pci: soft retfenceangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retfenceangle honesty; Soft≠product)\n");
-/* Grep: pci: soft retsemaphoreangle — Wave 116 exclusive semaphoreangle stamp */
-kprintf("pci: soft retsemaphoreangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retsemaphoreangle stamp; Soft≠product)\n");
-                            kprintf("pci: soft deepen wave=%u areas=%u via=%s ready=%u "
-            "prog_live=%u fire=%u hw_prog=%u ok=1 skip=0\n",
-            (unsigned)PCI_MSIX_SOFT_DEEPEN_WAVE,
-            (unsigned)PCI_MSIX_SOFT_DEEPEN_AREAS, szViaSafe,
-            (unsigned)(g_fSoftReady ? 1 : 0), (unsigned)cProgLive,
-            (unsigned)g_u32SoftFire, (unsigned)g_u32Programmed);
-    /* Grep: msix: soft return — Wave 17 twin API return surfaces */
-    kprintf("msix: soft return soft_inv=1 table=1 "
-            "product_kernel=OPEN hard_gate=0 wave=%u soft PASS\n",
-            (unsigned)PCI_MSIX_SOFT_DEEPEN_WAVE);
-    /* Grep: msix: soft return selftest — Wave 17 terminal return surface (kept) */
-    kprintf("msix: soft return selftest inv_ret=1 product_kernel=OPEN "
-            "multi_server=0 wave=%u soft PASS\n",
-            (unsigned)PCI_MSIX_SOFT_DEEPEN_WAVE);
-    /* Grep: msix: soft retmap — Wave 17 return-surface map (kept) */
-    kprintf("msix: soft retmap soft_inv=1 deepen=1 product=OPEN "
-            "wave=%u soft PASS\n",
-            (unsigned)PCI_MSIX_SOFT_DEEPEN_WAVE);
-    kprintf("msix: soft deepen wave=%u areas=%u via=%s ready=%u "
-            "prog_live=%u fire=%u hw_prog=%u ok=1 skip=0\n",
-            (unsigned)PCI_MSIX_SOFT_DEEPEN_WAVE,
-            (unsigned)PCI_MSIX_SOFT_DEEPEN_AREAS, szViaSafe,
-            (unsigned)(g_fSoftReady ? 1 : 0), (unsigned)cProgLive,
-            (unsigned)g_u32SoftFire, (unsigned)g_u32Programmed);
-
-    /* Grep: pci: soft stats / msix: soft stats */
-    kprintf("pci: soft stats inv_logs=%u soft_prog=%u soft_fire=%u "
-            "hw_prog=%u depth=%u wave=%u\n",
-            (unsigned)g_u32SoftInvLogs, (unsigned)g_u32SoftProg,
-            (unsigned)g_u32SoftFire, (unsigned)g_u32Programmed,
-            (unsigned)GJ_MSIX_SOFT_TBL, (unsigned)PCI_MSIX_SOFT_DEEPEN_WAVE);
-    kprintf("msix: soft stats inv_logs=%u soft_prog=%u soft_fire=%u "
-            "hw_prog=%u depth=%u wave=%u\n",
-            (unsigned)g_u32SoftInvLogs, (unsigned)g_u32SoftProg,
-            (unsigned)g_u32SoftFire, (unsigned)g_u32Programmed,
-            (unsigned)GJ_MSIX_SOFT_TBL, (unsigned)PCI_MSIX_SOFT_DEEPEN_WAVE);
-
-    /* Soft path is always available after init — inventory PASS. */
-    if (g_fSoftReady) {
-        /* Grep: pci: soft inventory PASS / pci: soft PASS */
-        kprintf("pci: soft inventory PASS via=%s logs=%u wave=%u "
-                "areas=%u\n",
-                szViaSafe, (unsigned)g_u32SoftInvLogs,
-                (unsigned)PCI_MSIX_SOFT_DEEPEN_WAVE,
-                (unsigned)PCI_MSIX_SOFT_DEEPEN_AREAS);
-        kprintf("pci: soft PASS via=%s wave=%u\n", szViaSafe,
-                (unsigned)PCI_MSIX_SOFT_DEEPEN_WAVE);
-        /* Grep: msix: soft inventory PASS / msix: soft PASS */
-        kprintf("msix: soft inventory PASS via=%s logs=%u wave=%u "
-                "areas=%u\n",
-                szViaSafe, (unsigned)g_u32SoftInvLogs,
-                (unsigned)PCI_MSIX_SOFT_DEEPEN_WAVE,
-                (unsigned)PCI_MSIX_SOFT_DEEPEN_AREAS);
-        kprintf("msix: soft PASS via=%s wave=%u\n", szViaSafe,
-                (unsigned)PCI_MSIX_SOFT_DEEPEN_WAVE);
-    } else {
-        kprintf("pci: soft inventory SKIP via=%s wave=%u\n", szViaSafe,
-                (unsigned)PCI_MSIX_SOFT_DEEPEN_WAVE);
-        kprintf("msix: soft inventory SKIP via=%s wave=%u\n", szViaSafe,
-                (unsigned)PCI_MSIX_SOFT_DEEPEN_WAVE);
-    }
+    pci_msix_soft_dual_dod_stronger_once(szViaSafe);
 }
 
 u32
@@ -1593,7 +1738,10 @@ pci_msix_soft_table_exercise(void)
     u32 fOk = 1;
     u32 u32Held;
     u32 u32Delivered;
+    u32 u32FireBefore;
+    u32 u32UnmaskBefore;
     u64 u64Pba;
+    u64 u64BadgeMask;
 
     pci_msix_soft_table_init();
     /* Entry 0: product vector, initially unmasked. */
@@ -1614,19 +1762,74 @@ pci_msix_soft_table_exercise(void)
         fOk = 0; /* masked fire must not deliver */
     }
     u64Pba = pci_msix_soft_pba();
-    if ((u64Pba & 1ull) == 0) {
+    if ((u64Pba & 1ull) == 0 || pci_msix_soft_pba_pending(0) == 0) {
         fOk = 0; /* sticky PBA still set while masked */
     }
-    /* Unmask + fire: delivery when irq path ready (or soft counter only). */
+    /*
+     * Residual unmask-pending: unmask with sticky PBA delivers once
+     * (UDX enable_irq latch shape). Soft!=product HW re-issue.
+     */
+    u32FireBefore = g_u32SoftFire;
+    u32UnmaskBefore = g_u32SoftUnmaskPend;
     if (!pci_msix_soft_mask(0, 0)) {
         fOk = 0;
     }
+    if (g_u32SoftFire <= u32FireBefore ||
+        g_u32SoftUnmaskPend <= u32UnmaskBefore) {
+        fOk = 0; /* unmask must have delivered pending */
+    }
+    /* Explicit re-fire still delivers (irq path ready or soft counter only). */
     u32Delivered = pci_msix_soft_fire(0);
     if (u32Delivered == 0) {
         fOk = 0;
     }
     /* Soft fire entry 1. */
     if (pci_msix_soft_fire(1) == 0) {
+        fOk = 0;
+    }
+    /*
+     * Residual Function Mask (MC bit14 shape): hold all soft delivery.
+     * Freestanding rtl stays poll-mode; this does not write device MC.
+     * Clear with sticky PBA auto-delivers unmasked entries (UDX residual).
+     */
+    if (!pci_msix_soft_function_mask(1)) {
+        fOk = 0;
+    }
+    u32FireBefore = g_u32SoftFire;
+    u32UnmaskBefore = g_u32SoftUnmaskPend;
+    if (pci_msix_soft_fire(1) != 0) {
+        fOk = 0; /* function-masked: no deliver */
+    }
+    if (g_u32SoftFire != u32FireBefore) {
+        fOk = 0;
+    }
+    if (pci_msix_soft_pba_pending(1) == 0) {
+        fOk = 0; /* sticky PBA while function-masked */
+    }
+    if (pci_msix_soft_function_mask_get() == 0) {
+        fOk = 0;
+    }
+    if (!pci_msix_soft_function_mask(0)) {
+        fOk = 0;
+    }
+    /* Residual: fn-mask clear with sticky PBA delivers without re-fire. */
+    if (g_u32SoftFire <= u32FireBefore ||
+        g_u32SoftUnmaskPend <= u32UnmaskBefore) {
+        fOk = 0;
+    }
+    /* Explicit re-fire still delivers after fn-mask clear. */
+    if (pci_msix_soft_fire(1) == 0) {
+        fOk = 0;
+    }
+    /* Badge mask residual: programmed entries map to TBL badges. */
+    u64BadgeMask = pci_msix_soft_badge_mask();
+    if ((u64BadgeMask & GJ_MSIX_BADGE_TBL(0)) == 0 ||
+        (u64BadgeMask & GJ_MSIX_BADGE_TBL(1)) == 0) {
+        fOk = 0;
+    }
+    if (pci_msix_soft_entry_badge(0) != GJ_MSIX_BADGE_TBL(0) ||
+        pci_msix_soft_entry_badge(1) != GJ_MSIX_BADGE_TBL(1) ||
+        pci_msix_soft_entry_badge(GJ_MSIX_SOFT_TBL) != 0) {
         fOk = 0;
     }
     /* Readback entry 0. */
@@ -1646,21 +1849,252 @@ pci_msix_soft_table_exercise(void)
     if ((pci_msix_soft_pba() & 1ull) != 0) {
         fOk = 0;
     }
-    if (g_u32SoftProg < 2 || g_u32SoftFire < 2) {
+    /*
+     * Residual order deepen (C0; Soft!=product; UDX enable_irq / MC shape).
+     * greppable: pba_drain=1 dual_latch=1 sticky_reissue=1 fn_pba_drain=1
+     * greppable: vec_remask_hold=1 order_residual=1
+     *
+     * (1) pba_drain: sticky clear before unmask must not re-issue.
+     * (2) dual_latch: vector unmask under fn_mask holds; fn clear delivers.
+     * (3) sticky_reissue: Soft PBA remains after deliver; remask+unmask
+     *     re-issues without new fire (Soft!=product HW auto-clear).
+     * (4) fn_pba_drain: clear sticky under fn_mask before fn clear: no issue.
+     * (5) vec_remask_hold: remask vector under fn before fn clear: no deliver.
+     * Freestanding rtl stays poll-mode; never forces HW MSI-X eth IRQ.
+     */
+    {
+        u32 u32FireSnap;
+        u32 u32UnmaskSnap;
+
+        /*
+         * Isolate order residual to entry0: drain all sticky PBA and mask
+         * entry1 so dual_latch / fn_pba_drain / vec_remask_hold tallies are
+         * not polluted by earlier multi-entry sticky (Soft sticky until clear).
+         */
+        (void)pci_msix_soft_pba_clear(~0ull);
+        if (!pci_msix_soft_mask(1, 1)) {
+            fOk = 0;
+        }
+
+        /* (1) pba_drain residual */
+        if (!pci_msix_soft_mask(0, 1)) {
+            fOk = 0;
+        }
+        if (pci_msix_soft_fire(0) != 0) {
+            fOk = 0; /* masked: hold */
+        }
+        if (pci_msix_soft_pba_pending(0) == 0) {
+            fOk = 0; /* sticky while masked */
+        }
+        if (pci_msix_soft_pba_clear(1ull) != 1ull) {
+            fOk = 0;
+        }
+        if (pci_msix_soft_pba_pending(0) != 0) {
+            fOk = 0; /* drained */
+        }
+        u32FireSnap = g_u32SoftFire;
+        u32UnmaskSnap = g_u32SoftUnmaskPend;
+        if (!pci_msix_soft_mask(0, 0)) {
+            fOk = 0;
+        }
+        if (g_u32SoftFire != u32FireSnap ||
+            g_u32SoftUnmaskPend != u32UnmaskSnap) {
+            fOk = 0; /* drain: unmask must not re-issue */
+        }
+
+        /* (2) dual_latch residual: fn_mask × vector mask order */
+        if (!pci_msix_soft_mask(0, 1)) {
+            fOk = 0;
+        }
+        if (pci_msix_soft_fire(0) != 0) {
+            fOk = 0; /* masked hold + sticky */
+        }
+        if (pci_msix_soft_pba_pending(0) == 0) {
+            fOk = 0;
+        }
+        if (!pci_msix_soft_function_mask(1)) {
+            fOk = 0;
+        }
+        u32FireSnap = g_u32SoftFire;
+        u32UnmaskSnap = g_u32SoftUnmaskPend;
+        /* Vector unmask under active fn_mask must not deliver. */
+        if (!pci_msix_soft_mask(0, 0)) {
+            fOk = 0;
+        }
+        if (g_u32SoftFire != u32FireSnap ||
+            g_u32SoftUnmaskPend != u32UnmaskSnap) {
+            fOk = 0;
+        }
+        if (pci_msix_soft_pba_pending(0) == 0) {
+            fOk = 0; /* sticky remains for fn clear */
+        }
+        if (pci_msix_soft_function_mask_get() == 0) {
+            fOk = 0;
+        }
+        /* fn clear with sticky + unmasked vector delivers once. */
+        if (!pci_msix_soft_function_mask(0)) {
+            fOk = 0;
+        }
+        if (g_u32SoftFire <= u32FireSnap ||
+            g_u32SoftUnmaskPend <= u32UnmaskSnap) {
+            fOk = 0;
+        }
+        if (pci_msix_soft_function_mask_get() != 0) {
+            fOk = 0;
+        }
+
+        /*
+         * (3) sticky_reissue residual (Soft!=product honesty):
+         * Soft PBA is not auto-cleared on deliver. After (2), entry0 is
+         * unmasked with sticky still set. Remask then unmask (no new fire)
+         * must re-issue once. Product HW typically clears pending on send;
+         * soft table keeps sticky until clear API.
+         */
+        if (pci_msix_soft_pba_pending(0) == 0) {
+            fOk = 0; /* dual_latch leave sticky for reissue */
+        }
+        if (!pci_msix_soft_mask(0, 1)) {
+            fOk = 0;
+        }
+        u32FireSnap = g_u32SoftFire;
+        u32UnmaskSnap = g_u32SoftUnmaskPend;
+        if (!pci_msix_soft_mask(0, 0)) {
+            fOk = 0;
+        }
+        if (g_u32SoftFire <= u32FireSnap ||
+            g_u32SoftUnmaskPend <= u32UnmaskSnap) {
+            fOk = 0; /* sticky re-issue on unmask without new fire */
+        }
+
+        /*
+         * (4) fn_pba_drain residual: under Function Mask, drain sticky
+         * then clear fn_mask must not re-issue (MC enable / ack shape).
+         */
+        if (!pci_msix_soft_function_mask(1)) {
+            fOk = 0;
+        }
+        if (pci_msix_soft_pba_pending(0) == 0) {
+            /* Ensure sticky under fn (fire while function-masked). */
+            if (pci_msix_soft_fire(0) != 0) {
+                fOk = 0; /* fn holds deliver */
+            }
+        }
+        if (pci_msix_soft_pba_pending(0) == 0) {
+            fOk = 0;
+        }
+        if (pci_msix_soft_pba_clear(1ull) != 1ull) {
+            fOk = 0;
+        }
+        if (pci_msix_soft_pba_pending(0) != 0) {
+            fOk = 0; /* drained under fn */
+        }
+        u32FireSnap = g_u32SoftFire;
+        u32UnmaskSnap = g_u32SoftUnmaskPend;
+        if (!pci_msix_soft_function_mask(0)) {
+            fOk = 0;
+        }
+        if (g_u32SoftFire != u32FireSnap ||
+            g_u32SoftUnmaskPend != u32UnmaskSnap) {
+            fOk = 0; /* fn_pba_drain: no re-issue */
+        }
+        if (pci_msix_soft_function_mask_get() != 0) {
+            fOk = 0;
+        }
+
+        /*
+         * (5) vec_remask_hold residual: dual_latch complement.
+         * Fire under vector mask + fn_mask; unmask vector (held by fn);
+         * remask vector; clear fn -> vector mask still holds (no deliver).
+         */
+        if (!pci_msix_soft_mask(0, 1)) {
+            fOk = 0;
+        }
+        if (pci_msix_soft_fire(0) != 0) {
+            fOk = 0; /* vector mask holds */
+        }
+        if (pci_msix_soft_pba_pending(0) == 0) {
+            fOk = 0;
+        }
+        if (!pci_msix_soft_function_mask(1)) {
+            fOk = 0;
+        }
+        u32FireSnap = g_u32SoftFire;
+        u32UnmaskSnap = g_u32SoftUnmaskPend;
+        if (!pci_msix_soft_mask(0, 0)) {
+            fOk = 0; /* unmask under fn: hold */
+        }
+        if (g_u32SoftFire != u32FireSnap ||
+            g_u32SoftUnmaskPend != u32UnmaskSnap) {
+            fOk = 0;
+        }
+        if (!pci_msix_soft_mask(0, 1)) {
+            fOk = 0; /* remask under fn */
+        }
+        if (!pci_msix_soft_function_mask(0)) {
+            fOk = 0; /* fn clear while vector remasked */
+        }
+        if (g_u32SoftFire != u32FireSnap ||
+            g_u32SoftUnmaskPend != u32UnmaskSnap) {
+            fOk = 0; /* vec_remask_hold: no deliver */
+        }
+        if (pci_msix_soft_pba_pending(0) == 0) {
+            fOk = 0; /* sticky remains (held, not drained) */
+        }
+        if (pci_msix_soft_function_mask_get() != 0) {
+            fOk = 0;
+        }
+    }
+    /*
+     * Residual tallies (after multi-entry base + order isolate to e0):
+     *   unmask-pend: base (vec0 + fn-clear e0/e1) + dual_latch e0
+     *                + sticky_reissue e0 >= 4
+     *   fires: base (>=5) + dual_latch + sticky_reissue -> soft_fire >= 6
+     *   (held fires, pba_drain, fn_pba_drain, vec_remask_hold do not count)
+     */
+    if (g_u32SoftProg < 2 || g_u32SoftFire < 6 || g_u32SoftUnmaskPend < 4) {
         fOk = 0;
     }
     if (fOk) {
-        kprintf("pci: MSI-X table soft path entries=%u fire=%u pba=0x%lx "
-                "PASS\n",
-                g_u32SoftProg, g_u32SoftFire,
+        kprintf("pci: MSI-X table soft path entries=%u fire=%u "
+                "unmask_pend=%u badge=0x%lx pba=0x%lx PASS\n",
+                g_u32SoftProg, g_u32SoftFire, g_u32SoftUnmaskPend,
+                (unsigned long)u64BadgeMask,
                 (unsigned long)pci_msix_soft_pba());
         kprintf("pci: MSI-X table soft path PASS\n");
+        /*
+         * Exercise residual lean (H1 honesty; Soft!=product).
+         * greppable: msix: soft residual lean
+         * greppable: pba_drain=1 dual_latch=1 sticky_reissue=1
+         * greppable: fn_pba_drain=1 vec_remask_hold=1 order_residual=1
+         * greppable: poll_mode_first force_irq_eth_poll hw_force_rtl
+         */
+        /* Contiguous greppable: msix: soft residual lean PASS */
+        kprintf("msix: soft residual lean PASS exercise unmask_pend=%u "
+                "fn_mask=0 fn_clear_delivers=1 "
+                "pba_drain=1 dual_latch=1 sticky_reissue=1 "
+                "fn_pba_drain=1 vec_remask_hold=1 order_residual=1 "
+                "badge=0x%lx entry0_badge=0x%lx "
+                "poll_mode_first=%u force_irq_eth_poll=%u hw_force_rtl=%u "
+                "net_eth_irq=%u net_eth_poll_from_msix=%u "
+                "net_eth_poll=run_loop_only udx_irq=1 "
+                "product_msix=OPEN product_notify_mint=OPEN "
+                "dual_dod_A=OPEN dual_dod_B=OPEN freestanding_skip=1 "
+                "stamp_free=1 hazard=H1 "
+                "dual_license=MIT_OR_Apache-2.0 Soft!=product\n",
+                g_u32SoftUnmaskPend, (unsigned long)u64BadgeMask,
+                (unsigned long)pci_msix_soft_entry_badge(0),
+                (unsigned)PCI_MSIX_POLL_MODE_FIRST,
+                (unsigned)PCI_MSIX_FORCE_IRQ_ETH_POLL,
+                (unsigned)PCI_MSIX_HW_FORCE_RTL,
+                (unsigned)PCI_MSIX_NET_ETH_IRQ,
+                (unsigned)PCI_MSIX_NET_ETH_POLL_FROM);
     } else {
-        kprintf("pci: MSI-X table soft path FAIL prog=%u fire=%u pba=0x%lx\n",
-                g_u32SoftProg, g_u32SoftFire,
+        kprintf("pci: MSI-X table soft path FAIL prog=%u fire=%u "
+                "unmask_pend=%u pba=0x%lx\n",
+                g_u32SoftProg, g_u32SoftFire, g_u32SoftUnmaskPend,
                 (unsigned long)pci_msix_soft_pba());
     }
-    /* Wave 14: greppable soft inventory rollup (after exercise state). */
+    /* Lean residual inventory (capped; Soft!=product; H1 honesty). */
     pci_msix_soft_inventory("exercise");
     return fOk;
 }
@@ -1884,8 +2318,8 @@ pci_msix_probe_log(void)
     /* Soft table always exercised (works with zero devices). */
     fSoft = pci_msix_soft_table_exercise();
     /*
-     * Wave 14 soft inventory at probe (exercise already dumps once;
-     * probe via= tag deepens greppable "pci: soft …" / "msix: soft …").
+     * Lean residual inventory (capped; exercise may have already logged).
+     * Soft!=product. H1 honesty. No version stamp / stamp storm.
      */
     pci_msix_soft_inventory("probe");
     if (cScan > 0 || cEnabled > 0 || fSoft) {

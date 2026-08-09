@@ -31,18 +31,18 @@
  * Enable order (product boot)
  * ---------------------------
  *   1. vmm_init / HHDM / product maps as needed
- *   2. vmm_harden_kernel_maps   — clear U outside user band (+ kernel half)
- *   3. vmm_harden_audit_user_bits — soft residual U == 0 ⇒ soft PASS
- *   4. cpu_enable_smep          — CR4.SMEP if CPUID leaf 7
- *   5. cpu_enable_smap          — CR4.SMAP + CLAC; notifies user_access
+ *   2. vmm_harden_kernel_maps   - clear U outside user band (+ kernel half)
+ *   3. vmm_harden_audit_user_bits - soft residual U == 0 ⇒ soft PASS
+ *   4. cpu_enable_smep          - CR4.SMEP if CPUID leaf 7
+ *   5. cpu_enable_smap          - CR4.SMAP + CLAC; notifies user_access
  *
  * Soft product surface
  * --------------------
- *   SMEP_HARDEN         — full walk clear U on non-user leaves
- *   SMEP_AUDIT          — residual U count (no mutate)
- *   SMEP_ENABLE         — CR4.SMEP CPUID-gated
- *   SMAP_ENABLE         — CR4.SMAP + user_access_smap_enabled
- *   SMEP_HARDEN_STATS   — gj_smep_stats snapshot/reset
+ *   SMEP_HARDEN         - full walk clear U on non-user leaves
+ *   SMEP_AUDIT          - residual U count (no mutate)
+ *   SMEP_ENABLE         - CR4.SMEP CPUID-gated
+ *   SMAP_ENABLE         - CR4.SMAP + user_access_smap_enabled
+ *   SMEP_HARDEN_STATS   - gj_smep_stats snapshot/reset
  *
  * Layering
  * --------
@@ -65,13 +65,13 @@
  * Soft product counters for map harden + SMEP/SMAP enable (diagnostics).
  * Wrap OK; never hard-gate boot. Snapshot via smep_stats_get.
  *
- * Cleared*     — U bits stripped by harden (by leaf size)
- * WalkedLeaves — present leaf PTEs/PDEs/PDPTEs visited
- * SkippedUserBand — wholly inside user window left alone (G-MAP-2)
- * StraddleLarge   — large pages partially overlapping user band (soft care)
- * UxCleared       — U cleared on executable (!NX) kernel leaves (G-MAP-4)
- * AuditRemainU    — residual U outside user after last audit
- * SoftPass/Fail   — harden audit residual U == 0 / != 0
+ * Cleared*     - U bits stripped by harden (by leaf size)
+ * WalkedLeaves - present leaf PTEs/PDEs/PDPTEs visited
+ * SkippedUserBand - wholly inside user window left alone (G-MAP-2)
+ * StraddleLarge   - large pages partially overlapping user band (soft care)
+ * UxCleared       - U cleared on executable (!NX) kernel leaves (G-MAP-4)
+ * AuditRemainU    - residual U outside user after last audit
+ * SoftPass/Fail   - harden audit residual U == 0 / != 0
  *
  * greppable: SMEP_HARDEN_STATS
  */
@@ -95,7 +95,7 @@ struct gj_smep_stats {
 };
 
 /**
- * Set CR4.SMEP when CPUID leaf 7 reports SMEP — ring-3 cannot exec U=0.
+ * Set CR4.SMEP when CPUID leaf 7 reports SMEP - ring-3 cannot exec U=0.
  * Soft skip + stats if feature missing. greppable: smep: SMEP
  */
 void cpu_enable_smep(void);

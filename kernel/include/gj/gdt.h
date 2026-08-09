@@ -20,19 +20,19 @@
  * -----------------------------------------------
  *   Index 1  0x08  kernel CS
  *   Index 2  0x10  kernel DS
- *   Index 3  0x18  user CS32 (compat / WoW64) — STAR user base
- *   Index 4  0x20  user DS   → selector | RPL3 = 0x23
- *   Index 5  0x28  user CS64 → selector | RPL3 = 0x2B  (SYSRETQ target)
+ *   Index 3  0x18  user CS32 (compat / WoW64) - STAR user base
+ *   Index 4  0x20  user DS   -> selector | RPL3 = 0x23
+ *   Index 5  0x28  user CS64 -> selector | RPL3 = 0x2B  (SYSRETQ target)
  *   Index 6  0x30  TSS
  *
  * TSS.RSP0 rule
  * -------------
- * Never point TSS.RSP0 at a thread SYSCALL kstack — that collides with a
+ * Never point TSS.RSP0 at a thread SYSCALL kstack - that collides with a
  * parked thr's mid-syscall frames when another thr takes an IRQ.
  * gdt_init installs a dedicated IRQ stack (tss_irq_rsp0); restore via
  * tss_use_irq_rsp0 after any temporary RSP0 retarget.
  *
- * AP load order: gdt_load_ap() before idt_load_ap() — IRQ gates use kernel CS.
+ * AP load order: gdt_load_ap() before idt_load_ap() - IRQ gates use kernel CS.
  * Shared TSS is BSP-only (AP LTR is not performed by gdt_load_ap).
  *
  * greppable: gdt: user soft
@@ -47,9 +47,9 @@
 #define GJ_GDT_KERNEL_CS 0x08u
 #define GJ_GDT_KERNEL_DS 0x10u
 /* STAR user base 0x18: +0 = CS32, +8 = DS, +16 = CS64 (all | RPL3) */
-#define GJ_GDT_USER_CS32 0x1Bu /* index 3 | RPL3 — 32-bit user code (WoW64) */
-#define GJ_GDT_USER_DS   0x23u /* index 4 | RPL3 — user data */
-#define GJ_GDT_USER_CS   0x2Bu /* index 5 | RPL3 — long mode user code */
+#define GJ_GDT_USER_CS32 0x1Bu /* index 3 | RPL3 - 32-bit user code (WoW64) */
+#define GJ_GDT_USER_DS   0x23u /* index 4 | RPL3 - user data */
+#define GJ_GDT_USER_CS   0x2Bu /* index 5 | RPL3 - long mode user code */
 #define GJ_GDT_TSS_SEL   0x30u
 
 /**
@@ -76,7 +76,7 @@ int gdt_user_cs32_is_compat(void);
 int gdt_user_cs32_lar_ok(u32 *pOutAr);
 
 /**
- * Load kernel GDT + reload CS/DS on an AP (no LTR — shared TSS is BSP-only).
+ * Load kernel GDT + reload CS/DS on an AP (no LTR - shared TSS is BSP-only).
  * Required before AP enables IDT IRQs (gate selectors are kernel CS).
  */
 void gdt_load_ap(void);
@@ -87,7 +87,7 @@ void tss_set_rsp0(u64 u64Rsp0);
 u64  tss_get_rsp0(void);
 /**
  * Dedicated IRQ/exception stack from gdt_init (g_aRsp0Stack).
- * Never point TSS.RSP0 at a thread SYSCALL kstack — that collides with a
+ * Never point TSS.RSP0 at a thread SYSCALL kstack - that collides with a
  * parked thr's mid-syscall frames when another thr takes an IRQ.
  */
 u64  tss_irq_rsp0(void);
@@ -160,7 +160,7 @@ int  gdt_user_ds_ok(void);
 
 /**
  * Soft full verify of CS32 compat + CS64 long + DS + (optional LAR).
- * fDoLar: non-zero → also run LAR probe. Bumps soft counters.
+ * fDoLar: non-zero -> also run LAR probe. Bumps soft counters.
  * Returns 1 on PASS, 0 on FAIL / not init.
  */
 int  gdt_user_soft_verify(int fDoLar);
@@ -173,10 +173,10 @@ int  gdt_user_soft_info_get(struct gj_gdt_user_soft *pOut);
 
 /**
  * Greppable soft summary:
- *   gdt: user soft inits=… ap=… lar_probe=… lar_ok=… lar_bad=… verify_ok=… verify_bad=…
- *   gdt: user soft cs32 acc=0x… gran=0x… ready=… compat=… sel=0x…
- *   gdt: user soft ds acc=0x… ok=… sel=0x… cs64 acc=0x… gran=0x… long=… sel=0x…
- *   gdt: user soft tss rsp0=0x… ist1=0x… lar_ar=0x…
+ *   gdt: user soft inits=... ap=... lar_probe=... lar_ok=... lar_bad=... verify_ok=... verify_bad=...
+ *   gdt: user soft cs32 acc=0x... gran=0x... ready=... compat=... sel=0x...
+ *   gdt: user soft ds acc=0x... ok=... sel=0x... cs64 acc=0x... gran=0x... long=... sel=0x...
+ *   gdt: user soft tss rsp0=0x... ist1=0x... lar_ar=0x...
  *   gdt: user soft verify PASS|FAIL|idle
  * greppable: gdt: user soft
  */

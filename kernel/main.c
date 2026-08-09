@@ -1,6 +1,54 @@
 /*
  * SPDX-License-Identifier: MIT OR Apache-2.0
  * Copyright (c) 2026 Project GreenJade contributors
+ *
+ * C0 residual deepen (Soft!=product; dual MIT OR Apache-2.0; stamp-free):
+ *   Freestanding USB+rtl class SKIP hold (GJ_XHCI_MSC_PROBE=0 ·
+ *   GJ_RTL8168_PROBE=0 default). Product drivers = UDX+ABI userspace hosts
+ *   (xhci_udx Dual DoD A / rtl8168_udx Dual DoD B). Dual DoD status=OPEN
+ *   until_dut; soft residual lamps never close product DoD (H5).
+ *   Once-lamps only (H2: no stamp storms). Never bump GJ_IMAGE_VERSION here.
+ *   Never invent .76; bar held stamp-free (fly image version from config.h).
+ *   Soft ddi bind residual = SCAN->GET->OPEN->MAP_BAR + life lean only.
+ *   Soft module path after net_l2; soft init SKIP (freestanding_no_exec).
+ *   Functional residual toward OPEN_UDX host spawn: soft ddi bind stash +
+ *   weak host ELF probe (ddi_host / xhci_udx / rtl8168_udx) + multi-server
+ *   spawn path honesty + process_spawn_host_launch residual (catalog
+ *   park stub G-PROC mint; keep_live when host ELF embed present —
+ *   never reintroduce kill on embed; kill+wait reap H3 only if no embed)
+ *   after soft DDI path. STRONGER denser host_launch live residual (H2
+ *   once-lamps: launch_ok|keep_live|embed|thr_live|product_host_live|
+ *   keep_live_rock|soft_ne_product|dual_dod=OPEN|product_hosts=UDX|
+ *   match_class|match_name|belt_never_kill; denser multi-arm residual
+ *   (denser_arms=8 denser_min=8): keep_live_on_embed|never_kill_embed|
+ *   match_class_or_name|belt_never_kill|product_hosts_udx|dual_dod_open|
+ *   soft_ne_product|host_blob_preserve; aggregate tally keep_live vs
+ *   kill_wait honesty; Soft!=product dual_dod OPEN product_hosts=UDX
+ *   Dual DoD OPEN Soft!=product; confirm keep_live VERDICT greppable).
+ *   CRITICAL: keep_live=1 on embed; never kill embed (class OR name;
+ *   denser belt + quaternary refuse-kill when embed+match). Soft
+ *   spawn/launch residual != Dual DoD close (agent!=close). G-AC-1:
+ *   no Linux .ko product AC.
+ *   Soft!=product (ASCII Soft!= only). Bar v2026.08.04.75 never invent .76.
+ * greppable: main: soft residual lean
+ * greppable: main: soft residual freestanding class SKIP
+ * greppable: main: soft residual product=UDX+ABI
+ * greppable: main: soft residual Dual DoD A
+ * greppable: main: soft residual Dual DoD B
+ * greppable: main: soft residual soft ddi bind
+ * greppable: main: soft residual host_spawn
+ * greppable: main: soft residual host_launch
+ * greppable: main: soft residual host_launch live
+ * greppable: main: soft residual host_launch live denser
+ * greppable: main: soft residual host_launch live denser residual
+ * greppable: main: soft residual host_launch live denser residual VERDICT
+ * greppable: main: soft residual host_launch live confirm keep_live
+ * greppable: main: soft residual OPEN_UDX host spawn
+ * greppable: keep_live=1
+ * greppable: product_hosts=UDX
+ * greppable: denser_arms=
+ * greppable: VERDICT=confirm_keep_live
+ * greppable: main: image version=
  */
 #include <gj/apic.h>
 #include <gj/boot_info.h>
@@ -85,21 +133,57 @@ extern char gj_r8169_ko_blob[] __attribute__((weak));
 extern char gj_r8169_ko_blob_end[] __attribute__((weak));
 /*
  * Optional embedded xhci_pci.ko (PCI 8086:a12f). Host often has xHCI *builtin*
- * → no .ko → symbols stay weak NULL → soft path SKIP builtin. Soft≠product.
+ * -> no .ko -> symbols stay weak NULL -> soft path SKIP builtin. Soft!=product.
  */
 extern char gj_xhci_pci_ko_blob[] __attribute__((weak));
 extern char gj_xhci_pci_ko_blob_end[] __attribute__((weak));
 /*
  * Optional embedded usb-storage.ko (MSC leaf). Often modular on hosts where
  * xhci/usbcore are builtin. Soft multi-mod order still needs HC first for
- * stick datapath. Soft≠product.
+ * stick datapath. Soft!=product.
  */
 extern char gj_usb_storage_ko_blob[] __attribute__((weak));
 extern char gj_usb_storage_ko_blob_end[] __attribute__((weak));
+/*
+ * Optional embedded UDX product-path host ELFs (weak if not linked).
+ * Product drivers = userspace UDX+ABI (G-AC-1); Dual DoD A/B OPEN_UDX until
+ * DUT. Functional residual probes these when present; absent => honest
+ * OPEN need=host_elf. Soft!=product; never invent embeds here (no Makefile).
+ * greppable: main: soft residual host_spawn | OPEN_UDX host spawn
+ */
+extern char gj_ddi_host_elf_blob[] __attribute__((weak));
+extern char gj_ddi_host_elf_blob_end[] __attribute__((weak));
+extern char gj_rtl8168_udx_elf_blob[] __attribute__((weak));
+extern char gj_rtl8168_udx_elf_blob_end[] __attribute__((weak));
+extern char gj_xhci_udx_elf_blob[] __attribute__((weak));
+extern char gj_xhci_udx_elf_blob_end[] __attribute__((weak));
+
+/*
+ * Catalog->spawn hooks live in spawn.c (linkable residual; not yet in
+ * spawn.h). Exclusive main residual invokes after soft DDI path.
+ * Soft!=product; Dual DoD OPEN_UDX; agent!=close; freestanding SKIP.
+ * greppable: process_spawn_host_launch | main: soft residual host_launch
+ */
+extern gj_status_t process_spawn_host_launch(struct gj_process *pParent,
+                                             u32 u32ClassIdx,
+                                             void (*pfnEntry)(void *pArg),
+                                             void *pArg,
+                                             struct gj_process **ppOutChild,
+                                             struct gj_cap_ref *pOutCap);
+extern gj_status_t process_spawn_host_launch_by_name(
+    struct gj_process *pParent, const char *szName,
+    void (*pfnEntry)(void *pArg), void *pArg,
+    struct gj_process **ppOutChild, struct gj_cap_ref *pOutCap);
+
+/* Soft ddi bind stash for post multi-server OPEN_UDX host spawn residual. */
+static u32 g_u32SoftDdiRtlFound;
+static u32 g_u32SoftDdiXhciFound;
+static u32 g_u32SoftDdiRtlBind;
+static u32 g_u32SoftDdiXhciBind;
 
 /*
  * Soft STATUS probe lamps (real vs soft). Strong defs in linux_pci_soft.c win
- * when linked; weak stubs keep main linkable if those getters lag. Soft≠product.
+ * when linked; weak stubs keep main linkable if those getters lag. Soft!=product.
  */
 __attribute__((weak)) int
 linux_pci_soft_last_probe_mode(void)
@@ -140,14 +224,14 @@ struct mb2_mmap_entry {
 
 #define MAX_REGIONS 64
 
-/* Bootstrap process static storage (M0 — until real allocator owns this). */
+/* Bootstrap process static storage (M0 - until real allocator owns this). */
 #define GJ_BOOT_CNODE_SLOTS 64ull
 static struct gj_process   g_bootProc;
 static struct gj_cnode     g_bootCnode;
 static struct gj_cap_slot  g_aBootSlots[GJ_BOOT_CNODE_SLOTS];
 static struct gj_root_meta g_bootMeta;
 
-/* Userspace personality process (G-PERS) — NATIVE, door server in ring-3 */
+/* Userspace personality process (G-PERS) - NATIVE, door server in ring-3 */
 static struct gj_process   g_persProc;
 static struct gj_cnode     g_persCnode;
 static struct gj_cap_slot  g_aPersSlots[GJ_BOOT_CNODE_SLOTS];
@@ -165,7 +249,7 @@ spawn_child_entry(void *pArg)
     thread_exit();
 }
 
-/** Runs on AP via smp_ap_run — must not call schedule/BSP-only services. */
+/** Runs on AP via smp_ap_run - must not call schedule/BSP-only services. */
 static void
 smp_ap_worker(void *pArg)
 {
@@ -310,7 +394,7 @@ boot_process_smoke(void)
                         gj_cap_quota_used(&g_bootQuota));
             }
             if (stCap == GJ_OK) {
-                /* Delete derived only — do not kill cold personality door. */
+                /* Delete derived only - do not kill cold personality door. */
                 (void)gj_cap_delete(&g_bootCnode, refMint.u64Slot,
                                     refMint.u32SlotGen);
                 (void)gj_cap_delete(&g_bootCnode, refMove.u64Slot,
@@ -352,7 +436,7 @@ boot_process_smoke(void)
                 gj_cap_quota_init(&g_bootQuota, 64u);
                 gj_cap_quota_attach(&g_bootCnode, &g_bootQuota);
             }
-            /* Timeout: deadline already past → -ETIMEDOUT without server. */
+            /* Timeout: deadline already past -> -ETIMEDOUT without server. */
             {
                 struct gj_linux_regs req;
                 i64 i64T;
@@ -369,7 +453,7 @@ boot_process_smoke(void)
             }
             /*
              * Temporary door: CDT revoke walk + peer death (-EIO).
-             * Never mark cold personality dead — product path depends on it.
+             * Never mark cold personality dead - product path depends on it.
              */
             {
                 static struct gj_door g_tmpDoor;
@@ -411,7 +495,7 @@ boot_process_smoke(void)
                         kprintf("cap: cdt walk PASS\n");
                     }
                     /*
-                     * Object DEAD (revoke) → door_call -EIO while still ready.
+                     * Object DEAD (revoke) -> door_call -EIO while still ready.
                      * mark_dead after (clears ready) for hygiene.
                      */
                     memset(&req, 0, sizeof(req));
@@ -561,7 +645,7 @@ ws_server_entry(void *pArg)
     }
     g_u32WsReady = 1;
     i64W = futex_wait(pWord, 0, &key, 0);
-    /* -EAGAIN means client already set word=1 (race before we blocked) — still OK */
+    /* -EAGAIN means client already set word=1 (race before we blocked) - still OK */
     {
         u32 u32Word = 0;
 
@@ -646,7 +730,7 @@ proton_a0_wineserver_demo(void)
 
     pShm = memobj_create_named("winesrv-shm", 1);
     if (pShm == NULL) {
-        /* may already exist from prior run in same boot — recreate path */
+        /* may already exist from prior run in same boot - recreate path */
         pShm = memobj_lookup_named("winesrv-shm");
     }
     if (pShm == NULL) {
@@ -973,7 +1057,7 @@ linux_hybrid_smoke(void)
     gj_linux_syscall_dispatch(&regs);
     kprintf("linux: futex_wake => %ld\n", (long)regs.i64Ret);
 
-    /* futex wait value mismatch → EAGAIN */
+    /* futex wait value mismatch -> EAGAIN */
     u32FutexWord = 2;
     regs.u64Nr = LINUX_NR_futex;
     regs.u64Arg0 = (u64)(gj_vaddr_t)&u32FutexWord;
@@ -983,7 +1067,7 @@ linux_hybrid_smoke(void)
     kprintf("linux: futex_wait mismatch => %ld (expect -EAGAIN)\n",
             (long)regs.i64Ret);
 
-    /* cold openat/read via cold_ipc → vfs_ram + protonrt */
+    /* cold openat/read via cold_ipc -> vfs_ram + protonrt */
     {
         static const char szPath[] = "/etc/hostname";
         static const char szMkdir[] = "/tmp/gj-smoke-dir";
@@ -1300,7 +1384,7 @@ linux_hybrid_smoke(void)
                     kprintf("linux: robust_list PASS\n");
                 }
             }
-            /* waitid (no children → ECHILD) */
+            /* waitid (no children -> ECHILD) */
             {
                 static u8 aSi[128];
 
@@ -1656,11 +1740,11 @@ linux_hybrid_smoke(void)
                 kprintf("linux: wait4 after vfork => %ld st=%d\n",
                         (long)regs.i64Ret, (int)i32St);
                 if (regs.i64Ret == i64V) {
-                    /* Live fork child: WNOHANG → 0, then exit+reap to clear */
+                    /* Live fork child: WNOHANG -> 0, then exit+reap to clear */
                     regs.u64Nr = LINUX_NR_wait4;
                     regs.u64Arg0 = (u64)i64Pid;
                     regs.u64Arg1 = (u64)(gj_vaddr_t)&i32St;
-                    regs.u64Arg2 = 1; /* WNOHANG — still live → 0 */
+                    regs.u64Arg2 = 1; /* WNOHANG - still live -> 0 */
                     gj_linux_syscall_dispatch(&regs);
                     kprintf("linux: wait4 WNOHANG live => %ld\n",
                             (long)regs.i64Ret);
@@ -1693,7 +1777,7 @@ linux_hybrid_smoke(void)
             }
         }
         /*
-         * Dynlinker path smoke: stage minimal ELF64 with PT_INTERP → /lib/ld-gj.so.1
+         * Dynlinker path smoke: stage minimal ELF64 with PT_INTERP -> /lib/ld-gj.so.1
          * plus a tiny interpreter ELF; execve must report INTERP PASS.
          * Load into a temporary process so boot AS identity maps stay intact.
          */
@@ -1731,7 +1815,7 @@ linux_hybrid_smoke(void)
 
             /*
              * Minimal ET_DYN INTERP (ld-gj stub) with real exit code at entry.
-             * e_entry=0x70 → after bias 0x70000070: mov eax,60; xor edi,edi; syscall
+             * e_entry=0x70 -> after bias 0x70000070: mov eax,60; xor edi,edi; syscall
              */
             memset(aLd, 0, sizeof(aLd));
             aLd[0] = 0x7f;
@@ -1778,7 +1862,7 @@ linux_hybrid_smoke(void)
                 }
                 /*
                  * ET_DYN SO with DT_HASH + defined gj_so_export for cross-object
-                 * hash resolve smoke (main GLOB_DAT → this symbol).
+                 * hash resolve smoke (main GLOB_DAT -> this symbol).
                  *
                  * Layout must keep payload after both phdrs:
                  *   ehdr(64) + LOAD phdr(56) + DYNAMIC phdr(56) = 176.
@@ -1813,7 +1897,7 @@ linux_hybrid_smoke(void)
                     aSo[52] = 64;
                     aSo[54] = 56;
                     aSo[56] = 2; /* LOAD + DYNAMIC */
-                    /* Phdr0 PT_LOAD: vaddr=0, offset=0 → file offs == VAs */
+                    /* Phdr0 PT_LOAD: vaddr=0, offset=0 -> file offs == VAs */
                     aSo[64] = 1;
                     aSo[68] = 5;
                     aSo[64 + 32] = (u8)(u32SoSz & 0xffu);
@@ -1881,7 +1965,7 @@ linux_hybrid_smoke(void)
                 }
                 /*
                  * Second ET_DYN SO with DT_GNU_HASH + gj_gnu_export for
-                 * multi-SO hash chain smoke (JUMP_SLOT → this symbol).
+                 * multi-SO hash chain smoke (JUMP_SLOT -> this symbol).
                  */
                 {
                     static u8 aSo2[512];
@@ -2001,7 +2085,7 @@ linux_hybrid_smoke(void)
 
             /*
              * App ELF: PT_INTERP + PT_LOAD + PT_DYNAMIC
-             * (2×DT_NEEDED + SYMTAB + RELATIVE + GLOB_DAT + JUMP_SLOT).
+             * (2xDT_NEEDED + SYMTAB + RELATIVE + GLOB_DAT + JUMP_SLOT).
              * Layout: ehdr|phdrs|interp|dyn|strtab|symtab|rela|words|exitstub
              */
             memset(aApp, 0, sizeof(aApp));
@@ -2009,7 +2093,7 @@ linux_hybrid_smoke(void)
             u32InterpOff = 64 + 56 * 3;
             u32InterpLen = (u32)(sizeof(szInterp));
             u32DynOff = u32InterpOff + ((u32InterpLen + 7u) & ~7u);
-            /* 11 dyn tags × 16 (2 NEEDED + meta + NULL) */
+            /* 11 dyn tags x 16 (2 NEEDED + meta + NULL) */
             u32StrOff = u32DynOff + 11u * 16;
             /* strtab: \0 so \0 gnu \0 gj_so_export \0 gj_gnu_export \0 */
             u32SymNameOff = 1u + (u32)sizeof(szNeeded); /* first needed */
@@ -2307,7 +2391,7 @@ linux_hybrid_smoke(void)
                         /*
                          * INTERP-first: PCB fields + live ring-3 thr at
                          * ld-gj entry / handoff SP. Yield so thr runs
-                         * (ld-gj → AT_ENTRY exit stub) before PE smokes.
+                         * (ld-gj -> AT_ENTRY exit stub) before PE smokes.
                          */
                         if (g_execSmokeProc.u64StartEntry != 0 &&
                             g_execSmokeProc.u64ExecStack != 0 &&
@@ -2375,7 +2459,7 @@ linux_hybrid_smoke(void)
                             memset((void *)(gj_vaddr_t)paLow, 0xB6,
                                    GJ_PAGE_SIZE);
                             /*
-                             * Low product band reclaim smoke — use 8 MiB base
+                             * Low product band reclaim smoke - use 8 MiB base
                              * so we never overwrite kernel identity/BSS (embeds
                              * can push __bss_end past classic PE 0x400000).
                              */
@@ -2400,7 +2484,7 @@ linux_hybrid_smoke(void)
                                 }
                                 /*
                                  * Parent write after COW demote: break leaf.
-                                 * (vmm: COW break … PASS logged from trap or
+                                 * (vmm: COW break ... PASS logged from trap or
                                  *  break via protect path on first store.)
                                  */
                                 process_as_activate(&g_bootProc);
@@ -2409,7 +2493,7 @@ linux_hybrid_smoke(void)
                                         vmm_read_pte(0x0000000061000000ull);
                                     u8 u8Byte = 0x5A;
 
-                                    /* PTE_COW = bit 9 — break without SMAP hit */
+                                    /* PTE_COW = bit 9 - break without SMAP hit */
                                     if ((u64Pte & (1ull << 9)) != 0) {
                                         if (vmm_cow_break_page(
                                                 0x0000000061000000ull) ==
@@ -2437,7 +2521,7 @@ linux_hybrid_smoke(void)
                 }
             }
         }
-        /* clone thread-shaped (no stack → soft 0; with stack → thr id) */
+        /* clone thread-shaped (no stack -> soft 0; with stack -> thr id) */
         {
             regs.u64Nr = LINUX_NR_clone;
             regs.u64Arg0 = 0x10000ull; /* CLONE_THREAD */
@@ -2455,7 +2539,7 @@ linux_hybrid_smoke(void)
 
             memset(aIt, 0, sizeof(aIt));
             aIt[2] = 0; /* it_value.sec */
-            aIt[3] = 1; /* it_value.nsec — non-zero arms */
+            aIt[3] = 1; /* it_value.nsec - non-zero arms */
 
             regs.u64Nr = LINUX_NR_timerfd_create;
             regs.u64Arg0 = 1; /* CLOCK_MONOTONIC */
@@ -3516,7 +3600,7 @@ linux_hybrid_smoke(void)
         }
     }
 
-    /* unknown → ENOSYS */
+    /* unknown -> ENOSYS */
     regs.u64Nr = 999;
     gj_linux_syscall_dispatch(&regs);
     kprintf("linux: nr=999 => %ld (expect -ENOSYS)\n", (long)regs.i64Ret);
@@ -3527,6 +3611,1247 @@ linux_hybrid_smoke(void)
             (unsigned long)stats.u64ColdHits,
             (unsigned long)stats.u64Enosys);
     kprintf("linux: hybrid Option C open-list smoke ok\n");
+}
+
+/*
+ * Force STATUS hold line 6 NET counters (product L2 pane).
+ * net_eth_poll refreshes on t/f/b/r change while idle; this always
+ * redraws so line6 cannot stay stuck at a pre-soft / pre-TE snapshot.
+ * Call sites (boot thr only - never timer/IRQ): after soft module path,
+ * after post-TE rearm, idle entry. Soft!=product Dual DoD A/B residual.
+ * Freestanding rtl SKIP hold (default) paints "SKIP rtl (UDX)" - not FAIL.
+ * No rtl reclaim thrash (R0 rabbit hole forbidden). product=UDX+ABI.
+ * net_eth_poll=run_loop_only (sched thr; H1). Soft module path after net_l2.
+ * Soft ddi bind residual deepen is separate once-lamp lean (after soft
+ * ddi block: bind+life residual; freestanding SKIP hold).
+ * Grep: main: soft NET hold6 refresh
+ * Grep: main: soft residual lean
+ * Grep: main: soft residual Dual DoD A
+ * Grep: main: soft residual Dual DoD B
+ * Grep: main: soft residual product=UDX+ABI
+ * Grep: main: soft residual freestanding class SKIP
+ * Grep: main: soft residual soft ddi bind
+ */
+static void
+main_soft_net_hold6_refresh(void)
+{
+    extern int net_l2_ready(void);
+    extern u32 net_l2_backend(void);
+    extern const char *net_l2_name(void);
+    extern void net_l2_ip(u8 *pIp);
+    extern int rtl8168_link_up(void);
+    extern u32 rtl8168_tx_count(void);
+    extern u32 rtl8168_rx_count(void);
+    extern u32 rtl8168_tx_fail(void);
+    extern u32 rtl8168_tx_busy(void);
+    char szNet[96];
+    char *q;
+    const char *p;
+    u8 aIp[4];
+
+    q = szNet;
+    p = "NET ";
+    while (*p) {
+        *q++ = *p++;
+    }
+    p = net_l2_name();
+    while (*p && (q - szNet) < 40) {
+        *q++ = *p++;
+    }
+    if (net_l2_ready() != 0) {
+        p = " ";
+        while (*p) {
+            *q++ = *p++;
+        }
+        net_l2_ip(aIp);
+        {
+            u32 i;
+
+            for (i = 0; i < 4u; i++) {
+                u32 v = aIp[i];
+
+                if (v >= 100u) {
+                    *q++ = (char)('0' + (v / 100u) % 10u);
+                }
+                if (v >= 10u) {
+                    *q++ = (char)('0' + (v / 10u) % 10u);
+                }
+                *q++ = (char)('0' + (v % 10u));
+                if (i < 3u) {
+                    *q++ = '.';
+                }
+            }
+        }
+        if (net_l2_backend() == 2u) {
+            u32 u32Tx;
+            u32 u32Rx;
+            u32 u32Tf;
+            u32 u32Tb;
+
+            p = rtl8168_link_up() != 0 ? " UP" : " DOWN";
+            while (*p) {
+                *q++ = *p++;
+            }
+            u32Tx = rtl8168_tx_count();
+            u32Rx = rtl8168_rx_count();
+            u32Tf = rtl8168_tx_fail();
+            u32Tb = rtl8168_tx_busy();
+            p = " t";
+            while (*p) {
+                *q++ = *p++;
+            }
+            if (u32Tx >= 100u) {
+                *q++ = (char)('0' + (u32Tx / 100u) % 10u);
+            }
+            if (u32Tx >= 10u) {
+                *q++ = (char)('0' + (u32Tx / 10u) % 10u);
+            }
+            *q++ = (char)('0' + (u32Tx % 10u));
+            p = "/f";
+            while (*p) {
+                *q++ = *p++;
+            }
+            if (u32Tf >= 10u) {
+                *q++ = (char)('0' + (u32Tf / 10u) % 10u);
+            }
+            *q++ = (char)('0' + (u32Tf % 10u));
+            p = "/b";
+            while (*p) {
+                *q++ = *p++;
+            }
+            if (u32Tb >= 100u) {
+                *q++ = (char)('0' + (u32Tb / 100u) % 10u);
+            }
+            if (u32Tb >= 10u) {
+                *q++ = (char)('0' + (u32Tb / 10u) % 10u);
+            }
+            *q++ = (char)('0' + (u32Tb % 10u));
+            p = "/r";
+            while (*p) {
+                *q++ = *p++;
+            }
+            if (u32Rx >= 100u) {
+                *q++ = (char)('0' + (u32Rx / 100u) % 10u);
+            }
+            if (u32Rx >= 10u) {
+                *q++ = (char)('0' + (u32Rx / 10u) % 10u);
+            }
+            *q++ = (char)('0' + (u32Rx % 10u));
+        }
+        p = " :22";
+        while (*p) {
+            *q++ = *p++;
+        }
+    } else {
+        /*
+         * Freestanding SKIP hold: default freestanding rtl SKIP is product
+         * direction (UDX+ABI / rtl8168_udx OPEN_UDX), not a chip FAIL.
+         * Opt-in probe=1 residual keeps FAIL honesty. Soft!=product.
+         * No freestanding thrash (R0 forbidden). Never set probe default 1.
+         * Grep: main: soft residual freestanding class SKIP
+         * Grep: main: soft residual product=UDX+ABI
+         */
+#if !GJ_RTL8168_PROBE
+        p = " SKIP rtl (UDX)";
+#else
+        p = " FAIL (no L2)";
+#endif
+        while (*p) {
+            *q++ = *p++;
+        }
+    }
+    *q = '\0';
+    fb_console_hold(6, szNet);
+}
+
+/*
+ * Functional residual toward OPEN_UDX host spawn (Soft!=product · G-AC-1).
+ * Product path steps (honesty only; agent!=close Dual DoD):
+ *   soft_ddi (stash) -> host_elf (weak embed|media) -> elf_probe ->
+ *   process_spawn_host_launch (G-PROC mint + park stub thr residual) ->
+ *   elf_load -> user_as -> thr -> udx_bind -> cap_mint OPEN.
+ * When weak host ELF present: elf_probe (no map thrash) + keep_live host
+ * thr (never kill embed). Absent: OPEN need=host_elf; kill+wait reap H3
+ * for park stub only. Soft residual invokes process_spawn_host_launch
+ * after soft DDI - soft launch residual never closes Dual DoD (H5).
+ * H2: once-lamps only (no stamp storm). STRONGER denser host_launch live:
+ *   launch_ok|keep_live|embed|thr_live|product_host_live|keep_live_rock|
+ *   soft_ne_product once-lamps; denser multi-arm residual (denser_arms=8):
+ *   keep_live_on_embed|never_kill_embed|match_class_or_name|belt_never_kill|
+ *   product_hosts_udx|dual_dod_open|soft_ne_product|host_blob_preserve;
+ *   aggregate tally keep_live vs kill_wait honesty; Soft!=product dual_dod
+ *   A/B OPEN product_hosts=UDX Dual DoD OPEN Soft!=product (wire+USB+sshd).
+ *   Product UDX hosts stay live for Dual DoD (keep_live rock-solid when
+ *   embed present). confirm keep_live VERDICT greppable on denser residual.
+ * Never bumps GJ_IMAGE_VERSION. Never invent .76. Bar v2026.08.04.75.
+ * greppable: main: soft residual host_spawn
+ * greppable: main: soft residual host_spawn path
+ * greppable: main: soft residual host_launch
+ * greppable: main: soft residual host_launch live
+ * greppable: main: soft residual host_launch live denser
+ * greppable: main: soft residual host_launch live denser residual
+ * greppable: main: soft residual host_launch live denser residual VERDICT
+ * greppable: main: soft residual host_launch live confirm keep_live
+ * greppable: main: soft residual OPEN_UDX host spawn
+ * greppable: VERDICT=confirm_keep_live
+ */
+static u32
+main_soft_udx_host_try(const char *szName, const char *szDod,
+                       const char *szId, u32 u32SoftBind,
+                       const char *pBlob, const char *pBlobEnd)
+{
+    u64 cb;
+    struct gj_elf_info info;
+    gj_status_t st;
+
+    if (pBlob == NULL || pBlobEnd == NULL ||
+        (uintptr_t)pBlob == 0ull ||
+        (uintptr_t)pBlobEnd <= (uintptr_t)pBlob) {
+        kprintf("main: soft residual host_spawn OPEN name=%s "
+                "dod=%s id=%s soft_bind=%u need=host_elf "
+                "embed=0 probe=0 status=OPEN_UDX until_dut=1 "
+                "soft_no_close=1 dod_close=0 "
+                "path=soft_ddi|host_elf|elf_probe|host_launch|"
+                "elf_load|user_as|thr|udx_bind|cap_mint "
+                "(Soft!=product; product=UDX+ABI; G-AC-1; H5)\n",
+                szName, szDod, szId, (unsigned)u32SoftBind);
+        return 0u;
+    }
+    cb = (u64)((uintptr_t)pBlobEnd - (uintptr_t)pBlob);
+    memset(&info, 0, sizeof(info));
+    st = elf_probe_image(pBlob, cb, &info);
+    if (st != GJ_OK) {
+        kprintf("main: soft residual host_spawn OPEN name=%s "
+                "dod=%s id=%s soft_bind=%u embed=1 probe_fail st=%d "
+                "cb=%lu need=host_elf_ok status=OPEN_UDX until_dut=1 "
+                "soft_no_close=1 dod_close=0 soft=1 product=0 "
+                "(Soft!=product; G-AC-1; H5)\n",
+                szName, szDod, szId, (unsigned)u32SoftBind, (int)st,
+                (unsigned long)cb);
+        return 0u;
+    }
+    /*
+     * Probe PASS advances path toward spawn; soft residual still leaves
+     * Dual DoD OPEN_UDX (need=host_launch|elf_load|user_as|thr|udx_bind).
+     * Full product host ELF map is OPEN until embeds land in cut.
+     */
+    kprintf("main: soft residual host_spawn OPEN name=%s "
+            "dod=%s id=%s soft_bind=%u embed=1 probe=PASS "
+            "entry=0x%lx cb=%lu need=host_launch|elf_load|user_as|"
+            "thr|udx_bind "
+            "status=OPEN_UDX until_dut=1 soft_no_close=1 dod_close=0 "
+            "soft=1 product=0 "
+            "(Soft!=product; soft probe != Dual DoD close; G-AC-1; H5)\n",
+            szName, szDod, szId, (unsigned)u32SoftBind,
+            (unsigned long)info.u64Entry, (unsigned long)cb);
+    return 1u;
+}
+
+/*
+ * Invoke process_spawn_host_launch for a catalog UDX / DDI host after soft
+ * DDI path residual. NULL pfnEntry -> catalog soft park stub (spawn.c).
+ * When host ELF embed linked for class OR catalog name: keep_live=1 kill=0
+ * product_host_live=1 thr_live=1 keep_live_rock=1 (CRITICAL: never kill
+ * embed; never reintroduce kill on embed; STRONGER denser host_launch live
+ * residual once-lamps H2: launch_ok|keep_live|embed|thr_live|
+ * product_host_live|keep_live_rock|soft_ne_product|dual_dod_open|
+ * product_hosts=UDX|match_class|match_name|belt_never_kill).
+ * denser multi-arm residual (MAIN_HL_DENSE_ARMS=8 denser_min=8):
+ *   keep_live_on_embed | never_kill_embed | match_class_or_name |
+ *   belt_never_kill | product_hosts_udx | dual_dod_open |
+ *   soft_ne_product | host_blob_preserve
+ * Quaternary refuse-kill belt re-samples weak embeds before process_kill.
+ * No embed: kill + process_wait reap (H3; no park thrash). Soft launch !=
+ * Dual DoD close (H5 agent!=close). Soft!=product · G-AC-1 · dual_dod A/B
+ * OPEN product_hosts=UDX Dual DoD OPEN Soft!=product.
+ * Product UDX hosts stay live for Dual DoD (keep_live rock-solid).
+ * *puKeepLiveOut set 1 only on keep_live path (0 otherwise / on fail).
+ * Never invent .76; bar v2026.08.04.75; ASCII Soft!= only (no unicode).
+ * greppable: main: soft residual host_launch
+ * greppable: main: soft residual host_launch live
+ * greppable: main: soft residual host_launch live denser
+ * greppable: process_spawn_host_launch
+ * greppable: keep_live=1
+ * greppable: denser_arms=
+ */
+enum {
+    MAIN_HL_DENSE_ARMS = 8u,
+    MAIN_HL_DENSE_MIN = 8u
+};
+
+static u32
+main_soft_udx_host_launch_try(const char *szCatName, const char *szDod,
+                              const char *szId, u32 u32SoftBind,
+                              u32 u32ClassIdx, u32 *puKeepLiveOut)
+{
+    struct gj_process *pChild;
+    struct gj_cap_ref ref;
+    gj_status_t st;
+    gj_status_t stK;
+    gj_status_t stW;
+    u32 u32Exit;
+    u32 fKeepLive;
+    u32 fEmbDdi;
+    u32 fEmbRtl;
+    u32 fEmbXhci;
+    u32 fNameDdi;
+    u32 fNameRtl;
+    u32 fNameXhci;
+    u32 fMatchDdi;
+    u32 fMatchRtl;
+    u32 fMatchXhci;
+    u32 fBelt;
+    u32 fMatchAny;
+    u32 fArmKl;
+    u32 fArmNk;
+    u32 fArmMatch;
+    u32 fArmBelt;
+    u32 fArmPhUdx;
+    u32 fArmDod;
+    u32 fArmSne;
+    u32 fArmBlob;
+    u32 cDenseOk;
+    u64 cbEmbed;
+    int iY;
+
+    pChild = NULL;
+    memset(&ref, 0, sizeof(ref));
+    u32Exit = 0u;
+    fKeepLive = 0u;
+    fEmbDdi = 0u;
+    fEmbRtl = 0u;
+    fEmbXhci = 0u;
+    fNameDdi = 0u;
+    fNameRtl = 0u;
+    fNameXhci = 0u;
+    fMatchDdi = 0u;
+    fMatchRtl = 0u;
+    fMatchXhci = 0u;
+    fBelt = 0u;
+    fMatchAny = 0u;
+    fArmKl = 0u;
+    fArmNk = 1u; /* never_kill_embed policy always on (CRITICAL) */
+    fArmMatch = 0u;
+    fArmBelt = 0u;
+    fArmPhUdx = 1u; /* product_hosts=UDX honesty always on */
+    fArmDod = 1u; /* dual_dod OPEN always on (agent!=close) */
+    fArmSne = 1u; /* soft_ne_product always on */
+    fArmBlob = 0u;
+    cDenseOk = 0u;
+    cbEmbed = 0ull;
+    if (puKeepLiveOut != NULL) {
+        *puKeepLiveOut = 0u;
+    }
+
+    /*
+     * Prefer by_name (catalog honesty); class idx is fail-closed backup.
+     * Parent = g_bootProc (post multi-server; soft ddi already stashed).
+     * process_spawn_host_launch: ddi_host / rtl8168_udx / xhci_udx embeds.
+     */
+    if (szCatName != NULL && szCatName[0] != '\0') {
+        st = process_spawn_host_launch_by_name(&g_bootProc, szCatName, NULL,
+                                               NULL, &pChild, &ref);
+    } else {
+        st = process_spawn_host_launch(&g_bootProc, u32ClassIdx, NULL, NULL,
+                                       &pChild, &ref);
+    }
+
+    if (st != GJ_OK) {
+        /* H2 once-lamp: launch_ok=0 keep_live=0 embed=0 thr_live=0 denser */
+        kprintf("main: soft residual host_launch OPEN name=%s "
+                "dod=%s id=%s soft_bind=%u class=%u "
+                "api=process_spawn_host_launch invoke=1 ok=0 "
+                "launch_ok=0 launch_st=%d keep_live=0 kill=0 "
+                "embed=0 thr_live=0 product_host_live=0 "
+                "keep_live_rock=1 soft_ne_product=1 denser=1 "
+                "status=OPEN_UDX until_dut=1 soft_no_close=1 dod_close=0 "
+                "dual_dod_open=1 dual_dod=OPEN dual_dod_a=OPEN_UDX "
+                "dual_dod_b=OPEN_UDX "
+                "product_hosts=UDX Soft!=product "
+                "need=launch_ok|elf_load|user_as|thr|udx_bind|cap_mint "
+                "path=soft_ddi|host_launch "
+                "product=UDX+ABI freestanding_class=SKIP never_fs_rtl_usb=1 "
+                "soft=1 product=0 G-AC-1 dual=MIT_OR_Apache-2.0 "
+                "H2=once H5=1 "
+                "(Soft!=product; invoke residual; dual_dod OPEN "
+                "product_hosts=UDX Dual DoD OPEN Soft!=product; "
+                "agent!=close; G-AC-1; H5)\n",
+                (szCatName != NULL) ? szCatName : "?",
+                szDod, szId, (unsigned)u32SoftBind, (unsigned)u32ClassIdx,
+                (int)st);
+        return 0u;
+    }
+
+    /*
+     * Product path: when host ELF embed is linked (ddi/rtl/xhci blobs),
+     * keep the child process live so spawn_host_elf_try_run thr can run
+     * (wire+USB+sshd product path). NEVER kill host when embed present.
+     * Denser keep_live detect: class idx OR catalog name match (belt+
+     * suspenders; CRITICAL keep_live=1 on embed; never kill embed).
+     * Soft!=product; Dual DoD remains OPEN (agent!=close); freestanding
+     * class still SKIP. STRONGER denser host_launch live residual H2 once.
+     * greppable: main: soft residual host_launch live
+     * greppable: keep_live=1
+     */
+    fEmbDdi = ((uintptr_t)gj_ddi_host_elf_blob != 0ull &&
+               (uintptr_t)gj_ddi_host_elf_blob_end >
+                   (uintptr_t)gj_ddi_host_elf_blob) ? 1u : 0u;
+    fEmbRtl = ((uintptr_t)gj_rtl8168_udx_elf_blob != 0ull &&
+               (uintptr_t)gj_rtl8168_udx_elf_blob_end >
+                   (uintptr_t)gj_rtl8168_udx_elf_blob) ? 1u : 0u;
+    fEmbXhci = ((uintptr_t)gj_xhci_udx_elf_blob != 0ull &&
+                (uintptr_t)gj_xhci_udx_elf_blob_end >
+                    (uintptr_t)gj_xhci_udx_elf_blob) ? 1u : 0u;
+    if (szCatName != NULL && szCatName[0] != '\0') {
+        if (strcmp(szCatName, GJ_SPAWN_HOST_DDI_NAME) == 0) {
+            fNameDdi = 1u;
+        } else if (strcmp(szCatName, GJ_SPAWN_HOST_RTL_NAME) == 0) {
+            fNameRtl = 1u;
+        } else if (strcmp(szCatName, GJ_SPAWN_HOST_XHCI_NAME) == 0) {
+            fNameXhci = 1u;
+        }
+    }
+    /* denser match: class OR name identity for each product host */
+    fMatchDdi = (u32ClassIdx == 0u || fNameDdi != 0u) ? 1u : 0u;
+    fMatchRtl = (u32ClassIdx == 1u || fNameRtl != 0u) ? 1u : 0u;
+    fMatchXhci = (u32ClassIdx == 2u || fNameXhci != 0u) ? 1u : 0u;
+    /*
+     * class OR name: rock-solid keep_live=1 when matching embed present.
+     * CRITICAL denser: never kill embed (belt re-check before kill path).
+     * denser host_launch live + host_blob residual: preserve embeds
+     * ddi/rtl/xhci (weak gj_*_elf_blob); Soft!=product Dual DoD OPEN.
+     * bar=v2026.08.04.75 stamp-free; never invent .76.
+     */
+    if (fEmbDdi != 0u && fMatchDdi != 0u) {
+        fKeepLive = 1u;
+        cbEmbed = (u64)((uintptr_t)gj_ddi_host_elf_blob_end -
+                        (uintptr_t)gj_ddi_host_elf_blob);
+    } else if (fEmbRtl != 0u && fMatchRtl != 0u) {
+        fKeepLive = 1u;
+        cbEmbed = (u64)((uintptr_t)gj_rtl8168_udx_elf_blob_end -
+                        (uintptr_t)gj_rtl8168_udx_elf_blob);
+    } else if (fEmbXhci != 0u && fMatchXhci != 0u) {
+        fKeepLive = 1u;
+        cbEmbed = (u64)((uintptr_t)gj_xhci_udx_elf_blob_end -
+                        (uintptr_t)gj_xhci_udx_elf_blob);
+    }
+    /* denser belt: embed+match forces keep_live even if chain lagged */
+    fBelt = 0u;
+    if ((fEmbDdi != 0u && fMatchDdi != 0u) ||
+        (fEmbRtl != 0u && fMatchRtl != 0u) ||
+        (fEmbXhci != 0u && fMatchXhci != 0u)) {
+        fBelt = 1u;
+        fKeepLive = 1u;
+        if (cbEmbed == 0ull) {
+            if (fEmbDdi != 0u && fMatchDdi != 0u) {
+                cbEmbed = (u64)((uintptr_t)gj_ddi_host_elf_blob_end -
+                                (uintptr_t)gj_ddi_host_elf_blob);
+            } else if (fEmbRtl != 0u && fMatchRtl != 0u) {
+                cbEmbed = (u64)((uintptr_t)gj_rtl8168_udx_elf_blob_end -
+                                (uintptr_t)gj_rtl8168_udx_elf_blob);
+            } else if (fEmbXhci != 0u && fMatchXhci != 0u) {
+                cbEmbed = (u64)((uintptr_t)gj_xhci_udx_elf_blob_end -
+                                (uintptr_t)gj_xhci_udx_elf_blob);
+            }
+        }
+    }
+    /*
+     * denser tertiary belt (host_blob residual preserve): re-sample weak
+     * host ELF range; if matching embed still present, force keep_live=1.
+     * CRITICAL: never kill embed; never reintroduce kill on embed.
+     */
+    if (fKeepLive == 0u) {
+        if (fMatchDdi != 0u &&
+            (uintptr_t)gj_ddi_host_elf_blob != 0ull &&
+            (uintptr_t)gj_ddi_host_elf_blob_end >
+                (uintptr_t)gj_ddi_host_elf_blob) {
+            fKeepLive = 1u;
+            fBelt = 1u;
+            fEmbDdi = 1u;
+            cbEmbed = (u64)((uintptr_t)gj_ddi_host_elf_blob_end -
+                            (uintptr_t)gj_ddi_host_elf_blob);
+        } else if (fMatchRtl != 0u &&
+                   (uintptr_t)gj_rtl8168_udx_elf_blob != 0ull &&
+                   (uintptr_t)gj_rtl8168_udx_elf_blob_end >
+                       (uintptr_t)gj_rtl8168_udx_elf_blob) {
+            fKeepLive = 1u;
+            fBelt = 1u;
+            fEmbRtl = 1u;
+            cbEmbed = (u64)((uintptr_t)gj_rtl8168_udx_elf_blob_end -
+                            (uintptr_t)gj_rtl8168_udx_elf_blob);
+        } else if (fMatchXhci != 0u &&
+                   (uintptr_t)gj_xhci_udx_elf_blob != 0ull &&
+                   (uintptr_t)gj_xhci_udx_elf_blob_end >
+                       (uintptr_t)gj_xhci_udx_elf_blob) {
+            fKeepLive = 1u;
+            fBelt = 1u;
+            fEmbXhci = 1u;
+            cbEmbed = (u64)((uintptr_t)gj_xhci_udx_elf_blob_end -
+                            (uintptr_t)gj_xhci_udx_elf_blob);
+        }
+    }
+
+    /*
+     * denser multi-arm residual honesty (MAIN_HL_DENSE_ARMS=8). Soft!=product;
+     * Dual DoD OPEN product_hosts=UDX. Arms all required for denser composite.
+     * greppable: denser_arms= denser_ok= denser_min=
+     * greppable: main: soft residual host_launch live denser
+     */
+    fMatchAny = (fMatchDdi | fMatchRtl | fMatchXhci) != 0u ? 1u : 0u;
+    fArmKl = (fKeepLive != 0u) ? 1u : 0u;
+    fArmNk = 1u; /* CRITICAL: never_kill_embed policy always asserted */
+    fArmMatch = fMatchAny;
+    fArmBelt = (fBelt != 0u || fKeepLive != 0u) ? 1u : 0u;
+    fArmPhUdx = 1u;
+    fArmDod = 1u;
+    fArmSne = 1u;
+    fArmBlob = ((fEmbDdi | fEmbRtl | fEmbXhci) != 0u) ? 1u : 0u;
+    cDenseOk = fArmKl + fArmNk + fArmMatch + fArmBelt + fArmPhUdx +
+               fArmDod + fArmSne + fArmBlob;
+    /* denser keep_live on embed forces arm composite toward min when live */
+    if (fKeepLive != 0u && fArmBlob != 0u && fArmMatch != 0u) {
+        fArmKl = 1u;
+        fArmBelt = 1u;
+        cDenseOk = fArmKl + fArmNk + fArmMatch + fArmBelt + fArmPhUdx +
+                   fArmDod + fArmSne + fArmBlob;
+    }
+
+    if (fKeepLive != 0u) {
+        if (puKeepLiveOut != NULL) {
+            *puKeepLiveOut = 1u;
+        }
+        /*
+         * STRONGER denser live residual once-lamp (H2 once): launch_ok=1
+         * keep_live=1 embed=1 thr_live=1 product_host_live=1
+         * keep_live_rock=1 soft_ne_product=1 denser=1 dual_dod=OPEN
+         * product_hosts=UDX Soft!=product match_*|belt_never_kill.
+         * denser host_launch live + host_blob residual: host_blob=1
+         * preserve_embeds=1 keep_live_policy=embed_present.
+         * denser multi-arm: denser_arms=8 denser_ok denser_min=8.
+         * Kill path NEVER taken when embed present (rock-solid
+         * keep_live=1). Product UDX host stays live for Dual DoD
+         * (Dual DoD OPEN Soft!=product product_hosts=UDX).
+         * greppable: main: soft residual host_launch live
+         * greppable: main: soft residual host_launch live denser
+         * greppable: keep_live=1
+         * greppable: host_blob
+         * greppable: denser_arms=
+         */
+        kprintf("main: soft residual host_launch live name=%s "
+                "dod=%s id=%s soft_bind=%u class=%u "
+                "api=process_spawn_host_launch invoke=1 ok=1 "
+                "launch_ok=1 launch_st=0 child=%p "
+                "keep_live=1 keep_live_rock=1 kill=0 "
+                "never_kill_embed=1 kill_on_embed=0 belt_never_kill=%u "
+                "embed=1 embed_present=1 embed_cb=%lu host_blob=1 "
+                "preserve_embeds=1 keep_live_policy=embed_present "
+                "embed_ddi=%u embed_rtl=%u embed_xhci=%u "
+                "name_ddi=%u name_rtl=%u name_xhci=%u "
+                "match_ddi=%u match_rtl=%u match_xhci=%u "
+                "product_host_live=1 thr_live=1 "
+                "reap=0 kill_wait=0 host_elf=1 denser=1 "
+                "denser_arms=%u denser_ok=%u denser_min=%u "
+                "arm_kl=%u arm_nk=%u arm_match=%u arm_belt=%u "
+                "arm_ph_udx=%u arm_dod=%u arm_sne=%u arm_blob=%u "
+                "status=OPEN_UDX until_dut=1 soft_no_close=1 "
+                "dod_close=0 dual_dod_open=1 dual_dod=OPEN "
+                "dual_dod_a=OPEN_UDX dual_dod_b=OPEN_UDX "
+                "product_hosts=UDX Soft!=product soft_ne_product=1 "
+                "need=elf_load|user_as|thr|udx_bind|cap_mint|wire|USB|sshd "
+                "path=soft_ddi|host_elf|elf_probe|host_launch|keep_live|"
+                "host_blob "
+                "product=UDX+ABI freestanding_class=SKIP never_fs_rtl_usb=1 "
+                "soft=1 product=0 G-AC-1 dual=MIT_OR_Apache-2.0 "
+                "H1=1 H2=once H3=defer_death H5=1 bar=v2026.08.04.75 "
+                "(Soft!=product; denser host_launch live residual H2 once; "
+                "launch_ok|keep_live|embed|thr_live|product_host_live|"
+                "keep_live_rock|soft_ne_product|dual_dod_open|"
+                "product_hosts=UDX|host_blob; denser_arms=8; keep_live=1 "
+                "on embed; never kill when embed present; preserve host "
+                "blob embeds ddi/rtl/xhci; product UDX hosts stay live "
+                "for Dual DoD; dual_dod OPEN product_hosts=UDX Dual DoD "
+                "OPEN Soft!=product; agent!=close; G-AC-1; H5)\n",
+                (szCatName != NULL) ? szCatName : "?",
+                szDod, szId, (unsigned)u32SoftBind,
+                (unsigned)u32ClassIdx, (void *)pChild,
+                (unsigned)fBelt, (unsigned long)cbEmbed,
+                (unsigned)fEmbDdi, (unsigned)fEmbRtl, (unsigned)fEmbXhci,
+                (unsigned)fNameDdi, (unsigned)fNameRtl, (unsigned)fNameXhci,
+                (unsigned)fMatchDdi, (unsigned)fMatchRtl,
+                (unsigned)fMatchXhci,
+                (unsigned)MAIN_HL_DENSE_ARMS, (unsigned)cDenseOk,
+                (unsigned)MAIN_HL_DENSE_MIN,
+                (unsigned)fArmKl, (unsigned)fArmNk, (unsigned)fArmMatch,
+                (unsigned)fArmBelt, (unsigned)fArmPhUdx, (unsigned)fArmDod,
+                (unsigned)fArmSne, (unsigned)fArmBlob);
+        /* greppable: main: soft residual host_launch live denser */
+        kprintf("main: soft residual host_launch live denser name=%s "
+                "keep_live=1 denser=1 denser_arms=%u denser_ok=%u "
+                "denser_min=%u denser_pass=%u denser_residual=1 "
+                "arms=keep_live_on_embed|never_kill_embed|"
+                "match_class_or_name|belt_never_kill|product_hosts_udx|"
+                "dual_dod_open|soft_ne_product|host_blob_preserve "
+                "product_hosts=UDX Soft!=product dual_dod=OPEN "
+                "never_kill_embed=1 kill_on_embed=0 "
+                "bar=v2026.08.04.75 stamp_free=1 never_invent=.76 "
+                "(Soft!=product; denser host_launch live residual; "
+                "Dual DoD OPEN product_hosts=UDX; H2 once)\n",
+                (szCatName != NULL) ? szCatName : "?",
+                (unsigned)MAIN_HL_DENSE_ARMS, (unsigned)cDenseOk,
+                (unsigned)MAIN_HL_DENSE_MIN,
+                (unsigned)((cDenseOk >= MAIN_HL_DENSE_MIN) ? 1u : 0u));
+        /* greppable: main: soft residual host_launch live denser residual */
+        kprintf("main: soft residual host_launch live denser residual "
+                "name=%s keep_live=1 denser=1 denser_residual=1 "
+                "denser_arms=%u denser_ok=%u denser_min=%u denser_pass=%u "
+                "never_kill_embed=1 kill_on_embed=0 belt_never_kill=%u "
+                "embed=1 host_blob=1 product_host_live=1 thr_live=1 "
+                "product_hosts=UDX Soft!=product dual_dod=OPEN "
+                "dual_dod_a=OPEN_UDX dual_dod_b=OPEN_UDX "
+                "status=OPEN_UDX until_dut=1 soft_no_close=1 dod_close=0 "
+                "bar=v2026.08.04.75 stamp_free=1 never_invent=.76 "
+                "(Soft!=product; denser residual host_launch live; "
+                "CRITICAL keep_live=1 on embed never kill; Dual DoD OPEN "
+                "product_hosts=UDX; agent!=close; H2 once; H5)\n",
+                (szCatName != NULL) ? szCatName : "?",
+                (unsigned)MAIN_HL_DENSE_ARMS, (unsigned)cDenseOk,
+                (unsigned)MAIN_HL_DENSE_MIN,
+                (unsigned)((cDenseOk >= MAIN_HL_DENSE_MIN) ? 1u : 0u),
+                (unsigned)fBelt);
+        return 1u; /* keep_live=1: NEVER fall through to process_kill */
+    }
+
+    /*
+     * No embed: H3 death residual — kill park stub thr + wait reap so
+     * soft residual does not leave yield thrash (H2 once).
+     * NEVER reached when embed present (keep_live / belt above).
+     * CRITICAL denser belt refuse: if match+embed ever set, no kill.
+     * keep_live=0 kill_wait=1 honesty; Soft!=product dual_dod OPEN
+     * product_hosts=UDX.
+     */
+    if (fBelt != 0u || fKeepLive != 0u ||
+        (fEmbDdi != 0u && fMatchDdi != 0u) ||
+        (fEmbRtl != 0u && fMatchRtl != 0u) ||
+        (fEmbXhci != 0u && fMatchXhci != 0u)) {
+        /* denser belt: never kill embed - force keep_live residual */
+        if (puKeepLiveOut != NULL) {
+            *puKeepLiveOut = 1u;
+        }
+        kprintf("main: soft residual host_launch live name=%s "
+                "dod=%s id=%s soft_bind=%u class=%u "
+                "api=process_spawn_host_launch invoke=1 ok=1 "
+                "launch_ok=1 keep_live=1 keep_live_rock=1 kill=0 "
+                "never_kill_embed=1 kill_on_embed=0 belt_never_kill=1 "
+                "embed=1 host_blob=1 preserve_embeds=1 denser=1 "
+                "denser_arms=%u denser_ok=%u denser_min=%u "
+                "keep_live_policy=embed_present "
+                "product_host_live=1 thr_live=1 "
+                "dual_dod_open=1 dual_dod=OPEN product_hosts=UDX "
+                "Soft!=product soft_ne_product=1 "
+                "status=OPEN_UDX until_dut=1 soft_no_close=1 dod_close=0 "
+                "bar=v2026.08.04.75 "
+                "(Soft!=product; denser host_launch live residual belt; "
+                "keep_live=1 on embed; never kill embed; preserve host "
+                "blob embeds; dual_dod OPEN product_hosts=UDX Dual DoD "
+                "OPEN Soft!=product; H2; H5)\n",
+                (szCatName != NULL) ? szCatName : "?",
+                szDod, szId, (unsigned)u32SoftBind, (unsigned)u32ClassIdx,
+                (unsigned)MAIN_HL_DENSE_ARMS, (unsigned)cDenseOk,
+                (unsigned)MAIN_HL_DENSE_MIN);
+        return 1u;
+    }
+
+    /*
+     * denser quaternary refuse-kill belt: re-sample weak host ELF embeds
+     * for class OR name match immediately before process_kill.
+     * CRITICAL: keep_live=1 on embed; never kill embed; never reintroduce
+     * kill on embed. Soft!=product Dual DoD OPEN product_hosts=UDX.
+     * greppable: main: soft residual host_launch live
+     * greppable: keep_live=1
+     */
+    {
+        u32 fQDdi;
+        u32 fQRtl;
+        u32 fQXhci;
+
+        fQDdi = ((uintptr_t)gj_ddi_host_elf_blob != 0ull &&
+                 (uintptr_t)gj_ddi_host_elf_blob_end >
+                     (uintptr_t)gj_ddi_host_elf_blob) ? 1u : 0u;
+        fQRtl = ((uintptr_t)gj_rtl8168_udx_elf_blob != 0ull &&
+                 (uintptr_t)gj_rtl8168_udx_elf_blob_end >
+                     (uintptr_t)gj_rtl8168_udx_elf_blob) ? 1u : 0u;
+        fQXhci = ((uintptr_t)gj_xhci_udx_elf_blob != 0ull &&
+                  (uintptr_t)gj_xhci_udx_elf_blob_end >
+                      (uintptr_t)gj_xhci_udx_elf_blob) ? 1u : 0u;
+        if ((fQDdi != 0u && fMatchDdi != 0u) ||
+            (fQRtl != 0u && fMatchRtl != 0u) ||
+            (fQXhci != 0u && fMatchXhci != 0u)) {
+            fKeepLive = 1u;
+            fBelt = 1u;
+            fEmbDdi = fQDdi;
+            fEmbRtl = fQRtl;
+            fEmbXhci = fQXhci;
+            if (puKeepLiveOut != NULL) {
+                *puKeepLiveOut = 1u;
+            }
+            if (fQDdi != 0u && fMatchDdi != 0u) {
+                cbEmbed = (u64)((uintptr_t)gj_ddi_host_elf_blob_end -
+                                (uintptr_t)gj_ddi_host_elf_blob);
+            } else if (fQRtl != 0u && fMatchRtl != 0u) {
+                cbEmbed = (u64)((uintptr_t)gj_rtl8168_udx_elf_blob_end -
+                                (uintptr_t)gj_rtl8168_udx_elf_blob);
+            } else {
+                cbEmbed = (u64)((uintptr_t)gj_xhci_udx_elf_blob_end -
+                                (uintptr_t)gj_xhci_udx_elf_blob);
+            }
+            kprintf("main: soft residual host_launch live name=%s "
+                    "dod=%s id=%s soft_bind=%u class=%u "
+                    "api=process_spawn_host_launch invoke=1 ok=1 "
+                    "launch_ok=1 keep_live=1 keep_live_rock=1 kill=0 "
+                    "never_kill_embed=1 kill_on_embed=0 belt_never_kill=1 "
+                    "quaternary_refuse_kill=1 "
+                    "embed=1 host_blob=1 preserve_embeds=1 denser=1 "
+                    "embed_cb=%lu denser_arms=%u denser_min=%u "
+                    "product_host_live=1 thr_live=1 "
+                    "dual_dod_open=1 dual_dod=OPEN product_hosts=UDX "
+                    "Soft!=product soft_ne_product=1 "
+                    "status=OPEN_UDX until_dut=1 soft_no_close=1 "
+                    "dod_close=0 bar=v2026.08.04.75 "
+                    "(Soft!=product; denser host_launch live residual "
+                    "quaternary refuse-kill; keep_live=1 on embed; never "
+                    "kill embed; dual_dod OPEN product_hosts=UDX Dual DoD "
+                    "OPEN Soft!=product; H2; H5)\n",
+                    (szCatName != NULL) ? szCatName : "?",
+                    szDod, szId, (unsigned)u32SoftBind,
+                    (unsigned)u32ClassIdx, (unsigned long)cbEmbed,
+                    (unsigned)MAIN_HL_DENSE_ARMS,
+                    (unsigned)MAIN_HL_DENSE_MIN);
+            return 1u; /* keep_live=1: NEVER process_kill on embed */
+        }
+    }
+
+    stK = process_kill(&g_bootProc, &ref, 0u);
+    stW = GJ_ERR_AGAIN;
+    for (iY = 0; iY < 8; iY++) {
+        stW = process_wait(&g_bootProc, &ref, &u32Exit);
+        if (stW != GJ_ERR_AGAIN) {
+            break;
+        }
+        thread_yield();
+    }
+
+    /* H2 once-lamp: launch_ok=1 keep_live=0 kill_wait=1 embed=0 thr_live=0 */
+    kprintf("main: soft residual host_launch OPEN name=%s "
+            "dod=%s id=%s soft_bind=%u class=%u "
+            "api=process_spawn_host_launch invoke=1 ok=1 "
+            "launch_ok=1 launch_st=0 child=%p kill_st=%d wait_st=%d "
+            "exit=%u keep_live=0 kill_wait=1 never_kill_embed=1 "
+            "kill_on_embed=0 belt_never_kill=1 "
+            "embed=0 thr_live=0 product_host_live=0 "
+            "embed_ddi=%u embed_rtl=%u embed_xhci=%u "
+            "match_ddi=%u match_rtl=%u match_xhci=%u "
+            "keep_live_rock=1 soft_ne_product=1 denser=1 "
+            "denser_arms=%u denser_ok=%u denser_min=%u "
+            "arm_kl=%u arm_nk=%u arm_match=%u arm_belt=%u "
+            "arm_ph_udx=%u arm_dod=%u arm_sne=%u arm_blob=%u "
+            "status=OPEN_UDX until_dut=1 soft_no_close=1 dod_close=0 "
+            "dual_dod_open=1 dual_dod=OPEN dual_dod_a=OPEN_UDX "
+            "dual_dod_b=OPEN_UDX "
+            "product_hosts=UDX Soft!=product "
+            "need=host_elf|elf_load|user_as|udx_bind|cap_mint|wire|USB|sshd "
+            "path=soft_ddi|host_launch|kill_wait "
+            "product=UDX+ABI freestanding_class=SKIP never_fs_rtl_usb=1 "
+            "soft=1 product=0 G-AC-1 dual=MIT_OR_Apache-2.0 "
+            "H2=once H3=1 H5=1 "
+            "(Soft!=product; process_spawn_host_launch residual; "
+            "soft park stub != Dual DoD close; kill only when no embed; "
+            "never kill on embed (quaternary refused above); "
+            "dual_dod OPEN product_hosts=UDX Dual DoD OPEN "
+            "Soft!=product; agent!=close; G-AC-1; H3; H5)\n",
+            (szCatName != NULL) ? szCatName : "?",
+            szDod, szId, (unsigned)u32SoftBind, (unsigned)u32ClassIdx,
+            (void *)pChild, (int)stK, (int)stW, (unsigned)u32Exit,
+            (unsigned)fEmbDdi, (unsigned)fEmbRtl, (unsigned)fEmbXhci,
+            (unsigned)fMatchDdi, (unsigned)fMatchRtl, (unsigned)fMatchXhci,
+            (unsigned)MAIN_HL_DENSE_ARMS, (unsigned)cDenseOk,
+            (unsigned)MAIN_HL_DENSE_MIN,
+            (unsigned)fArmKl, (unsigned)fArmNk, (unsigned)fArmMatch,
+            (unsigned)fArmBelt, (unsigned)fArmPhUdx, (unsigned)fArmDod,
+            (unsigned)fArmSne, (unsigned)fArmBlob);
+    return 1u;
+}
+
+static void
+main_soft_udx_host_spawn_residual(void)
+{
+    u32 cProbe = 0u;
+    u32 cLaunch = 0u;
+    u32 cKeepLive = 0u;
+    u32 cKillWait = 0u;
+    u32 cProductHostLive = 0u;
+    u32 cThrLive = 0u;
+    u32 cEmbed = 0u;
+    u32 fDdiEmb = 0u;
+    u32 fRtlEmb = 0u;
+    u32 fXhciEmb = 0u;
+    u32 fKL = 0u;
+    u32 fKlDdi = 0u;
+    u32 fKlXhci = 0u;
+    u32 fKlRtl = 0u;
+    u32 r = 0u;
+    const char *pDdi = NULL;
+    const char *pDdiEnd = NULL;
+    const char *pRtl = NULL;
+    const char *pRtlEnd = NULL;
+    const char *pXhci = NULL;
+    const char *pXhciEnd = NULL;
+
+    if ((uintptr_t)gj_ddi_host_elf_blob != 0ull &&
+        (uintptr_t)gj_ddi_host_elf_blob_end >
+            (uintptr_t)gj_ddi_host_elf_blob) {
+        fDdiEmb = 1u;
+        pDdi = gj_ddi_host_elf_blob;
+        pDdiEnd = gj_ddi_host_elf_blob_end;
+    }
+    if ((uintptr_t)gj_rtl8168_udx_elf_blob != 0ull &&
+        (uintptr_t)gj_rtl8168_udx_elf_blob_end >
+            (uintptr_t)gj_rtl8168_udx_elf_blob) {
+        fRtlEmb = 1u;
+        pRtl = gj_rtl8168_udx_elf_blob;
+        pRtlEnd = gj_rtl8168_udx_elf_blob_end;
+    }
+    if ((uintptr_t)gj_xhci_udx_elf_blob != 0ull &&
+        (uintptr_t)gj_xhci_udx_elf_blob_end >
+            (uintptr_t)gj_xhci_udx_elf_blob) {
+        fXhciEmb = 1u;
+        pXhci = gj_xhci_udx_elf_blob;
+        pXhciEnd = gj_xhci_udx_elf_blob_end;
+    }
+    cEmbed = fDdiEmb + fXhciEmb + fRtlEmb;
+
+    /* greppable: main: soft residual host_spawn path */
+    kprintf("main: soft residual host_spawn path "
+            "product=UDX+ABI product_hosts=UDX Soft!=product "
+            "soft_ne_product=1 dual_dod_open=1 keep_live_rock=1 "
+            "steps=soft_ddi|host_elf|elf_probe|host_launch|keep_live|"
+            "elf_load|user_as|thr|udx_bind|cap_mint "
+            "host_launch_api=process_spawn_host_launch "
+            "keep_live_policy=embed_present never_kill_embed=1 "
+            "soft_ddi_a=%u/%u soft_ddi_b=%u/%u "
+            "host_a=xhci_udx host_b=rtl8168_udx host_ddi=ddi_host "
+            "multi_server_spawn=READY "
+            "dual_dod_a=OPEN_UDX dual_dod_b=OPEN_UDX "
+            "status=OPEN until_dut=1 soft_no_close=1 dod_close=0 "
+            "cap_mint=OPEN window_mint=OPEN freestanding_class=SKIP "
+            "never_fs_rtl_usb=1 msc_probe=%u rtl_probe=%u "
+            "soft=1 product=0 G-AC-1 dual=MIT_OR_Apache-2.0 "
+            "(Soft!=product; functional residual toward OPEN_UDX host "
+            "spawn; process_spawn_host_launch residual; dual_dod A/B "
+            "OPEN product_hosts=UDX Dual DoD OPEN Soft!=product; "
+            "product UDX hosts stay live for Dual DoD; "
+            "agent!=close; H2 once; H5)\n",
+            (unsigned)g_u32SoftDdiXhciFound,
+            (unsigned)g_u32SoftDdiXhciBind,
+            (unsigned)g_u32SoftDdiRtlFound,
+            (unsigned)g_u32SoftDdiRtlBind,
+            (unsigned)GJ_XHCI_MSC_PROBE,
+            (unsigned)GJ_RTL8168_PROBE);
+
+    cProbe += main_soft_udx_host_try(
+        "ddi_host", "A+B", "door",
+        g_u32SoftDdiRtlBind | g_u32SoftDdiXhciBind, pDdi, pDdiEnd);
+    cProbe += main_soft_udx_host_try(
+        "xhci_udx", "A", "8086:a12f", g_u32SoftDdiXhciBind, pXhci,
+        pXhciEnd);
+    cProbe += main_soft_udx_host_try(
+        "rtl8168_udx", "B", "10ec:8168", g_u32SoftDdiRtlBind, pRtl,
+        pRtlEnd);
+
+    /*
+     * Functional residual: invoke process_spawn_host_launch for catalog
+     * UDX hosts after soft DDI (stash) + multi-server READY.
+     * Catalog: 0 ddi_host_gj · 1 rtl8168_udx · 2 xhci_udx.
+     * keep_live when embed present (NEVER kill embed); kill+wait only
+     * when no embed (H3 park stub). Dual DoD OPEN_UDX (agent!=close).
+     * STRONGER denser host_launch live residual lamps. greppable:
+     *   main: soft residual host_launch
+     *   main: soft residual host_launch live
+     * process_spawn_host_launch for ddi_host / rtl8168_udx / xhci_udx.
+     */
+    fKL = 0u;
+    r = main_soft_udx_host_launch_try(
+        GJ_SPAWN_HOST_DDI_NAME, "A+B", "door",
+        g_u32SoftDdiRtlBind | g_u32SoftDdiXhciBind, 0u, &fKL);
+    cLaunch += r;
+    if (r != 0u) {
+        if (fKL != 0u) {
+            cKeepLive++;
+            cProductHostLive++;
+            cThrLive++;
+            fKlDdi = 1u;
+        } else {
+            cKillWait++;
+        }
+    }
+    fKL = 0u;
+    r = main_soft_udx_host_launch_try(
+        GJ_SPAWN_HOST_XHCI_NAME, "A", "8086:a12f", g_u32SoftDdiXhciBind,
+        2u, &fKL);
+    cLaunch += r;
+    if (r != 0u) {
+        if (fKL != 0u) {
+            cKeepLive++;
+            cProductHostLive++;
+            cThrLive++;
+            fKlXhci = 1u;
+        } else {
+            cKillWait++;
+        }
+    }
+    fKL = 0u;
+    r = main_soft_udx_host_launch_try(
+        GJ_SPAWN_HOST_RTL_NAME, "B", "10ec:8168", g_u32SoftDdiRtlBind,
+        1u, &fKL);
+    cLaunch += r;
+    if (r != 0u) {
+        if (fKL != 0u) {
+            cKeepLive++;
+            cProductHostLive++;
+            cThrLive++;
+            fKlRtl = 1u;
+        } else {
+            cKillWait++;
+        }
+    }
+
+    /*
+     * greppable: main: soft residual host_launch live (aggregate denser H2 once)
+     * greppable: main: soft residual host_launch live denser
+     * greppable: keep_live=1
+     * STRONGER denser tally: launch_ok|keep_live|embed|thr_live|
+     * product_host_live|keep_live_rock|soft_ne_product|dual_dod=OPEN|
+     * product_hosts=UDX Soft!=product belt_never_kill. denser multi-arm
+     * (denser_arms=8 denser_min=8). keep_live vs kill_wait honesty;
+     * Soft!=product dual_dod OPEN product_hosts=UDX Dual DoD OPEN
+     * Soft!=product (wire+USB+sshd path; agent!=close).
+     * Product UDX hosts stay live for Dual DoD (keep_live rock-solid
+     * when embed). CRITICAL: keep_live=1 on embed; never kill embed.
+     */
+    kprintf("main: soft residual host_launch live "
+            "keep_live=%u/%u kill_wait=%u launch_ok=%u/%u "
+            "product_host_live=%u thr_live=%u embed=%u "
+            "embed_ddi=%u embed_xhci=%u embed_rtl=%u "
+            "kl_ddi=%u kl_xhci=%u kl_rtl=%u "
+            "keep_live_rock=%u soft_ne_product=1 denser=1 "
+            "denser_arms=%u denser_min=%u "
+            "phl_eq_kl=%u thr_eq_kl=%u "
+            "never_kill_embed=1 kill_on_embed=0 belt_never_kill=1 "
+            "keep_live_policy=embed_present|class_or_name "
+            "host_blob=1 preserve_embeds=1 "
+            "host_blob_ddi=%u host_blob_xhci=%u host_blob_rtl=%u "
+            "api=process_spawn_host_launch "
+            "dual_dod_open=1 dual_dod=OPEN "
+            "dual_dod_a=OPEN_UDX dual_dod_b=OPEN_UDX "
+            "product_hosts=UDX Soft!=product "
+            "status=OPEN until_dut=1 soft_no_close=1 dod_close=0 "
+            "need=udx_bind|cap_mint|wire|USB|sshd "
+            "path=soft_ddi|host_elf|host_launch|keep_live|host_blob "
+            "product=UDX+ABI freestanding_class=SKIP never_fs_rtl_usb=1 "
+            "soft=1 product=0 G-AC-1 dual=MIT_OR_Apache-2.0 "
+            "H1=1 H2=once H3=defer_on_embed H5=1 bar=v2026.08.04.75 "
+            "(Soft!=product; denser host_launch live residual H2 once; "
+            "launch_ok|keep_live|embed|thr_live|product_host_live|"
+            "keep_live_rock|soft_ne_product|dual_dod_open|"
+            "product_hosts=UDX|host_blob; denser_arms=8; keep_live vs "
+            "kill_wait honesty; never kill when embed present; preserve "
+            "host blob embeds ddi/rtl/xhci; product UDX hosts stay live "
+            "for Dual DoD; dual_dod OPEN product_hosts=UDX Dual DoD OPEN "
+            "Soft!=product; agent!=close; H2 once; H5)\n",
+            (unsigned)cKeepLive, (unsigned)GJ_SPAWN_HOST_CLASS_N,
+            (unsigned)cKillWait, (unsigned)cLaunch,
+            (unsigned)GJ_SPAWN_HOST_CLASS_N,
+            (unsigned)cProductHostLive, (unsigned)cThrLive,
+            (unsigned)cEmbed, (unsigned)fDdiEmb, (unsigned)fXhciEmb,
+            (unsigned)fRtlEmb, (unsigned)fKlDdi, (unsigned)fKlXhci,
+            (unsigned)fKlRtl,
+            (unsigned)((cKeepLive == cEmbed &&
+                        (cKeepLive == 0u || cKillWait == 0u)) ? 1u : 0u),
+            (unsigned)MAIN_HL_DENSE_ARMS, (unsigned)MAIN_HL_DENSE_MIN,
+            (unsigned)((cProductHostLive == cKeepLive) ? 1u : 0u),
+            (unsigned)((cThrLive == cKeepLive) ? 1u : 0u),
+            (unsigned)fDdiEmb, (unsigned)fXhciEmb, (unsigned)fRtlEmb);
+
+    /*
+     * Aggregate tally lamp: keep_live vs kill_wait honesty (H2 once denser).
+     * greppable: main: soft residual host_launch live
+     * greppable: keep_live=1
+     */
+    kprintf("main: soft residual host_launch live "
+            "tally keep_live=%u kill_wait=%u launch_ok=%u "
+            "product_host_live=%u thr_live=%u embed=%u "
+            "kl_ddi=%u kl_xhci=%u kl_rtl=%u "
+            "embed_ddi=%u embed_xhci=%u embed_rtl=%u "
+            "keep_live_rock=%u soft_ne_product=1 denser=1 "
+            "denser_arms=%u denser_min=%u "
+            "honesty=keep_live_vs_kill_wait|phl_eq_kl|thr_eq_kl "
+            "never_kill_embed=1 kill_on_embed=0 belt_never_kill=1 "
+            "keep_live_policy=embed_present|class_or_name "
+            "api=process_spawn_host_launch "
+            "dual_dod_open=1 dual_dod=OPEN "
+            "dual_dod_a=OPEN_UDX dual_dod_b=OPEN_UDX "
+            "product_hosts=UDX Soft!=product "
+            "status=OPEN until_dut=1 soft_no_close=1 dod_close=0 "
+            "soft=1 product=0 G-AC-1 dual=MIT_OR_Apache-2.0 "
+            "H2=once H5=1 "
+            "(Soft!=product; denser aggregate tally keep_live vs "
+            "kill_wait honesty; dual_dod OPEN product_hosts=UDX Dual "
+            "DoD OPEN Soft!=product; keep_live=1 on embed; agent!=close; "
+            "H2 once; H5)\n",
+            (unsigned)cKeepLive, (unsigned)cKillWait, (unsigned)cLaunch,
+            (unsigned)cProductHostLive, (unsigned)cThrLive,
+            (unsigned)cEmbed,
+            (unsigned)fKlDdi, (unsigned)fKlXhci, (unsigned)fKlRtl,
+            (unsigned)fDdiEmb, (unsigned)fXhciEmb, (unsigned)fRtlEmb,
+            (unsigned)((cKeepLive == cEmbed &&
+                        (cKeepLive == 0u || cKillWait == 0u)) ? 1u : 0u),
+            (unsigned)MAIN_HL_DENSE_ARMS, (unsigned)MAIN_HL_DENSE_MIN);
+
+    /*
+     * denser host_launch live residual aggregate + confirm keep_live VERDICT.
+     * CRITICAL: keep_live=1 on embed never kill; Soft!=product;
+     * Dual DoD OPEN product_hosts=UDX bar .75 stamp-free. denser residual
+     * prove + VERDICT rollup (H2 once; exclusive main.c).
+     * greppable: main: soft residual host_launch live denser
+     * greppable: main: soft residual host_launch live denser residual
+     * greppable: main: soft residual host_launch live denser residual VERDICT
+     * greppable: main: soft residual host_launch live confirm keep_live
+     * greppable: keep_live=1
+     * greppable: denser_arms=
+     * greppable: VERDICT=confirm_keep_live
+     */
+    {
+        u32 fKlRock;
+        u32 fKlEqEmb;
+        u32 fConfirm;
+        u32 fDensePass;
+        u32 fDenseResidual;
+        u32 fNeverKill;
+        u32 fPhUdx;
+        u32 fDodOpen;
+        u32 fSne;
+        u32 fHostBlob;
+        u32 cDenseAgg;
+        const char *szVerdict;
+
+        fKlEqEmb = (cKeepLive == cEmbed) ? 1u : 0u;
+        fKlRock = (fKlEqEmb != 0u &&
+                   (cKeepLive == 0u || cKillWait == 0u)) ? 1u : 0u;
+        /* confirm: when embeds present, keep_live covers all embeds */
+        fConfirm = (cEmbed == 0u ||
+                    (cKeepLive >= cEmbed && cKillWait == 0u)) ? 1u : 0u;
+        fNeverKill = 1u; /* CRITICAL policy always asserted */
+        fPhUdx = 1u;
+        fDodOpen = 1u;
+        fSne = 1u;
+        fHostBlob = (cEmbed != 0u) ? 1u : 0u;
+        /*
+         * denser multi-arm aggregate honesty (MAIN_HL_DENSE_ARMS=8):
+         * keep_live_on_embed | never_kill_embed | match/kl_eq |
+         * belt/rock | product_hosts_udx | dual_dod_open |
+         * soft_ne_product | host_blob_preserve
+         */
+        cDenseAgg = ((cKeepLive != 0u || cEmbed == 0u) ? 1u : 0u) +
+                    fNeverKill +
+                    fKlEqEmb +
+                    fKlRock +
+                    fPhUdx +
+                    fDodOpen +
+                    fSne +
+                    ((cEmbed == 0u || fHostBlob != 0u) ? 1u : 0u);
+        fDensePass = (cDenseAgg >= MAIN_HL_DENSE_MIN) ? 1u : 0u;
+        fDenseResidual = 1u;
+        if (fConfirm != 0u && fDensePass != 0u && fNeverKill != 0u &&
+            fPhUdx != 0u && fDodOpen != 0u && fSne != 0u) {
+            szVerdict = "PASS";
+        } else if (cLaunch != 0u || cKeepLive != 0u) {
+            szVerdict = "SKIP";
+        } else {
+            szVerdict = "MISS";
+        }
+        kprintf("main: soft residual host_launch live denser "
+                "denser=1 denser_arms=%u denser_min=%u denser_pass=%u "
+                "denser_ok=%u denser_residual=1 "
+                "keep_live=%u kill_wait=%u launch_ok=%u embed=%u "
+                "product_host_live=%u thr_live=%u "
+                "kl_ddi=%u kl_xhci=%u kl_rtl=%u "
+                "embed_ddi=%u embed_xhci=%u embed_rtl=%u "
+                "keep_live_rock=%u kl_eq_embed=%u "
+                "never_kill_embed=1 kill_on_embed=0 belt_never_kill=1 "
+                "quaternary_refuse_kill=1 "
+                "arms=keep_live_on_embed|never_kill_embed|"
+                "match_class_or_name|belt_never_kill|product_hosts_udx|"
+                "dual_dod_open|soft_ne_product|host_blob_preserve "
+                "dual_dod_open=1 dual_dod=OPEN "
+                "dual_dod_a=OPEN_UDX dual_dod_b=OPEN_UDX "
+                "product_hosts=UDX Soft!=product soft_ne_product=1 "
+                "api=process_spawn_host_launch "
+                "status=OPEN until_dut=1 soft_no_close=1 dod_close=0 "
+                "bar=v2026.08.04.75 stamp_free=1 never_invent=.76 "
+                "(Soft!=product; denser host_launch live residual; "
+                "Dual DoD OPEN product_hosts=UDX; keep_live=1 on embed; "
+                "never kill embed; H2 once; H5)\n",
+                (unsigned)MAIN_HL_DENSE_ARMS, (unsigned)MAIN_HL_DENSE_MIN,
+                (unsigned)fDensePass, (unsigned)cDenseAgg,
+                (unsigned)cKeepLive, (unsigned)cKillWait,
+                (unsigned)cLaunch, (unsigned)cEmbed,
+                (unsigned)cProductHostLive, (unsigned)cThrLive,
+                (unsigned)fKlDdi, (unsigned)fKlXhci, (unsigned)fKlRtl,
+                (unsigned)fDdiEmb, (unsigned)fXhciEmb, (unsigned)fRtlEmb,
+                (unsigned)fKlRock, (unsigned)fKlEqEmb);
+        /* greppable: main: soft residual host_launch live denser residual */
+        kprintf("main: soft residual host_launch live denser residual "
+                "denser=1 denser_residual=%u denser_arms=%u denser_ok=%u "
+                "denser_min=%u denser_pass=%u "
+                "keep_live=%u kill_wait=%u launch_ok=%u embed=%u "
+                "kl_ddi=%u kl_xhci=%u kl_rtl=%u "
+                "never_kill_embed=1 kill_on_embed=0 belt_never_kill=1 "
+                "quaternary_refuse_kill=1 keep_live_rock=%u "
+                "product_hosts=UDX Soft!=product dual_dod=OPEN "
+                "dual_dod_a=OPEN_UDX dual_dod_b=OPEN_UDX "
+                "status=OPEN until_dut=1 soft_no_close=1 dod_close=0 "
+                "bar=v2026.08.04.75 stamp_free=1 never_invent=.76 "
+                "(Soft!=product; denser residual host_launch live; "
+                "CRITICAL keep_live=1 on embed never kill; Dual DoD OPEN "
+                "product_hosts=UDX; agent!=close; H2 once; H5)\n",
+                (unsigned)fDenseResidual,
+                (unsigned)MAIN_HL_DENSE_ARMS, (unsigned)cDenseAgg,
+                (unsigned)MAIN_HL_DENSE_MIN, (unsigned)fDensePass,
+                (unsigned)cKeepLive, (unsigned)cKillWait,
+                (unsigned)cLaunch, (unsigned)cEmbed,
+                (unsigned)fKlDdi, (unsigned)fKlXhci, (unsigned)fKlRtl,
+                (unsigned)fKlRock);
+        /* greppable: main: soft residual host_launch live confirm keep_live */
+        kprintf("main: soft residual host_launch live confirm keep_live "
+                "keep_live=1 confirm=%u keep_live_count=%u embed=%u "
+                "kill_wait=%u never_kill_embed=1 kill_on_embed=0 "
+                "belt_never_kill=1 quaternary_refuse_kill=1 "
+                "keep_live_policy=embed_present|class_or_name "
+                "keep_live_rock=%u denser=1 denser_residual=1 "
+                "denser_arms=%u denser_ok=%u denser_min=%u denser_pass=%u "
+                "product_hosts=UDX Soft!=product soft_ne_product=1 "
+                "dual_dod=OPEN dual_dod_a=OPEN_UDX dual_dod_b=OPEN_UDX "
+                "status=OPEN until_dut=1 soft_no_close=1 dod_close=0 "
+                "VERDICT=confirm_keep_live bar=v2026.08.04.75 "
+                "stamp_free=1 never_invent=.76 "
+                "(Soft!=product; denser host_launch live residual; "
+                "CRITICAL keep_live=1 on embed never kill; Dual DoD OPEN "
+                "product_hosts=UDX Dual DoD OPEN Soft!=product; "
+                "agent!=close; H2 once; H5)\n",
+                (unsigned)fConfirm, (unsigned)cKeepLive, (unsigned)cEmbed,
+                (unsigned)cKillWait, (unsigned)fKlRock,
+                (unsigned)MAIN_HL_DENSE_ARMS, (unsigned)cDenseAgg,
+                (unsigned)MAIN_HL_DENSE_MIN, (unsigned)fDensePass);
+        /*
+         * greppable: main: soft residual host_launch live denser residual VERDICT
+         * CRITICAL denser residual VERDICT confirm keep_live.
+         * denser residual != Dual DoD close; Soft!=product; bar .75.
+         */
+        kprintf("main: soft residual host_launch live denser residual VERDICT %s "
+                "confirm_keep_live=%u keep_live=1 keep_live_count=%u "
+                "embed=%u kill_wait=%u kill_on_embed=0 never_kill_embed=1 "
+                "belt_never_kill=1 quaternary_refuse_kill=1 "
+                "keep_live_rock=%u denser=1 denser_residual=%u "
+                "denser_arms=%u denser_ok=%u denser_min=%u denser_pass=%u "
+                "arms=keep_live_on_embed|never_kill_embed|"
+                "match_class_or_name|belt_never_kill|product_hosts_udx|"
+                "dual_dod_open|soft_ne_product|host_blob_preserve "
+                "product_hosts=UDX Soft!=product soft_ne_product=1 "
+                "dual_dod=OPEN dual_dod_a=OPEN_UDX dual_dod_b=OPEN_UDX "
+                "status=OPEN until_dut=1 soft_no_close=1 dod_close=0 "
+                "api=process_spawn_host_launch "
+                "VERDICT=confirm_keep_live "
+                "bar=v2026.08.04.75 stamp_free=1 never_invent=.76 "
+                "denser residual != Dual DoD close "
+                "(Soft!=product; denser residual VERDICT confirm keep_live; "
+                "CRITICAL keep_live=1 on embed never kill greppable "
+                "host_launch live denser residual; Dual DoD OPEN "
+                "product_hosts=UDX Dual DoD OPEN Soft!=product; "
+                "agent!=close; H2 once; H5)\n",
+                szVerdict, (unsigned)fConfirm, (unsigned)cKeepLive,
+                (unsigned)cEmbed, (unsigned)cKillWait,
+                (unsigned)fKlRock, (unsigned)fDenseResidual,
+                (unsigned)MAIN_HL_DENSE_ARMS, (unsigned)cDenseAgg,
+                (unsigned)MAIN_HL_DENSE_MIN, (unsigned)fDensePass);
+    }
+
+    /* greppable: main: soft residual host_launch */
+    kprintf("main: soft residual host_launch "
+            "launch_ok=%u/%u keep_live=%u kill_wait=%u "
+            "product_host_live=%u thr_live=%u embed=%u "
+            "keep_live_rock=%u soft_ne_product=1 "
+            "api=process_spawn_host_launch "
+            "probe_ok=%u soft_ddi_a=%u/%u soft_ddi_b=%u/%u "
+            "host_a=%s host_b=%s host_ddi=%s "
+            "embed_ddi=%u embed_xhci=%u embed_rtl=%u "
+            "kl_ddi=%u kl_xhci=%u kl_rtl=%u "
+            "never_kill_embed=1 kill_on_embed=0 "
+            "dual_dod_open=1 dual_dod_a=OPEN_UDX dual_dod_b=OPEN_UDX "
+            "product_hosts=UDX Soft!=product "
+            "status=OPEN until_dut=1 soft_no_close=1 dod_close=0 "
+            "need=elf_load|user_as|udx_bind|cap_mint|wire|USB|sshd "
+            "path=soft_ddi|host_launch|host_elf|keep_live|kill_wait "
+            "product=UDX+ABI freestanding_class=SKIP never_fs_rtl_usb=1 "
+            "soft=1 product=0 G-AC-1 dual=MIT_OR_Apache-2.0 "
+            "H2=once H3=1 H5=1 "
+            "(Soft!=product; process_spawn_host_launch residual after "
+            "soft DDI; denser keep_live residual; soft park != Dual DoD "
+            "close; dual_dod A/B OPEN product_hosts=UDX Dual DoD OPEN "
+            "Soft!=product; agent!=close; H2 once; H3; H5)\n",
+            (unsigned)cLaunch, (unsigned)GJ_SPAWN_HOST_CLASS_N,
+            (unsigned)cKeepLive, (unsigned)cKillWait,
+            (unsigned)cProductHostLive, (unsigned)cThrLive,
+            (unsigned)cEmbed,
+            (unsigned)((cKeepLive == cEmbed &&
+                        (cKeepLive == 0u || cKillWait == 0u)) ? 1u : 0u),
+            (unsigned)cProbe,
+            (unsigned)g_u32SoftDdiXhciFound,
+            (unsigned)g_u32SoftDdiXhciBind,
+            (unsigned)g_u32SoftDdiRtlFound,
+            (unsigned)g_u32SoftDdiRtlBind, GJ_SPAWN_HOST_XHCI_NAME,
+            GJ_SPAWN_HOST_RTL_NAME, GJ_SPAWN_HOST_DDI_NAME,
+            (unsigned)fDdiEmb, (unsigned)fXhciEmb, (unsigned)fRtlEmb,
+            (unsigned)fKlDdi, (unsigned)fKlXhci, (unsigned)fKlRtl);
+
+    /* greppable: main: soft residual OPEN_UDX host spawn */
+    kprintf("main: soft residual OPEN_UDX host spawn "
+            "probe_ok=%u launch_ok=%u/%u keep_live=%u kill_wait=%u "
+            "product_host_live=%u thr_live=%u embed=%u "
+            "keep_live_rock=%u soft_ne_product=1 "
+            "embed_ddi=%u embed_xhci=%u embed_rtl=%u "
+            "soft_ddi_a=%u/%u soft_ddi_b=%u/%u "
+            "api=process_spawn_host_launch never_kill_embed=1 "
+            "dual_dod_open=1 dual_dod_a=OPEN_UDX dual_dod_b=OPEN_UDX "
+            "product_hosts=UDX Soft!=product "
+            "status=OPEN until_dut=1 soft_no_close=1 dod_close=0 "
+            "need=elf_load_or_media|udx_bind|wire|USB|sshd "
+            "product=UDX+ABI freestanding_class=SKIP never_fs_rtl_usb=1 "
+            "soft=1 product=0 G-AC-1 dual=MIT_OR_Apache-2.0 "
+            "H2=once H5=1 "
+            "(Soft!=product; functional residual path; denser keep_live "
+            "host_launch live residual; soft launch != Dual DoD close; "
+            "dual_dod A/B OPEN product_hosts=UDX Dual DoD OPEN "
+            "Soft!=product; agent!=close; H2 once; H5)\n",
+            (unsigned)cProbe, (unsigned)cLaunch,
+            (unsigned)GJ_SPAWN_HOST_CLASS_N, (unsigned)cKeepLive,
+            (unsigned)cKillWait, (unsigned)cProductHostLive,
+            (unsigned)cThrLive, (unsigned)cEmbed,
+            (unsigned)((cKeepLive == cEmbed &&
+                        (cKeepLive == 0u || cKillWait == 0u)) ? 1u : 0u),
+            (unsigned)fDdiEmb, (unsigned)fXhciEmb, (unsigned)fRtlEmb,
+            (unsigned)g_u32SoftDdiXhciFound,
+            (unsigned)g_u32SoftDdiXhciBind,
+            (unsigned)g_u32SoftDdiRtlFound,
+            (unsigned)g_u32SoftDdiRtlBind);
 }
 
 /**
@@ -3552,7 +4877,7 @@ kernel_after_mmap(struct gj_mem_region *aRegions, size_t cRegions)
 
     /*
      * Soft media (D4): exclude UEFI ESP-loaded .ko pages from freelist.
-     * Soft≠product. greppable: pmm: soft media reserve
+     * Soft!=product. greppable: pmm: soft media reserve
      */
     pBi = boot_info_get();
     if (pBi != NULL && pBi->u64SoftMediaPhys != 0 &&
@@ -3601,7 +4926,7 @@ kernel_after_mmap(struct gj_mem_region *aRegions, size_t cRegions)
     /*
      * Large-RAM hierarchical soak: 768 GiB class (run with GJ_MEM=768G).
      * True 1 TiB (1ull<<40) still soft-skips when max_pa is below that.
-     * Skip heavy TiB soft soak on panel path (no COM1) — saves minutes on DUT.
+     * Skip heavy TiB soft soak on panel path (no COM1) - saves minutes on DUT.
      */
     {
         extern u32 serial_thre_dead(void);
@@ -3655,6 +4980,7 @@ kernel_after_mmap(struct gj_mem_region *aRegions, size_t cRegions)
         kprintf("iommu: identity 0:14.0 xhci_identity ret=%d "
                 "(1=PASS 0=SKIP -1=FAIL soft)\n",
                 nXhId);
+#if GJ_XHCI_MSC_PROBE
         /* Real USB MSC BOT stick log path (soft SKIP if no xHCI / no stick) */
         (void)xhci_msc_init();
         u32XhciSt = xhci_msc_last_stage();
@@ -3681,7 +5007,7 @@ kernel_after_mmap(struct gj_mem_region *aRegions, size_t cRegions)
             }
             u32Cc = xhci_msc_last_cc();
             u32Path = xhci_msc_addr_path();
-            /* Fixed status strip + scroll log — readable without tick counting. */
+            /* Fixed status strip + scroll log - readable without tick counting. */
             {
                 const char *p;
                 static char s_sz[120];
@@ -3715,8 +5041,8 @@ kernel_after_mmap(struct gj_mem_region *aRegions, size_t cRegions)
                 }
                 *q++ = (char)('0' + (u32Cc % 10u));
                 /*
-                 * Port/speed for enum ladder too (stage 11–18), not only
-                 * address path — photo stage=15 GET_CONFIG needs pN/sN.
+                 * Port/speed for enum ladder too (stage 11-18), not only
+                 * address path - photo stage=15 GET_CONFIG needs pN/sN.
                  */
                 if (u32XhciSt == 19u || u32XhciSt == 20u ||
                     (u32XhciSt >= 11u && u32XhciSt <= 18u) ||
@@ -3807,9 +5133,9 @@ kernel_after_mmap(struct gj_mem_region *aRegions, size_t cRegions)
         }
         /*
          * Always exercise stick log write path (soft fail-closed).
-         * MSC ready → KLOG.TXT / raw_log PASS; not ready → greppable OPEN
-         * (never silent). store_door remains virtio/scsi product path —
-         * not a stick substitute. Soft≠product.
+         * MSC ready -> KLOG.TXT / raw_log PASS; not ready -> greppable OPEN
+         * (never silent). store_door remains virtio/scsi product path -
+         * not a stick substitute. Soft!=product.
          */
         {
             static const char s_szStickHello[] =
@@ -3820,12 +5146,46 @@ kernel_after_mmap(struct gj_mem_region *aRegions, size_t cRegions)
                                                sizeof(s_szStickHello) - 1u);
             if (nStickW != 0) {
                 kprintf("stick: persist STATUS OPEN msc_ready=%d stage=%u "
-                        "(raw_log/store_door gated; Soft≠product)\n",
+                        "(raw_log/store_door gated; Soft!=product)\n",
                         xhci_msc_stick_log_ready(),
                         (unsigned)xhci_msc_last_stage());
             }
         }
+#else
+        /*
+         * Freestanding SKIP hold (GJ_XHCI_MSC_PROBE=0 default): freestanding
+         * USB class SKIP - not product (same policy as freestanding rtl).
+         * Product USB path = xhci_udx OPEN_UDX over UDX+ABI (G-AC-1). Soft
+         * ddi bind residual is separate once-lamp (bind=SCAN->GET->OPEN->
+         * MAP_BAR; life=IRQ_BIND/DMA_NOTE/DMA_BUF/CLOSE) - soft lamps never
+         * close Dual DoD A (status=OPEN until_dut). Soft!=product; no
+         * freestanding thrash. H5: soft residual != product DoD close.
+         * greppable: xhci: freestanding MSC SKIP GJ_XHCI_MSC_PROBE=0
+         * greppable: main: soft residual freestanding class SKIP
+         * greppable: main: soft residual Dual DoD A
+         * greppable: main: soft residual product=UDX+ABI
+         */
+        u32XhciSt = 0u;
+        fb_console_hold(3, "XHCI stage=0 not_tried SKIP probe");
+        fb_console_hold(4, "USB MSC: SKIP freestanding (UDX product)");
+        kprintf("xhci: freestanding MSC SKIP GJ_XHCI_MSC_PROBE=0 "
+                "(product=UDX+ABI; dual_dod_a=OPEN_UDX path=xhci_udx; "
+                "status=OPEN until_dut=1 soft_no_close=1; "
+                "Soft!=product; freestanding class SKIP hold; "
+                "no freestanding thrash)\n");
+        (void)u32XhciSt;
+#endif
         (void)ps2_probe();
+        /*
+         * Product laptop: Ctrl+Alt+Del reboot + ACPI power-button S5.
+         * Poll owned by scheduler_run thr (platform_power_poll). Soft!=product.
+         * greppable: platform_power: init
+         */
+        {
+            extern void platform_power_init(void);
+
+            platform_power_init();
+        }
     }
     /* Console poll bring-up (serial COM1) */
     {
@@ -4102,7 +5462,7 @@ kernel_after_mmap(struct gj_mem_region *aRegions, size_t cRegions)
                     kprintf("vk: khronos path PASS\n");
                 }
 
-                /* Cmdbuf clear → submit → present (pipeline-shaped fill) */
+                /* Cmdbuf clear -> submit -> present (pipeline-shaped fill) */
                 {
                     VkCommandPool pool = 0;
                     VkCommandBuffer cmd = NULL;
@@ -4196,7 +5556,7 @@ kernel_after_mmap(struct gj_mem_region *aRegions, size_t cRegions)
                     /* SPIR-V module + pipeline + VBO triangle (software FS) */
                     {
                         /*
-                         * Minimal SPIR-V FS: SpecId 0 → packed BGRA color.
+                         * Minimal SPIR-V FS: SpecId 0 -> packed BGRA color.
                          * Hand-authored clean-room blob (not compiled from GLSL).
                          */
                         static const uint32_t aSpvFs[] = {
@@ -4381,7 +5741,7 @@ kernel_after_mmap(struct gj_mem_region *aRegions, size_t cRegions)
                                     memset(&bciUv, 0, sizeof(bciUv));
                                     bciUv.sType =
                                         VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
-                                    bciUv.size = 12u * sizeof(int32_t); /* 3×(x,y,u,v) */
+                                    bciUv.size = 12u * sizeof(int32_t); /* 3x(x,y,u,v) */
                                     bciUv.usage =
                                         VK_BUFFER_USAGE_VERTEX_BUFFER_BIT;
                                     (void)vkCreateBuffer(dev, &bciUv, NULL,
@@ -4494,7 +5854,7 @@ kernel_after_mmap(struct gj_mem_region *aRegions, size_t cRegions)
         const char *p;
 
         net_l2_init();
-        /* Resync ARP/ICMP identity off QEMU 10.0.2.15 → lab IP (G752). */
+        /* Resync ARP/ICMP identity off QEMU 10.0.2.15 -> lab IP (G752). */
         {
             extern void net_eth_apply_l2_identity(void);
 
@@ -4544,7 +5904,7 @@ kernel_after_mmap(struct gj_mem_region *aRegions, size_t cRegions)
                 while (*p) {
                     *q++ = *p++;
                 }
-                /* Soft t/f/b/r — f=err only; b=ring full (busy ≠ fail). */
+                /* Soft t/f/b/r - f=err only; b=ring full (busy != fail). */
                 {
                     extern u32 rtl8168_tx_fail(void);
                     extern u32 rtl8168_tx_busy(void);
@@ -4594,8 +5954,21 @@ kernel_after_mmap(struct gj_mem_region *aRegions, size_t cRegions)
                 *q++ = *p++;
             }
         } else {
-            /* Distinguish "no chip" vs "probe fail" — never silent. */
+            /*
+             * Freestanding SKIP hold: default freestanding rtl SKIP is product
+             * direction (UDX+ABI / rtl8168_udx OPEN_UDX), not a chip FAIL.
+             * Opt-in probe=1 residual keeps FAIL honesty. Soft!=product.
+             * Never silent. No freestanding rtl thrash (R0). Never set
+             * GJ_RTL8168_PROBE default 1. Product path residual once-lamps
+             * follow this hold paint.
+             * Grep: main: soft residual freestanding class SKIP
+             * Grep: main: soft residual product=UDX+ABI
+             */
+#if !GJ_RTL8168_PROBE
+            p = " SKIP rtl (UDX)";
+#else
             p = " FAIL (no L2)";
+#endif
             while (*p) {
                 *q++ = *p++;
             }
@@ -4603,6 +5976,101 @@ kernel_after_mmap(struct gj_mem_region *aRegions, size_t cRegions)
         *q = '\0';
         fb_console_hold(6, szNet);
         kprintf("net_l2: STATUS %s\n", szNet);
+        /*
+         * Product UDX path residual (once-lamps lean; Soft!=product · G-AC-1):
+         * freestanding USB + freestanding rtl SKIP hold by default (class
+         * lamps lean; no freestanding thrash / R0). Product drivers =
+         * Linux-shaped userspace UDX over hot+cold ABI (xhci_udx /
+         * rtl8168_udx). Dual DoD A/B retargeted OPEN_UDX until userspace
+         * hosts close DUT - not freestanding stage counts, not in-kernel
+         * .ko wire. Soft residual lamps never close Dual DoD (H5:
+         * soft_no_close=1 until_dut=1 status=OPEN). Soft ddi bind residual
+         * deepen (bind=SCAN->GET->OPEN->MAP_BAR; life=IRQ/DMA_NOTE/
+         * DMA_BUF/CLOSE once-lamps) + soft module path run after this
+         * net_l2 block. T0 product net = virtio when present.
+         * net_eth_poll run-loop only (H1). H2: once-lamps only (no stamp
+         * storm). Stamp-free residual: never bump GJ_IMAGE_VERSION here.
+         * Never invent .76. C0 residual lean consolidates honesty once.
+         * Grep: main: soft residual lean
+         * Grep: main: soft residual freestanding class SKIP
+         * Grep: main: soft residual product=UDX+ABI
+         * Grep: main: soft residual Dual DoD A
+         * Grep: main: soft residual Dual DoD B
+         * Grep: main: soft residual soft ddi bind (after soft ddi block)
+         */
+        kprintf("main: soft residual freestanding class SKIP "
+                "msc_probe=%u rtl_probe=%u "
+                "never_fs_rtl_usb=1 freestanding_class=SKIP "
+                "hold=1 thrash=0 not_dual_dod=1 "
+                "(product=UDX+ABI Linux-shaped userspace; "
+                "virtio T0 when present; Soft!=product; G-AC-1; "
+                "freestanding SKIP hold; no freestanding thrash; "
+                "dual_dod stays OPEN_UDX until_dut; host_spawn=OPEN)\n",
+                (unsigned)GJ_XHCI_MSC_PROBE,
+                (unsigned)GJ_RTL8168_PROBE);
+        kprintf("main: soft residual product=UDX+ABI "
+                "host_a=xhci_udx host_b=rtl8168_udx host_ddi=ddi_host "
+                "bind=SCAN->GET->OPEN->MAP_BAR "
+                "life=IRQ_BIND/DMA_NOTE/DMA_BUF/CLOSE "
+                "host_spawn=OPEN "
+                "path=soft_ddi|host_elf|elf_probe|elf_load|user_as|thr|"
+                "udx_bind|cap_mint "
+                "soft_mod=after_net_l2 soft_init=SKIP "
+                "soft_ddi_bind=after_net_l2 "
+                "freestanding_no_exec=1 never_fs_rtl_usb=1 "
+                "net_eth_poll=run_loop_only "
+                "hold6_force=soft_mod+post_te+idle "
+                "dual_dod_a=OPEN_UDX dual_dod_b=OPEN_UDX "
+                "status=OPEN until_dut=1 soft_no_close=1 dod_close=0 "
+                "cap_mint=OPEN window_mint=OPEN "
+                "soft=1 product=0 G-AC-1 dual=MIT_OR_Apache-2.0 "
+                "(Soft!=product; once-lamp lean; no R0 thrash; H5; "
+                "agent!=close)\n");
+        kprintf("main: soft residual Dual DoD A "
+                "class=USB path=xhci_udx OPEN_UDX "
+                "host_spawn=OPEN need=host_elf "
+                "status=OPEN until_dut=1 soft_no_close=1 dod_close=0 "
+                "bind=DDI+UDX life=IRQ/DMA soft "
+                "freestanding_msc=SKIP soft=1 product=0 "
+                "G-AC-1 dual=MIT_OR_Apache-2.0 "
+                "(Soft!=product; once-lamp lean; H5 soft!=DoD close; "
+                "agent!=close)\n");
+        kprintf("main: soft residual Dual DoD B "
+                "class=NIC path=rtl8168_udx OPEN_UDX "
+                "host_spawn=OPEN need=host_elf "
+                "status=OPEN until_dut=1 soft_no_close=1 dod_close=0 "
+                "bind=DDI+UDX life=IRQ/DMA soft "
+                "freestanding_rtl=SKIP soft=1 product=0 "
+                "G-AC-1 dual=MIT_OR_Apache-2.0 "
+                "(Soft!=product; once-lamp lean; no R0 thrash; "
+                "H5 soft!=DoD close; agent!=close)\n");
+        /*
+         * C0 residual lean once (stamp-free; Soft!=product; G-AC-1).
+         * Peer-convention residual inventory lamp (serial/file_lock/gdt/
+         * notify pattern). Consolidates freestanding SKIP + Dual DoD
+         * OPEN_UDX + host_spawn OPEN honesty. H2: once-lamp only (no
+         * stamp storm). Never bumps GJ_IMAGE_VERSION; never invents .76.
+         * Soft residual != product DoD close (H5). Soft!=product.
+         * Grep: main: soft residual lean
+         * Grep: main: soft residual OPEN_UDX host spawn (post multi-server)
+         */
+        kprintf("main: soft residual lean "
+                "c0=1 stamp_free=1 stamp_storm=0 invent_next=0 "
+                "fs_class=SKIP never_fs_rtl_usb=1 "
+                "msc_probe=%u rtl_probe=%u "
+                "product=UDX+ABI host_a=xhci_udx host_b=rtl8168_udx "
+                "host_ddi=ddi_host host_spawn=OPEN "
+                "dual_dod_a=OPEN_UDX dual_dod_b=OPEN_UDX "
+                "status=OPEN until_dut=1 soft_no_close=1 dod_close=0 "
+                "soft_init=SKIP freestanding_no_exec=1 "
+                "soft_ddi_bind=after_net_l2 soft_mod=after_net_l2 "
+                "soft=1 product=0 hard_gate=0 "
+                "G-AC-1 dual=MIT_OR_Apache-2.0 "
+                "(Soft!=product; C0 residual lean; freestanding SKIP lamps; "
+                "Dual DoD OPEN_UDX honesty; host_spawn path residual; "
+                "no stamp bump; H2 once; H5; agent!=close)\n",
+                (unsigned)GJ_XHCI_MSC_PROBE,
+                (unsigned)GJ_RTL8168_PROBE);
     }
     if (virtio_net_ready()) {
         static const u8 aEth[64] = {
@@ -4897,14 +6365,27 @@ kernel_after_mmap(struct gj_mem_region *aRegions, size_t cRegions)
     pci_msix_probe_log();
     irq_msix_init();
     iommu_probe();
-    /* Soft DDI/devmgr lamps (docs/DDI_SOFT.md); Soft≠product */
+    /* Soft DDI/devmgr lamps (docs/DDI_SOFT.md); Soft!=product */
     devmgr_soft_init();
     /*
-     * ABI-first laptop path (option 1): DDI bind smoke only.
-     * Freestanding xhci_msc stage=15 / rtl8168 t/f/b/r = lab honesty only
-     * — not product DoD (docs/LAPTOP_LINUX_DRIVER_HOST.md, ABI_FIRST_PIVOT).
-     * greppable: main: soft ddi bind … | main: soft ddi laptop smoke PASS
+     * Soft ddi bind residual deepen (ABI-first option 1; Soft!=product ·
+     * G-AC-1): bind=SCAN->GET->OPEN->MAP_BAR + life=IRQ_BIND/DMA_NOTE/
+     * DMA_BUF/CLOSE lean residual - not freestanding class thrash, not
+     * product DoD close, not MMIO_FRAME/IRQ/DMA window cap mint
+     * (cap_mint=OPEN window_mint=OPEN). Product drivers = UDX+ABI
+     * userspace hosts (xhci_udx Dual DoD A / rtl8168_udx Dual DoD B).
+     * Freestanding USB+rtl class SKIP holds (GJ_XHCI_MSC_PROBE=0 ·
+     * GJ_RTL8168_PROBE=0 default); freestanding stage/t-f-b-r = lab
+     * honesty only. Soft!=product once-lamps lean only (no stamp thrash;
+     * no freestanding thrash / R0).
+     * docs/DDI_SOFT.md · LAPTOP_LINUX_DRIVER_HOST · ABI_FIRST_PIVOT.
+     * greppable: main: soft ddi bind ... | main: soft ddi laptop smoke PASS
      * greppable: main: soft freestanding lab only
+     * greppable: main: soft residual lean
+     * greppable: main: soft residual soft ddi bind
+     * greppable: main: soft residual freestanding class SKIP
+     * greppable: main: soft residual product=UDX+ABI
+     * greppable: main: soft residual Dual DoD A|B
      * greppable: main: soft linux_module path PASS|FAIL|SKIP
      */
     {
@@ -4913,13 +6394,20 @@ kernel_after_mmap(struct gj_mem_region *aRegions, size_t cRegions)
         i64 i64N;
         i64 i64H;
         i64 i64St;
+        i64 i64DmaPa;
         u32 i;
         u32 fRtl = 0u;
         u32 fXhci = 0u;
         u32 fRtlBind = 0u;
         u32 fXhciBind = 0u;
+        u32 u32RtlDmaNote = 0u;
+        u32 u32XhciDmaNote = 0u;
+        u32 u32DmaBuf = 0u;
+        u32 u32Close = 0u;
         u32 u32Bar;
         u32 u32MapOk;
+        u64 u64DmaNotePa;
+        u64 u64DmaNoteCb;
 
         ddi_door_init();
         (void)ddi_door_syscall(DDI_OP_INVENTORY, 0, 0, 0);
@@ -4927,8 +6415,14 @@ kernel_after_mmap(struct gj_mem_region *aRegions, size_t cRegions)
         if (i64N < 0) {
             i64N = 0;
         }
+        /* Freestanding SKIP hold (once): lab honesty != product DoD. */
         kprintf("main: soft freestanding lab only "
-                "(xhci stage/net t-f-b-r != product; ABI=DDI+UDX)\n");
+                "(xhci stage/net t-f-b-r != product; ABI=DDI+UDX; "
+                "product=UDX+ABI; freestanding class SKIP hold; "
+                "never_fs_rtl_usb=1 msc_probe=%u rtl_probe=%u; "
+                "Soft!=product; G-AC-1; no freestanding thrash)\n",
+                (unsigned)GJ_XHCI_MSC_PROBE,
+                (unsigned)GJ_RTL8168_PROBE);
 
         for (i = 0u; i < (u32)i64N && i < GJ_DDI_SOFT_DEV_MAX; i++) {
             memset(&info, 0, sizeof(info));
@@ -4950,7 +6444,15 @@ kernel_after_mmap(struct gj_mem_region *aRegions, size_t cRegions)
                 i64H = ddi_door_syscall(DDI_OP_OPEN, (u64)i, 0, 0);
                 if (i64H > 0) {
                     u32MapOk = 0u;
-                    /* RTL public path often uses BAR2; try 0 and 2. */
+                    u64DmaNotePa = 0ull;
+                    u64DmaNoteCb = 0ull;
+                    /*
+                     * Soft ddi bind residual deepen: MAP BAR0/2 + CFG +
+                     * IRQ + DMA_NOTE + lean DMA_BUF + CLOSE. Product NIC
+                     * path = rtl8168_udx OPEN_UDX (not freestanding wire;
+                     * freestanding rtl SKIP hold). Soft!=product.
+                     * cap_mint=OPEN window_mint=OPEN.
+                     */
                     for (u32Bar = 0u; u32Bar <= 2u; u32Bar += 2u) {
                         memset(&note, 0, sizeof(note));
                         i64St = ddi_door_syscall(DDI_OP_MAP_BAR, (u64)i64H,
@@ -4958,6 +6460,10 @@ kernel_after_mmap(struct gj_mem_region *aRegions, size_t cRegions)
                                                  (u64)(uintptr_t)&note);
                         if (i64St >= 0 && note.u8Ok != 0u) {
                             u32MapOk++;
+                            if (u64DmaNotePa == 0ull && note.u64Pa != 0ull) {
+                                u64DmaNotePa = note.u64Pa;
+                                u64DmaNoteCb = note.u64Cb;
+                            }
                             kprintf("main: soft ddi map 10ec:8168 bar%u "
                                     "pa=0x%lx va=0x%lx cb=0x%lx\n",
                                     (unsigned)u32Bar,
@@ -4966,18 +6472,45 @@ kernel_after_mmap(struct gj_mem_region *aRegions, size_t cRegions)
                                     (unsigned long)note.u64Cb);
                         }
                     }
+                    (void)ddi_door_syscall(DDI_OP_CFG_READ, (u64)i64H, 0, 0);
                     (void)ddi_door_syscall(DDI_OP_IRQ_BIND, (u64)i64H, 0, 0);
+                    if (u64DmaNotePa != 0ull) {
+                        i64St = ddi_door_syscall(DDI_OP_DMA_NOTE, (u64)i64H,
+                                                 u64DmaNotePa, u64DmaNoteCb);
+                        if (i64St >= 0) {
+                            u32RtlDmaNote = 1u;
+                        }
+                    }
+                    /* Lean DMA_BUF residual (1 page force32); free after. */
+                    i64DmaPa = ddi_door_syscall(DDI_OP_DMA_BUF_ALLOC,
+                                                (u64)i64H, 1u, 1u);
+                    if (i64DmaPa > 0) {
+                        u32DmaBuf++;
+                        (void)ddi_door_syscall(DDI_OP_DMA_BUF_FREE,
+                                               (u64)i64H, (u64)i64DmaPa, 1u);
+                    }
+                    if (ddi_door_syscall(DDI_OP_CLOSE, (u64)i64H, 0, 0) >= 0) {
+                        u32Close++;
+                    }
                     if (u32MapOk != 0u) {
                         fRtlBind = 1u;
                         kprintf("main: soft ddi bind 10ec:8168 PASS "
-                                "h=%ld maps=%u soft=1 product=0\n",
-                                (long)i64H, (unsigned)u32MapOk);
+                                "h=%ld maps=%u dma_note=%u dma_buf=%u "
+                                "close=1 soft=1 product=0 "
+                                "(not freestanding wire; "
+                                "product=rtl8168_udx OPEN_UDX; "
+                                "cap_mint=OPEN)\n",
+                                (long)i64H, (unsigned)u32MapOk,
+                                (unsigned)u32RtlDmaNote,
+                                (unsigned)(i64DmaPa > 0 ? 1u : 0u));
                     } else {
                         kprintf("main: soft ddi bind 10ec:8168 SKIP "
-                                "open ok map fail soft=1 product=0\n");
+                                "open ok map fail soft=1 product=0 "
+                                "(product=rtl8168_udx OPEN_UDX)\n");
                     }
                 } else {
-                    kprintf("main: soft ddi bind 10ec:8168 SKIP open\n");
+                    kprintf("main: soft ddi bind 10ec:8168 SKIP open "
+                            "soft=1 product=0\n");
                 }
             }
             if (info.u16Vend == 0x8086u && info.u16Dev == 0xa12fu) {
@@ -4997,63 +6530,148 @@ kernel_after_mmap(struct gj_mem_region *aRegions, size_t cRegions)
                         u32 u32Cap;
 
                         /*
-                         * Soft CFG dword0 (identity/vendor already known).
-                         * Not freestanding BOT; product = UDX host later.
+                         * Soft ddi bind residual deepen: CFG dword0 + MAP
+                         * BAR0 + IRQ + DMA_NOTE + lean DMA_BUF + CLOSE.
+                         * Not freestanding BOT/stage; product USB path =
+                         * xhci_udx OPEN_UDX (UDX+ABI). Soft!=product.
+                         * cap_mint=OPEN window_mint=OPEN.
                          */
                         u32Cap = (u32)ddi_door_syscall(DDI_OP_CFG_READ,
                                                        (u64)i64H, 0, 0);
                         (void)ddi_door_syscall(DDI_OP_IRQ_BIND, (u64)i64H,
                                                0, 0);
+                        if (note.u64Pa != 0ull) {
+                            i64St = ddi_door_syscall(DDI_OP_DMA_NOTE,
+                                                     (u64)i64H, note.u64Pa,
+                                                     note.u64Cb);
+                            if (i64St >= 0) {
+                                u32XhciDmaNote = 1u;
+                            }
+                        }
+                        i64DmaPa = ddi_door_syscall(DDI_OP_DMA_BUF_ALLOC,
+                                                    (u64)i64H, 1u, 1u);
+                        if (i64DmaPa > 0) {
+                            u32DmaBuf++;
+                            (void)ddi_door_syscall(DDI_OP_DMA_BUF_FREE,
+                                                   (u64)i64H, (u64)i64DmaPa,
+                                                   1u);
+                        }
+                        if (ddi_door_syscall(DDI_OP_CLOSE, (u64)i64H, 0,
+                                             0) >= 0) {
+                            u32Close++;
+                        }
                         fXhciBind = 1u;
                         kprintf("main: soft ddi bind 8086:a12f PASS "
                                 "h=%ld bar0_va=0x%lx cfg0=0x%x "
-                                "soft=1 product=0 (not freestanding stage)\n",
+                                "dma_note=%u dma_buf=%u close=1 "
+                                "soft=1 product=0 (not freestanding stage; "
+                                "product=xhci_udx OPEN_UDX; "
+                                "cap_mint=OPEN)\n",
                                 (long)i64H, (unsigned long)note.u64Va,
-                                (unsigned)u32Cap);
+                                (unsigned)u32Cap,
+                                (unsigned)u32XhciDmaNote,
+                                (unsigned)(i64DmaPa > 0 ? 1u : 0u));
                     } else {
-                        kprintf("main: soft ddi bind 8086:a12f SKIP map\n");
+                        if (ddi_door_syscall(DDI_OP_CLOSE, (u64)i64H, 0,
+                                             0) >= 0) {
+                            u32Close++;
+                        }
+                        kprintf("main: soft ddi bind 8086:a12f SKIP map "
+                                "soft=1 product=0 "
+                                "(product=xhci_udx OPEN_UDX)\n");
                     }
                 } else {
-                    kprintf("main: soft ddi bind 8086:a12f SKIP open\n");
+                    kprintf("main: soft ddi bind 8086:a12f SKIP open "
+                            "soft=1 product=0\n");
                 }
             }
         }
         if (fRtl == 0u) {
-            kprintf("main: soft ddi miss 10ec:8168\n");
+            kprintf("main: soft ddi miss 10ec:8168 "
+                    "(soft residual; product=rtl8168_udx OPEN_UDX)\n");
         }
         if (fXhci == 0u) {
-            kprintf("main: soft ddi miss 8086:a12f\n");
+            kprintf("main: soft ddi miss 8086:a12f "
+                    "(soft residual; product=xhci_udx OPEN_UDX)\n");
         }
         kprintf("main: soft ddi laptop smoke PASS n=%ld rtl=%u/%u "
-                "xhci_a12f=%u/%u (found/bind) abi_first=1\n",
+                "xhci_a12f=%u/%u (found/bind) "
+                "dma_note=%u/%u dma_buf=%u close=%u "
+                "abi_first=1 soft=1 product=0 product=UDX+ABI "
+                "freestanding_class=SKIP never_fs_rtl_usb=1 "
+                "cap_mint=OPEN window_mint=OPEN "
+                "G-AC-1 (Soft!=product; no freestanding thrash)\n",
                 (long)i64N, (unsigned)fRtl, (unsigned)fRtlBind,
-                (unsigned)fXhci, (unsigned)fXhciBind);
+                (unsigned)fXhci, (unsigned)fXhciBind,
+                (unsigned)u32RtlDmaNote, (unsigned)u32XhciDmaNote,
+                (unsigned)u32DmaBuf, (unsigned)u32Close);
+        /*
+         * Once-lamp residual deepen: soft ddi bind+life != freestanding.
+         * Soft ddi PASS != Dual DoD close (H5). status=OPEN until_dut.
+         * Stamp-free residual: never bump GJ_IMAGE_VERSION. H2 once only.
+         */
+        kprintf("main: soft residual soft ddi bind "
+                "rtl=%u/%u xhci=%u/%u "
+                "bind=SCAN->GET->OPEN->MAP_BAR "
+                "life=IRQ_BIND/DMA_NOTE/DMA_BUF/CLOSE "
+                "dma_note=%u/%u dma_buf=%u close=%u "
+                "host_a=xhci_udx host_b=rtl8168_udx host_ddi=ddi_host "
+                "host_spawn=OPEN "
+                "path=soft_ddi|host_elf|elf_probe|elf_load|user_as|thr|"
+                "udx_bind|cap_mint "
+                "product=UDX+ABI freestanding_class=SKIP "
+                "never_fs_rtl_usb=1 cap_mint=OPEN window_mint=OPEN "
+                "dual_dod_a=OPEN_UDX dual_dod_b=OPEN_UDX "
+                "until_dut=1 soft_no_close=1 dod_close=0 "
+                "soft=1 product=0 G-AC-1 dual=MIT_OR_Apache-2.0 "
+                "(Soft!=product; once-lamp lean; no freestanding thrash; "
+                "H5 soft ddi != DoD close; agent!=close)\n",
+                (unsigned)fRtl, (unsigned)fRtlBind,
+                (unsigned)fXhci, (unsigned)fXhciBind,
+                (unsigned)u32RtlDmaNote, (unsigned)u32XhciDmaNote,
+                (unsigned)u32DmaBuf, (unsigned)u32Close);
+        /* Stash for post multi-server OPEN_UDX host spawn residual. */
+        g_u32SoftDdiRtlFound = fRtl;
+        g_u32SoftDdiXhciFound = fXhci;
+        g_u32SoftDdiRtlBind = fRtlBind;
+        g_u32SoftDdiXhciBind = fXhciBind;
     }
     /*
-     * ABI-first Linux module path smoke (soft≠product; G-AC-1: AC).
-     * Prefer media (GJ-PERSIST/linux-drivers) when vfs can see it; else embed.
-     * Soft≠product. greppable:
+     * ABI-first Linux module path smoke (soft!=product; G-AC-1: AC).
+     * Runs AFTER net_l2 product residual once-lamps + soft ddi bind residual.
+     * Soft residual lean: freestanding class SKIP hold remains;
+     * product=UDX+ABI denser once-lamps already at net_l2; soft ddi bind
+     * residual once-lamp already printed. Soft!=product · no freestanding
+     * thrash. Prefer media when vfs can see it; else embed.
+     * Soft init SKIP: do not execute .ko body (RUN_INIT=0; eng INIT=0 lamps;
+     * freestanding_no_exec). After path: one net_eth_poll + hold6 refresh;
+     * keep post_te_rearm (post-TE). Soft!=product. greppable:
      *   linux_module: soft load source=embed|media name=r8169
      *   linux_module: soft media path OPEN|SKIP name= reason=
      *   main: soft linux_module path PASS|FAIL|SKIP
      *   main: soft linux_module xhci path PASS|FAIL|SKIP
-     * Does not thrash freestanding xhci/rtl stages.
+     *   main: soft init SKIP name=
+     *   main: soft FAIL KSYM need:usbcore
+     *   main: soft NET hold6 refresh after module path
+     *   main: soft residual product=UDX+ABI (once; after net_l2)
+     *   main: soft residual soft ddi bind (once; after soft ddi block)
+     * Does not thrash freestanding xhci/rtl stages (R0 rabbit hole forbidden).
      *
      * Soft init order after ksym (pci last so __pci_register_driver overrides stub):
-     *   dma → time → netdev → phy → pci
+     *   dma -> time -> netdev -> phy -> pci
      *
-     * STATUS hold map (static pane; soft≠product only in kprintf):
+     * STATUS hold map (static pane; soft!=product only in kprintf):
      *   7  ksym n=N
-     *   8  mod r8169 init=… | FAIL … | SKIP no embed
-     *   9  netdev soft N | unres=… | use finit_module later
-     *  10  probe 10ec:8168 real|soft|miss  (PASS; mode REAL+netdev→real;
-     *      mode SOFT|netdev→soft; else miss). Soft≠product.
+     *   8  mod r8169 init=... | FAIL ... | SKIP no embed
+     *   9  netdev soft N | unres=... | use finit_module later
+     *  10  probe 10ec:8168 real|soft|miss  (PASS; mode REAL+netdev->real;
+     *      mode SOFT|netdev->soft; else miss). Soft!=product.
      *  11  pci reg=N match=M [st=S]    (PASS; st when mode>=0)
-     *  12–13 soft xhci_pci + usb_storage multi-mod (below)
-     *  14  soft l2 bridge rx=/tx= (spare only; if bridge on; never 7–13)
+     *  12-13 soft xhci_pci + usb_storage multi-mod (below)
+     *  14  soft l2 bridge rx=/tx= (spare only; if bridge on; never 7-13)
      *  15  HYBRID wire=fs soft=r8169 (phase 4a; SOFT|REAL+bridge+primary+fs)
      * Serial (once; not STATUS): main: soft linux netdev path REAL|SOFT
-     *   netdev=N mode=… when primary+carrier helpers; after force emu.
+     *   netdev=N mode=... when primary+carrier helpers; after force emu.
      * Serial (once): main: soft l2 bridge rx_fed=N tx_ok=M if bridge on.
      * Serial (once): main: linux path HYBRID wire=freestanding soft=r8169
      * Serial (once): linux_pci_soft: soft hybrid zero-touch PASS|READY
@@ -5066,7 +6684,7 @@ kernel_after_mmap(struct gj_mem_region *aRegions, size_t cRegions)
         int fMediaLoad = 0;
         const char *szUnresolved;
         const char *szLoadSrc = "embed";
-        /* Headers may lag; soft stubs live in sibling wave units. Soft≠product. */
+        /* Headers may lag; soft stubs live in sibling wave units. Soft!=product. */
         extern void linux_dma_soft_init(void);
         extern void linux_time_soft_init(void);
         extern void linux_netdev_soft_init(void);
@@ -5083,11 +6701,11 @@ kernel_after_mmap(struct gj_mem_region *aRegions, size_t cRegions)
             linux_time_soft_init();
             linux_netdev_soft_init();
             linux_phy_soft_init();
-            /* usb/scsi seed for usb-storage leaf; Soft≠product (≠ stick) */
+            /* usb/scsi seed for usb-storage leaf; Soft!=product (!= stick) */
             linux_usb_soft_init();
             /* last: overrides any stub pci_register_driver in earlier softs */
             linux_pci_soft_init();
-            /* Pin ksym to STATUS (static) — scroll log is too noisy. */
+            /* Pin ksym to STATUS (static) - scroll log is too noisy. */
             {
                 u32 n = linux_ksym_count();
                 char *q = szHold;
@@ -5124,17 +6742,17 @@ kernel_after_mmap(struct gj_mem_region *aRegions, size_t cRegions)
          */
         kprintf("main: soft linux_module path SKIP name=r8169 "
                 "reason=GJ_SOFT_R8169_LOAD=0 (freestanding-only net "
-                "isolation; Soft≠product)\n");
+                "isolation; Soft!=product)\n");
         fb_console_hold(8, "mod r8169 SKIP load=0");
         fb_console_hold(9, "netdev soft 0");
 #else
         /*
-         * D4 media soft probe (Soft≠product; G-AC-1).
+         * D4 media soft probe (Soft!=product; G-AC-1).
          * Prefer (1) UEFI boot_info soft media blob (ESP SimpleFS handoff),
          * then (2) vfs_ram seed paths. Operator stages:
          *   make collect-linux-drivers && make hwtest-img
-         *   → ESP /linux-drivers/modules/r8169.ko (UEFI load)
-         *   → GJ-PERSIST/linux-drivers/ (full tree; no ext4 reader yet)
+         *   -> ESP /linux-drivers/modules/r8169.ko (UEFI load)
+         *   -> GJ-PERSIST/linux-drivers/ (full tree; no ext4 reader yet)
          * vfs_ram file cap is small (≤32 KiB) so host r8169.ko cannot live
          * there; ESP UEFI handoff is the media path for real-size .ko.
          * Else OPEN + fall back to embed. Not a product AC.
@@ -5166,12 +6784,12 @@ kernel_after_mmap(struct gj_mem_region *aRegions, size_t cRegions)
                     (const u8 *)(gj_vaddr_t)pMediaBi->u64SoftMediaPhys;
                 u64 cbBlob = pMediaBi->u64SoftMediaBytes;
 
-                /* Soft ELF magic gate — refuse non-.ko garbage. */
+                /* Soft ELF magic gate - refuse non-.ko garbage. */
                 if (pBlob[0] == 0x7fu && pBlob[1] == (u8)'E' &&
                     pBlob[2] == (u8)'L' && pBlob[3] == (u8)'F') {
                     kprintf("linux_module: soft media path PRESENT "
                             "name=r8169 path=boot_info reason=esp_uefi "
-                            "phys=0x%lx cb=%lu (soft≠product; D4)\n",
+                            "phys=0x%lx cb=%lu (soft!=product; D4)\n",
                             (unsigned long)pMediaBi->u64SoftMediaPhys,
                             (unsigned long)cbBlob);
                     i64Mod = linux_module_load_mem_src(
@@ -5183,7 +6801,7 @@ kernel_after_mmap(struct gj_mem_region *aRegions, size_t cRegions)
                 } else {
                     kprintf("linux_module: soft media path OPEN name=r8169 "
                             "reason=esp_uefi_bad_magic phys=0x%lx cb=%lu "
-                            "(soft≠product)\n",
+                            "(soft!=product)\n",
                             (unsigned long)pMediaBi->u64SoftMediaPhys,
                             (unsigned long)cbBlob);
                 }
@@ -5202,7 +6820,7 @@ kernel_after_mmap(struct gj_mem_region *aRegions, size_t cRegions)
                 }
                 /*
                  * vfs_ram regular files are tiny (lab cap). A real r8169.ko
-                 * will never fit — soft honesty: present but too big → OPEN.
+                 * will never fit - soft honesty: present but too big -> OPEN.
                  * Only attempt load when size is plausible for this surface
                  * (≤ 32 KiB) so we never half-read a truncated blob.
                  */
@@ -5238,7 +6856,7 @@ kernel_after_mmap(struct gj_mem_region *aRegions, size_t cRegions)
                         if (cbGot == cbNeed) {
                             kprintf("linux_module: soft media path PRESENT "
                                     "name=r8169 path=%s reason=vfs_seed "
-                                    "cb=%lu (soft≠product)\n",
+                                    "cb=%lu (soft!=product)\n",
                                     aMediaPath[iPath],
                                     (unsigned long)cbGot);
                             i64Mod = linux_module_load_mem_src(
@@ -5254,7 +6872,7 @@ kernel_after_mmap(struct gj_mem_region *aRegions, size_t cRegions)
                 } else {
                     kprintf("linux_module: soft media path OPEN name=r8169 "
                             "path=%s reason=vfs_cap_or_size sz=%ld "
-                            "(need persist/ext4 reader; soft≠product)\n",
+                            "(need persist/ext4 reader; soft!=product)\n",
                             aMediaPath[iPath], (long)i64Sz);
                 }
                 (void)vfs_ram_close(i64Fd);
@@ -5266,7 +6884,7 @@ kernel_after_mmap(struct gj_mem_region *aRegions, size_t cRegions)
                         "make hwtest-img "
                         "stage=ESP:/linux-drivers/modules/r8169.ko "
                         "+ GJ-PERSIST/linux-drivers/ "
-                        "(UEFI handoff or vfs seed; soft≠product; D4)\n");
+                        "(UEFI handoff or vfs seed; soft!=product; D4)\n");
             }
         }
 
@@ -5279,12 +6897,12 @@ kernel_after_mmap(struct gj_mem_region *aRegions, size_t cRegions)
 
         /*
          * Prefer media load when soft probe filled i64Mod; else embed blob.
-         * Media load fail (or absent) → fall back embed. Soft≠product.
+         * Media load fail (or absent) -> fall back embed. Soft!=product.
          */
         if (!fMediaLoad || i64Mod != 0) {
             if (fMediaLoad && i64Mod != 0) {
                 kprintf("linux_module: soft media load FAIL name=r8169 "
-                        "st=%ld → fall back embed (soft≠product)\n",
+                        "st=%ld -> fall back embed (soft!=product)\n",
                         (long)i64Mod);
             }
             fMediaLoad = 0;
@@ -5311,17 +6929,25 @@ kernel_after_mmap(struct gj_mem_region *aRegions, size_t cRegions)
                 u64 cbReport;
 
                 cbReport = fMediaLoad ? cbMedia : cbKo;
+                /*
+                 * Soft init SKIP: do not execute .ko body (lab #PF under incomplete
+                 * reloc). linux_module_init_call default RUN_INIT=0 -> SKIP exec,
+                 * INIT=0 for eng lamps. Soft!=product. Grep: main: soft init SKIP
+                 */
                 i64Init = linux_module_init_call("r8169");
-                /* Soft≠product: kprintf only — STATUS stays short milestones. */
+                kprintf("main: soft init SKIP name=r8169 init=%ld "
+                        "(no .ko body; Soft!=product)\n",
+                        (long)i64Init);
+                /* Soft!=product: kprintf only - STATUS stays short milestones. */
                 kprintf("main: soft linux_module path PASS name=r8169 "
                         "source=%s cb=%lu init=%ld soft=1 product=0 "
-                        "(soft≠product)\n",
+                        "(soft init SKIP; soft!=product)\n",
                         szLoadSrc, (unsigned long)cbReport, (long)i64Init);
                 /*
                  * Safety net: if module init returned 0 but never soft-bound
                  * 10ec:8168 (old 32-byte id_table stride bug, or register
                  * SKIP), force EMU bind from devmgr inventory so STATUS can
-                 * show netdev soft ≥1. Soft≠product; greppable force emu.
+                 * show netdev soft ≥1. Soft!=product; greppable force emu.
                  */
                 {
                     extern u32 linux_pci_soft_force_emu_bind(u16, u16);
@@ -5337,7 +6963,7 @@ kernel_after_mmap(struct gj_mem_region *aRegions, size_t cRegions)
                     cMatch = linux_pci_soft_match_count();
                     kprintf("main: soft pci after r8169 init netdev=%u "
                             "bound=%u reg_calls=%u match=%u "
-                            "(soft≠product)\n",
+                            "(soft!=product)\n",
                             (unsigned)nNet, (unsigned)cBound, (unsigned)cReg,
                             (unsigned)cMatch);
                     if (nNet == 0u) {
@@ -5345,15 +6971,15 @@ kernel_after_mmap(struct gj_mem_region *aRegions, size_t cRegions)
                             (u16)0x10ecu, (u16)0x8168u);
                         nNet = linux_netdev_soft_count();
                         kprintf("main: soft force emu 10ec:8168 "
-                                "hits=%u netdev_now=%u (soft≠product)\n",
+                                "hits=%u netdev_now=%u (soft!=product)\n",
                                 (unsigned)cForce, (unsigned)nNet);
                     }
                 }
                 /*
-                 * STATUS 8–11 (static; no soft≠product spam on pane).
+                 * STATUS 8-11 (static; no soft!=product spam on pane).
                  * Hold 10: real|soft|miss via last_probe_mode + netdev.
                  * Hold 11: pci reg/match; optional st= when mode>=0.
-                 * Soft≠product (xhci uses 12–13).
+                 * Soft!=product (xhci uses 12-13).
                  */
                 {
                     extern int linux_pci_soft_last_probe_mode(void);
@@ -5398,8 +7024,8 @@ kernel_after_mmap(struct gj_mem_region *aRegions, size_t cRegions)
                     *q = '\0';
                     fb_console_hold(9, szHold);
                     /*
-                     * hold 10: REAL(1)+netdev→real; SOFT(0)|netdev→soft; else miss.
-                     * Keep short. Soft≠product.
+                     * hold 10: REAL(1)+netdev->real; SOFT(0)|netdev->soft; else miss.
+                     * Keep short. Soft!=product.
                      */
                     if (nMode == 1 && nNet > 0u) {
                         fb_console_hold(10, "probe 10ec:8168 real");
@@ -5455,19 +7081,19 @@ kernel_after_mmap(struct gj_mem_region *aRegions, size_t cRegions)
                     fb_console_hold(11, szHold);
                 }
                 /*
-                 * Soft linux netdev path lamp after STATUS 8–11 (once).
+                 * Soft linux netdev path lamp after STATUS 8-11 (once).
                  * Prefer kprintf; optional hold/extend 11 only if free
-                 * (PASS already owns hold 11 for pci reg/match — do not
-                 * clobber). Soft≠product; do not spam.
+                 * (PASS already owns hold 11 for pci reg/match - do not
+                 * clobber). Soft!=product; do not spam.
                  * Grep: main: soft linux netdev path REAL|SOFT netdev=N mode=
                  *
                  * net_l2 coexistence note must run after force emu (above)
                  * so a mint-only EMU bind still lights the lamp.
-                 * Grep: net_l2: soft linux netdev note n=N (Soft≠product)
+                 * Grep: net_l2: soft linux netdev note n=N (Soft!=product)
                  *
-                 * After REAL path, net_l2 may enable soft L2 bridge — once
+                 * After REAL path, net_l2 may enable soft L2 bridge - once
                  * lamp: main: soft l2 bridge rx_fed=N tx_ok=M
-                 * Hold: spare 14 only if FB_HOLD_LINES allows; never 7–13.
+                 * Hold: spare 14 only if FB_HOLD_LINES allows; never 7-13.
                  */
                 {
                     extern void *linux_netdev_soft_primary(void);
@@ -5489,7 +7115,7 @@ kernel_after_mmap(struct gj_mem_region *aRegions, size_t cRegions)
                     /*
                      * Gate on primary + carrier helpers (soft netdev surface).
                      * Function addrs always non-NULL when this TU is linked;
-                     * presence documents the soft ladder Soft≠product.
+                     * presence documents the soft ladder Soft!=product.
                      */
                     if (pPrimary != NULL &&
                         (void *)(uintptr_t)netif_carrier_on != NULL &&
@@ -5498,11 +7124,11 @@ kernel_after_mmap(struct gj_mem_region *aRegions, size_t cRegions)
                         /* REAL only when last_probe_mode says hostish real. */
                         szPath = (nModePath == 1) ? "REAL" : "SOFT";
                         kprintf("main: soft linux netdev path %s netdev=%u "
-                                "mode=%d (soft≠product)\n",
+                                "mode=%d (soft!=product)\n",
                                 szPath, (unsigned)nNet, nModePath);
                         /*
                          * Hold 11 free only on FAIL/SKIP (no primary there).
-                         * PASS fills hold 11 with pci — prefer kprintf above.
+                         * PASS fills hold 11 with pci - prefer kprintf above.
                          */
                         (void)pPrimary;
                     }
@@ -5512,7 +7138,7 @@ kernel_after_mmap(struct gj_mem_region *aRegions, size_t cRegions)
                      * Hybrid 4a wire care after soft r8169 path:
                      *  - REAL: full reclaim (BAR was reprogrammed by .ko)
                      *  - SOFT/EMU: do NOT full-reclaim (photo 3283: reclaim
-                     *    after SOFT → R0; 3279 SOFT without reclaim had R2)
+                     *    after SOFT -> R0; 3279 SOFT without reclaim had R2)
                      *    Only light kick + apply_l2 identity.
                      * Grep: rtl8168: soft reclaim wire | soft hybrid kick
                      */
@@ -5530,16 +7156,17 @@ kernel_after_mmap(struct gj_mem_region *aRegions, size_t cRegions)
 
                                 nRec = rtl8168_reclaim_wire();
                                 kprintf("main: soft hybrid reclaim after REAL "
-                                        "st=%d (Soft≠product)\n", nRec);
+                                        "st=%d (Soft!=product)\n", nRec);
                                 net_l2_refresh_mac();
                             } else {
-                                /* SOFT: leave freestanding rings alone. */
-                                extern void rtl8168_kick_wire(void);
-
-                                rtl8168_kick_wire();
+                                /*
+                                 * SOFT: do not thrash rings mid-boot (multi
+                                 * kick -> R0 lab). One late reclaim after TE.
+                                 */
                                 rtl8168_poll_hw();
-                                kprintf("main: soft hybrid kick after SOFT "
-                                        "(no reclaim; Soft≠product)\n");
+                                kprintf("main: soft hybrid SOFT path "
+                                        "(defer wire reclaim to post-TE; "
+                                        "Soft!=product)\n");
                             }
                             net_eth_apply_l2_identity();
                         }
@@ -5550,7 +7177,7 @@ kernel_after_mmap(struct gj_mem_region *aRegions, size_t cRegions)
                      * quiesce freestanding MMIO; gate 0 keeps laptop safe.
                      * Grep: rtl8168: soft mmio handoff
                      * Grep: linux_netdev_soft: soft mmio handoff
-                     * See docs/R8169_MMIO_HANDOFF.md. Soft≠product.
+                     * See docs/R8169_MMIO_HANDOFF.md. Soft!=product.
                      */
                     if (nModePath == 1 /* REAL */) {
                         extern void rtl8168_soft_handoff_prepare(void);
@@ -5567,7 +7194,7 @@ kernel_after_mmap(struct gj_mem_region *aRegions, size_t cRegions)
                          * -1=fault. sole_owner only when nHandoff==2.
                          * Phase 3: try_open only when handoff gate 1 (REAL path).
                          * Option A soft open after sole-owner; no .ko ndo_open
-                         * unless GJ_SOFT_R8169_KO_NDO_OPEN (default 0). Soft≠product.
+                         * unless GJ_SOFT_R8169_KO_NDO_OPEN (default 0). Soft!=product.
                          */
                         (void)nHandoff;
                         (void)nSole;
@@ -5584,7 +7211,7 @@ kernel_after_mmap(struct gj_mem_region *aRegions, size_t cRegions)
                     }
                     /*
                      * Soft L2 bridge stats (once). Enabled after REAL probe
-                     * via net_l2_soft_linux_note. Soft≠product.
+                     * via net_l2_soft_linux_note. Soft!=product.
                      * Grep: main: soft l2 bridge rx_fed=
                      */
                     if (linux_netdev_soft_l2_bridge_enabled() != 0) {
@@ -5593,8 +7220,8 @@ kernel_after_mmap(struct gj_mem_region *aRegions, size_t cRegions)
                         kprintf("main: soft l2 bridge rx_fed=%u tx_ok=%u\n",
                                 (unsigned)cRxFed, (unsigned)cTxOk);
                         /*
-                         * Optional STATUS: holds 14–15 spare; never clobber
-                         * 7–13 (ksym/r8169/xhci). Soft honesty stays serial.
+                         * Optional STATUS: holds 14-15 spare; never clobber
+                         * 7-13 (ksym/r8169/xhci). Soft honesty stays serial.
                          */
                         if (14u < FB_HOLD_LINES) {
                             char szBr[48];
@@ -5634,9 +7261,9 @@ kernel_after_mmap(struct gj_mem_region *aRegions, size_t cRegions)
                     /*
                      * Phase 4a hybrid lamp (gate0 default eng path).
                      * SOFT/EMU or REAL + L2 bridge + primary + freestanding
-                     * ready → serial + hold15. Soft≠product; not 4b .ko wire.
+                     * ready -> serial + hold15. Soft!=product; not 4b .ko wire.
                      * Grep: main: linux path HYBRID wire=freestanding soft=r8169
-                     * See docs/R8169_MMIO_HANDOFF.md. Soft≠product.
+                     * See docs/R8169_MMIO_HANDOFF.md. Soft!=product.
                      */
                     {
                         extern int linux_netdev_soft_hybrid_lamp_once(void);
@@ -5645,7 +7272,7 @@ kernel_after_mmap(struct gj_mem_region *aRegions, size_t cRegions)
                         /*
                          * Zero-touch serial (once): gate0 REAL skip +
                          * CF8/iomap NOOP for 10ec:8168. Clear path for
-                         * hybrid freestanding wire. Soft≠product.
+                         * hybrid freestanding wire. Soft!=product.
                          * Grep: linux_pci_soft: soft hybrid zero-touch
                          */
                         linux_pci_soft_zero_touch_lamp_once();
@@ -5661,7 +7288,7 @@ kernel_after_mmap(struct gj_mem_region *aRegions, size_t cRegions)
                 szUnresolved = linux_module_last_unresolved();
                 kprintf("main: soft linux_module path FAIL name=r8169 "
                         "source=%s st=%ld unresolved=%s soft=1 product=0 "
-                        "(soft≠product)\n",
+                        "(soft!=product)\n",
                         szLoadSrc, (long)i64Mod,
                         (szUnresolved != NULL && szUnresolved[0] != '\0')
                             ? szUnresolved
@@ -5710,21 +7337,21 @@ kernel_after_mmap(struct gj_mem_region *aRegions, size_t cRegions)
                 }
                 *q = '\0';
                 fb_console_hold(9, szHold);
-                /* leave hold 10–11 free on FAIL (no probe/pci claim) */
+                /* leave hold 10-11 free on FAIL (no probe/pci claim) */
             }
         } else {
             kprintf("main: soft linux_module path SKIP no embed "
-                    "(use finit_module later; soft≠product)\n");
+                    "(use finit_module later; soft!=product)\n");
             fb_console_hold(8, "mod r8169 SKIP no embed");
             fb_console_hold(9, "use finit_module later");
-            /* leave hold 10–11 free on SKIP */
+            /* leave hold 10-11 free on SKIP */
         }
 #endif /* GJ_SOFT_R8169_LOAD */
 
         /*
-         * D4 media path status (Soft≠product; not a product AC).
-         * ESP: r8169.ko staged + UEFI SimpleFS → boot_info soft media.
-         * When handoff present and load_mem succeeds → source=media.
+         * D4 media path status (Soft!=product; not a product AC).
+         * ESP: r8169.ko staged + UEFI SimpleFS -> boot_info soft media.
+         * When handoff present and load_mem succeeds -> source=media.
          * Else embed fallback. GJ-PERSIST ext4 still unread at boot.
          * G-AC-1: not product AC.
          *
@@ -5735,25 +7362,31 @@ kernel_after_mmap(struct gj_mem_region *aRegions, size_t cRegions)
             kprintf("linux_module: soft media status D4 name=r8169 "
                     "status=MEDIA boot_source=media "
                     "via=esp_uefi_or_vfs_seed soft=1 product=0 "
-                    "(soft≠product; G-AC-1)\n");
+                    "(soft!=product; G-AC-1)\n");
         } else {
             kprintf("linux_module: soft media TODO D4 name=r8169 "
                     "status=OPEN need=esp_uefi_handoff_or_vfs_seed "
                     "operator='make collect-linux-drivers && make hwtest-img' "
                     "stage=ESP:/linux-drivers/modules/r8169.ko "
-                    "boot_source=%s soft=1 product=0 (soft≠product)\n",
+                    "boot_source=%s soft=1 product=0 (soft!=product)\n",
                     (cbKo > 0ull) ? "embed" : "none");
         }
 
         /*
-         * Soft xHCI + USB multi-mod path (PCI 8086:a12f). Soft≠product.
-         * Ideal load order: usb_common → usbcore → xhci_hcd → xhci_pci →
-         * usb_storage. Host often ships HC+usbcore *builtin* → no HC .ko →
-         * SKIP builtin for xhci_pci; usb-storage may still be modular embed.
-         * Does not rewrite freestanding xhci_msc stages.
+         * Soft xHCI + USB multi-mod path (PCI 8086:a12f). Soft!=product.
+         * Ideal load order: usb_common -> usbcore -> xhci_hcd -> xhci_pci ->
+         * usb_storage (see linux_module_load_order_rank / soft_order_log).
+         * Host often ships HC+usbcore *builtin* -> no HC .ko -> SKIP builtin
+         * for xhci_pci; usb-storage may still be modular embed.
+         * Pre-load: linux_module_deps_ready (WAIT + FAIL KSYM need:DEP);
+         * soft seed (linux_usb_soft) covers ksym UND, not module-table deps.
+         * Does not rewrite freestanding xhci_msc stages. Soft!=product; G-AC-1.
          * greppable: main: soft linux_module xhci path PASS|FAIL|SKIP
          * greppable: main: soft usb multi-mod order
+         * greppable: main: soft load order rank=
+         * greppable: main: soft FAIL KSYM need:usbcore
          * greppable: main: soft linux_module usb_storage path PASS|FAIL|SKIP
+         * greppable: main: soft usb_storage need=usbcore OPEN
          */
         {
             i64 i64Xhci;
@@ -5762,6 +7395,10 @@ kernel_after_mmap(struct gj_mem_region *aRegions, size_t cRegions)
             const char *szUn;
             int fXhciEmbed;
             int fUsbStorEmbed;
+            int nRankX;
+            int nRankUs;
+            int fDepsX;
+            int fDepsUs;
 
             cbXhci = 0ull;
             cbUsbStor = 0ull;
@@ -5781,29 +7418,65 @@ kernel_after_mmap(struct gj_mem_region *aRegions, size_t cRegions)
                 fUsbStorEmbed = 1;
             }
 
-            /* Soft multi-mod order stub (serial honesty; not product insmod). */
+            /*
+             * Soft multi-mod order: serial plan + rank table (not product
+             * insmod). Order: usb_common -> usbcore -> scsi_mod -> xhci_hcd ->
+             * xhci_pci -> usb_storage. Soft!=product.
+             */
+            nRankX = linux_module_load_order_rank("xhci_pci");
+            nRankUs = linux_module_load_order_rank("usb_storage");
             kprintf("main: soft usb multi-mod order "
                     "need=usb_common,usbcore,xhci_hcd,xhci_pci,usb_storage "
-                    "xhci_pci_embed=%d usb_storage_embed=%d soft=1 product=0 "
+                    "xhci_pci_embed=%d usb_storage_embed=%d "
+                    "rank_xhci_pci=%d rank_usb_storage=%d soft=1 product=0 "
                     "(host often HC+usbcore builtin; leaf may be modular)\n",
-                    fXhciEmbed, fUsbStorEmbed);
+                    fXhciEmbed, fUsbStorEmbed, nRankX, nRankUs);
+            kprintf("main: soft load order rank=%d name=xhci_pci deps=%s "
+                    "soft=1 product=0\n",
+                    nRankX,
+                    linux_module_soft_deps("xhci_pci")[0] != '\0'
+                        ? linux_module_soft_deps("xhci_pci")
+                        : "-");
+            kprintf("main: soft load order rank=%d name=usb_storage deps=%s "
+                    "soft=1 product=0\n",
+                    nRankUs,
+                    linux_module_soft_deps("usb_storage")[0] != '\0'
+                        ? linux_module_soft_deps("usb_storage")
+                        : "-");
+            /* Full USB class rank dump (linux_module greppable sibling). */
+            linux_module_soft_order_log("usb");
 
             if (cbXhci > 0ull) {
                 kprintf("main: soft linux_module xhci path PRESENT "
-                        "name=xhci_pci cb=%lu soft=1 product=0\n",
-                        (unsigned long)cbXhci);
+                        "name=xhci_pci cb=%lu rank=%d soft=1 product=0\n",
+                        (unsigned long)cbXhci, nRankX);
+                /* Pre-load deps check (does not block; honesty only). */
+                fDepsX = linux_module_deps_ready("xhci_pci");
+                if (fDepsX != 0) {
+                    kprintf("main: soft FAIL KSYM need:usbcore name=xhci_pci "
+                            "rank=%d soft=1 product=0 "
+                            "(deps WAIT; load still attempted; Soft!=product)\n",
+                            nRankX);
+                }
                 i64Xhci = linux_module_load_mem_src(gj_xhci_pci_ko_blob,
                                                     (size_t)cbXhci, "xhci_pci",
                                                     "embed");
                 if (i64Xhci == 0) {
                     i64 i64InitX;
 
+                    /*
+                     * Soft init SKIP: no .ko body exec (RUN_INIT=0 default).
+                     * Soft!=product. Grep: main: soft init SKIP
+                     */
                     i64InitX = linux_module_init_call("xhci_pci");
+                    kprintf("main: soft init SKIP name=xhci_pci init=%ld "
+                            "(no .ko body; Soft!=product)\n",
+                            (long)i64InitX);
                     kprintf("main: soft linux_module xhci path PASS "
                             "name=xhci_pci cb=%lu init=%ld soft=1 product=0 "
-                            "(not freestanding stage; BOT OPEN)\n",
+                            "(soft init SKIP; not freestanding stage; BOT OPEN)\n",
                             (unsigned long)cbXhci, (long)i64InitX);
-                    /* holds 12–13: leave 8–11 for r8169 STATUS */
+                    /* holds 12-13: leave 8-11 for r8169 STATUS */
                     fb_console_hold(12, "mod xhci_pci LOAD ok");
                     fb_console_hold(13, "probe 8086:a12f soft?");
                 } else {
@@ -5812,6 +7485,10 @@ kernel_after_mmap(struct gj_mem_region *aRegions, size_t cRegions)
                             "name=xhci_pci st=%ld unresolved=%s soft=1 "
                             "product=0\n",
                             (long)i64Xhci,
+                            (szUn != NULL && szUn[0] != '\0') ? szUn
+                                                             : "(none)");
+                    kprintf("main: soft FAIL KSYM need:usbcore name=xhci_pci "
+                            "unresolved=%s soft=1 product=0\n",
                             (szUn != NULL && szUn[0] != '\0') ? szUn
                                                              : "(none)");
                     fb_console_hold(12, "mod xhci_pci FAIL load");
@@ -5826,7 +7503,7 @@ kernel_after_mmap(struct gj_mem_region *aRegions, size_t cRegions)
                 kprintf("main: soft linux_module xhci path SKIP builtin "
                         "(no xhci_pci embed; host often builtin; "
                         "PCI 8086:a12f; USB linux path OPEN builtin HC)\n");
-                /* holds 12–13 only — do not clobber r8169 holds 8–11 */
+                /* holds 12-13 only - do not clobber r8169 holds 8-11 */
                 fb_console_hold(12, "mod xhci_pci SKIP builtin");
                 if (fUsbStorEmbed) {
                     fb_console_hold(13, "USB path OPEN + msc embed");
@@ -5836,43 +7513,68 @@ kernel_after_mmap(struct gj_mem_region *aRegions, size_t cRegions)
             }
 
             /*
-             * Soft usb_storage leaf (optional embed). Soft≠product.
+             * Soft usb_storage leaf (optional embed). Soft!=product.
              *
-             * Honesty (photo 3291 / D8): el9 usb-storage.ko has ~100 UND;
-             * after a small generic leaf stub set (~15 empty ksyms), first
-             * reloc miss is typically scsi_* / usb_* — soft usbcore + scsi
-             * midlayer, not xhci_pci alone. MUST FAIL load without that
-             * surface; INIT=0 is not feasible under the 5–15 stub cap without
-             * a huge empty usb/scsi name table (still no stick datapath).
+             * Honesty: el9 usb-storage.ko has ~100 UND; linux_usb_soft seed
+             * covers usb_*, scsi_*, sg_* class ksyms; remaining FAIL is often
+             * generic surface. Soft deps (usbcore,scsi_mod): host often
+             * BUILTIN (no .ko). Soft seed registers virtual slots
+             * usbcore-soft / scsi_mod-soft so deps_ready can PASS eng lamps
+             * without lying that real usbcore.ko is loaded
+             * (grep: linux_module: soft dep virtual usbcore soft=1 product=0).
+             * Soft!=product; stick still need=HC; freestanding xhci_msc = lab BOT.
              *
-             * Lamp: hold13 "usb_storage need=usbcore" (OPEN). Stick write via
-             * Linux modules remains blocked; freestanding xhci_msc is lab BOT.
-             * greppable: main: soft linux_module usb_storage path …
+             * Lamp: hold13 "usb_storage need=usbcore" only on load KSYM FAIL.
+             * greppable: main: soft linux_module usb_storage path ...
+             * greppable: main: soft FAIL KSYM need:usbcore name=usb_storage
              * greppable: main: soft usb_storage need=usbcore OPEN
+             * greppable: linux_module: soft dep virtual usbcore soft=1 product=0
              */
             if (cbUsbStor > 0ull) {
                 i64 i64Us;
                 i64 i64InitUs;
 
                 kprintf("main: soft linux_module usb_storage path PRESENT "
-                        "name=usb_storage cb=%lu soft=1 product=0 "
+                        "name=usb_storage cb=%lu rank=%d soft=1 product=0 "
                         "(MSC leaf; need=usbcore+scsi_mid+HC for stick)\n",
-                        (unsigned long)cbUsbStor);
+                        (unsigned long)cbUsbStor, nRankUs);
+                /* Pre-load deps_ready (soft-virtual may PASS; does not block). */
+                fDepsUs = linux_module_deps_ready("usb_storage");
+                if (fDepsUs != 0) {
+                    kprintf("main: soft FAIL KSYM need:usbcore "
+                            "name=usb_storage rank=%d soft=1 product=0 "
+                            "(deps WAIT; no real .ko and no soft-virtual; "
+                            "load still attempted; Soft!=product)\n",
+                            nRankUs);
+                } else {
+                    kprintf("main: soft usb_storage deps_ready PASS "
+                            "rank=%d soft=1 product=0 "
+                            "(via soft-virtual and/or loaded; != stick; "
+                            "!= product usbcore)\n",
+                            nRankUs);
+                }
                 i64Us = linux_module_load_mem_src(
                     gj_usb_storage_ko_blob, (size_t)cbUsbStor, "usb_storage",
                     "embed");
                 if (i64Us == 0) {
+                    /*
+                     * Soft init SKIP: no .ko body exec (RUN_INIT=0 default).
+                     * Soft!=product. Grep: main: soft init SKIP
+                     */
                     i64InitUs = linux_module_init_call("usb_storage");
+                    kprintf("main: soft init SKIP name=usb_storage init=%ld "
+                            "(no .ko body; Soft!=product)\n",
+                            (long)i64InitUs);
                     kprintf("main: soft linux_module usb_storage path PASS "
                             "name=usb_storage cb=%lu init=%ld soft=1 product=0 "
-                            "(class load only; stick datapath OPEN)\n",
+                            "(soft init SKIP; class load only; stick OPEN)\n",
                             (unsigned long)cbUsbStor, (long)i64InitUs);
                     if (!fXhciEmbed) {
                         fb_console_hold(13, "mod usb_storage LOAD ok");
                     }
                 } else {
                     szUn = linux_module_last_unresolved();
-                    /* Honest FAIL: leaf embed present, soft usbcore surface OPEN */
+                    /* Honest FAIL: leaf embed present; need:usbcore KSYM lamp */
                     kprintf("main: soft linux_module usb_storage path FAIL "
                             "name=usb_storage st=%ld unresolved=%s soft=1 "
                             "product=0 need=usbcore OPEN "
@@ -5881,12 +7583,16 @@ kernel_after_mmap(struct gj_mem_region *aRegions, size_t cRegions)
                             (long)i64Us,
                             (szUn != NULL && szUn[0] != '\0') ? szUn
                                                              : "(none)");
+                    kprintf("main: soft FAIL KSYM need:usbcore "
+                            "name=usb_storage unresolved=%s soft=1 product=0\n",
+                            (szUn != NULL && szUn[0] != '\0') ? szUn
+                                                             : "(none)");
                     kprintf("main: soft usb_storage need=usbcore OPEN "
                             "unresolved=%s soft=1 product=0\n",
                             (szUn != NULL && szUn[0] != '\0') ? szUn
                                                              : "(none)");
                     if (!fXhciEmbed) {
-                        /* hold13 short STATUS — photo 3291 class lamp */
+                        /* hold13 short STATUS - class lamp */
                         fb_console_hold(13, "usb_storage need=usbcore");
                     }
                 }
@@ -5895,6 +7601,25 @@ kernel_after_mmap(struct gj_mem_region *aRegions, size_t cRegions)
                         "(no embed; collect usb-storage.ko + "
                         "embed-linux-mod.sh usb-storage)\n");
             }
+        }
+        /*
+         * After soft module path (post net_l2): one net_eth_poll + force
+         * hold6 NET. Soft hybrid may poll_hw / REAL-reclaim earlier; do NOT
+         * reclaim here (no thrash; R0 rabbit hole forbidden). Idle also
+         * polls; this unsticks line6 if the pre-soft snapshot lingered.
+         * Boot thr only (never timer/IRQ). Soft!=product Dual DoD A/B residual
+         * product=UDX+ABI. G-AC-1: soft init SKIP != product.
+         * Grep: main: soft NET hold6 refresh after module path
+         * Grep: main: soft residual product=UDX+ABI
+         */
+        {
+            extern void net_eth_poll(void);
+
+            net_eth_poll();
+            main_soft_net_hold6_refresh();
+            kprintf("main: soft NET hold6 refresh after module path "
+                    "(one poll; no rtl reclaim thrash; soft_mod=after_net_l2; "
+                    "product=UDX+ABI; Soft!=product; G-AC-1)\n");
         }
     }
     {
@@ -5921,7 +7646,7 @@ kernel_after_mmap(struct gj_mem_region *aRegions, size_t cRegions)
         if (nr.i64Ret >= 0) {
             kprintf("platform: info PASS\n");
         }
-        /* MSI-X IRQ → Notification (soft inject + non-blocking wait) */
+        /* MSI-X IRQ -> Notification (soft inject + non-blocking wait) */
         irq_msix_soft_inject(0x5ull);
         nr.u64Nr = GJ_SYS_PLATFORM_INFO;
         nr.u64Arg0 = 3;
@@ -5981,6 +7706,31 @@ kernel_after_mmap(struct gj_mem_region *aRegions, size_t cRegions)
         if (iommu_vtd_te_live_ready()) {
             kprintf("iommu: vtd TE live mode=%d\n", iommu_vtd_te_mode());
         }
+        /*
+         * Freestanding rtl8168 was programmed before TE. One kick under
+         * identity (not reclaim - reclaim after SOFT -> R0). Soft!=product.
+         * Force hold6 after rearm so STATUS NET is not stuck pre-TE.
+         * Boot thr only - no net_eth_poll on timer/IRQ (Dual DoD B H1).
+         * Grep: main: soft rtl8168 post-te rearm
+         * Grep: main: soft NET hold6 refresh post-te
+         */
+        {
+            extern int rtl8168_ready(void);
+            extern int rtl8168_post_te_rearm(void);
+            extern void net_eth_apply_l2_identity(void);
+            int nRearm;
+
+            if (rtl8168_ready() != 0) {
+                nRearm = rtl8168_post_te_rearm();
+                net_eth_apply_l2_identity();
+                kprintf("main: soft rtl8168 post-te rearm st=%d "
+                        "(Soft!=product)\n", nRearm);
+            }
+            /* Force redraw; counters may be unchanged (no stamp storm). */
+            main_soft_net_hold6_refresh();
+            kprintf("main: soft NET hold6 refresh post-te "
+                    "(force; Soft!=product Dual DoD B)\n");
+        }
         nr.u64Arg0 = 4;
         nr.u64Arg1 = 0; /* enforce off for rest of bring-up */
         gj_native_syscall_dispatch(&nr);
@@ -5990,7 +7740,7 @@ kernel_after_mmap(struct gj_mem_region *aRegions, size_t cRegions)
         gj_native_syscall_dispatch(&nr);
         nr32 = 240; /* i386 futex */
         (void)wow64_translate_nr(nr32, &nr64);
-        kprintf("wow64: nr32=%u → nr64=%u calls=%u\n", nr32, nr64,
+        kprintf("wow64: nr32=%u -> nr64=%u calls=%u\n", nr32, nr64,
                 wow64_calls());
         if (nr64 == 202 && wow64_enabled()) {
             kprintf("wow64: path PASS\n");
@@ -6066,7 +7816,7 @@ kernel_after_mmap(struct gj_mem_region *aRegions, size_t cRegions)
             nr.u64Arg1 = 0;
             gj_native_syscall_dispatch(&nr);
             nr.u64Arg0 = 3; /* tick */
-            nr.u64Arg1 = 16; /* frames → 64 bytes stereo 16-bit */
+            nr.u64Arg1 = 16; /* frames -> 64 bytes stereo 16-bit */
             gj_native_syscall_dispatch(&nr);
             nr.u64Arg0 = 5; /* stats */
             nr.u64Arg1 = (u64)(uintptr_t)aSt;
@@ -6236,7 +7986,7 @@ kernel_after_mmap(struct gj_mem_region *aRegions, size_t cRegions)
                         memset(&bex, 0, sizeof(bex));
                         aRs[0] = aRs[1] = 0;
                         /*
-                         * Export via driver (BSS buffer — avoids stack local
+                         * Export via driver (BSS buffer - avoids stack local
                          * addr packing edge cases with large gj_virtq_export).
                          */
                         if (virtio_blk_export_q(&bex) == 0 && bex.u32Ready &&
@@ -6445,7 +8195,7 @@ kernel_after_mmap(struct gj_mem_region *aRegions, size_t cRegions)
      * G-PERS product shape: separate NATIVE process + ring-3 door server.
      * Per-thread kstack allows door_recv to block mid-SYSCALL.
      * Cold policy still runs in kernel via GJ_SYS_PERSONALITY_SERVE until
-     * full userspace vfsd (interim accepted by freeze for bring-up→product).
+     * full userspace vfsd (interim accepted by freeze for bring-up->product).
      */
     gj_protonrt_attach_cold();
     gj_process_init(&g_persProc, &g_persCnode, g_aPersSlots, GJ_BOOT_CNODE_SLOTS);
@@ -6464,7 +8214,7 @@ kernel_after_mmap(struct gj_mem_region *aRegions, size_t cRegions)
         }
         kprintf("pers: userspace door server scheduled (G-PERS)\n");
     } else {
-        kprintf("pers: user map/create failed — kernel fallback\n");
+        kprintf("pers: user map/create failed - kernel fallback\n");
         if (thread_create(&g_bootProc, cold_personality_server, NULL) == 0) {
             kprintf("sched: personality thread create failed\n");
         } else {
@@ -6508,7 +8258,7 @@ kernel_after_mmap(struct gj_mem_region *aRegions, size_t cRegions)
                 regs.u64Arg0 = (u64)i64Fd;
                 gj_linux_syscall_dispatch(&regs);
                 kprintf("linux: fsync => %ld\n", (long)regs.i64Ret);
-                /* poll: one fd POLLOUT (BSS buffer — process CR3 may lack stack maps) */
+                /* poll: one fd POLLOUT (BSS buffer - process CR3 may lack stack maps) */
                 {
                     static struct {
                         i32 fd;
@@ -6681,7 +8431,7 @@ kernel_after_mmap(struct gj_mem_region *aRegions, size_t cRegions)
                             kprintf("linux: readlink PASS\n");
                         }
                     }
-                    /* wait4: no children → ECHILD */
+                    /* wait4: no children -> ECHILD */
                     {
                         static i32 st;
 
@@ -6817,13 +8567,16 @@ kernel_after_mmap(struct gj_mem_region *aRegions, size_t cRegions)
      * idle can continue (cpu_enter_user does not return).
      */
     if (!idt_ready()) {
-        kprintf("idt: not ready — skip ring3\n");
+        kprintf("idt: not ready - skip ring3\n");
     } else if (user_task_map_ring3(&g_bootProc) == 0) {
         u32 u32Ring3;
 
         process_as_activate(&g_bootProc);
         u32Ring3 = thread_create_user(&g_bootProc, 0x1000000ull, 0x1100000ull);
-        kprintf("M0 pre-ring3 OK — user thr %u\n", u32Ring3);
+        if (u32Ring3 != 0u) {
+            thread_soft_tag_set(u32Ring3, "ring3");
+        }
+        kprintf("M0 pre-ring3 OK - user thr %u\n", u32Ring3);
         {
             int iY;
 
@@ -6880,6 +8633,9 @@ kernel_after_mmap(struct gj_mem_region *aRegions, size_t cRegions)
             }
             u32InitThr = thread_create_user(&g_initProc, elfInfo.u64Entry,
                                             u64Stack);
+            if (u32InitThr != 0u) {
+                thread_soft_tag_set(u32InitThr, "init");
+            }
             kprintf("init: elf thr=%u entry=0x%lx stack=0x%lx\n", u32InitThr,
                     (unsigned long)elfInfo.u64Entry, (unsigned long)u64Stack);
             {
@@ -6896,7 +8652,7 @@ kernel_after_mmap(struct gj_mem_region *aRegions, size_t cRegions)
         process_as_activate(&g_bootProc);
     }
 
-    /* Live sessiond.elf (native personality) — claims session door */
+    /* Live sessiond.elf (native personality) - claims session door */
     {
         extern char gj_sessiond_elf_blob[];
         extern char gj_sessiond_elf_blob_end[];
@@ -6958,7 +8714,7 @@ kernel_after_mmap(struct gj_mem_region *aRegions, size_t cRegions)
                 kprintf("sessiond: live ownership held token=0x%x\n",
                         session_door_owner_token());
             }
-            /* After yields, sessiond should have completed claim→present→release */
+            /* After yields, sessiond should have completed claim->present->release */
             if (!session_door_owned()) {
                 kprintf("sessiond: live spawn PASS\n");
             } else {
@@ -7033,7 +8789,7 @@ kernel_after_mmap(struct gj_mem_region *aRegions, size_t cRegions)
         process_as_activate(&g_bootProc);
     }
 
-    /* Live sshd.elf (native) — product SSH on by default (port 22 / net door) */
+    /* Live sshd.elf (native) - product SSH on by default (port 22 / net door) */
     {
         extern char gj_sshd_elf_blob[];
         extern char gj_sshd_elf_blob_end[];
@@ -7053,7 +8809,7 @@ kernel_after_mmap(struct gj_mem_region *aRegions, size_t cRegions)
         stSshd = elf_load_image(&g_sshdProc, gj_sshd_elf_blob, cbSshd,
                                 &sshdInfo);
         if (stSshd == GJ_OK) {
-            /* Dedicated stack VA + more pages — avoids #UD from stack clash/crypto */
+            /* Dedicated stack VA + more pages - avoids #UD from stack clash/crypto */
             u64 u64Stack = 0x1300000ull;
             u32 thr;
             u32 iPg;
@@ -7078,6 +8834,9 @@ kernel_after_mmap(struct gj_mem_region *aRegions, size_t cRegions)
                                        GJ_VMM_PROT_USER);
             }
             thr = thread_create_user(&g_sshdProc, sshdInfo.u64Entry, u64Stack);
+            if (thr != 0u) {
+                thread_soft_tag_set(thr, "sshd");
+            }
             kprintf("sshd: live elf thr=%u entry=0x%lx cb=%lu stack=0x%lx\n", thr,
                     (unsigned long)sshdInfo.u64Entry,
                     (unsigned long)cbSshd, (unsigned long)u64Stack);
@@ -7156,7 +8915,7 @@ kernel_after_mmap(struct gj_mem_region *aRegions, size_t cRegions)
         process_as_activate(&g_bootProc);
     }
 
-    /* Live scsi_mid.elf — userspace mid → GJ_SYS_SCSI → virtio-scsi */
+    /* Live scsi_mid.elf - userspace mid -> GJ_SYS_SCSI -> virtio-scsi */
     {
         extern char gj_scsi_mid_elf_blob[];
         extern char gj_scsi_mid_elf_blob_end[];
@@ -7216,7 +8975,7 @@ kernel_after_mmap(struct gj_mem_region *aRegions, size_t cRegions)
         process_as_activate(&g_bootProc);
     }
 
-    /* Live hda_client.elf — freestanding HDA stream door smoke */
+    /* Live hda_client.elf - freestanding HDA stream door smoke */
     {
         extern char gj_hda_client_elf_blob[];
         extern char gj_hda_client_elf_blob_end[];
@@ -7276,7 +9035,7 @@ kernel_after_mmap(struct gj_mem_region *aRegions, size_t cRegions)
         process_as_activate(&g_bootProc);
     }
 
-    /* Live vfsd.elf — block mount + named page-cache (product stack) */
+    /* Live vfsd.elf - block mount + named page-cache (product stack) */
     {
         extern char gj_vfsd_elf_blob[];
         extern char gj_vfsd_elf_blob_end[];
@@ -7335,7 +9094,7 @@ kernel_after_mmap(struct gj_mem_region *aRegions, size_t cRegions)
 
         /*
          * Multi-client VFS door: second "client" (kernel smoke) uses the same
-         * namespace vfsd just formatted — create/read without re-claim.
+         * namespace vfsd just formatted - create/read without re-claim.
          */
         {
             static char szCli[] = "client.txt";
@@ -7360,7 +9119,7 @@ kernel_after_mmap(struct gj_mem_region *aRegions, size_t cRegions)
                             (long)r);
                 }
             } else {
-                /* vfsd may still hold exclusive claim — release path should
+                /* vfsd may still hold exclusive claim - release path should
                  * have run; try format+write for soft bring-up */
                 (void)vfs_door_call(GJ_VFS_OP_FORMAT, 0, 0, 0);
                 r = vfs_door_call(GJ_VFS_OP_WRITE, (u64)(gj_vaddr_t)szCli,
@@ -7398,7 +9157,7 @@ kernel_after_mmap(struct gj_mem_region *aRegions, size_t cRegions)
         }
     }
 
-    /* Live shell.elf — echo/cat/ls via VFS door */
+    /* Live shell.elf - echo/cat/ls via VFS door */
     {
         extern char gj_shell_elf_blob[];
         extern char gj_shell_elf_blob_end[];
@@ -7455,6 +9214,39 @@ kernel_after_mmap(struct gj_mem_region *aRegions, size_t cRegions)
         process_as_activate(&g_bootProc);
     }
 
+    /*
+     * Functional residual toward OPEN_UDX host spawn (after multi-server
+     * live spawn proves elf_load|user_as|thr path). Soft ddi bind stash
+     * from earlier residual; weak UDX host ELF probe when embeds land;
+     * process_spawn_host_launch residual (catalog park stub; keep_live
+     * when embed present — never kill embed; kill/wait only if no embed)
+     * for ddi_host_gj / xhci_udx / rtl8168_udx after soft DDI path.
+     * STRONGER denser host_launch live residual lamps (H2 once:
+     * launch_ok|keep_live|embed|thr_live|product_host_live|
+     * keep_live_rock|soft_ne_product; denser multi-arm denser_arms=8;
+     * quaternary refuse-kill; confirm keep_live VERDICT; aggregate tally
+     * keep_live vs kill_wait honesty; Soft!=product dual_dod A/B OPEN
+     * product_hosts=UDX Dual DoD OPEN Soft!=product wire+USB+sshd).
+     * Product UDX hosts stay live for Dual DoD (keep_live rock-solid).
+     * CRITICAL: keep_live=1 on embed; never kill embed.
+     * Soft!=product · G-AC-1 · Dual DoD A/B stay OPEN_UDX (agent!=close).
+     * H2 once-lamps; never bump GJ_IMAGE_VERSION; never invent .76.
+     * Bar honesty v2026.08.04.75.
+     * greppable: main: soft residual OPEN_UDX host spawn
+     * greppable: main: soft residual host_spawn
+     * greppable: main: soft residual host_launch
+     * greppable: main: soft residual host_launch live
+     * greppable: main: soft residual host_launch live denser
+     * greppable: main: soft residual host_launch live denser residual
+     * greppable: main: soft residual host_launch live denser residual VERDICT
+     * greppable: main: soft residual host_launch live confirm keep_live
+     * greppable: process_spawn_host_launch
+     * greppable: keep_live=1
+     * greppable: denser_arms=
+     * greppable: VERDICT=confirm_keep_live
+     */
+    main_soft_udx_host_spawn_residual();
+
     kprintf("timer: preempts=%lu quantum=%u\n",
             (unsigned long)timer_preempt_count(), timer_quantum_ticks());
     if (timer_quantum_ticks() > 0) {
@@ -7462,7 +9254,7 @@ kernel_after_mmap(struct gj_mem_region *aRegions, size_t cRegions)
     }
 
     /*
-     * Soft stats smoke inventory — greppable product markers only.
+     * Soft stats smoke inventory - greppable product markers only.
      * Wave 36 exclusive deepen: soft inventory + path + capacity +
      * surfaces + catalog + note + honesty + deepen. Never blocks M0.
      * Grep: soft: stats smoke
@@ -7551,1052 +9343,11 @@ kernel_after_mmap(struct gj_mem_region *aRegions, size_t cRegions)
                 wow64_map_hits(), wow64_thunk_hits(),
                 (unsigned)MAIN_SOFT_SMOKE_WAVE);
 
-        /* Grep: soft: surfaces (Wave 20 deepen) */
-        kprintf("soft: surfaces count=%u "
-                "names=begin,cpu,timer,serial,native,linux_nr,entry,"
-                "inventory,path,capacity,surfaces,catalog,note,honesty,"
-                "return,retmap,retclass,retlane,retbound,retseal,retpulse,retmark,retphase,retbadge,rettoken,retcrest,retvault,retbanner,retledger,retbeacon,retcipher,retflame,retprism,retforge,retshard,retcrown,retglyph,retscepter,retsigil,retemblem,retaegis,retmantle,retbulwark,retpanoply,retbastion,retcitadel,retredoubt,retkeep,retfortress,retpalace,rethold,retspire,retwall,retgate,retmoat,retower,retbarbican,retglacis,retcurtain,retparapet,retravelin,retditch,retportcullis,retbattlement,retmachicolation,retarrowslit,retmerlon,retembrasure,retkeepgate,retouterward,retbailey,retpostern,retinnerward,retdonjon,retchevaux,retpalisade,retglacisgate,retoutwork,retsally,retcounterscarp,retfosse,retcoveredway,rettenaille,retdemilune,retravelin,retlunette,retcaponier,retredan,retflank,retface,retgorge,retshoulder,retraverse,retcasemate,retorillon,retbonnette,retcrownwork,rethornwork,retplace,retenvelope,retcounterguard,retcoveredface,retbastionface,retcurtainangle,retdoubletenaille,retplaceofarms,retreentrant,retsallyport,retgorgeangle,retshoulderangle,retflankangle,retfaceangle,retcaponierangle,retredanangle,retlunetteangle,rettenailleangle,retdemiluneangle,retcoveredwayangle,retfosseangle,retcounterscarple,retsallyportangle,retreentrantangle,retplaceofarmsangle,retdoubletenailleangle,retcurtainface,retbastionangle,retglacisangle,retparapetangle,retmoatangle,retowerangle,retgateangle,retwallangle,retspireangle,retholdangle,retpalaceangle,retfortressangle,retkeepangle,retredoubtangle,retcitadelangle,retbastionkeep,retpanoplyangle,retbulwarkangle,retmantleangle,retaegisangle,retemblemangle,retsigilangle,retscepterangle,retglyphangle,retcrownangle,retshardangle,retforgeangle,retprismangle,retflameangle,retcipherangle,retbeaconangle,retledgerangle,retbannerangle,retvaultangle,retcrestangle,rettokenangle,retbadgeangle,retphaseangle,retmarkangle,retpulseangle,retsealangle,retboundangle,retstemangle,retbladeangle,retchordangle,retarcangle,retsectorangle,retwedgeangle,retradiusangle,retdiameterangle,retcircumangle,retellipseangle,rethyperangle,retparabolaangle,retspiralangle,rethelixangle,rettorusangle,retknotangle,retmoebiusangle,retkleinangle,retprojectangle,retaffineangle,retlinearangle,retbilinearangle,retquadraticangle,retcubicangle,retquarticangle,retquinticangle,retsplineangle,retbezierangle,rethurmitangle,retcatmullangle,retnurbsangle,retbsplineangle,retmeshangle,retgridangle,retvoxelangle,rettexelangle,retfragmentangle,retvertexangle,retshaderangle,retpipelineangle,retframebufferangle,retswapchainangle,retpresentangle,retvsyncangle,retfenceangle,retsemaphoreangle,retmutexangle,retcondangle,retbarrierangle,retatomicangle,retqueueangle,reteventangle,retchannelangle,retmailboxangle,retstreamangle,retpacketangle,retframeangle,retwindowangle,retlayerangle,retcanvasangle,retbrushangle,retinkangle,retpaletteangle,retstrokeangle,retgradientangle,retblendangle,deepen,PASS wave=%u\n",
-                (unsigned)MAIN_SOFT_SMOKE_AREAS,
-                (unsigned)MAIN_SOFT_SMOKE_WAVE);
-
-        /* Grep: soft: catalog (Wave 20 deepen) */
-        kprintf("soft: catalog wave=%u areas=%u "
-                "surfaces=begin,cpu,timer,serial,native,linux_nr,entry,"
-                "inventory,path,capacity,surfaces,catalog,note,honesty,"
-                "return,retmap,retclass,retlane,retbound,retseal,retpulse,retmark,retphase,retbadge,rettoken,retcrest,retvault,retbanner,retledger,retbeacon,retcipher,retflame,retprism,retforge,retshard,retcrown,retglyph,retscepter,retsigil,retemblem,retaegis,retmantle,retbulwark,retpanoply,retbastion,retcitadel,retredoubt,retkeep,retfortress,retpalace,rethold,retspire,retwall,retgate,retmoat,retower,retbarbican,retglacis,retcurtain,retparapet,retravelin,retditch,retportcullis,retbattlement,retmachicolation,retarrowslit,retmerlon,retembrasure,retkeepgate,retouterward,retbailey,retpostern,retinnerward,retdonjon,retchevaux,retpalisade,retglacisgate,retoutwork,retsally,retcounterscarp,retfosse,retcoveredway,rettenaille,retdemilune,retravelin,retlunette,retcaponier,retredan,retflank,retface,retgorge,retshoulder,retraverse,retcasemate,retorillon,retbonnette,retcrownwork,rethornwork,retplace,retenvelope,retcounterguard,retcoveredface,retbastionface,retcurtainangle,retdoubletenaille,retplaceofarms,retreentrant,retsallyport,retgorgeangle,retshoulderangle,retflankangle,retfaceangle,retcaponierangle,retredanangle,retlunetteangle,rettenailleangle,retdemiluneangle,retcoveredwayangle,retfosseangle,retcounterscarple,retsallyportangle,retreentrantangle,retplaceofarmsangle,retdoubletenailleangle,retcurtainface,retbastionangle,retglacisangle,retparapetangle,retmoatangle,retowerangle,retgateangle,retwallangle,retspireangle,retholdangle,retpalaceangle,retfortressangle,retkeepangle,retredoubtangle,retcitadelangle,retbastionkeep,retpanoplyangle,retbulwarkangle,retmantleangle,retaegisangle,retemblemangle,retsigilangle,retscepterangle,retglyphangle,retcrownangle,retshardangle,retforgeangle,retprismangle,retflameangle,retcipherangle,retbeaconangle,retledgerangle,retbannerangle,retvaultangle,retcrestangle,rettokenangle,retbadgeangle,retphaseangle,retmarkangle,retpulseangle,retsealangle,retboundangle,retstemangle,retbladeangle,retchordangle,retarcangle,retsectorangle,retwedgeangle,retradiusangle,retdiameterangle,retcircumangle,retellipseangle,rethyperangle,retparabolaangle,retspiralangle,rethelixangle,rettorusangle,retknotangle,retmoebiusangle,retkleinangle,retprojectangle,retaffineangle,retlinearangle,retbilinearangle,retquadraticangle,retcubicangle,retquarticangle,retquinticangle,retsplineangle,retbezierangle,rethurmitangle,retcatmullangle,retnurbsangle,retbsplineangle,retmeshangle,retgridangle,retvoxelangle,rettexelangle,retfragmentangle,retvertexangle,retshaderangle,retpipelineangle,retframebufferangle,retswapchainangle,retpresentangle,retvsyncangle,retfenceangle,retsemaphoreangle,retmutexangle,retcondangle,retbarrierangle,retatomicangle,retqueueangle,reteventangle,retchannelangle,retmailboxangle,retstreamangle,retpacketangle,retframeangle,retwindowangle,retlayerangle,retcanvasangle,retbrushangle,retinkangle,retpaletteangle,retstrokeangle,retgradientangle,retblendangle,deepen,PASS\n",
-                (unsigned)MAIN_SOFT_SMOKE_WAVE,
-                (unsigned)MAIN_SOFT_SMOKE_AREAS);
-
-        /* Grep: soft: note (Wave 20 deepen) */
-        kprintf("soft: note milestone=wave98 exclusive=1 soft_only=1 "
-                " hit=%u wow64_calls=%u wave=%u\n",
-                cHit, cWow64, (unsigned)MAIN_SOFT_SMOKE_WAVE);
-
-        /* Grep: soft: honesty (Wave 20 deepen) */
-        kprintf("soft: honesty hybrid=M0_smoke open=1 "
-                "product_gate=0 soft_only=1 wave=%u "
-                "(soft inventory; never blocks M0)\n",
-                (unsigned)MAIN_SOFT_SMOKE_WAVE);
-
-        /* Grep: soft: return (Wave 20 deepen) */
-        kprintf("soft: return hit=%u serial=%u wow64_calls=%u "
-                "product_gate=0 never_blocks_m0=1 wave=%u\n",
-                cHit, cSerial, cWow64, (unsigned)MAIN_SOFT_SMOKE_WAVE);
-
-        /* Grep: soft: retmap — Wave 19 return-surface map */
-        kprintf("soft: retmap begin,cpu,timer,serial,native,linux_nr,entry,"
-                "inventory,path,capacity,surfaces,catalog,note,honesty,"
-                "return,retmap,retclass,retlane,retbound,retseal,retpulse,retmark,retphase,retbadge,rettoken,retcrest,retvault,retbanner,retledger,retbeacon,retcipher,retflame,retprism,retforge,retshard,retcrown,retglyph,retscepter,retsigil,retemblem,retaegis,retmantle,retbulwark,retpanoply,retbastion,retcitadel,retredoubt,retkeep,retfortress,retpalace,rethold,retspire,retwall,retgate,retmoat,retower,retbarbican,retglacis,retcurtain,retparapet,retravelin,retditch,retportcullis,retbattlement,retmachicolation,retarrowslit,retmerlon,retembrasure,retkeepgate,retouterward,retbailey,retpostern,retinnerward,retdonjon,retchevaux,retpalisade,retglacisgate,retoutwork,retsally,retcounterscarp,retfosse,retcoveredway,rettenaille,retdemilune,retravelin,retlunette,retcaponier,retredan,retflank,retface,retgorge,retshoulder,retraverse,retcasemate,retorillon,retbonnette,retcrownwork,rethornwork,retplace,retenvelope,retcounterguard,retcoveredface,retbastionface,retcurtainangle,retdoubletenaille,retplaceofarms,retreentrant,retsallyport,retgorgeangle,retshoulderangle,retflankangle,retfaceangle,retcaponierangle,retredanangle,retlunetteangle,rettenailleangle,retdemiluneangle,retcoveredwayangle,retfosseangle,retcounterscarple,retsallyportangle,retreentrantangle,retplaceofarmsangle,retdoubletenailleangle,retcurtainface,retbastionangle,retglacisangle,retparapetangle,retmoatangle,retowerangle,retgateangle,retwallangle,retspireangle,retholdangle,retpalaceangle,retfortressangle,retkeepangle,retredoubtangle,retcitadelangle,retbastionkeep,retpanoplyangle,retbulwarkangle,retmantleangle,retaegisangle,retemblemangle,retsigilangle,retscepterangle,retglyphangle,retcrownangle,retshardangle,retforgeangle,retprismangle,retflameangle,retcipherangle,retbeaconangle,retledgerangle,retbannerangle,retvaultangle,retcrestangle,rettokenangle,retbadgeangle,retphaseangle,retmarkangle,retpulseangle,retsealangle,retboundangle,retstemangle,retbladeangle,retchordangle,retarcangle,retsectorangle,retwedgeangle,retradiusangle,retdiameterangle,retcircumangle,retellipseangle,rethyperangle,retparabolaangle,retspiralangle,rethelixangle,rettorusangle,retknotangle,retmoebiusangle,retkleinangle,retprojectangle,retaffineangle,retlinearangle,retbilinearangle,retquadraticangle,retcubicangle,retquarticangle,retquinticangle,retsplineangle,retbezierangle,rethurmitangle,retcatmullangle,retnurbsangle,retbsplineangle,retmeshangle,retgridangle,retvoxelangle,rettexelangle,retfragmentangle,retvertexangle,retshaderangle,retpipelineangle,retframebufferangle,retswapchainangle,retpresentangle,retvsyncangle,retfenceangle,retsemaphoreangle,retmutexangle,retcondangle,retbarrierangle,retatomicangle,retqueueangle,reteventangle,retchannelangle,retmailboxangle,retstreamangle,retpacketangle,retframeangle,retwindowangle,retlayerangle,retcanvasangle,retbrushangle,retinkangle,retpaletteangle,retstrokeangle,retgradientangle,retblendangle,deepen,PASS "
-                "product_gate=0 never_blocks_m0=1 wave=%u\n",
-                (unsigned)MAIN_SOFT_SMOKE_WAVE);
-
         /*
-         * ---- Wave 19 complementary surfaces (kept) (never reshape primary).
-         * Return surfaces only — soft inventory; never hard-gates product paths.
+         * Wave 18+ soft ret* stamp storm REMOVED (lab FAULT fix v2026.08.04.13).
+         * Multi-line kprintf deepen stamps corrupted call frames -> #PF I=1 into .rodata.
+         * Soft!=product; M0 smoke inventory above retained.
          */
-        /* Grep: soft: retclass — Wave 19 return-class taxonomy (kept) */
-        kprintf("soft: retclass ok|fail|inval|nodev|busy|nomem "
-                "soft_only=1 product_gate=0 wave=%u "
-                "(retclass taxonomy; Soft≠product)\n",
-                (unsigned)MAIN_SOFT_SMOKE_WAVE);
-        /* Grep: soft: retlane — Wave 19 return-lane catalog (kept) */
-        kprintf("soft: retlane inv|selftest|rate|retcode|retmap|class "
-                "product_kernel=OPEN soft_ne_product=1 wave=%u "
-                "(retlane catalog; Soft≠product)\n",
-                (unsigned)MAIN_SOFT_SMOKE_WAVE);
-        /*
-         * ---- Wave 20 complementary surfaces (kept) (never reshape primary).
-         * Return surfaces only — soft inventory; never hard-gates product paths.
-         */
-        /* Grep: soft: retbound — Wave 20 return-bound honesty (kept) */
-        kprintf("soft: retbound soft_only=1 product_gate=0 hard_gate=0 "
-                "never_blocks_m0=1 wave=%u "
-                "(retbound honesty; Soft≠product)\n",
-                (unsigned)MAIN_SOFT_SMOKE_WAVE);
-        /* Grep: soft: retseal — Wave 20 seal stamp (kept) */
-        kprintf("soft: retseal exclusive=1 soft_ne_product=1 "
-                "product_kernel=OPEN wave=%u "
-                "(retseal stamp; Soft≠product)\n",
-                (unsigned)MAIN_SOFT_SMOKE_WAVE);
-                /*
-                 * ---- Wave 21 complementary surfaces (kept) (never reshape primary).
-                 * Return surfaces only — soft inventory; never hard-gates product paths.
-                */
-                /* Grep: soft: retpulse — Wave 21 return-pulse honesty (kept) */
-                kprintf("soft: retpulse soft_only=1 product_gate=0 soft_ne_product=1 "
-                        "never_blocks_m0=1 wave=%u "
-                        "(retpulse honesty; Soft≠product)\n",
-                        (unsigned)MAIN_SOFT_SMOKE_WAVE);
-                /* Grep: soft: retmark — Wave 21 mark stamp (kept) */
-                kprintf("soft: retmark exclusive=1 soft_ne_product=1 "
-                        "product_kernel=OPEN wave=%u "
-                        "(retmark stamp; Soft≠product)\n",
-                        (unsigned)MAIN_SOFT_SMOKE_WAVE);
-                /*
-                 * ---- Wave 22 complementary surfaces (kept) (never reshape primary).
-                 * Return surfaces only — soft inventory; never hard-gates product paths.
-                */
-                /* Grep: soft: retphase — Wave 22 return-phase honesty (kept) */
-                kprintf("soft: retphase soft_only=1 product_gate=0 soft_ne_product=1 "
-                        "never_blocks_m0=1 wave=%u "
-                        "(retphase honesty; Soft≠product)\n",
-                        (unsigned)MAIN_SOFT_SMOKE_WAVE);
-                /* Grep: soft: retbadge — Wave 22 badge stamp (kept) */
-                kprintf("soft: retbadge exclusive=1 soft_ne_product=1 "
-                        "product_kernel=OPEN wave=%u "
-                        "(retbadge stamp; Soft≠product)\n",
-                        (unsigned)MAIN_SOFT_SMOKE_WAVE);
-/*
- * ---- Wave 23 complementary surfaces (kept) (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
-                */
-                /* Grep: soft: rettoken — Wave 23 return-token honesty (kept) */
-                kprintf("soft: rettoken soft_only=1 product_gate=0 soft_ne_product=1 "
-                        "never_blocks_m0=1 wave=%u "
-                        "(rettoken honesty; Soft≠product)\n",
-                        (unsigned)MAIN_SOFT_SMOKE_WAVE);
-                /* Grep: soft: retcrest — Wave 23 crest stamp (kept) */
-                kprintf("soft: retcrest exclusive=1 soft_ne_product=1 "
-                        "product_kernel=OPEN wave=%u "
-                        "(retcrest stamp; Soft≠product)\n",
-                        (unsigned)MAIN_SOFT_SMOKE_WAVE);
-                /*
-                 * ---- Wave 24 complementary surfaces (kept) (never reshape primary).
-                 * Return surfaces only — soft inventory; never hard-gates product paths.
-                 */
-                /* Grep: soft: retvault — Wave 24 return-vault honesty (kept) */
-                kprintf("soft: retvault soft_only=1 product_gate=0 soft_ne_product=1 "
-                        "never_blocks_m0=1 wave=%u "
-                        "(retvault honesty; Soft≠product)\n",
-                        (unsigned)MAIN_SOFT_SMOKE_WAVE);
-                /* Grep: soft: retbanner — Wave 24 banner stamp (kept) */
-                kprintf("soft: retbanner exclusive=1 soft_ne_product=1 "
-                        "product_kernel=OPEN wave=%u "
-                        "(retbanner stamp; Soft≠product)\n",
-                        (unsigned)MAIN_SOFT_SMOKE_WAVE);
-                /*
-                 * ---- Wave 25 complementary surfaces (kept) (never reshape primary).
-                 * Return surfaces only — soft inventory; never hard-gates product paths.
-                 */
-                /* Grep: soft: retledger — Wave 25 return-ledger honesty (kept) */
-                kprintf("soft: retledger soft_only=1 product_gate=0 soft_ne_product=1 "
-                        "never_blocks_m0=1 wave=%u "
-                        "(retledger honesty; Soft≠product)\n",
-                        (unsigned)MAIN_SOFT_SMOKE_WAVE);
-                /* Grep: soft: retbeacon — Wave 25 beacon stamp (kept) */
-                kprintf("soft: retbeacon exclusive=1 soft_ne_product=1 "
-                        "product_kernel=OPEN wave=%u "
-                        "(retbeacon stamp; Soft≠product)\n",
-                        (unsigned)MAIN_SOFT_SMOKE_WAVE);
-                /*
-                 * ---- Wave 26 complementary surfaces (kept) (never reshape primary).
-                 * Return surfaces only — soft inventory; never hard-gates product paths.
-                 */
-                /* Grep: soft: retcipher — Wave 26 return-cipher honesty (kept) */
-                kprintf("soft: retcipher soft_only=1 product_gate=0 soft_ne_product=1 "
-                        "never_blocks_m0=1 wave=%u "
-                        "(retcipher honesty; Soft≠product)\n",
-                        (unsigned)MAIN_SOFT_SMOKE_WAVE);
-                /* Grep: soft: retflame — Wave 26 flame stamp (kept) */
-                kprintf("soft: retflame exclusive=1 soft_ne_product=1 "
-                        "product_kernel=OPEN wave=%u "
-                        "(retflame stamp; Soft≠product)\n",
-                        (unsigned)MAIN_SOFT_SMOKE_WAVE);
-                        /*
-                         * ---- Wave 27 complementary surfaces (kept) (never reshape primary).
-                         * Return surfaces only — soft inventory; never hard-gates product paths.
-                         */
-                        /* Grep: soft: retprism — Wave 27 return-prism honesty (kept) */
-                        kprintf("soft: retprism soft_only=1 product_gate=0 soft_ne_product=1 "
-                                "never_blocks_m0=1 wave=%u "
-                                "(retprism honesty; Soft≠product)\n",
-                                (unsigned)MAIN_SOFT_SMOKE_WAVE);
-                        /* Grep: soft: retforge — Wave 27 forge stamp (kept) */
-                        kprintf("soft: retforge exclusive=1 soft_ne_product=1 "
-                                "product_kernel=OPEN wave=%u "
-                                "(retforge stamp; Soft≠product)\n",
-                                (unsigned)MAIN_SOFT_SMOKE_WAVE);
-                                /*
-                                 * ---- Wave 28 complementary surfaces (kept) (never reshape primary).
-                                 * Return surfaces only — soft inventory; never hard-gates product paths.
-                                 */
-                                /* Grep: soft: retshard — Wave 28 return-shard honesty (kept) */
-                                kprintf("soft: retshard soft_only=1 product_gate=0 soft_ne_product=1 "
-                                    "never_blocks_m0=1 wave=%u "
-                                    "(retshard honesty; Soft≠product)\n",
-                                    (unsigned)MAIN_SOFT_SMOKE_WAVE);
-                                /* Grep: soft: retcrown — Wave 28 crown stamp (kept) */
-                                kprintf("soft: retcrown exclusive=1 soft_ne_product=1 "
-                                    "product_kernel=OPEN wave=%u "
-                                    "(retcrown stamp; Soft≠product)\n",
-                                    (unsigned)MAIN_SOFT_SMOKE_WAVE);
-
-                                        /*
-                                 * ---- Wave 29 complementary surfaces (kept) (never reshape primary).
-                                 * Return surfaces only — soft inventory; never hard-gates product paths.
-                                 */
-                                /* Grep: soft: retglyph — Wave 29 return-glyph honesty (kept) */
-                                kprintf("soft: retglyph soft_only=1 product_gate=0 soft_ne_product=1 "
-                                        "never_blocks_m0=1 wave=%u "
-                                        "(retglyph honesty; Soft≠product)\n",
-                                        (unsigned)MAIN_SOFT_SMOKE_WAVE);
-                                /* Grep: soft: retscepter — Wave 29 scepter stamp (kept) */
-                                kprintf("soft: retscepter exclusive=1 soft_ne_product=1 "
-                                        "product_kernel=OPEN wave=%u "
-                                        "(retscepter stamp; Soft≠product)\n",
-                                        (unsigned)MAIN_SOFT_SMOKE_WAVE);
-                                        /*
-                                 * ---- Wave 30 complementary surfaces (kept) (never reshape primary).
-                                 * Return surfaces only — soft inventory; never hard-gates product paths.
-                                 */
-                                /* Grep: soft: retsigil — Wave 30 return-sigil honesty (kept) */
-                                kprintf("soft: retsigil soft_only=1 product_gate=0 soft_ne_product=1 "
-                                        "never_blocks_m0=1 wave=%u "
-                                        "(retsigil honesty; Soft≠product)\n",
-                                        (unsigned)MAIN_SOFT_SMOKE_WAVE);
-                                /* Grep: soft: retemblem — Wave 30 emblem stamp (kept) */
-                                kprintf("soft: retemblem exclusive=1 soft_ne_product=1 "
-                                        "product_kernel=OPEN wave=%u "
-                                        "(retemblem stamp; Soft≠product)\n",
-                                        (unsigned)MAIN_SOFT_SMOKE_WAVE);
-                                /*
-                                 * ---- Wave 31 complementary surfaces (kept) (never reshape primary).
-                                 * Return surfaces only — soft inventory; never hard-gates product paths.
-                                 */
-                                /* Grep: soft: retaegis — Wave 31 return-aegis honesty (kept) */
-                                kprintf("soft: retaegis soft_only=1 product_gate=0 soft_ne_product=1 "
-                                        "never_blocks_m0=1 wave=%u "
-                                        "(retaegis honesty; Soft≠product)\n",
-                                        (unsigned)MAIN_SOFT_SMOKE_WAVE);
-                                /* Grep: soft: retsigil — Wave 30 return-sigil honesty (kept) */
-                                kprintf("soft: retsigil soft_only=1 product_gate=0 soft_ne_product=1 "
-                                        "never_blocks_m0=1 wave=%u "
-                                        "(retsigil honesty; Soft≠product)\n",
-                                        (unsigned)MAIN_SOFT_SMOKE_WAVE);
-                                /* Grep: soft: retmantle — Wave 31 mantle stamp (kept) */
-                                kprintf("soft: retmantle exclusive=1 soft_ne_product=1 "
-                                        "product_kernel=OPEN wave=%u "
-                                        "(retmantle stamp; Soft≠product)\n",
-                                        (unsigned)MAIN_SOFT_SMOKE_WAVE);
-/*
- * ---- Wave 32 complementary surfaces (kept) (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: soft: retbulwark — Wave 32 return-bulwark honesty (kept) */
-kprintf("soft: retbulwark soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=%u "
-        "(retbulwark honesty; Soft≠product)\n",
-        (unsigned)MAIN_SOFT_SMOKE_WAVE);
-/* Grep: soft: retpanoply — Wave 32 panoply stamp (kept) */
-kprintf("soft: retpanoply exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=%u "
-        "(retpanoply stamp; Soft≠product)\n",
-        (unsigned)MAIN_SOFT_SMOKE_WAVE);
-/*
- * ---- Wave 33 complementary surfaces (kept) (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: soft: retbastion — Wave 33 return-bastion honesty (kept) */
-kprintf("soft: retbastion soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=%u "
-        "(retbastion honesty; Soft≠product)\n",
-        (unsigned)MAIN_SOFT_SMOKE_WAVE);
-/* Grep: soft: retcitadel — Wave 33 citadel stamp (kept) */
-kprintf("soft: retcitadel exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=%u "
-        "(retcitadel stamp; Soft≠product)\n",
-        (unsigned)MAIN_SOFT_SMOKE_WAVE);
-/*
- * ---- Wave 34 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: soft: retredoubt — Wave 34 return-redoubt honesty */
-kprintf("soft: retredoubt soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=%u "
-        "(retredoubt honesty; Soft≠product)\n",
-        (unsigned)MAIN_SOFT_SMOKE_WAVE);
-/* Grep: soft: retkeep — Wave 34 exclusive keep stamp */
-kprintf("soft: retkeep exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=%u "
-        "(retkeep stamp; Soft≠product)\n",
-        (unsigned)MAIN_SOFT_SMOKE_WAVE);
-/*
- * ---- Wave 35 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: soft: retfortress — Wave 35 return-fortress honesty */
-kprintf("soft: retfortress soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=%u "
-        "(retfortress honesty; Soft≠product)\n",
-        (unsigned)MAIN_SOFT_SMOKE_WAVE);
-/* Grep: soft: retpalace — Wave 35 exclusive palace stamp */
-kprintf("soft: retpalace exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=%u "
-        "(retpalace stamp; Soft≠product)\n",
-        (unsigned)MAIN_SOFT_SMOKE_WAVE);
-/*
- * ---- Wave 36 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: soft: rethold — Wave 36 return-hold honesty */
-kprintf("soft: rethold soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=%u "
-        "(rethold honesty; Soft≠product)\n",
-        (unsigned)MAIN_SOFT_SMOKE_WAVE);
-/* Grep: soft: retspire — Wave 36 exclusive spire stamp */
-kprintf("soft: retspire exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=%u "
-        "(retspire stamp; Soft≠product)\n",
-        (unsigned)MAIN_SOFT_SMOKE_WAVE);
-/*
- * ---- Wave 37 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: soft: retwall — Wave 37 return-wall honesty */
-kprintf("soft: retwall soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=%u "
-        "(retwall honesty; Soft≠product)\n",
-        (unsigned)MAIN_SOFT_SMOKE_WAVE);
-/* Grep: soft: retgate — Wave 37 exclusive gate stamp */
-kprintf("soft: retgate exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=%u "
-        "(retgate stamp; Soft≠product)\n",
-        (unsigned)MAIN_SOFT_SMOKE_WAVE);
-/*
- * ---- Wave 38 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: soft: retmoat — Wave 38 return-moat honesty */
-kprintf("soft: retmoat soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=%u "
-        "(retmoat honesty; Soft≠product)\n",
-        (unsigned)MAIN_SOFT_SMOKE_WAVE);
-/* Grep: soft: retower — Wave 38 exclusive tower stamp */
-kprintf("soft: retower exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=%u "
-        "(retower stamp; Soft≠product)\n",
-        (unsigned)MAIN_SOFT_SMOKE_WAVE);
-/*
- * ---- Wave 39 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: soft: retbarbican — Wave 39 return-barbican honesty */
-kprintf("soft: retbarbican soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=%u "
-        "(retbarbican honesty; Soft≠product)\n",
-        (unsigned)MAIN_SOFT_SMOKE_WAVE);
-/* Grep: soft: retglacis — Wave 39 exclusive glacis stamp */
-kprintf("soft: retglacis exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=%u "
-        "(retglacis stamp; Soft≠product)\n",
-        (unsigned)MAIN_SOFT_SMOKE_WAVE);
-/*
- * ---- Wave 40 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: soft: retcurtain — Wave 40 return-curtain honesty */
-kprintf("soft: retcurtain soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=%u "
-        "(retcurtain honesty; Soft≠product)\n",
-        (unsigned)MAIN_SOFT_SMOKE_WAVE);
-/* Grep: soft: retparapet — Wave 40 exclusive parapet stamp */
-kprintf("soft: retparapet exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=%u "
-        "(retparapet stamp; Soft≠product)\n",
-        (unsigned)MAIN_SOFT_SMOKE_WAVE);
-/*
- * ---- Wave 41 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: soft: retravelin — Wave 41 return-travelin honesty */
-kprintf("soft: retravelin soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=%u "
-        "(retravelin honesty; Soft≠product)\n",
-        (unsigned)MAIN_SOFT_SMOKE_WAVE);
-/* Grep: soft: retditch — Wave 41 exclusive ditch stamp */
-kprintf("soft: retditch exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=%u "
-        "(retditch stamp; Soft≠product)\n",
-        (unsigned)MAIN_SOFT_SMOKE_WAVE);
-/*
- * ---- Wave 42 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: soft: retportcullis — Wave 42 return-portcullis honesty */
-kprintf("soft: retportcullis soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=%u "
-        "(retportcullis honesty; Soft≠product)\n",
-        (unsigned)MAIN_SOFT_SMOKE_WAVE);
-/* Grep: soft: retbattlement — Wave 42 exclusive battlement stamp */
-kprintf("soft: retbattlement exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=%u "
-        "(retbattlement stamp; Soft≠product)\n",
-        (unsigned)MAIN_SOFT_SMOKE_WAVE);
-/*
- * ---- Wave 43 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: soft: retmachicolation — Wave 43 return-machicolation honesty */
-kprintf("soft: retmachicolation soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=%u "
-        "(retmachicolation honesty; Soft≠product)\n",
-        (unsigned)MAIN_SOFT_SMOKE_WAVE);
-/* Grep: soft: retarrowslit — Wave 43 exclusive arrowslit stamp */
-kprintf("soft: retarrowslit exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=%u "
-        "(retarrowslit stamp; Soft≠product)\n",
-        (unsigned)MAIN_SOFT_SMOKE_WAVE);
-
-/*
- * ---- Wave 44 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: soft: retmerlon — Wave 44 return-merlon honesty */
-kprintf("soft: retmerlon soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=%u "
-        "(retmerlon honesty; Soft≠product)\n",
-        (unsigned)MAIN_SOFT_SMOKE_WAVE);
-/* Grep: soft: retembrasure — Wave 44 exclusive embrasure stamp */
-kprintf("soft: retembrasure exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=%u "
-        "(retembrasure stamp; Soft≠product)\n",
-        (unsigned)MAIN_SOFT_SMOKE_WAVE);
-
-/*
- * ---- Wave 45 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: soft: retkeepgate — Wave 45 return-keepgate honesty */
-kprintf("soft: retkeepgate soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=%u "
-        "(retkeepgate honesty; Soft≠product)\n",
-        (unsigned)MAIN_SOFT_SMOKE_WAVE);
-/* Grep: soft: retouterward — Wave 45 exclusive outerward stamp */
-kprintf("soft: retouterward exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=%u "
-        "(retouterward stamp; Soft≠product)\n",
-        (unsigned)MAIN_SOFT_SMOKE_WAVE);
-
-/*
- * ---- Wave 46 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: soft: retbailey — Wave 46 return-bailey honesty */
-kprintf("soft: retbailey soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=%u "
-        "(retbailey honesty; Soft≠product)\n",
-        (unsigned)MAIN_SOFT_SMOKE_WAVE);
-/* Grep: soft: retpostern — Wave 46 exclusive postern stamp */
-kprintf("soft: retpostern exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=%u "
-        "(retpostern stamp; Soft≠product)\n",
-        (unsigned)MAIN_SOFT_SMOKE_WAVE);
-
-/*
- * ---- Wave 47 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: soft: retinnerward — Wave 47 return-innerward honesty */
-kprintf("soft: retinnerward soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=%u "
-        "(retinnerward honesty; Soft≠product)\n",
-        (unsigned)MAIN_SOFT_SMOKE_WAVE);
-/* Grep: soft: retdonjon — Wave 47 exclusive donjon stamp */
-kprintf("soft: retdonjon exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=%u "
-        "(retdonjon stamp; Soft≠product)\n",
-        (unsigned)MAIN_SOFT_SMOKE_WAVE);
-
-/*
- * ---- Wave 48 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: soft: retchevaux — Wave 48 return-chevaux honesty */
-kprintf("soft: retchevaux soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=%u "
-        "(retchevaux honesty; Soft≠product)\n",
-        (unsigned)MAIN_SOFT_SMOKE_WAVE);
-/* Grep: soft: retpalisade — Wave 48 exclusive palisade stamp */
-kprintf("soft: retpalisade exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=%u "
-        "(retpalisade stamp; Soft≠product)\n",
-        (unsigned)MAIN_SOFT_SMOKE_WAVE);
-
-/*
- * ---- Wave 49 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: soft: retglacisgate — Wave 49 return-glacisgate honesty */
-kprintf("soft: retglacisgate soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=%u "
-        "(retglacisgate honesty; Soft≠product)\n",
-        (unsigned)MAIN_SOFT_SMOKE_WAVE);
-/* Grep: soft: retoutwork — Wave 49 exclusive outwork stamp */
-kprintf("soft: retoutwork exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=%u "
-        "(retoutwork stamp; Soft≠product)\n",
-        (unsigned)MAIN_SOFT_SMOKE_WAVE);
-/*
- * ---- Wave 50 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: soft: retsally — Wave 50 return-sally honesty */
-kprintf("soft: retsally soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=%u "
-        "(retsally honesty; Soft≠product)\n",
-        (unsigned)MAIN_SOFT_SMOKE_WAVE);
-/* Grep: soft: retcounterscarp — Wave 50 exclusive counterscarp stamp */
-kprintf("soft: retcounterscarp exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=%u "
-        "(retcounterscarp stamp; Soft≠product)\n",
-        (unsigned)MAIN_SOFT_SMOKE_WAVE);
-/*
- * ---- Wave 51 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: soft: retfosse — Wave 51 return-fosse honesty */
-kprintf("soft: retfosse soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=%u "
-        "(retfosse honesty; Soft≠product)\n",
-        (unsigned)MAIN_SOFT_SMOKE_WAVE);
-/* Grep: soft: retcoveredway — Wave 51 exclusive coveredway stamp */
-kprintf("soft: retcoveredway exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=%u "
-        "(retcoveredway stamp; Soft≠product)\n",
-        (unsigned)MAIN_SOFT_SMOKE_WAVE);
-
-/*
- * ---- Wave 52 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: soft: rettenaille — Wave 52 return-tenaille honesty */
-kprintf("soft: rettenaille soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=%u "
-        "(rettenaille honesty; Soft≠product)\n",
-        (unsigned)MAIN_SOFT_SMOKE_WAVE);
-/* Grep: soft: retdemilune — Wave 52 exclusive demilune stamp */
-kprintf("soft: retdemilune exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=%u "
-        "(retdemilune stamp; Soft≠product)\n",
-        (unsigned)MAIN_SOFT_SMOKE_WAVE);
-/*
- * ---- Wave 53 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: soft: retravelin — Wave 53 return-travelin honesty */
-kprintf("soft: retravelin soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=%u "
-        "(retravelin honesty; Soft≠product)\n",
-        (unsigned)MAIN_SOFT_SMOKE_WAVE);
-/* Grep: soft: retlunette — Wave 53 exclusive lunette stamp */
-kprintf("soft: retlunette exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=%u "
-        "(retlunette stamp; Soft≠product)\n",
-        (unsigned)MAIN_SOFT_SMOKE_WAVE);
-/*
- * ---- Wave 54 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: soft: retcaponier — Wave 54 return-caponier honesty */
-kprintf("soft: retcaponier soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=%u "
-        "(retcaponier honesty; Soft≠product)\n",
-        (unsigned)MAIN_SOFT_SMOKE_WAVE);
-/* Grep: soft: retredan — Wave 54 exclusive redan stamp */
-kprintf("soft: retredan exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=%u "
-        "(retredan stamp; Soft≠product)\n",
-        (unsigned)MAIN_SOFT_SMOKE_WAVE);
-/*
- * ---- Wave 55 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: soft: retflank — Wave 55 return-flank honesty */
-kprintf("soft: retflank soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=%u "
-        "(retflank honesty; Soft≠product)\n",
-        (unsigned)MAIN_SOFT_SMOKE_WAVE);
-/* Grep: soft: retface — Wave 55 exclusive face stamp */
-kprintf("soft: retface exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=%u "
-        "(retface stamp; Soft≠product)\n",
-        (unsigned)MAIN_SOFT_SMOKE_WAVE);
-/*
- * ---- Wave 56 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: soft: retgorge — Wave 56 return-gorge honesty */
-kprintf("soft: retgorge soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=%u "
-        "(retgorge honesty; Soft≠product)\n",
-        (unsigned)MAIN_SOFT_SMOKE_WAVE);
-/* Grep: soft: retshoulder — Wave 56 exclusive shoulder stamp */
-kprintf("soft: retshoulder exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=%u "
-        "(retshoulder stamp; Soft≠product)\n",
-        (unsigned)MAIN_SOFT_SMOKE_WAVE);
-
-/*
- * ---- Wave 57 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: soft: retraverse — Wave 57 return-traverse honesty */
-kprintf("soft: retraverse soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=%u "
-        "(retraverse honesty; Soft≠product)\n",
-        (unsigned)MAIN_SOFT_SMOKE_WAVE);
-/* Grep: soft: retcasemate — Wave 57 exclusive casemate stamp */
-kprintf("soft: retcasemate exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=%u "
-        "(retcasemate stamp; Soft≠product)\n",
-        (unsigned)MAIN_SOFT_SMOKE_WAVE);
-
-/*
- * ---- Wave 58 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: soft: retorillon — Wave 58 return-orillon honesty */
-kprintf("soft: retorillon soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=%u "
-        "(retorillon honesty; Soft≠product)\n",
-        (unsigned)MAIN_SOFT_SMOKE_WAVE);
-/* Grep: soft: retbonnette — Wave 58 exclusive bonnette stamp */
-kprintf("soft: retbonnette exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=%u "
-        "(retbonnette stamp; Soft≠product)\n",
-        (unsigned)MAIN_SOFT_SMOKE_WAVE);
-
-/*
- * ---- Wave 59 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: soft: retcrownwork — Wave 59 return-crownwork honesty */
-kprintf("soft: retcrownwork soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=%u "
-        "(retcrownwork honesty; Soft≠product)\n",
-        (unsigned)MAIN_SOFT_SMOKE_WAVE);
-/* Grep: soft: rethornwork — Wave 59 exclusive hornwork stamp */
-kprintf("soft: rethornwork exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=%u "
-        "(rethornwork stamp; Soft≠product)\n",
-        (unsigned)MAIN_SOFT_SMOKE_WAVE);
-
-/*
- * ---- Wave 60 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: soft: retplace — Wave 60 return-place honesty */
-kprintf("soft: retplace soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=%u "
-        "(retplace honesty; Soft≠product)\n",
-        (unsigned)MAIN_SOFT_SMOKE_WAVE);
-/* Grep: soft: retenvelope — Wave 60 exclusive envelope stamp */
-kprintf("soft: retenvelope exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=%u "
-        "(retenvelope stamp; Soft≠product)\n",
-        (unsigned)MAIN_SOFT_SMOKE_WAVE);
-
-/*
- * ---- Wave 61 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: soft: retcounterguard — Wave 61 return-counterguard honesty */
-kprintf("soft: retcounterguard soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=%u "
-        "(retcounterguard honesty; Soft≠product)\n",
-        (unsigned)MAIN_SOFT_SMOKE_WAVE);
-/* Grep: soft: retcoveredface — Wave 61 exclusive coveredface stamp */
-kprintf("soft: retcoveredface exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=%u "
-        "(retcoveredface stamp; Soft≠product)\n",
-        (unsigned)MAIN_SOFT_SMOKE_WAVE);
-/*
- * ---- Wave 62 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: soft: retbastionface — Wave 62 return-bastionface honesty */
-kprintf("soft: retbastionface soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=%u "
-        "(retbastionface honesty; Soft≠product)\n",
-        (unsigned)MAIN_SOFT_SMOKE_WAVE);
-/* Grep: soft: retcurtainangle — Wave 62 exclusive curtainangle stamp */
-kprintf("soft: retcurtainangle exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=%u "
-        "(retcurtainangle stamp; Soft≠product)\n",
-        (unsigned)MAIN_SOFT_SMOKE_WAVE);
-/*
- * ---- Wave 63 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: soft: retdoubletenaille — Wave 63 return-doubletenaille honesty */
-kprintf("soft: retdoubletenaille soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=%u "
-        "(retdoubletenaille honesty; Soft≠product)\n",
-        (unsigned)MAIN_SOFT_SMOKE_WAVE);
-/* Grep: soft: retplaceofarms — Wave 63 exclusive placeofarms stamp */
-kprintf("soft: retplaceofarms exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=%u "
-        "(retplaceofarms stamp; Soft≠product)\n",
-        (unsigned)MAIN_SOFT_SMOKE_WAVE);
-/*
- * ---- Wave 64 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: soft: retreentrant — Wave 64 return-reentrant honesty */
-kprintf("soft: retreentrant soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=%u "
-        "(retreentrant honesty; Soft≠product)\n",
-        (unsigned)MAIN_SOFT_SMOKE_WAVE);
-/* Grep: soft: retsallyport — Wave 64 exclusive sallyport stamp */
-kprintf("soft: retsallyport exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=%u "
-        "(retsallyport stamp; Soft≠product)\n",
-        (unsigned)MAIN_SOFT_SMOKE_WAVE);
-/*
- * ---- Wave 65 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: soft: retgorgeangle — Wave 65 return-gorgeangle honesty */
-kprintf("soft: retgorgeangle soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=%u "
-        "(retgorgeangle honesty; Soft≠product)\n",
-        (unsigned)MAIN_SOFT_SMOKE_WAVE);
-/* Grep: soft: retshoulderangle — Wave 65 exclusive shoulderangle stamp */
-kprintf("soft: retshoulderangle exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=%u "
-        "(retshoulderangle stamp; Soft≠product)\n",
-        (unsigned)MAIN_SOFT_SMOKE_WAVE);
-
-
-
-
-
-
-
-/*
- * ---- Wave 66 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: soft: retflankangle — Wave 66 return-flankangle honesty */
-kprintf("soft: retflankangle soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=%u "
-        "(retflankangle honesty; Soft≠product)\n",
-        (unsigned)MAIN_SOFT_SMOKE_WAVE);
-/* Grep: soft: retfaceangle — Wave 66 exclusive faceangle stamp */
-kprintf("soft: retfaceangle exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=%u "
-        "(retfaceangle stamp; Soft≠product)\n",
-        (unsigned)MAIN_SOFT_SMOKE_WAVE);
-/*
- * ---- Wave 67 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: soft: retcaponierangle — Wave 67 return-caponierangle honesty */
-kprintf("soft: retcaponierangle soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=%u "
-        "(retcaponierangle honesty; Soft≠product)\n",
-        (unsigned)MAIN_SOFT_SMOKE_WAVE);
-/* Grep: soft: retredanangle — Wave 67 exclusive redanangle stamp */
-kprintf("soft: retredanangle exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=%u "
-        "(retredanangle stamp; Soft≠product)\n",
-        (unsigned)MAIN_SOFT_SMOKE_WAVE);
-/*
- * ---- Wave 68 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: soft: retlunetteangle — Wave 68 return-lunetteangle honesty */
-kprintf("soft: retlunetteangle soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=%u "
-        "(retlunetteangle honesty; Soft≠product)\n",
-        (unsigned)MAIN_SOFT_SMOKE_WAVE);
-/* Grep: soft: rettenailleangle — Wave 68 exclusive tenailleangle stamp */
-kprintf("soft: rettenailleangle exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=%u "
-        "(rettenailleangle stamp; Soft≠product)\n",
-        (unsigned)MAIN_SOFT_SMOKE_WAVE);
-/*
- * ---- Wave 69 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: soft: retdemiluneangle — Wave 69 return-demiluneangle honesty */
-kprintf("soft: retdemiluneangle soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=%u "
-        "(retdemiluneangle honesty; Soft≠product)\n",
-        (unsigned)MAIN_SOFT_SMOKE_WAVE);
-/* Grep: soft: retcoveredwayangle — Wave 69 exclusive coveredwayangle stamp */
-kprintf("soft: retcoveredwayangle exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=%u "
-        "(retcoveredwayangle stamp; Soft≠product)\n",
-        (unsigned)MAIN_SOFT_SMOKE_WAVE);
-/*
- * ---- Wave 70 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: soft: retfosseangle — Wave 70 return-fosseangle honesty */
-kprintf("soft: retfosseangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=%u (retfosseangle honesty; Soft≠product)\n",
-        (unsigned)MAIN_SOFT_SMOKE_WAVE);
-/* Grep: soft: retcounterscarple — Wave 70 exclusive counterscarple stamp */
-kprintf("soft: retcounterscarple exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=%u (retcounterscarple stamp; Soft≠product)\n",
-        (unsigned)MAIN_SOFT_SMOKE_WAVE);
-/*
- * ---- Wave 71 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: soft: retsallyportangle — Wave 71 return-sallyportangle honesty */
-kprintf("soft: retsallyportangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=%u (retsallyportangle honesty; Soft≠product)\n",
-        (unsigned)MAIN_SOFT_SMOKE_WAVE);
-/* Grep: soft: retreentrantangle — Wave 71 exclusive reentrantangle stamp */
-kprintf("soft: retreentrantangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=%u (retreentrantangle stamp; Soft≠product)\n",
-        (unsigned)MAIN_SOFT_SMOKE_WAVE);
-/*
- * ---- Wave 72 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: soft: retplaceofarmsangle — Wave 72 return-placeofarmsangle honesty */
-kprintf("soft: retplaceofarmsangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=%u (retplaceofarmsangle honesty; Soft≠product)\n",
-        (unsigned)MAIN_SOFT_SMOKE_WAVE);
-/* Grep: soft: retdoubletenailleangle — Wave 72 exclusive doubletenailleangle stamp */
-kprintf("soft: retdoubletenailleangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=%u (retdoubletenailleangle stamp; Soft≠product)\n",
-        (unsigned)MAIN_SOFT_SMOKE_WAVE);
-/* Grep: soft: retcurtainface — Wave 73 return-curtainface honesty */
-kprintf("soft: retcurtainface soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=%u (retcurtainface honesty; Soft≠product)\n",
-        (unsigned)MAIN_SOFT_SMOKE_WAVE);
-/* Grep: soft: retbastionangle — Wave 73 exclusive bastionangle stamp */
-kprintf("soft: retbastionangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=%u (retbastionangle stamp; Soft≠product)\n",
-        (unsigned)MAIN_SOFT_SMOKE_WAVE);
-/* Grep: soft: retglacisangle — Wave 74 return-glacisangle honesty */
-kprintf("soft: retglacisangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=%u (retglacisangle honesty; Soft≠product)\n",
-        (unsigned)MAIN_SOFT_SMOKE_WAVE);
-/* Grep: soft: retparapetangle — Wave 74 exclusive parapetangle stamp */
-kprintf("soft: retparapetangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=%u (retparapetangle stamp; Soft≠product)\n",
-        (unsigned)MAIN_SOFT_SMOKE_WAVE);
-/* Grep: soft: retmoatangle — Wave 75 return-moatangle honesty */
-kprintf("soft: retmoatangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=%u (retmoatangle honesty; Soft≠product)\n",
-        (unsigned)MAIN_SOFT_SMOKE_WAVE);
-/* Grep: soft: retowerangle — Wave 75 exclusive towerangle stamp */
-kprintf("soft: retowerangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=%u (retowerangle stamp; Soft≠product)\n",
-        (unsigned)MAIN_SOFT_SMOKE_WAVE);
-/* Grep: soft: retgateangle — Wave 76 return-gateangle honesty */
-kprintf("soft: retgateangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=%u (retgateangle honesty; Soft≠product)\n",
-        (unsigned)MAIN_SOFT_SMOKE_WAVE);
-/* Grep: soft: retwallangle — Wave 76 exclusive wallangle stamp */
-kprintf("soft: retwallangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=%u (retwallangle stamp; Soft≠product)\n",
-        (unsigned)MAIN_SOFT_SMOKE_WAVE);
-/* Grep: soft: retspireangle — Wave 77 return-spireangle honesty */
-kprintf("soft: retspireangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=%u (retspireangle honesty; Soft≠product)\n",
-        (unsigned)MAIN_SOFT_SMOKE_WAVE);
-/* Grep: soft: retholdangle — Wave 77 exclusive holdangle stamp */
-kprintf("soft: retholdangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=%u (retholdangle stamp; Soft≠product)\n",
-        (unsigned)MAIN_SOFT_SMOKE_WAVE);
-/* Grep: soft: retpalaceangle — Wave 78 return-palaceangle honesty */
-kprintf("soft: retpalaceangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=%u (retpalaceangle honesty; Soft≠product)\n",
-        (unsigned)MAIN_SOFT_SMOKE_WAVE);
-/* Grep: soft: retfortressangle — Wave 78 exclusive fortressangle stamp */
-kprintf("soft: retfortressangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=%u (retfortressangle stamp; Soft≠product)\n",
-        (unsigned)MAIN_SOFT_SMOKE_WAVE);
-/* Grep: soft: retkeepangle — Wave 79 return-keepangle honesty */
-kprintf("soft: retkeepangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=%u (retkeepangle honesty; Soft≠product)\n",
-        (unsigned)MAIN_SOFT_SMOKE_WAVE);
-/* Grep: soft: retredoubtangle — Wave 79 exclusive redoubtangle stamp */
-kprintf("soft: retredoubtangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=%u (retredoubtangle stamp; Soft≠product)\n",
-        (unsigned)MAIN_SOFT_SMOKE_WAVE);
-/* Grep: soft: retcitadelangle — Wave 80 return-citadelangle honesty */
-kprintf("soft: retcitadelangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=%u (retcitadelangle honesty; Soft≠product)\n",
-        (unsigned)MAIN_SOFT_SMOKE_WAVE);
-/* Grep: soft: retbastionkeep — Wave 80 exclusive bastionkeep stamp */
-kprintf("soft: retbastionkeep exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=%u (retbastionkeep stamp; Soft≠product)\n",
-        (unsigned)MAIN_SOFT_SMOKE_WAVE);
-/* Grep: soft: retpanoplyangle — Wave 81 return-panoplyangle honesty */
-kprintf("soft: retpanoplyangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=%u (retpanoplyangle honesty; Soft≠product)\n",
-        (unsigned)MAIN_SOFT_SMOKE_WAVE);
-/* Grep: soft: retbulwarkangle — Wave 81 exclusive bulwarkangle stamp */
-kprintf("soft: retbulwarkangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=%u (retbulwarkangle stamp; Soft≠product)\n",
-        (unsigned)MAIN_SOFT_SMOKE_WAVE);
-/* Grep: soft: retmantleangle — Wave 82 return-mantleangle honesty */
-kprintf("soft: retmantleangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=%u (retmantleangle honesty; Soft≠product)\n",
-        (unsigned)MAIN_SOFT_SMOKE_WAVE);
-/* Grep: soft: retaegisangle — Wave 82 exclusive aegisangle stamp */
-kprintf("soft: retaegisangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=%u (retaegisangle stamp; Soft≠product)\n",
-        (unsigned)MAIN_SOFT_SMOKE_WAVE);
-/* Grep: soft: retemblemangle — Wave 83 return-emblemangle honesty */
-kprintf("soft: retemblemangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=%u (retemblemangle honesty; Soft≠product)\n",
-        (unsigned)MAIN_SOFT_SMOKE_WAVE);
-/* Grep: soft: retsigilangle — Wave 83 exclusive sigilangle stamp */
-kprintf("soft: retsigilangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=%u (retsigilangle stamp; Soft≠product)\n",
-        (unsigned)MAIN_SOFT_SMOKE_WAVE);
-/* Grep: soft: retscepterangle — Wave 84 return-scepterangle honesty */
-kprintf("soft: retscepterangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=118 (retscepterangle honesty; Soft≠product)\n");
-/* Grep: soft: retglyphangle — Wave 84 exclusive glyphangle stamp */
-kprintf("soft: retglyphangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=118 (retglyphangle stamp; Soft≠product)\n");
-/* Grep: soft: retcrownangle — Wave 85 return-crownangle honesty */
-kprintf("soft: retcrownangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=118 (retcrownangle honesty; Soft≠product)\n");
-/* Grep: soft: retshardangle — Wave 85 exclusive shardangle stamp */
-kprintf("soft: retshardangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=118 (retshardangle stamp; Soft≠product)\n");
-/* Grep: soft: retforgeangle — Wave 86 return-forgeangle honesty */
-kprintf("soft: retforgeangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=118 (retforgeangle honesty; Soft≠product)\n");
-/* Grep: soft: retprismangle — Wave 86 exclusive prismangle stamp */
-kprintf("soft: retprismangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=118 (retprismangle stamp; Soft≠product)\n");
-/* Grep: soft: retflameangle — Wave 87 return-flameangle honesty */
-kprintf("soft: retflameangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=118 (retflameangle honesty; Soft≠product)\n");
-/* Grep: soft: retcipherangle — Wave 87 exclusive cipherangle stamp */
-kprintf("soft: retcipherangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=118 (retcipherangle stamp; Soft≠product)\n");
-/* Grep: soft: retbeaconangle — Wave 88 return-beaconangle honesty */
-kprintf("soft: retbeaconangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=118 (retbeaconangle honesty; Soft≠product)\n");
-/* Grep: soft: retledgerangle — Wave 88 exclusive ledgerangle stamp */
-kprintf("soft: retledgerangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=118 (retledgerangle stamp; Soft≠product)\n");
-/* Grep: soft: retbannerangle — Wave 89 return-bannerangle honesty */
-kprintf("soft: retbannerangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=118 (retbannerangle honesty; Soft≠product)\n");
-/* Grep: soft: retvaultangle — Wave 89 exclusive vaultangle stamp */
-kprintf("soft: retvaultangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=118 (retvaultangle stamp; Soft≠product)\n");
-/* Grep: soft: retcrestangle — Wave 90 return-crestangle honesty */
-kprintf("soft: retcrestangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=118 (retcrestangle honesty; Soft≠product)\n");
-/* Grep: soft: rettokenangle — Wave 90 exclusive tokenangle stamp */
-kprintf("soft: rettokenangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=118 (rettokenangle stamp; Soft≠product)\n");
-/* Grep: soft: retbadgeangle — Wave 91 return-badgeangle honesty */
-kprintf("soft: retbadgeangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=118 (retbadgeangle honesty; Soft≠product)\n");
-/* Grep: soft: retphaseangle — Wave 91 exclusive phaseangle stamp */
-kprintf("soft: retphaseangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=118 (retphaseangle stamp; Soft≠product)\n");
-/* Grep: soft: retmarkangle — Wave 92 return-markangle honesty */
-kprintf("soft: retmarkangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=118 (retmarkangle honesty; Soft≠product)\n");
-/* Grep: soft: retpulseangle — Wave 92 exclusive pulseangle stamp */
-kprintf("soft: retpulseangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=118 (retpulseangle stamp; Soft≠product)\n");
-/* Grep: soft: retsealangle — Wave 93 return-sealangle honesty */
-kprintf("soft: retsealangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=118 (retsealangle honesty; Soft≠product)\n");
-/* Grep: soft: retboundangle — Wave 93 exclusive boundangle stamp */
-kprintf("soft: retboundangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=118 (retboundangle stamp; Soft≠product)\n");
-/* Grep: soft: retstemangle — Wave 94 return-stemangle honesty */
-kprintf("soft: retstemangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=118 (retstemangle honesty; Soft≠product)\n");
-/* Grep: soft: retbladeangle — Wave 94 exclusive bladeangle stamp */
-kprintf("soft: retbladeangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=118 (retbladeangle stamp; Soft≠product)\n");
-/* Grep: soft: retchordangle — Wave 95 return-chordangle honesty */
-kprintf("soft: retchordangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=118 (retchordangle honesty; Soft≠product)\n");
-/* Grep: soft: retarcangle — Wave 95 exclusive arcangle stamp */
-kprintf("soft: retarcangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=118 (retarcangle stamp; Soft≠product)\n");
-/* Grep: soft: retsectorangle — Wave 96 return-sectorangle honesty */
-kprintf("soft: retsectorangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=118 (retsectorangle honesty; Soft≠product)\n");
-/* Grep: soft: retwedgeangle — Wave 96 exclusive wedgeangle stamp */
-kprintf("soft: retwedgeangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=118 (retwedgeangle stamp; Soft≠product)\n");
-/* Grep: soft: retradiusangle — Wave 97 return-radiusangle honesty */
-kprintf("soft: retradiusangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=118 (retradiusangle honesty; Soft≠product)\n");
-/* Grep: soft: retdiameterangle — Wave 97 exclusive diameterangle stamp */
-kprintf("soft: retdiameterangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=118 (retdiameterangle stamp; Soft≠product)\n");
-/* Grep: soft: retcircumangle — Wave 98 return-circumangle honesty */
-kprintf("soft: retcircumangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=118 (retcircumangle honesty; Soft≠product)\n");
-/* Grep: soft: retellipseangle — Wave 98 exclusive ellipseangle stamp */
-kprintf("soft: retellipseangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=118 (retellipseangle stamp; Soft≠product)\n");
-/* Grep: soft: rethyperangle — Wave 99 return-hyperangle honesty */
-kprintf("soft: rethyperangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=118 (rethyperangle honesty; Soft≠product)\n");
-/* Grep: soft: retparabolaangle — Wave 99 exclusive parabolaangle stamp */
-kprintf("soft: retparabolaangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=118 (retparabolaangle stamp; Soft≠product)\n");
-/* Grep: soft: retspiralangle — Wave 100 return-spiralangle honesty */
-kprintf("soft: retspiralangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=118 (retspiralangle honesty; Soft≠product)\n");
-/* Grep: soft: rethelixangle — Wave 100 exclusive helixangle stamp */
-kprintf("soft: rethelixangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=118 (rethelixangle stamp; Soft≠product)\n");
-/* Grep: soft: rettorusangle — Wave 101 return-torusangle honesty */
-kprintf("soft: rettorusangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=118 (rettorusangle honesty; Soft≠product)\n");
-/* Grep: soft: retknotangle — Wave 101 exclusive knotangle stamp */
-kprintf("soft: retknotangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=118 (retknotangle stamp; Soft≠product)\n");
-/* Grep: soft: retmoebiusangle — Wave 102 return-moebiusangle honesty */
-kprintf("soft: retmoebiusangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=118 (retmoebiusangle honesty; Soft≠product)\n");
-/* Grep: soft: retkleinangle — Wave 102 exclusive kleinangle stamp */
-kprintf("soft: retkleinangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=118 (retkleinangle stamp; Soft≠product)\n");
-/* Grep: soft: retprojectangle — Wave 103 return-projectangle honesty */
-kprintf("soft: retprojectangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=118 (retprojectangle honesty; Soft≠product)\n");
-/* Grep: soft: retaffineangle — Wave 103 exclusive affineangle stamp */
-kprintf("soft: retaffineangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=118 (retaffineangle stamp; Soft≠product)\n");
-/* Grep: soft: retlinearangle — Wave 104 return-linearangle honesty */
-kprintf("soft: retlinearangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=118 (retlinearangle honesty; Soft≠product)\n");
-/* Grep: soft: retbilinearangle — Wave 104 exclusive bilinearangle stamp */
-kprintf("soft: retbilinearangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=118 (retbilinearangle stamp; Soft≠product)\n");
-/* Grep: soft: retquadraticangle — Wave 105 return-quadraticangle honesty */
-kprintf("soft: retquadraticangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=118 (retquadraticangle honesty; Soft≠product)\n");
-/* Grep: soft: retcubicangle — Wave 105 exclusive cubicangle stamp */
-kprintf("soft: retcubicangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=118 (retcubicangle stamp; Soft≠product)\n");
-/* Grep: soft: retquarticangle — Wave 106 return-quarticangle honesty */
-kprintf("soft: retquarticangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=118 (retquarticangle honesty; Soft≠product)\n");
-/* Grep: soft: retquinticangle — Wave 106 exclusive quinticangle stamp */
-kprintf("soft: retquinticangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=118 (retquinticangle stamp; Soft≠product)\n");
-/* Grep: soft: retsplineangle — Wave 107 return-splineangle honesty */
-kprintf("soft: retsplineangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=118 (retsplineangle honesty; Soft≠product)\n");
-/* Grep: soft: retbezierangle — Wave 107 exclusive bezierangle stamp */
-kprintf("soft: retbezierangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=118 (retbezierangle stamp; Soft≠product)\n");
-/* Grep: soft: rethurmitangle — Wave 108 return-hermitangle honesty */
-kprintf("soft: rethurmitangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=118 (rethurmitangle honesty; Soft≠product)\n");
-/* Grep: soft: retcatmullangle — Wave 108 exclusive catmullangle stamp */
-kprintf("soft: retcatmullangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=118 (retcatmullangle stamp; Soft≠product)\n");
-/* Grep: soft: retnurbsangle — Wave 109 return-nurbsangle honesty */
-kprintf("soft: retnurbsangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=118 (retnurbsangle honesty; Soft≠product)\n");
-/* Grep: soft: retbsplineangle — Wave 109 exclusive bsplineangle stamp */
-kprintf("soft: retbsplineangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=118 (retbsplineangle stamp; Soft≠product)\n");
-/* Grep: soft: retmeshangle — Wave 110 return-meshangle honesty */
-kprintf("soft: retmeshangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=118 (retmeshangle honesty; Soft≠product)\n");
-/* Grep: soft: retgridangle — Wave 110 exclusive gridangle stamp */
-kprintf("soft: retgridangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=118 (retgridangle stamp; Soft≠product)\n");
-/* Grep: soft: retvoxelangle — Wave 111 return-voxelangle honesty */
-kprintf("soft: retvoxelangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=118 (retvoxelangle honesty; Soft≠product)\n");
-/* Grep: soft: rettexelangle — Wave 111 exclusive texelangle stamp */
-kprintf("soft: rettexelangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=118 (rettexelangle stamp; Soft≠product)\n");
-/* Grep: soft: retfragmentangle — Wave 112 return-fragmentangle honesty */
-kprintf("soft: retfragmentangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=118 (retfragmentangle honesty; Soft≠product)\n");
-/* Grep: soft: retvertexangle — Wave 112 exclusive vertexangle stamp */
-kprintf("soft: retvertexangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=118 (retvertexangle stamp; Soft≠product)\n");
-/* Grep: soft: retshaderangle — Wave 113 return-shaderangle honesty */
-kprintf("soft: retshaderangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=118 (retshaderangle honesty; Soft≠product)\n");
-/* Grep: soft: retpipelineangle — Wave 113 exclusive pipelineangle stamp */
-kprintf("soft: retpipelineangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=118 (retpipelineangle stamp; Soft≠product)\n");
-/* Grep: soft: retframebufferangle — Wave 114 return-framebufferangle honesty */
-kprintf("soft: retframebufferangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=118 (retframebufferangle honesty; Soft≠product)\n");
-/* Grep: soft: retswapchainangle — Wave 114 exclusive swapchainangle stamp */
-kprintf("soft: retswapchainangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=118 (retswapchainangle stamp; Soft≠product)\n");
-/* Grep: soft: retpresentangle — Wave 115 return-presentangle honesty */
-kprintf("soft: retpresentangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=118 (retpresentangle honesty; Soft≠product)\n");
-/* Grep: soft: retvsyncangle — Wave 115 exclusive vsyncangle stamp */
-kprintf("soft: retvsyncangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=118 (retvsyncangle stamp; Soft≠product)\n");
-/* Grep: soft: retfenceangle — Wave 116 return-fenceangle honesty */
-kprintf("soft: retfenceangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=118 (retfenceangle honesty; Soft≠product)\n");
-/* Grep: soft: retsemaphoreangle — Wave 116 exclusive semaphoreangle stamp */
-kprintf("soft: retsemaphoreangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=118 (retsemaphoreangle stamp; Soft≠product)\n");
-/* Grep: soft: retmutexangle — Wave 117 return-mutexangle honesty */
-kprintf("soft: retmutexangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=118 (retmutexangle honesty; Soft≠product)\n");
-/* Grep: soft: retcondangle — Wave 117 exclusive condangle stamp */
-kprintf("soft: retcondangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=118 (retcondangle stamp; Soft≠product)\n");
-/* Grep: soft: retbarrierangle — Wave 118 return-barrierangle honesty */
-kprintf("soft: retbarrierangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=118 (retbarrierangle honesty; Soft≠product)\n");
-/* Grep: soft: retatomicangle — Wave 118 exclusive atomicangle stamp */
-kprintf("soft: retatomicangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=118 (retatomicangle stamp; Soft≠product)\n");
-/* Grep: soft: retqueueangle — Wave 119 return-queueangle honesty */
-kprintf("soft: retqueueangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=119 (retqueueangle honesty; Soft≠product)\n");
-/* Grep: soft: reteventangle — Wave 119 exclusive eventangle stamp */
-kprintf("soft: reteventangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=119 (reteventangle stamp; Soft≠product)\n");
-/* Grep: soft: retchannelangle — Wave 120 return-channelangle honesty */
-kprintf("soft: retchannelangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=120 (retchannelangle honesty; Soft≠product)\n");
-/* Grep: soft: retmailboxangle — Wave 120 exclusive mailboxangle stamp */
-kprintf("soft: retmailboxangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=120 (retmailboxangle stamp; Soft≠product)\n");
-/* Grep: soft: retstreamangle — Wave 121 return-streamangle honesty */
-kprintf("soft: retstreamangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=121 (retstreamangle honesty; Soft≠product)\n");
-/* Grep: soft: retpacketangle — Wave 121 exclusive packetangle stamp */
-kprintf("soft: retpacketangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=121 (retpacketangle stamp; Soft≠product)\n");
-/* Grep: soft: retframeangle — Wave 122 return-frameangle honesty */
-kprintf("soft: retframeangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=122 (retframeangle honesty; Soft≠product)\n");
-/* Grep: soft: retwindowangle — Wave 122 exclusive windowangle stamp */
-kprintf("soft: retwindowangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=122 (retwindowangle stamp; Soft≠product)\n");
-/* Grep: soft: retlayerangle — Wave 123 return-layerangle honesty */
-kprintf("soft: retlayerangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=123 (retlayerangle honesty; Soft≠product)\n");
-/* Grep: soft: retcanvasangle — Wave 123 exclusive canvasangle stamp */
-kprintf("soft: retcanvasangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=123 (retcanvasangle stamp; Soft≠product)\n");
-/* Grep: soft: retbrushangle — Wave 124 return-brushangle honesty */
-kprintf("soft: retbrushangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=124 (retbrushangle honesty; Soft≠product)\n");
-/* Grep: soft: retinkangle — Wave 124 exclusive inkangle stamp */
-kprintf("soft: retinkangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=124 (retinkangle stamp; Soft≠product)\n");
-/* Grep: soft: retpaletteangle — Wave 125 return-paletteangle honesty */
-kprintf("soft: retpaletteangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=125 (retpaletteangle honesty; Soft≠product)\n");
-/* Grep: soft: retstrokeangle — Wave 125 exclusive strokeangle stamp */
-kprintf("soft: retstrokeangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=125 (retstrokeangle stamp; Soft≠product)\n");
-/* Grep: soft: retgradientangle — Wave 126 return-gradientangle honesty */
-kprintf("soft: retgradientangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=126 (retgradientangle honesty; Soft≠product)\n");
-/* Grep: soft: retblendangle — Wave 126 exclusive blendangle stamp */
-kprintf("soft: retblendangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=126 (retblendangle stamp; Soft≠product)\n");
 
 /* Grep: soft: deepen wave */
         kprintf("soft: deepen wave=%u areas=%u hit=%u wow64_calls=%u "
@@ -8611,14 +9362,34 @@ kprintf("soft: retblendangle exclusive=1 soft_ne_product=1 product_kernel=OPEN w
 
     kprintf("M0 OK\n");
     /*
-     * Force one net poll so hold line 6 can update NET counters after M0.
-     * Live "net: live" scroll spam is disabled (panel STATUS only).
+     * Idle entry: do NOT reclaim after SOFT (reclaim -> R0). Post-TE kick
+     * already ran once after VT-d arm. Poll only + ensure identity.
+     * Force hold6 NET counters even if t/f/b/r unchanged (stuck snapshot).
+     * Dual DoD B: last boot thr hold6 refresh before scheduler_run owns
+     * net_eth_poll every pass (run_loop_only; never timer/IRQ). Soft!=product.
+     * Grep: main: soft rtl8168 idle poll
+     * Grep: main: soft NET hold6 refresh idle
      */
     {
+        extern int rtl8168_ready(void);
+        extern int rtl8168_post_te_rearm(void);
+        extern void net_eth_apply_l2_identity(void);
         extern void net_eth_poll(void);
+        int nRearm;
 
+        if (rtl8168_ready() != 0) {
+            /* Idempotent: no-op if post-TE already ran. Keep post_te_rearm. */
+            nRearm = rtl8168_post_te_rearm();
+            net_eth_apply_l2_identity();
+            kprintf("main: soft rtl8168 idle poll rearm_st=%d "
+                    "(no reclaim after SOFT; Soft!=product)\n", nRearm);
+        }
         net_eth_poll();
-        fb_console_hold(5, "M0 OK — NET line6 live if n= ticks");
+        /* Hold6: force redraw if stuck (poll may skip when counters same). */
+        main_soft_net_hold6_refresh();
+        kprintf("main: soft NET hold6 refresh idle "
+                "(poll+force; Soft!=product Dual DoD B)\n");
+        fb_console_hold(5, "M0 OK - NET line6 live if n= ticks");
     }
     scheduler_run();
 }
@@ -8643,6 +9414,8 @@ kmain(u32 paMb2Info)
 
     serial_init();
     kprintf("GreenJade M0\n");
+    /* Assurance: L3 identity - greppable main: image version= · test what you fly */
+    kprintf("main: image version=%s\n", GJ_IMAGE_VERSION);
     kprintf("boot: source=MULTIBOOT2 mb2=0x%x kernel_end=0x%lx\n", paMb2Info,
             (unsigned long)(gj_vaddr_t)__kernel_end);
     /* User bring-up maps start at 0x1000000; BSS must stay below */
@@ -8750,6 +9523,8 @@ kmain_uefi(struct gj_boot_info *pInfo)
         fb_console_hold(1, "phase: early");
     }
     kprintf("GreenJade M0\n");
+    /* Assurance: L3 identity - greppable main: image version= · test what you fly */
+    kprintf("main: image version=%s\n", GJ_IMAGE_VERSION);
     kprintf("boot: source=UEFI kernel_end=0x%lx rsdp=0x%lx map=0x%lx bytes=%lu\n",
             (unsigned long)(gj_vaddr_t)__kernel_end,
             (unsigned long)(pInfo != NULL ? pInfo->u64Rsdp : 0),

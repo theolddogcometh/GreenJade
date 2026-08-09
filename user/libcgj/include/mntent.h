@@ -21,6 +21,14 @@
  * ---------
  * Full POSIX/Linux completeness; stubs and soft fills may return ENOSYS
  * until the hybrid ABI path is wired. See docs/GLIBC_COMPAT.md.
+ *
+ * Soft residual (C2 libcgj mntent.h; Soft!=product; G-AC-1; Dual DoD A/B OPEN):
+ *   soft     = struct mntent + setmntent/getmntent/addmntent/endmntent (bring-up)
+ *   product  = store/VFS doors for real mounts; not freestanding class; not .ko AC
+ *   honesty  = mntent soft != product mount completeness; agent PASS != Dual DoD
+ *              close; stamp-free bar honesty (no version stamp)
+ *   law      = dual MIT OR Apache-2.0; no GPL; H2 no stamp storms
+ * greppable: libcgj: mntent soft residual Soft!=product
  */
 #pragma once
 

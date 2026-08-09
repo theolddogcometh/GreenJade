@@ -18,6 +18,15 @@
  * Non-goals
  * ---------
  * Full glibc ptmalloc arena tuning APIs.
+ *
+ * Soft residual (C2 libcgj malloc.h; Soft!=product; G-AC-1; Dual DoD A/B OPEN):
+ *   soft     = memalign/malloc_usable_size/mallinfo/malloc_stats extras;
+ *              freelist heap bring-up; stats may be zeroed/approximate
+ *   product  = UDX/DDI + hot/cold ABI hosts; core malloc in <stdlib.h>
+ *   honesty  = soft heap extras != ptmalloc product; agent PASS != Dual DoD
+ *              close; stamp-free bar honesty (no version stamp); G-AC-1 no .ko AC
+ *   law      = dual MIT OR Apache-2.0; no GPL; H2 no stamp storms
+ * greppable: libcgj: malloc soft residual Soft!=product
  */
 #pragma once
 

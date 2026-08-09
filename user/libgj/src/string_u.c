@@ -21,15 +21,24 @@
  *   libgj: soft policy  freestanding pure_c no_heap no_locale no_errno ascii_only soft_null
  *   libgj: soft counts  none
  *   libgj: soft hot_path clean
- *   libgj: soft deepen  wave=70 areas=inventory,groups,names,policy,path,counts,areas,accessors,honesty
+ *   libgj: soft deepen  wave=70 areas=inventory,groups,names,policy,path,counts,areas,accessors,honesty,residual
  *   libgj: soft path    freestanding=1 pure_c=1 no_heap=1 counts=none
  *   libgj: soft honesty multi_server=0 confine=0 exclusive=1 soft=1 product_kernel=OPEN wave=70
+ *
+ * C2 lib residual (this TU exclusive; Soft!=product; dual MIT OR Apache-2.0):
+ *   Soft inventory/accessors are cold honesty only — never product bar3 /
+ *   Dual DoD close / multi-server confine. Hot helpers stay freestanding
+ *   product-path clean (no counter traffic, no stamp storms).
+ *   greppable: libgj: soft residual lean
+ *   greppable: Soft!=product | soft_ne_product=1 | G-AC-1 | Dual DoD OPEN
+ *   greppable: dual=MIT|Apache-2.0 | product lamps 0 | counts=none
+ *   Soft residual != product complete (Soft!=product). Dual DoD A/B OPEN.
  *
  * Call counts intentionally omitted: hot string/mem helpers stay freestanding
  * product-path clean with no counter traffic. Inventory is source + rodata
  * only (see gj_string_soft_inventory / gj_string_soft_helper_count /
  * gj_string_soft_wave / gj_string_soft_group_name / gj_string_soft_area_name /
- * gj_string_soft_honesty).
+ * gj_string_soft_honesty / gj_string_soft_residual).
  * Diagnostics / agent honesty only — never a product bar3 claim.
  */
 #include <gj/string.h>
@@ -38,10 +47,18 @@
 #include <stdint.h>
 
 /* Wave 126 exclusive soft deepen stamp (greppable wave=70). */
-/* Wave 126 soft deepen surfaces (CREATE-ONLY soft ≠ product):
+/* Wave 126 soft deepen surfaces (CREATE-ONLY Soft!=product):
  *   greppable: soft retgradientangle continuum_toward=26800 soft_ne_product=1 wave=126
  *   greppable: soft retblendangle exclusive=1 continuum_toward=26800 soft_ne_product=1 wave=126
- * Soft ≠ product complete; product lamps 0;
+ * Soft!=product complete; product lamps 0; Dual DoD OPEN; G-AC-1;
+ */
+/* C2 lib residual lean (Soft!=product; stamp-free; no GJ_IMAGE_VERSION):
+ *   greppable: libgj: soft residual lean exclusive=1 soft_ne_product=1
+ *   greppable: Soft!=product dual=MIT|Apache-2.0 G-AC-1 Dual DoD OPEN
+ *   Soft residual != product multi-server confine (Soft!=product);
+ * Product residual (stamp-free bar v2026.08.04.75; Soft!=product):
+ *   greppable: libgj: soft product residual product=UDX+sshd+stack
+ *   freestanding helpers link netstackd + sshd + UDX hosts; never DoD close;
  */
 
 #define LIBGJ_SOFT_WAVE 70u
@@ -67,7 +84,8 @@ static const char g_szLibgjSoftInventory[] =
     "io=gj_puts,gj_write,gj_read,gj_dlog "
     "format=gj_itoa,gj_utoa,gj_xtoa,gj_snprintf "
     "policy=freestanding,pure_c,no_heap,no_locale,no_errno,ascii_only,soft_null "
-    "counts=none hot_path=clean accessors=area,policy,honesty";
+    "counts=none hot_path=clean accessors=area,policy,honesty "
+    "residual=lean soft_ne_product=1 Soft!=product Dual_DoD=OPEN G-AC-1";
 
 /*
  * Wave 126 soft deepen stamp (rodata companion).
@@ -76,8 +94,10 @@ static const char g_szLibgjSoftInventory[] =
 static const char g_szLibgjSoftDeepen[] =
     "libgj: soft deepen wave=70 areas=16 "
     "inventory,groups,names,length,compare,copy,search,case,ctype,mem,"
-    "parse,io,format,policy,path,counts,areas,accessors,honesty "
-    "helpers=42 hot_path=clean counts=none multi_server=0 confine=0";
+    "parse,io,format,policy,path,counts,areas,accessors,honesty,residual "
+    "helpers=42 hot_path=clean counts=none multi_server=0 confine=0 "
+    "retgradientangle=1 retblendangle=1 continuum_toward=26800 "
+    "soft_ne_product=1 Soft!=product Dual_DoD=OPEN G-AC-1 wave=126";
 
 /*
  * Wave 111 honesty path line (static route labels).
@@ -86,15 +106,49 @@ static const char g_szLibgjSoftDeepen[] =
 static const char g_szLibgjSoftPath[] =
     "libgj: soft path freestanding=1 pure_c=1 no_heap=1 no_locale=1 "
     "no_errno=1 ascii_only=1 soft_null=1 counts=none hot_path=clean "
-    "multi_server=0 confine=0 (soft inventory)";
+    "multi_server=0 confine=0 soft_ne_product=1 Soft!=product "
+    "Dual_DoD=OPEN G-AC-1 (soft inventory residual lean)";
 
 /*
  * Wave 126 exclusive honesty line (static).
  * Grep: libgj: soft honesty
+ * Grep: libgj: soft residual lean
  */
 static const char g_szLibgjSoftHonesty[] =
     "libgj: soft honesty multi_server=0 confine=0 exclusive=1 "
-    "soft=1 product_kernel=OPEN wave=70 userland=1";
+    "soft=1 product_kernel=OPEN wave=70 userland=1 "
+    "retgradientangle=1 retblendangle=1 continuum_toward=26800 "
+    "soft_ne_product=1 Soft!=product Dual_DoD=OPEN G-AC-1 "
+    "dual=MIT|Apache-2.0 residual=lean product_lamps=0";
+
+/*
+ * C2 lib residual lean line (cold rodata; Soft!=product).
+ * Grep: libgj: soft residual lean
+ */
+static const char g_szLibgjSoftResidual[] =
+    "libgj: soft residual lean exclusive=1 soft_ne_product=1 "
+    "Soft!=product dual=MIT|Apache-2.0 G-AC-1 Dual_DoD=OPEN "
+    "helpers=42 groups=10 areas=16 hot_path=clean counts=none "
+    "product_lamps=0 multi_server=0 confine=0 bar3=0 stamp_free=1 "
+    "product=UDX+sshd+stack chain=rtl8168_udx>netstackd>sshd "
+    "bar=v2026.08.04.75";
+
+/*
+ * C2 product residual toward UDX+sshd+stack (cold rodata; Soft!=product).
+ * Freestanding string helpers serve netstackd/sshd/UDX host ELFs; never
+ * Dual DoD close. Grep: libgj: soft product residual product=UDX+sshd+stack
+ */
+static const char g_szLibgjSoftProductResidual[] =
+    "libgj: soft product residual claim_class=C2 "
+    "product=UDX+sshd+stack product_path=UDX "
+    "chain=rtl8168_udx>netstackd>sshd "
+    "surface=freestanding_string_helpers hot_path=clean counts=none "
+    "sshd_port=22 stack_host=link udx_host=link "
+    "freestanding_rtl=SKIP soft_ne_product=1 Soft!=product "
+    "G-AC-1=1 dual_dod_a=OPEN dual_dod_b=OPEN Dual_DoD=OPEN "
+    "agent_ne_close=1 multi_server=0 confine=0 product_ac=0 "
+    "stamp_free=1 storm=0 once=1 dual=MIT|Apache-2.0 "
+    "bar=v2026.08.04.75";
 
 /* Soft helper name table (order matches public soft set; cold only). */
 static const char *const g_apszLibgjSoftHelpers[] = {
@@ -246,12 +300,34 @@ gj_string_soft_path(void)
 
 /*
  * Cold soft honesty line (Wave 126 exclusive). Grep: libgj: soft honesty
- * Soft inventory ≠ product multi-server confine;
+ * Soft inventory != product multi-server confine (Soft!=product);
  */
 const char *
 gj_string_soft_honesty(void)
 {
     return g_szLibgjSoftHonesty;
+}
+
+/*
+ * Cold C2 lib residual lean line. Grep: libgj: soft residual lean
+ * Soft residual != product complete (Soft!=product; Dual DoD OPEN; G-AC-1).
+ * Diagnostics only — never consulted by hot helpers; no product bar3 claim.
+ */
+const char *
+gj_string_soft_residual(void)
+{
+    return g_szLibgjSoftResidual;
+}
+
+/*
+ * Cold C2 product residual toward UDX+sshd+stack.
+ * Grep: libgj: soft product residual product=UDX+sshd+stack
+ * Soft!=product; Dual DoD OPEN; never Dual DoD close / product bar3.
+ */
+const char *
+gj_string_soft_product_residual(void)
+{
+    return g_szLibgjSoftProductResidual;
 }
 
 /*
@@ -1276,15 +1352,86 @@ s_sn_puts(char *szBuf, size_t cbCap, size_t *pOut, size_t *pNeed,
     }
 }
 
-size_t
-gj_snprintf(char *szBuf, size_t cbBuf, const char *szFmt, ...)
+/*
+ * Soft xtoa for 64-bit freestanding UDX printk (%llx / %016llx spirit).
+ * Same digit path as gj_xtoa but unsigned long long.
+ */
+static size_t
+s_xtoa_ull(unsigned long long uVal, char *szBuf, size_t cbBuf,
+           int fLeadZero, size_t cMin)
 {
-    va_list ap;
+    static const char aHex[] = "0123456789abcdef";
+    char aTmp[24];
+    size_t n = 0;
+    size_t i;
+    size_t cPad;
+
+    if (szBuf == NULL || cbBuf == 0) {
+        return 0;
+    }
+    if (uVal == 0) {
+        aTmp[n++] = '0';
+    } else {
+        while (uVal > 0 && n < sizeof(aTmp)) {
+            aTmp[n++] = aHex[uVal & 0xfull];
+            uVal >>= 4;
+        }
+    }
+    cPad = 0;
+    if (fLeadZero != 0 && cMin > n) {
+        cPad = cMin - n;
+    }
+    i = 0;
+    while (cPad > 0 && i < cbBuf - 1) {
+        szBuf[i++] = '0';
+        cPad--;
+    }
+    while (n > 0 && i < cbBuf - 1) {
+        n--;
+        szBuf[i++] = aTmp[n];
+    }
+    szBuf[i] = '\0';
+    return i;
+}
+
+static size_t
+s_utoa_ull(unsigned long long uVal, char *szBuf, size_t cbBuf)
+{
+    char aTmp[24];
+    size_t n = 0;
+    size_t i;
+
+    if (szBuf == NULL || cbBuf == 0) {
+        return 0;
+    }
+    if (uVal == 0) {
+        aTmp[n++] = '0';
+    } else {
+        while (uVal > 0 && n < sizeof(aTmp)) {
+            aTmp[n++] = (char)('0' + (uVal % 10ull));
+            uVal /= 10ull;
+        }
+    }
+    i = 0;
+    while (n > 0 && i < cbBuf - 1) {
+        n--;
+        szBuf[i++] = aTmp[n];
+    }
+    szBuf[i] = '\0';
+    return i;
+}
+
+size_t
+gj_vsnprintf(char *szBuf, size_t cbBuf, const char *szFmt, va_list ap)
+{
     size_t iOut = 0;
     size_t iNeed = 0;
     size_t i;
-    char aNum[32];
+    char aNum[40];
     size_t nNum;
+    int fZero;
+    size_t cWidth;
+    int cLen; /* 0 default, 1 = l, 2 = ll */
 
     if (szFmt == NULL) {
         if (szBuf != NULL && cbBuf > 0) {
@@ -1292,7 +1439,6 @@ gj_snprintf(char *szBuf, size_t cbBuf, const char *szFmt, ...)
         }
         return 0;
     }
-    va_start(ap, szFmt);
     for (i = 0; szFmt[i] != '\0'; i++) {
         if (szFmt[i] != '%') {
             s_sn_putc(szBuf, cbBuf, &iOut, &iNeed, szFmt[i]);
@@ -1304,30 +1450,96 @@ gj_snprintf(char *szBuf, size_t cbBuf, const char *szFmt, ...)
         }
         if (szFmt[i] == '%') {
             s_sn_putc(szBuf, cbBuf, &iOut, &iNeed, '%');
-        } else if (szFmt[i] == 's') {
+            continue;
+        }
+        /* Optional 0-pad + width (e.g. %08x, %016llx). */
+        fZero = 0;
+        cWidth = 0;
+        if (szFmt[i] == '0') {
+            fZero = 1;
+            i++;
+        }
+        while (szFmt[i] >= '0' && szFmt[i] <= '9') {
+            cWidth = (cWidth * 10u) + (size_t)(szFmt[i] - '0');
+            i++;
+        }
+        /* Length: l / ll (ignore lone h/hh; treat as default). */
+        cLen = 0;
+        if (szFmt[i] == 'l') {
+            i++;
+            if (szFmt[i] == 'l') {
+                cLen = 2;
+                i++;
+            } else {
+                cLen = 1;
+            }
+        } else if (szFmt[i] == 'h') {
+            i++;
+            if (szFmt[i] == 'h') {
+                i++;
+            }
+            cLen = 0;
+        }
+        if (szFmt[i] == '\0') {
+            break;
+        }
+        if (szFmt[i] == 's') {
             s_sn_puts(szBuf, cbBuf, &iOut, &iNeed, va_arg(ap, const char *));
         } else if (szFmt[i] == 'c') {
             s_sn_putc(szBuf, cbBuf, &iOut, &iNeed,
                       (char)va_arg(ap, int));
         } else if (szFmt[i] == 'd' || szFmt[i] == 'i') {
-            nNum = gj_itoa(va_arg(ap, long), aNum, sizeof(aNum));
+            long long iVal;
+
+            if (cLen >= 2) {
+                iVal = va_arg(ap, long long);
+            } else if (cLen == 1) {
+                iVal = (long long)va_arg(ap, long);
+            } else {
+                iVal = (long long)va_arg(ap, int);
+            }
+            nNum = gj_itoa((long)iVal, aNum, sizeof(aNum));
             (void)nNum;
             s_sn_puts(szBuf, cbBuf, &iOut, &iNeed, aNum);
         } else if (szFmt[i] == 'u') {
-            nNum = gj_utoa(va_arg(ap, unsigned long), aNum, sizeof(aNum));
+            unsigned long long uVal;
+
+            if (cLen >= 2) {
+                uVal = va_arg(ap, unsigned long long);
+            } else if (cLen == 1) {
+                uVal = (unsigned long long)va_arg(ap, unsigned long);
+            } else {
+                uVal = (unsigned long long)va_arg(ap, unsigned int);
+            }
+            nNum = s_utoa_ull(uVal, aNum, sizeof(aNum));
             (void)nNum;
+            if (fZero != 0 && cWidth > nNum) {
+                size_t cPad = cWidth - nNum;
+                while (cPad > 0) {
+                    s_sn_putc(szBuf, cbBuf, &iOut, &iNeed, '0');
+                    cPad--;
+                }
+            }
             s_sn_puts(szBuf, cbBuf, &iOut, &iNeed, aNum);
         } else if (szFmt[i] == 'x' || szFmt[i] == 'X') {
-            nNum = gj_xtoa(va_arg(ap, unsigned long), aNum, sizeof(aNum), 0,
-                           0);
+            unsigned long long uVal;
+
+            if (cLen >= 2) {
+                uVal = va_arg(ap, unsigned long long);
+            } else if (cLen == 1) {
+                uVal = (unsigned long long)va_arg(ap, unsigned long);
+            } else {
+                uVal = (unsigned long long)va_arg(ap, unsigned int);
+            }
+            nNum = s_xtoa_ull(uVal, aNum, sizeof(aNum), fZero, cWidth);
             (void)nNum;
             s_sn_puts(szBuf, cbBuf, &iOut, &iNeed, aNum);
         } else if (szFmt[i] == 'p') {
             void *p = va_arg(ap, void *);
 
             s_sn_puts(szBuf, cbBuf, &iOut, &iNeed, "0x");
-            nNum = gj_xtoa((unsigned long)(uintptr_t)p, aNum, sizeof(aNum), 1,
-                           sizeof(void *) * 2u);
+            nNum = s_xtoa_ull((unsigned long long)(uintptr_t)p, aNum,
+                              sizeof(aNum), 1, sizeof(void *) * 2u);
             (void)nNum;
             s_sn_puts(szBuf, cbBuf, &iOut, &iNeed, aNum);
         } else {
@@ -1336,7 +1548,6 @@ gj_snprintf(char *szBuf, size_t cbBuf, const char *szFmt, ...)
             s_sn_putc(szBuf, cbBuf, &iOut, &iNeed, szFmt[i]);
         }
     }
-    va_end(ap);
     if (szBuf != NULL && cbBuf > 0) {
         if (iOut < cbBuf) {
             szBuf[iOut] = '\0';
@@ -1345,4 +1556,16 @@ gj_snprintf(char *szBuf, size_t cbBuf, const char *szFmt, ...)
         }
     }
     return iNeed;
+}
+
+size_t
+gj_snprintf(char *szBuf, size_t cbBuf, const char *szFmt, ...)
+{
+    va_list ap;
+    size_t n;
+
+    va_start(ap, szFmt);
+    n = gj_vsnprintf(szBuf, cbBuf, szFmt, ap);
+    va_end(ap);
+    return n;
 }

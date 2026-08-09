@@ -17,6 +17,15 @@
  * Non-goals
  * ---------
  * Full NSS (LDAP/SSSD) modules inside libc.
+ *
+ * Soft residual (C2 libcgj pwd.h; Soft!=product; G-AC-1; Dual DoD A/B OPEN):
+ *   soft     = struct passwd + getpwuid/getpwnam (+ reentrant); bring-up may be
+ *              root + self only until real /etc/passwd path exists
+ *   product  = UDX/DDI + hot/cold ABI hosts; not freestanding class; not .ko AC
+ *   honesty  = passwd DB soft != product identity completeness; agent PASS != Dual
+ *              DoD close; stamp-free bar honesty (no version stamp)
+ *   law      = dual MIT OR Apache-2.0; no GPL; H2 no stamp storms
+ * greppable: libcgj: pwd soft residual Soft!=product
  */
 #pragma once
 

@@ -4,11 +4,19 @@
  *
  * Tiny kernel heap (freelist over PMM pages, HHDM-mapped).
  * Allocs zeroed; free scrubs payload. Max single alloc < one page payload.
+ * Dual license: MIT OR Apache-2.0. Soft!=product (diagnostics never product).
+ *
+ * Lean residual (Soft!=product; G-AC-1):
+ *   single-page freelist + PMM grow; multi_page=OPEN; coalesce=OPEN.
+ *   Soft inventory only - no product capacity / 1TiB claim.
  *
  * Greppable serial markers (implementation in kernel/mm/kheap.c):
  *   kheap: init
  *   kheap: stats used= free= free_blocks= soft_frag= soft_align= soft_unsplit=
  *   kheap: counters alloc= free= grow= split= fail= double_free=
+ *   kheap: soft residual lean   (sole residual-class lamp)
+ *   kheap: soft PASS | NONE | inventory PASS
+ *   Soft!=product | dual MIT OR Apache-2.0 | storm=0
  */
 #pragma once
 
@@ -17,6 +25,7 @@
 /**
  * Snapshot of live heap accounting (cheap; no freelist walk for used/soft).
  * Free bytes / free_blocks are maintained on grow/alloc/free paths.
+ * Soft!=product: stats are diagnostics only (never product AC).
  */
 struct kheap_stats {
     size_t cbUsed;        /* live payload bytes charged */
@@ -53,11 +62,15 @@ size_t kheap_free_blocks(void);
 /**
  * Soft (internal) fragmentation on live blocks:
  * align pad + unsplittable leftover absorbed into the live payload.
+ * Soft!=product (frag diagnostics only).
  */
 size_t kheap_soft_frag_bytes(void);
 
 /** Fill *pOut with current stats; no-op if pOut is NULL. */
 void   kheap_get_stats(struct kheap_stats *pOut);
 
-/** Emit greppable "kheap: stats …" / "kheap: counters …" lines. */
+/**
+ * Emit greppable "kheap: stats ..." / "kheap: counters ..." /
+ * "kheap: soft residual lean" lines. Soft!=product; storm=0.
+ */
 void   kheap_dump_stats(void);

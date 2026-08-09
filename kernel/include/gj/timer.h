@@ -8,12 +8,12 @@
  * -----
  * Arch-owned early mono clock and soft quantum / preempt telemetry. Product
  * deadlines (futex_wait, door timeouts, nanosleep-class sleeps) must use
- * timer_mono_nsec — the coarse, jiffy-stable product clock. Soft mono and
+ * timer_mono_nsec - the coarse, jiffy-stable product clock. Soft mono and
  * quantum counters are boot/telemetry surfaces, not hot-path locks.
  *
  * Tick sources (x86_64 product path)
  * ----------------------------------
- *   Early boot:  PIT channel 0 @ GJ_TIMER_HZ, remapped PIC IRQ0 → vector 32.
+ *   Early boot:  PIT channel 0 @ GJ_TIMER_HZ, remapped PIC IRQ0 -> vector 32.
  *                timer_tick() advances jiffies when not yet APIC-sourced and
  *                always EOIs the PIC.
  *   After cal:   Local APIC periodic timer (typically vector 48). Call
@@ -31,8 +31,8 @@
  *
  * Soft preempt path (G-SCHED observability)
  * -----------------------------------------
- *   quantum_tick (every mono tick) → may call thread_yield_request()
- *   timer_preempt_check (idle/sched) → may consume pending yield → thread_yield
+ *   quantum_tick (every mono tick) -> may call thread_yield_request()
+ *   timer_preempt_check (idle/sched) -> may consume pending yield -> thread_yield
  *   Counters in gj_timer_preempt_soft deepen check / hit / yield / set stats.
  *
  * Coupling
@@ -42,17 +42,33 @@
  *   timer_sleep_until uses STI+HLT / yield with a spin guard so a stuck mono
  *   clock cannot hang forever (e.g. after user #PF paths).
  *
+ * Dual DoD B / H1 residual (Soft!=product - lean lamps only)
+ * ---------------------------------------------------------
+ *   timer_tick / timer_tick_apic / irq_timer_handler NEVER call net_eth_poll.
+ *   Eth poll ownership is run-loop only (scheduler_run, full thr stack).
+ *   IRQ-path eth poll is the stack-smash / #PF I=1 wild RIP fault class (H1).
+ *   Lean residual lamps document ownership; soft != product Dual DoD B close
+ *   (host arping/ping / :22 still OPEN until L3). No version stamps.
+ *   No stamp storms (inventory cap init+handoff; residual lean <= few lines).
+ *
+ * greppable: net_eth_poll=run_loop_only net_eth_irq=0 dual_dod_b
+ * greppable: timer: soft eth | timer: soft residual dual_dod_b
+ *
  * Soft product surface (this header / timer.c)
  * --------------------------------------------
- *   G-TIMER-MONO       — jiffies + coarse mono nsec
- *   G-TIMER-SOFT-MONO  — APIC-interpolated soft mono + snapshot
- *   G-TIMER-APIC-SRC   — PIT → APIC source handoff
- *   G-TIMER-PREEMPT    — quantum slice + soft preempt_check counters
+ *   G-TIMER-MONO       - jiffies + coarse mono nsec
+ *   G-TIMER-SOFT-MONO  - APIC-interpolated soft mono + snapshot
+ *   G-TIMER-APIC-SRC   - PIT -> APIC source handoff
+ *   G-TIMER-PREEMPT    - quantum slice + soft preempt_check counters
  *
  * greppable: timer: mono soft
  * greppable: timer: preempt soft
+ * greppable: timer: soft eth
+ * greppable: timer: soft residual dual_dod_b
  * greppable: G-TIMER-MONO G-TIMER-SOFT-MONO G-TIMER-APIC-SRC G-TIMER-PREEMPT
  * greppable: G-FUT G-SCHED
+ * greppable: net_eth_poll=run_loop_only net_eth_irq=0 dual_dod_b
+ * greppable: Soft!=product | soft_ne_product=1
  */
 #pragma once
 
@@ -77,13 +93,13 @@
  * ------
  *   u64Jiffies       Raw tick counter (same as timer_jiffies).
  *   u64MonoNsec      Coarse product clock: jiffies * nsec_per_tick.
- *   u64MonoSoftNsec  Finer soft mono (APIC interpolate); always ≥ coarse.
+ *   u64MonoSoftNsec  Finer soft mono (APIC interpolate); always >= coarse.
  *   u64NsecPerTick   Accounted period (PIT divisor or APIC programmed period).
  *   u32Source        GJ_TIMER_SRC_* (which hardware advances mono).
  *   u32Ready         1 after timer_init and IRQs live.
  *   u64PitTicks      Mono advances observed while source=PIT.
  *   u64ApicTicks     Mono advances observed while source=APIC.
- *   u64SourceSwitch  PIT→APIC handoffs observed (timer_set_apic_source).
+ *   u64SourceSwitch  PIT->APIC handoffs observed (timer_set_apic_source).
  *
  * Not a lock-free consistency snapshot under IRQ; for boot logs / soft PASS.
  * greppable: G-TIMER-SOFT-MONO
@@ -97,14 +113,14 @@ struct gj_timer_mono_soft {
     u32 u32Ready;
     u64 u64PitTicks;     /* mono advances while source=PIT */
     u64 u64ApicTicks;    /* mono advances while source=APIC */
-    u64 u64SourceSwitch; /* PIT→APIC handoffs observed */
+    u64 u64SourceSwitch; /* PIT->APIC handoffs observed */
 };
 
 /**
  * Soft snapshot of quantum / soft-preempt counters.
  *
  * Preempt path (one slice):
- *   quantum_tick on each mono tick decrements slice; at 0 → preempts++,
+ *   quantum_tick on each mono tick decrements slice; at 0 -> preempts++,
  *   yield_requests++, thread_yield_request(), re-arm slice.
  *   timer_preempt_check may then consume the pending yield (checks / hits /
  *   check_yields) from idle or sched helpers.
@@ -131,7 +147,7 @@ void timer_init(void);
 
 /**
  * Monotonic nanoseconds since timer_init (jiffies * period).
- * Coarse/stable product clock — use for futex and sleep deadlines.
+ * Coarse/stable product clock - use for futex and sleep deadlines.
  * greppable: G-TIMER-MONO
  */
 u64  timer_mono_nsec(void);
@@ -149,7 +165,7 @@ u64  timer_nsec_per_tick(void);
 
 /**
  * Unmask PIC IRQ0 and enable CPU interrupts (sti).
- * Call after timer_init() and preferably after apic_init() — not inside
+ * Call after timer_init() and preferably after apic_init() - not inside
  * timer_init (G752 bare-metal faulted on early sti + first IRQ0).
  */
 void timer_irq_enable(void);
@@ -161,13 +177,16 @@ u64  timer_jiffies(void);
  * Called from IRQ0 (PIT) stub path.
  * Advances mono only while source is still PIT; always PIC EOI.
  * Invokes futex_timer_check + quantum_tick (+ deferred revoke hygiene).
+ * H1 / Dual DoD B residual: NEVER calls net_eth_poll (IRQ stack smash class;
+ * eth poll = scheduler_run thr stack only). Soft!=product; dual_dod_b=OPEN.
  */
 void timer_tick(void);
 
 /**
  * Called from APIC timer IRQ when APIC is the mono source.
  * Same mono / futex / quantum side effects as timer_tick without PIC EOI.
- * greppable: G-TIMER-APIC-SRC
+ * H1 / Dual DoD B residual: NEVER calls net_eth_poll (run-loop only).
+ * Soft!=product; dual_dod_b=OPEN. greppable: G-TIMER-APIC-SRC
  */
 void timer_tick_apic(void);
 

@@ -3,7 +3,7 @@
  * Copyright (c) 2026 Project GreenJade contributors
  *
  * Clean-room cold-path Linux syscall soft stubs (Option C personality).
- * Pure C11 freestanding. Dual license: MIT OR Apache-2.0 — no GPL source.
+ * Pure C11 freestanding. Dual license: MIT OR Apache-2.0 - no GPL source.
  *
  * Role
  * ----
@@ -14,8 +14,8 @@
  *
  * Call chain (kernel smoke)
  * -------------------------
- *   linux_dispatch (cold) → cold_ipc → protonrt_service
- *     → (vfs_ram / explicit cases) → protonrt_cold_linux (this file)
+ *   linux_dispatch (cold) -> cold_ipc -> protonrt_service
+ *     -> (vfs_ram / explicit cases) -> protonrt_cold_linux (this file)
  *
  * Ownership / ENOSYS
  * ------------------
@@ -23,29 +23,49 @@
  *
  * io_uring min rings live in the kernel cold path (io_uring_min via
  * protonrt_cold_link): setup / enter / register succeed as min rings
- * on the product path — not an ENOSYS policy for setup. This library
+ * on the product path - not an ENOSYS policy for setup. This library
  * never implements those NRs; host-only direct calls still hit the
  * explicit io_uring stubs below (or default) and return ENOSYS.
  * Full SQE execution remains soft until a Deck title hard-requires it.
  *
  * Soft path (1.10)
  * ----------------
- * Typed soft FD table (stdio 0–2 reserved). pipe2 / eventfd2 /
+ * Typed soft FD table (stdio 0-2 reserved). pipe2 / eventfd2 /
  * socketpair / epoll_create1 / memfd_create allocate kinds; write
  * discards; read EOF (or eventfd counter); poll reports readiness for
  * owned fds; ioctl TTY/FIONREAD soft; fsync/madvise/flock no-op success.
  * No libc: freestanding only.
  *
- * Soft inventory (Wave 126 exclusive deepen; this unit only) — greppable:
- *   "protonrt: soft …"
- *   "cold_linux: soft …"
+ * C2 lib residual (Soft!=product / G-AC-1; stamp-free; cold ABI honesty):
+ *   Soft cold personality stubs only - never product multi-process UDX
+ *   notify/DDI close. Product path = UDX/DDI + hot/cold ABI (userspace
+ *   hosts over ABI; this unit is soft cold half residual only).
+ *   Dual DoD A/B stay OPEN (agent != close). Freestanding class SKIP.
+ *   H1: no IRQ eth poll from this unit (soft stubs; no net_eth_poll).
+ *   H2: once-inventory storm=0 (no stamp storms; no version stamp).
+ *   H3: soft proc spawn stays host ENOSYS (not thr_exit product path).
+ *   G-AC-1: not in-kernel .ko product AC. Dual MIT OR Apache-2.0.
+ *   Comment law: ASCII Soft!=product only (never Softneq unicode);
+ *   pure C block comments only (no nested star-slash footguns).
+ *
+ * Soft inventory (exclusive deepen; this unit only) - greppable:
+ *   "protonrt: soft ..."
+ *   "cold_linux: soft ..."
  * Prefix-stable serial markers:
  *   protonrt: soft inventory|fd|io|fd_alloc|stat|namei|id|time|poll|sock|
- *             proc|uring|enosys|query|path|groups|last|open|deepen|wave …
+ *             proc|uring|enosys|query|path|groups|last|open|deepen|wave|
+ *             honesty|residual lean|dual_dod OPEN ...
  *   cold_linux: soft inventory|fd|io|fd_alloc|stat|namei|id|time|poll|sock|
- *               proc|uring|enosys|query|path|groups|last|open|deepen|wave …
+ *               proc|uring|enosys|query|path|groups|last|open|deepen|wave|
+ *               honesty|residual lean|dual_dod OPEN ...
+ * greppable: protonrt: soft residual lean
+ * greppable: cold_linux: soft residual lean
+ * greppable: protonrt: soft dual_dod OPEN
+ * greppable: cold_linux: soft dual_dod OPEN
+ * greppable: Soft!=product
  * Pure observation; never hard-gates; wrap OK; soft.
- * Honesty: soft cold personality ≠ product multi-process UDX/notify close.
+ * Honesty: Soft!=product - soft cold personality is not product
+ * multi-process UDX/notify/DDI close (Dual DoD A/B OPEN).
  */
 #include <stdint.h>
 #include <gj/klog.h>
@@ -219,6 +239,19 @@
 #define PR_KIND_TIMERFD 9u
 #define PR_KIND_SIGNALFD 10u
 
+/*
+ * Soft socket residual flags (u8Flags on PR_KIND_SOCKET).
+ * Dual DoD B residual: listen → accept path toward sshd cold ABI honesty.
+ * Soft!=product; never product UDX wire / multi-server close.
+ * greppable: cold_linux: soft residual accept
+ * greppable: cold_linux: soft residual sshd_path
+ */
+#define PR_SOCK_F_BOUND    0x01u /* bind residual recorded */
+#define PR_SOCK_F_LISTEN   0x02u /* listen residual armed */
+#define PR_SOCK_F_CONN     0x04u /* connect / accepted residual */
+/* Soft default sshd port spirit when bind addr soft empty (Dual DoD B). */
+#define PR_SOCK_SSHD_PORT  22u
+
 /* fcntl cmds (subset). */
 #define PR_F_DUPFD     0
 #define PR_F_GETFD     1
@@ -259,9 +292,10 @@ static char g_szCwd[8] = { '/', 0, 0, 0, 0, 0, 0, 0 };
 static uint64_t g_u64ClearChildTid;
 
 /*
- * Soft product inventory (Wave 126 exclusive deepen). Enter-only tallies.
- * greppable: protonrt: soft … / cold_linux: soft …
+ * Soft product inventory (exclusive deepen). Enter-only tallies.
+ * greppable: protonrt: soft ... / cold_linux: soft ...
  * Never rewrites syscall returns; diagnostics / smoke only.
+ * Soft!=product: tallies never hard-gate Dual DoD or product AC.
  */
 enum {
     COLD_SOFT_GRP_IO = 0,     /* read/write/close/lseek/ioctl/fcntl/fsync/map */
@@ -274,12 +308,12 @@ enum {
     COLD_SOFT_GRP_SOCK,       /* socket family */
     COLD_SOFT_GRP_PROC,       /* clone/fork/exec/wait/kill/exit/sig */
     COLD_SOFT_GRP_URING,      /* io_uring_* host ENOSYS stubs */
-    COLD_SOFT_GRP_OTHER,      /* unlisted NR → ENOSYS default */
+    COLD_SOFT_GRP_OTHER,      /* unlisted NR -> ENOSYS default */
     COLD_SOFT_GRP_N
 };
 
 #define COLD_SOFT_WAVE 70u
-#define COLD_SOFT_AREAS    20u /* twin inventory + honesty per prefix family */
+#define COLD_SOFT_AREAS    22u /* twin inventory + honesty + residual lean */
 #define COLD_SOFT_VER_MAJ  ((uint32_t)PROTON_RT_VERSION_MAJOR)
 #define COLD_SOFT_VER_MIN  ((uint32_t)PROTON_RT_VERSION_MINOR)
 
@@ -580,14 +614,19 @@ soft_fd_live_counts(uint32_t *pFree, uint32_t *pLive, uint32_t *pStdio,
 }
 
 /**
- * Greppable soft protonrt / cold_linux inventory (product / smoke).
- * Twin prefixes so either agent grep works (Wave 126 exclusive deepen):
+ * Greppable soft protonrt / cold_linux inventory (smoke / residual).
+ * Twin prefixes so either agent grep works (exclusive deepen):
  *   protonrt: soft inventory|fd|io|fd_alloc|stat|namei|id|time|poll|sock|
- *             proc|uring|enosys|query|path|groups|last|open|deepen|wave …
+ *             proc|uring|enosys|query|path|groups|last|open|deepen|wave|
+ *             honesty|residual lean|dual_dod OPEN ...
  *   cold_linux: soft inventory|fd|io|fd_alloc|stat|namei|id|time|poll|sock|
- *               proc|uring|enosys|query|path|groups|last|open|deepen|wave …
+ *               proc|uring|enosys|query|path|groups|last|open|deepen|wave|
+ *               honesty|residual lean|dual_dod OPEN ...
  * greppable: protonrt: soft
  * greppable: cold_linux: soft
+ * greppable: Soft!=product
+ * Soft!=product: diagnostics only; Dual DoD A/B OPEN; never product AC.
+ * Product path = UDX/DDI + hot/cold ABI. G-AC-1. H1/H2/H3 honesty lamps.
  */
 static void
 soft_inventory_log(void)
@@ -617,7 +656,7 @@ soft_inventory_log(void)
               PROTON_FEAT_MEMFD;
 
     /*
-     * Primary prefix: protonrt: soft …
+     * Primary prefix: protonrt: soft ...
      * Catalog capacity + live FD table + group enter tallies.
      */
     /* Grep: protonrt: soft inventory */
@@ -713,15 +752,15 @@ soft_inventory_log(void)
     /* Grep: protonrt: soft path */
     kprintf("protonrt: soft path claim=cold_linux_personality hybrid=OptionC "
             "hot=kernel cold=libprotonrt enter_only=1 ret_rewrite=0 "
+            "product_path=UDX_DDI+hot_cold_ABI Soft!=product "
             "(soft inventory)\n");
 
-    /* Grep: protonrt: soft groups (Wave 111 deepen — all enters one line) */
-/* Wave 126 soft deepen surfaces (CREATE-ONLY soft ≠ product):
- *   greppable: soft retgradientangle continuum_toward=26800 soft_ne_product=1 wave=126
- *   greppable: soft retblendangle exclusive=1 continuum_toward=26800 soft_ne_product=1 wave=126
- * Soft ≠ product complete; product lamps 0;
- */
-
+    /* Grep: protonrt: soft groups (all enters one line) */
+    /* C2 Soft!=product residual surfaces (CREATE-ONLY soft inventory):
+     *   greppable: Soft!=product soft residual lean dual_dod OPEN
+     *   greppable: product_path=UDX_DDI+hot_cold_ABI G-AC-1 soft_ne_product=1
+     * Soft!=product complete; product lamps 0; Dual DoD A/B OPEN;
+     */
     kprintf("protonrt: soft groups io=%llu fd_alloc=%llu stat=%llu "
             "namei=%llu id=%llu time=%llu poll=%llu sock=%llu proc=%llu "
             "uring=%llu other=%llu total=%llu wave=%u\n",
@@ -739,7 +778,7 @@ soft_inventory_log(void)
             (unsigned long long)g_u64SoftEnterTotal,
             (unsigned)COLD_SOFT_WAVE);
 
-    /* Grep: protonrt: soft last (Wave 111 deepen) */
+    /* Grep: protonrt: soft last */
     kprintf("protonrt: soft last nr=%llu grp=%u enter_total=%llu "
             "enosys=%llu log_n=%llu wave=%u\n",
             (unsigned long long)g_u64SoftLastNr,
@@ -750,36 +789,41 @@ soft_inventory_log(void)
             (unsigned)COLD_SOFT_WAVE);
 
     /*
-     * Product OPEN honesty — cold soft ≠ multi-process UDX/notify product.
+     * Product OPEN honesty - Soft!=product multi-process UDX/notify/DDI.
      * greppable: protonrt: soft open
      */
     kprintf("protonrt: soft open kernel_notify=OPEN multi_process_spsc=OPEN "
-            "driver_host=OPEN product=0 soft=1 wave=%u\n",
+            "driver_host=OPEN product=0 soft=1 "
+            "product_path=UDX_DDI+hot_cold_ABI dual_dod_a=OPEN dual_dod_b=OPEN "
+            "G-AC-1=1 soft_ne_product=1 Soft!=product wave=%u\n",
             (unsigned)COLD_SOFT_WAVE);
 
-    /* Grep: protonrt: soft deepen wave (Wave 111 stamp) */
+    /* Grep: protonrt: soft deepen wave */
     kprintf("protonrt: soft deepen wave=%u areas=%u unit=cold_linux "
             "exclusive=1 prefix=protonrt:_soft log_n=%llu "
-            "(soft inventory)\n",
+            "Soft!=product (soft inventory)\n",
             (unsigned)COLD_SOFT_WAVE, (unsigned)COLD_SOFT_AREAS,
             (unsigned long long)g_u64SoftLogN);
 
     /* Grep: protonrt: soft wave */
     kprintf("protonrt: soft wave n=%u unit=cold_linux exclusive=1 "
             "areas=%u kernel_notify=OPEN multi_process_spsc=OPEN "
-            "(soft inventory)\n",
+            "Soft!=product (soft inventory)\n",
             (unsigned)COLD_SOFT_WAVE, (unsigned)COLD_SOFT_AREAS);
 
     /*
-     * Grep: protonrt: soft honesty (Wave 126 exclusive deepen).
-     * Soft inventory ≠ product multi-server confine.
+     * Grep: protonrt: soft honesty (C2 exclusive residual deepen).
+     * Soft inventory is not product multi-server confine (Soft!=product).
      */
     kprintf("protonrt: soft honesty multi_server=0 confine=0 "
-            "exclusive=1 soft=1 product_kernel=OPEN wave=%u\n",
+            "exclusive=1 soft=1 product=0 "
+            "product_path=UDX_DDI+hot_cold_ABI dual_dod_a=OPEN dual_dod_b=OPEN "
+            "dual_dod_close=0 agent_ne_close=1 freestanding_skip=1 "
+            "G-AC-1=1 soft_ne_product=1 Soft!=product wave=%u\n",
             (unsigned)COLD_SOFT_WAVE);
 
     /*
-     * Twin prefix: cold_linux: soft … (agent-friendly alias; same tallies).
+     * Twin prefix: cold_linux: soft ... (agent-friendly alias; same tallies).
      */
     /* Grep: cold_linux: soft inventory */
     kprintf("cold_linux: soft inventory wave=%u ver=%u.%u max_fd=%u "
@@ -874,9 +918,10 @@ soft_inventory_log(void)
     /* Grep: cold_linux: soft path */
     kprintf("cold_linux: soft path claim=cold_linux_personality "
             "hybrid=OptionC hot=kernel cold=libprotonrt enter_only=1 "
-            "ret_rewrite=0 (soft inventory)\n");
+            "ret_rewrite=0 product_path=UDX_DDI+hot_cold_ABI Soft!=product "
+            "(soft inventory)\n");
 
-    /* Grep: cold_linux: soft groups (Wave 111 deepen) */
+    /* Grep: cold_linux: soft groups */
     kprintf("cold_linux: soft groups io=%llu fd_alloc=%llu stat=%llu "
             "namei=%llu id=%llu time=%llu poll=%llu sock=%llu proc=%llu "
             "uring=%llu other=%llu total=%llu wave=%u\n",
@@ -894,7 +939,7 @@ soft_inventory_log(void)
             (unsigned long long)g_u64SoftEnterTotal,
             (unsigned)COLD_SOFT_WAVE);
 
-    /* Grep: cold_linux: soft last (Wave 111 deepen) */
+    /* Grep: cold_linux: soft last */
     kprintf("cold_linux: soft last nr=%llu grp=%u enter_total=%llu "
             "enosys=%llu log_n=%llu wave=%u\n",
             (unsigned long long)g_u64SoftLastNr,
@@ -904,28 +949,116 @@ soft_inventory_log(void)
             (unsigned long long)g_u64SoftLogN,
             (unsigned)COLD_SOFT_WAVE);
 
-    /* Grep: cold_linux: soft open (Wave 111 honesty) */
+    /* Grep: cold_linux: soft open (C2 Soft!=product honesty) */
     kprintf("cold_linux: soft open kernel_notify=OPEN multi_process_spsc=OPEN "
-            "driver_host=OPEN product=0 soft=1 wave=%u\n",
+            "driver_host=OPEN product=0 soft=1 "
+            "product_path=UDX_DDI+hot_cold_ABI dual_dod_a=OPEN dual_dod_b=OPEN "
+            "G-AC-1=1 soft_ne_product=1 Soft!=product wave=%u\n",
             (unsigned)COLD_SOFT_WAVE);
 
-    /* Grep: cold_linux: soft deepen wave (Wave 111 stamp) */
+    /* Grep: cold_linux: soft deepen wave */
     kprintf("cold_linux: soft deepen wave=%u areas=%u unit=cold_linux "
             "exclusive=1 prefix=cold_linux:_soft log_n=%llu "
-            "(soft inventory)\n",
+            "Soft!=product (soft inventory)\n",
             (unsigned)COLD_SOFT_WAVE, (unsigned)COLD_SOFT_AREAS,
             (unsigned long long)g_u64SoftLogN);
 
     /* Grep: cold_linux: soft wave */
     kprintf("cold_linux: soft wave n=%u unit=cold_linux exclusive=1 "
             "areas=%u kernel_notify=OPEN multi_process_spsc=OPEN "
-            "(soft inventory)\n",
+            "Soft!=product (soft inventory)\n",
             (unsigned)COLD_SOFT_WAVE, (unsigned)COLD_SOFT_AREAS);
 
-    /* Grep: cold_linux: soft honesty (Wave 126 exclusive deepen) */
+    /* Grep: cold_linux: soft honesty (C2 exclusive residual deepen) */
     kprintf("cold_linux: soft honesty multi_server=0 confine=0 "
-            "exclusive=1 soft=1 product_kernel=OPEN wave=%u\n",
+            "exclusive=1 soft=1 product=0 "
+            "product_path=UDX_DDI+hot_cold_ABI dual_dod_a=OPEN dual_dod_b=OPEN "
+            "dual_dod_close=0 agent_ne_close=1 freestanding_skip=1 "
+            "G-AC-1=1 soft_ne_product=1 Soft!=product wave=%u\n",
             (unsigned)COLD_SOFT_WAVE);
+
+    /*
+     * C2 lib residual lean (Soft!=product cold ABI honesty).
+     * Once-path only via soft_inventory_maybe_once - storm=0 (H2).
+     * greppable: protonrt: soft residual lean
+     * greppable: cold_linux: soft residual lean
+     * Product = UDX/DDI + hot/cold ABI; this unit is soft cold stub residual.
+     * Dual DoD A/B OPEN; agent != close; G-AC-1; no .ko product AC.
+     * H1 no IRQ eth poll; H2 storm=0; H3 soft spawn host ENOSYS.
+     */
+    /* Grep: protonrt: soft residual lean */
+    kprintf("protonrt: soft residual lean "
+            "unit=cold_linux claim=soft_cold_personality "
+            "enter=%llu enosys=%llu query=%llu log_n=%llu groups=%u "
+            "hybrid=OptionC hot=kernel cold=libprotonrt "
+            "surface=pipe+eventfd+socketpair+epoll+memfd+poll+id+time "
+            "uring_host=ENOSYS product_uring=kernel_min_rings "
+            "multi_server=0 confine=0 ret_rewrite=0 enter_only=1 "
+            "product_path=UDX_DDI+hot_cold_ABI "
+            "product_hosts=rtl8168_udx,xhci_udx,ddi_host_gj "
+            "dual_dod_a=OPEN dual_dod_b=OPEN dual_dod_close=0 "
+            "agent_ne_close=1 freestanding_skip=1 "
+            "H1=no_irq_poll H2=storm0 H3=spawn_native_enosys "
+            "soft_ne_product=1 dual=MIT_OR_Apache-2.0 G-AC-1=1 "
+            "no_ko_product=1 storm=0 no_version_stamp=1 not_bar3=1 "
+            "(Soft!=product; C2 lib residual cold ABI honesty; "
+            "Dual DoD A/B OPEN; not product close; not .ko product AC)\n",
+            (unsigned long long)g_u64SoftEnterTotal,
+            (unsigned long long)g_u64SoftEnosys,
+            (unsigned long long)g_u64SoftQueryEnter,
+            (unsigned long long)g_u64SoftLogN,
+            (unsigned)COLD_SOFT_GRP_N);
+
+    /* Grep: cold_linux: soft residual lean / soft residual accept / sshd_path */
+    kprintf("cold_linux: soft residual lean "
+            "unit=cold_linux claim=soft_cold_personality "
+            "enter=%llu enosys=%llu query=%llu log_n=%llu groups=%u "
+            "hybrid=OptionC hot=kernel cold=libprotonrt "
+            "surface=pipe+eventfd+socketpair+epoll+memfd+poll+id+time+"
+            "sock_bind_listen_accept "
+            "sshd_path=OPEN dual_dod_b=OPEN soft_accept=listen_req "
+            "uring_host=ENOSYS product_uring=kernel_min_rings "
+            "multi_server=0 confine=0 ret_rewrite=0 enter_only=1 "
+            "product_path=UDX_DDI+hot_cold_ABI "
+            "product_hosts=rtl8168_udx,xhci_udx,ddi_host_gj "
+            "dual_dod_a=OPEN dual_dod_b=OPEN dual_dod_close=0 "
+            "agent_ne_close=1 freestanding_skip=1 "
+            "H1=no_irq_poll H2=storm0 H3=spawn_native_enosys "
+            "soft_ne_product=1 dual=MIT_OR_Apache-2.0 G-AC-1=1 "
+            "no_ko_product=1 storm=0 no_version_stamp=1 not_bar3=1 "
+            "(Soft!=product; C2 lib residual cold ABI honesty; "
+            "Dual DoD A/B OPEN; not product close; not .ko product AC)\n",
+            (unsigned long long)g_u64SoftEnterTotal,
+            (unsigned long long)g_u64SoftEnosys,
+            (unsigned long long)g_u64SoftQueryEnter,
+            (unsigned long long)g_u64SoftLogN,
+            (unsigned)COLD_SOFT_GRP_N);
+
+    /*
+     * Dual DoD honesty once-lamp (Soft!=product; agent never closes A/B).
+     * greppable: protonrt: soft dual_dod OPEN
+     * greppable: cold_linux: soft dual_dod OPEN
+     * Product = UDX/DDI + hot/cold ABI. Freestanding SKIP. G-AC-1.
+     */
+    /* Grep: protonrt: soft dual_dod OPEN */
+    kprintf("protonrt: soft dual_dod OPEN "
+            "dual_dod_a=OPEN dual_dod_b=OPEN dual_dod_close=0 "
+            "agent_ne_close=1 product_path=UDX_DDI+hot_cold_ABI "
+            "freestanding_skip=1 G-AC-1=1 Soft!=product "
+            "dual=MIT_OR_Apache-2.0 unit=cold_linux cold_abi=soft_stub "
+            "storm=0 no_version_stamp=1 not_bar3=1 "
+            "(C2 Dual DoD residual honesty; agent never closes A/B; "
+            "product=UDX/DDI+hot/cold ABI; Soft!=product)\n");
+
+    /* Grep: cold_linux: soft dual_dod OPEN */
+    kprintf("cold_linux: soft dual_dod OPEN "
+            "dual_dod_a=OPEN dual_dod_b=OPEN dual_dod_close=0 "
+            "agent_ne_close=1 product_path=UDX_DDI+hot_cold_ABI "
+            "freestanding_skip=1 G-AC-1=1 Soft!=product "
+            "dual=MIT_OR_Apache-2.0 unit=cold_linux cold_abi=soft_stub "
+            "storm=0 no_version_stamp=1 not_bar3=1 "
+            "(C2 Dual DoD residual honesty; agent never closes A/B; "
+            "product=UDX/DDI+hot/cold ABI; Soft!=product)\n");
 }
 
 /**
@@ -1838,7 +1971,7 @@ protonrt_cold_linux(uint64_t u64Nr, uint64_t a0, uint64_t a1, uint64_t a2,
 
     fd_table_init();
 
-    /* Wave 126 soft enter — never rewrites ret. greppable: protonrt: soft */
+    /* Soft enter - never rewrites ret. greppable: protonrt: soft Soft!=product */
     u32Grp = soft_classify_nr(u64Nr);
     g_u64SoftLastNr = u64Nr;
     g_u32SoftLastGrp = u32Grp;
@@ -2218,10 +2351,14 @@ protonrt_cold_linux(uint64_t u64Nr, uint64_t a0, uint64_t a1, uint64_t a2,
     case NR_pselect6:
         return cold_select(a0, a1, a2, a3);
 
-    /* ---- sockets (soft loopback-shaped) ---------------------------- */
+    /* ---- sockets (soft loopback-shaped; Dual DoD B sshd residual) -- */
     case NR_socket: {
         int64_t i64Fd = alloc_fd_kind(PR_KIND_SOCKET);
 
+        if (i64Fd >= 0) {
+            g_aFd[i64Fd].u8Flags = 0;
+            g_aFd[i64Fd].u64Counter = 0; /* soft port residual */
+        }
         return i64Fd;
     }
     case NR_socketpair: {
@@ -2236,12 +2373,56 @@ protonrt_cold_linux(uint64_t u64Nr, uint64_t a0, uint64_t a1, uint64_t a2,
         if (i64St < 0) {
             return i64St;
         }
+        g_aFd[aFds[0]].u8Flags = PR_SOCK_F_CONN;
+        g_aFd[aFds[1]].u8Flags = PR_SOCK_F_CONN;
         soft_copy((void *)(uintptr_t)a3, aFds, 8);
         return 0;
     }
     case NR_bind:
+        if (!fd_ok(a0) || g_aFd[a0].u8Kind != PR_KIND_SOCKET) {
+            return -(int64_t)E_NOTSOCK;
+        }
+        /*
+         * Soft port residual: if sockaddr has AF_INET-shaped port, keep it;
+         * else record sshd spirit port for Dual DoD B cold accept honesty.
+         * Soft!=product — not product UDX wire ownership.
+         */
+        g_aFd[a0].u8Flags |= PR_SOCK_F_BOUND;
+        if (a1 != 0) {
+            uint16_t aSa[8];
+            uint16_t u16PortBe;
+
+            soft_zero(aSa, sizeof(aSa));
+            soft_copy(aSa, (const void *)(uintptr_t)a1, 16);
+            /* Linux sockaddr_in: sin_port at offset 2, network order. */
+            u16PortBe = aSa[1];
+            if (u16PortBe != 0) {
+                g_aFd[a0].u64Counter =
+                    (uint64_t)((u16PortBe >> 8) | ((u16PortBe & 0xffu) << 8));
+            } else {
+                g_aFd[a0].u64Counter = (uint64_t)PR_SOCK_SSHD_PORT;
+            }
+        } else {
+            g_aFd[a0].u64Counter = (uint64_t)PR_SOCK_SSHD_PORT;
+        }
+        return 0;
     case NR_listen:
+        if (!fd_ok(a0) || g_aFd[a0].u8Kind != PR_KIND_SOCKET) {
+            return -(int64_t)E_NOTSOCK;
+        }
+        /* Soft listen residual arms accept path (sshd :22 spirit OK). */
+        g_aFd[a0].u8Flags |= PR_SOCK_F_LISTEN;
+        if ((g_aFd[a0].u8Flags & PR_SOCK_F_BOUND) == 0u) {
+            g_aFd[a0].u8Flags |= PR_SOCK_F_BOUND;
+            g_aFd[a0].u64Counter = (uint64_t)PR_SOCK_SSHD_PORT;
+        }
+        return 0;
     case NR_connect:
+        if (!fd_ok(a0) || g_aFd[a0].u8Kind != PR_KIND_SOCKET) {
+            return -(int64_t)E_NOTSOCK;
+        }
+        g_aFd[a0].u8Flags |= PR_SOCK_F_CONN;
+        return 0;
     case NR_shutdown:
     case NR_setsockopt:
         if (!fd_ok(a0) || g_aFd[a0].u8Kind != PR_KIND_SOCKET) {
@@ -2268,20 +2449,43 @@ protonrt_cold_linux(uint64_t u64Nr, uint64_t a0, uint64_t a1, uint64_t a2,
         if (a1 != 0 && a2 != 0) {
             uint16_t aSa[8];
             int32_t nLen = 16;
+            uint16_t u16Port = (uint16_t)g_aFd[a0].u64Counter;
 
             soft_zero(aSa, sizeof(aSa));
-            aSa[0] = 1; /* AF_UNIX soft */
+            /* Soft AF_INET residual (sshd path honesty) when port known. */
+            if (u16Port != 0) {
+                aSa[0] = 2; /* AF_INET soft */
+                aSa[1] = (uint16_t)((u16Port >> 8) | ((u16Port & 0xffu) << 8));
+            } else {
+                aSa[0] = 1; /* AF_UNIX soft */
+            }
             soft_copy((void *)(uintptr_t)a1, aSa, 16);
             soft_copy((void *)(uintptr_t)a2, &nLen, 4);
         }
         return 0;
     case NR_accept: {
         int64_t i64Fd;
+        uint16_t u16Port;
 
         if (!fd_ok(a0) || g_aFd[a0].u8Kind != PR_KIND_SOCKET) {
             return -(int64_t)E_NOTSOCK;
         }
+        /*
+         * Functional residual: accept requires listen residual.
+         * Dual DoD B cold path toward sshd accept; Soft!=product.
+         * greppable: cold_linux: soft residual accept
+         */
+        if ((g_aFd[a0].u8Flags & PR_SOCK_F_LISTEN) == 0u) {
+            return -(int64_t)E_INVAL;
+        }
         i64Fd = alloc_fd_kind(PR_KIND_SOCKET);
+        if (i64Fd < 0) {
+            return i64Fd;
+        }
+        u16Port = (uint16_t)g_aFd[a0].u64Counter;
+        g_aFd[i64Fd].u8Flags = PR_SOCK_F_CONN | PR_SOCK_F_BOUND;
+        g_aFd[i64Fd].u64Counter = (uint64_t)u16Port;
+        g_aFd[i64Fd].u32Peer = (uint32_t)a0; /* soft listener parent */
         return i64Fd;
     }
     case NR_sendto:

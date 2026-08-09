@@ -2,24 +2,24 @@
  * SPDX-License-Identifier: MIT OR Apache-2.0
  * Copyright (c) 2026 Project GreenJade contributors
  *
- * Real-mode AP trampoline — copied to physical 0x8000 (SIPI vector 8).
+ * Real-mode AP trampoline - copied to physical 0x8000 (SIPI vector 8).
  * Bootstrap info at 0x7000 (struct gj_ap_boot_info, see smp.c).
  *
- * Soft deepen (ABI-stable bring-up contract — smp_start_aps must match):
+ * Soft deepen (ABI-stable bring-up contract - smp_start_aps must match):
  *
  *   Layout of copied block (phys 0x8000 + offset):
- *     +0x00  16-bit entry (SIPI target, vector 8 → 0x8000)
- *     private GDT / GDTR embedded via labels (not BSP GDT — low identity)
+ *     +0x00  16-bit entry (SIPI target, vector 8 -> 0x8000)
+ *     private GDT / GDTR embedded via labels (not BSP GDT - low identity)
  *     long64 parks with hlt if entry returns
  *
  *   gj_ap_boot_info @ 0x7000 (packed; offsets must match smp.c):
  *     +0   gdtr placeholder (unused when trampoline embeds GDT)
- *     +16  u64 cr3     — BSP CR3 (PML4 must be < 4 GiB for 32-bit load)
- *     +24  u64 entry   — 64-bit C entry (e.g. ap long-mode continue)
- *     +32  u64 stack   — stack top for this AP
- *     +40  u32 cpu     — cpu index (passed in EDI, System V first arg)
+ *     +16  u64 cr3     - BSP CR3 (PML4 must be < 4 GiB for 32-bit load)
+ *     +24  u64 entry   - 64-bit C entry (e.g. ap long-mode continue)
+ *     +32  u64 stack   - stack top for this AP
+ *     +40  u32 cpu     - cpu index (passed in EDI, System V first arg)
  *
- *   Mode ladder: real → prot32 (CS=0x08) → long64 (CS=0x18).
+ *   Mode ladder: real -> prot32 (CS=0x08) -> long64 (CS=0x18).
  *   Temporary GDT selectors:
  *     0x08  32-bit code    0x10  32-bit data
  *     0x18  64-bit code    0x20  64-bit data
@@ -28,7 +28,23 @@
  *   NX leaves after vmm_harden / mprotect; NXE=0 would #PF reserved-bit
  *   on those PTEs (Intel SDM). Soft-safe alignment with BSP cpu_syscall_init.
  *
- * Grep: ap_trampoline, smp: bringup soft
+ * C3 arch entry residual (this unit exclusive; Soft!=product; stamp-free):
+ *   Private GDT + low-identity mode ladder is isolation bring-up residual -
+ *   not product multi-server SMP close, not Dual DoD A/B close.
+ *   Soft!=product · dual MIT OR Apache-2.0 · G-AC-1 (no Linux .ko AP path).
+ *   Dual DoD A/B remain OPEN (trampoline never closes product DoD).
+ *   H1: no net_eth_poll - pure entry ladder, never eth/IRQ soft inventory.
+ *   H2: stamp-free - no kprintf storms, never bumps GJ_IMAGE_VERSION.
+ *   H3: park-hlt on C return is soft hang only - not thr-exit product wiring.
+ *   Machine code ABI-stable; residual honesty only (eng residual class C3
+ *   security/isolation edge docs). Soft!=product SMP bring-up residual.
+ *
+ * greppable: ap_trampoline
+ * greppable: smp: bringup soft
+ * greppable: Soft!=product
+ * greppable: G-AC-1
+ * greppable: Dual DoD OPEN
+ * greppable: ap_trampoline: soft residual
  */
 .section .rodata
 .global ap_trampoline_start

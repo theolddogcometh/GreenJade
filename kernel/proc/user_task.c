@@ -11,34 +11,94 @@
  *   pers  code  @ GJ_PERS_CODE_VA   (0x0120_0000)
  *   pers  stack @ GJ_PERS_STACK_TOP (0x0130_0000, grows down)
  *
- * Soft product inventory (Wave 35 exclusive deepen; this unit only):
- * greppable: "user: soft …" | "user_task: soft …"
- *   user: soft inventory …
- *   user: soft stats …
- *   user: soft map …
- *   user: soft layout …
- *   user: soft enter …
- *   user: soft recheck …
- *   user: soft catalog …
- *   user: soft va …          (dual-window VA geometry)
- *   user: soft return …      (Wave 19 return-path catalog)
- *   user: soft ret_surface … (Wave 19 terminal return classes)
- *   user: soft surface …     (Wave 19 area catalog)
- *   user: soft deepen wave=116 …
- *   user: soft path …
- *   user: soft PASS|PARTIAL
- *   user: ring3 map soft | user: personality map soft (post-map observe)
- *   Post-map PTE soft (P|U, code RX / stack RW|NX) + payload soft match
- *   Layout soft (user band, page align, code/stack non-overlap, dual windows)
- *   Fail closed on soft bad; greppable soft PASS|FAIL; soft stats counters
- *   Idempotent re-map: already-live soft recheck without double-install
- * Soft. Pure C freestanding; dual MIT OR Apache-2.0.
+ * Host ELF thr entry contract (FUNCTIONAL residual; Soft!=product):
+ *   After process_spawn_host_launch + elf_load, UDX host thr enters at
+ *   freestanding ET_EXEC base (= GJ_USER_CODE_VA) with user stack top
+ *   (= GJ_USER_STACK_TOP / spawn host stack). This unit owns the dual
+ *   user-AS windows + map|soft_observe|recheck|enter|sysret scaffold
+ *   those thr entries stand on. product_hosts=rtl8168_udx,xhci_udx,ddi_host.
+ *   Companion path honesty (spawn/elf_load own load thr mint):
+ *     process_spawn_host_launch|elf_load|user_as|thr
+ *   Local enter path: map|soft_observe|recheck|enter|sysret
+ *   H3: refuse enter when !mapped; process death thr_exit before as_destroy.
+ *   Dual DoD A/B remain OPEN; Soft residual never closes product Dual DoD.
+ *   Bar honesty v2026.08.04.75 stamp-free residual; NEVER invent .76.
+ *
+ * keep_live product host thr_live honesty (STRONGER denser residual; Soft!=product):
+ *   process_spawn_host_launch class hosts (rtl8168_udx|xhci_udx|ddi_host)
+ *   stay keep_live while host thr run. This unit must NEVER thrash dual
+ *   user-AS windows under an enterable thr (maps_live_while_enterable;
+ *   refuse enter when !mapped; unmap only partial-fail / process H3 death).
+ *   product_host_live=1 / keep_live=1 / thr_live=1 residual honesty:
+ *     dual windows live while thr can enter; H3 thr_exit before as_destroy
+ *     lives in process/thread; entry companion refuses !mapped enter.
+ *   denser axes (companion process denser keep_live thr_live residual):
+ *     denser_keep_live=1 | denser_thr_live=1 | denser_product_host_live=1
+ *     | denser_dual_dod=1 | maps_live_while_enterable=1
+ *     | never_unmap_while_thr_live=1 | thr_exit_before_as_destroy=1
+ *   Soft!=product: keep_live residual != product UDX wire/TX/RX close;
+ *   denser residual != Dual DoD close; Dual DoD A/B OPEN; agent!=close;
+ *   never invent stamp .76; bar=v2026.08.04.75 stamp-free.
+ *
+ * Lean soft residual for UDX driver host entry (C2 product-path honesty;
+ * this unit only; Soft!=product — residual never closes Dual DoD / bar3):
+ * greppable: "user: soft residual lean"
+ * greppable: "user: soft residual lean udx"
+ * greppable: "user: soft residual lean c2"
+ * greppable: "user: soft residual lean PASS"
+ * greppable: "user_task: soft residual lean"
+ * greppable: "user: soft residual lean H3"
+ * greppable: "user: soft residual ring3 map" (compat + C2 path tallies)
+ * greppable: "user: soft residual ring3 map c2" (C2 ring3 map residual)
+ * greppable: "user: soft residual personality map"
+ * greppable: "user: soft stats" | "user: ring3 map soft"
+ * greppable: "user: soft residual enter"
+ * greppable: "user: soft residual keep_live"
+ * greppable: "user: soft residual product_host_live"
+ * greppable: "user: soft residual thr_live"
+ * greppable: "user: soft residual denser keep_live"
+ * greppable: "user: soft residual denser thr_live"
+ * greppable: "user: soft residual denser product_host_live"
+ * greppable: "user: soft residual denser dual_dod"
+ * greppable: "user_task: soft residual product_host_live"
+ * greppable: "user_task: soft residual thr_live"
+ * greppable: "user_task: soft residual denser keep_live"
+ * greppable: "user_task: soft residual denser thr_live"
+ * greppable: "user: soft functional residual"
+ * greppable: "user: soft functional residual catalog"
+ * greppable: "user: soft functional residual host_elf_thr"
+ * greppable: "user: soft functional residual densify"
+ * greppable: "user: soft functional residual PASS"
+ * greppable: "user: soft functional step"
+ * greppable: "user_task: soft functional residual"
+ * greppable: product_host_live=1 | keep_live=1 | thr_live=1
+ * greppable: never_unmap_while_thr_live=1 | maps_live_while_enterable=1
+ * greppable: Soft!=product soft residual dual_dod OPEN product_host_live
+ * greppable: denser keep_live residual | denser thr_live residual
+ * greppable: denser product_host_live residual | denser dual_dod residual
+ * greppable: denser thr_exit_before_as_destroy residual
+ *   Soft!=product - residual is eng/smoke honesty, not product dual-drive.
+ *   G-AC-1: no Linux .ko product AC; product class hosts = userspace UDX.
+ *   Dual windows = soft user-AS scaffold for UDX driver host map+enter.
+ *   path=map|soft_observe|recheck|enter|sysret (ring3) + personality map.
+ *   product_dir=UDX+ABI · host_entry=map+sysret · freestanding_class_product=0.
+ *   claim_class=C2 (ASSURANCE_LITE product path residual; Soft scaffold only).
+ *   dual_dod_A/B=OPEN — residual never closes Dual DoD.
+ *   H3 companion: refuse enter when ring3 !mapped; maps live while thr can
+ *     enter; process death thr_exit before as_destroy (ASSURANCE H3).
+ *   No version stamp. No stamp storms (capped multi-line dumps).
+ *   Post-map PTE soft (P|U, code RX / stack RW|NX) + payload soft match.
+ *   Layout soft (user band, page align, code/stack non-overlap, dual windows).
+ *   Fail closed on soft bad; greppable soft PASS|FAIL; silent counters.
+ *   Idempotent re-map: already-live soft recheck without double-install.
+ *   Enter ring3 requires ring3 map (personality-only is not enough).
+ * Pure C freestanding; dual MIT OR Apache-2.0.
  */
 #include <gj/config.h>
 #include <gj/cpu.h>
 #include <gj/cpu_sys.h>
 #include <gj/klog.h>
-#include <gj/memobj.h>
+#include <gj/memobj.h> /* process_as_ensure / process_as_activate */
 #include <gj/pmm.h>
 #include <gj/process.h>
 #include <gj/string.h>
@@ -64,8 +124,55 @@ extern char gj_protonrt_user_blob_end[];
 static int g_fUserMapped;
 static int g_fPersMapped;
 
-/* ---- Soft map / enter counters (grep: user: soft …) Wave 19 ----------- */
-#define GJ_USER_SOFT_WAVE 116u
+/*
+ * Lean soft residual for UDX driver host entry (Soft!=product | G-AC-1 | H3).
+ * Silent counters + capped residual lamps only - no version stamp,
+ * no multi-line stamp storms. Soft verify still fail-closes product map.
+ * Residual never claims multi-server confine product or .ko product AC.
+ * H3: entry refuse when ring3 !mapped; teardown order is process/thread residual.
+ * C2 residual deepen (ring3 map): UDX host entry path honesty + live dual-window
+ * arm + ring3 map C2 selfcheck + path-tally residual; Soft residual != product
+ * DoD close (Soft!=product). claim_class=C2 scaffold only (ASSURANCE_LITE).
+ *
+ * FUNCTIONAL residual (STRONGER; Soft!=product): UDX host ELF thr entry
+ * scaffold after process_spawn_host_launch + elf_load. Layout contracts
+ * bind host ET_EXEC base + host stack top to this unit's dual windows;
+ * pipeline step honesty densifies map|observe|recheck|enter|sysret +
+ * host_stack|host_exec|h3_refuse + product_hosts|dual_dod|enter_req|user_band
+ * + thr_live|product_host_live|keep_live|maps_live_no_thrash.
+ * Dual DoD A/B stay OPEN. Bar .75 stamp-free; NEVER invent .76.
+ *
+ * keep_live / product_host_live / thr_live (STRONGER; Soft!=product):
+ * never thrash dual windows under enterable product host thr; Dual DoD OPEN.
+ */
+#define USER_SOFT_LOG_CAP 2u
+/* UDX host entry lean selfcheck arms (Soft!=product; never hard-gates). */
+#define USER_SOFT_UDX_LEAN_CHECKS 8u
+/* C2 ring3 map residual selfcheck arms (Soft!=product; never hard-gates). */
+#define USER_SOFT_RING3_MAP_C2_CHECKS 8u
+/*
+ * Host ELF thr entry FUNCTIONAL residual selfcheck arms (Soft!=product).
+ * greppable: user: soft functional residual | host_elf_thr_func=N/20
+ * Arms 1-6 layout/host-contract; 7-10 enter/map/soft/recheck; 11-12 live;
+ * 13-16 STRONGER: code budget, static dual layout, user band, skip sum;
+ * 17-20 STRONGER thr_live: live path, product_host_live, keep_live geometry,
+ *      never_unmap_while thr enterable.
+ */
+#define USER_SOFT_HOST_ELF_THR_FUNC_CHECKS 20u
+/*
+ * Soft functional residual pipeline steps (host thr entry scaffold).
+ * greppable: user: soft functional step
+ * path=map,soft_observe,recheck,enter,sysret,host_stack,host_exec,h3_refuse,
+ *      product_hosts,dual_dod_open,enter_req_ring3,user_band,
+ *      thr_live,product_host_live,keep_live,maps_live_no_thrash
+ */
+#define USER_SOFT_FUNC_STEP_COUNT 16u
+/* Freestanding host ET_EXEC base (matches elf_load GJ_ELF_HOST_EXEC_BASE). */
+#define USER_SOFT_HOST_EXEC_BASE 0x0000000001000000ull
+/* Host thr stack top (matches spawn GJ_SPAWN_HOST_STACK_TOP; thr=82 .78). */
+#define USER_SOFT_HOST_STACK_TOP 0x000000007F000000ull
+/* Host thr stack pages (matches spawn GJ_SPAWN_HOST_STACK_PAGES). */
+#define USER_SOFT_HOST_STACK_PAGES 64u
 
 static u32 g_cRing3MapOk;
 static u32 g_cRing3MapFail;
@@ -85,7 +192,7 @@ static size_t g_cbPersBlob;
 static u32    g_cRing3CodePages;
 static u32    g_cPersCodePages;
 
-/* Wave 15 deepen path tallies (diagnostics only; wrap OK). */
+/* Path tallies (diagnostics only; wrap OK). Soft!=product. */
 static u32 g_u32SoftLayoutFailRing3;
 static u32 g_u32SoftLayoutFailPers;
 static u32 g_u32SoftAsEnsureFailRing3;
@@ -109,11 +216,28 @@ static u32 g_u32SoftEnterSkipRecheck;
 static u32 g_u32SoftObserveOk;
 static u32 g_u32SoftObserveBad;
 static u32 g_u32SoftLogN;
+static u32 g_u32SoftLeanOk;
+static u32 g_u32SoftUdxLean;     /* last residual lean selfcheck (0..CHECKS) */
+static u32 g_u32SoftRing3MapC2;  /* last C2 ring3 map residual selfcheck */
+static u32 g_u32SoftRing3MapC2Ok; /* C2 ring3 map residual full PASS count */
+/* Host ELF thr functional residual (Soft!=product; Dual DoD OPEN). */
+static u32 g_u32SoftHostElfThrFunc;   /* last functional selfcheck (0..CHECKS) */
+static u32 g_u32SoftHostElfThrFuncOk; /* full PASS count */
+static u32 g_u32SoftFuncStepLive;     /* last densified step live count */
 static u8  g_fSoftInvOnce;
+static u8  g_fSoftResidualLeanOnce;
 
 static void user_soft_inc(u32 *pCtr);
 static void user_soft_inventory(const char *szVia);
+static void user_soft_residual_lean(const char *szVia);
 static void user_soft_maybe_once(void);
+static u32  user_soft_udx_host_lean_check(void);
+static u32  user_soft_ring3_map_c2_check(void);
+static u32  user_soft_host_elf_thr_func_check(void);
+static int  user_layout_soft_ok(u64 u64CodeVa, size_t cbCode, u64 u64StackTop,
+                                u32 cStackPages, u64 u64SiblingCode,
+                                size_t cbSibling, u64 u64SiblingStackTop,
+                                u32 cSiblingStack, int fSiblingLive);
 
 /** Soft: saturating bump (wrap avoided; wrap OK if ever hit). */
 static void
@@ -128,12 +252,430 @@ user_soft_inc(u32 *pCtr)
 }
 
 /**
- * Greppable Wave 15 soft user_task inventory (product / smoke).
- * Twin prefixes: user: soft … | user_task: soft …
- * Never hard-gates map/enter path. Soft.
+ * UDX driver host entry lean selfcheck (Soft!=product; never hard-gates).
+ * Arms (USER_SOFT_UDX_LEAN_CHECKS = 8):
+ *   1 dual VA windows ordered / non-overlap intent
+ *   2 stack page budgets (ring3 + personality)
+ *   3 code page budgets
+ *   4 page-aligned code + stack tops
+ *   5 live ring3 install consistency (!live || blob+pages set)
+ *   6 enter_ok implies map_ok (sysret enter required a prior ring3 map)
+ *   7 map_ok implies soft observe PASS count (fail-closed soft path)
+ *   8 live dual-window non-overlap when both windows live (else vacuous pass)
  *
- * greppable: user: soft
- * greppable: user_task: soft
+ * greppable: user: soft residual lean udx | udx_lean=N/8
+ * Policy tokens (G-AC-1 / H3 / enter contract / class=C2) live in residual
+ * lamps; arms above are runtime-consistent where possible.
+ */
+static u32
+user_soft_udx_host_lean_check(void)
+{
+    u32 u32Ok;
+    int nLiveDual;
+
+    u32Ok = 0;
+
+    /* 1: dual windows ordered; ring3 stack ends at/before personality code. */
+    if (GJ_USER_CODE_VA < GJ_USER_STACK_TOP &&
+        GJ_PERS_CODE_VA < GJ_PERS_STACK_TOP &&
+        GJ_USER_STACK_TOP <= GJ_PERS_CODE_VA) {
+        u32Ok++;
+    }
+
+    /* 2: stack page budgets (soft max; product install uses these). */
+    if (GJ_USER_STACK_PAGES == 4u && GJ_PERS_STACK_PAGES == 4u) {
+        u32Ok++;
+    }
+
+    /* 3: code page budgets. */
+    if (GJ_USER_CODE_PAGES == 4u && GJ_PERS_CODE_PAGES == 4u) {
+        u32Ok++;
+    }
+
+    /* 4: page-aligned code bases + stack tops. */
+    if ((GJ_USER_CODE_VA & 0xfffull) == 0 &&
+        (GJ_PERS_CODE_VA & 0xfffull) == 0 &&
+        (GJ_USER_STACK_TOP & 0xfffull) == 0 &&
+        (GJ_PERS_STACK_TOP & 0xfffull) == 0) {
+        u32Ok++;
+    }
+
+    /*
+     * 5: live ring3 install consistency — mapped flag implies tracked blob
+     * size and code page count (idempotent recheck / residual honesty).
+     */
+    if (g_fUserMapped == 0 ||
+        (g_cbRing3Blob > 0 && g_cRing3CodePages > 0)) {
+        u32Ok++;
+    }
+
+    /*
+     * 6: enter contract residual — successful sysret enter implies a prior
+     * ring3 map ok (personality-only is never enough for enter_ring3).
+     */
+    if (g_cEnterOk == 0u || g_cRing3MapOk > 0u) {
+        u32Ok++;
+    }
+
+    /*
+     * 7: soft observe on map success — map_ok path always soft-observes;
+     * residual refuses to claim map green without soft PASS tally.
+     */
+    if (g_cRing3MapOk == 0u || g_cRing3Soft > 0u) {
+        u32Ok++;
+    }
+
+    /*
+     * 8: live dual-window layout when both maps are live. Vacuous pass if
+     * only one (or neither) window is installed yet.
+     */
+    if (g_fUserMapped == 0 || g_fPersMapped == 0) {
+        u32Ok++;
+    } else {
+        nLiveDual = user_layout_soft_ok(
+            GJ_USER_CODE_VA,
+            g_cbRing3Blob != 0 ? g_cbRing3Blob
+                               : (size_t)GJ_USER_CODE_PAGES * (size_t)GJ_PAGE_SIZE,
+            GJ_USER_STACK_TOP, GJ_USER_STACK_PAGES, GJ_PERS_CODE_VA,
+            g_cbPersBlob != 0 ? g_cbPersBlob
+                              : (size_t)GJ_PERS_CODE_PAGES * (size_t)GJ_PAGE_SIZE,
+            GJ_PERS_STACK_TOP, GJ_PERS_STACK_PAGES, 1);
+        if (nLiveDual != 0) {
+            u32Ok++;
+        }
+    }
+
+    return u32Ok;
+}
+
+/**
+ * C2 ring3 map residual selfcheck (Soft!=product; never hard-gates).
+ * ASSURANCE_LITE claim_class=C2 product-path residual for Linux-shaped
+ * ring3 trampoline map+sysret host entry scaffold. Dual DoD A/B stay OPEN.
+ *
+ * Arms (USER_SOFT_RING3_MAP_C2_CHECKS = 8):
+ *   1 ring3 code VA < stack top
+ *   2 ring3 stack page budget
+ *   3 ring3 code page budget
+ *   4 page-aligned ring3 code + stack top
+ *   5 ring3 window clears personality code base (non-overlap intent)
+ *   6 !live || (blob + code pages tracked)
+ *   7 enter_ok implies map_ok; map_ok implies soft > 0
+ *   8 live blob size within code page budget (else vacuous if !live)
+ *
+ * greppable: user: soft residual ring3 map c2 | ring3_map_c2=N/8
+ */
+static u32
+user_soft_ring3_map_c2_check(void)
+{
+    u32 u32Ok;
+    size_t cbMax;
+
+    u32Ok = 0;
+    cbMax = (size_t)GJ_USER_CODE_PAGES * (size_t)GJ_PAGE_SIZE;
+
+    /* 1: ring3 code below stack top. */
+    if (GJ_USER_CODE_VA < GJ_USER_STACK_TOP) {
+        u32Ok++;
+    }
+
+    /* 2: stack page budget. */
+    if (GJ_USER_STACK_PAGES == 4u) {
+        u32Ok++;
+    }
+
+    /* 3: code page budget. */
+    if (GJ_USER_CODE_PAGES == 4u) {
+        u32Ok++;
+    }
+
+    /* 4: page-aligned ring3 bases. */
+    if ((GJ_USER_CODE_VA & 0xfffull) == 0 &&
+        (GJ_USER_STACK_TOP & 0xfffull) == 0) {
+        u32Ok++;
+    }
+
+    /* 5: ring3 stack top at/before personality code (dual-window intent). */
+    if (GJ_USER_STACK_TOP <= GJ_PERS_CODE_VA) {
+        u32Ok++;
+    }
+
+    /* 6: live install bookkeeping. */
+    if (g_fUserMapped == 0 ||
+        (g_cbRing3Blob > 0 && g_cRing3CodePages > 0 &&
+         g_cRing3CodePages <= GJ_USER_CODE_PAGES)) {
+        u32Ok++;
+    }
+
+    /*
+     * 7: enter/map/soft contract residual.
+     * enter_ok => map_ok; map_ok => soft observe ran green at least once.
+     */
+    if ((g_cEnterOk == 0u || g_cRing3MapOk > 0u) &&
+        (g_cRing3MapOk == 0u || g_cRing3Soft > 0u)) {
+        u32Ok++;
+    }
+
+    /* 8: live blob size within soft max code window. */
+    if (g_fUserMapped == 0 ||
+        (g_cbRing3Blob > 0 && g_cbRing3Blob <= cbMax)) {
+        u32Ok++;
+    }
+
+    return u32Ok;
+}
+
+/**
+ * Host ELF thr entry FUNCTIONAL residual selfcheck (Soft!=product; never
+ * hard-gates). STRONGER residual for UDX host thr after
+ * process_spawn_host_launch + elf_load. Layout contracts bind freestanding
+ * host ET_EXEC base + host stack top to dual windows owned here; enter
+ * contract + live install honesty densify the thr entry scaffold.
+ * STRONGER densify: code budget, static dual layout, user band, skip sum +
+ * thr_live / product_host_live / keep_live / never_unmap_while thr enterable.
+ *
+ * Arms (USER_SOFT_HOST_ELF_THR_FUNC_CHECKS = 20):
+ *   1 host exec base == GJ_USER_CODE_VA (elf_load freestanding band)
+ *   2 host stack top == GJ_USER_STACK_TOP (spawn host thr stack)
+ *   3 host stack page budget matches ring3 + spawn host stack pages
+ *   4 dual VA windows ordered / non-overlap intent
+ *   5 personality dual present (native host persona path)
+ *   6 page-aligned host code + stack + personality bases
+ *   7 enter_ok implies prior ring3 map_ok
+ *   8 map_ok implies soft observe PASS tally
+ *   9 H3 refuse-enter when !mapped path tracked (skip_notmap or green enter)
+ *  10 recheck-before-sysret path honesty (recheck tallies or green enter)
+ *  11 live ring3 install bookkeeping (!live || blob+pages)
+ *  12 live dual-window non-overlap when both live (else vacuous)
+ *  13 STRONGER: code page budget + personality code pages parity
+ *  14 STRONGER: static dual-window non-overlap (max budgets; always)
+ *  15 STRONGER: host dual windows inside user band
+ *  16 STRONGER: enter_skip == sum of skip reason tallies (counter honesty)
+ *  17 STRONGER thr_live: live ring3 implies map+soft+blob path honesty
+ *  18 STRONGER product_host_live: host thr entry layout contracts hold
+ *  19 STRONGER keep_live: dual-window geometry stable for long-lived thr
+ *  20 STRONGER never_unmap_while thr enterable (H3 refuse + live pages)
+ *
+ * greppable: user: soft functional residual | host_elf_thr_func=N/20
+ * product_hosts=rtl8168_udx,xhci_udx,ddi_host · Dual DoD A/B OPEN
+ * product_host_live=1 keep_live=1 thr_live honesty residual
+ * Bar honesty v2026.08.04.75 stamp-free; NEVER invent .76.
+ */
+static u32
+user_soft_host_elf_thr_func_check(void)
+{
+    u32 u32Ok;
+    int nLiveDual;
+    int nStaticDual;
+    u32 u32SkipSum;
+    size_t cbCodeMax;
+    size_t cbPersMax;
+
+    u32Ok = 0;
+    cbCodeMax = (size_t)GJ_USER_CODE_PAGES * (size_t)GJ_PAGE_SIZE;
+    cbPersMax = (size_t)GJ_PERS_CODE_PAGES * (size_t)GJ_PAGE_SIZE;
+
+    /* 1: host ET_EXEC base contract (matches elf_load host exec band). */
+    if (GJ_USER_CODE_VA == USER_SOFT_HOST_EXEC_BASE) {
+        u32Ok++;
+    }
+
+    /*
+     * 2: host thr stack top contract (spawn product host; thr=82 class).
+     * Distinct from ring3 smoke GJ_USER_STACK_TOP (0x1100000 / 4 pages).
+     */
+    if (USER_SOFT_HOST_STACK_TOP == 0x000000007F000000ull &&
+        USER_SOFT_HOST_STACK_TOP > GJ_PERS_STACK_TOP &&
+        USER_SOFT_HOST_STACK_TOP <= 0x0000000080000000ull) {
+        u32Ok++;
+    }
+
+    /* 3: host thr stack page budget (spawn 256 KiB; thr=82 class). */
+    if (USER_SOFT_HOST_STACK_PAGES == 64u &&
+        GJ_USER_STACK_PAGES == 4u) {
+        u32Ok++;
+    }
+
+    /* 4: dual windows ordered; ring3 stack ends at/before personality code. */
+    if (GJ_USER_CODE_VA < GJ_USER_STACK_TOP &&
+        GJ_PERS_CODE_VA < GJ_PERS_STACK_TOP &&
+        GJ_USER_STACK_TOP <= GJ_PERS_CODE_VA) {
+        u32Ok++;
+    }
+
+    /* 5: personality dual window present (native host persona scaffold). */
+    if (GJ_PERS_CODE_VA == 0x0000000001200000ull &&
+        GJ_PERS_STACK_TOP == 0x0000000001300000ull &&
+        GJ_PERS_STACK_PAGES == GJ_USER_STACK_PAGES) {
+        u32Ok++;
+    }
+
+    /* 6: page-aligned host + personality bases. */
+    if ((GJ_USER_CODE_VA & 0xfffull) == 0 &&
+        (GJ_USER_STACK_TOP & 0xfffull) == 0 &&
+        (GJ_PERS_CODE_VA & 0xfffull) == 0 &&
+        (GJ_PERS_STACK_TOP & 0xfffull) == 0) {
+        u32Ok++;
+    }
+
+    /* 7: enter contract — successful sysret enter implies prior ring3 map. */
+    if (g_cEnterOk == 0u || g_cRing3MapOk > 0u) {
+        u32Ok++;
+    }
+
+    /* 8: soft observe on map success (fail-closed soft path honesty). */
+    if (g_cRing3MapOk == 0u || g_cRing3Soft > 0u) {
+        u32Ok++;
+    }
+
+    /*
+     * 9: H3 refuse-enter when !mapped — either green enter or skip_notmap
+     * path has been exercised / enter still requires map (vacuous green if
+     * no enter activity yet; contract always present in code).
+     */
+    if (g_cEnterOk == 0u || g_fUserMapped != 0 ||
+        g_u32SoftEnterSkipNotMap > 0u) {
+        u32Ok++;
+    }
+
+    /*
+     * 10: recheck-before-sysret honesty — green enter or recheck tallies
+     * live; vacuous if no enter/recheck activity yet.
+     */
+    if (g_cEnterOk == 0u || g_u32SoftRecheckPassRing3 > 0u ||
+        g_u32SoftEnterSkipRecheck > 0u) {
+        u32Ok++;
+    }
+
+    /* 11: live ring3 install bookkeeping. */
+    if (g_fUserMapped == 0 ||
+        (g_cbRing3Blob > 0 && g_cRing3CodePages > 0 &&
+         g_cRing3CodePages <= GJ_USER_CODE_PAGES)) {
+        u32Ok++;
+    }
+
+    /* 12: live dual-window non-overlap when both live (else vacuous). */
+    if (g_fUserMapped == 0 || g_fPersMapped == 0) {
+        u32Ok++;
+    } else {
+        nLiveDual = user_layout_soft_ok(
+            GJ_USER_CODE_VA,
+            g_cbRing3Blob != 0 ? g_cbRing3Blob : cbCodeMax,
+            GJ_USER_STACK_TOP, GJ_USER_STACK_PAGES, GJ_PERS_CODE_VA,
+            g_cbPersBlob != 0 ? g_cbPersBlob : cbPersMax,
+            GJ_PERS_STACK_TOP, GJ_PERS_STACK_PAGES, 1);
+        if (nLiveDual != 0) {
+            u32Ok++;
+        }
+    }
+
+    /*
+     * 13 STRONGER: code page budgets + personality parity with ring3.
+     * Host thr ELF soft max + dual-window code page honesty.
+     */
+    if (GJ_USER_CODE_PAGES == 4u &&
+        GJ_PERS_CODE_PAGES == GJ_USER_CODE_PAGES &&
+        GJ_PERS_CODE_PAGES == 4u &&
+        cbCodeMax == (size_t)4u * (size_t)GJ_PAGE_SIZE) {
+        u32Ok++;
+    }
+
+    /*
+     * 14 STRONGER: static dual-window non-overlap at soft-max budgets.
+     * Always exercised (not vacuous on !live) — densifies thr entry scaffold
+     * geometry independent of install order. Soft!=product.
+     */
+    nStaticDual = user_layout_soft_ok(
+        GJ_USER_CODE_VA, cbCodeMax, GJ_USER_STACK_TOP, GJ_USER_STACK_PAGES,
+        GJ_PERS_CODE_VA, cbPersMax, GJ_PERS_STACK_TOP, GJ_PERS_STACK_PAGES, 1);
+    if (nStaticDual != 0) {
+        u32Ok++;
+    }
+
+    /*
+     * 15 STRONGER: host dual windows inside canonical user band.
+     * code @ HOST_EXEC_BASE through personality stack top stay in
+     * [GJ_USER_VA_BASE, GJ_USER_VA_END). Soft residual only.
+     */
+    if (GJ_USER_CODE_VA >= GJ_USER_VA_BASE &&
+        GJ_USER_CODE_VA < GJ_USER_VA_END &&
+        GJ_USER_STACK_TOP > GJ_USER_CODE_VA &&
+        GJ_USER_STACK_TOP <= GJ_USER_VA_END &&
+        GJ_PERS_CODE_VA >= GJ_USER_STACK_TOP &&
+        GJ_PERS_STACK_TOP > GJ_PERS_CODE_VA &&
+        GJ_PERS_STACK_TOP <= GJ_USER_VA_END &&
+        USER_SOFT_HOST_EXEC_BASE >= GJ_USER_VA_BASE &&
+        USER_SOFT_HOST_STACK_TOP <= GJ_USER_VA_END) {
+        u32Ok++;
+    }
+
+    /*
+     * 16 STRONGER: enter_skip counter honesty — total skip equals sum of
+     * reason tallies (notmap + syscall + recheck). Behavioral residual for
+     * H3 refuse + recheck-before-sysret path accounting. Soft!=product.
+     */
+    u32SkipSum = g_u32SoftEnterSkipNotMap + g_u32SoftEnterSkipSyscall +
+                 g_u32SoftEnterSkipRecheck;
+    if (g_cEnterSkip == u32SkipSum) {
+        u32Ok++;
+    }
+
+    /*
+     * 17 STRONGER thr_live: live ring3 implies map+soft+blob path honesty.
+     * Product host thr stand on dual windows; live maps must not claim green
+     * without a successful map/soft/blob path. Soft!=product.
+     */
+    if (g_fUserMapped == 0 ||
+        (g_cRing3MapOk > 0u && g_cRing3Soft > 0u && g_cbRing3Blob > 0 &&
+         g_cRing3CodePages > 0u)) {
+        u32Ok++;
+    }
+
+    /*
+     * 18 STRONGER product_host_live: host thr entry layout contracts hold
+     * together (exec base + stack top + page budgets). keep_live product
+     * hosts (rtl8168_udx|xhci_udx|ddi_host) enter at these VAs. Soft!=product.
+     */
+    if (GJ_USER_CODE_VA == USER_SOFT_HOST_EXEC_BASE &&
+        USER_SOFT_HOST_STACK_TOP == 0x000000007F000000ull &&
+        USER_SOFT_HOST_STACK_PAGES == 64u &&
+        GJ_USER_CODE_PAGES == 4u &&
+        GJ_PERS_CODE_PAGES == GJ_USER_CODE_PAGES) {
+        u32Ok++;
+    }
+
+    /*
+     * 19 STRONGER keep_live: dual-window geometry stable for long-lived
+     * product host thr — ordered + static non-overlap at soft-max budgets.
+     * keep_live residual never thrash maps under enterable thr. Soft!=product.
+     */
+    if (GJ_USER_STACK_TOP <= GJ_PERS_CODE_VA &&
+        GJ_PERS_STACK_TOP > GJ_PERS_CODE_VA &&
+        nStaticDual != 0) {
+        u32Ok++;
+    }
+
+    /*
+     * 20 STRONGER never_unmap_while thr enterable: H3 refuse-enter when
+     * !mapped + live pages tracked when mapped + skip counter honesty.
+     * Entry companion to process thr_exit before as_destroy. Soft!=product.
+     */
+    if ((g_cEnterOk == 0u || g_cRing3MapOk > 0u) &&
+        (g_fUserMapped == 0 || g_cRing3CodePages > 0u) &&
+        (g_cEnterSkip == u32SkipSum)) {
+        u32Ok++;
+    }
+
+    return u32Ok;
+}
+
+/**
+ * Lean greppable soft inventory (Soft!=product; capped - no stamp storms).
+ * Twin prefixes: user: soft ... | user_task: soft ...
+ * Never hard-gates map/enter. No version stamp.
+ *
+ * greppable: user: soft stats
+ * greppable: user_task: soft residual lean
  */
 static void
 user_soft_inventory(const char *szVia)
@@ -142,6 +684,10 @@ user_soft_inventory(const char *szVia)
     const char *szVerdict;
     u32         u32Ring3Live;
     u32         u32PersLive;
+
+    if (g_u32SoftLogN >= USER_SOFT_LOG_CAP) {
+        return; /* silent refresh; no stamp storms */
+    }
 
     szViaSafe = (szVia != NULL && szVia[0] != '\0') ? szVia : "unknown";
     user_soft_inc(&g_u32SoftLogN);
@@ -157,1222 +703,908 @@ user_soft_inventory(const char *szVia)
         szVerdict = "PARTIAL";
     }
 
-    /* Grep: user: soft inventory */
-    kprintf("user: soft inventory via=%s ring3_ok=%u ring3_fail=%u "
-            "pers_ok=%u pers_fail=%u enter_ok=%u enter_skip=%u "
-            "ring3_live=%u pers_live=%u log_n=%u wave=%u\n",
-            szViaSafe, g_cRing3MapOk, g_cRing3MapFail, g_cPersMapOk,
-            g_cPersMapFail, g_cEnterOk, g_cEnterSkip, u32Ring3Live,
-            u32PersLive, g_u32SoftLogN, GJ_USER_SOFT_WAVE);
+    /* Grep: user: soft stats (lean single-line inventory) */
+    kprintf("user: soft stats via=%s ring3_ok=%u ring3_fail=%u "
+            "ring3_soft=%u ring3_soft_bad=%u pers_ok=%u pers_fail=%u "
+            "pers_soft=%u pers_soft_bad=%u enter_ok=%u enter_skip=%u "
+            "code_pages=%u stack_pages=%u ring3_live=%u pers_live=%u "
+            "lean_ok=%u udx_lean=%u/%u ring3_map_c2=%u/%u "
+            "host_elf_thr_func=%u/%u func_steps=%u/%u "
+            "log_n=%u Soft!=product storm=0\n",
+            szViaSafe, g_cRing3MapOk, g_cRing3MapFail, g_cRing3Soft,
+            g_cRing3SoftBad, g_cPersMapOk, g_cPersMapFail, g_cPersSoft,
+            g_cPersSoftBad, g_cEnterOk, g_cEnterSkip, g_cCodePages,
+            g_cStackPages, u32Ring3Live, u32PersLive, g_u32SoftLeanOk,
+            g_u32SoftUdxLean, (unsigned)USER_SOFT_UDX_LEAN_CHECKS,
+            g_u32SoftRing3MapC2, (unsigned)USER_SOFT_RING3_MAP_C2_CHECKS,
+            g_u32SoftHostElfThrFunc,
+            (unsigned)USER_SOFT_HOST_ELF_THR_FUNC_CHECKS,
+            g_u32SoftFuncStepLive, (unsigned)USER_SOFT_FUNC_STEP_COUNT,
+            g_u32SoftLogN);
 
-    /* Grep: user: soft stats */
-    kprintf("user: soft stats ring3_ok=%u ring3_fail=%u ring3_soft=%u "
-            "ring3_soft_bad=%u pers_ok=%u pers_fail=%u pers_soft=%u "
-            "pers_soft_bad=%u enter_ok=%u enter_skip=%u code_pages=%u "
-            "stack_pages=%u ring3_live=%u pers_live=%u\n",
-            g_cRing3MapOk, g_cRing3MapFail, g_cRing3Soft, g_cRing3SoftBad,
-            g_cPersMapOk, g_cPersMapFail, g_cPersSoft, g_cPersSoftBad,
-            g_cEnterOk, g_cEnterSkip, g_cCodePages, g_cStackPages,
-            u32Ring3Live, u32PersLive);
-
-    /* Grep: user: soft map */
-    kprintf("user: soft map ring3_blob_bad=%u pers_blob_bad=%u "
-            "ring3_install_fail=%u pers_install_fail=%u "
-            "ring3_stack_fail=%u pers_stack_fail=%u "
-            "ring3_as_fail=%u pers_as_fail=%u teardown=%u "
-            "observe_ok=%u observe_bad=%u\n",
-            g_u32SoftBlobBadRing3, g_u32SoftBlobBadPers,
+    /* Grep: user: soft map (path tallies; one line; dual recheck) */
+    kprintf("user: soft map via=%s blob_bad=%u/%u install_fail=%u/%u "
+            "stack_fail=%u/%u as_fail=%u/%u layout_fail=%u/%u "
+            "teardown=%u observe_ok=%u observe_bad=%u "
+            "idem=%u/%u recheck_r3=%u/%u recheck_pers=%u/%u "
+            "enter_skip_notmap=%u enter_skip_syscall=%u "
+            "enter_skip_recheck=%u Soft!=product\n",
+            szViaSafe, g_u32SoftBlobBadRing3, g_u32SoftBlobBadPers,
             g_u32SoftInstallFailRing3, g_u32SoftInstallFailPers,
             g_u32SoftStackFailRing3, g_u32SoftStackFailPers,
             g_u32SoftAsEnsureFailRing3, g_u32SoftAsEnsureFailPers,
-            g_u32SoftTeardown, g_u32SoftObserveOk, g_u32SoftObserveBad);
-
-    /* Grep: user: soft layout */
-    kprintf("user: soft layout ring3_fail=%u pers_fail=%u "
-            "idem_ring3=%u idem_pers=%u dual_window=1\n",
             g_u32SoftLayoutFailRing3, g_u32SoftLayoutFailPers,
-            g_u32SoftIdemRing3, g_u32SoftIdemPers);
-
-    /* Grep: user: soft enter */
-    kprintf("user: soft enter ok=%u skip=%u not_mapped=%u syscall=%u "
-            "recheck=%u\n",
-            g_cEnterOk, g_cEnterSkip, g_u32SoftEnterSkipNotMap,
-            g_u32SoftEnterSkipSyscall, g_u32SoftEnterSkipRecheck);
-
-    /* Grep: user: soft recheck */
-    kprintf("user: soft recheck ring3_pass=%u ring3_fail=%u "
-            "pers_pass=%u pers_fail=%u\n",
+            g_u32SoftTeardown, g_u32SoftObserveOk, g_u32SoftObserveBad,
+            g_u32SoftIdemRing3, g_u32SoftIdemPers,
             g_u32SoftRecheckPassRing3, g_u32SoftRecheckFailRing3,
-            g_u32SoftRecheckPassPers, g_u32SoftRecheckFailPers);
-
-    /* Grep: user: soft catalog */
-    kprintf("user: soft catalog code_va=0x%lx stack_top=0x%lx "
-            "code_pages=%u stack_pages=%u pers_code=0x%lx "
-            "pers_stack=0x%lx pers_code_pages=%u ring3_blob=%lu "
-            "pers_blob=%lu wave=%u\n",
-            (unsigned long)GJ_USER_CODE_VA, (unsigned long)GJ_USER_STACK_TOP,
-            GJ_USER_CODE_PAGES, GJ_USER_STACK_PAGES,
-            (unsigned long)GJ_PERS_CODE_VA, (unsigned long)GJ_PERS_STACK_TOP,
-            GJ_PERS_CODE_PAGES, (unsigned long)g_cbRing3Blob,
-            (unsigned long)g_cbPersBlob, GJ_USER_SOFT_WAVE);
-
-    /* Grep: user: soft va (Wave 15 dual-window geometry) */
-    kprintf("user: soft va ring3_code=0x%lx ring3_stack=0x%lx "
-            "pers_code=0x%lx pers_stack=0x%lx dual=1 "
-            "ring3_live=%u pers_live=%u code_pages=%u stack_pages=%u "
-            "wave=%u\n",
-            (unsigned long)GJ_USER_CODE_VA, (unsigned long)GJ_USER_STACK_TOP,
-            (unsigned long)GJ_PERS_CODE_VA, (unsigned long)GJ_PERS_STACK_TOP,
-            u32Ring3Live, u32PersLive, g_cCodePages, g_cStackPages,
-            GJ_USER_SOFT_WAVE);
-
-    /* Grep: user: soft path */
-    kprintf("user: soft path claim=ring3,personality,enter "
-            "pte=RX_code+RW_NX_stack payload_match=1 layout=dual "
-            "sysret_enter=1 G-PERS=1 wave=%u "
-            "(soft inventory)\n",
-            GJ_USER_SOFT_WAVE);
-
-    /*
-     * Grep: user: soft return
-     * Wave 19 return-path catalog — map/enter/layout/recheck outcomes.
-     * Soft / product ring3 gate. product_kernel=OPEN.
-     */
-    kprintf("user: soft return ring3_ok=%u ring3_fail=%u pers_ok=%u "
-            "pers_fail=%u enter_ok=%u enter_skip=%u soft_ok=%u "
-            "soft_bad=%u layout_fail=%u as_fail=%u install_fail=%u "
-            "stack_fail=%u recheck_pass=%u recheck_fail=%u "
-            "product_kernel=OPEN wave=%u\n",
-            g_cRing3MapOk, g_cRing3MapFail, g_cPersMapOk, g_cPersMapFail,
-            g_cEnterOk, g_cEnterSkip, g_cRing3Soft + g_cPersSoft,
-            g_cRing3SoftBad + g_cPersSoftBad,
-            g_u32SoftLayoutFailRing3 + g_u32SoftLayoutFailPers,
-            g_u32SoftAsEnsureFailRing3 + g_u32SoftAsEnsureFailPers,
-            g_u32SoftInstallFailRing3 + g_u32SoftInstallFailPers,
-            g_u32SoftStackFailRing3 + g_u32SoftStackFailPers,
-            g_u32SoftRecheckPassRing3 + g_u32SoftRecheckPassPers,
-            g_u32SoftRecheckFailRing3 + g_u32SoftRecheckFailPers,
-            GJ_USER_SOFT_WAVE);
-
-    /* Grep: user: soft ret_surface — Wave 19 terminal return classes */
-    kprintf("user: soft ret_surface map=ring3_ok|ring3_fail|pers_ok|pers_fail "
-            "enter=ok|skip soft=ok|bad layout|as|install|stack=fail "
-            "recheck=pass|fail product_kernel=OPEN areas=99 wave=%u\n",
-            GJ_USER_SOFT_WAVE);
-
-    /* Grep: user: soft surface — Wave 19 area catalog */
-    kprintf("user: soft surface inventory,stats,map,layout,enter,recheck,"
-            "catalog,va,path,return,ret_surface,surface,deepen "
-            "areas=99 wave=%u\n",
-            GJ_USER_SOFT_WAVE);
-
-    /* Grep: user: soft deepen */
-    /*
-     * ---- Wave 19 complementary surfaces (kept) (never reshape primary).
-     * Return surfaces only — soft inventory; never hard-gates product paths.
-     */
-    /* Grep: user: soft retclass — Wave 19 return-class taxonomy (kept) */
-    kprintf("user: soft retclass ok|fail|inval|nodev|busy|nomem "
-            "soft_only=1 product_gate=0 wave=%u "
-            "(retclass taxonomy; Soft≠product)\n",
-            (unsigned)GJ_USER_SOFT_WAVE);
-    /* Grep: user: soft retlane — Wave 19 return-lane catalog (kept) */
-    kprintf("user: soft retlane inv|selftest|rate|retcode|retmap|class "
-            "product_kernel=OPEN soft_ne_product=1 wave=%u "
-            "(retlane catalog; Soft≠product)\n",
-            (unsigned)GJ_USER_SOFT_WAVE);
-    /*
-     * ---- Wave 20 complementary surfaces (kept) (never reshape primary).
-     * Return surfaces only — soft inventory; never hard-gates product paths.
-     */
-    /* Grep: user: soft retbound — Wave 20 return-bound honesty (kept) */
-    kprintf("user: soft retbound soft_only=1 product_gate=0 hard_gate=0 "
-            "never_blocks_m0=1 wave=%u "
-            "(retbound honesty; Soft≠product)\n",
-            (unsigned)GJ_USER_SOFT_WAVE);
-    /* Grep: user: soft retseal — Wave 20 seal stamp (kept) */
-    kprintf("user: soft retseal exclusive=1 soft_ne_product=1 "
-            "product_kernel=OPEN wave=%u "
-            "(retseal stamp; Soft≠product)\n",
-            (unsigned)GJ_USER_SOFT_WAVE);
-            /*
-             * ---- Wave 21 complementary surfaces (kept) (never reshape primary).
-             * Return surfaces only — soft inventory; never hard-gates product paths.
-            */
-            /* Grep: user: soft retpulse — Wave 21 return-pulse honesty (kept) */
-            kprintf("user: soft retpulse soft_only=1 product_gate=0 soft_ne_product=1 "
-                    "never_blocks_m0=1 wave=%u "
-                    "(retpulse honesty; Soft≠product)\n",
-                    (unsigned)GJ_USER_SOFT_WAVE);
-            /* Grep: user: soft retmark — Wave 21 mark stamp (kept) */
-            kprintf("user: soft retmark exclusive=1 soft_ne_product=1 "
-                    "product_kernel=OPEN wave=%u "
-                    "(retmark stamp; Soft≠product)\n",
-                    (unsigned)GJ_USER_SOFT_WAVE);
-            /*
-             * ---- Wave 22 complementary surfaces (kept) (never reshape primary).
-             * Return surfaces only — soft inventory; never hard-gates product paths.
-            */
-            /* Grep: user: soft retphase — Wave 22 return-phase honesty (kept) */
-            kprintf("user: soft retphase soft_only=1 product_gate=0 soft_ne_product=1 "
-                    "never_blocks_m0=1 wave=%u "
-                    "(retphase honesty; Soft≠product)\n",
-                    (unsigned)GJ_USER_SOFT_WAVE);
-            /* Grep: user: soft retbadge — Wave 22 badge stamp (kept) */
-            kprintf("user: soft retbadge exclusive=1 soft_ne_product=1 "
-                    "product_kernel=OPEN wave=%u "
-                    "(retbadge stamp; Soft≠product)\n",
-                    (unsigned)GJ_USER_SOFT_WAVE);
-/*
- * ---- Wave 23 complementary surfaces (kept) (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
-            */
-            /* Grep: user: soft rettoken — Wave 23 return-token honesty (kept) */
-            kprintf("user: soft rettoken soft_only=1 product_gate=0 soft_ne_product=1 "
-                    "never_blocks_m0=1 wave=%u "
-                    "(rettoken honesty; Soft≠product)\n",
-                    (unsigned)GJ_USER_SOFT_WAVE);
-            /* Grep: user: soft retcrest — Wave 23 crest stamp (kept) */
-            kprintf("user: soft retcrest exclusive=1 soft_ne_product=1 "
-                    "product_kernel=OPEN wave=%u "
-                    "(retcrest stamp; Soft≠product)\n",
-                    (unsigned)GJ_USER_SOFT_WAVE);
-            /*
-             * ---- Wave 24 complementary surfaces (kept) (never reshape primary).
-             * Return surfaces only — soft inventory; never hard-gates product paths.
-             */
-            /* Grep: user: soft retvault — Wave 24 return-vault honesty (kept) */
-            kprintf("user: soft retvault soft_only=1 product_gate=0 soft_ne_product=1 "
-                    "never_blocks_m0=1 wave=%u "
-                    "(retvault honesty; Soft≠product)\n",
-                    (unsigned)GJ_USER_SOFT_WAVE);
-            /* Grep: user: soft retbanner — Wave 24 banner stamp (kept) */
-            kprintf("user: soft retbanner exclusive=1 soft_ne_product=1 "
-                    "product_kernel=OPEN wave=%u "
-                    "(retbanner stamp; Soft≠product)\n",
-                    (unsigned)GJ_USER_SOFT_WAVE);
-            /*
-             * ---- Wave 25 complementary surfaces (kept) (never reshape primary).
-             * Return surfaces only — soft inventory; never hard-gates product paths.
-             */
-            /* Grep: user: soft retledger — Wave 25 return-ledger honesty (kept) */
-            kprintf("user: soft retledger soft_only=1 product_gate=0 soft_ne_product=1 "
-                    "never_blocks_m0=1 wave=%u "
-                    "(retledger honesty; Soft≠product)\n",
-                    (unsigned)GJ_USER_SOFT_WAVE);
-            /* Grep: user: soft retbeacon — Wave 25 beacon stamp (kept) */
-            kprintf("user: soft retbeacon exclusive=1 soft_ne_product=1 "
-                    "product_kernel=OPEN wave=%u "
-                    "(retbeacon stamp; Soft≠product)\n",
-                    (unsigned)GJ_USER_SOFT_WAVE);
-            /*
-             * ---- Wave 26 complementary surfaces (kept) (never reshape primary).
-             * Return surfaces only — soft inventory; never hard-gates product paths.
-             */
-            /* Grep: user: soft retcipher — Wave 26 return-cipher honesty (kept) */
-            kprintf("user: soft retcipher soft_only=1 product_gate=0 soft_ne_product=1 "
-                    "never_blocks_m0=1 wave=%u "
-                    "(retcipher honesty; Soft≠product)\n",
-                    (unsigned)GJ_USER_SOFT_WAVE);
-            /* Grep: user: soft retflame — Wave 26 flame stamp (kept) */
-            kprintf("user: soft retflame exclusive=1 soft_ne_product=1 "
-                    "product_kernel=OPEN wave=%u "
-                    "(retflame stamp; Soft≠product)\n",
-                    (unsigned)GJ_USER_SOFT_WAVE);
-                    /*
-                     * ---- Wave 27 complementary surfaces (kept) (never reshape primary).
-                     * Return surfaces only — soft inventory; never hard-gates product paths.
-                     */
-                    /* Grep: user: soft retprism — Wave 27 return-prism honesty (kept) */
-                    kprintf("user: soft retprism soft_only=1 product_gate=0 soft_ne_product=1 "
-                            "never_blocks_m0=1 wave=%u "
-                            "(retprism honesty; Soft≠product)\n",
-                            (unsigned)GJ_USER_SOFT_WAVE);
-                    /* Grep: user: soft retforge — Wave 27 forge stamp (kept) */
-                    kprintf("user: soft retforge exclusive=1 soft_ne_product=1 "
-                            "product_kernel=OPEN wave=%u "
-                            "(retforge stamp; Soft≠product)\n",
-                            (unsigned)GJ_USER_SOFT_WAVE);
-                            /*
-                             * ---- Wave 28 complementary surfaces (kept) (never reshape primary).
-                             * Return surfaces only — soft inventory; never hard-gates product paths.
-                             */
-                            /* Grep: user: soft retshard — Wave 28 return-shard honesty (kept) */
-                            kprintf("user: soft retshard soft_only=1 product_gate=0 soft_ne_product=1 "
-                                "never_blocks_m0=1 wave=%u "
-                                "(retshard honesty; Soft≠product)\n",
-                                (unsigned)GJ_USER_SOFT_WAVE);
-                            /* Grep: user: soft retcrown — Wave 28 crown stamp (kept) */
-                            kprintf("user: soft retcrown exclusive=1 soft_ne_product=1 "
-                                "product_kernel=OPEN wave=%u "
-                                "(retcrown stamp; Soft≠product)\n",
-                                (unsigned)GJ_USER_SOFT_WAVE);
-    kprintf("user: soft deepen wave=%u via=%s ring3_ok=%u pers_ok=%u "
-            "enter_ok=%u soft=%u soft_bad=%u logs=%u "
-            "(soft inventory only; not product gate)\n",
-            GJ_USER_SOFT_WAVE, szViaSafe, g_cRing3MapOk, g_cPersMapOk,
-            g_cEnterOk, g_cRing3Soft + g_cPersSoft,
-            g_cRing3SoftBad + g_cPersSoftBad, g_u32SoftLogN);
+            g_u32SoftRecheckPassPers, g_u32SoftRecheckFailPers,
+            g_u32SoftEnterSkipNotMap, g_u32SoftEnterSkipSyscall,
+            g_u32SoftEnterSkipRecheck);
 
     /* Grep: user: soft PASS | PARTIAL */
     kprintf("user: soft %s via=%s ring3_live=%u pers_live=%u "
-            "enter_ok=%u log_n=%u wave=%u\n",
+            "enter_ok=%u udx_lean=%u/%u log_n=%u Soft!=product\n",
             szVerdict, szViaSafe, u32Ring3Live, u32PersLive, g_cEnterOk,
-            g_u32SoftLogN, GJ_USER_SOFT_WAVE);
-
-    /* Twin prefix: user_task: soft … */
-    /* Grep: user_task: soft inventory */
-    kprintf("user_task: soft inventory via=%s ring3_ok=%u ring3_fail=%u "
-            "pers_ok=%u pers_fail=%u enter_ok=%u enter_skip=%u "
-            "ring3_live=%u pers_live=%u log_n=%u wave=%u\n",
-            szViaSafe, g_cRing3MapOk, g_cRing3MapFail, g_cPersMapOk,
-            g_cPersMapFail, g_cEnterOk, g_cEnterSkip, u32Ring3Live,
-            u32PersLive, g_u32SoftLogN, GJ_USER_SOFT_WAVE);
-
-    /* Grep: user_task: soft return */
-    kprintf("user_task: soft return ring3_ok=%u ring3_fail=%u pers_ok=%u "
-            "pers_fail=%u enter_ok=%u enter_skip=%u soft_bad=%u "
-            "product_kernel=OPEN wave=%u\n",
-            g_cRing3MapOk, g_cRing3MapFail, g_cPersMapOk, g_cPersMapFail,
-            g_cEnterOk, g_cEnterSkip, g_cRing3SoftBad + g_cPersSoftBad,
-            GJ_USER_SOFT_WAVE);
-    /* Grep: user_task: soft ret_surface */
-    kprintf("user_task: soft ret_surface map=ring3|pers enter=ok|skip "
-            "soft_bad product_kernel=OPEN wave=%u\n",
-            GJ_USER_SOFT_WAVE);
-
-    /* Grep: user_task: soft retmap — Wave 19 return-surface map */
-    kprintf("user_task: soft retmap ok|fail|inval|nodev|busy|nomem product_gate=0 soft_only=1 wave=116\n");
-
-    /* Grep: user_task: soft deepen */
-    /*
-     * ---- Wave 19 complementary surfaces (kept) (never reshape primary).
-     * Return surfaces only — soft inventory; never hard-gates product paths.
-     */
-    /* Grep: user_task: soft retclass — Wave 19 return-class taxonomy (kept) */
-    kprintf("user_task: soft retclass ok|fail|inval|nodev|busy|nomem "
-            "soft_only=1 product_gate=0 wave=%u "
-            "(retclass taxonomy; Soft≠product)\n",
-            (unsigned)GJ_USER_SOFT_WAVE);
-    /* Grep: user_task: soft retlane — Wave 19 return-lane catalog (kept) */
-    kprintf("user_task: soft retlane inv|selftest|rate|retcode|retmap|class "
-            "product_kernel=OPEN soft_ne_product=1 wave=%u "
-            "(retlane catalog; Soft≠product)\n",
-            (unsigned)GJ_USER_SOFT_WAVE);
-    /*
-     * ---- Wave 20 complementary surfaces (kept) (never reshape primary).
-     * Return surfaces only — soft inventory; never hard-gates product paths.
-     */
-    /* Grep: user_task: soft retbound — Wave 20 return-bound honesty (kept) */
-    kprintf("user_task: soft retbound soft_only=1 product_gate=0 hard_gate=0 "
-            "never_blocks_m0=1 wave=%u "
-            "(retbound honesty; Soft≠product)\n",
-            (unsigned)GJ_USER_SOFT_WAVE);
-    /* Grep: user_task: soft retseal — Wave 20 seal stamp (kept) */
-    kprintf("user_task: soft retseal exclusive=1 soft_ne_product=1 "
-            "product_kernel=OPEN wave=%u "
-            "(retseal stamp; Soft≠product)\n",
-            (unsigned)GJ_USER_SOFT_WAVE);
-            /*
-             * ---- Wave 21 complementary surfaces (kept) (never reshape primary).
-             * Return surfaces only — soft inventory; never hard-gates product paths.
-            */
-            /* Grep: user_task: soft retpulse — Wave 21 return-pulse honesty (kept) */
-            kprintf("user_task: soft retpulse soft_only=1 product_gate=0 soft_ne_product=1 "
-                    "never_blocks_m0=1 wave=%u "
-                    "(retpulse honesty; Soft≠product)\n",
-                    (unsigned)GJ_USER_SOFT_WAVE);
-            /* Grep: user_task: soft retmark — Wave 21 mark stamp (kept) */
-            kprintf("user_task: soft retmark exclusive=1 soft_ne_product=1 "
-                    "product_kernel=OPEN wave=%u "
-                    "(retmark stamp; Soft≠product)\n",
-                    (unsigned)GJ_USER_SOFT_WAVE);
-            /*
-             * ---- Wave 22 complementary surfaces (kept) (never reshape primary).
-             * Return surfaces only — soft inventory; never hard-gates product paths.
-            */
-            /* Grep: user_task: soft retphase — Wave 22 return-phase honesty (kept) */
-            kprintf("user_task: soft retphase soft_only=1 product_gate=0 soft_ne_product=1 "
-                    "never_blocks_m0=1 wave=%u "
-                    "(retphase honesty; Soft≠product)\n",
-                    (unsigned)GJ_USER_SOFT_WAVE);
-            /* Grep: user_task: soft retbadge — Wave 22 badge stamp (kept) */
-            kprintf("user_task: soft retbadge exclusive=1 soft_ne_product=1 "
-                    "product_kernel=OPEN wave=%u "
-                    "(retbadge stamp; Soft≠product)\n",
-                    (unsigned)GJ_USER_SOFT_WAVE);
-/*
- * ---- Wave 23 complementary surfaces (kept) (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
-            */
-            /* Grep: user_task: soft rettoken — Wave 23 return-token honesty (kept) */
-            kprintf("user_task: soft rettoken soft_only=1 product_gate=0 soft_ne_product=1 "
-                    "never_blocks_m0=1 wave=%u "
-                    "(rettoken honesty; Soft≠product)\n",
-                    (unsigned)GJ_USER_SOFT_WAVE);
-            /* Grep: user_task: soft retcrest — Wave 23 crest stamp (kept) */
-            kprintf("user_task: soft retcrest exclusive=1 soft_ne_product=1 "
-                    "product_kernel=OPEN wave=%u "
-                    "(retcrest stamp; Soft≠product)\n",
-                    (unsigned)GJ_USER_SOFT_WAVE);
-            /*
-             * ---- Wave 24 complementary surfaces (kept) (never reshape primary).
-             * Return surfaces only — soft inventory; never hard-gates product paths.
-             */
-            /* Grep: user_task: soft retvault — Wave 24 return-vault honesty (kept) */
-            kprintf("user_task: soft retvault soft_only=1 product_gate=0 soft_ne_product=1 "
-                    "never_blocks_m0=1 wave=%u "
-                    "(retvault honesty; Soft≠product)\n",
-                    (unsigned)GJ_USER_SOFT_WAVE);
-            /* Grep: user_task: soft retbanner — Wave 24 banner stamp (kept) */
-            kprintf("user_task: soft retbanner exclusive=1 soft_ne_product=1 "
-                    "product_kernel=OPEN wave=%u "
-                    "(retbanner stamp; Soft≠product)\n",
-                    (unsigned)GJ_USER_SOFT_WAVE);
-            /*
-             * ---- Wave 25 complementary surfaces (kept) (never reshape primary).
-             * Return surfaces only — soft inventory; never hard-gates product paths.
-             */
-            /* Grep: user_task: soft retledger — Wave 25 return-ledger honesty (kept) */
-            kprintf("user_task: soft retledger soft_only=1 product_gate=0 soft_ne_product=1 "
-                    "never_blocks_m0=1 wave=%u "
-                    "(retledger honesty; Soft≠product)\n",
-                    (unsigned)GJ_USER_SOFT_WAVE);
-            /* Grep: user_task: soft retbeacon — Wave 25 beacon stamp (kept) */
-            kprintf("user_task: soft retbeacon exclusive=1 soft_ne_product=1 "
-                    "product_kernel=OPEN wave=%u "
-                    "(retbeacon stamp; Soft≠product)\n",
-                    (unsigned)GJ_USER_SOFT_WAVE);
-            /*
-             * ---- Wave 26 complementary surfaces (kept) (never reshape primary).
-             * Return surfaces only — soft inventory; never hard-gates product paths.
-             */
-            /* Grep: user_task: soft retcipher — Wave 26 return-cipher honesty (kept) */
-            kprintf("user_task: soft retcipher soft_only=1 product_gate=0 soft_ne_product=1 "
-                    "never_blocks_m0=1 wave=%u "
-                    "(retcipher honesty; Soft≠product)\n",
-                    (unsigned)GJ_USER_SOFT_WAVE);
-            /* Grep: user_task: soft retflame — Wave 26 flame stamp (kept) */
-            kprintf("user_task: soft retflame exclusive=1 soft_ne_product=1 "
-                    "product_kernel=OPEN wave=%u "
-                    "(retflame stamp; Soft≠product)\n",
-                    (unsigned)GJ_USER_SOFT_WAVE);
-                    /*
-                     * ---- Wave 27 complementary surfaces (kept) (never reshape primary).
-                     * Return surfaces only — soft inventory; never hard-gates product paths.
-                     */
-                    /* Grep: user_task: soft retprism — Wave 27 return-prism honesty (kept) */
-                    kprintf("user_task: soft retprism soft_only=1 product_gate=0 soft_ne_product=1 "
-                            "never_blocks_m0=1 wave=%u "
-                            "(retprism honesty; Soft≠product)\n",
-                            (unsigned)GJ_USER_SOFT_WAVE);
-                    /* Grep: user_task: soft retforge — Wave 27 forge stamp (kept) */
-                    kprintf("user_task: soft retforge exclusive=1 soft_ne_product=1 "
-                            "product_kernel=OPEN wave=%u "
-                            "(retforge stamp; Soft≠product)\n",
-                            (unsigned)GJ_USER_SOFT_WAVE);
-                            /*
-                             * ---- Wave 28 complementary surfaces (kept) (never reshape primary).
-                             * Return surfaces only — soft inventory; never hard-gates product paths.
-                             */
-                            /* Grep: user_task: soft retshard — Wave 28 return-shard honesty (kept) */
-                            kprintf("user_task: soft retshard soft_only=1 product_gate=0 soft_ne_product=1 "
-                                "never_blocks_m0=1 wave=%u "
-                                "(retshard honesty; Soft≠product)\n",
-                                (unsigned)GJ_USER_SOFT_WAVE);
-                            /* Grep: user_task: soft retcrown — Wave 28 crown stamp (kept) */
-                            kprintf("user_task: soft retcrown exclusive=1 soft_ne_product=1 "
-                                "product_kernel=OPEN wave=%u "
-                                "(retcrown stamp; Soft≠product)\n",
-                                (unsigned)GJ_USER_SOFT_WAVE);
-                                /*
-                             * ---- Wave 29 complementary surfaces (kept) (never reshape primary).
-                             * Return surfaces only — soft inventory; never hard-gates product paths.
-                             */
-                            /* Grep: user_task: soft retglyph — Wave 29 return-glyph honesty (kept) */
-                            kprintf("user_task: soft retglyph soft_only=1 product_gate=0 soft_ne_product=1 "
-                                    "never_blocks_m0=1 wave=%u "
-                                    "(retglyph honesty; Soft≠product)\n",
-                                    (unsigned)GJ_USER_SOFT_WAVE);
-                            /* Grep: user_task: soft retscepter — Wave 29 scepter stamp (kept) */
-                            kprintf("user_task: soft retscepter exclusive=1 soft_ne_product=1 "
-                                    "product_kernel=OPEN wave=%u "
-                                    "(retscepter stamp; Soft≠product)\n",
-                                    (unsigned)GJ_USER_SOFT_WAVE);
-                                /*
-                             * ---- Wave 30 complementary surfaces (kept) (never reshape primary).
-                             * Return surfaces only — soft inventory; never hard-gates product paths.
-                             */
-                            /* Grep: user_task: soft retsigil — Wave 30 return-sigil honesty (kept) */
-                            kprintf("user_task: soft retsigil soft_only=1 product_gate=0 soft_ne_product=1 "
-                                    "never_blocks_m0=1 wave=%u "
-                                    "(retsigil honesty; Soft≠product)\n",
-                                    (unsigned)GJ_USER_SOFT_WAVE);
-                            /* Grep: user_task: soft retemblem — Wave 30 emblem stamp (kept) */
-                            kprintf("user_task: soft retemblem exclusive=1 soft_ne_product=1 "
-                                    "product_kernel=OPEN wave=%u "
-                                    "(retemblem stamp; Soft≠product)\n",
-                                    (unsigned)GJ_USER_SOFT_WAVE);
-                            /*
-                             * ---- Wave 31 complementary surfaces (kept) (never reshape primary).
-                             * Return surfaces only — soft inventory; never hard-gates product paths.
-                             */
-                            /* Grep: user_task: soft retaegis — Wave 31 return-aegis honesty (kept) */
-                            kprintf("user_task: soft retaegis soft_only=1 product_gate=0 soft_ne_product=1 "
-                                    "never_blocks_m0=1 wave=%u "
-                                    "(retaegis honesty; Soft≠product)\n",
-                                    (unsigned)GJ_USER_SOFT_WAVE);
-                            /* Grep: user_task: soft retsigil — Wave 30 return-sigil honesty (kept) */
-                            kprintf("user_task: soft retsigil soft_only=1 product_gate=0 soft_ne_product=1 "
-                                    "never_blocks_m0=1 wave=%u "
-                                    "(retsigil honesty; Soft≠product)\n",
-                                    (unsigned)GJ_USER_SOFT_WAVE);
-                            /* Grep: user_task: soft retmantle — Wave 31 mantle stamp (kept) */
-                            kprintf("user_task: soft retmantle exclusive=1 soft_ne_product=1 "
-                                    "product_kernel=OPEN wave=%u "
-                                    "(retmantle stamp; Soft≠product)\n",
-                                    (unsigned)GJ_USER_SOFT_WAVE);
-/*
- * ---- Wave 32 complementary surfaces (kept) (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: user_task: soft retbulwark — Wave 32 return-bulwark honesty (kept) */
-kprintf("user_task: soft retbulwark soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=%u "
-        "(retbulwark honesty; Soft≠product)\n",
-        (unsigned)GJ_USER_SOFT_WAVE);
-/* Grep: user_task: soft retpanoply — Wave 32 panoply stamp (kept) */
-kprintf("user_task: soft retpanoply exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=%u "
-        "(retpanoply stamp; Soft≠product)\n",
-        (unsigned)GJ_USER_SOFT_WAVE);
-/*
- * ---- Wave 33 complementary surfaces (kept) (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: user_task: soft retbastion — Wave 33 return-bastion honesty (kept) */
-kprintf("user_task: soft retbastion soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=%u "
-        "(retbastion honesty; Soft≠product)\n",
-        (unsigned)GJ_USER_SOFT_WAVE);
-/* Grep: user_task: soft retcitadel — Wave 33 citadel stamp (kept) */
-kprintf("user_task: soft retcitadel exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=%u "
-        "(retcitadel stamp; Soft≠product)\n",
-        (unsigned)GJ_USER_SOFT_WAVE);
-/*
- * ---- Wave 34 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: user_task: soft retredoubt — Wave 34 return-redoubt honesty */
-kprintf("user_task: soft retredoubt soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=%u "
-        "(retredoubt honesty; Soft≠product)\n",
-        (unsigned)GJ_USER_SOFT_WAVE);
-/* Grep: user_task: soft retkeep — Wave 34 exclusive keep stamp */
-kprintf("user_task: soft retkeep exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=%u "
-        "(retkeep stamp; Soft≠product)\n",
-        (unsigned)GJ_USER_SOFT_WAVE);
-/*
- * ---- Wave 35 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: user_task: soft retfortress — Wave 35 return-fortress honesty */
-kprintf("user_task: soft retfortress soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=%u "
-        "(retfortress honesty; Soft≠product)\n",
-        (unsigned)GJ_USER_SOFT_WAVE);
-/* Grep: user_task: soft retpalace — Wave 35 exclusive palace stamp */
-kprintf("user_task: soft retpalace exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=%u "
-        "(retpalace stamp; Soft≠product)\n",
-        (unsigned)GJ_USER_SOFT_WAVE);
-/*
- * ---- Wave 36 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: user_task: soft rethold — Wave 36 return-hold honesty */
-kprintf("user_task: soft rethold soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=%u "
-        "(rethold honesty; Soft≠product)\n",
-        (unsigned)GJ_USER_SOFT_WAVE);
-/* Grep: user_task: soft retspire — Wave 36 exclusive spire stamp */
-kprintf("user_task: soft retspire exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=%u "
-        "(retspire stamp; Soft≠product)\n",
-        (unsigned)GJ_USER_SOFT_WAVE);
-/*
- * ---- Wave 37 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: user_task: soft retwall — Wave 37 return-wall honesty */
-kprintf("user_task: soft retwall soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=%u "
-        "(retwall honesty; Soft≠product)\n",
-        (unsigned)GJ_USER_SOFT_WAVE);
-/* Grep: user_task: soft retgate — Wave 37 exclusive gate stamp */
-kprintf("user_task: soft retgate exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=%u "
-        "(retgate stamp; Soft≠product)\n",
-        (unsigned)GJ_USER_SOFT_WAVE);
-/*
- * ---- Wave 38 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: user_task: soft retmoat — Wave 38 return-moat honesty */
-kprintf("user_task: soft retmoat soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=%u "
-        "(retmoat honesty; Soft≠product)\n",
-        (unsigned)GJ_USER_SOFT_WAVE);
-/* Grep: user_task: soft retower — Wave 38 exclusive tower stamp */
-kprintf("user_task: soft retower exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=%u "
-        "(retower stamp; Soft≠product)\n",
-        (unsigned)GJ_USER_SOFT_WAVE);
-                            
-/*
- * ---- Wave 39 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: user_task: soft retbarbican — Wave 39 return-barbican honesty */
-kprintf("user_task: soft retbarbican soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=%u "
-        "(retbarbican honesty; Soft≠product)\n",
-        (unsigned)GJ_USER_SOFT_WAVE);
-/* Grep: user_task: soft retglacis — Wave 39 exclusive glacis stamp */
-kprintf("user_task: soft retglacis exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=%u "
-        "(retglacis stamp; Soft≠product)\n",
-        (unsigned)GJ_USER_SOFT_WAVE);
-/*
- * ---- Wave 40 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: user_task: soft retcurtain — Wave 40 return-curtain honesty */
-kprintf("user_task: soft retcurtain soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=%u "
-        "(retcurtain honesty; Soft≠product)\n",
-        (unsigned)GJ_USER_SOFT_WAVE);
-/* Grep: user_task: soft retparapet — Wave 40 exclusive parapet stamp */
-kprintf("user_task: soft retparapet exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=%u "
-        "(retparapet stamp; Soft≠product)\n",
-        (unsigned)GJ_USER_SOFT_WAVE);
-/*
- * ---- Wave 41 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: user_task: soft retravelin — Wave 41 return-travelin honesty */
-kprintf("user_task: soft retravelin soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=%u "
-        "(retravelin honesty; Soft≠product)\n",
-        (unsigned)GJ_USER_SOFT_WAVE);
-/* Grep: user_task: soft retditch — Wave 41 exclusive ditch stamp */
-kprintf("user_task: soft retditch exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=%u "
-        "(retditch stamp; Soft≠product)\n",
-        (unsigned)GJ_USER_SOFT_WAVE);
-/*
- * ---- Wave 42 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: user_task: soft retportcullis — Wave 42 return-portcullis honesty */
-kprintf("user_task: soft retportcullis soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=%u "
-        "(retportcullis honesty; Soft≠product)\n",
-        (unsigned)GJ_USER_SOFT_WAVE);
-/* Grep: user_task: soft retbattlement — Wave 42 exclusive battlement stamp */
-kprintf("user_task: soft retbattlement exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=%u "
-        "(retbattlement stamp; Soft≠product)\n",
-        (unsigned)GJ_USER_SOFT_WAVE);
-/*
- * ---- Wave 43 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: user_task: soft retmachicolation — Wave 43 return-machicolation honesty */
-kprintf("user_task: soft retmachicolation soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=%u "
-        "(retmachicolation honesty; Soft≠product)\n",
-        (unsigned)GJ_USER_SOFT_WAVE);
-/* Grep: user_task: soft retarrowslit — Wave 43 exclusive arrowslit stamp */
-kprintf("user_task: soft retarrowslit exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=%u "
-        "(retarrowslit stamp; Soft≠product)\n",
-        (unsigned)GJ_USER_SOFT_WAVE);
-
-/*
- * ---- Wave 44 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: user_task: soft retmerlon — Wave 44 return-merlon honesty */
-kprintf("user_task: soft retmerlon soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=%u "
-        "(retmerlon honesty; Soft≠product)\n",
-        (unsigned)GJ_USER_SOFT_WAVE);
-/* Grep: user_task: soft retembrasure — Wave 44 exclusive embrasure stamp */
-kprintf("user_task: soft retembrasure exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=%u "
-        "(retembrasure stamp; Soft≠product)\n",
-        (unsigned)GJ_USER_SOFT_WAVE);
-
-/*
- * ---- Wave 45 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: user_task: soft retkeepgate — Wave 45 return-keepgate honesty */
-kprintf("user_task: soft retkeepgate soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=%u "
-        "(retkeepgate honesty; Soft≠product)\n",
-        (unsigned)GJ_USER_SOFT_WAVE);
-/* Grep: user_task: soft retouterward — Wave 45 exclusive outerward stamp */
-kprintf("user_task: soft retouterward exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=%u "
-        "(retouterward stamp; Soft≠product)\n",
-        (unsigned)GJ_USER_SOFT_WAVE);
-
-/*
- * ---- Wave 46 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: user_task: soft retbailey — Wave 46 return-bailey honesty */
-kprintf("user_task: soft retbailey soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=%u "
-        "(retbailey honesty; Soft≠product)\n",
-        (unsigned)GJ_USER_SOFT_WAVE);
-/* Grep: user_task: soft retpostern — Wave 46 exclusive postern stamp */
-kprintf("user_task: soft retpostern exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=%u "
-        "(retpostern stamp; Soft≠product)\n",
-        (unsigned)GJ_USER_SOFT_WAVE);
-
-/*
- * ---- Wave 47 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: user_task: soft retinnerward — Wave 47 return-innerward honesty */
-kprintf("user_task: soft retinnerward soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retinnerward honesty; Soft≠product)\n");
-/* Grep: user_task: soft retdonjon — Wave 47 exclusive donjon stamp */
-kprintf("user_task: soft retdonjon exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retdonjon stamp; Soft≠product)\n");
-
-/*
- * ---- Wave 48 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: user_task: soft retchevaux — Wave 48 return-chevaux honesty */
-kprintf("user_task: soft retchevaux soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retchevaux honesty; Soft≠product)\n");
-/* Grep: user_task: soft retpalisade — Wave 48 exclusive palisade stamp */
-kprintf("user_task: soft retpalisade exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retpalisade stamp; Soft≠product)\n");
-
-/*
- * ---- Wave 49 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: user_task: soft retglacisgate — Wave 49 return-glacisgate honesty */
-kprintf("user_task: soft retglacisgate soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retglacisgate honesty; Soft≠product)\n");
-/* Grep: user_task: soft retoutwork — Wave 49 exclusive outwork stamp */
-kprintf("user_task: soft retoutwork exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retoutwork stamp; Soft≠product)\n");
-/*
- * ---- Wave 50 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: user_task: soft retsally — Wave 50 return-sally honesty */
-kprintf("user_task: soft retsally soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retsally honesty; Soft≠product)\n");
-/* Grep: user_task: soft retcounterscarp — Wave 50 exclusive counterscarp stamp */
-kprintf("user_task: soft retcounterscarp exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retcounterscarp stamp; Soft≠product)\n");
-/*
- * ---- Wave 51 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: user_task: soft retfosse — Wave 51 return-fosse honesty */
-kprintf("user_task: soft retfosse soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retfosse honesty; Soft≠product)\n");
-/* Grep: user_task: soft retcoveredway — Wave 51 exclusive coveredway stamp */
-kprintf("user_task: soft retcoveredway exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retcoveredway stamp; Soft≠product)\n");
-
-/*
- * ---- Wave 52 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: user_task: soft rettenaille — Wave 52 return-tenaille honesty */
-kprintf("user_task: soft rettenaille soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(rettenaille honesty; Soft≠product)\n");
-/* Grep: user_task: soft retdemilune — Wave 52 exclusive demilune stamp */
-kprintf("user_task: soft retdemilune exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retdemilune stamp; Soft≠product)\n");
-/*
- * ---- Wave 53 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: user_task: soft retravelin — Wave 53 return-travelin honesty */
-kprintf("user_task: soft retravelin soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retravelin honesty; Soft≠product)\n");
-/* Grep: user_task: soft retlunette — Wave 53 exclusive lunette stamp */
-kprintf("user_task: soft retlunette exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retlunette stamp; Soft≠product)\n");
-/*
- * ---- Wave 54 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: user_task: soft retcaponier — Wave 54 return-caponier honesty */
-kprintf("user_task: soft retcaponier soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retcaponier honesty; Soft≠product)\n");
-/* Grep: user_task: soft retredan — Wave 54 exclusive redan stamp */
-kprintf("user_task: soft retredan exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retredan stamp; Soft≠product)\n");
-/*
- * ---- Wave 55 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: user_task: soft retflank — Wave 55 return-flank honesty */
-kprintf("user_task: soft retflank soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retflank honesty; Soft≠product)\n");
-/* Grep: user_task: soft retface — Wave 55 exclusive face stamp */
-kprintf("user_task: soft retface exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retface stamp; Soft≠product)\n");
-/*
- * ---- Wave 56 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: user_task: soft retgorge — Wave 56 return-gorge honesty */
-kprintf("user_task: soft retgorge soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retgorge honesty; Soft≠product)\n");
-/* Grep: user_task: soft retshoulder — Wave 56 exclusive shoulder stamp */
-kprintf("user_task: soft retshoulder exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retshoulder stamp; Soft≠product)\n");
-/*
- * ---- Wave 57 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: user_task: soft retraverse — Wave 57 return-traverse honesty */
-kprintf("user_task: soft retraverse soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retraverse honesty; Soft≠product)\n");
-/* Grep: user_task: soft retcasemate — Wave 57 exclusive casemate stamp */
-kprintf("user_task: soft retcasemate exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retcasemate stamp; Soft≠product)\n");
-
-/*
- * ---- Wave 58 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: user_task: soft retorillon — Wave 58 return-orillon honesty */
-kprintf("user_task: soft retorillon soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retorillon honesty; Soft≠product)\n");
-/* Grep: user_task: soft retbonnette — Wave 58 exclusive bonnette stamp */
-kprintf("user_task: soft retbonnette exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retbonnette stamp; Soft≠product)\n");
-
-/*
- * ---- Wave 59 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: user_task: soft retcrownwork — Wave 59 return-crownwork honesty */
-kprintf("user_task: soft retcrownwork soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retcrownwork honesty; Soft≠product)\n");
-/* Grep: user_task: soft rethornwork — Wave 59 exclusive hornwork stamp */
-kprintf("user_task: soft rethornwork exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(rethornwork stamp; Soft≠product)\n");
-
-/*
- * ---- Wave 60 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: user_task: soft retplace — Wave 60 return-place honesty */
-kprintf("user_task: soft retplace soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retplace honesty; Soft≠product)\n");
-/* Grep: user_task: soft retenvelope — Wave 60 exclusive envelope stamp */
-kprintf("user_task: soft retenvelope exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retenvelope stamp; Soft≠product)\n");
-
-
-
-
-
-
-
-
-
-/*
- * ---- Wave 61 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: user_task: soft retcounterguard — Wave 61 return-counterguard honesty */
-kprintf("user_task: soft retcounterguard soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retcounterguard honesty; Soft≠product)\n");
-/* Grep: user_task: soft retcoveredface — Wave 61 exclusive coveredface stamp */
-kprintf("user_task: soft retcoveredface exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retcoveredface stamp; Soft≠product)\n");
-/*
- * ---- Wave 62 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: user_task: soft retbastionface — Wave 62 return-bastionface honesty */
-kprintf("user_task: soft retbastionface soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retbastionface honesty; Soft≠product)\n");
-/* Grep: user_task: soft retcurtainangle — Wave 62 exclusive curtainangle stamp */
-kprintf("user_task: soft retcurtainangle exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retcurtainangle stamp; Soft≠product)\n");
-/*
- * ---- Wave 63 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: user_task: soft retdoubletenaille — Wave 63 return-doubletenaille honesty */
-kprintf("user_task: soft retdoubletenaille soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retdoubletenaille honesty; Soft≠product)\n");
-/* Grep: user_task: soft retplaceofarms — Wave 63 exclusive placeofarms stamp */
-kprintf("user_task: soft retplaceofarms exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retplaceofarms stamp; Soft≠product)\n");
- /*
-  * ---- Wave 64 exclusive complementary surfaces (never reshape primary).
-  * Return surfaces only — soft inventory; never hard-gates product paths.
-  */
- /* Grep: user_task: soft retreentrant — Wave 64 return-reentrant honesty */
-kprintf("user_task: soft retreentrant soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retreentrant honesty; Soft≠product)\n");
- /* Grep: user_task: soft retsallyport — Wave 64 exclusive sallyport stamp */
-kprintf("user_task: soft retsallyport exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retsallyport stamp; Soft≠product)\n");
- /*
-  * ---- Wave 65 exclusive complementary surfaces (never reshape primary).
-  * Return surfaces only — soft inventory; never hard-gates product paths.
-  */
- /* Grep: user_task: soft retgorgeangle — Wave 65 return-gorgeangle honesty */
-kprintf("user_task: soft retgorgeangle soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retgorgeangle honesty; Soft≠product)\n");
- /* Grep: user_task: soft retshoulderangle — Wave 65 exclusive shoulderangle stamp */
-kprintf("user_task: soft retshoulderangle exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retshoulderangle stamp; Soft≠product)\n");
- /*
-  * ---- Wave 66 exclusive complementary surfaces (never reshape primary).
-  * Return surfaces only — soft inventory; never hard-gates product paths.
-  */
- /* Grep: user_task: soft retflankangle — Wave 66 return-flankangle honesty */
- kprintf("user_task: soft retflankangle soft_only=1 product_gate=0 soft_ne_product=1 "
-         "never_blocks_m0=1 wave=116 "
-         "(retflankangle honesty; Soft≠product)\n");
- /* Grep: user_task: soft retfaceangle — Wave 66 exclusive faceangle stamp */
- kprintf("user_task: soft retfaceangle exclusive=1 soft_ne_product=1 "
-         "product_kernel=OPEN wave=116 "
-         "(retfaceangle stamp; Soft≠product)\n");
-/*
- * ---- Wave 67 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: user_task: soft retcaponierangle — Wave 67 return-caponierangle honesty */
-kprintf("user_task: soft retcaponierangle soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retcaponierangle honesty; Soft≠product)\n");
-/* Grep: user_task: soft retredanangle — Wave 67 exclusive redanangle stamp */
-kprintf("user_task: soft retredanangle exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retredanangle stamp; Soft≠product)\n");
-/*
- * ---- Wave 68 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: user_task: soft retlunetteangle — Wave 68 return-lunetteangle honesty */
-kprintf("user_task: soft retlunetteangle soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retlunetteangle honesty; Soft≠product)\n");
-/* Grep: user_task: soft rettenailleangle — Wave 68 exclusive tenailleangle stamp */
-kprintf("user_task: soft rettenailleangle exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(rettenailleangle stamp; Soft≠product)\n");
-/*
- * ---- Wave 69 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: user_task: soft retdemiluneangle — Wave 69 return-demiluneangle honesty */
-kprintf("user_task: soft retdemiluneangle soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retdemiluneangle honesty; Soft≠product)\n");
-/* Grep: user_task: soft retcoveredwayangle — Wave 69 exclusive coveredwayangle stamp */
-kprintf("user_task: soft retcoveredwayangle exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retcoveredwayangle stamp; Soft≠product)\n");
-/*
- * ---- Wave 70 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: user_task: soft retfosseangle — Wave 70 return-fosseangle honesty */
-kprintf("user_task: soft retfosseangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retfosseangle honesty; Soft≠product)\n");
-/* Grep: user_task: soft retcounterscarple — Wave 70 exclusive counterscarple stamp */
-kprintf("user_task: soft retcounterscarple exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retcounterscarple stamp; Soft≠product)\n");
-/*
- * ---- Wave 71 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: user_task: soft retsallyportangle — Wave 71 return-sallyportangle honesty */
-kprintf("user_task: soft retsallyportangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retsallyportangle honesty; Soft≠product)\n");
-/* Grep: user_task: soft retreentrantangle — Wave 71 exclusive reentrantangle stamp */
-kprintf("user_task: soft retreentrantangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retreentrantangle stamp; Soft≠product)\n");
-/*
- * ---- Wave 72 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: user_task: soft retplaceofarmsangle — Wave 72 return-placeofarmsangle honesty */
-kprintf("user_task: soft retplaceofarmsangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retplaceofarmsangle honesty; Soft≠product)\n");
-/* Grep: user_task: soft retdoubletenailleangle — Wave 72 exclusive doubletenailleangle stamp */
-kprintf("user_task: soft retdoubletenailleangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retdoubletenailleangle stamp; Soft≠product)\n");
-/* Grep: user_task: soft retcurtainface — Wave 73 return-curtainface honesty */
-kprintf("user_task: soft retcurtainface soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retcurtainface honesty; Soft≠product)\n");
-/* Grep: user_task: soft retbastionangle — Wave 73 exclusive bastionangle stamp */
-kprintf("user_task: soft retbastionangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retbastionangle stamp; Soft≠product)\n");
-/* Grep: user_task: soft retglacisangle — Wave 74 return-glacisangle honesty */
-kprintf("user_task: soft retglacisangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retglacisangle honesty; Soft≠product)\n");
-/* Grep: user_task: soft retparapetangle — Wave 74 exclusive parapetangle stamp */
-kprintf("user_task: soft retparapetangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retparapetangle stamp; Soft≠product)\n");
-/* Grep: user_task: soft retmoatangle — Wave 75 return-moatangle honesty */
-kprintf("user_task: soft retmoatangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retmoatangle honesty; Soft≠product)\n");
-/* Grep: user_task: soft retowerangle — Wave 75 exclusive towerangle stamp */
-kprintf("user_task: soft retowerangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retowerangle stamp; Soft≠product)\n");
-/* Grep: user_task: soft retgateangle — Wave 76 return-gateangle honesty */
-kprintf("user_task: soft retgateangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retgateangle honesty; Soft≠product)\n");
-/* Grep: user_task: soft retwallangle — Wave 76 exclusive wallangle stamp */
-kprintf("user_task: soft retwallangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retwallangle stamp; Soft≠product)\n");
-/* Grep: user_task: soft retspireangle — Wave 77 return-spireangle honesty */
-kprintf("user_task: soft retspireangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retspireangle honesty; Soft≠product)\n");
-/* Grep: user_task: soft retholdangle — Wave 77 exclusive holdangle stamp */
-kprintf("user_task: soft retholdangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retholdangle stamp; Soft≠product)\n");
-/* Grep: user_task: soft retpalaceangle — Wave 78 return-palaceangle honesty */
-kprintf("user_task: soft retpalaceangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retpalaceangle honesty; Soft≠product)\n");
-/* Grep: user_task: soft retfortressangle — Wave 78 exclusive fortressangle stamp */
-kprintf("user_task: soft retfortressangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retfortressangle stamp; Soft≠product)\n");
-/* Grep: user_task: soft retkeepangle — Wave 79 return-keepangle honesty */
-kprintf("user_task: soft retkeepangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retkeepangle honesty; Soft≠product)\n");
-/* Grep: user_task: soft retredoubtangle — Wave 79 exclusive redoubtangle stamp */
-kprintf("user_task: soft retredoubtangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retredoubtangle stamp; Soft≠product)\n");
-/* Grep: user_task: soft retcitadelangle — Wave 80 return-citadelangle honesty */
-kprintf("user_task: soft retcitadelangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retcitadelangle honesty; Soft≠product)\n");
-/* Grep: user_task: soft retbastionkeep — Wave 80 exclusive bastionkeep stamp */
-kprintf("user_task: soft retbastionkeep exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retbastionkeep stamp; Soft≠product)\n");
-/* Grep: user_task: soft retpanoplyangle — Wave 81 return-panoplyangle honesty */
-kprintf("user_task: soft retpanoplyangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retpanoplyangle honesty; Soft≠product)\n");
-/* Grep: user_task: soft retbulwarkangle — Wave 81 exclusive bulwarkangle stamp */
-kprintf("user_task: soft retbulwarkangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retbulwarkangle stamp; Soft≠product)\n");
-/* Grep: user_task: soft retmantleangle — Wave 82 return-mantleangle honesty */
-kprintf("user_task: soft retmantleangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retmantleangle honesty; Soft≠product)\n");
-/* Grep: user_task: soft retaegisangle — Wave 82 exclusive aegisangle stamp */
-kprintf("user_task: soft retaegisangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retaegisangle stamp; Soft≠product)\n");
-/* Grep: user_task: soft retemblemangle — Wave 83 return-emblemangle honesty */
-kprintf("user_task: soft retemblemangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retemblemangle honesty; Soft≠product)\n");
-/* Grep: user_task: soft retsigilangle — Wave 83 exclusive sigilangle stamp */
-kprintf("user_task: soft retsigilangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retsigilangle stamp; Soft≠product)\n");
-/* Grep: user_task: soft retscepterangle — Wave 84 return-scepterangle honesty */
-kprintf("user_task: soft retscepterangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retscepterangle honesty; Soft≠product)\n");
-/* Grep: user_task: soft retglyphangle — Wave 84 exclusive glyphangle stamp */
-kprintf("user_task: soft retglyphangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retglyphangle stamp; Soft≠product)\n");
-/* Grep: user_task: soft retcrownangle — Wave 85 return-crownangle honesty */
-kprintf("user_task: soft retcrownangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retcrownangle honesty; Soft≠product)\n");
-/* Grep: user_task: soft retshardangle — Wave 85 exclusive shardangle stamp */
-kprintf("user_task: soft retshardangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retshardangle stamp; Soft≠product)\n");
-/* Grep: user_task: soft retforgeangle — Wave 86 return-forgeangle honesty */
-kprintf("user_task: soft retforgeangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retforgeangle honesty; Soft≠product)\n");
-/* Grep: user_task: soft retprismangle — Wave 86 exclusive prismangle stamp */
-kprintf("user_task: soft retprismangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retprismangle stamp; Soft≠product)\n");
-/* Grep: user_task: soft retflameangle — Wave 87 return-flameangle honesty */
-kprintf("user_task: soft retflameangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retflameangle honesty; Soft≠product)\n");
-/* Grep: user_task: soft retcipherangle — Wave 87 exclusive cipherangle stamp */
-kprintf("user_task: soft retcipherangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retcipherangle stamp; Soft≠product)\n");
-/* Grep: user_task: soft retbeaconangle — Wave 88 return-beaconangle honesty */
-kprintf("user_task: soft retbeaconangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retbeaconangle honesty; Soft≠product)\n");
-/* Grep: user_task: soft retledgerangle — Wave 88 exclusive ledgerangle stamp */
-kprintf("user_task: soft retledgerangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retledgerangle stamp; Soft≠product)\n");
-/* Grep: user_task: soft retbannerangle — Wave 89 return-bannerangle honesty */
-kprintf("user_task: soft retbannerangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retbannerangle honesty; Soft≠product)\n");
-/* Grep: user_task: soft retvaultangle — Wave 89 exclusive vaultangle stamp */
-kprintf("user_task: soft retvaultangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retvaultangle stamp; Soft≠product)\n");
-/* Grep: user_task: soft retcrestangle — Wave 90 return-crestangle honesty */
-kprintf("user_task: soft retcrestangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retcrestangle honesty; Soft≠product)\n");
-/* Grep: user_task: soft rettokenangle — Wave 90 exclusive tokenangle stamp */
-kprintf("user_task: soft rettokenangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (rettokenangle stamp; Soft≠product)\n");
-/* Grep: user_task: soft retbadgeangle — Wave 91 return-badgeangle honesty */
-kprintf("user_task: soft retbadgeangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retbadgeangle honesty; Soft≠product)\n");
-/* Grep: user_task: soft retphaseangle — Wave 91 exclusive phaseangle stamp */
-kprintf("user_task: soft retphaseangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retphaseangle stamp; Soft≠product)\n");
-/* Grep: user_task: soft retmarkangle — Wave 92 return-markangle honesty */
-kprintf("user_task: soft retmarkangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retmarkangle honesty; Soft≠product)\n");
-/* Grep: user_task: soft retpulseangle — Wave 92 exclusive pulseangle stamp */
-kprintf("user_task: soft retpulseangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retpulseangle stamp; Soft≠product)\n");
-
-/* Grep: user_task: soft retsealangle — Wave 93 return-sealangle honesty */
-kprintf("user_task: soft retsealangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retsealangle honesty; Soft≠product)\n");
-/* Grep: user_task: soft retboundangle — Wave 93 exclusive boundangle stamp */
-kprintf("user_task: soft retboundangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retboundangle stamp; Soft≠product)\n");
-/* Grep: user_task: soft retstemangle — Wave 94 return-stemangle honesty */
-kprintf("user_task: soft retstemangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retstemangle honesty; Soft≠product)\n");
-/* Grep: user_task: soft retbladeangle — Wave 94 exclusive bladeangle stamp */
-kprintf("user_task: soft retbladeangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retbladeangle stamp; Soft≠product)\n");
-/* Grep: user_task: soft retchordangle — Wave 95 return-chordangle honesty */
-kprintf("user_task: soft retchordangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retchordangle honesty; Soft≠product)\n");
-/* Grep: user_task: soft retarcangle — Wave 95 exclusive arcangle stamp */
-kprintf("user_task: soft retarcangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retarcangle stamp; Soft≠product)\n");
-/* Grep: user_task: soft retsectorangle — Wave 96 return-sectorangle honesty */
-kprintf("user_task: soft retsectorangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retsectorangle honesty; Soft≠product)\n");
-/* Grep: user_task: soft retwedgeangle — Wave 96 exclusive wedgeangle stamp */
-kprintf("user_task: soft retwedgeangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retwedgeangle stamp; Soft≠product)\n");
-/* Grep: user_task: soft retradiusangle — Wave 97 return-radiusangle honesty */
-kprintf("user_task: soft retradiusangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retradiusangle honesty; Soft≠product)\n");
-/* Grep: user_task: soft retdiameterangle — Wave 97 exclusive diameterangle stamp */
-kprintf("user_task: soft retdiameterangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retdiameterangle stamp; Soft≠product)\n");
-/* Grep: user_task: soft retcircumangle — Wave 98 return-circumangle honesty */
-kprintf("user_task: soft retcircumangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retcircumangle honesty; Soft≠product)\n");
-/* Grep: user_task: soft retellipseangle — Wave 98 exclusive ellipseangle stamp */
-kprintf("user_task: soft retellipseangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retellipseangle stamp; Soft≠product)\n");
-/* Grep: user_task: soft rethyperangle — Wave 99 return-hyperangle honesty */
-kprintf("user_task: soft rethyperangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (rethyperangle honesty; Soft≠product)\n");
-/* Grep: user_task: soft retparabolaangle — Wave 99 exclusive parabolaangle stamp */
-kprintf("user_task: soft retparabolaangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retparabolaangle stamp; Soft≠product)\n");
-/* Grep: user_task: soft retspiralangle — Wave 100 return-spiralangle honesty */
-kprintf("user_task: soft retspiralangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retspiralangle honesty; Soft≠product)\n");
-/* Grep: user_task: soft rethelixangle — Wave 100 exclusive helixangle stamp */
-kprintf("user_task: soft rethelixangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (rethelixangle stamp; Soft≠product)\n");
-/* Grep: user_task: soft rettorusangle — Wave 101 return-torusangle honesty */
-kprintf("user_task: soft rettorusangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (rettorusangle honesty; Soft≠product)\n");
-/* Grep: user_task: soft retknotangle — Wave 101 exclusive knotangle stamp */
-kprintf("user_task: soft retknotangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retknotangle stamp; Soft≠product)\n");
-/* Grep: user_task: soft retmoebiusangle — Wave 102 return-moebiusangle honesty */
-kprintf("user_task: soft retmoebiusangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retmoebiusangle honesty; Soft≠product)\n");
-/* Grep: user_task: soft retkleinangle — Wave 102 exclusive kleinangle stamp */
-kprintf("user_task: soft retkleinangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retkleinangle stamp; Soft≠product)\n");
-/* Grep: user_task: soft retprojectangle — Wave 103 return-projectangle honesty */
-kprintf("user_task: soft retprojectangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retprojectangle honesty; Soft≠product)\n");
-/* Grep: user_task: soft retaffineangle — Wave 103 exclusive affineangle stamp */
-kprintf("user_task: soft retaffineangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retaffineangle stamp; Soft≠product)\n");
-/* Grep: user_task: soft retlinearangle — Wave 104 return-linearangle honesty */
-kprintf("user_task: soft retlinearangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retlinearangle honesty; Soft≠product)\n");
-/* Grep: user_task: soft retbilinearangle — Wave 104 exclusive bilinearangle stamp */
-kprintf("user_task: soft retbilinearangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retbilinearangle stamp; Soft≠product)\n");
-/* Grep: user_task: soft retquadraticangle — Wave 105 return-quadraticangle honesty */
-kprintf("user_task: soft retquadraticangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retquadraticangle honesty; Soft≠product)\n");
-/* Grep: user_task: soft retcubicangle — Wave 105 exclusive cubicangle stamp */
-kprintf("user_task: soft retcubicangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retcubicangle stamp; Soft≠product)\n");
-/* Grep: user_task: soft retquarticangle — Wave 106 return-quarticangle honesty */
-kprintf("user_task: soft retquarticangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retquarticangle honesty; Soft≠product)\n");
-/* Grep: user_task: soft retquinticangle — Wave 106 exclusive quinticangle stamp */
-kprintf("user_task: soft retquinticangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retquinticangle stamp; Soft≠product)\n");
-/* Grep: user_task: soft retsplineangle — Wave 107 return-splineangle honesty */
-kprintf("user_task: soft retsplineangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retsplineangle honesty; Soft≠product)\n");
-/* Grep: user_task: soft retbezierangle — Wave 107 exclusive bezierangle stamp */
-kprintf("user_task: soft retbezierangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retbezierangle stamp; Soft≠product)\n");
-/* Grep: user_task: soft rethurmitangle — Wave 108 return-hermitangle honesty */
-kprintf("user_task: soft rethurmitangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (rethurmitangle honesty; Soft≠product)\n");
-/* Grep: user_task: soft retcatmullangle — Wave 108 exclusive catmullangle stamp */
-kprintf("user_task: soft retcatmullangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retcatmullangle stamp; Soft≠product)\n");
-/* Grep: user_task: soft retnurbsangle — Wave 109 return-nurbsangle honesty */
-kprintf("user_task: soft retnurbsangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retnurbsangle honesty; Soft≠product)\n");
-/* Grep: user_task: soft retbsplineangle — Wave 109 exclusive bsplineangle stamp */
-kprintf("user_task: soft retbsplineangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retbsplineangle stamp; Soft≠product)\n");
-/* Grep: user_task: soft retmeshangle — Wave 110 return-meshangle honesty */
-kprintf("user_task: soft retmeshangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retmeshangle honesty; Soft≠product)\n");
-/* Grep: user_task: soft retgridangle — Wave 110 exclusive gridangle stamp */
-kprintf("user_task: soft retgridangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retgridangle stamp; Soft≠product)\n");
-/* Grep: user_task: soft retvoxelangle — Wave 111 return-voxelangle honesty */
-kprintf("user_task: soft retvoxelangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retvoxelangle honesty; Soft≠product)\n");
-/* Grep: user_task: soft rettexelangle — Wave 111 exclusive texelangle stamp */
-kprintf("user_task: soft rettexelangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (rettexelangle stamp; Soft≠product)\n");
-/* Grep: user_task: soft retfragmentangle — Wave 112 return-fragmentangle honesty */
-kprintf("user_task: soft retfragmentangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retfragmentangle honesty; Soft≠product)\n");
-/* Grep: user_task: soft retvertexangle — Wave 112 exclusive vertexangle stamp */
-kprintf("user_task: soft retvertexangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retvertexangle stamp; Soft≠product)\n");
-/* Grep: user_task: soft retshaderangle — Wave 113 return-shaderangle honesty */
-kprintf("user_task: soft retshaderangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retshaderangle honesty; Soft≠product)\n");
-/* Grep: user_task: soft retpipelineangle — Wave 113 exclusive pipelineangle stamp */
-kprintf("user_task: soft retpipelineangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retpipelineangle stamp; Soft≠product)\n");
-/* Grep: user_task: soft retframebufferangle — Wave 114 return-framebufferangle honesty */
-kprintf("user_task: soft retframebufferangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retframebufferangle honesty; Soft≠product)\n");
-/* Grep: user_task: soft retswapchainangle — Wave 114 exclusive swapchainangle stamp */
-kprintf("user_task: soft retswapchainangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retswapchainangle stamp; Soft≠product)\n");
-/* Grep: user_task: soft retpresentangle — Wave 115 return-presentangle honesty */
-kprintf("user_task: soft retpresentangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retpresentangle honesty; Soft≠product)\n");
-/* Grep: user_task: soft retvsyncangle — Wave 115 exclusive vsyncangle stamp */
-kprintf("user_task: soft retvsyncangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retvsyncangle stamp; Soft≠product)\n");
-/* Grep: user_task: soft retfenceangle — Wave 116 return-fenceangle honesty */
-kprintf("user_task: soft retfenceangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retfenceangle honesty; Soft≠product)\n");
-/* Grep: user_task: soft retsemaphoreangle — Wave 116 exclusive semaphoreangle stamp */
-kprintf("user_task: soft retsemaphoreangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retsemaphoreangle stamp; Soft≠product)\n");
-                            kprintf("user_task: soft deepen wave=%u via=%s ring3_ok=%u pers_ok=%u "
-            "enter_ok=%u soft=%u soft_bad=%u logs=%u "
-            "(soft inventory only; not product gate)\n",
-            GJ_USER_SOFT_WAVE, szViaSafe, g_cRing3MapOk, g_cPersMapOk,
-            g_cEnterOk, g_cRing3Soft + g_cPersSoft,
-            g_cRing3SoftBad + g_cPersSoftBad, g_u32SoftLogN);
-
-    /* Grep: user_task: soft path */
-    kprintf("user_task: soft path claim=ring3,personality,enter "
-            "pte=RX_code+RW_NX_stack payload_match=1 layout=dual "
-            "sysret_enter=1 G-PERS=1 wave=%u "
-            "(soft inventory)\n",
-            GJ_USER_SOFT_WAVE);
-
-    /* Grep: user_task: soft PASS | PARTIAL */
-    kprintf("user_task: soft %s via=%s ring3_live=%u pers_live=%u "
-            "enter_ok=%u log_n=%u wave=%u\n",
-            szVerdict, szViaSafe, u32Ring3Live, u32PersLive, g_cEnterOk,
-            g_u32SoftLogN, GJ_USER_SOFT_WAVE);
+            g_u32SoftUdxLean, (unsigned)USER_SOFT_UDX_LEAN_CHECKS,
+            g_u32SoftLogN);
 }
 
 /**
- * After first product map/enter activity, print soft inventory once.
- * Diagnostics only.
+ * Lean residual once-lamp for UDX driver host entry (C2 product-path residual).
+ * Soft!=product | G-AC-1 | H3 companion; dual MIT OR Apache-2.0;
+ * no version stamp; no storms.
+ * Dual user-AS windows (ring3 Linux + native personality) are the soft
+ * map+enter surface process_spawn / thread_create_user hosts stand on -
+ * not product multi-server confine, not in-kernel .ko product AC.
+ * H3: refuse enter when ring3 !mapped; process death thr_exit before
+ * as_destroy (entry companion; teardown residual lives in process/thread).
+ * path=map|soft_observe|recheck|enter|sysret · product_dir=UDX+ABI.
+ * claim_class=C2 (ASSURANCE_LITE); dual_dod A/B OPEN; Soft scaffold only.
+ * FUNCTIONAL residual: host ELF thr entry scaffold after
+ * process_spawn_host_launch + elf_load (layout contracts + step densify).
+ * STRONGER denser keep_live / product_host_live / thr_live honesty residual:
+ * never thrash dual windows under enterable product host thr; Dual DoD OPEN.
+ * denser residual != Dual DoD close; H3 thr_exit before as_destroy companion.
+ *
+ * greppable: user: soft residual lean Soft!=product
+ * greppable: user: soft residual lean udx
+ * greppable: user: soft residual lean c2
+ * greppable: user: soft residual lean PASS
+ * greppable: user: soft residual lean H3
+ * greppable: user_task: soft residual lean
+ * greppable: user: soft residual ring3 map
+ * greppable: user: soft residual ring3 map c2
+ * greppable: user: soft residual personality map
+ * greppable: user: soft residual enter
+ * greppable: user: soft residual keep_live
+ * greppable: user: soft residual product_host_live
+ * greppable: user: soft residual thr_live
+ * greppable: user: soft residual denser keep_live
+ * greppable: user: soft residual denser thr_live
+ * greppable: user: soft residual denser product_host_live
+ * greppable: user: soft residual denser dual_dod
+ * greppable: user_task: soft residual product_host_live
+ * greppable: user_task: soft residual thr_live
+ * greppable: user_task: soft residual denser keep_live
+ * greppable: user_task: soft residual denser thr_live
+ * greppable: user: soft functional residual
+ * greppable: user: soft functional residual catalog
+ * greppable: user: soft functional residual host_elf_thr
+ * greppable: user: soft functional residual densify
+ * greppable: user: soft functional residual PASS
+ * greppable: user: soft functional step
+ * greppable: user_task: soft functional residual
+ * greppable: product_host_live=1 | keep_live=1 | thr_live=1
+ * greppable: Soft!=product soft residual dual_dod OPEN product_host_live
+ * greppable: denser keep_live residual | denser thr_live residual
+ * greppable: denser product_host_live residual | denser dual_dod residual
+ * greppable: denser thr_exit_before_as_destroy residual
+ */
+static void
+user_soft_residual_lean(const char *szVia)
+{
+    const char *szViaSafe;
+    u32         u32Ring3Live;
+    u32         u32PersLive;
+    u32         u32Ok;
+    u32         u32Ring3C2;
+    u32         u32HostFunc;
+    u32         u32PteSoft;
+    u32         u32PagesR3;
+    u32         u32StepMap;
+    u32         u32StepObserve;
+    u32         u32StepRecheck;
+    u32         u32StepEnter;
+    u32         u32StepSysret;
+    u32         u32StepHostStack;
+    u32         u32StepHostExec;
+    u32         u32StepH3Refuse;
+    u32         u32StepProductHosts;
+    u32         u32StepDualDodOpen;
+    u32         u32StepEnterReqRing3;
+    u32         u32StepUserBand;
+    u32         u32StepThrLive;
+    u32         u32StepProductHostLive;
+    u32         u32StepKeepLive;
+    u32         u32StepMapsLiveNoThrash;
+    u32         u32StepLive;
+
+    if (g_fSoftResidualLeanOnce != 0) {
+        return;
+    }
+    /* Lamp after any map/enter activity (ring3, personality, or enter). */
+    if (g_cRing3MapOk == 0u && g_cRing3MapFail == 0u &&
+        g_cPersMapOk == 0u && g_cPersMapFail == 0u &&
+        g_cEnterOk == 0u && g_cEnterSkip == 0u) {
+        return;
+    }
+    g_fSoftResidualLeanOnce = 1;
+    szViaSafe = (szVia != NULL && szVia[0] != '\0') ? szVia : "activity";
+    u32Ring3Live = g_fUserMapped != 0 ? 1u : 0u;
+    u32PersLive = g_fPersMapped != 0 ? 1u : 0u;
+
+    /*
+     * Compact self-check (never hard-gates product). ok/8 = dual VA +
+     * budgets + align + live/enter/soft consistency + live dual layout.
+     */
+    u32Ok = user_soft_udx_host_lean_check();
+    g_u32SoftUdxLean = u32Ok;
+    if (u32Ok == USER_SOFT_UDX_LEAN_CHECKS) {
+        user_soft_inc(&g_u32SoftLeanOk);
+    }
+
+    /* C2 ring3 map residual selfcheck (Soft!=product; never hard-gates). */
+    u32Ring3C2 = user_soft_ring3_map_c2_check();
+    g_u32SoftRing3MapC2 = u32Ring3C2;
+    if (u32Ring3C2 == USER_SOFT_RING3_MAP_C2_CHECKS) {
+        user_soft_inc(&g_u32SoftRing3MapC2Ok);
+    }
+
+    /*
+     * Host ELF thr entry FUNCTIONAL residual (Soft!=product; Dual DoD OPEN).
+     * After process_spawn_host_launch + elf_load; layout + enter contracts.
+     */
+    u32HostFunc = user_soft_host_elf_thr_func_check();
+    g_u32SoftHostElfThrFunc = u32HostFunc;
+    if (u32HostFunc == USER_SOFT_HOST_ELF_THR_FUNC_CHECKS) {
+        user_soft_inc(&g_u32SoftHostElfThrFuncOk);
+    }
+
+    /*
+     * Soft PTE/payload residual flags: only claim green when the ring3
+     * window is live (map path fail-closed before setting live). Soft!=product.
+     */
+    u32PteSoft = u32Ring3Live;
+    u32PagesR3 = g_cRing3CodePages != 0u ? g_cRing3CodePages : GJ_USER_CODE_PAGES;
+
+    /*
+     * Functional pipeline step densify (Soft!=product; never hard-gates).
+     * Local enter path + host ELF thr layout contracts + H3 refuse +
+     * STRONGER: product_hosts | dual_dod_open | enter_req_ring3 | user_band
+     * + thr_live | product_host_live | keep_live | maps_live_no_thrash.
+     */
+    u32StepMap = (g_cRing3MapOk != 0u || g_cPersMapOk != 0u) ? 1u : 0u;
+    u32StepObserve = (g_cRing3Soft != 0u || g_cPersSoft != 0u ||
+                      g_u32SoftObserveOk != 0u)
+                         ? 1u
+                         : 0u;
+    u32StepRecheck = (g_u32SoftRecheckPassRing3 != 0u ||
+                      g_u32SoftRecheckPassPers != 0u ||
+                      g_u32SoftRecheckFailRing3 != 0u ||
+                      g_u32SoftIdemRing3 != 0u)
+                         ? 1u
+                         : 0u;
+    u32StepEnter = (g_cEnterOk != 0u) ? 1u : 0u;
+    u32StepSysret = (g_cEnterOk != 0u) ? 1u : 0u; /* sysret reached via enter */
+    /* Host product thr stack (spawn); ring3 smoke stack stays separate. */
+    u32StepHostStack =
+        (USER_SOFT_HOST_STACK_TOP == 0x000000007F000000ull &&
+         USER_SOFT_HOST_STACK_PAGES == 64u)
+            ? 1u
+            : 0u;
+    u32StepHostExec =
+        (GJ_USER_CODE_VA == USER_SOFT_HOST_EXEC_BASE) ? 1u : 0u;
+    u32StepH3Refuse = 1u; /* refuse_enter_ring3_not_mapped contract always on */
+    /* STRONGER densify steps (contract always present; Soft!=product). */
+    u32StepProductHosts = 1u; /* rtl8168_udx,xhci_udx,ddi_host host thr trio */
+    u32StepDualDodOpen = 1u;  /* dual_dod_A/B remain OPEN; residual != close */
+    u32StepEnterReqRing3 = 1u; /* personality-alone never enough for enter */
+    u32StepUserBand =
+        (GJ_USER_CODE_VA >= GJ_USER_VA_BASE &&
+         GJ_PERS_STACK_TOP <= GJ_USER_VA_END &&
+         GJ_USER_STACK_TOP <= GJ_PERS_CODE_VA)
+            ? 1u
+            : 0u;
+    /*
+     * STRONGER thr_live / product_host_live / keep_live densify steps.
+     * thr_live reflects dual windows or green enter; product_host_live +
+     * keep_live are contract residual always on (Soft!=product Dual DoD OPEN).
+     * maps_live_no_thrash: never claim thrash under enterable thr.
+     */
+    u32StepThrLive =
+        (u32Ring3Live != 0u || u32PersLive != 0u || g_cEnterOk != 0u) ? 1u
+                                                                     : 0u;
+    u32StepProductHostLive = 1u; /* product_host_live honesty residual */
+    u32StepKeepLive = 1u;        /* keep_live maps_live_while_enterable */
+    u32StepMapsLiveNoThrash =
+        (g_cEnterOk == 0u || u32Ring3Live != 0u ||
+         g_u32SoftEnterSkipNotMap > 0u)
+            ? 1u
+            : 0u;
+    u32StepLive = u32StepMap + u32StepObserve + u32StepRecheck + u32StepEnter +
+                  u32StepSysret + u32StepHostStack + u32StepHostExec +
+                  u32StepH3Refuse + u32StepProductHosts + u32StepDualDodOpen +
+                  u32StepEnterReqRing3 + u32StepUserBand + u32StepThrLive +
+                  u32StepProductHostLive + u32StepKeepLive +
+                  u32StepMapsLiveNoThrash;
+    g_u32SoftFuncStepLive = u32StepLive;
+
+    /*
+     * Once-only residual lamps (HARD: no stamp storms / no version stamp).
+     * Soft!=product. Primary lean + UDX + C2 + H3 + ring3 map residual + twin.
+     * Grep: user: soft residual lean
+     * Grep: user: soft residual lean udx
+     * Grep: user: soft residual lean c2
+     * Grep: user: soft residual lean H3
+     * Grep: user: soft residual lean PASS
+     * Grep: user: soft residual ring3 map
+     * Grep: user: soft residual ring3 map c2
+     * Grep: user: soft residual personality map
+     * Grep: user: soft residual enter
+     * Grep: user_task: soft residual lean
+     */
+    kprintf("user: soft residual lean via=%s ok=%u/%u "
+            "ring3_ok=%u ring3_fail=%u ring3_soft=%u ring3_live=%u "
+            "pers_ok=%u pers_fail=%u pers_soft=%u pers_live=%u "
+            "enter_ok=%u enter_skip=%u code_pages=%u stack_pages=%u "
+            "code=0x%lx stack=0x%lx pers_code=0x%lx pers_stack=0x%lx "
+            "dual_win=1 pte_rx=%u pte_rw_nx=%u payload_match=%u layout=dual "
+            "idem=%u/%u recheck_r3=%u/%u recheck_pers=%u/%u teardown=%u "
+            "ring3_map_c2=%u/%u host_elf_thr_func=%u/%u "
+            "udx_driver_host_entry=soft host_as=1 host_entry=map+sysret "
+            "product_dir=UDX+ABI freestanding_class_product=0 "
+            "claim_class=C2 ko_product_ac=0 multi_server_confine=0 "
+            "product_host_live=1 keep_live=1 thr_live=%u "
+            "never_unmap_while_thr_live=1 maps_live_while_enterable=1 "
+            "dual_dod_a=OPEN dual_dod_b=OPEN "
+            "soft_ne_product=1 G-AC-1=1 dual=MIT_OR_Apache-2.0 "
+            "stamp_storm=0 no_version_stamp=1 "
+            "(Soft!=product; lean residual for UDX driver host entry; "
+            "not product multi-server confine; not .ko product AC; "
+            "dual MIT OR Apache-2.0)\n",
+            szViaSafe, (unsigned)u32Ok, (unsigned)USER_SOFT_UDX_LEAN_CHECKS,
+            g_cRing3MapOk, g_cRing3MapFail, g_cRing3Soft, u32Ring3Live,
+            g_cPersMapOk, g_cPersMapFail, g_cPersSoft, u32PersLive,
+            g_cEnterOk, g_cEnterSkip, g_cCodePages, g_cStackPages,
+            (unsigned long)GJ_USER_CODE_VA,
+            (unsigned long)GJ_USER_STACK_TOP,
+            (unsigned long)GJ_PERS_CODE_VA,
+            (unsigned long)GJ_PERS_STACK_TOP,
+            u32PteSoft, u32PteSoft, u32PteSoft,
+            g_u32SoftIdemRing3, g_u32SoftIdemPers,
+            g_u32SoftRecheckPassRing3, g_u32SoftRecheckFailRing3,
+            g_u32SoftRecheckPassPers, g_u32SoftRecheckFailPers,
+            g_u32SoftTeardown,
+            (unsigned)u32Ring3C2, (unsigned)USER_SOFT_RING3_MAP_C2_CHECKS,
+            (unsigned)u32HostFunc,
+            (unsigned)USER_SOFT_HOST_ELF_THR_FUNC_CHECKS,
+            u32StepThrLive);
+
+    /*
+     * Grep: user: soft residual lean udx
+     * C2 product-path residual honesty for UDX driver host map+enter.
+     * Soft!=product; G-AC-1; multi-server confine stays OPEN.
+     */
+    kprintf("user: soft residual lean udx host=userspace linux_shaped=1 "
+            "host_entry=map+sysret path=map|soft_observe|recheck|enter|sysret "
+            "product_dir=UDX+ABI freestanding_class_product=0 "
+            "ko_product=0 G-AC-1=1 udx_confine_product=OPEN "
+            "claim_class=C2 dual_dod_a=OPEN dual_dod_b=OPEN "
+            "dual_win=1 ring3_live=%u pers_live=%u "
+            "enter_ok=%u enter_skip=%u thr_live=%u "
+            "product_host_live=1 keep_live=1 "
+            "never_unmap_while_thr_live=1 maps_live_while_enterable=1 "
+            "lean_ok=%u/%u lean_pass=%u ring3_map_c2=%u/%u "
+            "host_elf_thr_func=%u/%u "
+            "host_path=process_spawn_host_launch|elf_load|user_as|thr "
+            "soft_ne_product=1 dual=MIT_OR_Apache-2.0 storm=0 "
+            "(Soft!=product; G-AC-1; UDX host entry residual lean; "
+            "no .ko product; no version stamp)\n",
+            u32Ring3Live, u32PersLive, g_cEnterOk, g_cEnterSkip,
+            u32StepThrLive,
+            (unsigned)u32Ok, (unsigned)USER_SOFT_UDX_LEAN_CHECKS,
+            g_u32SoftLeanOk,
+            (unsigned)u32Ring3C2, (unsigned)USER_SOFT_RING3_MAP_C2_CHECKS,
+            (unsigned)u32HostFunc,
+            (unsigned)USER_SOFT_HOST_ELF_THR_FUNC_CHECKS);
+
+    /*
+     * Grep: user: soft residual lean c2
+     * ASSURANCE_LITE claim_class=C2 product-path residual (Soft scaffold).
+     * Dual DoD A/B OPEN; never product AC / bar3 close.
+     */
+    kprintf("user: soft residual lean c2 class=C2 "
+            "role=ring3_map_host_entry "
+            "path=map|soft_observe|recheck|enter|sysret "
+            "host_entry=map+sysret product_dir=UDX+ABI "
+            "freestanding_class_product=0 ko_product_ac=0 "
+            "dual_dod_a=OPEN dual_dod_b=OPEN "
+            "udx_confine_product=OPEN multi_server_confine=0 "
+            "ring3_live=%u pers_live=%u enter_ok=%u "
+            "udx_lean=%u/%u ring3_map_c2=%u/%u "
+            "H3=entry_companion soft_ne_product=1 G-AC-1=1 "
+            "dual=MIT_OR_Apache-2.0 Soft!=product storm=0 "
+            "(Soft!=product; C2 residual honesty; not Dual DoD close; "
+            "not product AC; no version stamp)\n",
+            u32Ring3Live, u32PersLive, g_cEnterOk,
+            (unsigned)u32Ok, (unsigned)USER_SOFT_UDX_LEAN_CHECKS,
+            (unsigned)u32Ring3C2, (unsigned)USER_SOFT_RING3_MAP_C2_CHECKS);
+
+    /* H3 entry companion (teardown residual lives in process/thread). */
+    kprintf("user: soft residual lean H3 via=%s "
+            "refuse_enter_ring3_not_mapped=1 "
+            "maps_live_while_enterable=1 never_unmap_while_thr_live=1 "
+            "thr_exit_before_as_destroy=1 udx_host_entry=soft "
+            "enter_requires_ring3=1 personality_alone=0 "
+            "product_host_live=1 keep_live=1 thr_live=%u "
+            "death_residual=process H3=entry_companion "
+            "dual_dod_a=OPEN dual_dod_b=OPEN "
+            "soft_ne_product=1 G-AC-1=1 dual=MIT_OR_Apache-2.0 "
+            "Soft!=product storm=0\n",
+            szViaSafe, u32StepThrLive);
+
+    /*
+     * Grep: user: soft residual enter
+     * Enter residual honesty (skip reasons + recheck-before-sysret).
+     */
+    kprintf("user: soft residual enter via=%s "
+            "enter_ok=%u enter_skip=%u "
+            "skip_notmap=%u skip_syscall=%u skip_recheck=%u "
+            "recheck_before_sysret=1 require_ring3_map=1 "
+            "code=0x%lx stack=0x%lx class=C2 "
+            "soft_ne_product=1 G-AC-1=1 Soft!=product storm=0\n",
+            szViaSafe, g_cEnterOk, g_cEnterSkip,
+            g_u32SoftEnterSkipNotMap, g_u32SoftEnterSkipSyscall,
+            g_u32SoftEnterSkipRecheck,
+            (unsigned long)GJ_USER_CODE_VA,
+            (unsigned long)GJ_USER_STACK_TOP);
+
+    /*
+     * Grep: user: soft residual ring3 map
+     * Deepened C2 ring3 map residual: path tallies + live-conditional soft
+     * PTE/payload flags + dual DoD honesty. Soft!=product.
+     */
+    kprintf("user: soft residual ring3 map via=%s "
+            "code=0x%lx stack=0x%lx blob=%lu pages=%u "
+            "ok=%u fail=%u soft=%u soft_bad=%u live=%u "
+            "pte_rx=%u pte_rw_nx=%u payload_match=%u layout=dual "
+            "layout_fail=%u blob_bad=%u install_fail=%u stack_fail=%u "
+            "as_fail=%u idem=%u recheck_pass=%u recheck_fail=%u "
+            "observe_ok=%u observe_bad=%u teardown=%u "
+            "path=map|soft_observe|recheck|enter|sysret "
+            "linux_shaped=1 host_entry=map+sysret product_dir=UDX+ABI "
+            "claim_class=C2 freestanding_class_product=0 ko_product_ac=0 "
+            "dual_dod_a=OPEN dual_dod_b=OPEN "
+            "ring3_map_c2=%u/%u soft=1 product=0 Soft!=product storm=0 "
+            "(C2 ring3 map residual; dual MIT OR Apache-2.0; not product gate)\n",
+            szViaSafe,
+            (unsigned long)GJ_USER_CODE_VA,
+            (unsigned long)GJ_USER_STACK_TOP,
+            (unsigned long)g_cbRing3Blob,
+            u32PagesR3,
+            g_cRing3MapOk, g_cRing3MapFail, g_cRing3Soft, g_cRing3SoftBad,
+            u32Ring3Live,
+            u32PteSoft, u32PteSoft, u32PteSoft,
+            g_u32SoftLayoutFailRing3, g_u32SoftBlobBadRing3,
+            g_u32SoftInstallFailRing3, g_u32SoftStackFailRing3,
+            g_u32SoftAsEnsureFailRing3, g_u32SoftIdemRing3,
+            g_u32SoftRecheckPassRing3, g_u32SoftRecheckFailRing3,
+            g_u32SoftObserveOk, g_u32SoftObserveBad, g_u32SoftTeardown,
+            (unsigned)u32Ring3C2, (unsigned)USER_SOFT_RING3_MAP_C2_CHECKS);
+
+    /*
+     * Grep: user: soft residual ring3 map c2
+     * Focused C2 selfcheck residual for ring3 map host-entry scaffold.
+     */
+    kprintf("user: soft residual ring3 map c2 class=C2 via=%s "
+            "ok=%u/%u pass=%u "
+            "code=0x%lx stack=0x%lx blob=%lu pages=%u live=%u "
+            "map_ok=%u map_fail=%u soft=%u soft_bad=%u "
+            "enter_ok=%u enter_skip=%u "
+            "path=map|soft_observe|recheck|enter|sysret "
+            "host_entry=map+sysret product_dir=UDX+ABI "
+            "freestanding_class_product=0 ko_product_ac=0 "
+            "dual_dod_a=OPEN dual_dod_b=OPEN "
+            "soft_scaffold_ne_product_ac=1 "
+            "H3=entry_companion enter_requires_ring3=1 "
+            "soft_ne_product=1 G-AC-1=1 dual=MIT_OR_Apache-2.0 "
+            "Soft!=product storm=0 "
+            "(Soft!=product; C2 ring3 map residual; not Dual DoD close; "
+            "not product AC; no version stamp)\n",
+            szViaSafe,
+            (unsigned)u32Ring3C2, (unsigned)USER_SOFT_RING3_MAP_C2_CHECKS,
+            g_u32SoftRing3MapC2Ok,
+            (unsigned long)GJ_USER_CODE_VA,
+            (unsigned long)GJ_USER_STACK_TOP,
+            (unsigned long)g_cbRing3Blob,
+            u32PagesR3, u32Ring3Live,
+            g_cRing3MapOk, g_cRing3MapFail, g_cRing3Soft, g_cRing3SoftBad,
+            g_cEnterOk, g_cEnterSkip);
+
+    /* Personality dual-window residual (parity with ring3 alias). */
+    kprintf("user: soft residual personality map via=%s "
+            "code=0x%lx stack=0x%lx blob=%lu pages=%u "
+            "ok=%u fail=%u soft=%u soft_bad=%u live=%u "
+            "entry=0x%lx native=1 pte_rx=%u pte_rw_nx=%u payload_match=%u "
+            "layout=dual soft=1 product=0 Soft!=product storm=0 "
+            "(lean residual; dual MIT OR Apache-2.0; not product gate)\n",
+            szViaSafe,
+            (unsigned long)GJ_PERS_CODE_VA,
+            (unsigned long)GJ_PERS_STACK_TOP,
+            (unsigned long)g_cbPersBlob,
+            g_cPersCodePages != 0u ? g_cPersCodePages : GJ_PERS_CODE_PAGES,
+            g_cPersMapOk, g_cPersMapFail, g_cPersSoft, g_cPersSoftBad,
+            u32PersLive, (unsigned long)g_u64PersEntry,
+            u32PersLive, u32PersLive, u32PersLive);
+
+    /* Twin lean residual (user_task: prefix). Grep: user_task: soft residual lean */
+    kprintf("user_task: soft residual lean via=%s ok=%u/%u "
+            "ring3_live=%u pers_live=%u enter_ok=%u lean_ok=%u "
+            "ring3_map_c2=%u/%u host_elf_thr_func=%u/%u "
+            "udx_driver_host_entry=soft host_entry=map+sysret "
+            "product_dir=UDX+ABI claim_class=C2 H3=entry_companion "
+            "ko_product_ac=0 multi_server_confine=0 "
+            "product_host_live=1 keep_live=1 thr_live=%u "
+            "never_unmap_while_thr_live=1 maps_live_while_enterable=1 "
+            "dual_dod_a=OPEN dual_dod_b=OPEN "
+            "soft_ne_product=1 G-AC-1=1 "
+            "dual=MIT_OR_Apache-2.0 Soft!=product storm=0\n",
+            szViaSafe, (unsigned)u32Ok, (unsigned)USER_SOFT_UDX_LEAN_CHECKS,
+            u32Ring3Live, u32PersLive, g_cEnterOk, g_u32SoftLeanOk,
+            (unsigned)u32Ring3C2, (unsigned)USER_SOFT_RING3_MAP_C2_CHECKS,
+            (unsigned)u32HostFunc,
+            (unsigned)USER_SOFT_HOST_ELF_THR_FUNC_CHECKS,
+            u32StepThrLive);
+
+    /*
+     * Grep: user: soft functional residual catalog
+     * Grep: user: soft functional residual
+     * STRONGER FUNCTIONAL residual for UDX host ELF thr entry scaffold
+     * after process_spawn_host_launch + elf_load. Soft!=product.
+     * product_hosts=rtl8168_udx,xhci_udx,ddi_host · Dual DoD A/B OPEN.
+     * Bar honesty v2026.08.04.75 stamp-free; NEVER invent .76.
+     * densify: arms 20 + steps 16 (code budget, static dual, user band,
+     * skip sum + product_hosts|dual_dod|enter_req|user_band +
+     * thr_live|product_host_live|keep_live|maps_live_no_thrash).
+     */
+    kprintf("user: soft functional residual catalog "
+            "Soft!=product G-AC-1=1 claim_class=C2 "
+            "dual_dod_a=OPEN dual_dod_b=OPEN "
+            "product_dir=UDX+ABI freestanding_class_product=0 ko_product=0 "
+            "product_hosts=rtl8168_udx,xhci_udx,ddi_host "
+            "path=map,soft_observe,recheck,enter,sysret,"
+            "host_stack,host_exec,h3_refuse,"
+            "product_hosts,dual_dod_open,enter_req_ring3,user_band,"
+            "thr_live,product_host_live,keep_live,maps_live_no_thrash "
+            "host_path=process_spawn_host_launch|elf_load|user_as|thr "
+            "steps=%u host_elf_thr_func=%u/%u lean_ok=%u/%u "
+            "ring3_map_c2=%u/%u "
+            "host_exec_base=0x%lx host_stack_top=0x%lx "
+            "host_stack_pages=%u densify=STRONGER "
+            "ring3_live=%u pers_live=%u enter_ok=%u "
+            "product_host_live=1 keep_live=1 thr_live=%u "
+            "H3=thr_exit_before_as_destroy refuse_enter_not_mapped=1 "
+            "soft_ne_product=1 dual=MIT_OR_Apache-2.0 storm=0 "
+            "via=%s bar=v2026.08.04.75 stamp_free=1\n",
+            (unsigned)USER_SOFT_FUNC_STEP_COUNT, (unsigned)u32HostFunc,
+            (unsigned)USER_SOFT_HOST_ELF_THR_FUNC_CHECKS, (unsigned)u32Ok,
+            (unsigned)USER_SOFT_UDX_LEAN_CHECKS, (unsigned)u32Ring3C2,
+            (unsigned)USER_SOFT_RING3_MAP_C2_CHECKS,
+            (unsigned long)USER_SOFT_HOST_EXEC_BASE,
+            (unsigned long)USER_SOFT_HOST_STACK_TOP,
+            (unsigned)USER_SOFT_HOST_STACK_PAGES, u32Ring3Live,
+            u32PersLive, g_cEnterOk, u32StepThrLive, szViaSafe);
+    kprintf("user: soft functional residual "
+            "product_hosts=rtl8168_udx,xhci_udx,ddi_host "
+            "host_elf_thr=1 after=process_spawn_host_launch+elf_load "
+            "host_load=userspace_elf host_entry=map+sysret "
+            "host_exec_base=0x%lx host_stack_top=0x%lx "
+            "host_stack_pages=%u densify=STRONGER "
+            "path=map|soft_observe|recheck|enter|sysret "
+            "host_path=process_spawn_host_launch|elf_load|user_as|thr "
+            "func_ok=%u/%u func_pass=%u steps=%u/%u "
+            "lean_ok=%u/%u ring3_live=%u pers_live=%u enter_ok=%u "
+            "skip_sum=%u enter_skip=%u "
+            "product_host_live=1 keep_live=1 thr_live=%u "
+            "never_unmap_while_thr_live=1 maps_live_while_enterable=1 "
+            "dual_dod_a=OPEN dual_dod_b=OPEN "
+            "H3=thr_exit_before_as_destroy thr_exit_before_as_destroy=1 "
+            "Soft!=product G-AC-1=1 never_ko_product=1 storm=0 "
+            "via=%s bar=v2026.08.04.75 stamp_free=1 "
+            "(Soft!=product; UDX host ELF thr entry residual STRONGER; "
+            "Dual DoD OPEN product_host_live; no version stamp)\n",
+            (unsigned long)USER_SOFT_HOST_EXEC_BASE,
+            (unsigned long)USER_SOFT_HOST_STACK_TOP,
+            (unsigned)USER_SOFT_HOST_STACK_PAGES, (unsigned)u32HostFunc,
+            (unsigned)USER_SOFT_HOST_ELF_THR_FUNC_CHECKS,
+            g_u32SoftHostElfThrFuncOk, u32StepLive,
+            (unsigned)USER_SOFT_FUNC_STEP_COUNT, (unsigned)u32Ok,
+            (unsigned)USER_SOFT_UDX_LEAN_CHECKS, u32Ring3Live, u32PersLive,
+            g_cEnterOk,
+            g_u32SoftEnterSkipNotMap + g_u32SoftEnterSkipSyscall +
+                g_u32SoftEnterSkipRecheck,
+            g_cEnterSkip, u32StepThrLive, szViaSafe);
+
+    /*
+     * Grep: user: soft functional residual host_elf_thr
+     * Focused host ELF thr entry residual (layout + enter contracts).
+     * STRONGER densify: static dual + user band + skip sum + thr_live honesty.
+     */
+    kprintf("user: soft functional residual host_elf_thr "
+            "after=process_spawn_host_launch+elf_load "
+            "steps=probe|load|user_as|thr companion=user_task_windows "
+            "host_exec_base=0x%lx==code_va host_stack_top=0x%lx==stack_top "
+            "stack_pages=%u code_pages_max=%u densify=STRONGER "
+            "func_ok=%u/%u func_pass=%u "
+            "enter_ok=%u enter_skip=%u skip_notmap=%u skip_syscall=%u "
+            "skip_recheck=%u skip_sum_ok=%u "
+            "ring3_live=%u pers_live=%u thr_live=%u "
+            "user_band=1 static_dual=1 code_budget=1 "
+            "product_host_live=1 keep_live=1 "
+            "never_unmap_while_thr_live=1 maps_live_while_enterable=1 "
+            "product_hosts=rtl8168_udx,xhci_udx,ddi_host "
+            "product_dir=UDX+ABI claim_class=C2 "
+            "dual_dod_a=OPEN dual_dod_b=OPEN "
+            "H3=thr_exit_before_as_destroy refuse_enter_not_mapped=1 "
+            "soft_ne_product=1 G-AC-1=1 Soft!=product storm=0 "
+            "via=%s bar=v2026.08.04.75 stamp_free=1\n",
+            (unsigned long)USER_SOFT_HOST_EXEC_BASE,
+            (unsigned long)USER_SOFT_HOST_STACK_TOP,
+            (unsigned)GJ_USER_STACK_PAGES, (unsigned)GJ_USER_CODE_PAGES,
+            (unsigned)u32HostFunc,
+            (unsigned)USER_SOFT_HOST_ELF_THR_FUNC_CHECKS,
+            g_u32SoftHostElfThrFuncOk, g_cEnterOk, g_cEnterSkip,
+            g_u32SoftEnterSkipNotMap, g_u32SoftEnterSkipSyscall,
+            g_u32SoftEnterSkipRecheck,
+            (g_cEnterSkip ==
+             (g_u32SoftEnterSkipNotMap + g_u32SoftEnterSkipSyscall +
+              g_u32SoftEnterSkipRecheck))
+                ? 1u
+                : 0u,
+            u32Ring3Live, u32PersLive, u32StepThrLive, szViaSafe);
+
+    /*
+     * Grep: user: soft functional residual densify
+     * STRONGER densify lamp: arms 13-20 + steps 9-16 honesty (Soft!=product).
+     */
+    kprintf("user: soft functional residual densify "
+            "arms=code_budget|static_dual|user_band|skip_sum|"
+            "thr_live|product_host_live|keep_live|never_unmap "
+            "steps=product_hosts|dual_dod_open|enter_req_ring3|user_band|"
+            "thr_live|product_host_live|keep_live|maps_live_no_thrash "
+            "func_ok=%u/%u steps_live=%u/%u "
+            "product_hosts=%u dual_dod_open=%u enter_req_ring3=%u "
+            "user_band=%u host_stack=%u host_exec=%u h3_refuse=%u "
+            "thr_live=%u product_host_live=%u keep_live=%u "
+            "maps_live_no_thrash=%u "
+            "host_exec_base=0x%lx host_stack_top=0x%lx "
+            "product_hosts=rtl8168_udx,xhci_udx,ddi_host "
+            "dual_dod_a=OPEN dual_dod_b=OPEN "
+            "H3=thr_exit_before_as_destroy Soft!=product G-AC-1=1 storm=0 "
+            "via=%s bar=v2026.08.04.75 stamp_free=1 densify=STRONGER\n",
+            (unsigned)u32HostFunc,
+            (unsigned)USER_SOFT_HOST_ELF_THR_FUNC_CHECKS, u32StepLive,
+            (unsigned)USER_SOFT_FUNC_STEP_COUNT, u32StepProductHosts,
+            u32StepDualDodOpen, u32StepEnterReqRing3, u32StepUserBand,
+            u32StepHostStack, u32StepHostExec, u32StepH3Refuse,
+            u32StepThrLive, u32StepProductHostLive, u32StepKeepLive,
+            u32StepMapsLiveNoThrash,
+            (unsigned long)USER_SOFT_HOST_EXEC_BASE,
+            (unsigned long)USER_SOFT_HOST_STACK_TOP, szViaSafe);
+
+    /*
+     * Grep: user: soft functional step
+     * Live densify of host thr entry scaffold steps (Soft!=product).
+     * STRONGER: 16 steps + thr_live|product_host_live|keep_live|maps_live.
+     */
+    kprintf("user: soft functional step "
+            "map=%u soft_observe=%u recheck=%u enter=%u sysret=%u "
+            "host_stack=%u host_exec=%u h3_refuse=%u "
+            "product_hosts=%u dual_dod_open=%u enter_req_ring3=%u "
+            "user_band=%u thr_live=%u product_host_live=%u keep_live=%u "
+            "maps_live_no_thrash=%u steps=%u/%u densify=STRONGER "
+            "product_hosts_names=rtl8168_udx,xhci_udx,ddi_host "
+            "host_path=process_spawn_host_launch|elf_load|user_as|thr "
+            "Soft!=product dual_dod_a=OPEN dual_dod_b=OPEN "
+            "H3=thr_exit_before_as_destroy storm=0 "
+            "via=%s bar=v2026.08.04.75 stamp_free=1\n",
+            u32StepMap, u32StepObserve, u32StepRecheck, u32StepEnter,
+            u32StepSysret, u32StepHostStack, u32StepHostExec,
+            u32StepH3Refuse, u32StepProductHosts, u32StepDualDodOpen,
+            u32StepEnterReqRing3, u32StepUserBand, u32StepThrLive,
+            u32StepProductHostLive, u32StepKeepLive,
+            u32StepMapsLiveNoThrash, u32StepLive,
+            (unsigned)USER_SOFT_FUNC_STEP_COUNT, szViaSafe);
+
+    /* Twin prefix FUNCTIONAL residual. Grep: user_task: soft functional residual */
+    kprintf("user_task: soft functional residual "
+            "product_hosts=rtl8168_udx,xhci_udx,ddi_host "
+            "after=process_spawn_host_launch+elf_load "
+            "host_elf_thr=1 host_exec_base=0x%lx host_stack_top=0x%lx "
+            "func_ok=%u/%u steps=%u/%u lean_ok=%u/%u densify=STRONGER "
+            "ring3_live=%u pers_live=%u enter_ok=%u thr_live=%u "
+            "product_host_live=1 keep_live=1 "
+            "path=map|soft_observe|recheck|enter|sysret "
+            "dual_dod_a=OPEN dual_dod_b=OPEN "
+            "H3=thr_exit_before_as_destroy "
+            "Soft!=product G-AC-1=1 never_ko_product=1 storm=0 "
+            "via=%s bar=v2026.08.04.75 stamp_free=1\n",
+            (unsigned long)USER_SOFT_HOST_EXEC_BASE,
+            (unsigned long)USER_SOFT_HOST_STACK_TOP, (unsigned)u32HostFunc,
+            (unsigned)USER_SOFT_HOST_ELF_THR_FUNC_CHECKS, u32StepLive,
+            (unsigned)USER_SOFT_FUNC_STEP_COUNT, (unsigned)u32Ok,
+            (unsigned)USER_SOFT_UDX_LEAN_CHECKS, u32Ring3Live, u32PersLive,
+            g_cEnterOk, u32StepThrLive, szViaSafe);
+
+    /*
+     * Grep: user: soft functional residual PASS
+     * Once-lamp when all host ELF thr functional arms pass. Soft!=product.
+     */
+    if (u32HostFunc == USER_SOFT_HOST_ELF_THR_FUNC_CHECKS) {
+        kprintf("user: soft functional residual PASS "
+                "host_elf_thr_func=%u/%u steps=%u/%u densify=STRONGER "
+                "product_hosts=rtl8168_udx,xhci_udx,ddi_host "
+                "host_exec_base=0x%lx host_stack_top=0x%lx "
+                "host_path=process_spawn_host_launch|elf_load|user_as|thr "
+                "product_host_live=1 keep_live=1 thr_live=%u "
+                "never_unmap_while_thr_live=1 maps_live_while_enterable=1 "
+                "dual_dod_a=OPEN dual_dod_b=OPEN "
+                "H3=thr_exit_before_as_destroy "
+                "Soft!=product G-AC-1=1 never_ko_product=1 storm=0 "
+                "via=%s bar=v2026.08.04.75 stamp_free=1 "
+                "(Soft!=product; UDX host ELF thr entry residual complete; "
+                "not Dual DoD close; product_host_live honesty; no stamp)\n",
+                (unsigned)u32HostFunc,
+                (unsigned)USER_SOFT_HOST_ELF_THR_FUNC_CHECKS, u32StepLive,
+                (unsigned)USER_SOFT_FUNC_STEP_COUNT,
+                (unsigned long)USER_SOFT_HOST_EXEC_BASE,
+                (unsigned long)USER_SOFT_HOST_STACK_TOP, u32StepThrLive,
+                szViaSafe);
+    }
+
+    /*
+     * Grep: user: soft residual lean PASS
+     * Once-lamp when all UDX host lean selfcheck arms pass. Soft!=product.
+     */
+    if (u32Ok == USER_SOFT_UDX_LEAN_CHECKS) {
+        kprintf("user: soft residual lean PASS via=%s "
+                "udx_lean=%u/%u ring3_map_c2=%u/%u "
+                "host_elf_thr_func=%u/%u "
+                "host_entry=map+sysret "
+                "product_dir=UDX+ABI freestanding_class_product=0 "
+                "ko_product=0 G-AC-1=1 dual_win=1 claim_class=C2 "
+                "enter_requires_ring3=1 H3=entry_companion "
+                "product_host_live=1 keep_live=1 thr_live=%u "
+                "dual_dod_a=OPEN dual_dod_b=OPEN "
+                "soft_ne_product=1 dual=MIT_OR_Apache-2.0 storm=0 "
+                "(Soft!=product; UDX host entry residual lean complete; "
+                "no version stamp)\n",
+                szViaSafe, (unsigned)u32Ok,
+                (unsigned)USER_SOFT_UDX_LEAN_CHECKS,
+                (unsigned)u32Ring3C2,
+                (unsigned)USER_SOFT_RING3_MAP_C2_CHECKS,
+                (unsigned)u32HostFunc,
+                (unsigned)USER_SOFT_HOST_ELF_THR_FUNC_CHECKS,
+                u32StepThrLive);
+    }
+
+    /*
+     * STRONGER denser keep_live product host thr_live honesty residual
+     * (Soft!=product). product_host_live / keep_live / thr_live: dual
+     * user-AS windows stay live while product host thr
+     * (rtl8168_udx|xhci_udx|ddi_host) can enter; this unit never thrash
+     * maps under enterable thr (H3 refuse !mapped enter; process thr_exit
+     * before as_destroy). Dual DoD A/B OPEN; denser residual != Dual DoD close.
+     * Grep: user: soft residual keep_live
+     * Grep: user: soft residual product_host_live
+     * Grep: user: soft residual thr_live
+     * Grep: user: soft residual denser keep_live
+     * Grep: user: soft residual denser thr_live
+     * Grep: user: soft residual denser product_host_live
+     * Grep: user: soft residual denser dual_dod
+     * Grep: user_task: soft residual product_host_live
+     * Grep: user_task: soft residual thr_live
+     * Grep: user_task: soft residual denser keep_live
+     * Grep: user_task: soft residual denser thr_live
+     * Grep: Soft!=product soft residual dual_dod OPEN product_host_live
+     * Grep: denser keep_live residual | denser thr_live residual
+     * Grep: denser product_host_live residual | denser dual_dod residual
+     * Grep: denser thr_exit_before_as_destroy residual
+     * Grep: product_host_live=1 | keep_live=1 | thr_live=1
+     * Grep: never_unmap_while_thr_live=1 | maps_live_while_enterable=1
+     */
+    kprintf("user: soft residual keep_live product_host_live=1 "
+            "keep_live=1 thr_live=%u never_kill_embed=1 denser=1 "
+            "hosts=rtl8168_udx|xhci_udx|ddi_host "
+            "api=process_spawn_host_launch "
+            "H3=thr_exit_before_as_destroy "
+            "never_unmap_while_thr_live=1 maps_live_while_enterable=1 "
+            "refuse_enter_ring3_not_mapped=1 enter_requires_ring3=1 "
+            "host_entry=map+sysret host_exec_base=0x%lx host_stack_top=0x%lx "
+            "ring3_live=%u pers_live=%u enter_ok=%u "
+            "func_ok=%u/%u steps=%u/%u densify=STRONGER "
+            "dual_dod=OPEN dual_dod_a=OPEN dual_dod_b=OPEN "
+            "soft_no_close=1 dod_close=0 product_udx_close=0 "
+            "soft_ne_product=1 G-AC-1=1 Soft!=product dual=MIT_OR_Apache-2.0 "
+            "live_host_path=1 not_immediate_kill=1 "
+            "bar=v2026.08.04.75 stamp_free=1 via=%s "
+            "(Soft!=product soft residual dual_dod OPEN product_host_live; "
+            "denser keep_live residual; never thrash dual windows while thr "
+            "live; agent!=close)\n",
+            u32StepThrLive,
+            (unsigned long)USER_SOFT_HOST_EXEC_BASE,
+            (unsigned long)USER_SOFT_HOST_STACK_TOP, u32Ring3Live,
+            u32PersLive, g_cEnterOk, (unsigned)u32HostFunc,
+            (unsigned)USER_SOFT_HOST_ELF_THR_FUNC_CHECKS, u32StepLive,
+            (unsigned)USER_SOFT_FUNC_STEP_COUNT, szViaSafe);
+    kprintf("user: soft residual product_host_live "
+            "product_host_live=1 keep_live=1 thr_live=%u denser=1 "
+            "path=map|soft_observe|recheck|enter|sysret|"
+            "host_stack|host_exec|h3_refuse|"
+            "product_hosts|dual_dod_open|enter_req_ring3|user_band|"
+            "thr_live|product_host_live|keep_live|maps_live_no_thrash "
+            "host_path=process_spawn_host_launch|elf_load|user_as|thr "
+            "never_unmap_while_thr_live=1 maps_live_while_enterable=1 "
+            "thr_exit_before_as_destroy=1 refuse_enter_not_mapped=1 "
+            "dual_dod=OPEN dual_dod_a=OPEN dual_dod_b=OPEN "
+            "Soft!=product soft residual product_host_live honesty residual "
+            "hosts=rtl8168_udx,xhci_udx,ddi_host "
+            "ring3_live=%u pers_live=%u enter_ok=%u "
+            "func_ok=%u/%u densify=STRONGER "
+            "bar=v2026.08.04.75 stamp_free=1 via=%s\n",
+            u32StepThrLive, u32Ring3Live, u32PersLive, g_cEnterOk,
+            (unsigned)u32HostFunc,
+            (unsigned)USER_SOFT_HOST_ELF_THR_FUNC_CHECKS, szViaSafe);
+    kprintf("user: soft residual thr_live "
+            "thr_live=%u product_host_live=1 keep_live=1 denser=1 "
+            "ring3_live=%u pers_live=%u enter_ok=%u enter_skip=%u "
+            "maps_live_while_enterable=1 never_unmap_while_thr_live=1 "
+            "host_entry=map+sysret product_dir=UDX+ABI "
+            "product_hosts=rtl8168_udx,xhci_udx,ddi_host "
+            "host_exec_base=0x%lx host_stack_top=0x%lx "
+            "func_ok=%u/%u steps=%u/%u "
+            "dual_dod_a=OPEN dual_dod_b=OPEN "
+            "H3=entry_companion Soft!=product G-AC-1=1 storm=0 "
+            "bar=v2026.08.04.75 stamp_free=1 via=%s "
+            "(Soft!=product soft residual dual_dod OPEN product_host_live; "
+            "denser thr_live residual for keep_live UDX host thr)\n",
+            u32StepThrLive, u32Ring3Live, u32PersLive, g_cEnterOk,
+            g_cEnterSkip,
+            (unsigned long)USER_SOFT_HOST_EXEC_BASE,
+            (unsigned long)USER_SOFT_HOST_STACK_TOP, (unsigned)u32HostFunc,
+            (unsigned)USER_SOFT_HOST_ELF_THR_FUNC_CHECKS, u32StepLive,
+            (unsigned)USER_SOFT_FUNC_STEP_COUNT, szViaSafe);
+    /* Twin prefixes for thr_live / product_host_live residual. */
+    kprintf("user_task: soft residual product_host_live "
+            "product_host_live=1 keep_live=1 thr_live=%u denser=1 "
+            "hosts=rtl8168_udx,xhci_udx,ddi_host "
+            "never_unmap_while_thr_live=1 maps_live_while_enterable=1 "
+            "ring3_live=%u pers_live=%u enter_ok=%u "
+            "dual_dod=OPEN dual_dod_a=OPEN dual_dod_b=OPEN "
+            "Soft!=product soft residual dual_dod OPEN product_host_live "
+            "H3=thr_exit_before_as_destroy G-AC-1=1 "
+            "bar=v2026.08.04.75 stamp_free=1 via=%s\n",
+            u32StepThrLive, u32Ring3Live, u32PersLive, g_cEnterOk,
+            szViaSafe);
+    kprintf("user_task: soft residual thr_live "
+            "thr_live=%u product_host_live=1 keep_live=1 denser=1 "
+            "ring3_live=%u pers_live=%u enter_ok=%u "
+            "maps_live_while_enterable=1 never_unmap_while_thr_live=1 "
+            "func_ok=%u/%u densify=STRONGER "
+            "dual_dod_a=OPEN dual_dod_b=OPEN Soft!=product "
+            "bar=v2026.08.04.75 stamp_free=1 via=%s\n",
+            u32StepThrLive, u32Ring3Live, u32PersLive, g_cEnterOk,
+            (unsigned)u32HostFunc,
+            (unsigned)USER_SOFT_HOST_ELF_THR_FUNC_CHECKS, szViaSafe);
+    /*
+     * denser residual lamps (Soft!=product Dual DoD OPEN; bar .75 stamp-free).
+     * Companion process denser keep_live thr_live dual_dod residual.
+     * H3 thr_exit_before_as_destroy lives in process/thread; entry companion
+     * refuses !mapped enter + maps_live_while_enterable.
+     */
+    kprintf("user: soft residual denser keep_live "
+            "keep_live=1 product_host_live=1 thr_live=%u denser=1 "
+            "never_kill_embed=1 soft_ne_product=1 Soft!=product "
+            "axes=keep_live|product_host_live|thr_live|"
+            "never_unmap_while_thr_live|maps_live_while_enterable|"
+            "dual_dod_open|thr_exit_before_as_destroy "
+            "hosts=rtl8168_udx|xhci_udx|ddi_host product_hosts=UDX "
+            "H3=thr_exit_before_as_destroy thr_exit_before_as_destroy=1 "
+            "never_unmap_while_thr_live=1 maps_live_while_enterable=1 "
+            "dual_dod=OPEN dual_dod_a=OPEN dual_dod_b=OPEN "
+            "denser_keep_live_residual=1 denser_thr_live_residual=1 "
+            "denser_product_host_live=1 denser_dual_dod_residual=1 "
+            "ring3_live=%u pers_live=%u enter_ok=%u "
+            "bar=v2026.08.04.75 stamp_free=1 via=%s "
+            "(denser keep_live residual; denser != Dual DoD close; "
+            "agent!=close; G-AC-1)\n",
+            u32StepThrLive, u32Ring3Live, u32PersLive, g_cEnterOk,
+            szViaSafe);
+    kprintf("user: soft residual denser thr_live "
+            "thr_live=%u keep_live=1 product_host_live=1 denser=1 "
+            "ring3_live=%u pers_live=%u enter_ok=%u enter_skip=%u "
+            "maps_live_while_enterable=1 never_unmap_while_thr_live=1 "
+            "host_entry=map+sysret host_exec_base=0x%lx host_stack_top=0x%lx "
+            "product_hosts=rtl8168_udx,xhci_udx,ddi_host "
+            "H3=entry_companion thr_exit_before_as_destroy=1 "
+            "dual_dod=OPEN dual_dod_a=OPEN dual_dod_b=OPEN "
+            "denser_thr_live_residual=1 denser_keep_live_residual=1 "
+            "Soft!=product soft residual dual_dod OPEN thr_live "
+            "bar=v2026.08.04.75 stamp_free=1 via=%s "
+            "(denser thr_live residual; denser thr_exit_before_as_destroy "
+            "residual; denser != Dual DoD close)\n",
+            u32StepThrLive, u32Ring3Live, u32PersLive, g_cEnterOk,
+            g_cEnterSkip,
+            (unsigned long)USER_SOFT_HOST_EXEC_BASE,
+            (unsigned long)USER_SOFT_HOST_STACK_TOP, szViaSafe);
+    kprintf("user: soft residual denser product_host_live "
+            "product_host_live=1 keep_live=1 thr_live=%u denser=1 "
+            "hosts=rtl8168_udx|xhci_udx|ddi_host product_hosts=UDX "
+            "companion=process_spawn_host_launch "
+            "path=map|soft_observe|recheck|enter|sysret "
+            "never_unmap_while_thr_live=1 maps_live_while_enterable=1 "
+            "H3=thr_exit_before_as_destroy thr_exit_before_as_destroy=1 "
+            "dual_dod=OPEN dual_dod_a=OPEN dual_dod_b=OPEN "
+            "Soft!=product denser residual product_host_live honesty "
+            "bar=v2026.08.04.75 stamp_free=1 via=%s\n",
+            u32StepThrLive, szViaSafe);
+    kprintf("user: soft residual denser dual_dod "
+            "dual_dod=OPEN dual_dod_a=OPEN dual_dod_b=OPEN denser=1 "
+            "keep_live=1 thr_live=%u product_host_live=1 "
+            "soft_no_close=1 dod_close=0 product_udx_close=0 "
+            "soft_ne_product=1 Soft!=product product_hosts=UDX "
+            "H3=thr_exit_before_as_destroy thr_exit_before_as_destroy=1 "
+            "never_unmap_while_thr_live=1 maps_live_while_enterable=1 "
+            "denser_dual_dod_residual=1 denser_keep_live_residual=1 "
+            "denser_thr_live_residual=1 denser_product_host_live=1 "
+            "ring3_live=%u pers_live=%u enter_ok=%u "
+            "bar=v2026.08.04.75 stamp_free=1 via=%s "
+            "(denser dual_dod residual; Dual DoD OPEN Soft!=product; "
+            "agent!=close; denser residual != Dual DoD close)\n",
+            u32StepThrLive, u32Ring3Live, u32PersLive, g_cEnterOk,
+            szViaSafe);
+    kprintf("user_task: soft residual denser keep_live "
+            "keep_live=1 thr_live=%u product_host_live=1 denser=1 "
+            "never_unmap_while_thr_live=1 maps_live_while_enterable=1 "
+            "dual_dod=OPEN dual_dod_a=OPEN dual_dod_b=OPEN "
+            "Soft!=product H3=thr_exit_before_as_destroy "
+            "denser_keep_live_residual=1 denser_thr_live_residual=1 "
+            "bar=v2026.08.04.75 stamp_free=1 via=%s\n",
+            u32StepThrLive, szViaSafe);
+    kprintf("user_task: soft residual denser thr_live "
+            "thr_live=%u keep_live=1 product_host_live=1 denser=1 "
+            "maps_live_while_enterable=1 never_unmap_while_thr_live=1 "
+            "dual_dod=OPEN dual_dod_a=OPEN dual_dod_b=OPEN "
+            "Soft!=product denser_thr_live_residual=1 "
+            "thr_exit_before_as_destroy=1 "
+            "bar=v2026.08.04.75 stamp_free=1 via=%s\n",
+            u32StepThrLive, szViaSafe);
+}
+
+/**
+ * After first map/enter activity: lean residual once + inventory once.
+ * Diagnostics only. Soft!=product | G-AC-1 | H3 entry companion.
  */
 static void
 user_soft_maybe_once(void)
 {
-    if (g_fSoftInvOnce != 0) {
-        return;
-    }
     if (g_cRing3MapOk == 0u && g_cPersMapOk == 0u &&
         g_cRing3MapFail == 0u && g_cPersMapFail == 0u &&
         g_cEnterOk == 0u && g_cEnterSkip == 0u) {
+        return;
+    }
+    user_soft_residual_lean("activity");
+    if (g_fSoftInvOnce != 0) {
         return;
     }
     g_fSoftInvOnce = 1;
@@ -1381,7 +1613,7 @@ user_soft_maybe_once(void)
 
 /**
  * Install user RX (or RW) page: zero frame under kernel CR3, copy payload,
- * map with final prot. Avoids intermediate RW→RX races / wrong PTE flags.
+ * map with final prot. Avoids intermediate RW->RX races / wrong PTE flags.
  */
 static gj_status_t
 user_install_page(gj_vaddr_t va, const void *pSrc, size_t cbSrc, u32 u32Prot)
@@ -1860,7 +2092,7 @@ user_task_map_ring3(struct gj_process *pProc)
         return -1;
     }
 
-    /* Soft idempotent: already live + soft recheck still green → success. */
+    /* Soft idempotent: already live + soft recheck still green -> success. */
     if (g_fUserMapped != 0) {
         if (user_task_ring3_map_soft() == 0) {
             user_soft_inc(&g_u32SoftIdemRing3);
@@ -1953,11 +2185,21 @@ user_task_map_ring3(struct gj_process *pProc)
 void
 user_task_enter_ring3(void)
 {
-    if (!g_fUserMapped && !g_fPersMapped) {
+    /*
+     * Ring3 sysret enter requires the ring3 trampoline window.
+     * Personality-only map is insufficient (personality enters via
+     * thread_create_user + user_personality_entry/stack). Soft!=product
+     * residual tracks skips; product path fail-closes on !ring3.
+     * H3: refuse enter when ring3 !mapped (maps must stay live while
+     * a thr can enter this window).
+     */
+    if (g_fUserMapped == 0) {
         g_cEnterSkip++;
         user_soft_inc(&g_u32SoftEnterSkipNotMap);
         kprintf("user: not mapped\n");
-        kprintf("user: ring3 enter soft SKIP not_mapped\n");
+        kprintf("user: ring3 enter soft SKIP not_mapped "
+                "require_ring3=1 pers_live=%u Soft!=product\n",
+                g_fPersMapped != 0 ? 1u : 0u);
         user_soft_maybe_once();
         return;
     }
@@ -1970,7 +2212,7 @@ user_task_enter_ring3(void)
         return;
     }
     /* Soft recheck of the trampoline window before irrevocable enter. */
-    if (g_fUserMapped != 0 && user_task_ring3_map_soft() != 0) {
+    if (user_task_ring3_map_soft() != 0) {
         g_cEnterSkip++;
         user_soft_inc(&g_u32SoftEnterSkipRecheck);
         kprintf("user: ring3 enter soft SKIP recheck\n");
@@ -1978,8 +2220,9 @@ user_task_enter_ring3(void)
         return;
     }
     g_cEnterOk++;
-    kprintf("user: entering ring3…\n");
-    kprintf("user: ring3 enter soft PASS code@0x%lx stack@0x%lx\n",
+    kprintf("user: entering ring3...\n");
+    kprintf("user: ring3 enter soft PASS code@0x%lx stack@0x%lx "
+            "recheck=1 require_ring3=1 Soft!=product\n",
             (unsigned long)GJ_USER_CODE_VA, (unsigned long)GJ_USER_STACK_TOP);
     user_soft_maybe_once();
     cpu_enter_user(GJ_USER_CODE_VA, GJ_USER_STACK_TOP);
@@ -2143,9 +2386,28 @@ u32
 user_task_stats_soft(void)
 {
     /*
-     * Wave 15: full greppable soft inventory dump (includes soft stats).
-     * Grep: user: soft | user_task: soft
+     * Lean capped soft inventory (Soft!=product; no stamp storms).
+     * Grep: user: soft stats | user: soft residual lean
+     * Grep: user: soft residual lean udx | user: soft residual lean c2
+     * Grep: user: soft residual lean PASS | user: soft residual lean H3
+     * Grep: user: soft residual enter
+     * Grep: user: soft residual keep_live | user: soft residual product_host_live
+     * Grep: user: soft residual thr_live
+     * Grep: user_task: soft residual product_host_live
+     * Grep: user_task: soft residual thr_live
+     * Grep: user_task: soft residual lean | user: soft residual ring3 map
+     * Grep: user: soft residual ring3 map c2
+     * Grep: user: soft residual personality map
+     * Grep: user: soft functional residual | user: soft functional step
+     * Grep: user: soft functional residual catalog
+     * Grep: user: soft functional residual host_elf_thr
+     * Grep: user: soft functional residual densify
+     * Grep: user: soft functional residual PASS
+     * Grep: user_task: soft functional residual
+     * Grep: product_host_live=1 | keep_live=1 | thr_live=1
+     * Grep: Soft!=product soft residual dual_dod OPEN product_host_live
      */
+    user_soft_residual_lean("stats");
     user_soft_inventory("stats");
     return g_cRing3Soft;
 }

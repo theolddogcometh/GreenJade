@@ -18,6 +18,14 @@
  * Non-goals
  * ---------
  * Full POSIX named semaphore persistence across reboots.
+ *
+ * Soft residual lean (this unit; Soft!=product; G-AC-1; Dual DoD A/B OPEN):
+ *   - unnamed futex sem bring-up; named sem_* soft ENOSYS residual
+ *   - Soft!=product: libcgj semaphore surface != UDX/DDI product close
+ *   - product = UDX/DDI + hot/cold Linux ABI; freestanding rtl/USB SKIP
+ *   - agent PASS != close Dual DoD; no stamp storms; bar v2026.08.04.75 parent-only
+ *   - dual MIT OR Apache-2.0; no GPL; no Linux .ko product AC (G-AC-1)
+ * Grep: libcgj semaphore.h: soft residual lean Soft!=product
  */
 #pragma once
 

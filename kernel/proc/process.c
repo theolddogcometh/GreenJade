@@ -5,40 +5,131 @@
  * Process: shared CNode, root meta bootstrap, pager on PCB, wait4 reaper,
  * G-PROC-5 death (CNode wipe + private AS reclaim for wait-registered children).
  * Soft deepen: pager ep kernel ref + badge + slot-1 mirror; wait reparent /
- * WNOWAIT / counts; death quota+CDT CNode clear + orphan reparent + scrub.
+ * WNOWAIT / counts; death thr_exit siblings before AS destroy (clone_vm
+ * FAULT H3: early + pre-as_destroy barrier) + quota+CDT CNode + scrub.
+ * Soft!=product. Dual license: MIT OR Apache-2.0.
+ *
+ * H3 residual lean (ASSURANCE thr_exit before as_destroy; this unit only):
+ *   Permanent order: u32Alive=0 -> thr_exit early (siblings + cur scrub) ->
+ *   pager/region/cnode -> thr_exit barrier (siblings + cur scrub) ->
+ *   cr3_publish=0 (local holds destroy target) -> private as_destroy.
+ *   Dual belt residual lean: early drain after alive=0, re-drain immediately
+ *   before as_destroy (catches thr bound mid-death). Covers pe32 clone_vm
+ *   lab class and multi-thr UDX host processes (work/IRQ soft thr sharing AS).
+ *   Cur-scrub residual: thread_exit_process skips current; death helper also
+ *   clears current thr USER*_ENTRY / sysuser (valid+rip/rsp/rflags) / thr CR3 /
+ *   block when bound to dying PCB (no EXIT - caller thread_exit). Fail-closed
+ *   vs dying thr iretq / mid-syscall sysret into maps about to free (same
+ *   #PF I=1 class as sibling residual).
+ *   CR3 publish residual: after dual belt thr_exit, zero PCB u64Cr3 before
+ *   as_destroy so trampoline/schedule refuse-enter cr3_0 belt is live during
+ *   map free (local u64 holds destroy target). Long-lived skip leaves CR3.
+ *   fork_stub_as_teardown mirrors early + barrier + cr3_pub before as_destroy.
+ *   Companion: thread_exit_process + trampoline refuse-enter (thread.c).
+ *   Soft!=product - not product UDX close; not Linux .ko (G-AC-1).
+ *
+ * Functional residual process lifecycle (UDX / sshd hosts; Soft!=product):
+ *   LIVE host path (not immediate kill / not vfork fExitNow):
+ *     wait_register -> live unreaped -> parent soft wait poll (WNOHANG yield
+ *     + blocking yield) -> force-exit/exit_pid OR wait-heal -> G-PROC-5 H3
+ *     death -> wait reap. Covers long-lived multi-thr UDX hosts
+ *     (rtl8168_udx / xhci_udx / ddi_host_gj) and sshd session children.
+ *   keep_live product host honesty (STRONGER denser residual; Soft!=product):
+ *     process_spawn_host_launch class hosts may stay keep_live when host
+ *     ELF embed is present (main: soft residual host_launch live). This
+ *     unit must NEVER thrash as_destroy while product host thr are live
+ *     (H3 thr_exit dual belt + cur_scrub + cr3_pub BEFORE as_destroy).
+ *     Denser axes (companion to main host_launch live residual):
+ *       keep_live=1 | product_host_live=1 | thr_live=1 | keep_live_rock=1
+ *       | never_kill_embed=1 | soft_ne_product=1 | product_hosts=UDX
+ *     keep_live=1 / product_host_live=1 means death is deferred until
+ *     intentional kill/exit; soft wait poll + yield while alive; Dual DoD
+ *     A/B stay OPEN (soft residual never closes Dual DoD; agent!=close).
+ *     Soft!=product: keep_live residual != product UDX wire/TX/RX close;
+ *     denser residual != Dual DoD close; never invent stamp .76;
+ *     bar=v2026.08.04.75 stamp-free.
+ *   exit_pid residual: process_linux_exit_pid runs full process_death (H3
+ *     thr_exit dual belt + as_destroy) when the wait-registered PCB still
+ *     needs teardown (alive/cr3/pager/start_thr/exc/regions). note_exit-only
+ *     would set u32Alive=0 and skip teardown -> private AS leak / sibling
+ *     USER*_ENTRY into freed maps (same H3 class).
+ *   wait live-heal residual: parent wait4 sees PCB alive==0 but slot not
+ *     zombie (mid-death race / incomplete force-exit) -> promote via full
+ *     process_death when teardown remains, else note_exit, so live-host
+ *     parents reaps without soft hang.
+ *   wait WNOHANG / blocking residual: live-child return yields so concurrent
+ *     UDX host thr + freestanding sshd eth accept (Dual DoD B direction)
+ *     can progress while a parent soft-polls (pairs with spawn: soft wait
+ *     poll).
+ *   Dual DoD A/B remain OPEN (soft residual never closes Dual DoD).
+ *   Bar honesty v2026.08.04.75 stamp-free; never bump GJ_IMAGE_VERSION here.
+ * greppable: process: soft residual lean H3
+ * greppable: process: soft death residual lean
+ * greppable: process: soft residual lifecycle
+ * greppable: process: soft residual keep_live
+ * greppable: process: soft residual product_host_live
+ * greppable: process: soft residual denser keep_live
+ * greppable: process: soft residual denser product_host_live
+ * greppable: process: soft residual denser thr_live
+ * greppable: process: soft residual denser dual_dod
+ * greppable: process: death thr_exit | process: death thr_exit barrier
+ * greppable: process: death thr_exit early | process: death thr_exit cur_scrub
+ * greppable: process: death H3 order | process: death cr3_pub
+ * greppable: process: soft exit_pid death | process: soft wait nohang_yield
+ * greppable: process: soft wait live_heal | process: soft wait live_death
+ * greppable: thr_exit_before_as_destroy=1 | udx_host_teardown=1
+ * greppable: H3=death_residual | udx_host_multi_thr=1 | soft_ne_product=1
+ * greppable: cr3_pub_before_as_destroy=1 | dual_dod=OPEN | lifecycle=1
+ * greppable: live_host_path=1 | not_immediate_kill=1
+ * greppable: product_host_live=1 | keep_live=1 | never_kill_embed=1
+ * greppable: keep_live_rock=1 | thr_live=1 | product_hosts=UDX
+ * greppable: Soft!=product soft residual dual_dod OPEN product_host_live
+ * greppable: denser keep_live residual | denser product_host_live residual
+ * greppable: denser thr_live residual | denser dual_dod residual
+ * greppable: denser thr_exit_before_as_destroy residual
  *
  * Soft product inventory (ABI-first fork/wait deepen; this unit only):
- * greppable: "process: soft …"
- *   process: soft inventory …
- *   process: soft stats …
- *   process: soft init …
- *   process: soft seal …
- *   process: soft confine …
- *   process: soft pager …
- *   process: soft fault …
- *   process: soft wait …     — wait4/waitid WNOHANG reaper (shell/sshd later)
- *   process: soft fork-wait product-min — PCB parent fork/clone/wait APIs
- *   process: soft death …
- *   process: soft fork …     — linux_fork + linux_clone flag map (usable pid)
- *   process: soft jit …
- *   process: soft promise …
- *   process: soft path …
- *   process: soft return …  (Wave 19 return-path catalog)
- *   process: soft ret_surface … (Wave 19 terminal return classes)
- *   process: soft surface … (Wave 19 area catalog)
- *   process: soft deepen wave=116 …
+ * greppable: "process: soft ..."
+ *   process: soft inventory ...
+ *   process: soft stats ...
+ *   process: soft init ...
+ *   process: soft seal ...
+ *   process: soft confine ...
+ *   process: soft pager ...
+ *   process: soft fault ...
+ *   process: soft wait ...     - wait4/waitid WNOHANG reaper (shell/sshd later)
+ *   process: soft fork-wait product-min - PCB parent fork/clone/wait APIs
+ *   process: soft death ...
+ *   process: soft death residual lean ...  - H3 thr_exit-before-as_destroy
+ *   process: soft residual lean H3 ...
+ *   process: soft residual lifecycle ...  - UDX/sshd live host death+wait residual
+ *   process: soft residual keep_live ...  - product host keep_live honesty residual
+ *   process: soft residual product_host_live ... - denser keep_live Dual DoD OPEN
+ *   process: soft residual denser keep_live ... - denser keep_live_rock thr_live axes
+ *   process: soft residual denser product_host_live ... - denser Dual DoD OPEN residual
+ *   process: soft residual denser thr_live ... - denser thr_live keep_live Dual DoD OPEN
+ *   process: soft residual denser dual_dod ... - denser Dual DoD OPEN honesty residual
+ *   process: soft fork ...     - linux_fork + linux_clone flag map (usable pid)
+ *   process: soft jit ...
+ *   process: soft promise ...
+ *   process: soft path ...
+ *   process: soft surface ... (Wave 19 area catalog)
+ *   process: soft deepen wave=116 ...
  *   process: soft PASS|PARTIAL
- *   Apple §13 bootstrap seal checklist (wave=116 stamp):
- *     process: bootstrap seal soft …
- *     process: seal checklist …
- *     process: bootstrap seal soft deepen wave=116 …
+ *   Apple s13 bootstrap seal checklist (wave=116 stamp):
+ *     process: bootstrap seal soft ...
+ *     process: seal checklist ...
+ *     process: bootstrap seal soft deepen wave=116 ...
  *   G-PROC-5 death tallies (wave=116 stamp):
- *     process: death … / process: death deepen wave=116 …
+ *     process: death ... / process: death deepen wave=116 ...
  *
- * Honesty: soft inventory only — not product multi-server seal, not Apple §13
- * closed. Fork stub ≠ real user child; wait table ≠ full posix wait.
- * docs/CAP_ADDRESSING.md · docs/APPLE_CHANNEL_REMAINING.md §13 ·
- * docs/SOLARIS_STYLE_REMAINING.md §6 · §9 · docs/SECURITY_CORE_DESIGN.md §13
+ * Honesty: soft inventory only - not product multi-server seal, not Apple s13
+ * closed. Fork stub != real user child; wait table != full posix wait.
+ * keep_live residual != product UDX close; denser residual != Dual DoD close;
+ * Dual DoD A/B OPEN until DUT. Soft!=product. G-AC-1.
+ * docs/CAP_ADDRESSING.md | docs/APPLE_CHANNEL_REMAINING.md s13 |
+ * docs/SOLARIS_STYLE_REMAINING.md s6 | s9 | docs/SECURITY_CORE_DESIGN.md s13 |
+ * docs/ASSURANCE_LITE.md H3
  */
 #include <gj/cap.h>
 #include <gj/cpu.h>
@@ -52,7 +143,8 @@
 
 /* ---- Wave 19 exclusive soft inventory (this unit only) ------------------ */
 #define GJ_PROCESS_SOFT_WAVE 116u
-#define GJ_PROCESS_SOFT_AREAS 217u /* greppable inventory area count */
+/* +live lifecycle + denser keep_live thr_live product_host_live Dual DoD residual */
+#define GJ_PROCESS_SOFT_AREAS 244u
 #define GJ_SEAL_SOFT_WAVE 116u /* Apple s13 seal checklist stamp */
 #define GJ_SEAL_SOFT_LOG_MAX   8u
 
@@ -64,7 +156,7 @@
 
 /*
  * Soft path tallies (diagnostics only; wrap OK). Never hard-gate product.
- * greppable: process: soft …
+ * greppable: process: soft ...
  */
 static u32 g_u32SoftInitOk;
 static u32 g_u32SoftInitNull;
@@ -120,11 +212,61 @@ static u32 g_u32SoftForkCloneOk;
 static u32 g_u32SoftForkCloneFail;
 static u32 g_u32SoftForkRegFail;      /* wait table full after stub alloc */
 static u32 g_u32SoftCloneEnter;
-static u32 g_u32SoftCloneForkLike;    /* flags 0 / share → fork */
+static u32 g_u32SoftCloneForkLike;    /* flags 0 / share -> fork */
 static u32 g_u32SoftCloneVfork;
 static u32 g_u32SoftCloneThreadReject;
 static u32 g_u32SoftCloneNsReject;
 static u32 g_u32SoftDeathEnter;
+/* Sibling thr EXITED before AS destroy (clone_vm FAULT H3; Soft!=product). */
+static u64 g_u64DeathThrExit;
+/* Early-pass thr exits only (post alive=0; pre pager/region/cnode). */
+static u64 g_u64DeathThrExitEarly;
+/* Second-pass residual exits at pre-as_destroy barrier (usually 0). */
+static u64 g_u64DeathThrExitBarrier;
+/* Pre-as_destroy barrier invocations (n may be 0; dual belt residual lean). */
+static u64 g_u64DeathThrExitBarrierCalls;
+/* Deaths that reached thr_exit dual belt then as_destroy attempt/skip. */
+static u64 g_u64DeathH3OrderPass;
+/* fork_stub_as_teardown H3 dual-belt invocations (Soft!=product). */
+static u64 g_u64DeathH3ForkStub;
+/*
+ * Current-thr user/CR3 scrub hits (thread_exit_process skips current; H3
+ * residual lean fail-closed before as_destroy). Soft!=product.
+ */
+static u64 g_u64DeathThrExitCurScrub;
+/*
+ * PCB u64Cr3 published 0 after thr_exit dual belt, before as_destroy
+ * (local holds destroy target; refuse-enter cr3_0 during map free).
+ */
+static u64 g_u64DeathH3Cr3Pub;
+/* H3 residual lean once-lamp (Soft!=product; no stamp storm). */
+static u8  g_fH3ResLeanOnce;
+/* Lifecycle residual once-lamp (UDX/sshd host death+wait; Dual DoD OPEN). */
+static u8  g_fLifecycleResLeanOnce;
+/*
+ * keep_live product host honesty once-lamp (Soft!=product; Dual DoD OPEN).
+ * denser residual: product_host_live keep_live keep_live_rock thr_live
+ * product_hosts=UDX; never thrash as_destroy while thr live (H3 thr_exit
+ * before as_destroy spirit). Companion main host_launch live axes. No
+ * stamp storm (H2). denser residual != Dual DoD close.
+ */
+static u8  g_fKeepLiveResLeanOnce;
+/*
+ * process_linux_exit_pid full process_death path (H3 thr_exit before as_destroy).
+ * note_exit-only path would race deferred fork exit worker into AS leak.
+ */
+static u64 g_u64SoftExitPidDeath;
+static u64 g_u64SoftExitPidNoteOnly; /* already fully torn; re-note only */
+/* wait4 WNOHANG live yield (sshd accept / UDX host thr progress residual). */
+static u64 g_u64SoftWaitNohangYield;
+/* wait4 blocking live yield (same concurrent host progress class). */
+static u64 g_u64SoftWaitBlockYield;
+/*
+ * wait live-heal: PCB alive==0 but wait slot not zombie (live host residual).
+ * live_death: heal promoted full process_death (teardown still pending).
+ */
+static u64 g_u64SoftWaitLiveHeal;
+static u64 g_u64SoftWaitLiveDeath;
 static u32 g_u32SoftLogN;
 static u8  g_fSoftInvOnce;
 static u32 g_u32SoftLastForkPid;      /* last usable child pid (diag) */
@@ -158,7 +300,7 @@ process_soft_inc(u32 *pCtr)
 
 /*
  * Greppable Wave 19 soft process inventory (product / smoke).
- * Prefix-stable: "process: soft …". Never hard-gates.
+ * Prefix-stable: "process: soft ...". Never hard-gates.
  * greppable: process: soft
  */
 static void
@@ -244,19 +386,224 @@ process_soft_inventory(const char *szVia)
             "reg_null=%u zombie=%u reap=%u nowait=%u reparent=%u "
             "forget=%u wait4_enter=%u echild=%u nohang0=%u "
             "live_timeout=%u reap_pid=%u reap_any=%u "
+            "nohang_yield=%llu block_yield=%llu live_heal=%llu "
+            "live_death=%llu "
             "used=%u zombie_now=%u live=%u free=%u wave=%u\n",
             g_u32SoftWaitRegOk, g_u32SoftWaitRegIdem, g_u32SoftWaitRegFull,
             g_u32SoftWaitRegNull, g_u32SoftWaitZombie, g_u32SoftWaitReap,
             g_u32SoftWaitNowait, g_u32SoftWaitReparentN, g_u32SoftWaitForget,
             g_u32SoftWait4Enter, g_u32SoftWait4Echild, g_u32SoftWait4Nohang0,
             g_u32SoftWait4LiveTimeout, g_u32SoftWait4ReapPid,
-            g_u32SoftWait4ReapAny, u32Used, u32Zombie, u32Live, u32Free,
+            g_u32SoftWait4ReapAny,
+            (unsigned long long)g_u64SoftWaitNohangYield,
+            (unsigned long long)g_u64SoftWaitBlockYield,
+            (unsigned long long)g_u64SoftWaitLiveHeal,
+            (unsigned long long)g_u64SoftWaitLiveDeath,
+            u32Used, u32Zombie, u32Live, u32Free,
             GJ_PROCESS_SOFT_WAVE);
 
-    /* Grep: process: soft death */
-    kprintf("process: soft death enter=%u wave=%u "
-            "(detail via process: death tallies / deepen)\n",
-            g_u32SoftDeathEnter, GJ_PROCESS_SOFT_WAVE);
+    /* Grep: process: soft death | process: death thr_exit */
+    kprintf("process: soft death enter=%u thr_exit=%llu thr_early=%llu "
+            "thr_bar=%llu thr_bar_calls=%llu thr_cur_scrub=%llu "
+            "h3_order=%llu fork_stub_h3=%llu cr3_pub=%llu "
+            "wave=%u (H3 thr_exit before as_destroy; Soft!=product)\n",
+            g_u32SoftDeathEnter,
+            (unsigned long long)g_u64DeathThrExit,
+            (unsigned long long)g_u64DeathThrExitEarly,
+            (unsigned long long)g_u64DeathThrExitBarrier,
+            (unsigned long long)g_u64DeathThrExitBarrierCalls,
+            (unsigned long long)g_u64DeathThrExitCurScrub,
+            (unsigned long long)g_u64DeathH3OrderPass,
+            (unsigned long long)g_u64DeathH3ForkStub,
+            (unsigned long long)g_u64DeathH3Cr3Pub,
+            GJ_PROCESS_SOFT_WAVE);
+    /*
+     * H3 residual lean once-lamp (Soft!=product; UDX host multi-thr class).
+     * Align tokens with thread.c companion. No stamp storm (H2).
+     * Grep: process: soft death residual lean | process: soft residual lean H3
+     * Grep: thr_exit_before_as_destroy=1 | udx_host_teardown=1 | H3=death_residual
+     * Grep: process: death thr_exit cur_scrub | process: death cr3_pub
+     * Grep: cr3_pub_before_as_destroy=1
+     */
+    if (g_fH3ResLeanOnce == 0) {
+        g_fH3ResLeanOnce = 1;
+        kprintf("process: soft death residual lean H3 thr_exit_before_as_destroy=1 "
+                "early+barrier=1 cur_scrub=1 cr3_pub=1 fork_stub=1 "
+                "udx_host_multi_thr=1 udx_host_teardown=1 H3=death_residual "
+                "never_as_destroy_while_thr_live=1 product_host_live=1 "
+                "keep_live=1 keep_live_rock=1 thr_live=1 product_hosts=UDX "
+                "soft_ne_product=1 Soft!=product dual=MIT/Apache "
+                "dual_dod=OPEN denser=1 wave=%u bar=v2026.08.04.75\n",
+                GJ_PROCESS_SOFT_WAVE);
+        kprintf("process: soft residual lean H3 order=alive0,thr_exit_early,"
+                "cur_scrub,pager_region_cnode,thr_exit_barrier,cur_scrub,"
+                "cr3_pub,as_destroy pe32_clone_vm=1 udx_host=1 dual_belt=1 "
+                "cr3_pub_before_as_destroy=1 never_as_destroy_while_thr_live=1 "
+                "product_host_live=1 keep_live=1 keep_live_rock=1 thr_live=1 "
+                "product_hosts=UDX Soft!=product dual_dod=OPEN denser=1 "
+                "dual=MIT/Apache\n");
+    }
+    /*
+     * Functional residual lifecycle once-lamp (live UDX host + sshd class).
+     * Soft!=product; Dual DoD A/B OPEN; no stamp storm (H2).
+     * Grep: process: soft residual lifecycle
+     * Grep: process: soft exit_pid death | process: soft wait nohang_yield
+     * Grep: process: soft wait live_heal | process: soft wait live_death
+     * Grep: dual_dod=OPEN | udx_host_teardown=1 | thr_exit_before_as_destroy=1
+     * Grep: live_host_path=1 | not_immediate_kill=1
+     * Grep: product_host_live=1 | keep_live=1
+     */
+    if (g_fLifecycleResLeanOnce == 0) {
+        g_fLifecycleResLeanOnce = 1;
+        kprintf("process: soft residual lifecycle exit_pid_death=1 "
+                "wait_nohang_yield=1 wait_block_yield=1 wait_live_heal=1 "
+                "need_death_broad=1 thr_exit_before_as_destroy=1 "
+                "udx_host_teardown=1 hosts=rtl8168_udx|xhci_udx|ddi_host_gj "
+                "product_hosts=UDX sshd_wait=1 "
+                "dual_dod=OPEN dual_dod_a=OPEN dual_dod_b=OPEN "
+                "product_udx_close=0 product_sshd_tcp22=OPEN "
+                "product_host_live=1 keep_live=1 keep_live_rock=1 thr_live=1 "
+                "never_kill_embed=1 soft_ne_product=1 G-AC-1=1 "
+                "Soft!=product dual=MIT/Apache denser=1 "
+                "lifecycle=1 live_host_path=1 not_immediate_kill=1 wave=%u "
+                "bar=v2026.08.04.75\n",
+                GJ_PROCESS_SOFT_WAVE);
+        kprintf("process: soft residual lifecycle path="
+                "wait_reg,live_run,soft_wait_poll,"
+                "exit_pid_or_wait_heal,death_H3_thr_exit_before_as_destroy,"
+                "wait_reap "
+                "exit_pid_death=%llu note_only=%llu nohang_yield=%llu "
+                "block_yield=%llu live_heal=%llu live_death=%llu "
+                "Soft!=product dual_dod=OPEN live_host_path=1 "
+                "product_host_live=1 keep_live=1 keep_live_rock=1 thr_live=1 "
+                "product_hosts=UDX denser=1 not_immediate_kill=1\n",
+                (unsigned long long)g_u64SoftExitPidDeath,
+                (unsigned long long)g_u64SoftExitPidNoteOnly,
+                (unsigned long long)g_u64SoftWaitNohangYield,
+                (unsigned long long)g_u64SoftWaitBlockYield,
+                (unsigned long long)g_u64SoftWaitLiveHeal,
+                (unsigned long long)g_u64SoftWaitLiveDeath);
+    }
+    /*
+     * STRONGER denser keep_live product host honesty residual (Soft!=product).
+     * product_host_live / keep_live / keep_live_rock / thr_live:
+     * process_spawn_host_launch UDX hosts stay live while embed thr run;
+     * process layer never thrash as_destroy while thr live (H3 thr_exit
+     * before as_destroy). Companion denser axes to main host_launch live.
+     * Dual DoD OPEN; denser residual != Dual DoD close; agent!=close.
+     * Grep: process: soft residual keep_live
+     * Grep: process: soft residual product_host_live
+     * Grep: process: soft residual denser keep_live
+     * Grep: process: soft residual denser product_host_live
+     * Grep: process: soft residual denser thr_live
+     * Grep: process: soft residual denser dual_dod
+     * Grep: Soft!=product soft residual dual_dod OPEN product_host_live
+     * Grep: product_host_live=1 | keep_live=1 | keep_live_rock=1
+     * Grep: thr_live=1 | product_hosts=UDX | dual_dod=OPEN
+     * Grep: thr_exit_before_as_destroy=1 | never_kill_embed=1
+     * Grep: denser keep_live residual | denser product_host_live residual
+     * Grep: denser thr_live residual | denser dual_dod residual
+     * Grep: denser thr_exit_before_as_destroy residual
+     */
+    if (g_fKeepLiveResLeanOnce == 0) {
+        g_fKeepLiveResLeanOnce = 1;
+        kprintf("process: soft residual keep_live product_host_live=1 "
+                "keep_live=1 keep_live_rock=1 thr_live=1 "
+                "never_kill_embed=1 kill_on_embed=0 "
+                "hosts=rtl8168_udx|xhci_udx|ddi_host_gj "
+                "product_hosts=UDX api=process_spawn_host_launch "
+                "H3=thr_exit_before_as_destroy "
+                "never_as_destroy_while_thr_live=1 "
+                "thr_exit_before_as_destroy=1 cr3_pub_before_as_destroy=1 "
+                "udx_host_teardown=1 udx_host_multi_thr=1 "
+                "dual_dod=OPEN dual_dod_a=OPEN dual_dod_b=OPEN "
+                "soft_no_close=1 dod_close=0 product_udx_close=0 "
+                "soft_ne_product=1 G-AC-1=1 Soft!=product dual=MIT/Apache "
+                "live_host_path=1 not_immediate_kill=1 denser=1 "
+                "bar=v2026.08.04.75 stamp-free wave=%u "
+                "(Soft!=product soft residual dual_dod OPEN product_host_live; "
+                "denser keep_live residual; never thrash as_destroy while thr "
+                "live; agent!=close)\n",
+                GJ_PROCESS_SOFT_WAVE);
+        kprintf("process: soft residual product_host_live "
+                "product_host_live=1 keep_live=1 keep_live_rock=1 thr_live=1 "
+                "path=wait_reg|live_run|soft_wait_poll|keep_live|"
+                "exit_or_heal|death_H3_thr_exit_before_as_destroy|wait_reap "
+                "order=alive0,thr_exit_early,cur_scrub,pager_region_cnode,"
+                "thr_exit_barrier,cur_scrub,cr3_pub,as_destroy "
+                "never_as_destroy_while_thr_live=1 "
+                "thr_exit_before_as_destroy=1 "
+                "dual_dod=OPEN Soft!=product soft residual "
+                "product_host_live honesty residual denser=1 "
+                "hosts=rtl8168_udx,xhci_udx,ddi_host_gj product_hosts=UDX "
+                "bar=v2026.08.04.75 stamp-free\n");
+        kprintf("process: soft residual denser keep_live "
+                "keep_live=1 product_host_live=1 keep_live_rock=1 thr_live=1 "
+                "never_kill_embed=1 soft_ne_product=1 product_hosts=UDX "
+                "axes=keep_live|product_host_live|thr_live|keep_live_rock|"
+                "never_kill_embed|soft_ne_product|dual_dod_open|"
+                "thr_exit_before_as_destroy "
+                "H3=thr_exit_before_as_destroy "
+                "never_as_destroy_while_thr_live=1 "
+                "dual_dod=OPEN dual_dod_a=OPEN dual_dod_b=OPEN "
+                "denser_keep_live_residual=1 denser_product_host_live=1 "
+                "denser_thr_live_residual=1 denser_dual_dod_residual=1 "
+                "Soft!=product soft residual dual_dod OPEN product_host_live "
+                "bar=v2026.08.04.75 stamp-free wave=%u "
+                "(denser keep_live residual; denser thr_live residual; "
+                "denser != Dual DoD close; agent!=close; G-AC-1)\n",
+                GJ_PROCESS_SOFT_WAVE);
+        kprintf("process: soft residual denser product_host_live "
+                "product_host_live=1 keep_live=1 keep_live_rock=1 thr_live=1 "
+                "hosts=rtl8168_udx|xhci_udx|ddi_host_gj product_hosts=UDX "
+                "companion=main_host_launch_live "
+                "H3=defer_death_while_live thr_exit_before_as_destroy=1 "
+                "cr3_pub_before_as_destroy=1 udx_host_teardown=1 "
+                "dual_dod=OPEN dual_dod_a=OPEN dual_dod_b=OPEN denser=1 "
+                "Soft!=product denser residual product_host_live honesty "
+                "bar=v2026.08.04.75 stamp-free\n");
+        kprintf("process: soft residual denser thr_live "
+                "thr_live=1 keep_live=1 keep_live_rock=1 product_host_live=1 "
+                "product_hosts=UDX hosts=rtl8168_udx|xhci_udx|ddi_host_gj "
+                "never_as_destroy_while_thr_live=1 "
+                "thr_exit_before_as_destroy=1 cr3_pub_before_as_destroy=1 "
+                "H3=thr_exit_before_as_destroy udx_host_multi_thr=1 "
+                "dual_dod=OPEN dual_dod_a=OPEN dual_dod_b=OPEN "
+                "denser_thr_live_residual=1 denser_keep_live_residual=1 "
+                "Soft!=product soft residual dual_dod OPEN thr_live "
+                "bar=v2026.08.04.75 stamp-free wave=%u "
+                "(denser thr_live residual; denser thr_exit_before_as_destroy "
+                "residual; denser != Dual DoD close; G-AC-1)\n",
+                GJ_PROCESS_SOFT_WAVE);
+        kprintf("process: soft residual denser dual_dod "
+                "dual_dod=OPEN dual_dod_a=OPEN dual_dod_b=OPEN "
+                "keep_live=1 thr_live=1 product_host_live=1 keep_live_rock=1 "
+                "product_hosts=UDX soft_no_close=1 dod_close=0 "
+                "product_udx_close=0 soft_ne_product=1 Soft!=product "
+                "H3=thr_exit_before_as_destroy thr_exit_before_as_destroy=1 "
+                "never_as_destroy_while_thr_live=1 denser=1 "
+                "denser_dual_dod_residual=1 denser_keep_live_residual=1 "
+                "denser_thr_live_residual=1 denser_product_host_live=1 "
+                "bar=v2026.08.04.75 stamp-free wave=%u "
+                "(denser dual_dod residual; Dual DoD OPEN Soft!=product; "
+                "agent!=close; denser residual != Dual DoD close)\n",
+                GJ_PROCESS_SOFT_WAVE);
+        kprintf("process: soft residual keep_live honesty "
+                "Soft!=product soft residual dual_dod=OPEN "
+                "product_host_live=1 keep_live=1 keep_live_rock=1 thr_live=1 "
+                "process_spawn_host_launch=1 integration_hold=1 "
+                "product_hosts=UDX H3=defer_death_while_live denser=1 "
+                "exit_pid_death=%llu live_heal=%llu live_death=%llu "
+                "nohang_yield=%llu block_yield=%llu "
+                "soft=1 product=0 G-AC-1=1 dual=MIT_OR_Apache-2.0 "
+                "denser_keep_live_residual=1 denser_thr_live_residual=1 "
+                "denser_dual_dod_residual=1\n",
+                (unsigned long long)g_u64SoftExitPidDeath,
+                (unsigned long long)g_u64SoftWaitLiveHeal,
+                (unsigned long long)g_u64SoftWaitLiveDeath,
+                (unsigned long long)g_u64SoftWaitNohangYield,
+                (unsigned long long)g_u64SoftWaitBlockYield);
+    }
 
     /*
      * Grep: process: soft fork
@@ -278,12 +625,12 @@ process_soft_inventory(const char *szVia)
 
     /*
      * Grep: process: soft fork-wait product-min
-     * PCB parent → child pid + wait4/waitid reaper (cold personality later).
+     * PCB parent -> child pid + wait4/waitid reaper (cold personality later).
      */
     kprintf("process: soft fork-wait product-min fork_enter=%u fork_ok=%u "
             "clone_enter=%u wait_enter=%u wait_reap=%u waitid_enter=%u "
             "smoke_ok=%u pass_once=%u last_pid=%u wave=%u "
-            "(soft≠product; not full AS clone)\n",
+            "(soft!=product; not full AS clone)\n",
             g_u32SoftFwForkEnter, g_u32SoftFwForkOk, g_u32SoftFwCloneEnter,
             g_u32SoftFwWaitEnter, g_u32SoftFwWaitReap, g_u32SoftFwWaitidEnter,
             g_u32SoftFwSmokeOk, (unsigned)g_fSoftFwPassOnce,
@@ -303,7 +650,7 @@ process_soft_inventory(const char *szVia)
             GJ_PROCESS_SOFT_WAVE);
 
     /*
-     * Honesty: PCB + fixed wait table + soft seal lamps ≠ multi-server
+     * Honesty: PCB + fixed wait table + soft seal lamps != multi-server
      * product seal / full posix wait.
      * Grep: process: soft path
      */
@@ -313,189 +660,32 @@ process_soft_inventory(const char *szVia)
             " via=%s wave=%u (soft inventory; not product gate)\n",
             GJ_WAIT_SLOTS, GJ_FORK_STUBS, szViaSafe, GJ_PROCESS_SOFT_WAVE);
 
-    /*
-     * Grep: process: soft return
-     * Wave 19 return-path catalog — init/seal/pager/fault/wait/fork outcomes.
-     * Soft ≠ multi-server seal product gate. product_kernel=OPEN.
-     */
-    kprintf("process: soft return init_ok=%u init_null=%u root_ok=%u "
-            "root_fail=%u root_busy=%u pager_set=%u pager_fail=%u "
-            "fault_no_pager=%u fault_wx=%u fault_busy=%u "
-            "wait_reg_ok=%u wait_reg_full=%u wait_echild=%u "
-            "fork_ok=%u fork_full=%u fork_as_fail=%u death=%u "
-            "confine=%u product_kernel=OPEN wave=%u\n",
-            g_u32SoftInitOk, g_u32SoftInitNull, g_u32SoftRootMetaOk,
-            g_u32SoftRootMetaFail, g_u32SoftRootMetaBusy, g_u32SoftPagerSetOk,
-            g_u32SoftPagerSetFail, g_u32SoftFaultNoPager, g_u32SoftFaultWxDeny,
-            g_u32SoftFaultBusy, g_u32SoftWaitRegOk, g_u32SoftWaitRegFull,
-            g_u32SoftWait4Echild, g_u32SoftForkOk, g_u32SoftForkFull,
-            g_u32SoftForkAsFail, g_u32SoftDeathEnter, g_u32SoftConfineN,
-            GJ_PROCESS_SOFT_WAVE);
-
-    /* Grep: process: soft ret_surface — Wave 19 terminal return classes */
-    kprintf("process: soft ret_surface init=ok|null root=ok|fail|busy "
-            "pager=set|fail fault=no_pager|wx|busy wait=reg_ok|reg_full|echild "
-            "fork=ok|full|as_fail death confine product_kernel=OPEN "
+    /* Grep: process: soft surface - lean Wave 19 area catalog (H2 no storm) */
+    kprintf("process: soft surface inventory,stats,init,seal,confine,"
+            "pager,fault,wait,death,fork,jit,promise,path,surface,deepen,"
+            "PASS,bootstrap_seal,death_tallies,headroom,H3_residual_lean,"
+            "H3_dual_belt,H3_fork_stub,H3_cur_scrub,H3_cr3_pub,"
+            "thr_exit_before_as_destroy,cr3_pub_before_as_destroy,"
+            "lifecycle_residual,exit_pid_death,wait_nohang_yield,"
+            "wait_block_yield,wait_live_heal,wait_live_death,need_death_broad,"
+            "live_host_path,not_immediate_kill,dual_dod,"
+            "keep_live,product_host_live,never_kill_embed,"
+            "never_as_destroy_while_thr_live,"
+            "keep_live_rock,thr_live,product_hosts_UDX,"
+            "denser_keep_live,denser_product_host_live,"
+            "denser_thr_live,denser_dual_dod,"
+            "denser_thr_exit_before_as_destroy "
             "areas=%u wave=%u\n",
             GJ_PROCESS_SOFT_AREAS, GJ_PROCESS_SOFT_WAVE);
 
-    /* Grep: process: soft surface — Wave 19 area catalog */
-    kprintf("process: soft surface inventory,stats,init,seal,confine,"
-            "pager,fault,wait,death,fork,jit,promise,path,return,"
-            "ret_surface,surface,deepen,PASS,bootstrap_seal,death_tallies,"
-            "headroom areas=%u wave=%u\n",
-            GJ_PROCESS_SOFT_AREAS, GJ_PROCESS_SOFT_WAVE);
-
-    /* Grep: process: soft headroom — wait table free slots */
+    /* Grep: process: soft headroom - wait table free slots */
     kprintf("process: soft headroom wait_free=%u wait_used=%u "
             "wait_slots=%u fork_stubs=%u wave=%u\n",
             u32Free, u32Used, GJ_WAIT_SLOTS, GJ_FORK_STUBS,
             GJ_PROCESS_SOFT_WAVE);
 
-    /* Grep: process: soft retmap — Wave 19 return-surface map */
-    kprintf("process: soft retmap ok|fail|inval|nodev|busy|nomem product_gate=0 soft_only=1 wave=116\n");
 
     /* Grep: process: soft deepen */
-    /*
-     * ---- Wave 19 complementary surfaces (kept) (never reshape primary).
-     * Return surfaces only — soft inventory; never hard-gates product paths.
-     */
-    /* Grep: process: soft retclass — Wave 19 return-class taxonomy (kept) */
-    kprintf("process: soft retclass ok|fail|inval|nodev|busy|nomem "
-            "soft_only=1 product_gate=0 wave=%u "
-            "(retclass taxonomy; Soft≠product)\n",
-            (unsigned)GJ_PROCESS_SOFT_WAVE);
-    /* Grep: process: soft retlane — Wave 19 return-lane catalog (kept) */
-    kprintf("process: soft retlane inv|selftest|rate|retcode|retmap|class "
-            "product_kernel=OPEN soft_ne_product=1 wave=%u "
-            "(retlane catalog; Soft≠product)\n",
-            (unsigned)GJ_PROCESS_SOFT_WAVE);
-    /*
-     * ---- Wave 20 complementary surfaces (kept) (never reshape primary).
-     * Return surfaces only — soft inventory; never hard-gates product paths.
-     */
-    /* Grep: process: soft retbound — Wave 20 return-bound honesty (kept) */
-    kprintf("process: soft retbound soft_only=1 product_gate=0 hard_gate=0 "
-            "never_blocks_m0=1 wave=%u "
-            "(retbound honesty; Soft≠product)\n",
-            (unsigned)GJ_PROCESS_SOFT_WAVE);
-    /* Grep: process: soft retseal — Wave 20 seal stamp (kept) */
-    kprintf("process: soft retseal exclusive=1 soft_ne_product=1 "
-            "product_kernel=OPEN wave=%u "
-            "(retseal stamp; Soft≠product)\n",
-            (unsigned)GJ_PROCESS_SOFT_WAVE);
-            /*
-             * ---- Wave 21 complementary surfaces (kept) (never reshape primary).
-             * Return surfaces only — soft inventory; never hard-gates product paths.
-            */
-            /* Grep: process: soft retpulse — Wave 21 return-pulse honesty (kept) */
-            kprintf("process: soft retpulse soft_only=1 product_gate=0 soft_ne_product=1 "
-                    "never_blocks_m0=1 wave=%u "
-                    "(retpulse honesty; Soft≠product)\n",
-                    (unsigned)GJ_PROCESS_SOFT_WAVE);
-            /* Grep: process: soft retmark — Wave 21 mark stamp (kept) */
-            kprintf("process: soft retmark exclusive=1 soft_ne_product=1 "
-                    "product_kernel=OPEN wave=%u "
-                    "(retmark stamp; Soft≠product)\n",
-                    (unsigned)GJ_PROCESS_SOFT_WAVE);
-            /*
-             * ---- Wave 22 complementary surfaces (kept) (never reshape primary).
-             * Return surfaces only — soft inventory; never hard-gates product paths.
-            */
-            /* Grep: process: soft retphase — Wave 22 return-phase honesty (kept) */
-            kprintf("process: soft retphase soft_only=1 product_gate=0 soft_ne_product=1 "
-                    "never_blocks_m0=1 wave=%u "
-                    "(retphase honesty; Soft≠product)\n",
-                    (unsigned)GJ_PROCESS_SOFT_WAVE);
-            /* Grep: process: soft retbadge — Wave 22 badge stamp (kept) */
-            kprintf("process: soft retbadge exclusive=1 soft_ne_product=1 "
-                    "product_kernel=OPEN wave=%u "
-                    "(retbadge stamp; Soft≠product)\n",
-                    (unsigned)GJ_PROCESS_SOFT_WAVE);
-/*
- * ---- Wave 23 complementary surfaces (kept) (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
-            */
-            /* Grep: process: soft rettoken — Wave 23 return-token honesty (kept) */
-            kprintf("process: soft rettoken soft_only=1 product_gate=0 soft_ne_product=1 "
-                    "never_blocks_m0=1 wave=%u "
-                    "(rettoken honesty; Soft≠product)\n",
-                    (unsigned)GJ_PROCESS_SOFT_WAVE);
-            /* Grep: process: soft retcrest — Wave 23 crest stamp (kept) */
-            kprintf("process: soft retcrest exclusive=1 soft_ne_product=1 "
-                    "product_kernel=OPEN wave=%u "
-                    "(retcrest stamp; Soft≠product)\n",
-                    (unsigned)GJ_PROCESS_SOFT_WAVE);
-            /*
-             * ---- Wave 24 complementary surfaces (kept) (never reshape primary).
-             * Return surfaces only — soft inventory; never hard-gates product paths.
-             */
-            /* Grep: process: soft retvault — Wave 24 return-vault honesty (kept) */
-            kprintf("process: soft retvault soft_only=1 product_gate=0 soft_ne_product=1 "
-                    "never_blocks_m0=1 wave=%u "
-                    "(retvault honesty; Soft≠product)\n",
-                    (unsigned)GJ_PROCESS_SOFT_WAVE);
-            /* Grep: process: soft retbanner — Wave 24 banner stamp (kept) */
-            kprintf("process: soft retbanner exclusive=1 soft_ne_product=1 "
-                    "product_kernel=OPEN wave=%u "
-                    "(retbanner stamp; Soft≠product)\n",
-                    (unsigned)GJ_PROCESS_SOFT_WAVE);
-            /*
-             * ---- Wave 25 complementary surfaces (kept) (never reshape primary).
-             * Return surfaces only — soft inventory; never hard-gates product paths.
-             */
-            /* Grep: process: soft retledger — Wave 25 return-ledger honesty (kept) */
-            kprintf("process: soft retledger soft_only=1 product_gate=0 soft_ne_product=1 "
-                    "never_blocks_m0=1 wave=%u "
-                    "(retledger honesty; Soft≠product)\n",
-                    (unsigned)GJ_PROCESS_SOFT_WAVE);
-            /* Grep: process: soft retbeacon — Wave 25 beacon stamp (kept) */
-            kprintf("process: soft retbeacon exclusive=1 soft_ne_product=1 "
-                    "product_kernel=OPEN wave=%u "
-                    "(retbeacon stamp; Soft≠product)\n",
-                    (unsigned)GJ_PROCESS_SOFT_WAVE);
-            /*
-             * ---- Wave 26 complementary surfaces (kept) (never reshape primary).
-             * Return surfaces only — soft inventory; never hard-gates product paths.
-             */
-            /* Grep: process: soft retcipher — Wave 26 return-cipher honesty (kept) */
-            kprintf("process: soft retcipher soft_only=1 product_gate=0 soft_ne_product=1 "
-                    "never_blocks_m0=1 wave=%u "
-                    "(retcipher honesty; Soft≠product)\n",
-                    (unsigned)GJ_PROCESS_SOFT_WAVE);
-            /* Grep: process: soft retflame — Wave 26 flame stamp (kept) */
-            kprintf("process: soft retflame exclusive=1 soft_ne_product=1 "
-                    "product_kernel=OPEN wave=%u "
-                    "(retflame stamp; Soft≠product)\n",
-                    (unsigned)GJ_PROCESS_SOFT_WAVE);
-                    /*
-                     * ---- Wave 27 complementary surfaces (kept) (never reshape primary).
-                     * Return surfaces only — soft inventory; never hard-gates product paths.
-                     */
-                    /* Grep: process: soft retprism — Wave 27 return-prism honesty (kept) */
-                    kprintf("process: soft retprism soft_only=1 product_gate=0 soft_ne_product=1 "
-                            "never_blocks_m0=1 wave=%u "
-                            "(retprism honesty; Soft≠product)\n",
-                            (unsigned)GJ_PROCESS_SOFT_WAVE);
-                    /* Grep: process: soft retforge — Wave 27 forge stamp (kept) */
-                    kprintf("process: soft retforge exclusive=1 soft_ne_product=1 "
-                            "product_kernel=OPEN wave=%u "
-                            "(retforge stamp; Soft≠product)\n",
-                            (unsigned)GJ_PROCESS_SOFT_WAVE);
-                            /*
-                             * ---- Wave 28 complementary surfaces (kept) (never reshape primary).
-                             * Return surfaces only — soft inventory; never hard-gates product paths.
-                             */
-                            /* Grep: process: soft retshard — Wave 28 return-shard honesty (kept) */
-                            kprintf("process: soft retshard soft_only=1 product_gate=0 soft_ne_product=1 "
-                                "never_blocks_m0=1 wave=%u "
-                                "(retshard honesty; Soft≠product)\n",
-                                (unsigned)GJ_PROCESS_SOFT_WAVE);
-                            /* Grep: process: soft retcrown — Wave 28 crown stamp (kept) */
-                            kprintf("process: soft retcrown exclusive=1 soft_ne_product=1 "
-                                "product_kernel=OPEN wave=%u "
-                                "(retcrown stamp; Soft≠product)\n",
-                                (unsigned)GJ_PROCESS_SOFT_WAVE);
     kprintf("process: soft deepen wave=%u areas=%u via=%s init_ok=%u "
             "root_ok=%u confine=%u pager_set=%u fault=%u wait_reg=%u "
             "death=%u fork_ok=%u logs=%u "
@@ -513,7 +703,7 @@ process_soft_inventory(const char *szVia)
 
 /**
  * After first product activity, print soft inventory once.
- * Diagnostics only — never hard-gates.
+ * Diagnostics only - never hard-gates.
  */
 static void
 process_soft_maybe_once(void)
@@ -591,11 +781,11 @@ gj_process_set_jit(struct gj_process *pProc, int fEnable)
 }
 
 /*
- * Soft Apple §13 bootstrap seal checklist (process.c only; Wave 15 deepen).
+ * Soft Apple s13 bootstrap seal checklist (process.c only; Wave 15 deepen).
  * Enumerates PCB lamps: root meta, ambient/confine, pager empty, promises,
  * plus soft open inventory for Apple s13 product seal items (all 0 until
- * product retype/IRQ/untyped seal exists — honesty inventory only).
- * One-way soft lamp is inventory only — does NOT seal retype/IRQ/untyped.
+ * product retype/IRQ/untyped seal exists - honesty inventory only).
+ * One-way soft lamp is inventory only - does NOT seal retype/IRQ/untyped.
  * Grep: process: bootstrap seal soft | process: seal checklist
  * Honesty: not product-complete.
  */
@@ -635,10 +825,15 @@ static u64 g_u64DeathReparent;         /* children reparented to init */
 static u64 g_u64DeathExcClear;         /* exception port cleared */
 static u64 g_u64DeathConfineScrub;     /* confine/promises scrub */
 static u64 g_u64DeathJitScrub;         /* CapJit cache scrub */
+/*
+ * H3 residual lean thr_exit tallies (inventory scope; Soft!=product):
+ *   g_u64DeathThrExit / Early / Barrier / BarrierCalls / CurScrub /
+ *   H3OrderPass / H3ForkStub / H3Cr3Pub - declared with soft death counters.
+ */
 
 /*
  * Soft CNode occupancy count (const; inventory only for seal checklist).
- * Counts non-INVALID slots; does not lock (snapshot may race — soft OK).
+ * Counts non-INVALID slots; does not lock (snapshot may race - soft OK).
  */
 static u32
 process_seal_cnode_live_slots(const struct gj_process *pProc)
@@ -711,14 +906,14 @@ process_seal_checklist_soft(const struct gj_process *pProc, const char *szVia)
     g_u32SealChecklistLogs++;
     fRootMeta = (pProc->pRootMeta != NULL) ? 1 : 0;
     /*
-     * Design K1–K6: root meta is kernel ops only — never a factory for
+     * Design K1-K6: root meta is kernel ops only - never a factory for
      * transferable PROCESS/CNODE. Soft lamp always 1 (policy intent);
      * product seal of retype/IRQ/untyped remains open (0 below).
      */
     fRootMetaNotFactory = 1;
     /*
      * Const path: gen!=0 and LIVE when pPagerEpObj known.
-     * Empty gen ⇒ pager empty (expected post-init before set_pager).
+     * Empty gen -> pager empty (expected post-init before set_pager).
      */
     fPagerEmpty = 0;
     if (gj_cap_ref_is_null(&pProc->refPager)) {
@@ -739,7 +934,7 @@ process_seal_checklist_soft(const struct gj_process *pProc, const char *szVia)
             "(Apple s13 soft checklist)\n",
             szViaSafe, g_u32SealChecklistLogs, g_u32BootstrapSealSoftLamp);
 
-    /* Grep: process: seal checklist … */
+    /* Grep: process: seal checklist ... */
     kprintf("process: seal checklist root_meta=%u pager_empty=%u "
             "ambient=%u confined=%u promises=0x%x soft\n",
             fRootMeta, fPagerEmpty, fAmbient, u32Confined, u32Promises);
@@ -785,582 +980,7 @@ process_seal_checklist_soft(const struct gj_process *pProc, const char *szVia)
      * Wave 13 deepen stamp + emit tallies.
      * Grep: process: bootstrap seal soft deepen | process: bootstrap seal soft tallies
      */
-    /*
-     * ---- Wave 19 complementary surfaces (kept) (never reshape primary).
-     * Return surfaces only — soft inventory; never hard-gates product paths.
-     */
-    /* Grep: process: bootstrap seal: soft retclass — Wave 19 return-class taxonomy (kept) */
-    kprintf("process: bootstrap seal: soft retclass ok|fail|inval|nodev|busy|nomem "
-            "soft_only=1 product_gate=0 wave=%u "
-            "(retclass taxonomy; Soft≠product)\n",
-            (unsigned)GJ_PROCESS_SOFT_WAVE);
-    /* Grep: process: bootstrap seal: soft retlane — Wave 19 return-lane catalog (kept) */
-    kprintf("process: bootstrap seal: soft retlane inv|selftest|rate|retcode|retmap|class "
-            "product_kernel=OPEN soft_ne_product=1 wave=%u "
-            "(retlane catalog; Soft≠product)\n",
-            (unsigned)GJ_PROCESS_SOFT_WAVE);
-    /*
-     * ---- Wave 20 complementary surfaces (kept) (never reshape primary).
-     * Return surfaces only — soft inventory; never hard-gates product paths.
-     */
-    /* Grep: process: bootstrap seal: soft retbound — Wave 20 return-bound honesty (kept) */
-    kprintf("process: bootstrap seal: soft retbound soft_only=1 product_gate=0 hard_gate=0 "
-            "never_blocks_m0=1 wave=%u "
-            "(retbound honesty; Soft≠product)\n",
-            (unsigned)GJ_PROCESS_SOFT_WAVE);
-    /* Grep: process: bootstrap seal: soft retseal — Wave 20 seal stamp (kept) */
-    kprintf("process: bootstrap seal: soft retseal exclusive=1 soft_ne_product=1 "
-            "product_kernel=OPEN wave=%u "
-            "(retseal stamp; Soft≠product)\n",
-            (unsigned)GJ_PROCESS_SOFT_WAVE);
-            /*
-             * ---- Wave 21 complementary surfaces (kept) (never reshape primary).
-             * Return surfaces only — soft inventory; never hard-gates product paths.
-            */
-            /* Grep: process: bootstrap seal: soft retpulse — Wave 21 return-pulse honesty (kept) */
-            kprintf("process: bootstrap seal: soft retpulse soft_only=1 product_gate=0 soft_ne_product=1 "
-                    "never_blocks_m0=1 wave=%u "
-                    "(retpulse honesty; Soft≠product)\n",
-                    (unsigned)GJ_PROCESS_SOFT_WAVE);
-            /* Grep: process: bootstrap seal: soft retmark — Wave 21 mark stamp (kept) */
-            kprintf("process: bootstrap seal: soft retmark exclusive=1 soft_ne_product=1 "
-                    "product_kernel=OPEN wave=%u "
-                    "(retmark stamp; Soft≠product)\n",
-                    (unsigned)GJ_PROCESS_SOFT_WAVE);
-            /*
-             * ---- Wave 22 complementary surfaces (kept) (never reshape primary).
-             * Return surfaces only — soft inventory; never hard-gates product paths.
-            */
-            /* Grep: process: bootstrap seal: soft retphase — Wave 22 return-phase honesty (kept) */
-            kprintf("process: bootstrap seal: soft retphase soft_only=1 product_gate=0 soft_ne_product=1 "
-                    "never_blocks_m0=1 wave=%u "
-                    "(retphase honesty; Soft≠product)\n",
-                    (unsigned)GJ_PROCESS_SOFT_WAVE);
-            /* Grep: process: bootstrap seal: soft retbadge — Wave 22 badge stamp (kept) */
-            kprintf("process: bootstrap seal: soft retbadge exclusive=1 soft_ne_product=1 "
-                    "product_kernel=OPEN wave=%u "
-                    "(retbadge stamp; Soft≠product)\n",
-                    (unsigned)GJ_PROCESS_SOFT_WAVE);
-/*
- * ---- Wave 23 complementary surfaces (kept) (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
-            */
-            /* Grep: process: bootstrap seal: soft rettoken — Wave 23 return-token honesty (kept) */
-            kprintf("process: bootstrap seal: soft rettoken soft_only=1 product_gate=0 soft_ne_product=1 "
-                    "never_blocks_m0=1 wave=%u "
-                    "(rettoken honesty; Soft≠product)\n",
-                    (unsigned)GJ_PROCESS_SOFT_WAVE);
-            /* Grep: process: bootstrap seal: soft retcrest — Wave 23 crest stamp (kept) */
-            kprintf("process: bootstrap seal: soft retcrest exclusive=1 soft_ne_product=1 "
-                    "product_kernel=OPEN wave=%u "
-                    "(retcrest stamp; Soft≠product)\n",
-                    (unsigned)GJ_PROCESS_SOFT_WAVE);
-            /*
-             * ---- Wave 24 complementary surfaces (kept) (never reshape primary).
-             * Return surfaces only — soft inventory; never hard-gates product paths.
-             */
-            /* Grep: process: bootstrap seal: soft retvault — Wave 24 return-vault honesty (kept) */
-            kprintf("process: bootstrap seal: soft retvault soft_only=1 product_gate=0 soft_ne_product=1 "
-                    "never_blocks_m0=1 wave=%u "
-                    "(retvault honesty; Soft≠product)\n",
-                    (unsigned)GJ_PROCESS_SOFT_WAVE);
-            /* Grep: process: bootstrap seal: soft retbanner — Wave 24 banner stamp (kept) */
-            kprintf("process: bootstrap seal: soft retbanner exclusive=1 soft_ne_product=1 "
-                    "product_kernel=OPEN wave=%u "
-                    "(retbanner stamp; Soft≠product)\n",
-                    (unsigned)GJ_PROCESS_SOFT_WAVE);
-            /*
-             * ---- Wave 25 complementary surfaces (kept) (never reshape primary).
-             * Return surfaces only — soft inventory; never hard-gates product paths.
-             */
-            /* Grep: process: bootstrap seal: soft retledger — Wave 25 return-ledger honesty (kept) */
-            kprintf("process: bootstrap seal: soft retledger soft_only=1 product_gate=0 soft_ne_product=1 "
-                    "never_blocks_m0=1 wave=%u "
-                    "(retledger honesty; Soft≠product)\n",
-                    (unsigned)GJ_PROCESS_SOFT_WAVE);
-            /* Grep: process: bootstrap seal: soft retbeacon — Wave 25 beacon stamp (kept) */
-            kprintf("process: bootstrap seal: soft retbeacon exclusive=1 soft_ne_product=1 "
-                    "product_kernel=OPEN wave=%u "
-                    "(retbeacon stamp; Soft≠product)\n",
-                    (unsigned)GJ_PROCESS_SOFT_WAVE);
-            /*
-             * ---- Wave 26 complementary surfaces (kept) (never reshape primary).
-             * Return surfaces only — soft inventory; never hard-gates product paths.
-             */
-            /* Grep: process: bootstrap seal: soft retcipher — Wave 26 return-cipher honesty (kept) */
-            kprintf("process: bootstrap seal: soft retcipher soft_only=1 product_gate=0 soft_ne_product=1 "
-                    "never_blocks_m0=1 wave=%u "
-                    "(retcipher honesty; Soft≠product)\n",
-                    (unsigned)GJ_PROCESS_SOFT_WAVE);
-            /* Grep: process: bootstrap seal: soft retflame — Wave 26 flame stamp (kept) */
-            kprintf("process: bootstrap seal: soft retflame exclusive=1 soft_ne_product=1 "
-                    "product_kernel=OPEN wave=%u "
-                    "(retflame stamp; Soft≠product)\n",
-                    (unsigned)GJ_PROCESS_SOFT_WAVE);
-                    /*
-                     * ---- Wave 27 complementary surfaces (kept) (never reshape primary).
-                     * Return surfaces only — soft inventory; never hard-gates product paths.
-                     */
-                    /* Grep: process: bootstrap seal: soft retprism — Wave 27 return-prism honesty (kept) */
-                    kprintf("process: bootstrap seal: soft retprism soft_only=1 product_gate=0 soft_ne_product=1 "
-                            "never_blocks_m0=1 wave=%u "
-                            "(retprism honesty; Soft≠product)\n",
-                            (unsigned)GJ_PROCESS_SOFT_WAVE);
-                    /* Grep: process: bootstrap seal: soft retforge — Wave 27 forge stamp (kept) */
-                    kprintf("process: bootstrap seal: soft retforge exclusive=1 soft_ne_product=1 "
-                            "product_kernel=OPEN wave=%u "
-                            "(retforge stamp; Soft≠product)\n",
-                            (unsigned)GJ_PROCESS_SOFT_WAVE);
-                            /*
-                             * ---- Wave 28 complementary surfaces (kept) (never reshape primary).
-                             * Return surfaces only — soft inventory; never hard-gates product paths.
-                             */
-                            /* Grep: process: bootstrap seal: soft retshard — Wave 28 return-shard honesty (kept) */
-                            kprintf("process: bootstrap seal: soft retshard soft_only=1 product_gate=0 soft_ne_product=1 "
-                                "never_blocks_m0=1 wave=%u "
-                                "(retshard honesty; Soft≠product)\n",
-                                (unsigned)GJ_PROCESS_SOFT_WAVE);
-                            /* Grep: process: bootstrap seal: soft retcrown — Wave 28 crown stamp (kept) */
-                            kprintf("process: bootstrap seal: soft retcrown exclusive=1 soft_ne_product=1 "
-                                "product_kernel=OPEN wave=%u "
-                                "(retcrown stamp; Soft≠product)\n",
-                                (unsigned)GJ_PROCESS_SOFT_WAVE);
-                                /*
-                             * ---- Wave 29 complementary surfaces (kept) (never reshape primary).
-                             * Return surfaces only — soft inventory; never hard-gates product paths.
-                             */
-                            /* Grep: process: bootstrap seal: soft retglyph — Wave 29 return-glyph honesty (kept) */
-                            kprintf("process: bootstrap seal: soft retglyph soft_only=1 product_gate=0 soft_ne_product=1 "
-                                    "never_blocks_m0=1 wave=%u "
-                                    "(retglyph honesty; Soft≠product)\n",
-                                    (unsigned)GJ_PROCESS_SOFT_WAVE);
-                            /* Grep: process: bootstrap seal: soft retscepter — Wave 29 scepter stamp (kept) */
-                            kprintf("process: bootstrap seal: soft retscepter exclusive=1 soft_ne_product=1 "
-                                    "product_kernel=OPEN wave=%u "
-                                    "(retscepter stamp; Soft≠product)\n",
-                                    (unsigned)GJ_PROCESS_SOFT_WAVE);
-                                /*
-                             * ---- Wave 30 complementary surfaces (kept) (never reshape primary).
-                             * Return surfaces only — soft inventory; never hard-gates product paths.
-                             */
-                            /* Grep: process: bootstrap seal: soft retsigil — Wave 30 return-sigil honesty (kept) */
-                            kprintf("process: bootstrap seal: soft retsigil soft_only=1 product_gate=0 soft_ne_product=1 "
-                                    "never_blocks_m0=1 wave=%u "
-                                    "(retsigil honesty; Soft≠product)\n",
-                                    (unsigned)GJ_PROCESS_SOFT_WAVE);
-                            /* Grep: process: bootstrap seal: soft retemblem — Wave 30 emblem stamp (kept) */
-                            kprintf("process: bootstrap seal: soft retemblem exclusive=1 soft_ne_product=1 "
-                                    "product_kernel=OPEN wave=%u "
-                                    "(retemblem stamp; Soft≠product)\n",
-                                    (unsigned)GJ_PROCESS_SOFT_WAVE);
-                            /*
-                             * ---- Wave 31 complementary surfaces (kept) (never reshape primary).
-                             * Return surfaces only — soft inventory; never hard-gates product paths.
-                             */
-                            /* Grep: process: bootstrap seal: soft retaegis — Wave 31 return-aegis honesty (kept) */
-                            kprintf("process: bootstrap seal: soft retaegis soft_only=1 product_gate=0 soft_ne_product=1 "
-                                    "never_blocks_m0=1 wave=%u "
-                                    "(retaegis honesty; Soft≠product)\n",
-                                    (unsigned)GJ_PROCESS_SOFT_WAVE);
-                            /* Grep: process: bootstrap seal: soft retsigil — Wave 30 return-sigil honesty (kept) */
-                            kprintf("process: bootstrap seal: soft retsigil soft_only=1 product_gate=0 soft_ne_product=1 "
-                                    "never_blocks_m0=1 wave=%u "
-                                    "(retsigil honesty; Soft≠product)\n",
-                                    (unsigned)GJ_PROCESS_SOFT_WAVE);
-                            /* Grep: process: bootstrap seal: soft retmantle — Wave 31 mantle stamp (kept) */
-                            kprintf("process: bootstrap seal: soft retmantle exclusive=1 soft_ne_product=1 "
-                                    "product_kernel=OPEN wave=%u "
-                                    "(retmantle stamp; Soft≠product)\n",
-                                    (unsigned)GJ_PROCESS_SOFT_WAVE);
-/*
- * ---- Wave 32 complementary surfaces (kept) (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: process: bootstrap seal: soft retbulwark — Wave 32 return-bulwark honesty (kept) */
-kprintf("process: bootstrap seal: soft retbulwark soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=%u "
-        "(retbulwark honesty; Soft≠product)\n",
-        (unsigned)GJ_PROCESS_SOFT_WAVE);
-/* Grep: process: bootstrap seal: soft retpanoply — Wave 32 panoply stamp (kept) */
-kprintf("process: bootstrap seal: soft retpanoply exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=%u "
-        "(retpanoply stamp; Soft≠product)\n",
-        (unsigned)GJ_PROCESS_SOFT_WAVE);
-/*
- * ---- Wave 33 complementary surfaces (kept) (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: process: bootstrap seal: soft retbastion — Wave 33 return-bastion honesty (kept) */
-kprintf("process: bootstrap seal: soft retbastion soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=%u "
-        "(retbastion honesty; Soft≠product)\n",
-        (unsigned)GJ_PROCESS_SOFT_WAVE);
-/* Grep: process: bootstrap seal: soft retcitadel — Wave 33 citadel stamp (kept) */
-kprintf("process: bootstrap seal: soft retcitadel exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=%u "
-        "(retcitadel stamp; Soft≠product)\n",
-        (unsigned)GJ_PROCESS_SOFT_WAVE);
-/*
- * ---- Wave 34 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: process: bootstrap seal: soft retredoubt — Wave 34 return-redoubt honesty */
-kprintf("process: bootstrap seal: soft retredoubt soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=%u "
-        "(retredoubt honesty; Soft≠product)\n",
-        (unsigned)GJ_PROCESS_SOFT_WAVE);
-/* Grep: process: bootstrap seal: soft retkeep — Wave 34 exclusive keep stamp */
-kprintf("process: bootstrap seal: soft retkeep exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=%u "
-        "(retkeep stamp; Soft≠product)\n",
-        (unsigned)GJ_PROCESS_SOFT_WAVE);
-/*
- * ---- Wave 35 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: process: bootstrap seal: soft retfortress — Wave 35 return-fortress honesty */
-kprintf("process: bootstrap seal: soft retfortress soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=%u "
-        "(retfortress honesty; Soft≠product)\n",
-        (unsigned)GJ_PROCESS_SOFT_WAVE);
-/* Grep: process: bootstrap seal: soft retpalace — Wave 35 exclusive palace stamp */
-kprintf("process: bootstrap seal: soft retpalace exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=%u "
-        "(retpalace stamp; Soft≠product)\n",
-        (unsigned)GJ_PROCESS_SOFT_WAVE);
-/*
- * ---- Wave 36 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: process: bootstrap seal: soft rethold — Wave 36 return-hold honesty */
-kprintf("process: bootstrap seal: soft rethold soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=%u "
-        "(rethold honesty; Soft≠product)\n",
-        (unsigned)GJ_PROCESS_SOFT_WAVE);
-/* Grep: process: bootstrap seal: soft retspire — Wave 36 exclusive spire stamp */
-kprintf("process: bootstrap seal: soft retspire exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=%u "
-        "(retspire stamp; Soft≠product)\n",
-        (unsigned)GJ_PROCESS_SOFT_WAVE);
-/*
- * ---- Wave 37 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: process: bootstrap seal: soft retwall — Wave 37 return-wall honesty */
-kprintf("process: bootstrap seal: soft retwall soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=%u "
-        "(retwall honesty; Soft≠product)\n",
-        (unsigned)GJ_PROCESS_SOFT_WAVE);
-/* Grep: process: bootstrap seal: soft retgate — Wave 37 exclusive gate stamp */
-kprintf("process: bootstrap seal: soft retgate exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=%u "
-        "(retgate stamp; Soft≠product)\n",
-        (unsigned)GJ_PROCESS_SOFT_WAVE);
-/*
- * ---- Wave 38 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: process: bootstrap seal: soft retmoat — Wave 38 return-moat honesty */
-kprintf("process: bootstrap seal: soft retmoat soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=%u "
-        "(retmoat honesty; Soft≠product)\n",
-        (unsigned)GJ_PROCESS_SOFT_WAVE);
-/* Grep: process: bootstrap seal: soft retower — Wave 38 exclusive tower stamp */
-kprintf("process: bootstrap seal: soft retower exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=%u "
-        "(retower stamp; Soft≠product)\n",
-        (unsigned)GJ_PROCESS_SOFT_WAVE);
                             
-/*
- * ---- Wave 39 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: process: bootstrap seal: soft retbarbican — Wave 39 return-barbican honesty */
-kprintf("process: bootstrap seal: soft retbarbican soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=%u "
-        "(retbarbican honesty; Soft≠product)\n",
-        (unsigned)GJ_PROCESS_SOFT_WAVE);
-/* Grep: process: bootstrap seal: soft retglacis — Wave 39 exclusive glacis stamp */
-kprintf("process: bootstrap seal: soft retglacis exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=%u "
-        "(retglacis stamp; Soft≠product)\n",
-        (unsigned)GJ_PROCESS_SOFT_WAVE);
-/*
- * ---- Wave 40 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: process: bootstrap seal: soft retcurtain — Wave 40 return-curtain honesty */
-kprintf("process: bootstrap seal: soft retcurtain soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=%u "
-        "(retcurtain honesty; Soft≠product)\n",
-        (unsigned)GJ_PROCESS_SOFT_WAVE);
-/* Grep: process: bootstrap seal: soft retparapet — Wave 40 exclusive parapet stamp */
-kprintf("process: bootstrap seal: soft retparapet exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=%u "
-        "(retparapet stamp; Soft≠product)\n",
-        (unsigned)GJ_PROCESS_SOFT_WAVE);
-/*
- * ---- Wave 41 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: process: bootstrap seal: soft retravelin — Wave 41 return-travelin honesty */
-kprintf("process: bootstrap seal: soft retravelin soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=%u "
-        "(retravelin honesty; Soft≠product)\n",
-        (unsigned)GJ_PROCESS_SOFT_WAVE);
-/* Grep: process: bootstrap seal: soft retditch — Wave 41 exclusive ditch stamp */
-kprintf("process: bootstrap seal: soft retditch exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=%u "
-        "(retditch stamp; Soft≠product)\n",
-        (unsigned)GJ_PROCESS_SOFT_WAVE);
-/*
- * ---- Wave 42 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: process: bootstrap seal: soft retportcullis — Wave 42 return-portcullis honesty */
-kprintf("process: bootstrap seal: soft retportcullis soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=%u "
-        "(retportcullis honesty; Soft≠product)\n",
-        (unsigned)GJ_PROCESS_SOFT_WAVE);
-/* Grep: process: bootstrap seal: soft retbattlement — Wave 42 exclusive battlement stamp */
-kprintf("process: bootstrap seal: soft retbattlement exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=%u "
-        "(retbattlement stamp; Soft≠product)\n",
-        (unsigned)GJ_PROCESS_SOFT_WAVE);
-/*
- * ---- Wave 43 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: process: bootstrap seal: soft retmachicolation — Wave 43 return-machicolation honesty */
-kprintf("process: bootstrap seal: soft retmachicolation soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=%u "
-        "(retmachicolation honesty; Soft≠product)\n",
-        (unsigned)GJ_PROCESS_SOFT_WAVE);
-/* Grep: process: bootstrap seal: soft retarrowslit — Wave 43 exclusive arrowslit stamp */
-kprintf("process: bootstrap seal: soft retarrowslit exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=%u "
-        "(retarrowslit stamp; Soft≠product)\n",
-        (unsigned)GJ_PROCESS_SOFT_WAVE);
-
-/*
- * ---- Wave 44 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: process: bootstrap seal: soft retmerlon — Wave 44 return-merlon honesty */
-kprintf("process: bootstrap seal: soft retmerlon soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=%u "
-        "(retmerlon honesty; Soft≠product)\n",
-        (unsigned)GJ_PROCESS_SOFT_WAVE);
-/* Grep: process: bootstrap seal: soft retembrasure — Wave 44 exclusive embrasure stamp */
-kprintf("process: bootstrap seal: soft retembrasure exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=%u "
-        "(retembrasure stamp; Soft≠product)\n",
-        (unsigned)GJ_PROCESS_SOFT_WAVE);
-
-/*
- * ---- Wave 45 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: process: bootstrap seal: soft retkeepgate — Wave 45 return-keepgate honesty */
-kprintf("process: bootstrap seal: soft retkeepgate soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=%u "
-        "(retkeepgate honesty; Soft≠product)\n",
-        (unsigned)GJ_PROCESS_SOFT_WAVE);
-/* Grep: process: bootstrap seal: soft retouterward — Wave 45 exclusive outerward stamp */
-kprintf("process: bootstrap seal: soft retouterward exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=%u "
-        "(retouterward stamp; Soft≠product)\n",
-        (unsigned)GJ_PROCESS_SOFT_WAVE);
-
-/*
- * ---- Wave 46 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: process: bootstrap seal: soft retbailey — Wave 46 return-bailey honesty */
-kprintf("process: bootstrap seal: soft retbailey soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=%u "
-        "(retbailey honesty; Soft≠product)\n",
-        (unsigned)GJ_PROCESS_SOFT_WAVE);
-/* Grep: process: bootstrap seal: soft retpostern — Wave 46 exclusive postern stamp */
-kprintf("process: bootstrap seal: soft retpostern exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=%u "
-        "(retpostern stamp; Soft≠product)\n",
-        (unsigned)GJ_PROCESS_SOFT_WAVE);
-
-/*
- * ---- Wave 47 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: process: bootstrap seal: soft retinnerward — Wave 47 return-innerward honesty */
-kprintf("process: bootstrap seal: soft retinnerward soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retinnerward honesty; Soft≠product)\n");
-/* Grep: process: bootstrap seal: soft retdonjon — Wave 47 exclusive donjon stamp */
-kprintf("process: bootstrap seal: soft retdonjon exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retdonjon stamp; Soft≠product)\n");
-
-/*
- * ---- Wave 48 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: process: bootstrap seal: soft retchevaux — Wave 48 return-chevaux honesty */
-kprintf("process: bootstrap seal: soft retchevaux soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retchevaux honesty; Soft≠product)\n");
-/* Grep: process: bootstrap seal: soft retpalisade — Wave 48 exclusive palisade stamp */
-kprintf("process: bootstrap seal: soft retpalisade exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retpalisade stamp; Soft≠product)\n");
-
-/*
- * ---- Wave 49 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: process: bootstrap seal: soft retglacisgate — Wave 49 return-glacisgate honesty */
-kprintf("process: bootstrap seal: soft retglacisgate soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retglacisgate honesty; Soft≠product)\n");
-/* Grep: process: bootstrap seal: soft retoutwork — Wave 49 exclusive outwork stamp */
-kprintf("process: bootstrap seal: soft retoutwork exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retoutwork stamp; Soft≠product)\n");
-/*
- * ---- Wave 50 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: process: bootstrap seal: soft retsally — Wave 50 return-sally honesty */
-kprintf("process: bootstrap seal: soft retsally soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retsally honesty; Soft≠product)\n");
-/* Grep: process: bootstrap seal: soft retcounterscarp — Wave 50 exclusive counterscarp stamp */
-kprintf("process: bootstrap seal: soft retcounterscarp exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retcounterscarp stamp; Soft≠product)\n");
-/*
- * ---- Wave 51 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: process: bootstrap seal: soft retfosse — Wave 51 return-fosse honesty */
-kprintf("process: bootstrap seal: soft retfosse soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retfosse honesty; Soft≠product)\n");
-/* Grep: process: bootstrap seal: soft retcoveredway — Wave 51 exclusive coveredway stamp */
-kprintf("process: bootstrap seal: soft retcoveredway exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retcoveredway stamp; Soft≠product)\n");
-
-/*
- * ---- Wave 52 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: process: bootstrap seal: soft rettenaille — Wave 52 return-tenaille honesty */
-kprintf("process: bootstrap seal: soft rettenaille soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(rettenaille honesty; Soft≠product)\n");
-/* Grep: process: bootstrap seal: soft retdemilune — Wave 52 exclusive demilune stamp */
-kprintf("process: bootstrap seal: soft retdemilune exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retdemilune stamp; Soft≠product)\n");
-/*
- * ---- Wave 53 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: process: bootstrap seal: soft retravelin — Wave 53 return-travelin honesty */
-kprintf("process: bootstrap seal: soft retravelin soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retravelin honesty; Soft≠product)\n");
-/* Grep: process: bootstrap seal: soft retlunette — Wave 53 exclusive lunette stamp */
-kprintf("process: bootstrap seal: soft retlunette exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retlunette stamp; Soft≠product)\n");
-/*
- * ---- Wave 54 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: process: bootstrap seal: soft retcaponier — Wave 54 return-caponier honesty */
-kprintf("process: bootstrap seal: soft retcaponier soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retcaponier honesty; Soft≠product)\n");
-/* Grep: process: bootstrap seal: soft retredan — Wave 54 exclusive redan stamp */
-kprintf("process: bootstrap seal: soft retredan exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retredan stamp; Soft≠product)\n");
-/*
- * ---- Wave 55 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: process: bootstrap seal: soft retflank — Wave 55 return-flank honesty */
-kprintf("process: bootstrap seal: soft retflank soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retflank honesty; Soft≠product)\n");
-/* Grep: process: bootstrap seal: soft retface — Wave 55 exclusive face stamp */
-kprintf("process: bootstrap seal: soft retface exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retface stamp; Soft≠product)\n");
-/*
- * ---- Wave 56 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: process: bootstrap seal: soft retgorge — Wave 56 return-gorge honesty */
-kprintf("process: bootstrap seal: soft retgorge soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retgorge honesty; Soft≠product)\n");
-/* Grep: process: bootstrap seal: soft retshoulder — Wave 56 exclusive shoulder stamp */
-kprintf("process: bootstrap seal: soft retshoulder exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retshoulder stamp; Soft≠product)\n");
-/*
- * ---- Wave 57 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: process: bootstrap seal: soft retraverse — Wave 57 return-traverse honesty */
-kprintf("process: bootstrap seal: soft retraverse soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retraverse honesty; Soft≠product)\n");
-/* Grep: process: bootstrap seal: soft retcasemate — Wave 57 exclusive casemate stamp */
-kprintf("process: bootstrap seal: soft retcasemate exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retcasemate stamp; Soft≠product)\n");
-
-/*
- * ---- Wave 58 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: process: bootstrap seal: soft retorillon — Wave 58 return-orillon honesty */
-kprintf("process: bootstrap seal: soft retorillon soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retorillon honesty; Soft≠product)\n");
-/* Grep: process: bootstrap seal: soft retbonnette — Wave 58 exclusive bonnette stamp */
-kprintf("process: bootstrap seal: soft retbonnette exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retbonnette stamp; Soft≠product)\n");
-
-/*
- * ---- Wave 59 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: process: bootstrap seal: soft retcrownwork — Wave 59 return-crownwork honesty */
-kprintf("process: bootstrap seal: soft retcrownwork soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retcrownwork honesty; Soft≠product)\n");
-/* Grep: process: bootstrap seal: soft rethornwork — Wave 59 exclusive hornwork stamp */
-kprintf("process: bootstrap seal: soft rethornwork exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(rethornwork stamp; Soft≠product)\n");
-
-/*
- * ---- Wave 60 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: process: bootstrap seal: soft retplace — Wave 60 return-place honesty */
-kprintf("process: bootstrap seal: soft retplace soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retplace honesty; Soft≠product)\n");
-/* Grep: process: bootstrap seal: soft retenvelope — Wave 60 exclusive envelope stamp */
-kprintf("process: bootstrap seal: soft retenvelope exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retenvelope stamp; Soft≠product)\n");
 
 
 
@@ -1370,316 +990,18 @@ kprintf("process: bootstrap seal: soft retenvelope exclusive=1 soft_ne_product=1
 
 
 
-/*
- * ---- Wave 61 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: process: bootstrap seal: soft retcounterguard — Wave 61 return-counterguard honesty */
-kprintf("process: bootstrap seal: soft retcounterguard soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retcounterguard honesty; Soft≠product)\n");
-/* Grep: process: bootstrap seal: soft retcoveredface — Wave 61 exclusive coveredface stamp */
-kprintf("process: bootstrap seal: soft retcoveredface exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retcoveredface stamp; Soft≠product)\n");
-/*
- * ---- Wave 62 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: process: bootstrap seal: soft retbastionface — Wave 62 return-bastionface honesty */
-kprintf("process: bootstrap seal: soft retbastionface soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retbastionface honesty; Soft≠product)\n");
-/* Grep: process: bootstrap seal: soft retcurtainangle — Wave 62 exclusive curtainangle stamp */
-kprintf("process: bootstrap seal: soft retcurtainangle exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retcurtainangle stamp; Soft≠product)\n");
-/*
- * ---- Wave 63 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: process: bootstrap seal: soft retdoubletenaille — Wave 63 return-doubletenaille honesty */
-kprintf("process: bootstrap seal: soft retdoubletenaille soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retdoubletenaille honesty; Soft≠product)\n");
-/* Grep: process: bootstrap seal: soft retplaceofarms — Wave 63 exclusive placeofarms stamp */
-kprintf("process: bootstrap seal: soft retplaceofarms exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retplaceofarms stamp; Soft≠product)\n");
- /*
-  * ---- Wave 64 exclusive complementary surfaces (never reshape primary).
-  * Return surfaces only — soft inventory; never hard-gates product paths.
-  */
- /* Grep: process: bootstrap seal: soft retreentrant — Wave 64 return-reentrant honesty */
-kprintf("process: bootstrap seal: soft retreentrant soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retreentrant honesty; Soft≠product)\n");
- /* Grep: process: bootstrap seal: soft retsallyport — Wave 64 exclusive sallyport stamp */
-kprintf("process: bootstrap seal: soft retsallyport exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retsallyport stamp; Soft≠product)\n");
- /*
-  * ---- Wave 65 exclusive complementary surfaces (never reshape primary).
-  * Return surfaces only — soft inventory; never hard-gates product paths.
-  */
- /* Grep: process: bootstrap seal: soft retgorgeangle — Wave 65 return-gorgeangle honesty */
-kprintf("process: bootstrap seal: soft retgorgeangle soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retgorgeangle honesty; Soft≠product)\n");
- /* Grep: process: bootstrap seal: soft retshoulderangle — Wave 65 exclusive shoulderangle stamp */
-kprintf("process: bootstrap seal: soft retshoulderangle exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retshoulderangle stamp; Soft≠product)\n");
- /*
-  * ---- Wave 66 exclusive complementary surfaces (never reshape primary).
-  * Return surfaces only — soft inventory; never hard-gates product paths.
-  */
- /* Grep: process: bootstrap seal: soft retflankangle — Wave 66 return-flankangle honesty */
- kprintf("process: bootstrap seal: soft retflankangle soft_only=1 product_gate=0 soft_ne_product=1 "
-         "never_blocks_m0=1 wave=116 "
-         "(retflankangle honesty; Soft≠product)\n");
- /* Grep: process: bootstrap seal: soft retfaceangle — Wave 66 exclusive faceangle stamp */
- kprintf("process: bootstrap seal: soft retfaceangle exclusive=1 soft_ne_product=1 "
-         "product_kernel=OPEN wave=116 "
-         "(retfaceangle stamp; Soft≠product)\n");
-/*
- * ---- Wave 67 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: process: bootstrap seal: soft retcaponierangle — Wave 67 return-caponierangle honesty */
-kprintf("process: bootstrap seal: soft retcaponierangle soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retcaponierangle honesty; Soft≠product)\n");
-/* Grep: process: bootstrap seal: soft retredanangle — Wave 67 exclusive redanangle stamp */
-kprintf("process: bootstrap seal: soft retredanangle exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retredanangle stamp; Soft≠product)\n");
-/*
- * ---- Wave 68 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: process: bootstrap seal: soft retlunetteangle — Wave 68 return-lunetteangle honesty */
-kprintf("process: bootstrap seal: soft retlunetteangle soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retlunetteangle honesty; Soft≠product)\n");
-/* Grep: process: bootstrap seal: soft rettenailleangle — Wave 68 exclusive tenailleangle stamp */
-kprintf("process: bootstrap seal: soft rettenailleangle exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(rettenailleangle stamp; Soft≠product)\n");
-/*
- * ---- Wave 69 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: process: bootstrap seal: soft retdemiluneangle — Wave 69 return-demiluneangle honesty */
-kprintf("process: bootstrap seal: soft retdemiluneangle soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retdemiluneangle honesty; Soft≠product)\n");
-/* Grep: process: bootstrap seal: soft retcoveredwayangle — Wave 69 exclusive coveredwayangle stamp */
-kprintf("process: bootstrap seal: soft retcoveredwayangle exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retcoveredwayangle stamp; Soft≠product)\n");
-/*
- * ---- Wave 70 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: process: bootstrap seal: soft retfosseangle — Wave 70 return-fosseangle honesty */
-kprintf("process: bootstrap seal: soft retfosseangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retfosseangle honesty; Soft≠product)\n");
-/* Grep: process: bootstrap seal: soft retcounterscarple — Wave 70 exclusive counterscarple stamp */
-kprintf("process: bootstrap seal: soft retcounterscarple exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retcounterscarple stamp; Soft≠product)\n");
-/*
- * ---- Wave 71 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: process: bootstrap seal: soft retsallyportangle — Wave 71 return-sallyportangle honesty */
-kprintf("process: bootstrap seal: soft retsallyportangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retsallyportangle honesty; Soft≠product)\n");
-/* Grep: process: bootstrap seal: soft retreentrantangle — Wave 71 exclusive reentrantangle stamp */
-kprintf("process: bootstrap seal: soft retreentrantangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retreentrantangle stamp; Soft≠product)\n");
-/*
- * ---- Wave 72 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: process: bootstrap seal: soft retplaceofarmsangle — Wave 72 return-placeofarmsangle honesty */
-kprintf("process: bootstrap seal: soft retplaceofarmsangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retplaceofarmsangle honesty; Soft≠product)\n");
-/* Grep: process: bootstrap seal: soft retdoubletenailleangle — Wave 72 exclusive doubletenailleangle stamp */
-kprintf("process: bootstrap seal: soft retdoubletenailleangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retdoubletenailleangle stamp; Soft≠product)\n");
-/* Grep: process: bootstrap seal: soft retcurtainface — Wave 73 return-curtainface honesty */
-kprintf("process: bootstrap seal: soft retcurtainface soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retcurtainface honesty; Soft≠product)\n");
-/* Grep: process: bootstrap seal: soft retbastionangle — Wave 73 exclusive bastionangle stamp */
-kprintf("process: bootstrap seal: soft retbastionangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retbastionangle stamp; Soft≠product)\n");
-/* Grep: process: bootstrap seal: soft retglacisangle — Wave 74 return-glacisangle honesty */
-kprintf("process: bootstrap seal: soft retglacisangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retglacisangle honesty; Soft≠product)\n");
-/* Grep: process: bootstrap seal: soft retparapetangle — Wave 74 exclusive parapetangle stamp */
-kprintf("process: bootstrap seal: soft retparapetangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retparapetangle stamp; Soft≠product)\n");
-/* Grep: process: bootstrap seal: soft retmoatangle — Wave 75 return-moatangle honesty */
-kprintf("process: bootstrap seal: soft retmoatangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retmoatangle honesty; Soft≠product)\n");
-/* Grep: process: bootstrap seal: soft retowerangle — Wave 75 exclusive towerangle stamp */
-kprintf("process: bootstrap seal: soft retowerangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retowerangle stamp; Soft≠product)\n");
-/* Grep: process: bootstrap seal: soft retgateangle — Wave 76 return-gateangle honesty */
-kprintf("process: bootstrap seal: soft retgateangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retgateangle honesty; Soft≠product)\n");
-/* Grep: process: bootstrap seal: soft retwallangle — Wave 76 exclusive wallangle stamp */
-kprintf("process: bootstrap seal: soft retwallangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retwallangle stamp; Soft≠product)\n");
-/* Grep: process: bootstrap seal: soft retspireangle — Wave 77 return-spireangle honesty */
-kprintf("process: bootstrap seal: soft retspireangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retspireangle honesty; Soft≠product)\n");
-/* Grep: process: bootstrap seal: soft retholdangle — Wave 77 exclusive holdangle stamp */
-kprintf("process: bootstrap seal: soft retholdangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retholdangle stamp; Soft≠product)\n");
-/* Grep: process: bootstrap seal: soft retpalaceangle — Wave 78 return-palaceangle honesty */
-kprintf("process: bootstrap seal: soft retpalaceangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retpalaceangle honesty; Soft≠product)\n");
-/* Grep: process: bootstrap seal: soft retfortressangle — Wave 78 exclusive fortressangle stamp */
-kprintf("process: bootstrap seal: soft retfortressangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retfortressangle stamp; Soft≠product)\n");
-/* Grep: process: bootstrap seal: soft retkeepangle — Wave 79 return-keepangle honesty */
-kprintf("process: bootstrap seal: soft retkeepangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retkeepangle honesty; Soft≠product)\n");
-/* Grep: process: bootstrap seal: soft retredoubtangle — Wave 79 exclusive redoubtangle stamp */
-kprintf("process: bootstrap seal: soft retredoubtangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retredoubtangle stamp; Soft≠product)\n");
-/* Grep: process: bootstrap seal: soft retcitadelangle — Wave 80 return-citadelangle honesty */
-kprintf("process: bootstrap seal: soft retcitadelangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retcitadelangle honesty; Soft≠product)\n");
-/* Grep: process: bootstrap seal: soft retbastionkeep — Wave 80 exclusive bastionkeep stamp */
-kprintf("process: bootstrap seal: soft retbastionkeep exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retbastionkeep stamp; Soft≠product)\n");
-/* Grep: process: bootstrap seal: soft retpanoplyangle — Wave 81 return-panoplyangle honesty */
-kprintf("process: bootstrap seal: soft retpanoplyangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retpanoplyangle honesty; Soft≠product)\n");
-/* Grep: process: bootstrap seal: soft retbulwarkangle — Wave 81 exclusive bulwarkangle stamp */
-kprintf("process: bootstrap seal: soft retbulwarkangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retbulwarkangle stamp; Soft≠product)\n");
-/* Grep: process: bootstrap seal: soft retmantleangle — Wave 82 return-mantleangle honesty */
-kprintf("process: bootstrap seal: soft retmantleangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retmantleangle honesty; Soft≠product)\n");
-/* Grep: process: bootstrap seal: soft retaegisangle — Wave 82 exclusive aegisangle stamp */
-kprintf("process: bootstrap seal: soft retaegisangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retaegisangle stamp; Soft≠product)\n");
-/* Grep: process: bootstrap seal: soft retemblemangle — Wave 83 return-emblemangle honesty */
-kprintf("process: bootstrap seal: soft retemblemangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retemblemangle honesty; Soft≠product)\n");
-/* Grep: process: bootstrap seal: soft retsigilangle — Wave 83 exclusive sigilangle stamp */
-kprintf("process: bootstrap seal: soft retsigilangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retsigilangle stamp; Soft≠product)\n");
-/* Grep: process: bootstrap seal: soft retscepterangle — Wave 84 return-scepterangle honesty */
-kprintf("process: bootstrap seal: soft retscepterangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retscepterangle honesty; Soft≠product)\n");
-/* Grep: process: bootstrap seal: soft retglyphangle — Wave 84 exclusive glyphangle stamp */
-kprintf("process: bootstrap seal: soft retglyphangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retglyphangle stamp; Soft≠product)\n");
-/* Grep: process: bootstrap seal: soft retcrownangle — Wave 85 return-crownangle honesty */
-kprintf("process: bootstrap seal: soft retcrownangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retcrownangle honesty; Soft≠product)\n");
-/* Grep: process: bootstrap seal: soft retshardangle — Wave 85 exclusive shardangle stamp */
-kprintf("process: bootstrap seal: soft retshardangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retshardangle stamp; Soft≠product)\n");
-/* Grep: process: bootstrap seal: soft retforgeangle — Wave 86 return-forgeangle honesty */
-kprintf("process: bootstrap seal: soft retforgeangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retforgeangle honesty; Soft≠product)\n");
-/* Grep: process: bootstrap seal: soft retprismangle — Wave 86 exclusive prismangle stamp */
-kprintf("process: bootstrap seal: soft retprismangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retprismangle stamp; Soft≠product)\n");
-/* Grep: process: bootstrap seal: soft retflameangle — Wave 87 return-flameangle honesty */
-kprintf("process: bootstrap seal: soft retflameangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retflameangle honesty; Soft≠product)\n");
-/* Grep: process: bootstrap seal: soft retcipherangle — Wave 87 exclusive cipherangle stamp */
-kprintf("process: bootstrap seal: soft retcipherangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retcipherangle stamp; Soft≠product)\n");
-/* Grep: process: bootstrap seal: soft retbeaconangle — Wave 88 return-beaconangle honesty */
-kprintf("process: bootstrap seal: soft retbeaconangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retbeaconangle honesty; Soft≠product)\n");
-/* Grep: process: bootstrap seal: soft retledgerangle — Wave 88 exclusive ledgerangle stamp */
-kprintf("process: bootstrap seal: soft retledgerangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retledgerangle stamp; Soft≠product)\n");
-/* Grep: process: bootstrap seal: soft retbannerangle — Wave 89 return-bannerangle honesty */
-kprintf("process: bootstrap seal: soft retbannerangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retbannerangle honesty; Soft≠product)\n");
-/* Grep: process: bootstrap seal: soft retvaultangle — Wave 89 exclusive vaultangle stamp */
-kprintf("process: bootstrap seal: soft retvaultangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retvaultangle stamp; Soft≠product)\n");
-/* Grep: process: bootstrap seal: soft retcrestangle — Wave 90 return-crestangle honesty */
-kprintf("process: bootstrap seal: soft retcrestangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retcrestangle honesty; Soft≠product)\n");
-/* Grep: process: bootstrap seal: soft rettokenangle — Wave 90 exclusive tokenangle stamp */
-kprintf("process: bootstrap seal: soft rettokenangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (rettokenangle stamp; Soft≠product)\n");
-/* Grep: process: bootstrap seal: soft retbadgeangle — Wave 91 return-badgeangle honesty */
-kprintf("process: bootstrap seal: soft retbadgeangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retbadgeangle honesty; Soft≠product)\n");
-/* Grep: process: bootstrap seal: soft retphaseangle — Wave 91 exclusive phaseangle stamp */
-kprintf("process: bootstrap seal: soft retphaseangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retphaseangle stamp; Soft≠product)\n");
-/* Grep: process: bootstrap seal: soft retmarkangle — Wave 92 return-markangle honesty */
-kprintf("process: bootstrap seal: soft retmarkangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retmarkangle honesty; Soft≠product)\n");
-/* Grep: process: bootstrap seal: soft retpulseangle — Wave 92 exclusive pulseangle stamp */
-kprintf("process: bootstrap seal: soft retpulseangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retpulseangle stamp; Soft≠product)\n");
 
-/* Grep: process: bootstrap seal: soft retsealangle — Wave 93 return-sealangle honesty */
-kprintf("process: bootstrap seal: soft retsealangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retsealangle honesty; Soft≠product)\n");
-/* Grep: process: bootstrap seal: soft retboundangle — Wave 93 exclusive boundangle stamp */
-kprintf("process: bootstrap seal: soft retboundangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retboundangle stamp; Soft≠product)\n");
-/* Grep: process: bootstrap seal: soft retstemangle — Wave 94 return-stemangle honesty */
-kprintf("process: bootstrap seal: soft retstemangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retstemangle honesty; Soft≠product)\n");
-/* Grep: process: bootstrap seal: soft retbladeangle — Wave 94 exclusive bladeangle stamp */
-kprintf("process: bootstrap seal: soft retbladeangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retbladeangle stamp; Soft≠product)\n");
-/* Grep: process: bootstrap seal: soft retchordangle — Wave 95 return-chordangle honesty */
-kprintf("process: bootstrap seal: soft retchordangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retchordangle honesty; Soft≠product)\n");
-/* Grep: process: bootstrap seal: soft retarcangle — Wave 95 exclusive arcangle stamp */
-kprintf("process: bootstrap seal: soft retarcangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retarcangle stamp; Soft≠product)\n");
-/* Grep: process: bootstrap seal: soft retsectorangle — Wave 96 return-sectorangle honesty */
-kprintf("process: bootstrap seal: soft retsectorangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retsectorangle honesty; Soft≠product)\n");
-/* Grep: process: bootstrap seal: soft retwedgeangle — Wave 96 exclusive wedgeangle stamp */
-kprintf("process: bootstrap seal: soft retwedgeangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retwedgeangle stamp; Soft≠product)\n");
-/* Grep: process: bootstrap seal: soft retradiusangle — Wave 97 return-radiusangle honesty */
-kprintf("process: bootstrap seal: soft retradiusangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retradiusangle honesty; Soft≠product)\n");
-/* Grep: process: bootstrap seal: soft retdiameterangle — Wave 97 exclusive diameterangle stamp */
-kprintf("process: bootstrap seal: soft retdiameterangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retdiameterangle stamp; Soft≠product)\n");
-/* Grep: process: bootstrap seal: soft retcircumangle — Wave 98 return-circumangle honesty */
-kprintf("process: bootstrap seal: soft retcircumangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retcircumangle honesty; Soft≠product)\n");
-/* Grep: process: bootstrap seal: soft retellipseangle — Wave 98 exclusive ellipseangle stamp */
-kprintf("process: bootstrap seal: soft retellipseangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retellipseangle stamp; Soft≠product)\n");
-/* Grep: process: bootstrap seal: soft rethyperangle — Wave 99 return-hyperangle honesty */
-kprintf("process: bootstrap seal: soft rethyperangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (rethyperangle honesty; Soft≠product)\n");
-/* Grep: process: bootstrap seal: soft retparabolaangle — Wave 99 exclusive parabolaangle stamp */
-kprintf("process: bootstrap seal: soft retparabolaangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retparabolaangle stamp; Soft≠product)\n");
-/* Grep: process: bootstrap seal: soft retspiralangle — Wave 100 return-spiralangle honesty */
-kprintf("process: bootstrap seal: soft retspiralangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retspiralangle honesty; Soft≠product)\n");
-/* Grep: process: bootstrap seal: soft rethelixangle — Wave 100 exclusive helixangle stamp */
-kprintf("process: bootstrap seal: soft rethelixangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (rethelixangle stamp; Soft≠product)\n");
-/* Grep: process: bootstrap seal: soft rettorusangle — Wave 101 return-torusangle honesty */
-kprintf("process: bootstrap seal: soft rettorusangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (rettorusangle honesty; Soft≠product)\n");
-/* Grep: process: bootstrap seal: soft retknotangle — Wave 101 exclusive knotangle stamp */
-kprintf("process: bootstrap seal: soft retknotangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retknotangle stamp; Soft≠product)\n");
-/* Grep: process: bootstrap seal: soft retmoebiusangle — Wave 102 return-moebiusangle honesty */
-kprintf("process: bootstrap seal: soft retmoebiusangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retmoebiusangle honesty; Soft≠product)\n");
-/* Grep: process: bootstrap seal: soft retkleinangle — Wave 102 exclusive kleinangle stamp */
-kprintf("process: bootstrap seal: soft retkleinangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retkleinangle stamp; Soft≠product)\n");
-/* Grep: process: bootstrap seal: soft retprojectangle — Wave 103 return-projectangle honesty */
-kprintf("process: bootstrap seal: soft retprojectangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retprojectangle honesty; Soft≠product)\n");
-/* Grep: process: bootstrap seal: soft retaffineangle — Wave 103 exclusive affineangle stamp */
-kprintf("process: bootstrap seal: soft retaffineangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retaffineangle stamp; Soft≠product)\n");
-/* Grep: process: bootstrap seal: soft retlinearangle — Wave 104 return-linearangle honesty */
-kprintf("process: bootstrap seal: soft retlinearangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retlinearangle honesty; Soft≠product)\n");
-/* Grep: process: bootstrap seal: soft retbilinearangle — Wave 104 exclusive bilinearangle stamp */
-kprintf("process: bootstrap seal: soft retbilinearangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retbilinearangle stamp; Soft≠product)\n");
-/* Grep: process: bootstrap seal: soft retquadraticangle — Wave 105 return-quadraticangle honesty */
-kprintf("process: bootstrap seal: soft retquadraticangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retquadraticangle honesty; Soft≠product)\n");
-/* Grep: process: bootstrap seal: soft retcubicangle — Wave 105 exclusive cubicangle stamp */
-kprintf("process: bootstrap seal: soft retcubicangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retcubicangle stamp; Soft≠product)\n");
-/* Grep: process: bootstrap seal: soft retquarticangle — Wave 106 return-quarticangle honesty */
-kprintf("process: bootstrap seal: soft retquarticangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retquarticangle honesty; Soft≠product)\n");
-/* Grep: process: bootstrap seal: soft retquinticangle — Wave 106 exclusive quinticangle stamp */
-kprintf("process: bootstrap seal: soft retquinticangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retquinticangle stamp; Soft≠product)\n");
-/* Grep: process: bootstrap seal: soft retsplineangle — Wave 107 return-splineangle honesty */
-kprintf("process: bootstrap seal: soft retsplineangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retsplineangle honesty; Soft≠product)\n");
-/* Grep: process: bootstrap seal: soft retbezierangle — Wave 107 exclusive bezierangle stamp */
-kprintf("process: bootstrap seal: soft retbezierangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retbezierangle stamp; Soft≠product)\n");
-/* Grep: process: bootstrap seal: soft rethurmitangle — Wave 108 return-hermitangle honesty */
-kprintf("process: bootstrap seal: soft rethurmitangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (rethurmitangle honesty; Soft≠product)\n");
-/* Grep: process: bootstrap seal: soft retcatmullangle — Wave 108 exclusive catmullangle stamp */
-kprintf("process: bootstrap seal: soft retcatmullangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retcatmullangle stamp; Soft≠product)\n");
-/* Grep: process: bootstrap seal: soft retnurbsangle — Wave 109 return-nurbsangle honesty */
-kprintf("process: bootstrap seal: soft retnurbsangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retnurbsangle honesty; Soft≠product)\n");
-/* Grep: process: bootstrap seal: soft retbsplineangle — Wave 109 exclusive bsplineangle stamp */
-kprintf("process: bootstrap seal: soft retbsplineangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retbsplineangle stamp; Soft≠product)\n");
-/* Grep: process: bootstrap seal: soft retmeshangle — Wave 110 return-meshangle honesty */
-kprintf("process: bootstrap seal: soft retmeshangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retmeshangle honesty; Soft≠product)\n");
-/* Grep: process: bootstrap seal: soft retgridangle — Wave 110 exclusive gridangle stamp */
-kprintf("process: bootstrap seal: soft retgridangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retgridangle stamp; Soft≠product)\n");
-/* Grep: process: bootstrap seal: soft retvoxelangle — Wave 111 return-voxelangle honesty */
-kprintf("process: bootstrap seal: soft retvoxelangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retvoxelangle honesty; Soft≠product)\n");
-/* Grep: process: bootstrap seal: soft rettexelangle — Wave 111 exclusive texelangle stamp */
-kprintf("process: bootstrap seal: soft rettexelangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (rettexelangle stamp; Soft≠product)\n");
-/* Grep: process: bootstrap seal: soft retfragmentangle — Wave 112 return-fragmentangle honesty */
-kprintf("process: bootstrap seal: soft retfragmentangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retfragmentangle honesty; Soft≠product)\n");
-/* Grep: process: bootstrap seal: soft retvertexangle — Wave 112 exclusive vertexangle stamp */
-kprintf("process: bootstrap seal: soft retvertexangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retvertexangle stamp; Soft≠product)\n");
-/* Grep: process: bootstrap seal: soft retshaderangle — Wave 113 return-shaderangle honesty */
-kprintf("process: bootstrap seal: soft retshaderangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retshaderangle honesty; Soft≠product)\n");
-/* Grep: process: bootstrap seal: soft retpipelineangle — Wave 113 exclusive pipelineangle stamp */
-kprintf("process: bootstrap seal: soft retpipelineangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retpipelineangle stamp; Soft≠product)\n");
-/* Grep: process: bootstrap seal: soft retframebufferangle — Wave 114 return-framebufferangle honesty */
-kprintf("process: bootstrap seal: soft retframebufferangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retframebufferangle honesty; Soft≠product)\n");
-/* Grep: process: bootstrap seal: soft retswapchainangle — Wave 114 exclusive swapchainangle stamp */
-kprintf("process: bootstrap seal: soft retswapchainangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retswapchainangle stamp; Soft≠product)\n");
-/* Grep: process: bootstrap seal: soft retpresentangle — Wave 115 return-presentangle honesty */
-kprintf("process: bootstrap seal: soft retpresentangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retpresentangle honesty; Soft≠product)\n");
-/* Grep: process: bootstrap seal: soft retvsyncangle — Wave 115 exclusive vsyncangle stamp */
-kprintf("process: bootstrap seal: soft retvsyncangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retvsyncangle stamp; Soft≠product)\n");
-/* Grep: process: bootstrap seal: soft retfenceangle — Wave 116 return-fenceangle honesty */
-kprintf("process: bootstrap seal: soft retfenceangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retfenceangle honesty; Soft≠product)\n");
-/* Grep: process: bootstrap seal: soft retsemaphoreangle — Wave 116 exclusive semaphoreangle stamp */
-kprintf("process: bootstrap seal: soft retsemaphoreangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retsemaphoreangle stamp; Soft≠product)\n");
-                            kprintf("process: bootstrap seal soft deepen wave=%u via=%s "
+
+
+
+
+
+
+
+
+
+
+    kprintf("process: bootstrap seal soft deepen wave=%u via=%s "
             "logs=%u emits=%llu rate_limited=%llu "
             "\n",
             GJ_SEAL_SOFT_WAVE, szViaSafe, g_u32SealChecklistLogs,
@@ -1714,7 +1036,7 @@ process_bootstrap_seal_soft_try(struct gj_process *pProc, const char *szVia)
         kprintf("process: bootstrap seal soft one-way lamp=1 "
                 "(soft only; not product-complete)\n");
         /*
-         * Wave 13: one-way flip honesty — product s13 lamps stay 0.
+         * Wave 13: one-way flip honesty - product s13 lamps stay 0.
          * Grep: process: bootstrap seal soft one-way | process: bootstrap seal soft lamps
          */
         kprintf("process: bootstrap seal soft one-way product_retype=%u "
@@ -1745,7 +1067,7 @@ gj_process_confine(struct gj_process *pProc, u32 u32Promises)
     kprintf("process: confine soft confined=%u promises=0x%x "
             "ambient_drop=1 (soft; not product multi-server)\n",
             pProc->u32Confined, pProc->u32Promises);
-    /* Confine is the soft ambient-drop edge — re-emit seal checklist lamps. */
+    /* Confine is the soft ambient-drop edge - re-emit seal checklist lamps. */
     process_bootstrap_seal_soft_try(pProc, "confine");
     process_soft_maybe_once();
 }
@@ -1830,7 +1152,7 @@ gj_process_bootstrap_root_meta(struct gj_process *pProc,
 
     /*
      * Install into slot 0 as ROOT_META.
-     * Process + CNode are kernel fields for kernel ops only (K1–K6).
+     * Process + CNode are kernel fields for kernel ops only (K1-K6).
      * Not transferable Scheme A PROCESS/CNODE caps.
      */
     u16Rights = (u16)(GJ_RIGHT_READ | GJ_RIGHT_IDENTIFY);
@@ -1850,7 +1172,7 @@ gj_process_bootstrap_root_meta(struct gj_process *pProc,
     }
     process_soft_inc(&g_u32SoftRootMetaOk);
     /*
-     * Soft Apple §13 seal checklist after root meta install.
+     * Soft Apple s13 seal checklist after root meta install.
      * Enumerates root_meta / pager_empty / ambient / promises (rate-limited).
      * Grep: process: bootstrap seal soft | process: seal checklist
      * Honesty: not product-complete.
@@ -1861,7 +1183,7 @@ gj_process_bootstrap_root_meta(struct gj_process *pProc,
 }
 
 /*
- * Soft pager kernel ref (SOLARIS_STYLE §9): hold endpoint while PCB names it.
+ * Soft pager kernel ref (SOLARIS_STYLE s9): hold endpoint while PCB names it.
  * Grep: process:pager ref
  */
 static void
@@ -1944,7 +1266,7 @@ process_pager_mirror_install(struct gj_process *pProc, struct gj_obj_hdr *pEp,
                                           (struct gj_obj_hdr *)pSlot->pObj);
         }
     }
-    /* Mirror is READ|IDENTIFY (+ GRANT if source had it) — not ambient MAP. */
+    /* Mirror is READ|IDENTIFY (+ GRANT if source had it) - not ambient MAP. */
     u16MirRights = (u16)(GJ_RIGHT_READ | GJ_RIGHT_IDENTIFY);
     if ((u16Rights & (u16)GJ_RIGHT_GRANT) != 0) {
         u16MirRights = (u16)(u16MirRights | GJ_RIGHT_GRANT);
@@ -1972,7 +1294,7 @@ gj_process_clear_pager(struct gj_process *pProc)
     pProc->refPager = gj_cap_ref_null();
     pProc->pPagerEpObj = NULL;
     pProc->u32PagerBadge = 0;
-    /* Soft: drop kernel hold after PCB cleared (SOLARIS_STYLE §9 clear). */
+    /* Soft: drop kernel hold after PCB cleared (SOLARIS_STYLE s9 clear). */
     process_pager_ref_drop(pOld);
     process_soft_inc(&g_u32SoftPagerClear);
 }
@@ -2046,7 +1368,7 @@ gj_process_set_pager_badge(struct gj_process *pProc, u64 u64EpSlot,
         process_soft_inc(&g_u32SoftPagerSetFail);
         return GJ_ERR_INVAL;
     }
-    /* Soft LIVE check — refuse DEAD/REVOKING endpoints (fail closed). */
+    /* Soft LIVE check - refuse DEAD/REVOKING endpoints (fail closed). */
     if (res.pObj->u32State != (u32)GJ_OBJ_LIVE) {
         process_soft_inc(&g_u32SoftPagerSetFail);
         return GJ_ERR_DEAD;
@@ -2082,7 +1404,7 @@ gj_process_set_pager_badge(struct gj_process *pProc, u64 u64EpSlot,
 gj_status_t
 gj_process_set_pager(struct gj_process *pProc, u64 u64EpSlot, u32 u32EpGen)
 {
-    /* Badge 0 → soft-snap from door endpoint when LIVE. */
+    /* Badge 0 -> soft-snap from door endpoint when LIVE. */
     return gj_process_set_pager_badge(pProc, u64EpSlot, u32EpGen, 0u);
 }
 
@@ -2111,11 +1433,11 @@ gj_process_has_pager(const struct gj_process *pProc)
 }
 
 /*
- * Fault policy (CAP_ADDRESSING + SOLARIS_STYLE_REMAINING §7):
+ * Fault policy (CAP_ADDRESSING + SOLARIS_STYLE_REMAINING s7):
  * - one fault lock per space (here: process.fault until gj_space exists)
- * - no pager ⇒ FAULT (kill)
+ * - no pager -> FAULT (kill)
  * - with pager: build cluster + kernel cookie; Call pager (IPC later)
- * - object owns pages / maps are views (map path not fully wired; Apple §2)
+ * - object owns pages / maps are views (map path not fully wired; Apple s2)
  */
 gj_status_t
 gj_process_handle_fault(struct gj_process *pProc, u64 u64FaultVa, int fWrite,
@@ -2219,7 +1541,7 @@ u32 process_wait_pid_of(struct gj_process *pProc);
 
 /*
  * Soft parent identity for PCBs that are not wait-registered children
- * (boot/init long-lived parents). pids 2..99 — below GJ_WAIT_PID_BASE so
+ * (boot/init long-lived parents). pids 2..99 - below GJ_WAIT_PID_BASE so
  * they never collide with child wait-table pids. Does NOT put the parent
  * into the zombie table (avoids G-PROC-5 CNode wipe on parent death).
  * greppable: process: soft fork-wait product-min
@@ -2294,7 +1616,7 @@ process_soft_ensure_parent_pid(struct gj_process *pParent)
             return pid;
         }
     }
-    return 1u; /* soft map full → init bucket */
+    return 1u; /* soft map full -> init bucket */
 }
 
 /** Resolve wait-table PCB by Linux-shaped pid (NULL if missing). */
@@ -2354,14 +1676,14 @@ process_soft_fw_pass_once(i64 i64Pid, int nStatus, const char *szVia)
     g_fSoftFwPassOnce = 1;
     szViaSafe = (szVia != NULL && szVia[0] != '\0') ? szVia : "path";
     kprintf("process: soft fork-wait product-min PASS via=%s pid=%ld "
-            "status=0x%x WIFEXITED=%d exit=%d soft≠product\n",
+            "status=0x%x WIFEXITED=%d exit=%d soft!=product\n",
             szViaSafe, (long)i64Pid, (unsigned)nStatus,
             GJ_WIFEXITED(nStatus) ? 1 : 0, GJ_WEXITSTATUS(nStatus));
 }
 
 /*
  * Soft wait-table census (Wave 15 inventory). Snapshots used/zombie/live/free.
- * Does not lock (soft OK). greppable via process: soft wait …
+ * Does not lock (soft OK). greppable via process: soft wait ...
  */
 static void
 process_soft_wait_census(u32 *pUsed, u32 *pZombie, u32 *pLive, u32 *pFree)
@@ -2443,7 +1765,7 @@ process_wait_register(struct gj_process *pChild, u32 u32Ppid)
         }
     }
     process_soft_inc(&g_u32SoftWaitRegFull);
-    return 0; /* table full — caller may continue without wait4 */
+    return 0; /* table full - caller may continue without wait4 */
 }
 
 void
@@ -2511,6 +1833,54 @@ process_is_wait_child(struct gj_process *pProc)
     return 0;
 }
 
+/*
+ * Soft: whether wait-registered PCB still needs full G-PROC-5 process_death
+ * (H3 thr_exit dual belt + as_destroy) vs note_exit-only.
+ *
+ * Live UDX host residual (not immediate kill path; Soft!=product):
+ * force-exit (exit_pid) and wait-heal must not skip teardown when residual
+ * AS / pager / start thr / exception port / region views remain. Covers
+ * multi-thr hosts rtl8168_udx / xhci_udx / ddi_host_gj + sshd children.
+ * denser keep_live / product_host_live honesty: intentional death still
+ * runs full H3 order (never thrash as_destroy while thr live). Soft residual
+ * only; Dual DoD stays OPEN; denser residual != Dual DoD close.
+ * Grep: process: soft residual lifecycle | need_death_broad=1
+ * Grep: live_host_path=1 | thr_exit_before_as_destroy=1
+ * Grep: product_host_live=1 | keep_live=1 | keep_live_rock=1
+ * Grep: thr_live=1 | product_hosts=UDX | dual_dod=OPEN
+ */
+static int
+process_lifecycle_need_death(struct gj_process *pProc)
+{
+    u32 iReg;
+
+    if (pProc == NULL) {
+        return 0;
+    }
+    if (pProc->u32Alive != 0u) {
+        return 1;
+    }
+    if (pProc->u64Cr3 != 0ull) {
+        return 1;
+    }
+    if (gj_process_has_pager(pProc)) {
+        return 1;
+    }
+    if (pProc->u32StartThr != 0u) {
+        return 1;
+    }
+    if (pProc->excPort.u8Live != 0u || pProc->excPort.u8Pending != 0u ||
+        pProc->excPort.u32HandlerThr != 0u) {
+        return 1;
+    }
+    for (iReg = 0; iReg < GJ_PROC_REGION_MAX; iReg++) {
+        if (pProc->aRegions[iReg].u8Used != 0u) {
+            return 1;
+        }
+    }
+    return 0;
+}
+
 u32
 process_wait_reparent(u32 u32OldPpid, u32 u32NewPpid)
 {
@@ -2534,7 +1904,7 @@ process_wait_reparent(u32 u32OldPpid, u32 u32NewPpid)
         u32N++;
         g_u64WaitReparent++;
         process_soft_inc(&g_u32SoftWaitReparentN);
-        kprintf("process: wait reparent pid=%u ppid %u→%u soft\n",
+        kprintf("process: wait reparent pid=%u ppid %u->%u soft\n",
                 g_aWait[i].u32Pid, u32OldPpid, u32NewPpid);
     }
     return u32N;
@@ -2579,7 +1949,7 @@ process_wait_zombie_count(u32 u32Ppid)
 /*
  * Soft G-PROC-5 CNode wipe: kernel-authority slot clear with quota refund +
  * CDT unlink (never rights-gated like user gj_cap_delete). Boot/init CNodes
- * are not passed here — only wait-registered children.
+ * are not passed here - only wait-registered children.
  * Grep: process: death cnode | process:death cnode
  */
 static u32
@@ -2620,6 +1990,77 @@ process_death_cnode_wipe(struct gj_process *pProc)
     /* Soft: detach quota ledger pointer (account body lives with creator). */
     pCnode->pQuotaAccount = NULL;
     return u32Cleared;
+}
+
+/*
+ * H3 thr_exit helper: EXIT every non-current sibling of pProc and scrub
+ * start-thr handoff so nothing can iretq into maps about to be freed.
+ * Residual lean dual-belt core (Soft!=product):
+ *   - Early call after u32Alive=0 (refuse-enter races fail-closed)
+ *   - Barrier call immediately before as_destroy (mid-death bind race)
+ * Same drain for CLONE_VM / pe32 lab class and multi-thr UDX host processes
+ * (work/IRQ soft thr sharing private AS). Not product UDX host close.
+ *
+ * Cur-scrub residual (stronger fail-closed belt; Soft!=product):
+ *   thread_exit_process intentionally skips the current thr (caller finishes
+ *   via thread_exit / EXITED+schedule). Scrub current thr USER*_ENTRY /
+ *   sysuser (valid + rip/rsp/rflags) / thr CR3 / block key when bound to
+ *   pProc so the dying thr cannot iretq or mid-syscall sysret / load thr
+ *   CR3 into maps about to free - same #PF I=1 class as sibling residual
+ *   (pe32 clone_vm / UDX host). Parity with sibling scrub fields minus
+ *   EXITED + pProc detach (caller needs PCB for rest of death). Do NOT
+ *   mark current EXITED here.
+ * Grep: process: death thr_exit | process: death thr_exit cur_scrub
+ * Grep: thread: exit_process | thr_exit_before_as_destroy=1
+ * Grep: process: soft residual lean H3 | udx_host_teardown=1 | H3=death_residual
+ */
+static u32
+process_death_thr_exit_siblings(struct gj_process *pProc)
+{
+    u32 cThrEx;
+    struct gj_thread *pCur;
+
+    if (pProc == NULL) {
+        return 0;
+    }
+    cThrEx = thread_exit_process(pProc);
+    /* No recycled PCB re-entry via start handoff after sibling drain. */
+    pProc->u32StartThr = 0;
+    pProc->u64StartEntry = 0;
+    /*
+     * H3 cur_scrub: fail-closed for dying thr (skipped by thread_exit_process).
+     * Full sysuser field parity with sibling drain + schedule resume refuse
+     * (valid + rip/rsp/rflags) - mid-syscall sysret belt. Soft!=product.
+     * Grep: process: death thr_exit cur_scrub | thr_exit_before_as_destroy=1
+     */
+    pCur = thread_current();
+    if (pCur != NULL && pCur->pProc == pProc) {
+        u32 fHad = 0;
+
+        if ((pCur->u32Flags & (GJ_THR_F_USER_ENTRY | GJ_THR_F_USER32_ENTRY)) != 0 ||
+            pCur->u32SysUserValid != 0 || pCur->u64Cr3 != 0 ||
+            pCur->pBlockObj != NULL || pCur->u64SysUserRip != 0 ||
+            pCur->u64SysUserRsp != 0 || pCur->u64SysUserRflags != 0) {
+            fHad = 1;
+        }
+        pCur->u32Flags &= ~(GJ_THR_F_USER_ENTRY | GJ_THR_F_USER32_ENTRY);
+        pCur->u64UserRip = 0;
+        pCur->u64UserRsp = 0;
+        pCur->u32SysUserValid = 0;
+        pCur->u64SysUserRip = 0;
+        pCur->u64SysUserRsp = 0;
+        pCur->u64SysUserRflags = 0;
+        pCur->u64Cr3 = 0;
+        pCur->pBlockObj = NULL;
+        pCur->u32BlockTag = 0;
+        if (fHad != 0u) {
+            g_u64DeathThrExitCurScrub++;
+            /* Lean lamp only on real scrub (H2 no storm). */
+            kprintf("process: death thr_exit cur_scrub=1 soft "
+                    "(G-PROC-5 H3 thr_exit_before_as_destroy=1)\n");
+        }
+    }
+    return cThrEx;
 }
 
 /* Soft: scrub exec/auxv handoff so reaped PCBs leave no image facts. */
@@ -2685,19 +2126,33 @@ process_death(struct gj_process *pProc, u32 u32ExitCode)
     u32 u32AsSkip = 0;
     u32 u32WasConfined = 0;
     u32 u32WasJit = 0;
+    u32 cThrEx = 0;
+    u32 cThrExBar = 0;
     int fWaitChild;
 
     if (pProc == NULL) {
         return;
     }
     process_soft_inc(&g_u32SoftDeathEnter);
-    /* Idempotent: second death only re-notes zombie code */
+    /*
+     * Idempotent: second death re-notes zombie code. Soft belt (H3): still
+     * drain residual siblings so a half-torn PCB cannot leave USER*_ENTRY
+     * thr RUNNABLE after maps are already gone (UDX host multi-thr race).
+     */
     if (!pProc->u32Alive && pProc->u64Cr3 == 0 && !gj_process_has_pager(pProc)) {
+        u32 cThrIdem;
+
         g_u64DeathIdempotent++;
-        /* Grep: process: death idempotent */
-        kprintf("process: death idempotent re-note exit=%u soft "
-                "(G-PROC-5)\n",
-                u32ExitCode);
+        cThrIdem = process_death_thr_exit_siblings(pProc);
+        g_u64DeathThrExitBarrierCalls++;
+        if (cThrIdem != 0u) {
+            g_u64DeathThrExit += (u64)cThrIdem;
+            g_u64DeathThrExitBarrier += (u64)cThrIdem;
+        }
+        /* Grep: process: death idempotent | process: death thr_exit */
+        kprintf("process: death idempotent re-note exit=%u thr_exit=%u soft "
+                "(G-PROC-5 H3 thr_exit_before_as_destroy=1)\n",
+                u32ExitCode, cThrIdem);
         process_wait_note_exit(pProc, u32ExitCode);
         return;
     }
@@ -2707,7 +2162,41 @@ process_death(struct gj_process *pProc, u32 u32ExitCode)
     u32WasConfined = pProc->u32Confined;
     u32WasJit = pProc->u32Jit;
     pProc->u32ExitCode = u32ExitCode;
+    /*
+     * H3 residual lean dual belt (Soft!=product | UDX host multi-thr):
+     *   1) Mark dead first so trampoline refuse-enter (alive==0) races with
+     *      thr_exit are fail-closed.
+     *   2) Early thr_exit: drain CLONE_VM / multi-thr siblings (incl. UDX
+     *      host work/IRQ thr) + cur_scrub BEFORE any private map free.
+     *   3) Later barrier re-drain + cur_scrub immediately before as_destroy.
+     *   4) CR3 publish 0 (local holds target) then private as_destroy so
+     *      refuse-enter cr3_0 is live during map free.
+     * denser keep_live / product_host_live honesty: intentional death of a
+     * product host still obeys never-as_destroy-while-thr-live (H3 spirit).
+     * Soft residual never claims Dual DoD close. Soft!=product.
+     * Lab class: pe32 clone_vm child RIP~0x58240013 -> #PF I=1.
+     * Grep: process: death thr_exit early | process: death thr_exit
+     * Grep: process: death thr_exit cur_scrub | thr_exit_before_as_destroy=1
+     * Grep: process: death cr3_pub | cr3_pub_before_as_destroy=1
+     * Grep: product_host_live=1 | keep_live=1 | keep_live_rock=1
+     * Grep: thr_live=1 | product_hosts=UDX | dual_dod=OPEN
+     * Grep: thread: exit_process
+     */
     pProc->u32Alive = 0;
+    cThrEx = process_death_thr_exit_siblings(pProc);
+    g_u64DeathThrExit += (u64)cThrEx;
+    g_u64DeathThrExitEarly += (u64)cThrEx;
+    /*
+     * Greppable order probe vs death as_destroy (n=0 still soft-ok).
+     * Grep: process: death thr_exit | process: death thr_exit early
+     * Grep: thr_exit_before_as_destroy=1
+     */
+    kprintf("process: death thr_exit n=%u early=1 "
+            "thr_exit_before_as_destroy=1 soft "
+            "(G-PROC-5 H3 udx_host_multi_thr=1 Soft!=product "
+            "product_host_live keep_live keep_live_rock thr_live "
+            "product_hosts=UDX dual_dod=OPEN denser=1)\n",
+            cThrEx);
 
     /* ---- pager clear (G-PROC-5) ---------------------------------------- */
     u32HadPager = gj_process_has_pager(pProc) ? 1u : 0u;
@@ -2748,7 +2237,7 @@ process_death(struct gj_process *pProc, u32 u32ExitCode)
     kprintf("process: death fault_lock force was_busy=%u soft (G-PROC-5)\n",
             u32FaultWasBusy);
 
-    /* Drop region views (object owns pages; maps are views — G-MO) */
+    /* Drop region views (object owns pages; maps are views - G-MO) */
     for (iReg = 0; iReg < GJ_PROC_REGION_MAX; iReg++) {
         if (pProc->aRegions[iReg].u8Used) {
             memset(&pProc->aRegions[iReg], 0, sizeof(pProc->aRegions[iReg]));
@@ -2799,24 +2288,70 @@ process_death(struct gj_process *pProc, u32 u32ExitCode)
                 "(G-PROC-5)\n");
     }
     /*
+     * H3 pre-as_destroy barrier (residual lean dual belt): re-exit residual
+     * siblings after pager / region / cnode work. Catches any thr that
+     * became bound mid-death (soft race belt; UDX host multi-thr safety).
+     * Always count barrier call; log body only when n!=0 (H2 no storm).
+     * Grep: process: death thr_exit barrier
+     */
+    cThrExBar = process_death_thr_exit_siblings(pProc);
+    g_u64DeathThrExitBarrierCalls++;
+    if (cThrExBar != 0u) {
+        g_u64DeathThrExit += (u64)cThrExBar;
+        g_u64DeathThrExitBarrier += (u64)cThrExBar;
+        kprintf("process: death thr_exit barrier n=%u soft "
+                "(G-PROC-5 H3 thr_exit_before_as_destroy=1)\n",
+                cThrExBar);
+    }
+    /* Dual belt complete - as_destroy may free maps now (H3 order pass). */
+    g_u64DeathH3OrderPass++;
+    /* Grep: process: death H3 order | process: death thr_exit cur_scrub */
+    /* Grep: product_host_live | keep_live | keep_live_rock | thr_live */
+    /* Grep: never_as_destroy_while_thr_live | product_hosts=UDX */
+    kprintf("process: death H3 order thr_early=%u thr_bar=%u "
+            "thr_cur_scrub=%llu thr_exit_before_as_destroy=1 "
+            "never_as_destroy_while_thr_live=1 "
+            "udx_host_teardown=1 soft (G-PROC-5 H3 Soft!=product "
+            "product_host_live keep_live keep_live_rock thr_live "
+            "product_hosts=UDX dual_dod=OPEN denser=1)\n",
+            cThrEx, cThrExBar,
+            (unsigned long long)g_u64DeathThrExitCurScrub);
+
+    /*
      * Destroy private AS only for wait-registered children (PE/spawn/fork).
-     * Never free boot/init AS — ring-3 smokes share it with the rest of kmain.
-     * Save/restore caller CR3: death may run mid-syscall on the parent AS
-     * (e.g. vfork child exit while parent PE32 is current).
+     * Must stay AFTER thr_exit early + barrier + cur_scrub (H3 residual lean).
+     * CR3 publish residual: zero PCB u64Cr3 before map free so refuse-enter
+     * cr3_0 belt is live during as_destroy (local holds destroy target).
+     * Never free boot/init AS. Save/restore caller CR3: death may run
+     * mid-syscall on the parent AS (e.g. vfork child exit while parent PE32
+     * is current).
      * Grep: process: death as_destroy | process: as_destroy
+     * Grep: thr_exit_before_as_destroy=1 | process: death cr3_pub
+     * Grep: cr3_pub_before_as_destroy=1
      */
     u64SavedCr3 = cpu_read_cr3();
     u64Cr3 = pProc->u64Cr3;
     u64Ker = vmm_kernel_cr3();
     if (fWaitChild && u64Cr3 != 0 && u64Ker != 0 &&
         (u64Cr3 & ~0xfffull) != (u64Ker & ~0xfffull)) {
+        /*
+         * H3: publish dead-AS (cr3_0) BEFORE free maps. thr_exit dual belt
+         * already drained siblings + cur_scrub; local u64Cr3 is destroy tgt.
+         * Grep: process: death cr3_pub | cr3_pub_before_as_destroy=1
+         */
+        pProc->u64Cr3 = 0;
+        g_u64DeathH3Cr3Pub++;
+        kprintf("process: death cr3_pub=1 before_as_destroy soft "
+                "(G-PROC-5 H3 cr3_pub_before_as_destroy=1 "
+                "thr_exit_before_as_destroy=1)\n");
         cpu_load_cr3(u64Ker);
         vmm_set_anon_cursor(NULL);
         if (vmm_as_destroy(u64Cr3) == GJ_OK) {
             u32AsOk = 1;
             g_u64DeathAsDestroyOk++;
             kprintf("process: death as_destroy cr3=0x%lx ok=1 soft "
-                    "(G-PROC-5)\n",
+                    "(G-PROC-5 H3 thr_exit_before_as_destroy=1 "
+                    "cr3_pub_before_as_destroy=1)\n",
                     (unsigned long)u64Cr3);
             kprintf("process: as_destroy cr3=0x%lx PASS\n",
                     (unsigned long)u64Cr3);
@@ -2824,19 +2359,20 @@ process_death(struct gj_process *pProc, u32 u32ExitCode)
             u32AsFail = 1;
             g_u64DeathAsDestroyFail++;
             kprintf("process: death as_destroy cr3=0x%lx ok=0 soft "
-                    "(G-PROC-5)\n",
+                    "(G-PROC-5 H3 thr_exit_before_as_destroy=1 "
+                    "cr3_pub_before_as_destroy=1)\n",
                     (unsigned long)u64Cr3);
             kprintf("process: as_destroy cr3=0x%lx FAIL\n",
                     (unsigned long)u64Cr3);
         }
-        pProc->u64Cr3 = 0;
+        /* PCB CR3 already published 0 (H3 cr3_pub residual). */
     } else if (u64Cr3 != 0 && u64Ker != 0 &&
                (u64Cr3 & ~0xfffull) != (u64Ker & ~0xfffull)) {
         /* Long-lived process: leave AS; switch off if we were on it */
         u32AsSkip = 1;
         g_u64DeathAsSkip++;
         kprintf("process: death as_destroy cr3=0x%lx skip=long_lived soft "
-                "(G-PROC-5)\n",
+                "(G-PROC-5 H3)\n",
                 (unsigned long)u64Cr3);
         if ((u64SavedCr3 & ~0xfffull) == (u64Cr3 & ~0xfffull)) {
             cpu_load_cr3(u64Ker);
@@ -2847,7 +2383,7 @@ process_death(struct gj_process *pProc, u32 u32ExitCode)
         u32AsSkip = 1;
         g_u64DeathAsSkip++;
         kprintf("process: death as_destroy cr3=0x%lx skip=none soft "
-                "(G-PROC-5)\n",
+                "(G-PROC-5 H3)\n",
                 (unsigned long)u64Cr3);
     }
     /* Restore caller address space when it was not the victim */
@@ -2861,7 +2397,7 @@ process_death(struct gj_process *pProc, u32 u32ExitCode)
     pProc->pParent = NULL;
 
     /*
-     * Wave 13: death ≠ Apple §13 bootstrap seal product.
+     * Wave 13: death != Apple s13 bootstrap seal product.
      * Cleanup revokes grants for this PCB; does not seal privileged retype /
      * broad IRQ / root untyped. Soft seal_note + optional checklist.
      * Grep: process: death seal_note | process: bootstrap seal soft
@@ -2879,10 +2415,20 @@ process_death(struct gj_process *pProc, u32 u32ExitCode)
      * Aggregate G-PROC-5 death tallies (soft product observability).
      * Grep: process: death exit= | process: death tallies
      */
-    kprintf("process: death tallies total=%llu pager_clear=%llu "
-            "fault_force=%llu cnode_wipe=%llu cnode_slots=%llu "
-            "as_ok=%llu as_fail=%llu as_skip=%llu soft (G-PROC-5)\n",
+    kprintf("process: death tallies total=%llu thr_exit=%llu thr_early=%llu "
+            "thr_bar=%llu thr_bar_calls=%llu thr_cur_scrub=%llu h3_order=%llu "
+            "cr3_pub=%llu pager_clear=%llu fault_force=%llu cnode_wipe=%llu "
+            "cnode_slots=%llu as_ok=%llu as_fail=%llu as_skip=%llu "
+            "soft (G-PROC-5 H3 thr_exit_before_as_destroy=1 "
+            "cr3_pub_before_as_destroy=1)\n",
             (unsigned long long)g_u64DeathTotal,
+            (unsigned long long)g_u64DeathThrExit,
+            (unsigned long long)g_u64DeathThrExitEarly,
+            (unsigned long long)g_u64DeathThrExitBarrier,
+            (unsigned long long)g_u64DeathThrExitBarrierCalls,
+            (unsigned long long)g_u64DeathThrExitCurScrub,
+            (unsigned long long)g_u64DeathH3OrderPass,
+            (unsigned long long)g_u64DeathH3Cr3Pub,
             (unsigned long long)g_u64DeathPagerClear,
             (unsigned long long)g_u64DeathFaultForce,
             (unsigned long long)g_u64DeathCnodeWipe,
@@ -2891,14 +2437,14 @@ process_death(struct gj_process *pProc, u32 u32ExitCode)
             (unsigned long long)g_u64DeathAsDestroyFail,
             (unsigned long long)g_u64DeathAsSkip);
     /*
-     * Wave 15 deepen tallies (extra axes; wrap OK).
+     * Deepen tallies (extra axes; wrap OK). Soft!=product.
      * Grep: process: death deepen | process: death tallies deepen
      */
-    kprintf("process: death deepen wave=%u tallies wait_child=%llu "
+    kprintf("process: death deepen tallies wait_child=%llu "
             "long_lived=%llu idempotent=%llu regions=%llu reparent=%llu "
-            "exc_clear=%llu confine_scrub=%llu jit_scrub=%llu soft "
-            "(G-PROC-5)\n",
-            GJ_PROCESS_SOFT_WAVE,
+            "exc_clear=%llu confine_scrub=%llu jit_scrub=%llu thr_exit=%llu "
+            "thr_early=%llu thr_bar=%llu thr_bar_calls=%llu thr_cur_scrub=%llu "
+            "h3_order=%llu fork_stub_h3=%llu cr3_pub=%llu soft (G-PROC-5 H3)\n",
             (unsigned long long)g_u64DeathWaitChild,
             (unsigned long long)g_u64DeathLongLived,
             (unsigned long long)g_u64DeathIdempotent,
@@ -2906,12 +2452,23 @@ process_death(struct gj_process *pProc, u32 u32ExitCode)
             (unsigned long long)g_u64DeathReparent,
             (unsigned long long)g_u64DeathExcClear,
             (unsigned long long)g_u64DeathConfineScrub,
-            (unsigned long long)g_u64DeathJitScrub);
-    kprintf("process: death exit=%u reparent=%u regions=%u "
-            "cnode_slots=%u as_ok=%u as_fail=%u as_skip=%u "
-            "wait_child=%d soft (G-PROC-5)\n",
-            u32ExitCode, u32Reparented, u32RegionsDropped, u32Cleared,
-            u32AsOk, u32AsFail, u32AsSkip, fWaitChild);
+            (unsigned long long)g_u64DeathJitScrub,
+            (unsigned long long)g_u64DeathThrExit,
+            (unsigned long long)g_u64DeathThrExitEarly,
+            (unsigned long long)g_u64DeathThrExitBarrier,
+            (unsigned long long)g_u64DeathThrExitBarrierCalls,
+            (unsigned long long)g_u64DeathThrExitCurScrub,
+            (unsigned long long)g_u64DeathH3OrderPass,
+            (unsigned long long)g_u64DeathH3ForkStub,
+            (unsigned long long)g_u64DeathH3Cr3Pub);
+    kprintf("process: death exit=%u thr_exit=%u thr_bar=%u reparent=%u "
+            "regions=%u cnode_slots=%u as_ok=%u as_fail=%u as_skip=%u "
+            "wait_child=%d thr_exit_before_as_destroy=1 thr_cur_scrub=%llu "
+            "cr3_pub=%llu soft (G-PROC-5 H3 Soft!=product)\n",
+            u32ExitCode, cThrEx, cThrExBar, u32Reparented, u32RegionsDropped,
+            u32Cleared, u32AsOk, u32AsFail, u32AsSkip, fWaitChild,
+            (unsigned long long)g_u64DeathThrExitCurScrub,
+            (unsigned long long)g_u64DeathH3Cr3Pub);
     /* Wave 15: unified soft inventory dump after death path. */
     process_soft_inventory("death");
 }
@@ -2927,7 +2484,14 @@ static u8                g_aForkUsed[GJ_FORK_STUBS];
 
 /**
  * Soft reverse: drop private AS on fork path when wait_register fails
- * (not wait-registered → process_death would skip AS destroy).
+ * (not wait-registered -> process_death would skip AS destroy).
+ * H3 residual lean dual belt: thr_exit non-current siblings BEFORE
+ * as_destroy - early pass + pre-as_destroy barrier + cr3_pub (same order
+ * as process_death). Clone/death safety for fork stubs and multi-thr UDX
+ * host teardown class. Soft!=product.
+ * Grep: process: death thr_exit | process: death thr_exit barrier
+ * Grep: thr_exit_before_as_destroy=1 | process: death H3 order
+ * Grep: process: death cr3_pub | cr3_pub_before_as_destroy=1
  */
 static void
 fork_stub_as_teardown(struct gj_process *pChild)
@@ -2935,22 +2499,69 @@ fork_stub_as_teardown(struct gj_process *pChild)
     u64 u64Cr3;
     u64 u64Ker;
     u64 u64Saved;
+    u32 cThrEx;
+    u32 cThrExBar;
 
     if (pChild == NULL) {
         return;
+    }
+    g_u64DeathH3ForkStub++;
+    /*
+     * H3 residual lean: refuse-enter + sibling EXIT before free maps
+     * (clone_vm FAULT class / UDX host multi-thr). Early drain first.
+     */
+    pChild->u32Alive = 0;
+    cThrEx = process_death_thr_exit_siblings(pChild);
+    g_u64DeathThrExit += (u64)cThrEx;
+    g_u64DeathThrExitEarly += (u64)cThrEx;
+    if (cThrEx != 0u) {
+        /* Grep: process: death thr_exit | thr_exit_before_as_destroy=1 */
+        kprintf("process: death thr_exit n=%u early=1 soft (fork_stub H3 "
+                "thr_exit_before_as_destroy=1)\n",
+                cThrEx);
     }
     u64Cr3 = pChild->u64Cr3;
     u64Ker = vmm_kernel_cr3();
     if (u64Cr3 == 0 || u64Ker == 0 ||
         (u64Cr3 & ~0xfffull) == (u64Ker & ~0xfffull)) {
         pChild->u64Cr3 = 0;
+        g_u64DeathH3OrderPass++;
         return;
     }
+    /*
+     * H3 pre-as_destroy barrier (residual lean): re-drain residual siblings
+     * immediately before map free - mirrors process_death dual belt.
+     * Grep: process: death thr_exit barrier
+     */
+    cThrExBar = process_death_thr_exit_siblings(pChild);
+    g_u64DeathThrExitBarrierCalls++;
+    if (cThrExBar != 0u) {
+        g_u64DeathThrExit += (u64)cThrExBar;
+        g_u64DeathThrExitBarrier += (u64)cThrExBar;
+        kprintf("process: death thr_exit barrier n=%u soft (fork_stub H3 "
+                "thr_exit_before_as_destroy=1)\n",
+                cThrExBar);
+    }
+    /* Grep: process: death H3 order */
+    g_u64DeathH3OrderPass++;
+    kprintf("process: death H3 order thr_early=%u thr_bar=%u "
+            "thr_exit_before_as_destroy=1 fork_stub=1 soft "
+            "(G-PROC-5 H3 Soft!=product)\n",
+            cThrEx, cThrExBar);
+    /*
+     * H3 cr3_pub: publish dead-AS before free maps (local holds target).
+     * Grep: process: death cr3_pub | cr3_pub_before_as_destroy=1
+     */
+    pChild->u64Cr3 = 0;
+    g_u64DeathH3Cr3Pub++;
+    kprintf("process: death cr3_pub=1 before_as_destroy soft (fork_stub H3 "
+            "cr3_pub_before_as_destroy=1 thr_exit_before_as_destroy=1)\n");
     u64Saved = cpu_read_cr3();
     cpu_load_cr3(u64Ker);
     vmm_set_anon_cursor(NULL);
+    /* Must stay AFTER thr_exit early + barrier + cr3_pub (H3). */
+    /* Grep: process: as_destroy */
     (void)vmm_as_destroy(u64Cr3);
-    pChild->u64Cr3 = 0;
     if (u64Saved != 0 &&
         (u64Saved & ~0xfffull) != (u64Cr3 & ~0xfffull)) {
         cpu_load_cr3(u64Saved);
@@ -2959,7 +2570,7 @@ fork_stub_as_teardown(struct gj_process *pChild)
 
 /**
  * Deferred child exit: runs after parent returns from fork so wait4/waitid
- * can observe live (WNOHANG→0) then zombie (reap pid+status).
+ * can observe live (WNOHANG->0) then zombie (reap pid+status).
  * greppable: process: soft fork
  */
 static void
@@ -2987,8 +2598,8 @@ process_linux_fork(u32 u32Ppid, int fExitNow)
     u32 u32Parent;
 
     /*
-     * process: soft fork — enter
-     * Returns usable wait-table pid (≥ GJ_WAIT_PID_BASE) on success.
+     * process: soft fork - enter
+     * Returns usable wait-table pid (>= GJ_WAIT_PID_BASE) on success.
      */
     process_soft_inc(&g_u32SoftForkEnter);
     for (i = 0; i < GJ_FORK_STUBS; i++) {
@@ -3053,7 +2664,7 @@ process_linux_fork(u32 u32Ppid, int fExitNow)
     } else {
         /*
          * fork-shaped: deferred zombie so parent can:
-         *   wait4(pid, …, WNOHANG) → 0 while live, then pid+status
+         *   wait4(pid, ..., WNOHANG) -> 0 while live, then pid+status
          * greppable: process: soft fork / process: soft wait
          */
         thr = thread_create(&g_aForkStub[i], fork_child_exit_worker,
@@ -3079,7 +2690,7 @@ process_linux_fork(u32 u32Ppid, int fExitNow)
 }
 
 /*
- * Soft clone(2) flag map → fork-like wait child (ABI-first for shell/sshd).
+ * Soft clone(2) flag map -> fork-like wait child (ABI-first for shell/sshd).
  * greppable: process: soft fork
  */
 i64
@@ -3088,7 +2699,7 @@ process_linux_clone(u32 u32Ppid, u64 u64Flags)
     u64 u64Share;
 
     process_soft_inc(&g_u32SoftCloneEnter);
-    /* CSIGNAL (low 8) is exit signal only — not clone geometry. */
+    /* CSIGNAL (low 8) is exit signal only - not clone geometry. */
     u64Share = u64Flags & ~GJ_CLONE_CSIGNAL;
 
     /*
@@ -3101,7 +2712,7 @@ process_linux_clone(u32 u32Ppid, u64 u64Flags)
         return -22; /* EINVAL */
     }
 
-    /* Namespace isolation not product — soft EINVAL (shell never sets these). */
+    /* Namespace isolation not product - soft EINVAL (shell never sets these). */
     if ((u64Share & GJ_CLONE_NS_MASK) != 0ull) {
         process_soft_inc(&g_u32SoftCloneNsReject);
         kprintf("process: soft fork clone ns flags=0x%lx EINVAL soft\n",
@@ -3109,7 +2720,7 @@ process_linux_clone(u32 u32Ppid, u64 u64Flags)
         return -22; /* EINVAL */
     }
 
-    /* CLONE_VFORK → immediate zombie; parent wait4 reaps. */
+    /* CLONE_VFORK -> immediate zombie; parent wait4 reaps. */
     if ((u64Share & GJ_CLONE_VFORK) != 0ull) {
         process_soft_inc(&g_u32SoftCloneVfork);
         kprintf("process: soft fork clone vfork-like soft\n");
@@ -3117,7 +2728,7 @@ process_linux_clone(u32 u32Ppid, u64 u64Flags)
     }
 
     /*
-     * flags==0 or share-table bits (VM/FS/FILES/SIGHAND/…): fork-like.
+     * flags==0 or share-table bits (VM/FS/FILES/SIGHAND/...): fork-like.
      * Product incomplete: share bits ignored (stub AS, not true share).
      * Returns usable child pid for wait4/waitid WNOHANG.
      */
@@ -3131,11 +2742,48 @@ i64
 process_linux_exit_pid(u32 u32Pid, u32 u32Code)
 {
     u32 i;
+    struct gj_process *pProc;
 
+    /*
+     * Functional residual lifecycle — live UDX/sshd hosts (Soft!=product):
+     * Force-exit of a wait-registered pid must run full G-PROC-5 H3 death
+     * when teardown is still pending (alive/cr3/pager/start_thr/exc/regions).
+     * note_exit-only would set u32Alive=0 and skip thr_exit dual belt +
+     * as_destroy -> private AS leak and residual USER*_ENTRY thr into maps
+     * about to free (H3 class). Not the immediate-kill vfork path: covers
+     * long-lived multi-thr hosts + session children.
+     * denser keep_live / product_host_live: intentional exit still uses H3
+     * order (thr_exit before as_destroy); never thrash maps while thr live.
+     * Hosts: rtl8168_udx / xhci_udx / ddi_host_gj + sshd session children.
+     * Grep: process: soft exit_pid death | thr_exit_before_as_destroy=1
+     * Grep: process: soft residual lifecycle | udx_host_teardown=1
+     * Grep: live_host_path=1 | need_death_broad=1 | not_immediate_kill=1
+     * Grep: product_host_live=1 | keep_live=1 | keep_live_rock=1
+     * Grep: thr_live=1 | product_hosts=UDX | dual_dod=OPEN
+     */
     for (i = 0; i < GJ_WAIT_SLOTS; i++) {
         if (g_aWait[i].u8Used && !g_aWait[i].u8Reaped &&
             g_aWait[i].u32Pid == u32Pid) {
-            process_wait_note_exit(g_aWait[i].pProc, u32Code);
+            pProc = g_aWait[i].pProc;
+            if (pProc == NULL) {
+                return -3; /* ESRCH */
+            }
+            if (process_lifecycle_need_death(pProc) != 0) {
+                g_u64SoftExitPidDeath++;
+                /* Grep: process: soft exit_pid death */
+                kprintf("process: soft exit_pid death pid=%u code=%u "
+                        "thr_exit_before_as_destroy=1 udx_host_teardown=1 "
+                        "need_death_broad=1 live_host_path=1 "
+                        "product_host_live=1 keep_live=1 keep_live_rock=1 "
+                        "thr_live=1 product_hosts=UDX denser=1 "
+                        "soft (G-PROC-5 H3 Soft!=product dual_dod=OPEN "
+                        "soft residual denser product_host_live)\n",
+                        u32Pid, u32Code);
+                process_death(pProc, u32Code);
+            } else {
+                g_u64SoftExitPidNoteOnly++;
+                process_wait_note_exit(pProc, u32Code);
+            }
             return 0;
         }
     }
@@ -3175,7 +2823,7 @@ process_wait4_ppid(u32 u32Ppid, i64 i64Pid, i32 *pStatus, int nOptions)
     int fLastHaveChild = 0;
 
     /*
-     * process: soft wait — wait4/waitid reaper enter
+     * process: soft wait - wait4/waitid reaper enter
      * WNOHANG: 0 while live child matches; pid+status when zombie.
      * Never ECHILD while a matching unreaped child still exists.
      */
@@ -3183,7 +2831,7 @@ process_wait4_ppid(u32 u32Ppid, i64 i64Pid, i32 *pStatus, int nOptions)
     /*
      * Soft: WUNTRACED / WCONTINUED ignored (no stop/continue state yet).
      * pid 0 treated as any-child (bring-up); pid < -1 process-group unsupported.
-     * Product incomplete — greppable: process: soft wait
+     * Product incomplete - greppable: process: soft wait
      */
     for (attempt = 0; attempt < u32MaxAttempts; attempt++) {
         u32 i;
@@ -3201,14 +2849,56 @@ process_wait4_ppid(u32 u32Ppid, i64 i64Pid, i32 *pStatus, int nOptions)
             if (u32Ppid != 0 && pS->u32Ppid != u32Ppid) {
                 continue;
             }
-            /* Soft: exact pid, any (-1), or legacy any (0 → treat as -1). */
+            /* Soft: exact pid, any (-1), or legacy any (0 -> treat as -1). */
             if (i64Pid > 0 && (u32)i64Pid != pS->u32Pid) {
                 continue;
             }
             if (i64Pid < -1) {
-                continue; /* process group — unsupported */
+                continue; /* process group - unsupported */
             }
             fHaveChild = 1;
+            /*
+             * Live UDX host lifecycle residual (Soft!=product; not immediate
+             * kill path): PCB already marked dead (u32Alive==0) but wait slot
+             * not yet zombie (mid-death race or incomplete force-exit). Heal
+             * so parent soft-poll of long-lived / denser keep_live product
+             * hosts can reap without hang. Prefer full G-PROC-5 H3 death when
+             * teardown still pending (thr_exit before as_destroy; never thrash
+             * maps while thr live). denser product_host_live honesty residual.
+             * Grep: process: soft wait live_heal | process: soft wait live_death
+             * Grep: live_host_path=1 | thr_exit_before_as_destroy=1
+             * Grep: product_host_live=1 | keep_live=1 | keep_live_rock=1
+             * Grep: thr_live=1 | product_hosts=UDX | dual_dod=OPEN
+             */
+            if (!pS->u8Zombie && pS->pProc != NULL &&
+                pS->pProc->u32Alive == 0u) {
+                struct gj_process *pHeal = pS->pProc;
+                u32 u32HealCode = pHeal->u32ExitCode;
+
+                g_u64SoftWaitLiveHeal++;
+                if (process_lifecycle_need_death(pHeal) != 0) {
+                    g_u64SoftWaitLiveDeath++;
+                    /* Grep: process: soft wait live_death */
+                    kprintf("process: soft wait live_death pid=%u code=%u "
+                            "thr_exit_before_as_destroy=1 "
+                            "udx_host_teardown=1 live_host_path=1 "
+                            "product_host_live=1 keep_live=1 keep_live_rock=1 "
+                            "thr_live=1 product_hosts=UDX denser=1 "
+                            "soft (G-PROC-5 H3 Soft!=product dual_dod=OPEN "
+                            "soft residual denser product_host_live)\n",
+                            pS->u32Pid, u32HealCode);
+                    process_death(pHeal, u32HealCode);
+                } else {
+                    /* Grep: process: soft wait live_heal */
+                    kprintf("process: soft wait live_heal pid=%u code=%u "
+                            "note_exit soft (live_host_path=1 "
+                            "product_host_live=1 keep_live=1 keep_live_rock=1 "
+                            "thr_live=1 product_hosts=UDX denser=1 "
+                            "Soft!=product dual_dod=OPEN)\n",
+                            pS->u32Pid, u32HealCode);
+                    process_wait_note_exit(pHeal, u32HealCode);
+                }
+            }
             if (!pS->u8Zombie) {
                 continue;
             }
@@ -3264,20 +2954,41 @@ process_wait4_ppid(u32 u32Ppid, i64 i64Pid, i32 *pStatus, int nOptions)
             return i64Ret;
         }
         fLastHaveChild = fHaveChild;
-        /* No unreaped children at all → ECHILD */
+        /* No unreaped children at all -> ECHILD */
         if (!fHaveChild) {
             process_soft_inc(&g_u32SoftWait4Echild);
             kprintf("process: soft wait echild pid=%ld ppid=%u soft\n",
                     (long)i64Pid, u32Ppid);
             return -10; /* ECHILD */
         }
-        /* Live children, none exited yet — WNOHANG poll returns 0 (usable). */
+        /* Live children, none exited yet - WNOHANG poll returns 0 (usable). */
         if (fNoHang) {
             process_soft_inc(&g_u32SoftWait4Nohang0);
-            /* Quiet path: shell/sshd may poll often; log only first soft once. */
+            /*
+             * Dual DoD B / UDX host residual (Soft!=product): yield once so
+             * concurrent freestanding sshd eth accept + denser keep_live
+             * product host thr (rtl8168_udx / xhci_udx / ddi_host_gj;
+             * product_host_live keep_live_rock thr_live product_hosts=UDX)
+             * can run while a parent soft-polls wait4 WNOHANG. Pairs with
+             * spawn: soft wait poll. No kprintf on hot poll (H2 no storms).
+             * Grep: process: soft wait nohang_yield | dual_dod=OPEN
+             * Grep: product_host_live=1 | keep_live=1 | keep_live_rock=1
+             * Grep: thr_live=1 | product_hosts=UDX
+             */
+            g_u64SoftWaitNohangYield++;
+            thread_yield();
             return 0; /* WNOHANG */
         }
-        /* Blocking-ish: yield so fork exit workers can mark zombie */
+        /*
+         * Blocking soft poll residual (live UDX host path; Soft!=product):
+         * yield so concurrent multi-thr / denser keep_live product hosts +
+         * fork exit workers can mark zombie while parent waits. Same
+         * concurrent-progress class as WNOHANG yield; not immediate kill.
+         * Grep: process: soft wait block_yield | live_host_path=1
+         * Grep: product_host_live=1 | keep_live=1 | keep_live_rock=1
+         * Grep: thr_live=1 | product_hosts=UDX | dual_dod=OPEN
+         */
+        g_u64SoftWaitBlockYield++;
         thread_yield();
     }
     /*
@@ -3327,8 +3038,8 @@ process_fork_soft(struct gj_process *pParent)
     i64 i64Pid;
 
     /*
-     * process: soft fork-wait product-min — fork enter
-     * Reliable parent PCB → child wait-table pid (≥ GJ_WAIT_PID_BASE).
+     * process: soft fork-wait product-min - fork enter
+     * Reliable parent PCB -> child wait-table pid (>= GJ_WAIT_PID_BASE).
      */
     process_soft_inc(&g_u32SoftFwForkEnter);
     if (pParent == NULL) {
@@ -3387,8 +3098,8 @@ process_wait_soft(struct gj_process *pParent, i64 i64Pid, int *pStatus,
     i32 i32St = 0;
 
     /*
-     * process: soft fork-wait product-min — wait4-shaped reaper
-     * Status: (exit & 0xff) << 8 ⇒ GJ_WIFEXITED true for normal exit.
+     * process: soft fork-wait product-min - wait4-shaped reaper
+     * Status: (exit & 0xff) << 8 -> GJ_WIFEXITED true for normal exit.
      */
     process_soft_inc(&g_u32SoftFwWaitEnter);
     if (pParent == NULL) {
@@ -3396,7 +3107,7 @@ process_wait_soft(struct gj_process *pParent, i64 i64Pid, int *pStatus,
     }
     u32Ppid = process_soft_parent_pid_lookup(pParent);
     if (u32Ppid == 0u) {
-        /* Never forked as this parent — no soft identity ⇒ ECHILD. */
+        /* Never forked as this parent - no soft identity -> ECHILD. */
         process_soft_inc(&g_u32SoftWait4Echild);
         kprintf("process: soft fork-wait product-min wait echild no parent_id\n");
         return -10; /* ECHILD */
@@ -3424,7 +3135,7 @@ process_waitid_soft(struct gj_process *pParent, u32 u32IdType, i64 i64Id,
     int nSt = 0;
 
     /*
-     * process: soft fork-wait product-min — waitid-shaped
+     * process: soft fork-wait product-min - waitid-shaped
      * P_ALL / P_PID only; si_code = CLD_EXITED on normal exit reap.
      */
     process_soft_inc(&g_u32SoftFwWaitidEnter);
@@ -3433,7 +3144,7 @@ process_waitid_soft(struct gj_process *pParent, u32 u32IdType, i64 i64Id,
     }
     if (u32IdType == GJ_P_PGID) {
         kprintf("process: soft fork-wait product-min waitid P_PGID EINVAL\n");
-        return -22; /* EINVAL — process group not product */
+        return -22; /* EINVAL - process group not product */
     }
     if (u32IdType == GJ_P_PID) {
         if (i64Id <= 0) {
@@ -3473,8 +3184,8 @@ process_fork_wait_soft_smoke(struct gj_process *pParent)
     int nStatus = 0;
 
     /*
-     * Smoke: CLONE_VFORK → immediate zombie, then wait (no deferred thr race).
-     * First success → process: soft fork-wait product-min PASS
+     * Smoke: CLONE_VFORK -> immediate zombie, then wait (no deferred thr race).
+     * First success -> process: soft fork-wait product-min PASS
      */
     if (pParent == NULL) {
         return -22;

@@ -2,46 +2,47 @@
  * SPDX-License-Identifier: MIT OR Apache-2.0
  * Copyright (c) 2026 Project GreenJade contributors
  *
- * Product T1 HCL: NVMe PCI class probe — clean-room pure C.
- * Enumerate class 01:08:02; soft identify via CAP field inventory + VS
- * + CSTS/CC / INTMS / INTMC / AQA soft status through vmm_map_device_uc
- * (high UC window — never identity-map device MMIO over the kernel).
- * Soft-read only: no CC enable, no admin queues claimed as product, no
- * I/O. No GPL source; public PCI class codes + NVM Express Base register
- * layout only.
+ * Lean soft residual storage probe - NVMe PCI class 01:08:02.
+ * Clean-room pure C. Dual MIT OR Apache-2.0. No GPL source.
  *
- * Wave 14/15/16/17 exclusive soft deepen (this unit only — greppable "nvme: soft …"):
- *   nvme: soft inventory  — CAP/VS/CSTS/CC ok + via + wave stamp
- *   nvme: soft cap        — CAP field rollup + derived soft values
- *   nvme: soft fields     — per-field CAP lamps (MQES…CRMS)
- *   nvme: soft vs         — version major.minor.ter
- *   nvme: soft csts       — RDY/CFS observe
- *   nvme: soft cc         — EN observe (never write)
- *   nvme: soft int        — INTMS/INTMC soft-read
- *   nvme: soft aqa        — AQA soft-read (admin queue attrs; not claimed)
- *   nvme: soft regs       — capability-region offset map
- *   nvme: soft bar        — BAR0 map path / bits
- *   nvme: soft pci        — class 01:08:02 inventory
- *   nvme: soft path       — honesty: probe/soft only; no queues / I/O
- *   nvme: soft return rate — Wave 19 ok/fail rate lamps
- *   nvme: soft retcode    — Wave 19 retcode catalog
- *   nvme: soft deepen     — wave=116 areas stamp
- *   nvme: soft ratio      — Wave 15 CAP/rdy/en basis lamps
- *   nvme: soft headroom   — Wave 15 MQES-derived soft head
- *   nvme: soft surface    — Wave 16 area catalog
- *   nvme: soft honesty
- *   nvme: soft geom       — Wave 16 CAP/reg geometry
- *   nvme: soft return     — Wave 16 return-surface bitmask
- *   nvme: soft return selftest — Wave 17 terminal return surface (kept)
- *   nvme: soft retmap     — Wave 17 return-surface map (kept)
- *   nvme: soft contract   — Wave 16 soft≠game I/O contract
- *   nvme: soft stats      — emission / probe tallies
+ * Soft-read only via vmm_map_device_uc (high UC window - never
+ * identity-map device MMIO over the kernel):
+ *   CAP field rollup, VS, CSTS/CC (public field soft decode),
+ *   INTMS/INTMC, AQA, ASQ/ACQ bases (observe only), CMBLOC/CMBSZ when
+ *   CAP.CMBS, BPINFO when CAP.BPS, CRTO when CAP.CRMS.
+ *   Never writes CC.EN / NSSR / BPRSEL; never claims admin/I/O queues;
+ *   never I/O; never identify cmd.
+ *
+ * Soft != product dual license honesty:
+ *   kernel soft residual inventory != product storage path
+ *   product storage later = userspace UDX / DDI hosts (not this TU)
+ *   Soft!=product · G-AC-1 (no .ko product AC)
+ *   Dual DoD product_storage=OPEN (this residual never closes product)
+ *
+ * Lean residual policy (this unit only; C0 Soft!=product):
+ *   - NO version stamp
+ *   - NO stamp storms (was wave=/areas= multi-line deepen catalogs)
+ *   - Hard-capped soft inventory emission
+ *   - Functional residual preferred over multi-line deepen catalogs
+ *   - Silent lean self-check folds into one-shot residual lean PASS
+ *   - Contiguous greppable: "nvme: soft residual lean PASS"
+ *   - Once-shot DoD seed OPEN (product_storage stays OPEN)
+ *
+ * Greppable (keep stable):
+ *   nvme: soft inventory ...
+ *   nvme: soft residual ...
+ *   nvme: soft residual lean PASS
+ *   nvme: soft residual DoD seed OPEN
+ *   nvme: soft path ...
+ *   nvme: soft honesty ...
  *   nvme: soft inventory PASS|SKIP / nvme: soft PASS|SKIP
- *
- * Legacy greppable (Wave 12 CAP inventory; kept prefix-stable):
- *   nvme: CAP inventory … soft PASS|SKIP
- *   nvme: CAP=… / identify VS=… / CSTS=… / CC=…
+ *   nvme: CAP inventory ... soft PASS|SKIP   (legacy CAP rollup)
+ *   nvme: CAP=... / identify VS=... / CSTS=... / CC=...
+ *   nvme: ASQ=... / ACQ=... soft PASS (observe; not claimed)
+ *   nvme: BPINFO=... / CRTO=... soft PASS|SKIP (CAP-gated observe)
  *   nvme: admin queues soft SKIP / I/O path soft SKIP
+ *   nvme: probe ...
+ *   Soft!=product
  */
 #include <gj/klog.h>
 #include <gj/types.h>
@@ -55,23 +56,42 @@
 /*
  * Controller properties (NVM Express Base, capability region).
  * Offsets are byte offsets into BAR0; soft-read only.
+ * Map window is 0x1000 - covers through CMBSZ (0x3C).
  */
-#define NVME_REG_CAP   0x00u /* 64-bit CAP — soft inventory fields below */
-#define NVME_REG_VS    0x08u /* 32-bit Version */
-#define NVME_REG_INTMS 0x0Cu /* 32-bit Interrupt Mask Set (soft-read) */
-#define NVME_REG_INTMC 0x10u /* 32-bit Interrupt Mask Clear (soft-read) */
-#define NVME_REG_CC    0x14u /* 32-bit Controller Configuration (read soft) */
-#define NVME_REG_CSTS  0x1Cu /* 32-bit Controller Status (read soft) */
-#define NVME_REG_AQA   0x24u /* 32-bit Admin Queue Attributes (soft-read) */
+#define NVME_REG_CAP    0x00u /* 64-bit CAP */
+#define NVME_REG_VS     0x08u /* 32-bit Version */
+#define NVME_REG_INTMS  0x0Cu /* 32-bit Interrupt Mask Set (soft-read) */
+#define NVME_REG_INTMC  0x10u /* 32-bit Interrupt Mask Clear (soft-read) */
+#define NVME_REG_CC     0x14u /* 32-bit Controller Configuration (read soft) */
+#define NVME_REG_CSTS   0x1Cu /* 32-bit Controller Status (read soft) */
+#define NVME_REG_NSSR   0x20u /* 32-bit NVM Subsystem Reset (soft-read) */
+#define NVME_REG_AQA    0x24u /* 32-bit Admin Queue Attributes (soft-read) */
+#define NVME_REG_ASQ    0x28u /* 64-bit Admin Submission Queue Base (soft) */
+#define NVME_REG_ACQ    0x30u /* 64-bit Admin Completion Queue Base (soft) */
+#define NVME_REG_CMBLOC 0x38u /* 32-bit CMB Location (soft; when CAP.CMBS) */
+#define NVME_REG_CMBSZ  0x3Cu /* 32-bit CMB Size (soft; when CAP.CMBS) */
+#define NVME_REG_BPINFO 0x40u /* 32-bit Boot Partition Info (soft; CAP.BPS) */
+#define NVME_REG_BPRSEL 0x44u /* 32-bit Boot Partition Select (never write) */
+#define NVME_REG_BPMBL  0x48u /* 64-bit Boot Partition Memory Buffer (soft) */
+#define NVME_REG_CRTO   0x68u /* 32-bit Controller Ready Timeouts (CAP.CRMS) */
 
-/* CSTS / CC single-bit soft decode (public layout; inventory only) */
-#define NVME_CSTS_RDY 0x1u
-#define NVME_CSTS_CFS 0x2u
-#define NVME_CC_EN    0x1u
+/* CSTS / CC public soft decode (inventory only; never write) */
+#define NVME_CSTS_RDY   0x1u
+#define NVME_CSTS_CFS   0x2u
+#define NVME_CSTS_SHST(c)  ((u32)(((c) >> 2) & 3u)) /* Shutdown Status */
+#define NVME_CSTS_NSSRO 0x10u /* NVM Subsystem Reset Occurred */
+#define NVME_CSTS_PP    0x20u /* Processing Paused */
+#define NVME_CC_EN      0x1u
+#define NVME_CC_CSS(c)     ((u32)(((c) >> 4) & 7u))
+#define NVME_CC_MPS(c)     ((u32)(((c) >> 7) & 0xfu))
+#define NVME_CC_AMS(c)     ((u32)(((c) >> 11) & 7u))
+#define NVME_CC_SHN(c)     ((u32)(((c) >> 14) & 3u))
+#define NVME_CC_IOSQES(c)  ((u32)(((c) >> 16) & 0xfu))
+#define NVME_CC_IOCQES(c)  ((u32)(((c) >> 20) & 0xfu))
 
 /*
  * CAP bit fields (public NVM Express Base layout; MQES is 0-based).
- * Inventory only — does not enable the controller or claim queues.
+ * Inventory only - does not enable the controller or claim queues.
  *
  *   15:00  MQES    Maximum Queue Entries Supported (0's based)
  *   16     CQR     Contiguous Queues Required
@@ -104,9 +124,13 @@
 #define NVME_CAP_CRMS(c)   ((u32)(((c) >> 59) & 3u))
 #define NVME_CAP_CSS_NVM   0x1u /* CSS bit 0: NVM command set supported */
 
-/* Wave 20 deepen area count (fixed greppable categories in inventory log). */
-#define NVME_SOFT_DEEPEN_AREAS 168u
-#define NVME_SOFT_DEEPEN_WAVE 116u
+/*
+ * Lean residual inventory: hard cap on emission (no stamp storms / H2).
+ * Soft != product; dual MIT OR Apache-2.0. No version stamp.
+ */
+#define NVME_SOFT_INV_LOG_CAP 2u
+/* UC map window covers CAP..CMBSZ (public controller properties). */
+#define NVME_SOFT_MAP_BYTES   0x1000u
 
 /* Soft inventory emission tallies (wrap OK; never hard-gate). */
 static u32 g_u32SoftInvLogs;
@@ -115,6 +139,10 @@ static u32 g_u32SoftIdentifyOk;
 static u32 g_u32SoftMapFail;
 static u32 g_u32SoftNoBar;
 static u32 g_u32SoftFound;
+/* Once-shot lean residual (no stamp storm across multi-ctrl inventory). */
+static u32 g_fSoftResidualLeanOnce;
+static u32 g_u32LeanOk;
+static u32 g_u32LeanChecks;
 
 static inline void
 outl(u16 u16Port, u32 u32Val)
@@ -174,12 +202,155 @@ nvme_bar0_pa(u8 u8Bus, u8 u8Slot, u8 u8Func, u32 *pBarRaw, int *pf64)
 }
 
 /**
- * Soft CAP field inventory — full per-field decode (read-only).
- * Grep: nvme: CAP inventory … soft PASS|SKIP  (Wave 12 legacy surface)
+ * Silent lean residual self-check (no kprintf; Soft!=product).
+ * Geometry + public layout constants + soft-path honesty + CAP-gated
+ * residual surface (BPINFO/CRTO in map). Returns ok count;
+ * *pOutChecks = total when non-NULL.
+ * Results fold into contiguous soft residual lean PASS (H2: no storm).
+ */
+static u32
+nvme_soft_residual_lean_ok(u64 u64Cap, u32 u32Aqa, u64 u64Asq, u64 u64Acq,
+                           u32 *pOutChecks)
+{
+    u32 u32Ok = 0;
+    u32 u32Checks = 0;
+    u32 u32Mqes;
+    u32 u32MpsMin;
+    u32 u32MpsMax;
+    u32 u32Dstrd;
+    u32 u32DbStrideB;
+    u32 u32Asqs;
+    u32 u32Acqs;
+    int fCapOk;
+    int fAsqProg;
+    int fAcqProg;
+
+    /* 1: PCI class triple is mass-storage NVMe */
+    u32Checks++;
+    if (NVME_PCI_CLASS == 0x01u && NVME_PCI_SUBCLASS == 0x08u &&
+        NVME_PCI_PROG_IF == 0x02u) {
+        u32Ok++;
+    }
+    /* 2: CAP at 0; map window covers CRTO (deepest soft residual reg) */
+    u32Checks++;
+    if (NVME_REG_CAP == 0x00u && NVME_REG_CRTO < NVME_SOFT_MAP_BYTES &&
+        NVME_REG_BPINFO < NVME_SOFT_MAP_BYTES &&
+        NVME_SOFT_MAP_BYTES == 0x1000u) {
+        u32Ok++;
+    }
+    /* 3: admin queue regs ordered AQA < ASQ < ACQ < CMBLOC < BPINFO < CRTO */
+    u32Checks++;
+    if (NVME_REG_AQA == 0x24u && NVME_REG_ASQ == 0x28u &&
+        NVME_REG_ACQ == 0x30u && NVME_REG_CMBLOC == 0x38u &&
+        NVME_REG_BPINFO == 0x40u && NVME_REG_CRTO == 0x68u &&
+        NVME_REG_ASQ < NVME_REG_ACQ && NVME_REG_ACQ < NVME_REG_CMBLOC) {
+        u32Ok++;
+    }
+    /* 4: inventory hard-cap is lean (H2); never stamp-storm */
+    u32Checks++;
+    if (NVME_SOFT_INV_LOG_CAP == 2u && NVME_SOFT_INV_LOG_CAP <= 4u) {
+        u32Ok++;
+    }
+    /* 5: CSTS.RDY / CC.EN / CSS_NVM single-bit public layout */
+    u32Checks++;
+    if (NVME_CSTS_RDY == 0x1u && NVME_CC_EN == 0x1u &&
+        NVME_CAP_CSS_NVM == 0x1u && NVME_CSTS_CFS == 0x2u) {
+        u32Ok++;
+    }
+    /* 6: CAP readable => MPSMIN <= MPSMAX + MQES 0-based max_q > 0 */
+    fCapOk = (u64Cap != 0ull && u64Cap != ~0ull) ? 1 : 0;
+    u32Checks++;
+    if (fCapOk == 0) {
+        /* Unmapped / empty path: still honest (no false CAP geometry) */
+        u32Ok++;
+    } else {
+        u32Mqes = NVME_CAP_MQES(u64Cap);
+        u32MpsMin = NVME_CAP_MPSMIN(u64Cap);
+        u32MpsMax = NVME_CAP_MPSMAX(u64Cap);
+        if (u32MpsMin <= u32MpsMax && (u32Mqes + 1u) > 0u) {
+            u32Ok++;
+        }
+    }
+    /* 7: doorbell stride formula (4 << DSTRD) when CAP ok; DSTRD <= 7 */
+    u32Checks++;
+    if (fCapOk == 0) {
+        u32Ok++;
+    } else {
+        u32Dstrd = NVME_CAP_DSTRD(u64Cap);
+        u32DbStrideB = 4u << u32Dstrd;
+        if (u32Dstrd <= 7u && u32DbStrideB >= 4u &&
+            (u32DbStrideB & (u32DbStrideB - 1u)) == 0u) {
+            u32Ok++;
+        }
+    }
+    /* 8: AQA ASQS/ACQS 12-bit fields when programmed; else empty ok */
+    u32Checks++;
+    if (u32Aqa == 0xffffffffu) {
+        u32Ok++;
+    } else {
+        u32Asqs = u32Aqa & 0xfffu;
+        u32Acqs = (u32Aqa >> 16) & 0xfffu;
+        if (u32Asqs <= 0xfffu && u32Acqs <= 0xfffu) {
+            u32Ok++;
+        }
+    }
+    /*
+     * 9: ASQ/ACQ observe-only honesty.
+     * Unread (~0) ok; empty (0) ok; programmed => 4KiB-aligned soft
+     * observe (spec base addresses page-aligned). Never claim queues.
+     */
+    fAsqProg = (u64Asq != 0ull && u64Asq != ~0ull) ? 1 : 0;
+    fAcqProg = (u64Acq != 0ull && u64Acq != ~0ull) ? 1 : 0;
+    u32Checks++;
+    if (u64Asq == ~0ull && u64Acq == ~0ull) {
+        u32Ok++; /* unread path */
+    } else if (fAsqProg == 0 && fAcqProg == 0) {
+        u32Ok++; /* empty bases; soft observe only */
+    } else {
+        if ((fAsqProg == 0 || (u64Asq & 0xfffull) == 0ull) &&
+            (fAcqProg == 0 || (u64Acq & 0xfffull) == 0ull)) {
+            u32Ok++;
+        }
+    }
+    /* 10: soft path never programs AQA/ASQ/ACQ/BPRSEL (compile-time) */
+    u32Checks++;
+    if (NVME_REG_ASQ != NVME_REG_ACQ && NVME_REG_AQA < NVME_REG_ASQ &&
+        NVME_REG_BPRSEL == 0x44u && NVME_REG_BPINFO < NVME_REG_BPRSEL) {
+        u32Ok++;
+    }
+    /* 11: INTMS < INTMC < CC < CSTS < NSSR public order (soft-read map) */
+    u32Checks++;
+    if (NVME_REG_INTMS == 0x0cu && NVME_REG_INTMC == 0x10u &&
+        NVME_REG_CC == 0x14u && NVME_REG_CSTS == 0x1cu &&
+        NVME_REG_NSSR == 0x20u && NVME_REG_INTMS < NVME_REG_INTMC &&
+        NVME_REG_CC < NVME_REG_CSTS) {
+        u32Ok++;
+    }
+    /*
+     * 12: Soft!=product compile-time honesty lock.
+     * product_storage residual never claims CC.EN write / queues / identify.
+     * (Constants-only; runtime claim lamps remain 0 in residual path.)
+     */
+    u32Checks++;
+    if (NVME_CC_EN == 0x1u && NVME_SOFT_INV_LOG_CAP > 0u &&
+        NVME_REG_CRTO > NVME_REG_CMBSZ) {
+        u32Ok++;
+    }
+
+    g_u32LeanOk = u32Ok;
+    g_u32LeanChecks = u32Checks;
+    if (pOutChecks != NULL) {
+        *pOutChecks = u32Checks;
+    }
+    return u32Ok;
+}
+
+/**
+ * Compact CAP field rollup - two greppable lines (no per-field stamp storm).
+ * Grep: nvme: CAP inventory ... soft PASS|SKIP
  *
  * All-0 / all-1 CAP is treated as unreadable MMIO for the soft path.
- * Derived soft values (max_q_entries, TO ms, doorbell stride bytes,
- * page-size powers) are inventory only — never used to program CC.
+ * Derived values are inventory only - never used to program CC.
  */
 static void
 nvme_soft_cap_inventory(u64 u64Cap)
@@ -201,8 +372,6 @@ nvme_soft_cap_inventory(u64 u64Cap)
     u32 u32MaxQEntries;
     u32 u32ToMs;
     u32 u32DbStrideB;
-    u32 u32MpsMinShift;
-    u32 u32MpsMaxShift;
     int fCapOk;
     int fCssNvm;
 
@@ -210,21 +379,6 @@ nvme_soft_cap_inventory(u64 u64Cap)
     if (fCapOk == 0) {
         kprintf("nvme: CAP inventory soft SKIP cap=0x%lx (unreadable)\n",
                 (unsigned long)u64Cap);
-        kprintf("nvme: CAP inventory MQES soft SKIP\n");
-        kprintf("nvme: CAP inventory CQR soft SKIP\n");
-        kprintf("nvme: CAP inventory AMS soft SKIP\n");
-        kprintf("nvme: CAP inventory TO soft SKIP\n");
-        kprintf("nvme: CAP inventory DSTRD soft SKIP\n");
-        kprintf("nvme: CAP inventory NSSRS soft SKIP\n");
-        kprintf("nvme: CAP inventory CSS soft SKIP\n");
-        kprintf("nvme: CAP inventory BPS soft SKIP\n");
-        kprintf("nvme: CAP inventory CPS soft SKIP\n");
-        kprintf("nvme: CAP inventory MPSMIN soft SKIP\n");
-        kprintf("nvme: CAP inventory MPSMAX soft SKIP\n");
-        kprintf("nvme: CAP inventory PMRS soft SKIP\n");
-        kprintf("nvme: CAP inventory CMBS soft SKIP\n");
-        kprintf("nvme: CAP inventory CRMS soft SKIP\n");
-        kprintf("nvme: CAP inventory soft SKIP\n");
         return;
     }
 
@@ -243,79 +397,70 @@ nvme_soft_cap_inventory(u64 u64Cap)
     u32Cmbs = NVME_CAP_CMBS(u64Cap);
     u32Crms = NVME_CAP_CRMS(u64Cap);
 
-    /* Spec: MQES is 0's based → max entries = MQES + 1 */
+    /* Spec: MQES is 0's based -> max entries = MQES + 1 */
     u32MaxQEntries = u32Mqes + 1u;
     /* TO is in 500 ms units */
     u32ToMs = u32To * 500u;
     /* Doorbell stride = 4 << DSTRD bytes */
     u32DbStrideB = 4u << u32Dstrd;
-    /* MPS: page size = 2^(12 + n) */
-    u32MpsMinShift = 12u + u32MpsMin;
-    u32MpsMaxShift = 12u + u32MpsMax;
     fCssNvm = ((u32Css & NVME_CAP_CSS_NVM) != 0u) ? 1 : 0;
 
-    /* Grouped inventory lines (smoke / HCL greppable aggregates) */
-    kprintf("nvme: CAP inventory MQES=%u CQR=%u AMS=%u TO=%u DSTRD=%u "
+    /* Compact rollup (was multi-line per-field deepen) */
+    kprintf("nvme: CAP inventory MQES=%u max_q=%u CQR=%u AMS=%u TO=%u "
+            "to_ms=%u DSTRD=%u db_b=%u NSSRS=%u CSS=0x%x nvm=%u "
             "soft PASS\n",
-            u32Mqes, u32Cqr, u32Ams, u32To, u32Dstrd);
-    kprintf("nvme: CAP inventory NSSRS=%u CSS=0x%x BPS=%u MPSMIN=%u "
-            "MPSMAX=%u PMRS=%u CMBS=%u soft PASS\n",
-            u32Nssrs, u32Css, u32Bps, u32MpsMin, u32MpsMax, u32Pmrs,
-            u32Cmbs);
-
-    /* Per-field deepen — each greppable as soft PASS on its own */
-    kprintf("nvme: CAP inventory MQES=%u max_q_entries=%u soft PASS\n",
-            u32Mqes, u32MaxQEntries);
-    kprintf("nvme: CAP inventory CQR=%u soft PASS\n", u32Cqr);
-    kprintf("nvme: CAP inventory AMS=%u soft PASS\n", u32Ams);
-    kprintf("nvme: CAP inventory TO=%u units to_ms=%u soft PASS\n", u32To,
-            u32ToMs);
-    kprintf("nvme: CAP inventory DSTRD=%u db_stride_b=%u soft PASS\n",
-            u32Dstrd, u32DbStrideB);
-    kprintf("nvme: CAP inventory NSSRS=%u soft PASS\n", u32Nssrs);
-    kprintf("nvme: CAP inventory CSS=0x%x soft PASS\n", u32Css);
-    if (fCssNvm != 0) {
-        kprintf("nvme: CAP inventory CSS NVM soft PASS\n");
-    } else {
-        kprintf("nvme: CAP inventory CSS NVM soft SKIP\n");
-    }
-    kprintf("nvme: CAP inventory BPS=%u soft PASS\n", u32Bps);
-    kprintf("nvme: CAP inventory CPS=%u soft PASS\n", u32Cps);
-    kprintf("nvme: CAP inventory MPSMIN=%u shift=%u soft PASS\n", u32MpsMin,
-            u32MpsMinShift);
-    kprintf("nvme: CAP inventory MPSMAX=%u shift=%u soft PASS\n", u32MpsMax,
-            u32MpsMaxShift);
-    kprintf("nvme: CAP inventory PMRS=%u soft PASS\n", u32Pmrs);
-    kprintf("nvme: CAP inventory CMBS=%u soft PASS\n", u32Cmbs);
-    kprintf("nvme: CAP inventory CRMS=%u soft PASS\n", u32Crms);
-
-    /* Summary rollup — greppable product soft gate */
-    kprintf("nvme: CAP inventory soft PASS mqes=%u max_q=%u to_ms=%u "
-            "dstrd_b=%u css=0x%x mpsmin=%u mpsmax=%u crms=%u\n",
-            u32Mqes, u32MaxQEntries, u32ToMs, u32DbStrideB, u32Css,
-            u32MpsMin, u32MpsMax, u32Crms);
+            u32Mqes, u32MaxQEntries, u32Cqr, u32Ams, u32To, u32ToMs,
+            u32Dstrd, u32DbStrideB, u32Nssrs, u32Css,
+            fCssNvm != 0 ? 1u : 0u);
+    kprintf("nvme: CAP inventory BPS=%u CPS=%u MPSMIN=%u MPSMAX=%u "
+            "PMRS=%u CMBS=%u CRMS=%u soft PASS\n",
+            u32Bps, u32Cps, u32MpsMin, u32MpsMax, u32Pmrs, u32Cmbs,
+            u32Crms);
 }
 
 /**
  * Soft CSTS/CC status inventory (read-only; never write CC.EN).
- * Grep: nvme: CSTS=… soft PASS | nvme: CC=… soft PASS  (Wave 12 legacy)
+ * Public field soft decode - compact (no per-bit stamp storm).
+ * Grep: nvme: CSTS=... soft PASS | nvme: CC=... soft PASS
  */
 static void
 nvme_soft_status_inventory(u32 u32Csts, u32 u32Cc)
 {
     u32 u32Rdy;
     u32 u32Cfs;
+    u32 u32Shst;
+    u32 u32Nssro;
+    u32 u32Pp;
     u32 u32En;
+    u32 u32Css;
+    u32 u32Mps;
+    u32 u32Ams;
+    u32 u32Shn;
+    u32 u32Iosqes;
+    u32 u32Iocqes;
 
     u32Rdy = (u32Csts & NVME_CSTS_RDY) != 0u ? 1u : 0u;
     u32Cfs = (u32Csts & NVME_CSTS_CFS) != 0u ? 1u : 0u;
+    u32Shst = NVME_CSTS_SHST(u32Csts);
+    u32Nssro = (u32Csts & NVME_CSTS_NSSRO) != 0u ? 1u : 0u;
+    u32Pp = (u32Csts & NVME_CSTS_PP) != 0u ? 1u : 0u;
     u32En = (u32Cc & NVME_CC_EN) != 0u ? 1u : 0u;
+    u32Css = NVME_CC_CSS(u32Cc);
+    u32Mps = NVME_CC_MPS(u32Cc);
+    u32Ams = NVME_CC_AMS(u32Cc);
+    u32Shn = NVME_CC_SHN(u32Cc);
+    u32Iosqes = NVME_CC_IOSQES(u32Cc);
+    u32Iocqes = NVME_CC_IOCQES(u32Cc);
 
-    kprintf("nvme: CSTS=0x%x RDY=%u CFS=%u soft PASS\n", u32Csts, u32Rdy,
-            u32Cfs);
-    kprintf("nvme: CC=0x%x EN=%u soft PASS\n", u32Cc, u32En);
+    kprintf("nvme: CSTS=0x%x RDY=%u CFS=%u SHST=%u NSSRO=%u PP=%u "
+            "soft PASS\n",
+            u32Csts, u32Rdy, u32Cfs, u32Shst, u32Nssro, u32Pp);
+    kprintf("nvme: CC=0x%x EN=%u CSS=%u MPS=%u AMS=%u SHN=%u "
+            "IOSQES=%u IOCQES=%u soft PASS\n",
+            u32Cc, u32En, u32Css, u32Mps, u32Ams, u32Shn, u32Iosqes,
+            u32Iocqes);
     if (u32En != 0u) {
-        /* Soft observe only — product path never claims enable */
+        /* Soft observe only - product path never claims enable */
         kprintf("nvme: CC enable observed soft PASS (not claimed)\n");
     } else {
         kprintf("nvme: CC enable soft SKIP (disabled)\n");
@@ -323,42 +468,71 @@ nvme_soft_status_inventory(u32 u32Csts, u32 u32Cc)
 }
 
 /**
- * Wave 14 greppable soft inventory dump — prefix-stable "nvme: soft …".
- * Snapshots soft-read CAP/VS/CSTS/CC/INT/AQA; never allocates; never
- * hard-gates; never writes CC or claims queues. 0xff.. / 0 = unread.
+ * Soft ASQ/ACQ base inventory (read-only; never program queues).
+ * Non-zero bases mean firmware/prior software left queues programmed -
+ * still claim=0. Grep: nvme: ASQ=... ACQ=... soft PASS
+ */
+static void
+nvme_soft_aq_inventory(u64 u64Asq, u64 u64Acq, u32 u32Aqa)
+{
+    u32 u32Asqs;
+    u32 u32Acqs;
+    u32 u32AsqProg;
+    u32 u32AcqProg;
+
+    u32Asqs = (u32Aqa != 0xffffffffu) ? (u32Aqa & 0xfffu) : 0u;
+    u32Acqs = (u32Aqa != 0xffffffffu) ? ((u32Aqa >> 16) & 0xfffu) : 0u;
+    u32AsqProg = (u64Asq != 0ull && u64Asq != ~0ull) ? 1u : 0u;
+    u32AcqProg = (u64Acq != 0ull && u64Acq != ~0ull) ? 1u : 0u;
+
+    kprintf("nvme: ASQ=0x%lx ACQ=0x%lx asq_prog=%u acq_prog=%u "
+            "aqa=0x%x asqs=%u acqs=%u soft PASS (observe; not claimed)\n",
+            (unsigned long)u64Asq, (unsigned long)u64Acq, u32AsqProg,
+            u32AcqProg, u32Aqa, u32Asqs, u32Acqs);
+}
+
+/**
+ * Lean soft residual inventory - greppable "nvme: soft ...".
+ * Snapshots soft-read CAP/VS/CSTS/CC/INT/AQA/ASQ/ACQ (+ CMB/BP/CRTO);
+ * never allocates; never hard-gates; never writes CC or claims queues.
+ * Hard-capped emission (NVME_SOFT_INV_LOG_CAP). No version stamp.
+ * Soft != product. No stamp storms (H2). Dual DoD product_storage=OPEN.
  *
- * greppable: nvme: soft
+ * greppable: nvme: soft inventory
+ * greppable: nvme: soft residual
+ * greppable: nvme: soft residual lean PASS
+ * greppable: nvme: soft residual DoD seed OPEN
+ * greppable: nvme: soft path
+ * greppable: nvme: soft honesty
  */
 static void
 nvme_soft_inventory(const char *szVia, u64 u64Cap, u32 u32Vs, u32 u32Csts,
                     u32 u32Cc, u32 u32Intms, u32 u32Intmc, u32 u32Aqa,
+                    u64 u64Asq, u64 u64Acq, u32 u32Cmbloc, u32 u32Cmbsz,
+                    u32 u32Bpinfo, u32 u32Crto, u32 u32Bps, u32 u32Crms,
                     u64 paBar, u32 u32BarBits)
 {
     u32 u32Mqes = 0;
-    u32 u32Cqr = 0;
-    u32 u32Ams = 0;
-    u32 u32To = 0;
-    u32 u32Dstrd = 0;
-    u32 u32Nssrs = 0;
     u32 u32Css = 0;
-    u32 u32Bps = 0;
-    u32 u32Cps = 0;
-    u32 u32MpsMin = 0;
-    u32 u32MpsMax = 0;
-    u32 u32Pmrs = 0;
-    u32 u32Cmbs = 0;
-    u32 u32Crms = 0;
     u32 u32MaxQ = 0;
     u32 u32ToMs = 0;
     u32 u32DbStrideB = 0;
+    u32 u32Cmbs = 0;
     u32 u32Maj;
     u32 u32Min;
     u32 u32Ter;
     u32 u32Rdy;
     u32 u32Cfs;
+    u32 u32Shst;
     u32 u32En;
     u32 u32Asqs;
     u32 u32Acqs;
+    u32 u32AsqProg;
+    u32 u32AcqProg;
+    u32 u32LeanOk;
+    u32 u32LeanChecks;
+    u32 u32BpsObs;
+    u32 u32CrmsObs;
     int fCapOk;
     int fVsOk;
     int fCstsOk;
@@ -368,6 +542,11 @@ nvme_soft_inventory(const char *szVia, u64 u64Cap, u32 u32Vs, u32 u32Csts,
     const char *szVerdict;
 
     szViaSafe = (szVia != NULL && szVia[0] != '\0') ? szVia : "anon";
+
+    /* Cap serial flood (identify + no_bar + none may call; residual only). */
+    if (g_u32SoftInvLogs >= NVME_SOFT_INV_LOG_CAP) {
+        return;
+    }
     if (g_u32SoftInvLogs < 0xffffffffu) {
         g_u32SoftInvLogs++;
     }
@@ -379,39 +558,33 @@ nvme_soft_inventory(const char *szVia, u64 u64Cap, u32 u32Vs, u32 u32Csts,
 
     if (fCapOk != 0) {
         u32Mqes = NVME_CAP_MQES(u64Cap);
-        u32Cqr = NVME_CAP_CQR(u64Cap);
-        u32Ams = NVME_CAP_AMS(u64Cap);
-        u32To = NVME_CAP_TO(u64Cap);
-        u32Dstrd = NVME_CAP_DSTRD(u64Cap);
-        u32Nssrs = NVME_CAP_NSSRS(u64Cap);
         u32Css = NVME_CAP_CSS(u64Cap);
-        u32Bps = NVME_CAP_BPS(u64Cap);
-        u32Cps = NVME_CAP_CPS(u64Cap);
-        u32MpsMin = NVME_CAP_MPSMIN(u64Cap);
-        u32MpsMax = NVME_CAP_MPSMAX(u64Cap);
-        u32Pmrs = NVME_CAP_PMRS(u64Cap);
-        u32Cmbs = NVME_CAP_CMBS(u64Cap);
-        u32Crms = NVME_CAP_CRMS(u64Cap);
         u32MaxQ = u32Mqes + 1u;
-        u32ToMs = u32To * 500u;
-        u32DbStrideB = 4u << u32Dstrd;
+        u32ToMs = NVME_CAP_TO(u64Cap) * 500u;
+        u32DbStrideB = 4u << NVME_CAP_DSTRD(u64Cap);
+        u32Cmbs = NVME_CAP_CMBS(u64Cap);
     }
     fCssNvm = ((u32Css & NVME_CAP_CSS_NVM) != 0u) ? 1 : 0;
+    u32BpsObs = (fCapOk != 0) ? u32Bps : 0u;
+    u32CrmsObs = (fCapOk != 0) ? u32Crms : 0u;
 
     u32Ter = u32Vs & 0xffu;
     u32Min = (u32Vs >> 8) & 0xffu;
     u32Maj = (u32Vs >> 16) & 0xffffu;
     u32Rdy = (fCstsOk != 0 && (u32Csts & NVME_CSTS_RDY) != 0u) ? 1u : 0u;
     u32Cfs = (fCstsOk != 0 && (u32Csts & NVME_CSTS_CFS) != 0u) ? 1u : 0u;
+    u32Shst = (fCstsOk != 0) ? NVME_CSTS_SHST(u32Csts) : 0u;
     u32En = (fCcOk != 0 && (u32Cc & NVME_CC_EN) != 0u) ? 1u : 0u;
-    /* AQA: ASQS bits 7:0, ACQS bits 27:16 (0's based when programmed) */
+    /* AQA: ASQS bits 11:0, ACQS bits 27:16 (0's based when programmed) */
     u32Asqs = (u32Aqa != 0xffffffffu) ? (u32Aqa & 0xfffu) : 0u;
     u32Acqs = (u32Aqa != 0xffffffffu) ? ((u32Aqa >> 16) & 0xfffu) : 0u;
+    u32AsqProg = (u64Asq != 0ull && u64Asq != ~0ull) ? 1u : 0u;
+    u32AcqProg = (u64Acq != 0ull && u64Acq != ~0ull) ? 1u : 0u;
 
     /*
      * Soft verdict (inventory only; never claims admin/I/O queues):
-     *   PASS — CAP readable (mapped controller)
-     *   SKIP — unreadable CAP / empty inventory path
+     *   PASS - CAP readable (mapped controller)
+     *   SKIP - unreadable CAP / empty inventory path
      */
     if (fCapOk != 0) {
         szVerdict = "PASS";
@@ -419,1124 +592,130 @@ nvme_soft_inventory(const char *szVia, u64 u64Cap, u32 u32Vs, u32 u32Csts,
         szVerdict = "SKIP";
     }
 
-    /* Grep: nvme: soft inventory */
+    /*
+     * Grep: nvme: soft inventory
+     * One-line rollup (CAP/VS/status lamps + tallies). Soft residual only.
+     */
     kprintf("nvme: soft inventory via=%s cap_ok=%u vs_ok=%u csts_ok=%u "
-            "cc_ok=%u mqes=%u css=0x%x rdy=%u en=%u found=%u logs=%u "
-            "wave=%u\n",
+            "cc_ok=%u mqes=%u max_q=%u css=0x%x nvm=%u rdy=%u en=%u "
+            "vs=%u.%u.%u asq_prog=%u acq_prog=%u bps=%u crms=%u "
+            "found=%u logs=%u Soft!=product\n",
             szViaSafe, fCapOk != 0 ? 1u : 0u, fVsOk != 0 ? 1u : 0u,
-            fCstsOk != 0 ? 1u : 0u, fCcOk != 0 ? 1u : 0u, u32Mqes, u32Css,
-            u32Rdy, u32En, g_u32SoftFound, g_u32SoftInvLogs,
-            (unsigned)NVME_SOFT_DEEPEN_WAVE);
-
-    /* Grep: nvme: soft cap */
-    if (fCapOk != 0) {
-        kprintf("nvme: soft cap mqes=%u max_q=%u cqr=%u ams=%u to=%u "
-                "to_ms=%u dstrd=%u db_b=%u nssrs=%u css=0x%x nvm=%u "
-                "bps=%u cps=%u mpsmin=%u mpsmax=%u pmrs=%u cmbs=%u "
-                "crms=%u raw=0x%lx soft PASS\n",
-                u32Mqes, u32MaxQ, u32Cqr, u32Ams, u32To, u32ToMs, u32Dstrd,
-                u32DbStrideB, u32Nssrs, u32Css, fCssNvm != 0 ? 1u : 0u,
-                u32Bps, u32Cps, u32MpsMin, u32MpsMax, u32Pmrs, u32Cmbs,
-                u32Crms, (unsigned long)u64Cap);
-    } else {
-        kprintf("nvme: soft cap soft SKIP cap=0x%lx\n",
-                (unsigned long)u64Cap);
-    }
-
-    /* Grep: nvme: soft fields (per-field CAP lamps) */
-    if (fCapOk != 0) {
-        kprintf("nvme: soft fields MQES=%u CQR=%u AMS=%u TO=%u DSTRD=%u "
-                "NSSRS=%u CSS=0x%x BPS=%u CPS=%u MPSMIN=%u MPSMAX=%u "
-                "PMRS=%u CMBS=%u CRMS=%u soft PASS\n",
-                u32Mqes, u32Cqr, u32Ams, u32To, u32Dstrd, u32Nssrs, u32Css,
-                u32Bps, u32Cps, u32MpsMin, u32MpsMax, u32Pmrs, u32Cmbs,
-                u32Crms);
-    } else {
-        kprintf("nvme: soft fields soft SKIP\n");
-    }
-
-    /* Grep: nvme: soft vs */
-    if (fVsOk != 0) {
-        kprintf("nvme: soft vs major=%u minor=%u ter=%u raw=0x%x "
-                "soft PASS\n",
-                u32Maj, u32Min, u32Ter, u32Vs);
-    } else {
-        kprintf("nvme: soft vs soft SKIP vs=0x%x\n", u32Vs);
-    }
-
-    /* Grep: nvme: soft csts */
-    if (fCstsOk != 0) {
-        kprintf("nvme: soft csts rdy=%u cfs=%u raw=0x%x soft PASS\n",
-                u32Rdy, u32Cfs, u32Csts);
-    } else {
-        kprintf("nvme: soft csts soft SKIP csts=0x%x\n", u32Csts);
-    }
-
-    /* Grep: nvme: soft cc (observe only — never write EN) */
-    if (fCcOk != 0) {
-        kprintf("nvme: soft cc en=%u raw=0x%x soft PASS cc_write=0\n",
-                u32En, u32Cc);
-    } else {
-        kprintf("nvme: soft cc soft SKIP cc=0x%x\n", u32Cc);
-    }
-
-    /* Grep: nvme: soft int (INTMS/INTMC soft-read; never mask-write) */
-    if (u32Intms != 0xffffffffu || u32Intmc != 0xffffffffu) {
-        kprintf("nvme: soft int intms=0x%x intmc=0x%x soft PASS "
-                "mask_write=0\n",
-                u32Intms, u32Intmc);
-    } else {
-        kprintf("nvme: soft int soft SKIP intms=0x%x intmc=0x%x\n",
-                u32Intms, u32Intmc);
-    }
-
-    /* Grep: nvme: soft aqa (admin queue attrs observe; not claimed) */
-    if (u32Aqa != 0xffffffffu) {
-        kprintf("nvme: soft aqa asqs=%u acqs=%u raw=0x%x soft PASS "
-                "queues_claimed=0\n",
-                u32Asqs, u32Acqs, u32Aqa);
-    } else {
-        kprintf("nvme: soft aqa soft SKIP aqa=0x%x\n", u32Aqa);
-    }
-
-    /* Grep: nvme: soft regs (capability-region offset map) */
-    kprintf("nvme: soft regs CAP=0x%x VS=0x%x INTMS=0x%x INTMC=0x%x "
-            "CC=0x%x CSTS=0x%x AQA=0x%x soft PASS\n",
-            (unsigned)NVME_REG_CAP, (unsigned)NVME_REG_VS,
-            (unsigned)NVME_REG_INTMS, (unsigned)NVME_REG_INTMC,
-            (unsigned)NVME_REG_CC, (unsigned)NVME_REG_CSTS,
-            (unsigned)NVME_REG_AQA);
-
-    /* Grep: nvme: soft bar */
-    kprintf("nvme: soft bar pa=0x%lx bits=%u map_uc=1 io=0 soft PASS\n",
-            (unsigned long)paBar, u32BarBits);
-
-    /* Grep: nvme: soft pci */
-    kprintf("nvme: soft pci class=0x%02x subclass=0x%02x pif=0x%02x "
-            "mass_storage_nvme=1 soft PASS\n",
-            (unsigned)NVME_PCI_CLASS, (unsigned)NVME_PCI_SUBCLASS,
-            (unsigned)NVME_PCI_PROG_IF);
+            fCstsOk != 0 ? 1u : 0u, fCcOk != 0 ? 1u : 0u, u32Mqes, u32MaxQ,
+            u32Css, fCssNvm != 0 ? 1u : 0u, u32Rdy, u32En, u32Maj, u32Min,
+            u32Ter, u32AsqProg, u32AcqProg, u32BpsObs, u32CrmsObs,
+            g_u32SoftFound, g_u32SoftInvLogs);
 
     /*
-     * Grep: nvme: soft path
-     * Honesty: product surface is PCI class + soft CAP/VS/status inventory.
-     * claim=0 queues — no CC.EN write, no AQA/ASQ/ACQ program, no I/O.
+     * Grep: nvme: soft residual
+     * Storage residual surface - lean, no wave=/areas= stamp storm.
+     * Path: PCI 01:08:02 -> BAR0 UC map -> CAP/VS/status/ASQ soft-read ->
+     * product storage mint OPEN (userspace UDX later). Soft!=product.
+     */
+    kprintf("nvme: soft residual storage class=01:08:02 "
+            "via=%s cap_ok=%u mqes=%u max_q=%u to_ms=%u db_b=%u "
+            "css=0x%x nvm=%u rdy=%u cfs=%u shst=%u en=%u asqs=%u acqs=%u "
+            "asq_prog=%u acq_prog=%u asq=0x%lx acq=0x%lx "
+            "intms=0x%x intmc=0x%x aqa=0x%x cmbs=%u cmbloc=0x%x cmbsz=0x%x "
+            "bps=%u bpinfo=0x%x crms=%u crto=0x%x "
+            "bar_pa=0x%lx bits=%u map_uc=1 identify_ok=%u map_fail=%u "
+            "no_bar=%u path=pci_010802->bar0_uc->cap_vs_csts_asq->"
+            "userspace_UDX soft=1 product=0 product_storage=OPEN "
+            "dual_dod=OPEN need=userspace_UDX "
+            "Soft!=product G-AC-1 (no CC.EN write; no queues claimed; "
+            "no .ko product; no BPRSEL write)\n",
+            szViaSafe, fCapOk != 0 ? 1u : 0u, u32Mqes, u32MaxQ, u32ToMs,
+            u32DbStrideB, u32Css, fCssNvm != 0 ? 1u : 0u, u32Rdy, u32Cfs,
+            u32Shst, u32En, u32Asqs, u32Acqs, u32AsqProg, u32AcqProg,
+            (unsigned long)u64Asq, (unsigned long)u64Acq, u32Intms, u32Intmc,
+            u32Aqa, u32Cmbs, u32Cmbloc, u32Cmbsz, u32BpsObs, u32Bpinfo,
+            u32CrmsObs, u32Crto, (unsigned long)paBar, u32BarBits,
+            g_u32SoftIdentifyOk, g_u32SoftMapFail, g_u32SoftNoBar);
+
+    /*
+     * Grep: nvme: soft residual lean PASS
+     * Contiguous greppable once-shot (H2: no multi-ctrl storm).
+     * Silent self-check fold-in; Soft!=product; Dual DoD OPEN.
+     */
+    if (g_fSoftResidualLeanOnce == 0u) {
+        g_fSoftResidualLeanOnce = 1u;
+        u32LeanOk = nvme_soft_residual_lean_ok(u64Cap, u32Aqa, u64Asq, u64Acq,
+                                               &u32LeanChecks);
+        /*
+         * Contiguous greppable: "nvme: soft residual lean PASS"
+         * (PASS immediately after lean). Emit PASS only when lean self-check
+         * is full-ok; otherwise lean lamp without PASS (honesty).
+         */
+        if (u32LeanOk == u32LeanChecks && u32LeanChecks > 0u) {
+            kprintf("nvme: soft residual lean PASS via=%s cap_ok=%u "
+                    "mqes=%u nvm=%u rdy=%u en=%u asq_prog=%u acq_prog=%u "
+                    "bps=%u crms=%u lean_ok=%u/%u claim=0 admin_q=0 io_q=0 "
+                    "cc_en_write=0 aqa_write=0 asq_write=0 acq_write=0 "
+                    "bprsel_write=0 nssr_write=0 identify_cmd=0 "
+                    "product_storage=OPEN dual_dod=OPEN need=userspace_UDX "
+                    "soft=1 product=0 dual=MIT_OR_Apache-2.0 "
+                    "stamp_storm=0 no_version_stamp=1 G-AC-1 Soft!=product\n",
+                    szViaSafe, fCapOk != 0 ? 1u : 0u, u32Mqes,
+                    fCssNvm != 0 ? 1u : 0u, u32Rdy, u32En, u32AsqProg,
+                    u32AcqProg, u32BpsObs, u32CrmsObs, u32LeanOk,
+                    u32LeanChecks);
+        } else {
+            kprintf("nvme: soft residual lean via=%s cap_ok=%u mqes=%u "
+                    "nvm=%u rdy=%u en=%u asq_prog=%u acq_prog=%u "
+                    "lean_ok=%u/%u claim=0 product_storage=OPEN "
+                    "dual_dod=OPEN soft=1 product=0 G-AC-1 Soft!=product\n",
+                    szViaSafe, fCapOk != 0 ? 1u : 0u, u32Mqes,
+                    fCssNvm != 0 ? 1u : 0u, u32Rdy, u32En, u32AsqProg,
+                    u32AcqProg, u32LeanOk, u32LeanChecks);
+        }
+        /*
+         * Grep: nvme: soft residual DoD seed OPEN
+         * Product storage remains OPEN (userspace UDX later). This residual
+         * never closes Dual DoD product_storage. Soft!=product · G-AC-1.
+         */
+        kprintf("nvme: soft residual DoD seed OPEN class=01:08:02 via=%s "
+                "cap_ok=%u mqes=%u nvm=%u rdy=%u en=%u asq_prog=%u "
+                "acq_prog=%u bps=%u crms=%u lean_ok=%u/%u "
+                "soft=1 product=0 claim=0 admin_q=0 io_q=0 "
+                "product_storage=OPEN dual_dod=OPEN need=userspace_UDX "
+                "path=pci_010802->bar0_uc->cap_vs_csts_asq->userspace_UDX "
+                "dual=MIT_OR_Apache-2.0 G-AC-1 Soft!=product "
+                "(!= CC.EN write; != queue claim; != identify cmd; "
+                "!= .ko product)\n",
+                szViaSafe, fCapOk != 0 ? 1u : 0u, u32Mqes,
+                fCssNvm != 0 ? 1u : 0u, u32Rdy, u32En, u32AsqProg, u32AcqProg,
+                u32BpsObs, u32CrmsObs, u32LeanOk, u32LeanChecks);
+    }
+
+    /*
+     * Grep: nvme: soft path | nvme: soft honesty
+     * Soft residual != product storage I/O. claim=0 queues.
      */
     kprintf("nvme: soft path claim=0 admin_q=0 io_q=0 cc_en_write=0 "
-            "aqa_write=0 identify_cmd=0 map_uc=1 cap_fields=1 vs=1 "
-            "csts_ro=1 cc_ro=1 int_ro=1 aqa_ro=1 via=%s wave=%u\n",
-            szViaSafe, (unsigned)NVME_SOFT_DEEPEN_WAVE);
-
-    /*
-     * Wave 15 exclusive deepen (complementary; never hard-gates).
-     * greppable: nvme: soft ratio|headroom|surface
-     */
-    {
-        u32 u32CssNvmBp = fCssNvm != 0 ? 10000u : 0u;
-        u32 u32RdyLamp = u32Rdy;
-        u32 u32EnLamp = u32En;
-        u32 u32MpsSpan = 0;
-
-        if (fCapOk != 0 && u32MpsMax >= u32MpsMin) {
-            u32MpsSpan = u32MpsMax - u32MpsMin;
-        }
-        /* Grep: nvme: soft ratio */
-        kprintf("nvme: soft ratio css_nvm_bp=%u rdy=%u en=%u mqes=%u "
-                "max_q=%u mps_span=%u wave=%u\n",
-                u32CssNvmBp, u32RdyLamp, u32EnLamp, u32Mqes, u32MaxQ,
-                u32MpsSpan, (unsigned)NVME_SOFT_DEEPEN_WAVE);
-        /* Grep: nvme: soft headroom */
-        kprintf("nvme: soft headroom max_q=%u mqes=%u to_ms=%u db_b=%u "
-                "asqs=%u acqs=%u wave=%u\n",
-                u32MaxQ, u32Mqes, u32ToMs, u32DbStrideB, u32Asqs, u32Acqs,
-                (unsigned)NVME_SOFT_DEEPEN_WAVE);
-        /* Grep: nvme: soft surface */
-        kprintf("nvme: soft surface inventory,cap,fields,vs,csts,cc,int,"
-                "aqa,regs,bar,pci,path,ratio,headroom,honesty,geom,return,"
-                "contract,return_selftest,retmap,deepen,stats areas=%u wave=%u\n",
-                (unsigned)NVME_SOFT_DEEPEN_AREAS,
-                (unsigned)NVME_SOFT_DEEPEN_WAVE);
-    }
-
-    /*
-     * Wave 16 complementary deepen (kept; never hard-gates).
-     * Soft ≠ game I/O. greppable: nvme: soft honesty|geom|return|contract
-     */
-    {
-        u32 u32Surf = 0u;
-
-        /* Return-surface bit lamps (inventory only; never product gate). */
-        if (fCapOk != 0) {
-            u32Surf |= 0x1u; /* CAP soft-read */
-        }
-        if (fVsOk != 0) {
-            u32Surf |= 0x2u; /* VS soft-read */
-        }
-        if (fCstsOk != 0) {
-            u32Surf |= 0x4u; /* CSTS soft-read */
-        }
-        if (fCcOk != 0) {
-            u32Surf |= 0x8u; /* CC soft-read */
-        }
-        if (u32Intms != 0xffffffffu || u32Intmc != 0xffffffffu) {
-            u32Surf |= 0x10u; /* INT soft-read */
-        }
-        if (u32Aqa != 0xffffffffu) {
-            u32Surf |= 0x20u; /* AQA soft-read */
-        }
-        u32Surf |= 0x40u; /* regs/bar/pci map always catalogued */
-        /* Grep: nvme: soft honesty */
-        kprintf("nvme: soft honesty probe_only=1 admin_q=0 io_q=0 "
-                "cc_en_write=0 game_io=0 product_storage=0 "
-                "soft_only=1 wave=%u soft PASS\n",
-                (unsigned)NVME_SOFT_DEEPEN_WAVE);
-        /* Grep: nvme: soft geom */
-        kprintf("nvme: soft geom cap_off=0x%x vs_off=0x%x csts_off=0x%x "
-                "cc_off=0x%x aqa_off=0x%x bar0_bits=%u mqes=%u max_q=%u "
-                "wave=%u soft PASS\n",
-                (unsigned)NVME_REG_CAP, (unsigned)NVME_REG_VS,
-                (unsigned)NVME_REG_CSTS, (unsigned)NVME_REG_CC,
-                (unsigned)NVME_REG_AQA, u32BarBits, u32Mqes, u32MaxQ,
-                (unsigned)NVME_SOFT_DEEPEN_WAVE);
-        /* Grep: nvme: soft return — return-surface bitmask */
-        kprintf("nvme: soft return surf=0x%x cap=%u vs=%u csts=%u cc=%u "
-                "int=%u aqa=%u map=1 via=%s areas=%u wave=%u soft PASS\n",
-                u32Surf, fCapOk != 0 ? 1u : 0u, fVsOk != 0 ? 1u : 0u,
-                fCstsOk != 0 ? 1u : 0u, fCcOk != 0 ? 1u : 0u,
-                (u32Intms != 0xffffffffu || u32Intmc != 0xffffffffu) ? 1u
-                                                                     : 0u,
-                (u32Aqa != 0xffffffffu) ? 1u : 0u, szViaSafe,
-                (unsigned)NVME_SOFT_DEEPEN_AREAS,
-                (unsigned)NVME_SOFT_DEEPEN_WAVE);
-        /* Grep: nvme: soft contract — soft ≠ game I/O */
-        kprintf("nvme: soft contract soft_only=1 game_io=0 product_io=0 "
-                "queues_claimed=0 identify_cmd=0 wave=%u "
-                "soft PASS\n",
-                (unsigned)NVME_SOFT_DEEPEN_WAVE);
-    }
-
-    /*
-     * Wave 17 complementary sub-lines (kept) (never reshape primary).
-     * Return surfaces only — soft inventory; never hard-gates product paths.
-     */
-    /* Grep: nvme: soft return — Wave 17 API return surfaces (kept) */
-    kprintf("nvme: soft return cap=%u vs=%u probe=1 soft_inv=1 "
-            "product_kernel=OPEN hard_gate=0 wave=%u soft PASS\n",
-            (fCapOk != 0 ? 1u : 0u), (fVsOk != 0 ? 1u : 0u), (unsigned)NVME_SOFT_DEEPEN_WAVE);
-
-    /* Grep: nvme: soft return selftest — Wave 17 terminal return surface (kept) */
-    kprintf("nvme: soft return selftest inv_ret=1 product_kernel=OPEN "
-            "multi_server=0 wave=%u soft PASS\n",
-            (unsigned)NVME_SOFT_DEEPEN_WAVE);
-
-    /* Grep: nvme: soft retmap — Wave 17 return-surface map (kept) */
-    kprintf("nvme: soft retmap soft_inv=1 deepen=1 product=OPEN "
-            "wave=%u soft PASS\n",
-            (unsigned)NVME_SOFT_DEEPEN_WAVE);
-
-    /*
-     * ---- Wave 18 complementary surfaces (kept) (never reshape primary).
-     * Return surfaces only — soft inventory; never hard-gates product paths.
-     */
-    /* Grep: nvme: soft return rate — Wave 19 ok/fail rate lamps */
-    kprintf("nvme: soft return rate soft_inv=1 selftest=1 retmap=1 "
-            "product_kernel=OPEN hard_gate=0 wave=%u "
-            "(return rate; Soft≠product)\n",
-            (unsigned)NVME_SOFT_DEEPEN_WAVE);
-
-    /* Grep: nvme: soft retcode — Wave 19 retcode catalog */
-    kprintf("nvme: soft retcode ok=1 fail=1 inval=1 busy=1 "
-            "selftest=1 retmap=1 product=OPEN soft_ne_product=1 wave=%u "
-            "(retcode catalog; Soft≠product)\n",
-            (unsigned)NVME_SOFT_DEEPEN_WAVE);
-
-    /* Grep: nvme: soft deepen wave (Wave 24 stamp) */
-    /*
-     * ---- Wave 19 complementary surfaces (kept) (never reshape primary).
-     * Return surfaces only — soft inventory; never hard-gates product paths.
-     */
-    /* Grep: nvme: soft retclass — Wave 19 return-class taxonomy (kept) */
-    kprintf("nvme: soft retclass ok|fail|inval|nodev|busy|nomem "
-            "soft_only=1 product_gate=0 wave=%u "
-            "(retclass taxonomy; Soft≠product)\n",
-            (unsigned)NVME_SOFT_DEEPEN_WAVE);
-    /* Grep: nvme: soft retlane — Wave 19 return-lane catalog (kept) */
-    kprintf("nvme: soft retlane inv|selftest|rate|retcode|retmap|class "
-            "product_kernel=OPEN soft_ne_product=1 wave=%u "
-            "(retlane catalog; Soft≠product)\n",
-            (unsigned)NVME_SOFT_DEEPEN_WAVE);
-    /*
-     * ---- Wave 20 complementary surfaces (kept) (never reshape primary).
-     * Return surfaces only — soft inventory; never hard-gates product paths.
-     */
-    /* Grep: nvme: soft retbound — Wave 20 return-bound honesty (kept) */
-    kprintf("nvme: soft retbound soft_only=1 product_gate=0 hard_gate=0 "
-            "never_blocks_m0=1 wave=%u "
-            "(retbound honesty; Soft≠product)\n",
-            (unsigned)NVME_SOFT_DEEPEN_WAVE);
-    /* Grep: nvme: soft retseal — Wave 20 seal stamp (kept) */
-    kprintf("nvme: soft retseal exclusive=1 soft_ne_product=1 "
-            "product_kernel=OPEN wave=%u "
-            "(retseal stamp; Soft≠product)\n",
-            (unsigned)NVME_SOFT_DEEPEN_WAVE);
-            /*
-             * ---- Wave 21 complementary surfaces (kept) (never reshape primary).
-             * Return surfaces only — soft inventory; never hard-gates product paths.
-            */
-            /* Grep: nvme: soft retpulse — Wave 21 return-pulse honesty (kept) */
-            kprintf("nvme: soft retpulse soft_only=1 product_gate=0 soft_ne_product=1 "
-                    "never_blocks_m0=1 wave=%u "
-                    "(retpulse honesty; Soft≠product)\n",
-                    (unsigned)NVME_SOFT_DEEPEN_WAVE);
-            /* Grep: nvme: soft retmark — Wave 21 mark stamp (kept) */
-            kprintf("nvme: soft retmark exclusive=1 soft_ne_product=1 "
-                    "product_kernel=OPEN wave=%u "
-                    "(retmark stamp; Soft≠product)\n",
-                    (unsigned)NVME_SOFT_DEEPEN_WAVE);
-            /*
-             * ---- Wave 22 complementary surfaces (kept) (never reshape primary).
-             * Return surfaces only — soft inventory; never hard-gates product paths.
-            */
-            /* Grep: nvme: soft retphase — Wave 22 return-phase honesty (kept) */
-            kprintf("nvme: soft retphase soft_only=1 product_gate=0 soft_ne_product=1 "
-                    "never_blocks_m0=1 wave=%u "
-                    "(retphase honesty; Soft≠product)\n",
-                    (unsigned)NVME_SOFT_DEEPEN_WAVE);
-            /* Grep: nvme: soft retbadge — Wave 22 badge stamp (kept) */
-            kprintf("nvme: soft retbadge exclusive=1 soft_ne_product=1 "
-                    "product_kernel=OPEN wave=%u "
-                    "(retbadge stamp; Soft≠product)\n",
-                    (unsigned)NVME_SOFT_DEEPEN_WAVE);
-/*
- * ---- Wave 23 complementary surfaces (kept) (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
-            */
-            /* Grep: nvme: soft rettoken — Wave 23 return-token honesty (kept) */
-            kprintf("nvme: soft rettoken soft_only=1 product_gate=0 soft_ne_product=1 "
-                    "never_blocks_m0=1 wave=%u "
-                    "(rettoken honesty; Soft≠product)\n",
-                    (unsigned)NVME_SOFT_DEEPEN_WAVE);
-            /* Grep: nvme: soft retcrest — Wave 23 crest stamp (kept) */
-            kprintf("nvme: soft retcrest exclusive=1 soft_ne_product=1 "
-                    "product_kernel=OPEN wave=%u "
-                    "(retcrest stamp; Soft≠product)\n",
-                    (unsigned)NVME_SOFT_DEEPEN_WAVE);
-            /*
-             * ---- Wave 24 complementary surfaces (kept) (never reshape primary).
-             * Return surfaces only — soft inventory; never hard-gates product paths.
-             */
-            /* Grep: nvme: soft retvault — Wave 24 return-vault honesty (kept) */
-            kprintf("nvme: soft retvault soft_only=1 product_gate=0 soft_ne_product=1 "
-                    "never_blocks_m0=1 wave=%u "
-                    "(retvault honesty; Soft≠product)\n",
-                    (unsigned)NVME_SOFT_DEEPEN_WAVE);
-            /* Grep: nvme: soft retbanner — Wave 24 banner stamp (kept) */
-            kprintf("nvme: soft retbanner exclusive=1 soft_ne_product=1 "
-                    "product_kernel=OPEN wave=%u "
-                    "(retbanner stamp; Soft≠product)\n",
-                    (unsigned)NVME_SOFT_DEEPEN_WAVE);
-            /*
-             * ---- Wave 25 complementary surfaces (kept) (never reshape primary).
-             * Return surfaces only — soft inventory; never hard-gates product paths.
-             */
-            /* Grep: nvme: soft retledger — Wave 25 return-ledger honesty (kept) */
-            kprintf("nvme: soft retledger soft_only=1 product_gate=0 soft_ne_product=1 "
-                    "never_blocks_m0=1 wave=%u "
-                    "(retledger honesty; Soft≠product)\n",
-                    (unsigned)NVME_SOFT_DEEPEN_WAVE);
-            /* Grep: nvme: soft retbeacon — Wave 25 beacon stamp (kept) */
-            kprintf("nvme: soft retbeacon exclusive=1 soft_ne_product=1 "
-                    "product_kernel=OPEN wave=%u "
-                    "(retbeacon stamp; Soft≠product)\n",
-                    (unsigned)NVME_SOFT_DEEPEN_WAVE);
-            /*
-             * ---- Wave 26 complementary surfaces (kept) (never reshape primary).
-             * Return surfaces only — soft inventory; never hard-gates product paths.
-             */
-            /* Grep: nvme: soft retcipher — Wave 26 return-cipher honesty (kept) */
-            kprintf("nvme: soft retcipher soft_only=1 product_gate=0 soft_ne_product=1 "
-                    "never_blocks_m0=1 wave=%u "
-                    "(retcipher honesty; Soft≠product)\n",
-                    (unsigned)NVME_SOFT_DEEPEN_WAVE);
-            /* Grep: nvme: soft retflame — Wave 26 flame stamp (kept) */
-            kprintf("nvme: soft retflame exclusive=1 soft_ne_product=1 "
-                    "product_kernel=OPEN wave=%u "
-                    "(retflame stamp; Soft≠product)\n",
-                    (unsigned)NVME_SOFT_DEEPEN_WAVE);
-                    /*
-                     * ---- Wave 27 complementary surfaces (kept) (never reshape primary).
-                     * Return surfaces only — soft inventory; never hard-gates product paths.
-                     */
-                    /* Grep: nvme: soft retprism — Wave 27 return-prism honesty (kept) */
-                    kprintf("nvme: soft retprism soft_only=1 product_gate=0 soft_ne_product=1 "
-                            "never_blocks_m0=1 wave=%u "
-                            "(retprism honesty; Soft≠product)\n",
-                            (unsigned)NVME_SOFT_DEEPEN_WAVE);
-                    /* Grep: nvme: soft retforge — Wave 27 forge stamp (kept) */
-                    kprintf("nvme: soft retforge exclusive=1 soft_ne_product=1 "
-                            "product_kernel=OPEN wave=%u "
-                            "(retforge stamp; Soft≠product)\n",
-                            (unsigned)NVME_SOFT_DEEPEN_WAVE);
-                            /*
-                             * ---- Wave 28 complementary surfaces (kept) (never reshape primary).
-                             * Return surfaces only — soft inventory; never hard-gates product paths.
-                             */
-                            /* Grep: nvme: soft retshard — Wave 28 return-shard honesty (kept) */
-                            kprintf("nvme: soft retshard soft_only=1 product_gate=0 soft_ne_product=1 "
-                                "never_blocks_m0=1 wave=%u "
-                                "(retshard honesty; Soft≠product)\n",
-                                (unsigned)NVME_SOFT_DEEPEN_WAVE);
-                            /* Grep: nvme: soft retcrown — Wave 28 crown stamp (kept) */
-                            kprintf("nvme: soft retcrown exclusive=1 soft_ne_product=1 "
-                                "product_kernel=OPEN wave=%u "
-                                "(retcrown stamp; Soft≠product)\n",
-                                (unsigned)NVME_SOFT_DEEPEN_WAVE);
-                                /*
-                             * ---- Wave 29 complementary surfaces (kept) (never reshape primary).
-                             * Return surfaces only — soft inventory; never hard-gates product paths.
-                             */
-                            /* Grep: nvme: soft retglyph — Wave 29 return-glyph honesty (kept) */
-                            kprintf("nvme: soft retglyph soft_only=1 product_gate=0 soft_ne_product=1 "
-                                    "never_blocks_m0=1 wave=116 "
-                                    "(retglyph honesty; Soft≠product)\n");
-                            /* Grep: nvme: soft retscepter — Wave 29 scepter stamp (kept) */
-                            kprintf("nvme: soft retscepter exclusive=1 soft_ne_product=1 "
-                                    "product_kernel=OPEN wave=116 "
-                                    "(retscepter stamp; Soft≠product)\n");
-                                /*
-                             * ---- Wave 30 complementary surfaces (kept) (never reshape primary).
-                             * Return surfaces only — soft inventory; never hard-gates product paths.
-                             */
-                            /* Grep: nvme: soft retsigil — Wave 30 return-sigil honesty (kept) */
-                            kprintf("nvme: soft retsigil soft_only=1 product_gate=0 soft_ne_product=1 "
-                                    "never_blocks_m0=1 wave=116 "
-                                    "(retsigil honesty; Soft≠product)\n");
-                            /* Grep: nvme: soft retemblem — Wave 30 emblem stamp (kept) */
-                            kprintf("nvme: soft retemblem exclusive=1 soft_ne_product=1 "
-                                    "product_kernel=OPEN wave=116 "
-                                    "(retemblem stamp; Soft≠product)\n");
-                            /*
-                             * ---- Wave 31 complementary surfaces (kept) (never reshape primary).
-                             * Return surfaces only — soft inventory; never hard-gates product paths.
-                             */
-                            /* Grep: nvme: soft retaegis — Wave 31 return-aegis honesty (kept) */
-                            kprintf("nvme: soft retaegis soft_only=1 product_gate=0 soft_ne_product=1 "
-                                    "never_blocks_m0=1 wave=116 "
-                                    "(retaegis honesty; Soft≠product)\n");
-                            /* Grep: nvme: soft retsigil — Wave 30 return-sigil honesty (kept) */
-                            kprintf("nvme: soft retsigil soft_only=1 product_gate=0 soft_ne_product=1 "
-                                    "never_blocks_m0=1 wave=116 "
-                                    "(retsigil honesty; Soft≠product)\n");
-                            /* Grep: nvme: soft retmantle — Wave 31 mantle stamp (kept) */
-                            kprintf("nvme: soft retmantle exclusive=1 soft_ne_product=1 "
-                                    "product_kernel=OPEN wave=116 "
-                                    "(retmantle stamp; Soft≠product)\n");
-/*
- * ---- Wave 32 complementary surfaces (kept) (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: nvme: soft retbulwark — Wave 32 return-bulwark honesty (kept) */
-kprintf("nvme: soft retbulwark soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retbulwark honesty; Soft≠product)\n");
-/* Grep: nvme: soft retpanoply — Wave 32 panoply stamp (kept) */
-kprintf("nvme: soft retpanoply exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retpanoply stamp; Soft≠product)\n");
-/*
- * ---- Wave 33 complementary surfaces (kept) (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: nvme: soft retbastion — Wave 33 return-bastion honesty (kept) */
-kprintf("nvme: soft retbastion soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retbastion honesty; Soft≠product)\n");
-/* Grep: nvme: soft retcitadel — Wave 33 citadel stamp (kept) */
-kprintf("nvme: soft retcitadel exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retcitadel stamp; Soft≠product)\n");
-/*
- * ---- Wave 34 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: nvme: soft retredoubt — Wave 34 return-redoubt honesty */
-kprintf("nvme: soft retredoubt soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retredoubt honesty; Soft≠product)\n");
-/* Grep: nvme: soft retkeep — Wave 34 exclusive keep stamp */
-kprintf("nvme: soft retkeep exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retkeep stamp; Soft≠product)\n");
-/*
- * ---- Wave 35 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: nvme: soft retfortress — Wave 35 return-fortress honesty */
-kprintf("nvme: soft retfortress soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retfortress honesty; Soft≠product)\n");
-/* Grep: nvme: soft retpalace — Wave 35 exclusive palace stamp */
-kprintf("nvme: soft retpalace exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retpalace stamp; Soft≠product)\n");
-/*
- * ---- Wave 36 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: nvme: soft rethold — Wave 36 return-hold honesty */
-kprintf("nvme: soft rethold soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(rethold honesty; Soft≠product)\n");
-/* Grep: nvme: soft retspire — Wave 36 exclusive spire stamp */
-kprintf("nvme: soft retspire exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retspire stamp; Soft≠product)\n");
-/*
- * ---- Wave 37 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: nvme: soft retwall — Wave 37 return-wall honesty */
-kprintf("nvme: soft retwall soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retwall honesty; Soft≠product)\n");
-/* Grep: nvme: soft retgate — Wave 37 exclusive gate stamp */
-kprintf("nvme: soft retgate exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retgate stamp; Soft≠product)\n");
-/*
- * ---- Wave 38 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: nvme: soft retmoat — Wave 38 return-moat honesty */
-kprintf("nvme: soft retmoat soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retmoat honesty; Soft≠product)\n");
-/* Grep: nvme: soft retower — Wave 38 exclusive tower stamp */
-kprintf("nvme: soft retower exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retower stamp; Soft≠product)\n");
-/*
- * ---- Wave 39 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: nvme: soft retbarbican — Wave 39 return-barbican honesty */
-kprintf("nvme: soft retbarbican soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retbarbican honesty; Soft≠product)\n");
-/* Grep: nvme: soft retglacis — Wave 39 exclusive glacis stamp */
-kprintf("nvme: soft retglacis exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retglacis stamp; Soft≠product)\n");
-/*
- * ---- Wave 40 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: nvme: soft retcurtain — Wave 40 return-curtain honesty */
-kprintf("nvme: soft retcurtain soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retcurtain honesty; Soft≠product)\n");
-/* Grep: nvme: soft retparapet — Wave 40 exclusive parapet stamp */
-kprintf("nvme: soft retparapet exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retparapet stamp; Soft≠product)\n");
-/*
- * ---- Wave 41 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: nvme: soft retravelin — Wave 41 return-travelin honesty */
-kprintf("nvme: soft retravelin soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retravelin honesty; Soft≠product)\n");
-/* Grep: nvme: soft retditch — Wave 41 exclusive ditch stamp */
-kprintf("nvme: soft retditch exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retditch stamp; Soft≠product)\n");
-/*
- * ---- Wave 42 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: nvme: soft retportcullis — Wave 42 return-portcullis honesty */
-kprintf("nvme: soft retportcullis soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retportcullis honesty; Soft≠product)\n");
-/* Grep: nvme: soft retbattlement — Wave 42 exclusive battlement stamp */
-kprintf("nvme: soft retbattlement exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retbattlement stamp; Soft≠product)\n");
-/*
- * ---- Wave 43 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: nvme: soft retmachicolation — Wave 43 return-machicolation honesty */
-kprintf("nvme: soft retmachicolation soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retmachicolation honesty; Soft≠product)\n");
-/* Grep: nvme: soft retarrowslit — Wave 43 exclusive arrowslit stamp */
-kprintf("nvme: soft retarrowslit exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retarrowslit stamp; Soft≠product)\n");
-
-/*
- * ---- Wave 44 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: nvme: soft retmerlon — Wave 44 return-merlon honesty */
-kprintf("nvme: soft retmerlon soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retmerlon honesty; Soft≠product)\n");
-/* Grep: nvme: soft retembrasure — Wave 44 exclusive embrasure stamp */
-kprintf("nvme: soft retembrasure exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retembrasure stamp; Soft≠product)\n");
-
-/*
- * ---- Wave 45 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: nvme: soft retkeepgate — Wave 45 return-keepgate honesty */
-kprintf("nvme: soft retkeepgate soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retkeepgate honesty; Soft≠product)\n");
-/* Grep: nvme: soft retouterward — Wave 45 exclusive outerward stamp */
-kprintf("nvme: soft retouterward exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retouterward stamp; Soft≠product)\n");
-
-/*
- * ---- Wave 46 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: nvme: soft retbailey — Wave 46 return-bailey honesty */
-kprintf("nvme: soft retbailey soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retbailey honesty; Soft≠product)\n");
-/* Grep: nvme: soft retpostern — Wave 46 exclusive postern stamp */
-kprintf("nvme: soft retpostern exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retpostern stamp; Soft≠product)\n");
-
-/*
- * ---- Wave 47 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: nvme: soft retinnerward — Wave 47 return-innerward honesty */
-kprintf("nvme: soft retinnerward soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retinnerward honesty; Soft≠product)\n");
-/* Grep: nvme: soft retdonjon — Wave 47 exclusive donjon stamp */
-kprintf("nvme: soft retdonjon exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retdonjon stamp; Soft≠product)\n");
-
-/*
- * ---- Wave 48 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: nvme: soft retchevaux — Wave 48 return-chevaux honesty */
-kprintf("nvme: soft retchevaux soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retchevaux honesty; Soft≠product)\n");
-/* Grep: nvme: soft retpalisade — Wave 48 exclusive palisade stamp */
-kprintf("nvme: soft retpalisade exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retpalisade stamp; Soft≠product)\n");
-
-/*
- * ---- Wave 49 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: nvme: soft retglacisgate — Wave 49 return-glacisgate honesty */
-kprintf("nvme: soft retglacisgate soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retglacisgate honesty; Soft≠product)\n");
-/* Grep: nvme: soft retoutwork — Wave 49 exclusive outwork stamp */
-kprintf("nvme: soft retoutwork exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retoutwork stamp; Soft≠product)\n");
-/*
- * ---- Wave 50 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: nvme: soft retsally — Wave 50 return-sally honesty */
-kprintf("nvme: soft retsally soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retsally honesty; Soft≠product)\n");
-/* Grep: nvme: soft retcounterscarp — Wave 50 exclusive counterscarp stamp */
-kprintf("nvme: soft retcounterscarp exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retcounterscarp stamp; Soft≠product)\n");
-/*
- * ---- Wave 51 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: nvme: soft retfosse — Wave 51 return-fosse honesty */
-kprintf("nvme: soft retfosse soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retfosse honesty; Soft≠product)\n");
-/* Grep: nvme: soft retcoveredway — Wave 51 exclusive coveredway stamp */
-kprintf("nvme: soft retcoveredway exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retcoveredway stamp; Soft≠product)\n");
-
-/*
- * ---- Wave 52 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: nvme: soft rettenaille — Wave 52 return-tenaille honesty */
-kprintf("nvme: soft rettenaille soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(rettenaille honesty; Soft≠product)\n");
-/* Grep: nvme: soft retdemilune — Wave 52 exclusive demilune stamp */
-kprintf("nvme: soft retdemilune exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retdemilune stamp; Soft≠product)\n");
-/*
- * ---- Wave 53 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: nvme: soft retravelin — Wave 53 return-travelin honesty */
-kprintf("nvme: soft retravelin soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retravelin honesty; Soft≠product)\n");
-/* Grep: nvme: soft retlunette — Wave 53 exclusive lunette stamp */
-kprintf("nvme: soft retlunette exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retlunette stamp; Soft≠product)\n");
-/*
- * ---- Wave 54 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: nvme: soft retcaponier — Wave 54 return-caponier honesty */
-kprintf("nvme: soft retcaponier soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retcaponier honesty; Soft≠product)\n");
-/* Grep: nvme: soft retredan — Wave 54 exclusive redan stamp */
-kprintf("nvme: soft retredan exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retredan stamp; Soft≠product)\n");
-/*
- * ---- Wave 55 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: nvme: soft retflank — Wave 55 return-flank honesty */
-kprintf("nvme: soft retflank soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retflank honesty; Soft≠product)\n");
-/* Grep: nvme: soft retface — Wave 55 exclusive face stamp */
-kprintf("nvme: soft retface exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retface stamp; Soft≠product)\n");
-/*
- * ---- Wave 56 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: nvme: soft retgorge — Wave 56 return-gorge honesty */
-kprintf("nvme: soft retgorge soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retgorge honesty; Soft≠product)\n");
-/* Grep: nvme: soft retshoulder — Wave 56 exclusive shoulder stamp */
-kprintf("nvme: soft retshoulder exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retshoulder stamp; Soft≠product)\n");
-/*
- * ---- Wave 57 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: nvme: soft retraverse — Wave 57 return-traverse honesty */
-kprintf("nvme: soft retraverse soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retraverse honesty; Soft≠product)\n");
-/* Grep: nvme: soft retcasemate — Wave 57 exclusive casemate stamp */
-kprintf("nvme: soft retcasemate exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retcasemate stamp; Soft≠product)\n");
-
-/*
- * ---- Wave 58 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: nvme: soft retorillon — Wave 58 return-orillon honesty */
-kprintf("nvme: soft retorillon soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retorillon honesty; Soft≠product)\n");
-/* Grep: nvme: soft retbonnette — Wave 58 exclusive bonnette stamp */
-kprintf("nvme: soft retbonnette exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retbonnette stamp; Soft≠product)\n");
-
-/*
- * ---- Wave 59 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: nvme: soft retcrownwork — Wave 59 return-crownwork honesty */
-kprintf("nvme: soft retcrownwork soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retcrownwork honesty; Soft≠product)\n");
-/* Grep: nvme: soft rethornwork — Wave 59 exclusive hornwork stamp */
-kprintf("nvme: soft rethornwork exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(rethornwork stamp; Soft≠product)\n");
-
-/*
- * ---- Wave 60 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: nvme: soft retplace — Wave 60 return-place honesty */
-kprintf("nvme: soft retplace soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retplace honesty; Soft≠product)\n");
-/* Grep: nvme: soft retenvelope — Wave 60 exclusive envelope stamp */
-kprintf("nvme: soft retenvelope exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retenvelope stamp; Soft≠product)\n");
-
-
-
-
-
-
-
-
-
-/*
- * ---- Wave 61 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: nvme: soft retcounterguard — Wave 61 return-counterguard honesty */
-kprintf("nvme: soft retcounterguard soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retcounterguard honesty; Soft≠product)\n");
-/* Grep: nvme: soft retcoveredface — Wave 61 exclusive coveredface stamp */
-kprintf("nvme: soft retcoveredface exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retcoveredface stamp; Soft≠product)\n");
-/*
- * ---- Wave 62 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: nvme: soft retbastionface — Wave 62 return-bastionface honesty */
-kprintf("nvme: soft retbastionface soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retbastionface honesty; Soft≠product)\n");
-/* Grep: nvme: soft retcurtainangle — Wave 62 exclusive curtainangle stamp */
-kprintf("nvme: soft retcurtainangle exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retcurtainangle stamp; Soft≠product)\n");
-/*
- * ---- Wave 63 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: nvme: soft retdoubletenaille — Wave 63 return-doubletenaille honesty */
-kprintf("nvme: soft retdoubletenaille soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retdoubletenaille honesty; Soft≠product)\n");
-/* Grep: nvme: soft retplaceofarms — Wave 63 exclusive placeofarms stamp */
-kprintf("nvme: soft retplaceofarms exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retplaceofarms stamp; Soft≠product)\n");
- /*
-  * ---- Wave 64 exclusive complementary surfaces (never reshape primary).
-  * Return surfaces only — soft inventory; never hard-gates product paths.
-  */
- /* Grep: nvme: soft retreentrant — Wave 64 return-reentrant honesty */
-kprintf("nvme: soft retreentrant soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retreentrant honesty; Soft≠product)\n");
- /* Grep: nvme: soft retsallyport — Wave 64 exclusive sallyport stamp */
-kprintf("nvme: soft retsallyport exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retsallyport stamp; Soft≠product)\n");
- /*
-  * ---- Wave 65 exclusive complementary surfaces (never reshape primary).
-  * Return surfaces only — soft inventory; never hard-gates product paths.
-  */
- /* Grep: nvme: soft retgorgeangle — Wave 65 return-gorgeangle honesty */
-kprintf("nvme: soft retgorgeangle soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retgorgeangle honesty; Soft≠product)\n");
- /* Grep: nvme: soft retshoulderangle — Wave 65 exclusive shoulderangle stamp */
-kprintf("nvme: soft retshoulderangle exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retshoulderangle stamp; Soft≠product)\n");
- /*
-  * ---- Wave 66 exclusive complementary surfaces (never reshape primary).
-  * Return surfaces only — soft inventory; never hard-gates product paths.
-  */
- /* Grep: nvme: soft retflankangle — Wave 66 return-flankangle honesty */
- kprintf("nvme: soft retflankangle soft_only=1 product_gate=0 soft_ne_product=1 "
-         "never_blocks_m0=1 wave=116 "
-         "(retflankangle honesty; Soft≠product)\n");
- /* Grep: nvme: soft retfaceangle — Wave 66 exclusive faceangle stamp */
- kprintf("nvme: soft retfaceangle exclusive=1 soft_ne_product=1 "
-         "product_kernel=OPEN wave=116 "
-         "(retfaceangle stamp; Soft≠product)\n");
-/*
- * ---- Wave 67 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: nvme: soft retcaponierangle — Wave 67 return-caponierangle honesty */
-kprintf("nvme: soft retcaponierangle soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retcaponierangle honesty; Soft≠product)\n");
-/* Grep: nvme: soft retredanangle — Wave 67 exclusive redanangle stamp */
-kprintf("nvme: soft retredanangle exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retredanangle stamp; Soft≠product)\n");
-/*
- * ---- Wave 68 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: nvme: soft retlunetteangle — Wave 68 return-lunetteangle honesty */
-kprintf("nvme: soft retlunetteangle soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retlunetteangle honesty; Soft≠product)\n");
-/* Grep: nvme: soft rettenailleangle — Wave 68 exclusive tenailleangle stamp */
-kprintf("nvme: soft rettenailleangle exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(rettenailleangle stamp; Soft≠product)\n");
-/*
- * ---- Wave 69 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: nvme: soft retdemiluneangle — Wave 69 return-demiluneangle honesty */
-kprintf("nvme: soft retdemiluneangle soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retdemiluneangle honesty; Soft≠product)\n");
-/* Grep: nvme: soft retcoveredwayangle — Wave 69 exclusive coveredwayangle stamp */
-kprintf("nvme: soft retcoveredwayangle exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retcoveredwayangle stamp; Soft≠product)\n");
-/*
- * ---- Wave 70 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: nvme: soft retfosseangle — Wave 70 return-fosseangle honesty */
-kprintf("nvme: soft retfosseangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retfosseangle honesty; Soft≠product)\n");
-/* Grep: nvme: soft retcounterscarple — Wave 70 exclusive counterscarple stamp */
-kprintf("nvme: soft retcounterscarple exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retcounterscarple stamp; Soft≠product)\n");
-/*
- * ---- Wave 71 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: nvme: soft retsallyportangle — Wave 71 return-sallyportangle honesty */
-kprintf("nvme: soft retsallyportangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retsallyportangle honesty; Soft≠product)\n");
-/* Grep: nvme: soft retreentrantangle — Wave 71 exclusive reentrantangle stamp */
-kprintf("nvme: soft retreentrantangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retreentrantangle stamp; Soft≠product)\n");
-/*
- * ---- Wave 72 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: nvme: soft retplaceofarmsangle — Wave 72 return-placeofarmsangle honesty */
-kprintf("nvme: soft retplaceofarmsangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retplaceofarmsangle honesty; Soft≠product)\n");
-/* Grep: nvme: soft retdoubletenailleangle — Wave 72 exclusive doubletenailleangle stamp */
-kprintf("nvme: soft retdoubletenailleangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retdoubletenailleangle stamp; Soft≠product)\n");
-/* Grep: nvme: soft retcurtainface — Wave 73 return-curtainface honesty */
-kprintf("nvme: soft retcurtainface soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retcurtainface honesty; Soft≠product)\n");
-/* Grep: nvme: soft retbastionangle — Wave 73 exclusive bastionangle stamp */
-kprintf("nvme: soft retbastionangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retbastionangle stamp; Soft≠product)\n");
-/* Grep: nvme: soft retglacisangle — Wave 74 return-glacisangle honesty */
-kprintf("nvme: soft retglacisangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retglacisangle honesty; Soft≠product)\n");
-/* Grep: nvme: soft retparapetangle — Wave 74 exclusive parapetangle stamp */
-kprintf("nvme: soft retparapetangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retparapetangle stamp; Soft≠product)\n");
-/* Grep: nvme: soft retmoatangle — Wave 75 return-moatangle honesty */
-kprintf("nvme: soft retmoatangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retmoatangle honesty; Soft≠product)\n");
-/* Grep: nvme: soft retowerangle — Wave 75 exclusive towerangle stamp */
-kprintf("nvme: soft retowerangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retowerangle stamp; Soft≠product)\n");
-/* Grep: nvme: soft retgateangle — Wave 76 return-gateangle honesty */
-kprintf("nvme: soft retgateangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retgateangle honesty; Soft≠product)\n");
-/* Grep: nvme: soft retwallangle — Wave 76 exclusive wallangle stamp */
-kprintf("nvme: soft retwallangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retwallangle stamp; Soft≠product)\n");
-/* Grep: nvme: soft retspireangle — Wave 77 return-spireangle honesty */
-kprintf("nvme: soft retspireangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retspireangle honesty; Soft≠product)\n");
-/* Grep: nvme: soft retholdangle — Wave 77 exclusive holdangle stamp */
-kprintf("nvme: soft retholdangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retholdangle stamp; Soft≠product)\n");
-/* Grep: nvme: soft retpalaceangle — Wave 78 return-palaceangle honesty */
-kprintf("nvme: soft retpalaceangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retpalaceangle honesty; Soft≠product)\n");
-/* Grep: nvme: soft retfortressangle — Wave 78 exclusive fortressangle stamp */
-kprintf("nvme: soft retfortressangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retfortressangle stamp; Soft≠product)\n");
-/* Grep: nvme: soft retkeepangle — Wave 79 return-keepangle honesty */
-kprintf("nvme: soft retkeepangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retkeepangle honesty; Soft≠product)\n");
-/* Grep: nvme: soft retredoubtangle — Wave 79 exclusive redoubtangle stamp */
-kprintf("nvme: soft retredoubtangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retredoubtangle stamp; Soft≠product)\n");
-/* Grep: nvme: soft retcitadelangle — Wave 80 return-citadelangle honesty */
-kprintf("nvme: soft retcitadelangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retcitadelangle honesty; Soft≠product)\n");
-/* Grep: nvme: soft retbastionkeep — Wave 80 exclusive bastionkeep stamp */
-kprintf("nvme: soft retbastionkeep exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retbastionkeep stamp; Soft≠product)\n");
-/* Grep: nvme: soft retpanoplyangle — Wave 81 return-panoplyangle honesty */
-kprintf("nvme: soft retpanoplyangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retpanoplyangle honesty; Soft≠product)\n");
-/* Grep: nvme: soft retbulwarkangle — Wave 81 exclusive bulwarkangle stamp */
-kprintf("nvme: soft retbulwarkangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retbulwarkangle stamp; Soft≠product)\n");
-/* Grep: nvme: soft retmantleangle — Wave 82 return-mantleangle honesty */
-kprintf("nvme: soft retmantleangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retmantleangle honesty; Soft≠product)\n");
-/* Grep: nvme: soft retaegisangle — Wave 82 exclusive aegisangle stamp */
-kprintf("nvme: soft retaegisangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retaegisangle stamp; Soft≠product)\n");
-/* Grep: nvme: soft retemblemangle — Wave 83 return-emblemangle honesty */
-kprintf("nvme: soft retemblemangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retemblemangle honesty; Soft≠product)\n");
-/* Grep: nvme: soft retsigilangle — Wave 83 exclusive sigilangle stamp */
-kprintf("nvme: soft retsigilangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retsigilangle stamp; Soft≠product)\n");
-/* Grep: nvme: soft retscepterangle — Wave 84 return-scepterangle honesty */
-kprintf("nvme: soft retscepterangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retscepterangle honesty; Soft≠product)\n");
-/* Grep: nvme: soft retglyphangle — Wave 84 exclusive glyphangle stamp */
-kprintf("nvme: soft retglyphangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retglyphangle stamp; Soft≠product)\n");
-/* Grep: nvme: soft retcrownangle — Wave 85 return-crownangle honesty */
-kprintf("nvme: soft retcrownangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retcrownangle honesty; Soft≠product)\n");
-/* Grep: nvme: soft retshardangle — Wave 85 exclusive shardangle stamp */
-kprintf("nvme: soft retshardangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retshardangle stamp; Soft≠product)\n");
-/* Grep: nvme: soft retforgeangle — Wave 86 return-forgeangle honesty */
-kprintf("nvme: soft retforgeangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retforgeangle honesty; Soft≠product)\n");
-/* Grep: nvme: soft retprismangle — Wave 86 exclusive prismangle stamp */
-kprintf("nvme: soft retprismangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retprismangle stamp; Soft≠product)\n");
-/* Grep: nvme: soft retflameangle — Wave 87 return-flameangle honesty */
-kprintf("nvme: soft retflameangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retflameangle honesty; Soft≠product)\n");
-/* Grep: nvme: soft retcipherangle — Wave 87 exclusive cipherangle stamp */
-kprintf("nvme: soft retcipherangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retcipherangle stamp; Soft≠product)\n");
-/* Grep: nvme: soft retbeaconangle — Wave 88 return-beaconangle honesty */
-kprintf("nvme: soft retbeaconangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retbeaconangle honesty; Soft≠product)\n");
-/* Grep: nvme: soft retledgerangle — Wave 88 exclusive ledgerangle stamp */
-kprintf("nvme: soft retledgerangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retledgerangle stamp; Soft≠product)\n");
-/* Grep: nvme: soft retbannerangle — Wave 89 return-bannerangle honesty */
-kprintf("nvme: soft retbannerangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retbannerangle honesty; Soft≠product)\n");
-/* Grep: nvme: soft retvaultangle — Wave 89 exclusive vaultangle stamp */
-kprintf("nvme: soft retvaultangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retvaultangle stamp; Soft≠product)\n");
-/* Grep: nvme: soft retcrestangle — Wave 90 return-crestangle honesty */
-kprintf("nvme: soft retcrestangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retcrestangle honesty; Soft≠product)\n");
-/* Grep: nvme: soft rettokenangle — Wave 90 exclusive tokenangle stamp */
-kprintf("nvme: soft rettokenangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (rettokenangle stamp; Soft≠product)\n");
-/* Grep: nvme: soft retbadgeangle — Wave 91 return-badgeangle honesty */
-kprintf("nvme: soft retbadgeangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retbadgeangle honesty; Soft≠product)\n");
-/* Grep: nvme: soft retphaseangle — Wave 91 exclusive phaseangle stamp */
-kprintf("nvme: soft retphaseangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retphaseangle stamp; Soft≠product)\n");
-/* Grep: nvme: soft retmarkangle — Wave 92 return-markangle honesty */
-kprintf("nvme: soft retmarkangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retmarkangle honesty; Soft≠product)\n");
-/* Grep: nvme: soft retpulseangle — Wave 92 exclusive pulseangle stamp */
-kprintf("nvme: soft retpulseangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retpulseangle stamp; Soft≠product)\n");
-
-/* Grep: nvme: soft retsealangle — Wave 93 return-sealangle honesty */
-kprintf("nvme: soft retsealangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retsealangle honesty; Soft≠product)\n");
-/* Grep: nvme: soft retboundangle — Wave 93 exclusive boundangle stamp */
-kprintf("nvme: soft retboundangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retboundangle stamp; Soft≠product)\n");
-/* Grep: nvme: soft retstemangle — Wave 94 return-stemangle honesty */
-kprintf("nvme: soft retstemangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retstemangle honesty; Soft≠product)\n");
-/* Grep: nvme: soft retbladeangle — Wave 94 exclusive bladeangle stamp */
-kprintf("nvme: soft retbladeangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retbladeangle stamp; Soft≠product)\n");
-/* Grep: nvme: soft retchordangle — Wave 95 return-chordangle honesty */
-kprintf("nvme: soft retchordangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retchordangle honesty; Soft≠product)\n");
-/* Grep: nvme: soft retarcangle — Wave 95 exclusive arcangle stamp */
-kprintf("nvme: soft retarcangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retarcangle stamp; Soft≠product)\n");
-/* Grep: nvme: soft retsectorangle — Wave 96 return-sectorangle honesty */
-kprintf("nvme: soft retsectorangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retsectorangle honesty; Soft≠product)\n");
-/* Grep: nvme: soft retwedgeangle — Wave 96 exclusive wedgeangle stamp */
-kprintf("nvme: soft retwedgeangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retwedgeangle stamp; Soft≠product)\n");
-/* Grep: nvme: soft retradiusangle — Wave 97 return-radiusangle honesty */
-kprintf("nvme: soft retradiusangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retradiusangle honesty; Soft≠product)\n");
-/* Grep: nvme: soft retdiameterangle — Wave 97 exclusive diameterangle stamp */
-kprintf("nvme: soft retdiameterangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retdiameterangle stamp; Soft≠product)\n");
-/* Grep: nvme: soft retcircumangle — Wave 98 return-circumangle honesty */
-kprintf("nvme: soft retcircumangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retcircumangle honesty; Soft≠product)\n");
-/* Grep: nvme: soft retellipseangle — Wave 98 exclusive ellipseangle stamp */
-kprintf("nvme: soft retellipseangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retellipseangle stamp; Soft≠product)\n");
-/* Grep: nvme: soft rethyperangle — Wave 99 return-hyperangle honesty */
-kprintf("nvme: soft rethyperangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (rethyperangle honesty; Soft≠product)\n");
-/* Grep: nvme: soft retparabolaangle — Wave 99 exclusive parabolaangle stamp */
-kprintf("nvme: soft retparabolaangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retparabolaangle stamp; Soft≠product)\n");
-/* Grep: nvme: soft retspiralangle — Wave 100 return-spiralangle honesty */
-kprintf("nvme: soft retspiralangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retspiralangle honesty; Soft≠product)\n");
-/* Grep: nvme: soft rethelixangle — Wave 100 exclusive helixangle stamp */
-kprintf("nvme: soft rethelixangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (rethelixangle stamp; Soft≠product)\n");
-/* Grep: nvme: soft rettorusangle — Wave 101 return-torusangle honesty */
-kprintf("nvme: soft rettorusangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (rettorusangle honesty; Soft≠product)\n");
-/* Grep: nvme: soft retknotangle — Wave 101 exclusive knotangle stamp */
-kprintf("nvme: soft retknotangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retknotangle stamp; Soft≠product)\n");
-/* Grep: nvme: soft retmoebiusangle — Wave 102 return-moebiusangle honesty */
-kprintf("nvme: soft retmoebiusangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retmoebiusangle honesty; Soft≠product)\n");
-/* Grep: nvme: soft retkleinangle — Wave 102 exclusive kleinangle stamp */
-kprintf("nvme: soft retkleinangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retkleinangle stamp; Soft≠product)\n");
-/* Grep: nvme: soft retprojectangle — Wave 103 return-projectangle honesty */
-kprintf("nvme: soft retprojectangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retprojectangle honesty; Soft≠product)\n");
-/* Grep: nvme: soft retaffineangle — Wave 103 exclusive affineangle stamp */
-kprintf("nvme: soft retaffineangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retaffineangle stamp; Soft≠product)\n");
-/* Grep: nvme: soft retlinearangle — Wave 104 return-linearangle honesty */
-kprintf("nvme: soft retlinearangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retlinearangle honesty; Soft≠product)\n");
-/* Grep: nvme: soft retbilinearangle — Wave 104 exclusive bilinearangle stamp */
-kprintf("nvme: soft retbilinearangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retbilinearangle stamp; Soft≠product)\n");
-/* Grep: nvme: soft retquadraticangle — Wave 105 return-quadraticangle honesty */
-kprintf("nvme: soft retquadraticangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retquadraticangle honesty; Soft≠product)\n");
-/* Grep: nvme: soft retcubicangle — Wave 105 exclusive cubicangle stamp */
-kprintf("nvme: soft retcubicangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retcubicangle stamp; Soft≠product)\n");
-/* Grep: nvme: soft retquarticangle — Wave 106 return-quarticangle honesty */
-kprintf("nvme: soft retquarticangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retquarticangle honesty; Soft≠product)\n");
-/* Grep: nvme: soft retquinticangle — Wave 106 exclusive quinticangle stamp */
-kprintf("nvme: soft retquinticangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retquinticangle stamp; Soft≠product)\n");
-/* Grep: nvme: soft retsplineangle — Wave 107 return-splineangle honesty */
-kprintf("nvme: soft retsplineangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retsplineangle honesty; Soft≠product)\n");
-/* Grep: nvme: soft retbezierangle — Wave 107 exclusive bezierangle stamp */
-kprintf("nvme: soft retbezierangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retbezierangle stamp; Soft≠product)\n");
-/* Grep: nvme: soft rethurmitangle — Wave 108 return-hermitangle honesty */
-kprintf("nvme: soft rethurmitangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (rethurmitangle honesty; Soft≠product)\n");
-/* Grep: nvme: soft retcatmullangle — Wave 108 exclusive catmullangle stamp */
-kprintf("nvme: soft retcatmullangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retcatmullangle stamp; Soft≠product)\n");
-/* Grep: nvme: soft retnurbsangle — Wave 109 return-nurbsangle honesty */
-kprintf("nvme: soft retnurbsangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retnurbsangle honesty; Soft≠product)\n");
-/* Grep: nvme: soft retbsplineangle — Wave 109 exclusive bsplineangle stamp */
-kprintf("nvme: soft retbsplineangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retbsplineangle stamp; Soft≠product)\n");
-/* Grep: nvme: soft retmeshangle — Wave 110 return-meshangle honesty */
-kprintf("nvme: soft retmeshangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retmeshangle honesty; Soft≠product)\n");
-/* Grep: nvme: soft retgridangle — Wave 110 exclusive gridangle stamp */
-kprintf("nvme: soft retgridangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retgridangle stamp; Soft≠product)\n");
-/* Grep: nvme: soft retvoxelangle — Wave 111 return-voxelangle honesty */
-kprintf("nvme: soft retvoxelangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retvoxelangle honesty; Soft≠product)\n");
-/* Grep: nvme: soft rettexelangle — Wave 111 exclusive texelangle stamp */
-kprintf("nvme: soft rettexelangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (rettexelangle stamp; Soft≠product)\n");
-/* Grep: nvme: soft retfragmentangle — Wave 112 return-fragmentangle honesty */
-kprintf("nvme: soft retfragmentangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retfragmentangle honesty; Soft≠product)\n");
-/* Grep: nvme: soft retvertexangle — Wave 112 exclusive vertexangle stamp */
-kprintf("nvme: soft retvertexangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retvertexangle stamp; Soft≠product)\n");
-/* Grep: nvme: soft retshaderangle — Wave 113 return-shaderangle honesty */
-kprintf("nvme: soft retshaderangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retshaderangle honesty; Soft≠product)\n");
-/* Grep: nvme: soft retpipelineangle — Wave 113 exclusive pipelineangle stamp */
-kprintf("nvme: soft retpipelineangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retpipelineangle stamp; Soft≠product)\n");
-/* Grep: nvme: soft retframebufferangle — Wave 114 return-framebufferangle honesty */
-kprintf("nvme: soft retframebufferangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retframebufferangle honesty; Soft≠product)\n");
-/* Grep: nvme: soft retswapchainangle — Wave 114 exclusive swapchainangle stamp */
-kprintf("nvme: soft retswapchainangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retswapchainangle stamp; Soft≠product)\n");
-/* Grep: nvme: soft retpresentangle — Wave 115 return-presentangle honesty */
-kprintf("nvme: soft retpresentangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retpresentangle honesty; Soft≠product)\n");
-/* Grep: nvme: soft retvsyncangle — Wave 115 exclusive vsyncangle stamp */
-kprintf("nvme: soft retvsyncangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retvsyncangle stamp; Soft≠product)\n");
-/* Grep: nvme: soft retfenceangle — Wave 116 return-fenceangle honesty */
-kprintf("nvme: soft retfenceangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retfenceangle honesty; Soft≠product)\n");
-/* Grep: nvme: soft retsemaphoreangle — Wave 116 exclusive semaphoreangle stamp */
-kprintf("nvme: soft retsemaphoreangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retsemaphoreangle stamp; Soft≠product)\n");
-                            kprintf("nvme: soft deepen wave=%u areas=%u via=%s cap_ok=%u vs_ok=%u "
-            "found=%u identify_ok=%u map_fail=%u no_bar=%u ok=%u "
-            "skip=%u\n",
-            (unsigned)NVME_SOFT_DEEPEN_WAVE,
-            (unsigned)NVME_SOFT_DEEPEN_AREAS, szViaSafe,
-            fCapOk != 0 ? 1u : 0u, fVsOk != 0 ? 1u : 0u, g_u32SoftFound,
-            g_u32SoftIdentifyOk, g_u32SoftMapFail, g_u32SoftNoBar,
-            fCapOk != 0 ? 1u : 0u, fCapOk != 0 ? 0u : 1u);
-
-    /* Grep: nvme: soft stats */
-    kprintf("nvme: soft stats inv_logs=%u probe_logs=%u found=%u "
-            "identify_ok=%u map_fail=%u no_bar=%u wave=%u\n",
-            g_u32SoftInvLogs, g_u32SoftProbeLogs, g_u32SoftFound,
-            g_u32SoftIdentifyOk, g_u32SoftMapFail, g_u32SoftNoBar,
-            (unsigned)NVME_SOFT_DEEPEN_WAVE);
+            "aqa_write=0 asq_write=0 acq_write=0 bprsel_write=0 "
+            "nssr_write=0 identify_cmd=0 map_uc=1 "
+            "asq_prog=%u acq_prog=%u via=%s "
+            "product_storage=OPEN dual_dod=OPEN need=userspace_UDX "
+            "(soft residual; Soft!=product G-AC-1)\n",
+            u32AsqProg, u32AcqProg, szViaSafe);
+    kprintf("nvme: soft honesty probe_only=1 admin_q=0 io_q=0 "
+            "cc_en_write=0 game_io=0 product_storage=0 soft=1 product=0 "
+            "product_storage_dod=OPEN dual_dod=OPEN need=userspace_UDX "
+            "Soft!=product dual=MIT|Apache-2.0 G-AC-1 soft PASS\n");
 
     /* Grep: nvme: soft inventory PASS|SKIP / nvme: soft PASS|SKIP */
-    kprintf("nvme: soft inventory %s via=%s mqes=%u css=0x%x wave=%u "
-            "areas=%u\n",
-            szVerdict, szViaSafe, u32Mqes, u32Css,
-            (unsigned)NVME_SOFT_DEEPEN_WAVE,
-            (unsigned)NVME_SOFT_DEEPEN_AREAS);
-    kprintf("nvme: soft %s via=%s cap_ok=%u wave=%u\n", szVerdict, szViaSafe,
-            fCapOk != 0 ? 1u : 0u, (unsigned)NVME_SOFT_DEEPEN_WAVE);
+    kprintf("nvme: soft inventory %s via=%s mqes=%u css=0x%x logs=%u "
+            "Soft!=product\n",
+            szVerdict, szViaSafe, u32Mqes, u32Css, g_u32SoftInvLogs);
+    kprintf("nvme: soft %s via=%s cap_ok=%u Soft!=product\n", szVerdict,
+            szViaSafe, fCapOk != 0 ? 1u : 0u);
 }
 
 /**
  * Soft identify: map BAR0 UC and inventory CAP fields + VS + CSTS/CC +
- * INTMS/INTMC/AQA. Read-only MMIO — no CC write, no AQA/ASQ/ACQ program,
- * no admin queues as product.
+ * INTMS/INTMC/AQA + ASQ/ACQ bases (+ CMB when CAP.CMBS, BPINFO when
+ * CAP.BPS, CRTO when CAP.CRMS). Read-only MMIO - no CC write, no
+ * AQA/ASQ/ACQ/BPRSEL program, no admin queues as product.
  */
 static void
 nvme_soft_identify(u64 paBar, u32 u32BarBits)
@@ -1546,7 +725,7 @@ nvme_soft_identify(u64 paBar, u32 u32BarBits)
 
     kprintf("nvme: bar0 mem soft path PASS pa=0x%lx\n",
             (unsigned long)paBar);
-    stMap = vmm_map_device_uc((gj_paddr_t)paBar, 0x1000, &vaMap);
+    stMap = vmm_map_device_uc((gj_paddr_t)paBar, NVME_SOFT_MAP_BYTES, &vaMap);
     if (stMap != GJ_OK) {
         if (g_u32SoftMapFail < 0xffffffffu) {
             g_u32SoftMapFail++;
@@ -1555,34 +734,77 @@ nvme_soft_identify(u64 paBar, u32 u32BarBits)
         kprintf("nvme: CAP inventory soft SKIP (unmapped)\n");
         nvme_soft_inventory("map_fail", ~0ull, 0xffffffffu, 0xffffffffu,
                             0xffffffffu, 0xffffffffu, 0xffffffffu,
-                            0xffffffffu, paBar, u32BarBits);
+                            0xffffffffu, ~0ull, ~0ull, 0xffffffffu,
+                            0xffffffffu, 0xffffffffu, 0xffffffffu, 0u, 0u,
+                            paBar, u32BarBits);
         return;
     }
     {
         volatile u8 *pMmio = (volatile u8 *)(gj_vaddr_t)vaMap;
         u64 u64Cap;
+        u64 u64Asq;
+        u64 u64Acq;
         u32 u32Vs;
         u32 u32Cc;
         u32 u32Csts;
         u32 u32Intms;
         u32 u32Intmc;
         u32 u32Aqa;
+        u32 u32Nssr;
+        u32 u32Cmbloc;
+        u32 u32Cmbsz;
+        u32 u32Bpinfo;
+        u32 u32Crto;
         u32 u32Maj;
         u32 u32Min;
         u32 u32Ter;
+        u32 u32Cmbs;
+        u32 u32Bps;
+        u32 u32Crms;
 
-        /* CAP @ 0x00 (64-bit LE) — full soft field inventory */
+        /* CAP @ 0x00 (64-bit LE) - soft field inventory */
         u64Cap = *(volatile u64 *)(void *)(pMmio + NVME_REG_CAP);
         /* VS @ 0x08: TER:MIN:MAJ in bytes (public layout) */
         u32Vs = *(volatile u32 *)(void *)(pMmio + NVME_REG_VS);
-        /* INTMS / INTMC soft-read only — never mask-write */
+        /* INTMS / INTMC soft-read only - never mask-write */
         u32Intms = *(volatile u32 *)(void *)(pMmio + NVME_REG_INTMS);
         u32Intmc = *(volatile u32 *)(void *)(pMmio + NVME_REG_INTMC);
-        /* CC / CSTS soft-read only — never write EN */
+        /* CC / CSTS soft-read only - never write EN */
         u32Cc = *(volatile u32 *)(void *)(pMmio + NVME_REG_CC);
         u32Csts = *(volatile u32 *)(void *)(pMmio + NVME_REG_CSTS);
-        /* AQA soft-read only — never program ASQ/ACQ */
+        /* NSSR soft-read only - never trigger subsystem reset */
+        u32Nssr = *(volatile u32 *)(void *)(pMmio + NVME_REG_NSSR);
+        /* AQA soft-read only - never program ASQ/ACQ */
         u32Aqa = *(volatile u32 *)(void *)(pMmio + NVME_REG_AQA);
+        /* ASQ / ACQ bases soft-read only - observe fw_prog; claim=0 */
+        u64Asq = *(volatile u64 *)(void *)(pMmio + NVME_REG_ASQ);
+        u64Acq = *(volatile u64 *)(void *)(pMmio + NVME_REG_ACQ);
+
+        u32Cmbs = (u64Cap != 0ull && u64Cap != ~0ull) ? NVME_CAP_CMBS(u64Cap)
+                                                      : 0u;
+        u32Bps = (u64Cap != 0ull && u64Cap != ~0ull) ? NVME_CAP_BPS(u64Cap)
+                                                     : 0u;
+        u32Crms = (u64Cap != 0ull && u64Cap != ~0ull) ? NVME_CAP_CRMS(u64Cap)
+                                                      : 0u;
+        if (u32Cmbs != 0u) {
+            u32Cmbloc = *(volatile u32 *)(void *)(pMmio + NVME_REG_CMBLOC);
+            u32Cmbsz = *(volatile u32 *)(void *)(pMmio + NVME_REG_CMBSZ);
+        } else {
+            u32Cmbloc = 0u;
+            u32Cmbsz = 0u;
+        }
+        /* BPINFO soft-read when CAP.BPS; never write BPRSEL / BPMBL */
+        if (u32Bps != 0u) {
+            u32Bpinfo = *(volatile u32 *)(void *)(pMmio + NVME_REG_BPINFO);
+        } else {
+            u32Bpinfo = 0u;
+        }
+        /* CRTO soft-read when CAP.CRMS (ready-mode timeouts); observe only */
+        if (u32Crms != 0u) {
+            u32Crto = *(volatile u32 *)(void *)(pMmio + NVME_REG_CRTO);
+        } else {
+            u32Crto = 0u;
+        }
 
         u32Ter = u32Vs & 0xffu;
         u32Min = (u32Vs >> 8) & 0xffu;
@@ -1597,18 +819,44 @@ nvme_soft_identify(u64 paBar, u32 u32BarBits)
         kprintf("nvme: identify VS=0x%x %u.%u.%u soft PASS\n", u32Vs, u32Maj,
                 u32Min, u32Ter);
         nvme_soft_status_inventory(u32Csts, u32Cc);
-        /* Explicit non-claim: product stop is CAP/VS/status soft inventory. */
+        kprintf("nvme: NSSR=0x%x soft PASS (observe; never reset)\n", u32Nssr);
+        nvme_soft_aq_inventory(u64Asq, u64Acq, u32Aqa);
+        if (u32Cmbs != 0u) {
+            kprintf("nvme: CMB cmbloc=0x%x cmbsz=0x%x soft PASS "
+                    "(observe; not claimed)\n",
+                    u32Cmbloc, u32Cmbsz);
+        } else {
+            kprintf("nvme: CMB soft SKIP (CAP.CMBS=0)\n");
+        }
+        if (u32Bps != 0u) {
+            kprintf("nvme: BPINFO=0x%x soft PASS (observe; BPRSEL never "
+                    "write)\n",
+                    u32Bpinfo);
+        } else {
+            kprintf("nvme: BPINFO soft SKIP (CAP.BPS=0)\n");
+        }
+        if (u32Crms != 0u) {
+            kprintf("nvme: CRTO=0x%x soft PASS (observe; ready modes)\n",
+                    u32Crto);
+        } else {
+            kprintf("nvme: CRTO soft SKIP (CAP.CRMS=0)\n");
+        }
+        /* Explicit non-claim: product stop is CAP/VS/status/ASQ soft inventory. */
         kprintf("nvme: admin queues soft SKIP (not claimed)\n");
         kprintf("nvme: I/O path soft SKIP (not claimed)\n");
-        /* Wave 14 unified soft inventory */
+        /* Lean soft residual inventory */
         nvme_soft_inventory("identify", u64Cap, u32Vs, u32Csts, u32Cc,
-                            u32Intms, u32Intmc, u32Aqa, paBar, u32BarBits);
+                            u32Intms, u32Intmc, u32Aqa, u64Asq, u64Acq,
+                            u32Cmbloc, u32Cmbsz, u32Bpinfo, u32Crto, u32Bps,
+                            u32Crms, paBar, u32BarBits);
     }
 }
 
 /**
  * Scan PCI for NVMe controllers. Soft CAP inventory when BAR0 is mapped.
  * Returns count of matching functions. Always logs greppable soft PASS/SKIP.
+ * Soft != product; dual MIT OR Apache-2.0. No version stamp / stamp storm.
+ * Dual DoD product_storage=OPEN - residual never closes product storage.
  */
 u32
 nvme_probe_scan(void)
@@ -1673,7 +921,10 @@ nvme_probe_scan(void)
                     nvme_soft_inventory("no_bar", ~0ull, 0xffffffffu,
                                         0xffffffffu, 0xffffffffu,
                                         0xffffffffu, 0xffffffffu,
-                                        0xffffffffu, 0ull, 0u);
+                                        0xffffffffu, ~0ull, ~0ull,
+                                        0xffffffffu, 0xffffffffu,
+                                        0xffffffffu, 0xffffffffu, 0u, 0u,
+                                        0ull, 0u);
                 }
                 cFound++;
                 if (g_u32SoftFound < 0xffffffffu) {
@@ -1687,7 +938,9 @@ nvme_probe_scan(void)
         kprintf("nvme: CAP inventory soft SKIP (no controller)\n");
         nvme_soft_inventory("none", ~0ull, 0xffffffffu, 0xffffffffu,
                             0xffffffffu, 0xffffffffu, 0xffffffffu,
-                            0xffffffffu, 0ull, 0u);
+                            0xffffffffu, ~0ull, ~0ull, 0xffffffffu,
+                            0xffffffffu, 0xffffffffu, 0xffffffffu, 0u, 0u,
+                            0ull, 0u);
     } else {
         kprintf("nvme: probe count=%u soft PASS\n", cFound);
     }

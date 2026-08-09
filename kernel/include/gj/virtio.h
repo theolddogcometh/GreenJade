@@ -4,32 +4,39 @@
  *
  * Virtio transport discovery + modern PCI + split virtqueues (clean-room OASIS).
  * Pure C11 freestanding. Dual MIT OR Apache-2.0 only. No Linux virtio source,
- * no GPL paste — layout constants match public OASIS virtio 1.x (read as
+ * no GPL paste - layout constants match public OASIS virtio 1.x (read as
  * specification numbers, not as a copy of any implementation).
+ * Soft!=product. G-AC-1: no Linux .ko product AC.
  *
  * Scope of this header:
  *   - PCI modern-cap discovery (vendor 0x1AF4, modern device IDs)
  *   - Common-cfg feature negotiate + soft ladder
  *   - Split virtqueue setup (desc | avail | used) + kick/poll/reap
  *   - Ring / DMA export shapes for UDX / door MAP_RING consumers
+ *   - Lean residual inventory hooks (transport only; Soft!=product)
+ *
+ * T0 product class set (transport support; class modules own I/O):
+ *   virtio-net (KIND_NET) | virtio-blk (KIND_BLK) | virtio-gpu (KIND_GPU)
+ * Lab freestanding net remains rtl8168 soft; product_net=virtio on T0.
  *
  * Not in this header (device-class modules):
  *   virtio_blk.h / virtio_net.h / virtio_gpu.h / virtio_input.h / virtio_scsi.h
  * AArch64 soft virtio-mmio (arch tree) is a separate scaffold, not PCI.
  *
  * Bring-up lifecycle (product drivers):
- *   1. virtio_init()          — zero inventory
- *   2. virtio_pci_scan()      — enumerate BDF + BARs; set u32Kind
- *   3. virtio_pci_setup()     — walk vendor caps → pCommon/pNotify/pIsr/pDevice
- *   4. virtio_negotiate[_soft]— FEATURES_OK; snapshot on pDev
- *   5. virtio_q_setup()       — per-queue desc/avail/used + enable verify
- *   6. virtio_driver_ok()     — OR DRIVER_OK; device may process avail
- *   7. virtio_q_add{,2,3} + kick + poll/reap  — I/O path
+ *   1. virtio_init()          - zero inventory
+ *   2. virtio_pci_scan()      - enumerate BDF + BARs; set u32Kind
+ *   3. virtio_pci_setup()     - walk vendor caps -> pCommon/pNotify/pIsr/pDevice
+ *   4. virtio_negotiate[_soft]- FEATURES_OK; snapshot on pDev
+ *   5. virtio_q_setup()       - per-queue desc/avail/used + enable verify
+ *   6. virtio_driver_ok()     - OR DRIVER_OK; device may process avail
+ *   7. virtio_q_add{,2,3} + kick + poll/reap  - I/O path
  *
  * Soft product depth (common-cfg / queues; greppable logs in virtio_pci.c):
  *   - modern common-cfg cap walk + soft reset (status clear spin)
  *   - feature read/write helpers + soft negotiate ladder
  *   - queue soft size clamp, disable-before-setup, enable verify
+ *   - lean residual T0 triad tallies (net/blk/gpu); hard-capped emission
  *
  * Greppable product markers (prefix-stable; see virtio_pci.c logs):
  *   virtio: scan PASS
@@ -40,7 +47,15 @@
  *   virtio: q%u size=
  *   virtio: driver_ok
  *
+ * Greppable lean residual (Soft!=product; stamp_storm=0):
+ *   virtio-pci: soft inventory
+ *   virtio-pci: soft residual lean
+ *   virtio: soft residual lean
+ *   virtio-pci: soft PASS|NODEV|PARTIAL
+ *   t0_product=1 product_net=virtio t0_net= t0_blk= t0_gpu=
+ *
  * greppable: GJ_VIRTIO_PCI_ GJ_VIRTIO_S_ GJ_VIRTIO_F_ GJ_VIRTQ_
+ * greppable: GJ_VIRTIO_KIND_NET GJ_VIRTIO_KIND_BLK GJ_VIRTIO_KIND_GPU
  */
 #pragma once
 
@@ -66,7 +81,7 @@
 
 /*
  * virtio_pci_cap.cfg_type (vendor capability structures).
- * setup walks the PCI cap list and maps each type into pCommon/pNotify/…
+ * setup walks the PCI cap list and maps each type into pCommon/pNotify/...
  */
 #define GJ_VIRTIO_PCI_CAP_COMMON_CFG 1 /* device-wide common config */
 #define GJ_VIRTIO_PCI_CAP_NOTIFY_CFG 2 /* queue notify MMIO + multiplier */
@@ -78,7 +93,7 @@
  * Modern virtio_pci_common_cfg field offsets (OASIS; greppable GJ_VIRTIO_PCI_COMMON_*).
  * Drivers may use these with pDev->pCommon for soft feature/queue peeks.
  * Widths: most are u32; MSIX/NUMQ/STATUS/CFGGEN/Q_* are u16 or u8 as noted
- * in OASIS — GreenJade peeks via byte-addressed MMIO helpers in virtio_pci.c.
+ * in OASIS - GreenJade peeks via byte-addressed MMIO helpers in virtio_pci.c.
  */
 #define GJ_VIRTIO_PCI_COMMON_DFSELECT 0u  /* device_feature_select (u32) */
 #define GJ_VIRTIO_PCI_COMMON_DF       4u  /* device_feature (u32) */
@@ -99,7 +114,7 @@
 
 /*
  * Device status bits (common-cfg device_status).
- * Product path: reset → ACK → DRIVER → FEATURES_OK → queues → DRIVER_OK.
+ * Product path: reset -> ACK -> DRIVER -> FEATURES_OK -> queues -> DRIVER_OK.
  * FAILED is sticky failure; soft reset clears via status=0 spin.
  */
 #define GJ_VIRTIO_S_ACKNOWLEDGE 1u
@@ -110,7 +125,7 @@
 
 /*
  * Transport / common feature bits (device-independent, OASIS virtio 1.x).
- * Bits 0–23 are device-class; 24–27 reserved; 28+ are transport.
+ * Bits 0-23 are device-class; 24-27 reserved; 28+ are transport.
  * Product negotiate always wants VERSION_1; optional mask for class bits.
  */
 #define GJ_VIRTIO_F_RING_INDIRECT_DESC (1ull << 28) /* indirect desc tables */
@@ -127,8 +142,15 @@
 #define GJ_VIRTIO_RESET_SPINS 1000000u
 
 /*
- * gj_virtio_dev.u32Kind — inventory class after scan (not a PCI ID).
+ * gj_virtio_dev.u32Kind - inventory class after scan (not a PCI ID).
  * 0 unknown / unmatched modern ID; 1..6 match product device classes.
+ *
+ * T0 product triad (must remain first-class in transport residual):
+ *   GJ_VIRTIO_KIND_NET  - virtio-net (T0 product NIC)
+ *   GJ_VIRTIO_KIND_BLK  - virtio-blk (T0 store / store_door)
+ *   GJ_VIRTIO_KIND_GPU  - virtio-gpu (T0 present / compositor)
+ * Other kinds (input/console/scsi) are inventory-supported; class modules
+ * own product depth. Soft residual tallies all; lean lamps highlight T0.
  */
 #define GJ_VIRTIO_KIND_UNKNOWN 0u
 #define GJ_VIRTIO_KIND_NET     1u
@@ -137,6 +159,14 @@
 #define GJ_VIRTIO_KIND_INPUT   4u
 #define GJ_VIRTIO_KIND_CONSOLE 5u
 #define GJ_VIRTIO_KIND_SCSI    6u
+
+/**
+ * True if u32Kind is a T0 product class (net | blk | gpu).
+ * Soft residual and class probes may use this; Soft!=product.
+ */
+#define GJ_VIRTIO_KIND_IS_T0(k) \
+    ((k) == GJ_VIRTIO_KIND_NET || (k) == GJ_VIRTIO_KIND_BLK || \
+     (k) == GJ_VIRTIO_KIND_GPU)
 
 /**
  * One discovered virtio PCI function after virtio_pci_scan / setup.
@@ -171,7 +201,7 @@ struct gj_virtio_dev {
     volatile u8 *pNotify;
     volatile u8 *pIsr;
     volatile u8 *pDevice;
-    u32  u32NotifyMult; /* notify_off * mult → notify MMIO offset */
+    u32  u32NotifyMult; /* notify_off * mult -> notify MMIO offset */
     u32  u32NumQueues;  /* common-cfg num_queues snapshot */
     /* Feature snapshot after last successful negotiate (soft helpers) */
     u64  u64FeaturesDev;
@@ -201,7 +231,7 @@ struct gj_virtq_desc {
 #define GJ_VIRTQ_DESC_F_WRITE 2 /* device writes this buffer */
 
 /**
- * Available ring (driver → device). u16Idx is free-running (mod 2^16);
+ * Available ring (driver -> device). u16Idx is free-running (mod 2^16);
  * aRing[] holds descriptor heads. Flags: NO_INTERRUPT is device-side only
  * on used; avail flags left 0 on product soft path.
  */
@@ -218,7 +248,7 @@ struct gj_virtq_used_elem {
 } __attribute__((packed));
 
 /**
- * Used ring (device → driver). Driver tracks last seen idx in
+ * Used ring (device -> driver). Driver tracks last seen idx in
  * gj_virtq.u16LastUsed for poll/reap without races against free-running idx.
  */
 struct gj_virtq_used {
@@ -252,10 +282,10 @@ struct gj_virtq {
 };
 
 /**
- * Userspace/UDX ring export (net, blk, …).
+ * Userspace/UDX ring export (net, blk, ...).
  * MAP_RING maps three pages at vaBase: desc | avail | used; byte offsets
  * in u32Off* are relative to that vaBase. Snapshot of free list is at
- * export time only — userspace must not assume live free counts without
+ * export time only - userspace must not assume live free counts without
  * its own protocol. u32Ready non-zero when rings are live for MAP.
  */
 struct gj_virtq_export {
@@ -311,6 +341,19 @@ u32  virtio_dev_count(void);
 struct gj_virtio_dev *virtio_dev_get(u32 u32Index);
 
 /**
+ * First inventory device with u32Kind == u32Kind, or NULL.
+ * T0 class probes (net/blk/gpu) may use this instead of hand-walking
+ * virtio_dev_get. Soft residual: does not change transport state.
+ */
+struct gj_virtio_dev *virtio_dev_find_kind(u32 u32Kind);
+
+/**
+ * Count inventory slots with u32Kind == u32Kind (after last scan).
+ * Soft residual / class probe sizing; Soft!=product.
+ */
+u32 virtio_dev_count_kind(u32 u32Kind);
+
+/**
  * Parse modern vendor caps, enable BME/MEM on the function, map cap MMIO,
  * leave device in reset (status=0 path). Soft-fails if legacy-only (no
  * common-cfg): returns error without programming unknown layout.
@@ -356,7 +399,7 @@ int virtio_features_has(struct gj_virtio_dev *pDev, u64 u64Bit);
 
 /**
  * Allocate and enable queue index u16QIdx (soft size clamp + enable verify).
- * Disables queue first if previously enabled. Fails if idx ≥ num_queues,
+ * Disables queue first if previously enabled. Fails if idx >= num_queues,
  * device max size 0, or page alloc fails. Logs "virtio: q soft".
  */
 gj_status_t virtio_q_setup(struct gj_virtio_dev *pDev, struct gj_virtq *pQ,
@@ -375,7 +418,7 @@ u16 virtio_q_max_size(struct gj_virtio_dev *pDev, u16 u16QIdx);
 void virtio_q_disable(struct gj_virtio_dev *pDev, u16 u16QIdx);
 
 /**
- * Allocate one free descriptor (does not push avail). Returns head ≥0 or -1
+ * Allocate one free descriptor (does not push avail). Returns head >=0 or -1
  * if free list empty. Caller fills desc fields then push_head or class path.
  */
 int virtio_q_alloc_desc(struct gj_virtq *pQ);
@@ -389,7 +432,7 @@ int virtio_q_push_head(struct gj_virtq *pQ, u16 u16Head);
 
 /**
  * Push one contiguous guest buffer; fWrite=1 for device-write.
- * Returns desc head ≥0 or -1 if no free desc.
+ * Returns desc head >=0 or -1 if no free desc.
  */
 int virtio_q_add(struct gj_virtq *pQ, gj_paddr_t pa, u32 u32Len, int fWrite);
 
@@ -448,7 +491,7 @@ void virtio_driver_ok(struct gj_virtio_dev *pDev);
 
 /**
  * Read ISR status (ack by read per OASIS). Returns 0 if no ISR cap.
- * Bit0 queue interrupt; bit1 config change — class drivers may soft-ignore.
+ * Bit0 queue interrupt; bit1 config change - class drivers may soft-ignore.
  */
 u8 virtio_isr_read(struct gj_virtio_dev *pDev);
 

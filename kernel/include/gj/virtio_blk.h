@@ -2,37 +2,50 @@
  * SPDX-License-Identifier: MIT OR Apache-2.0
  * Copyright (c) 2026 Project GreenJade contributors
  *
- * Clean-room virtio-blk (modern PCI) — pure C11 freestanding, dual license,
- * no GPL. Product storage path: request virtqueue (q0) sector R/W for
- * store_door / storaged / vfsd. OASIS virtio-blk layout numbers only;
- * no Linux virtio source.
+ * Clean-room virtio-blk (modern PCI) - pure C11 freestanding, dual license,
+ * no GPL. T0 product storage path: request virtqueue (q0) sector R/W for
+ * store_door / storaged / vfsd / UDX MAP_RING. OASIS virtio-blk layout
+ * numbers only; no Linux virtio source. Soft!=product residual.
  *
  * Queue layout (only queue used by this driver):
- *   q0 request — hdr (device-R) + data (R or W) + status (device-W)
+ *   q0 request - hdr (device-R) + data (R or W) + status (device-W)
  *                FLUSH: hdr + status only (no data desc)
  *
  * Request types (OASIS public; implemented in driver .c, not re-exported):
  *   T_IN=0 read, T_OUT=1 write, T_FLUSH=4 barrier
- * Status: S_OK=0, S_IOERR=1, S_UNSUP=2 (UNSUP on FLUSH → soft fsync success)
+ * Status: S_OK=0, S_IOERR=1, S_UNSUP=2 (UNSUP on FLUSH -> soft fsync success)
  *
- * Soft product depth (bring-up / smoke):
+ * Soft product depth (bring-up / smoke; Soft!=product):
  *   - queue stats (kicks, free watermark, multi-seg, flush counters)
  *   - multi-segment soft bounce (GJ_VIRTIO_BLK_SOFT_SEGS sectors / chain)
  *   - FLUSH/sync serial depth-1 (one outstanding barrier)
+ *   - lean residual: one-shot soft inventory (probe) + soft residual lean
+ *     (self-check + store_door/UDX handoff honesty); silent fail/API
+ *     counters; map_q lamp once. Never stamp-storm kprintf.
+ *
+ * T0 storage residual role (Soft!=product; dual MIT OR Apache-2.0):
+ *   QEMU virtio-blk is T0 product storage until UDX owns the request ring.
+ *   store_door EXPORT/MAP/KICK hand q0 to storaged/UDX without changing
+ *   sector semantics. product_store=UDX direction; freestanding residual
+ *   only (lamp != dual-license DoD close). G-AC-1.
  *
  * Bring-up lifecycle:
- *   virtio_pci_scan → probe first KIND_BLK → setup → negotiate VERSION_1
- *   → q_setup(q0) → driver_ok → capacity from device config (8-byte sectors)
+ *   virtio_pci_scan -> probe first KIND_BLK -> setup -> negotiate VERSION_1
+ *   -> q_setup(q0) -> driver_ok -> capacity from device config (8-byte sectors)
  *
  * Export: store_door MAP_RING uses export_q / map_q_user on request q0.
  *
  * Greppable markers (prefix-stable; serial in virtio_blk.c):
- *   "virtio-blk: ready …"
- *   "virtio-blk: soft queue stats …"
- *   "virtio-blk: soft multi-seg …"
- *   "virtio-blk: soft flush …"
+ *   "virtio-blk: ready ..."
+ *   "virtio-blk: soft inventory ..." (one-shot, Soft!=product)
+ *   "virtio-blk: soft residual lean ..." (one-shot lean self-check)
+ *   "virtio-blk: soft residual lean PASS"
+ *   "virtio-blk: map_q ..." (once)
  *
  * greppable: GJ_VIRTIO_BLK_ virtio_blk_probe virtio_blk_q_stats
+ * greppable: Soft!=product t0_storage store_door product_store=UDX
+ * greppable: virtio-blk: soft residual lean
+ * greppable: handoff=storaged|UDX | map_ring | export_map
  */
 #pragma once
 
@@ -111,9 +124,9 @@ int  virtio_blk_write(u64 u64Sector, const void *pBuf, u32 cbLen);
 
 /**
  * FLUSH / fsync-shaped barrier on the request queue (OASIS T_FLUSH).
- * Depth-1 serial soft path (one outstanding). Device S_UNSUP → soft
+ * Depth-1 serial soft path (one outstanding). Device S_UNSUP -> soft
  * success (fsync-shaped) and increments flush_soft. Hard failure:
- * timeout / q_add fail → -1. Returns 0 on OK/soft, -1 hard.
+ * timeout / q_add fail -> -1. Returns 0 on OK/soft, -1 hard.
  */
 int  virtio_blk_flush(void);
 

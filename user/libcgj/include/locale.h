@@ -18,6 +18,15 @@
  * Non-goals
  * ---------
  * Full ICU/tzdata-backed locale databases.
+ *
+ * Soft residual (C2 libcgj locale.h; Soft!=product; G-AC-1; Dual DoD A/B OPEN):
+ *   soft     = setlocale/localeconv + newlocale/uselocale/duplocale/freelocale
+ *              C/POSIX objects only; non-C names may still return "C"
+ *   product  = UDX/DDI + hot/cold ABI hosts; not freestanding class; not .ko AC
+ *   honesty  = C-locale soft != full glibc locale product; agent PASS != Dual DoD
+ *              close; stamp-free bar honesty (no version stamp)
+ *   law      = dual MIT OR Apache-2.0; no GPL; H2 no stamp storms
+ * greppable: libcgj: locale soft residual Soft!=product
  */
 #pragma once
 

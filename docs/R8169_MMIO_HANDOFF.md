@@ -2,14 +2,27 @@
 
 | Field | Value |
 |-------|--------|
-| **Status** | **4a hybrid eng PROVEN** lab evidence: `HYBRID WIRE=FS SOFT=R8169` · `L2 BR RX=2`; Phase **0** live gate **0**; Phases **1–3** stubs; **4b** OPEN |
-| **Gate** | `GJ_SOFT_R8169_MMIO_HANDOFF` — **default 0** (hybrid is the default proven lab path) |
+| **Status** | Hybrid **SOFT gate0** default (Phase **0** live; Phases **1–3** stubs; **4b** OPEN). **Earlier lab:** 4a eng + freestanding **ICMP proven** (`HYBRID WIRE=FS SOFT=R8169` · L2 RX live). **Recent boots:** freestanding RX may regress to **R0/R1** — re-verify after flash; not continuous-pass claim. Dual laptop DoD **B** (sshd **:22**) remains **OPEN** until DUT proof ([TODO.md](TODO.md)). |
+| **Gate** | `GJ_SOFT_R8169_MMIO_HANDOFF` — **default 0** (hybrid SOFT gate0 is the default lab path) |
 | **Soft load gate** | `GJ_SOFT_R8169_LOAD` — **default 1** (boot load/init of embed/media `r8169.ko`; set **0** for freestanding-only net prove) |
 | **Option B gate** | `GJ_SOFT_R8169_KO_NDO_OPEN` — **default 0** (needs handoff gate 1 + layout confidence) |
-| **Law** | Dual **MIT OR Apache-2.0**; Soft ≠ product; **G-AC-1** |
+| **Law** | Dual **MIT OR Apache-2.0**; Soft ≠ product; **G-AC-1** (no `.ko` as product AC) |
 | **Companion** | [LINUX_MODULE_PATH.md](LINUX_MODULE_PATH.md) **D7**; [TODO.md](TODO.md) Current track |
+| **Image stamp** | **STATUS (static) vYYYY.MM.DD.N** via `GJ_IMAGE_VERSION` — confirm cut before net claims |
 
-**Honesty:** Soft-loaded host `.ko` is an engineering path on lab media. It is **not** product AC and **not** bar3. Enabling the handoff gate on a laptop can drop freestanding net until soft open is proven. **Phase-4a hybrid** (gate0) is the pragmatic eng claim: Linux driver **hosted**, freestanding **datapath** — still Soft ≠ product / **G-AC-1**.
+**Honesty:** Soft-loaded host `.ko` is an engineering path on lab media. It is **not** product AC and **not** bar3. Enabling the handoff gate on a laptop can drop freestanding net until soft open is proven. **Phase-4a hybrid** (**SOFT gate0**) is the pragmatic eng path: Linux driver **hosted**, freestanding **datapath** — still Soft ≠ product / **G-AC-1**. Earlier ICMP proof does **not** close dual DoD **B** (:22). No test-panel photo IDs.
+
+### Product bar: in-kernel Linux r8169 owns the wire — **DEFERRED / G-AC-1**
+
+| Claim | Status |
+|-------|--------|
+| **Linux `.ko` binary runs in kernel** (REAL `init` / product datapath) and owns BAR/TX/RX | **Forbidden as product** (**G-AC-1**). Not “never use Linux drivers.” |
+| **Product NIC path** | **Userspace** Linux-shaped driver over **hot + cold** ABI / DDI·UDX (MMIO/IRQ/DMA caps) |
+| T0 product net (interim) | **virtio-net** |
+| Lab dual DoD **B** (now) | Freestanding **`rtl8168` + stack** until UDX net is ready |
+| Soft kernel r8169 work | Optional eng residual (ksym, gate0 hybrid, hostish diagnostics) — Soft ≠ product; **do not** treat as “load and run `.ko` in kernel” product |
+
+Operator note (2026-08-05): dual-DoD lab **does not** require proving “r8169.ko runs in-kernel and owns the wire.” Product goal remains **Linux drivers in userspace** with matching hot/cold calls — not freestanding-only forever, and not in-kernel GPL `.ko` exec.
 
 ### Hybrid reclaim (2026-08-04)
 
@@ -361,8 +374,8 @@ Boot G752 with default build (no handoff flags). After r8169 REAL+SOFT1:
 5. Firmware real load (still ENOENT — module-path; not this file’s sole owner)  
 6. Lab panel/serial: hold14 live + (elsewhere) `source=media`
 
-Leave gate **0** on all default images — **hybrid is the default proven lab path**. Enable handoff only for deliberate 4b lab.
+Leave gate **0** on all default images — **hybrid SOFT gate0** is the default lab path. Enable handoff only for deliberate 4b lab. After flash, check **STATUS (static) v…** (`GJ_IMAGE_VERSION`) and re-verify freestanding RX (recent boots may show **R0/R1** even when ICMP was proven earlier). Dual DoD **B** sshd **:22** stays **OPEN** until DUT proof — not a product AC.
 
 ---
 
-*Dual MIT OR Apache-2.0. Soft ≠ product. G-AC-1: no `.ko` as product AC.*
+*Dual MIT OR Apache-2.0. Soft ≠ product. G-AC-1: no `.ko` as product AC. No test-panel photo IDs.*

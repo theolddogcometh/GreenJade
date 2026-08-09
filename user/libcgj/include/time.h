@@ -20,6 +20,17 @@
  * ---------
  * Full tzdb leap-second policy and every obscure clock id.
  * See docs/GLIBC_COMPAT.md.
+ *
+ * Soft residual (C2 libcgj header; Soft!=product; G-AC-1; Dual DoD A/B OPEN):
+ *   soft path  = clock_gettime/nanosleep/timers + UTC/C tz soft fill
+ *   product    = full tzdb + product clock domains (OPEN; not closed here)
+ *   catalog    = CLOCK_* TIMER_ABSTIME TIME_UTC + timespec/timeval/tm +
+ *                timer_create/settime + strftime/strptime soft surface
+ *   honesty    = Soft!=product; bring-up local==UTC residual; no .ko product
+ *   Bar honesty v2026.08.04.75. NEVER bump GJ_IMAGE_VERSION from this unit.
+ * greppable: libcgj: soft residual time
+ * greppable: libcgj: soft residual time Soft!=product
+ * Dual MIT OR Apache-2.0. No GPL. G-AC-1. Dual DoD A/B OPEN.
  */
 #pragma once
 
@@ -36,6 +47,14 @@ extern "C" {
 #define CLOCK_MONOTONIC          1
 #define CLOCK_PROCESS_CPUTIME_ID 2
 #define CLOCK_THREAD_CPUTIME_ID  3
+/* Linux soft residual clock ids (Soft!=product; may ENOSYS until wired) */
+#define CLOCK_MONOTONIC_RAW      4
+#define CLOCK_REALTIME_COARSE    5
+#define CLOCK_MONOTONIC_COARSE   6
+#define CLOCK_BOOTTIME           7
+#define CLOCK_REALTIME_ALARM     8
+#define CLOCK_BOOTTIME_ALARM     9
+#define CLOCK_TAI                11
 
 /* timer_settime / clock_nanosleep absolute flag */
 #define TIMER_ABSTIME 1

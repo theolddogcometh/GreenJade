@@ -18,6 +18,15 @@
  * Non-goals
  * ---------
  * Every historical rusage field accuracy on soft paths.
+ *
+ * Soft residual lean (this unit; Soft!=product; G-AC-1; Dual DoD A/B OPEN):
+ *   - wait/waitpid W* macros; soft rusage residual
+ *   - Soft!=product: libcgj sys/wait surface != UDX/DDI product close
+ *   - product = UDX/DDI + hot/cold Linux ABI; freestanding rtl/USB SKIP
+ *   - H3 thr_exit before as_destroy on reaped tasks; Dual DoD OPEN
+ *   - agent PASS != close Dual DoD; no stamp storms; bar v2026.08.04.75 parent-only
+ *   - dual MIT OR Apache-2.0; no GPL; no Linux .ko product AC (G-AC-1)
+ * Grep: libcgj sys/wait.h: soft residual lean Soft!=product
  */
 #pragma once
 

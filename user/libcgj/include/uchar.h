@@ -21,6 +21,16 @@
  * ---------
  * Full POSIX/Linux completeness; stubs and soft fills may return ENOSYS
  * until the hybrid ABI path is wired. See docs/GLIBC_COMPAT.md.
+ *
+ * Soft residual (C2 libcgj header; Soft!=product; G-AC-1; Dual DoD A/B OPEN):
+ *   soft path  = C11 char16/char32 restartable conversion (UTF-8 bring-up)
+ *   product    = full locale multibyte state machines (OPEN; not here)
+ *   catalog    = c16rtomb c32rtomb mbrtoc16 mbrtoc32 + char16_t/char32_t
+ *   honesty    = Soft!=product; complements wchar soft surface; no .ko AC
+ *   Bar honesty v2026.08.04.75. NEVER bump GJ_IMAGE_VERSION from this unit.
+ * greppable: libcgj: soft residual uchar
+ * greppable: libcgj: soft residual uchar Soft!=product
+ * Dual MIT OR Apache-2.0. No GPL. G-AC-1. Dual DoD A/B OPEN.
  */
 #pragma once
 

@@ -21,6 +21,16 @@
  * ---------
  * Full POSIX/Linux completeness; stubs and soft fills may return ENOSYS
  * until the hybrid ABI path is wired. See docs/GLIBC_COMPAT.md.
+ *
+ * Soft residual (C2 libcgj header; Soft!=product; G-AC-1; Dual DoD A/B OPEN):
+ *   soft path  = wordexp/wordfree single-word no-meta soft split
+ *   product    = full shell meta expansion product (OPEN; not closed here)
+ *   catalog    = WRDE_* flags/errors + wordexp_t + wordexp/wordfree
+ *   honesty    = Soft!=product; meta chars soft WRDE_BADCHAR residual
+ *   Bar honesty v2026.08.04.75. NEVER bump GJ_IMAGE_VERSION from this unit.
+ * greppable: libcgj: soft residual wordexp
+ * greppable: libcgj: soft residual wordexp Soft!=product
+ * Dual MIT OR Apache-2.0. No GPL. G-AC-1. Dual DoD A/B OPEN.
  */
 #pragma once
 

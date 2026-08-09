@@ -21,6 +21,15 @@
  * ---------
  * Full POSIX/Linux completeness; stubs and soft fills may return ENOSYS
  * until the hybrid ABI path is wired. See docs/GLIBC_COMPAT.md.
+ *
+ * Soft residual (C2 libcgj netinet/ether.h; Soft!=product; G-AC-1; Dual DoD A/B OPEN):
+ *   soft     = ether_aton/ntoa/ntoa_r/line/hostton pure MAC string helpers
+ *   product  = Dual DoD B wire = rtl8168_udx + DDI (OPEN); freestanding rtl SKIP
+ *   honesty  = ether_* soft != product L2 ownership; agent PASS != Dual DoD close;
+ *              stamp-free bar honesty (no version stamp); G-AC-1 no .ko AC
+ *   law      = dual MIT OR Apache-2.0; no GPL; H1 no net_eth_poll from IRQ;
+ *              H2 no stamp storms
+ * greppable: libcgj: netinet/ether soft residual Soft!=product
  */
 #pragma once
 

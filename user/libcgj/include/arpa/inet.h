@@ -18,6 +18,16 @@
  * Non-goals
  * ---------
  * Classful legacy network macros beyond common app needs.
+ *
+ * Soft residual (C2 libcgj arpa/inet.h; Soft!=product; G-AC-1; Dual DoD A/B OPEN):
+ *   soft     = inet_pton/ntop/aton/ntoa/addr/network/makeaddr + net_ntop/pton
+ *              pure string/addr compute; no socket I/O; no wire ownership
+ *   product  = Dual DoD B wire = rtl8168_udx + DDI (OPEN); freestanding rtl SKIP
+ *   honesty  = address helpers != product NIC/stack close; agent PASS != Dual
+ *              DoD close; stamp-free bar honesty (no version stamp)
+ *   law      = dual MIT OR Apache-2.0; no GPL; H1 no net_eth_poll from IRQ;
+ *              H2 no stamp storms
+ * greppable: libcgj: arpa/inet soft residual Soft!=product
  */
 #pragma once
 

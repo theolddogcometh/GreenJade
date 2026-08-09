@@ -21,6 +21,14 @@
  * ---------
  * Full POSIX/Linux completeness; stubs and soft fills may return ENOSYS
  * until the hybrid ABI path is wired. See docs/GLIBC_COMPAT.md.
+ *
+ * Soft residual (C2 libcgj inttypes.h; Soft!=product; G-AC-1; Dual DoD A/B OPEN):
+ *   soft     = PRI*/SCN* format macros + imaxabs/imaxdiv/strtoimax subset
+ *   product  = UDX/DDI + hot/cold ABI hosts; not freestanding class; not .ko AC
+ *   honesty  = format catalog != product printf completeness; agent PASS != Dual
+ *              DoD close; stamp-free bar honesty (no version stamp)
+ *   law      = dual MIT OR Apache-2.0; no GPL; H2 no stamp storms
+ * greppable: libcgj: inttypes soft residual Soft!=product
  */
 #pragma once
 

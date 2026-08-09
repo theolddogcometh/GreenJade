@@ -3,7 +3,7 @@
  * Copyright (c) 2026 Project GreenJade contributors
  *
  * PE32/PE32+ header + section parse (clean-room MS PE layout) for WoW64 /
- * Proton bring-up. Pure C; dual MIT OR Apache-2.0 — no Wine/GPL paste.
+ * Proton bring-up. Pure C; dual MIT OR Apache-2.0 - no Wine/GPL paste.
  *
  * -------------------------------------------------------------------------
  * Role
@@ -14,15 +14,15 @@
  *
  * Product pipeline (typical)
  * --------------------------
- *   pe32_parse → pe32_parse_sections → pe32_image_stage
- *     → pe32_load_soft_validate → pe32_load_soft_va / pe32_soft_relocate
- *     → pe32_map_user or pe32_load_process → thread_create_user32
+ *   pe32_parse -> pe32_parse_sections -> pe32_image_stage
+ *     -> pe32_load_soft_validate -> pe32_load_soft_va / pe32_soft_relocate
+ *     -> pe32_map_user or pe32_load_process -> thread_create_user32
  *
  * Soft-exec / compat (no GPL PE loaders)
  * --------------------------------------
- *   pe32_i386_soft_exec — tiny interpreter for smoke exit/int80 sequences
- *   pe32_compat_*       — iret frame prep + GDT CS32 validate (hw enter later)
- *   pe32_hw_*           — hardware CS32 enter / int80 surface smokes
+ *   pe32_i386_soft_exec - tiny interpreter for smoke exit/int80 sequences
+ *   pe32_compat_*       - iret frame prep + GDT CS32 validate (hw enter later)
+ *   pe32_hw_*           - hardware CS32 enter / int80 surface smokes
  *
  * greppable: pe32: compat  pe32: int80  pe32: hw ready  pe32: vfs load
  *            pe32: enter prep  pe32_smoke pe32_spawn_smoke pe32_wow64_smoke
@@ -183,7 +183,7 @@ int pe32_compat_frame_prepare(u64 u64Entry32, u64 u64Stack32, u64 *pFrameOut,
 /**
  * Soft-execute a tiny i386 PE payload from staged image (no real 32-bit CS).
  * Recognizes clean-room sequences used in smokes / load soft paths:
- *   mov eax,1; xor ebx,ebx; int 0x80  → exit via i386 Linux NR 1 / 252
+ *   mov eax,1; xor ebx,ebx; int 0x80  -> exit via i386 Linux NR 1 / 252
  *   int 0x80 subset: read/write/open/close/brk/mmap2(90|192)/path-ish NRs
  * Soft stack (push/pop/call/ret), jcc/ZF, lea-less reg-reg mov, PE prologues.
  * Soft mmap2 returns synthetic VA 0x57000000 (matches hw int80 mmap band).
@@ -216,7 +216,7 @@ int pe32_compat_hw_ready(void);
 /**
  * Soft-iretq bridge: prepare frame on stack page, "pop" RIP/CS/RFLAGS/RSP/SS
  * and soft-execute image at entry (no real privilege/CS change).
- * Proves enter_prep → soft-exec pipeline for PE32 smoke payloads.
+ * Proves enter_prep -> soft-exec pipeline for PE32 smoke payloads.
  */
 int pe32_compat_soft_iretq(const void *pImage, u32 cbImage, u32 u32EntryRva,
                            void *pStackMem, u32 cbStack, i32 *pExitCode);
@@ -242,8 +242,8 @@ u32 pe32_int80_last_nr(void);
 
 /**
  * Hardware PE32 int80 surface smoke (CS32):
- *   exit → trap logs "pe32: int80 exit PASS"
- *   getpid+exit, multi-NR, mmap2, pipe/socket, path open/fstat/vfs_io, …
+ *   exit -> trap logs "pe32: int80 exit PASS"
+ *   getpid+exit, multi-NR, mmap2, pipe/socket, path open/fstat/vfs_io, ...
  * Greppable PASS markers must stay stable for scripts/smoke-all.sh.
  */
 int pe32_hw_int80_smoke(void);

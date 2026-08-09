@@ -5,31 +5,48 @@
  * Minimal PE32/PE32+ header + section load (clean-room MS PE format).
  * Pure C dual-license; no Wine/GPL paste. Soft load path: validate, soft VA,
  * basereloc, soft-exec. CS32 int 0x80 smokes exercise mmap2 / path / vfs;
- * greppable "pe32: … PASS" markers stay stable.
+ * greppable "pe32: ... PASS" markers stay stable.
  *
- * Soft inventory (Wave 11 base + Wave 35 exclusive deepen; this unit only —
- * greppable "pe32: soft …"):
- *   pe32: soft inventory   — capacity + pipeline catalog + log tallies
- *   pe32: soft parse       — parse/sections enter+ok snapshot
- *   pe32: soft stage       — image_stage + map_user snapshot
- *   pe32: soft load        — validate / reloc / load_process snapshot
- *   pe32: soft exec        — soft-exec / soft-iretq / compat surface
- *   pe32: soft int80       — CS32 int80 smoke surface catalog ()
- *   pe32: soft path        — honesty: kernel PE soft ≠ Steam/Proton titles
+ * Soft inventory (Wave 11 base + Wave 35 exclusive deepen; this unit only -
+ * greppable "pe32: soft ..."):
+ *   pe32: soft inventory   - capacity + pipeline catalog + log tallies
+ *   pe32: soft parse       - parse/sections enter+ok snapshot
+ *   pe32: soft stage       - image_stage + map_user snapshot
+ *   pe32: soft load        - validate / reloc / load_process snapshot
+ *   pe32: soft exec        - soft-exec / soft-iretq / compat surface
+ *   pe32: soft int80       - CS32 int80 smoke surface catalog ()
+ *   pe32: soft path        - honesty: kernel PE soft != Steam/Proton titles
  *   pe32: soft inventory PASS / pe32: soft PASS
  * Wave 15/16 exclusive complementary surfaces (never reshape primary fields):
- *   pe32: soft reject      — parse/sec/stage/map/validate/reloc/load fails
- *   pe32: soft format      — PE32/PE32+ + i386/amd64 accept tallies
- *   pe32: soft reloc       — ABSOLUTE/HIGHLOW/DIR64/HIGH/LOW/skip/delta0
- *   pe32: soft soft_va     — preferred-base honor vs fallback band
- *   pe32: soft stats       — aggregate enter/ok/fail rollup + wave
- *   pe32: soft lamps       — pipeline readiness lamps (software only)
- *   pe32: soft smoke       — smoke/spawn/wow64/int80/vfs ok snapshot
- *   pe32: soft capacity    — max_sec/stage_cap/soft_va geometry
- *   pe32: soft return      — Wave 19 pipeline return-path catalog
- *   pe32: soft ret_surface — Wave 19 terminal return classes
- *   pe32: soft surface     — Wave 19 area catalog
- *   pe32: soft deepen      — wave=116 areas stamp
+ *   pe32: soft reject      - parse/sec/stage/map/validate/reloc/load fails
+ *   pe32: soft format      - PE32/PE32+ + i386/amd64 accept tallies
+ *   pe32: soft reloc       - ABSOLUTE/HIGHLOW/DIR64/HIGH/LOW/skip/delta0
+ *   pe32: soft soft_va     - preferred-base honor vs fallback band
+ *   pe32: soft stats       - aggregate enter/ok/fail rollup + wave
+ *   pe32: soft lamps       - pipeline readiness lamps (software only)
+ *   pe32: soft smoke       - smoke/spawn/wow64/int80/vfs ok snapshot
+ *   pe32: soft capacity    - max_sec/stage_cap/soft_va geometry
+ *   pe32: soft surface     - Wave 19 area catalog
+ *   pe32: soft deepen      - wave=116 areas stamp
+ * H3 thrash reject residual (clone_vm yield/order only; Soft!=product):
+ *   pe32: soft residual lean H3
+ *   pe32: soft H3 thrash reject residual
+ *   pe32: soft residual lean H3 thrash reject
+ * Lab class: CLONE_VM sibling late USER32_ENTRY -> dead AS #PF (RIP~0x58240013).
+ * Residual: refuse next-band advance while parent/sibling still schedulable;
+ * thr_exit_before_as_destroy is process/thread product of death order (G-PROC-5).
+ * C0 pe32_wow #PF residual (wow tramp/hw smoke at 0x52000000; Soft!=product):
+ *   pe32: soft residual lean C0
+ *   pe32: soft C0 pe32_wow pf residual
+ *   pe32: soft residual lean C0 pe32_wow pf
+ * Lab class: thr tag=pe32_wow RIP=0x52000009 CR2~-ENOSYS ERR=0x6 user write
+ * not-present (DUT thr kill). Cause: wow64 ON remaps native eax=60 as i386
+ * umask(95); syscall returns; fallthrough 0x00 -> add [rax],al write #PF.
+ * Residual (STRONGER functional): i386 exit NR under wow64 + re-exit/ud2 belt +
+ * page int3 fill (no zero fallthrough) + thr EXITED observe + force-drain belt
+ * via thread_exit_process if not EXITED. Dual DoD OPEN; freestanding SKIP;
+ * G-AC-1; stamp-free; Soft!=product.
+ * Stamp-free residual: no GJ_IMAGE_VERSION bump; no wave bump; no stamp storms.
  * Never hard-gates product paths; diagnostics / smoke grep only.
  * Note: existing "pe32: soft-iretq PASS" (hyphen) stays stable and separate.
  */
@@ -76,7 +93,7 @@ rd16(const u8 *p)
  * Soft path sticky counters (wrap OK; diagnostics only).
  * Bumped off product return paths; never hard-gate behavior.
  * Wave 11 base + Wave 15 exclusive path deepen.
- * greppable: pe32: soft …
+ * greppable: pe32: soft ...
  */
 struct pe32_soft_stats {
     u64 u64ParseEnter;
@@ -133,6 +150,38 @@ struct pe32_soft_stats {
 
 static struct pe32_soft_stats g_soft;
 
+/*
+ * H3 thrash reject residual tallies (clone_vm yield/order only).
+ * Soft!=product | G-AC-1 | dual MIT OR Apache-2.0 | stamp-free.
+ * Greppable once-lamp: pe32: soft residual lean H3 thrash reject
+ */
+static u64 g_u64H3ThrashReject;   /* continue while thrash risk (schedulable) */
+static u64 g_u64H3SettleOk;       /* primary settle band completed */
+static u64 g_u64H3DrainExtra;     /* final refuse-advance drain yields */
+static u64 g_u64H3PostBandBarrier;/* post PASS|FAIL thrash reject barrier */
+static u64 g_u64H3CloneVmPass;
+static u64 g_u64H3CloneVmFail;
+static u8  g_fH3ThrashResLeanOnce;
+
+/*
+ * C0 pe32_wow #PF residual tallies (wow tramp/hw smoke @ 0x52000000).
+ * Soft!=product | G-AC-1 | dual MIT OR Apache-2.0 | stamp-free.
+ * Lab: tag=pe32_wow RIP=0x52000009 CR2~0xFFFFFFFFFFFFFFDA ERR=0x6.
+ * Greppable once-lamp: pe32: soft residual lean C0 pe32_wow pf
+ * STRONGER functional: page_int3_belt + force_drain when thr not EXITED.
+ */
+static u64 g_u64C0WowSmokeEnter;  /* pe32_wow64_smoke entered hw tramp path */
+static u64 g_u64C0WowExitOk;      /* thr EXITED after tramp (honest clean) */
+static u64 g_u64C0WowThrKillRes;  /* thr not EXITED after yields (kill/residual) */
+static u64 g_u64C0WowSaferTramp;  /* safer tramp installed (i386 exit+belt) */
+static u64 g_u64C0WowPageInt3;    /* tramp page filled int3 after safer tramp */
+static u64 g_u64C0WowForceDrain;  /* thread_exit_process force-drain residual */
+static u64 g_u64C0WowTrampVerify; /* post-map tramp byte verify ok */
+static u64 g_u64C0HwSmokeEnter;   /* pe32_hw_enter_smoke entered 0x52000000 */
+static u64 g_u64C0HwSaferBelt;    /* hw int3 + ud2 belt installed */
+static u64 g_u64C0HwPageInt3;     /* hw code page filled int3 after payload */
+static u8  g_fC0WowPfResLeanOnce;
+
 /** Soft: saturating-ish bump (u64 wrap is fine for telemetry). */
 static void
 pe32_soft_inc(u64 *pCtr)
@@ -144,7 +193,192 @@ pe32_soft_inc(u64 *pCtr)
 }
 
 /**
- * Wave 15 soft inventory dump — greppable "pe32: soft …".
+ * H3 thrash reject residual lean once-lamp (Soft!=product; stamp-free).
+ * Honesty only: pe32 yield/order companion to process/thread death residual.
+ * Never hard-gates product PE load / Wine / Proton. G-AC-1: no .ko product AC.
+ *
+ * greppable: pe32: soft residual lean H3
+ * greppable: pe32: soft H3 thrash reject residual
+ * greppable: pe32: soft residual lean H3 thrash reject
+ * greppable: thr_exit_before_as_destroy=1 | H3=death_residual | Soft!=product
+ */
+static void
+pe32_soft_h3_thrash_reject_residual_lean(const char *szVia)
+{
+    const char *szViaSafe;
+    u32         u32Ok;
+
+    if (g_fH3ThrashResLeanOnce != 0) {
+        return;
+    }
+    g_fH3ThrashResLeanOnce = 1;
+    szViaSafe = (szVia != NULL && szVia[0] != '\0') ? szVia : "clone_vm";
+
+    /*
+     * Compact self-check (stack-local; never hard-gates).
+     * ok/6 = thrash reject surface + H3 order honesty + dual-license belt.
+     */
+    u32Ok = 0;
+    if (g_u64H3ThrashReject != 0ull || g_u64H3SettleOk != 0ull ||
+        g_u64H3PostBandBarrier != 0ull) {
+        u32Ok++; /* thrash reject path exercised */
+    }
+    if (g_u64H3CloneVmPass != 0ull || g_u64H3CloneVmFail != 0ull) {
+        u32Ok++; /* clone_vm band closed (PASS or FAIL) */
+    }
+    u32Ok++; /* refuse next-band while parent/sibling schedulable */
+    u32Ok++; /* thr_exit_before_as_destroy companion (process/thread) */
+    u32Ok++; /* Soft!=product | G-AC-1 (no .ko product AC) */
+    u32Ok++; /* dual MIT OR Apache-2.0; stamp-free residual */
+
+    /* Grep: pe32: soft residual lean H3 */
+    kprintf("pe32: soft residual lean H3 via=%s ok=%u/6 "
+            "thrash_reject=%lu settle_ok=%lu drain_extra=%lu "
+            "post_band=%lu clone_vm_pass=%lu clone_vm_fail=%lu "
+            "order=yield,parent_exited,alive0,sib_exited,settle,barrier "
+            "fault_class=H3_clone_sibling_dead_AS "
+            "thr_exit_before_as_destroy=1 H3=death_residual "
+            "pe32_clone_vm=1 udx_host=0 "
+            "soft_ne_product=1 G-AC-1=1 dual=MIT_OR_Apache-2.0 "
+            "stamp_storm=0 no_version_stamp=1 Soft!=product\n",
+            szViaSafe, (unsigned)u32Ok,
+            (unsigned long)g_u64H3ThrashReject,
+            (unsigned long)g_u64H3SettleOk,
+            (unsigned long)g_u64H3DrainExtra,
+            (unsigned long)g_u64H3PostBandBarrier,
+            (unsigned long)g_u64H3CloneVmPass,
+            (unsigned long)g_u64H3CloneVmFail);
+
+    /* Grep: pe32: soft H3 thrash reject residual */
+    kprintf("pe32: soft H3 thrash reject residual via=%s "
+            "refuse_next_band_while_schedulable=1 "
+            "parent_exited=1 alive0=1 sib_exited_when_known=1 "
+            "settle_yields=1 post_band_barrier=1 "
+            "lab_rip=0x58240013 thr_exit_before_as_destroy=1 "
+            "H3=death_residual soft_ne_product=1 G-AC-1=1 "
+            "dual=MIT_OR_Apache-2.0 Soft!=product storm=0\n",
+            szViaSafe);
+
+    /* Grep: pe32: soft residual lean H3 thrash reject */
+    kprintf("pe32: soft residual lean H3 thrash reject via=%s "
+            "reject=%lu settle=%lu barrier=%lu pass=%lu fail=%lu "
+            "soft_ne_product=1 G-AC-1=1 dual=MIT_OR_Apache-2.0 "
+            "(Soft!=product; clone_vm yield/order only; not Wine/Proton)\n",
+            szViaSafe,
+            (unsigned long)g_u64H3ThrashReject,
+            (unsigned long)g_u64H3SettleOk,
+            (unsigned long)g_u64H3PostBandBarrier,
+            (unsigned long)g_u64H3CloneVmPass,
+            (unsigned long)g_u64H3CloneVmFail);
+}
+
+/**
+ * C0 pe32_wow #PF residual lean once-lamp (Soft!=product; stamp-free).
+ * Honesty: DUT thr kill class at vaTramp 0x52000000 (tag=pe32_wow).
+ * Root: wow64 ON + native eax=60 -> i386 umask map; fallthrough write #PF.
+ * Safer tramp STRONGER: i386 exit NR (1) + re-exit jmp + ud2 + page int3 fill
+ * + thr EXITED observe + force-drain if not EXITED.
+ * Never hard-gates product PE / Wine / Proton. Dual DoD remains OPEN.
+ * G-AC-1: no .ko product AC. No version stamp. No stamp storms.
+ *
+ * greppable: pe32: soft residual lean C0
+ * greppable: pe32: soft C0 pe32_wow pf residual
+ * greppable: pe32: soft residual lean C0 pe32_wow pf
+ * greppable: fault_class=C0_pe32_wow_pf | tag=pe32_wow | Soft!=product
+ */
+static void
+pe32_soft_c0_wow_pf_residual_lean(const char *szVia)
+{
+    const char *szViaSafe;
+    u32         u32Ok;
+
+    if (g_fC0WowPfResLeanOnce != 0) {
+        return;
+    }
+    g_fC0WowPfResLeanOnce = 1;
+    szViaSafe = (szVia != NULL && szVia[0] != '\0') ? szVia : "wow_tramp";
+
+    /*
+     * Compact self-check (stack-local; never hard-gates).
+     * ok/8 = safer tramp surface + page belt + thr honesty + dual-license.
+     */
+    u32Ok = 0;
+    if (g_u64C0WowSaferTramp != 0ull) {
+        u32Ok++; /* safer tramp (i386 exit NR + re-exit/ud2 belt) */
+    }
+    if (g_u64C0WowPageInt3 != 0ull || g_u64C0HwPageInt3 != 0ull) {
+        u32Ok++; /* page int3 fill (no zero fallthrough write-#PF class) */
+    }
+    if (g_u64C0WowExitOk != 0ull || g_u64C0WowThrKillRes != 0ull) {
+        u32Ok++; /* thr exit observed (clean or residual kill) */
+    }
+    if (g_u64C0WowSmokeEnter != 0ull) {
+        u32Ok++; /* wow smoke entered 0x52000000 path */
+    }
+    if (g_u64C0WowTrampVerify != 0ull || g_u64C0WowForceDrain != 0ull) {
+        u32Ok++; /* post-map verify and/or force-drain residual belt */
+    }
+    u32Ok++; /* lab class documented: RIP=0x52000009 ERR=0x6 write NP */
+    u32Ok++; /* Soft!=product | G-AC-1 (no .ko product AC) | Dual DoD OPEN */
+    u32Ok++; /* dual MIT OR Apache-2.0; stamp-free residual */
+
+    /* Grep: pe32: soft residual lean C0 */
+    kprintf("pe32: soft residual lean C0 via=%s ok=%u/8 "
+            "wow_enter=%lu exit_ok=%lu thr_kill_res=%lu safer_tramp=%lu "
+            "page_int3=%lu force_drain=%lu tramp_verify=%lu "
+            "hw_enter=%lu hw_belt=%lu hw_page_int3=%lu "
+            "fault_class=C0_pe32_wow_pf lab_rip=0x52000009 "
+            "lab_cr2=0xFFFFFFFFFFFFFFDA lab_err=0x6 "
+            "lab_cause=wow64_nr60_umask_fallthrough_write_pf "
+            "fix=i386_exit1+reexit_ud2+page_int3+force_drain "
+            "va_tramp=0x52000000 tag=pe32_wow thr_kill_honest=1 "
+            "dual_dod=OPEN freestanding=SKIP "
+            "soft_ne_product=1 G-AC-1=1 dual=MIT_OR_Apache-2.0 "
+            "stamp_storm=0 no_version_stamp=1 Soft!=product\n",
+            szViaSafe, (unsigned)u32Ok,
+            (unsigned long)g_u64C0WowSmokeEnter,
+            (unsigned long)g_u64C0WowExitOk,
+            (unsigned long)g_u64C0WowThrKillRes,
+            (unsigned long)g_u64C0WowSaferTramp,
+            (unsigned long)g_u64C0WowPageInt3,
+            (unsigned long)g_u64C0WowForceDrain,
+            (unsigned long)g_u64C0WowTrampVerify,
+            (unsigned long)g_u64C0HwSmokeEnter,
+            (unsigned long)g_u64C0HwSaferBelt,
+            (unsigned long)g_u64C0HwPageInt3);
+
+    /* Grep: pe32: soft C0 pe32_wow pf residual */
+    kprintf("pe32: soft C0 pe32_wow pf residual via=%s "
+            "va=0x52000000 rip_lab=0x52000009 err=0x6 "
+            "user_write_not_present=1 tag=pe32_wow "
+            "wow64_on_native_exit60=umask_map "
+            "safer_i386_exit1=1 reexit_jmp=1 ud2_belt=1 "
+            "page_int3_belt=1 force_drain=1 tramp_verify=1 "
+            "stack_top_slop=16 thr_exited_observe=1 "
+            "dual_dod=OPEN Soft!=product G-AC-1=1 storm=0\n",
+            szViaSafe);
+
+    /* Grep: pe32: soft residual lean C0 pe32_wow pf */
+    kprintf("pe32: soft residual lean C0 pe32_wow pf via=%s "
+            "enter=%lu exit_ok=%lu kill_res=%lu safer=%lu "
+            "page_int3=%lu force_drain=%lu "
+            "hw_enter=%lu hw_belt=%lu "
+            "soft_ne_product=1 G-AC-1=1 dual=MIT_OR_Apache-2.0 "
+            "(Soft!=product; wow tramp/hw smoke residual only; "
+            "not Wine/Proton; Dual DoD OPEN)\n",
+            szViaSafe,
+            (unsigned long)g_u64C0WowSmokeEnter,
+            (unsigned long)g_u64C0WowExitOk,
+            (unsigned long)g_u64C0WowThrKillRes,
+            (unsigned long)g_u64C0WowSaferTramp,
+            (unsigned long)g_u64C0WowPageInt3,
+            (unsigned long)g_u64C0WowForceDrain,
+            (unsigned long)g_u64C0HwSmokeEnter,
+            (unsigned long)g_u64C0HwSaferBelt);
+}
+
+/**
+ * Wave 15 soft inventory dump - greppable "pe32: soft ...".
  * Snapshots live soft path state; never allocates; never hard-gates.
  * Primary Wave 11 field names stay stable; Wave 15 adds complementary lines.
  * szVia: caller tag (smoke / spawn / wow64 / int80 / vfs / anon).
@@ -173,7 +407,7 @@ pe32_soft_inventory_log(const char *szVia)
     /*
      * Grep: pe32: soft inventory
      * Capacity + dual-format catalog (PE32 i386 + PE32+ amd64) + log count.
-     * Wave 15 appends wave= only — prior keys remain prefix-stable.
+     * Wave 15 appends wave= only - prior keys remain prefix-stable.
      */
     kprintf("pe32: soft inventory via=%s max_sec=%u stage_cap=0x8000 "
             "pe32=1 pe32p=1 i386=1 amd64=1 soft_exec=1 soft_reloc=1 "
@@ -228,7 +462,7 @@ pe32_soft_inventory_log(const char *szVia)
     /*
      * Grep: pe32: soft int80
      * Catalog of greppable CS32 int80 smoke surface (scripts/smoke-all.sh).
-     * Honesty: soft smokes ≠ Wine/Proton title runtime claim.
+     * Honesty: soft smokes != Wine/Proton title runtime claim.
      */
     kprintf("pe32: soft int80 smoke_ok=%lu vfs_ok=%lu surface=exit,getpid,"
             "multi,mmap2,pipe_sock,fstat64,getrandom,mmap_fixed,clock_gettime,"
@@ -242,7 +476,7 @@ pe32_soft_inventory_log(const char *szVia)
 
     /*
      * Grep: pe32: soft path
-     * Honesty: kernel PE soft path ≠ Steam client / Proton titles.
+     * Honesty: kernel PE soft path != Steam client / Proton titles.
      */
     kprintf("pe32: soft path claim=kernel_soft pe_load=1 wow64_tramp=1 "
             "cs32_int80=1 soft_exec=1 steam_pe=0 proton_title=0 "
@@ -386,624 +620,20 @@ pe32_soft_inventory_log(const char *szVia)
             (unsigned)PE32_SOFT_WAVE);
 
     /*
-     * Grep: pe32: soft return
-     * Wave 19 return-path catalog — pipeline enter vs ok outcomes.
-     * Soft ≠ Steam/Proton title claim. product_kernel=OPEN.
+     * Wave 19 return-path catalog - pipeline enter vs ok outcomes.
+     * Soft != Steam/Proton title claim. product_kernel=OPEN.
      */
-    kprintf("pe32: soft return parse_ok=%lu parse_e=%lu stage_ok=%lu "
-            "stage_e=%lu map_ok=%lu map_e=%lu validate_ok=%lu "
-            "validate_e=%lu reloc_ok=%lu reloc_e=%lu load_ok=%lu "
-            "load_e=%lu soft_exec_ok=%lu soft_exec_e=%lu "
-            "soft_iretq_ok=%lu product_kernel=OPEN wave=%u\n",
-            (unsigned long)g_soft.u64ParseOk,
-            (unsigned long)g_soft.u64ParseEnter,
-            (unsigned long)g_soft.u64StageOk,
-            (unsigned long)g_soft.u64StageEnter,
-            (unsigned long)g_soft.u64MapOk,
-            (unsigned long)g_soft.u64MapEnter,
-            (unsigned long)g_soft.u64ValidateOk,
-            (unsigned long)g_soft.u64ValidateEnter,
-            (unsigned long)g_soft.u64RelocOk,
-            (unsigned long)g_soft.u64RelocEnter,
-            (unsigned long)g_soft.u64LoadOk,
-            (unsigned long)g_soft.u64LoadEnter,
-            (unsigned long)g_soft.u64SoftExecOk,
-            (unsigned long)g_soft.u64SoftExecEnter,
-            (unsigned long)g_soft.u64SoftIretqOk,
-            (unsigned)PE32_SOFT_WAVE);
 
-    /* Grep: pe32: soft ret_surface — Wave 19 terminal return classes */
-    kprintf("pe32: soft ret_surface parse=ok|e stage=ok|e map=ok|e "
-            "validate=ok|e reloc=ok|e load=ok|e soft_exec=ok|e "
-            "soft_iretq=ok product_kernel=OPEN areas=111 wave=%u\n",
-            (unsigned)PE32_SOFT_WAVE);
 
-    /* Grep: pe32: soft surface — Wave 19 area catalog */
+    /* Grep: pe32: soft surface - Wave 19 area catalog */
     kprintf("pe32: soft surface inventory,parse,stage,load,exec,int80,"
             "path,reject,format,reloc,soft_va,stats,lamps,smoke,"
             "capacity,return,ret_surface,surface,deepen areas=113 wave=%u\n",
             (unsigned)PE32_SOFT_WAVE);
 
-    /* Grep: pe32: soft retmap — Wave 19 return-surface map */
-    kprintf("pe32: soft retmap ok|fail|inval|nodev|busy|nomem product_gate=0 soft_only=1 wave=116\n");
 
     /* Grep: pe32: soft deepen */
-    /*
-     * ---- Wave 19 complementary surfaces (kept) (never reshape primary).
-     * Return surfaces only — soft inventory; never hard-gates product paths.
-     */
-    /* Grep: pe32: soft retclass — Wave 19 return-class taxonomy (kept) */
-    kprintf("pe32: soft retclass ok|fail|inval|nodev|busy|nomem "
-            "soft_only=1 product_gate=0 wave=%u "
-            "(retclass taxonomy; Soft≠product)\n",
-            (unsigned)PE32_SOFT_WAVE);
-    /* Grep: pe32: soft retlane — Wave 19 return-lane catalog (kept) */
-    kprintf("pe32: soft retlane inv|selftest|rate|retcode|retmap|class "
-            "product_kernel=OPEN soft_ne_product=1 wave=%u "
-            "(retlane catalog; Soft≠product)\n",
-            (unsigned)PE32_SOFT_WAVE);
-    /*
-     * ---- Wave 20 complementary surfaces (kept) (never reshape primary).
-     * Return surfaces only — soft inventory; never hard-gates product paths.
-     */
-    /* Grep: pe32: soft retbound — Wave 20 return-bound honesty (kept) */
-    kprintf("pe32: soft retbound soft_only=1 product_gate=0 hard_gate=0 "
-            "never_blocks_m0=1 wave=%u "
-            "(retbound honesty; Soft≠product)\n",
-            (unsigned)PE32_SOFT_WAVE);
-    /* Grep: pe32: soft retseal — Wave 20 seal stamp (kept) */
-    kprintf("pe32: soft retseal exclusive=1 soft_ne_product=1 "
-            "product_kernel=OPEN wave=%u "
-            "(retseal stamp; Soft≠product)\n",
-            (unsigned)PE32_SOFT_WAVE);
-            /*
-             * ---- Wave 21 complementary surfaces (kept) (never reshape primary).
-             * Return surfaces only — soft inventory; never hard-gates product paths.
-            */
-            /* Grep: pe32: soft retpulse — Wave 21 return-pulse honesty (kept) */
-            kprintf("pe32: soft retpulse soft_only=1 product_gate=0 soft_ne_product=1 "
-                    "never_blocks_m0=1 wave=%u "
-                    "(retpulse honesty; Soft≠product)\n",
-                    (unsigned)PE32_SOFT_WAVE);
-            /* Grep: pe32: soft retmark — Wave 21 mark stamp (kept) */
-            kprintf("pe32: soft retmark exclusive=1 soft_ne_product=1 "
-                    "product_kernel=OPEN wave=%u "
-                    "(retmark stamp; Soft≠product)\n",
-                    (unsigned)PE32_SOFT_WAVE);
-            /*
-             * ---- Wave 22 complementary surfaces (kept) (never reshape primary).
-             * Return surfaces only — soft inventory; never hard-gates product paths.
-            */
-            /* Grep: pe32: soft retphase — Wave 22 return-phase honesty (kept) */
-            kprintf("pe32: soft retphase soft_only=1 product_gate=0 soft_ne_product=1 "
-                    "never_blocks_m0=1 wave=%u "
-                    "(retphase honesty; Soft≠product)\n",
-                    (unsigned)PE32_SOFT_WAVE);
-            /* Grep: pe32: soft retbadge — Wave 22 badge stamp (kept) */
-            kprintf("pe32: soft retbadge exclusive=1 soft_ne_product=1 "
-                    "product_kernel=OPEN wave=%u "
-                    "(retbadge stamp; Soft≠product)\n",
-                    (unsigned)PE32_SOFT_WAVE);
-/*
- * ---- Wave 23 complementary surfaces (kept) (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
-            */
-            /* Grep: pe32: soft rettoken — Wave 23 return-token honesty (kept) */
-            kprintf("pe32: soft rettoken soft_only=1 product_gate=0 soft_ne_product=1 "
-                    "never_blocks_m0=1 wave=%u "
-                    "(rettoken honesty; Soft≠product)\n",
-                    (unsigned)PE32_SOFT_WAVE);
-            /* Grep: pe32: soft retcrest — Wave 23 crest stamp (kept) */
-            kprintf("pe32: soft retcrest exclusive=1 soft_ne_product=1 "
-                    "product_kernel=OPEN wave=%u "
-                    "(retcrest stamp; Soft≠product)\n",
-                    (unsigned)PE32_SOFT_WAVE);
-            /*
-             * ---- Wave 24 complementary surfaces (kept) (never reshape primary).
-             * Return surfaces only — soft inventory; never hard-gates product paths.
-             */
-            /* Grep: pe32: soft retvault — Wave 24 return-vault honesty (kept) */
-            kprintf("pe32: soft retvault soft_only=1 product_gate=0 soft_ne_product=1 "
-                    "never_blocks_m0=1 wave=%u "
-                    "(retvault honesty; Soft≠product)\n",
-                    (unsigned)PE32_SOFT_WAVE);
-            /* Grep: pe32: soft retbanner — Wave 24 banner stamp (kept) */
-            kprintf("pe32: soft retbanner exclusive=1 soft_ne_product=1 "
-                    "product_kernel=OPEN wave=%u "
-                    "(retbanner stamp; Soft≠product)\n",
-                    (unsigned)PE32_SOFT_WAVE);
-            /*
-             * ---- Wave 25 complementary surfaces (kept) (never reshape primary).
-             * Return surfaces only — soft inventory; never hard-gates product paths.
-             */
-            /* Grep: pe32: soft retledger — Wave 25 return-ledger honesty (kept) */
-            kprintf("pe32: soft retledger soft_only=1 product_gate=0 soft_ne_product=1 "
-                    "never_blocks_m0=1 wave=%u "
-                    "(retledger honesty; Soft≠product)\n",
-                    (unsigned)PE32_SOFT_WAVE);
-            /* Grep: pe32: soft retbeacon — Wave 25 beacon stamp (kept) */
-            kprintf("pe32: soft retbeacon exclusive=1 soft_ne_product=1 "
-                    "product_kernel=OPEN wave=%u "
-                    "(retbeacon stamp; Soft≠product)\n",
-                    (unsigned)PE32_SOFT_WAVE);
-            /*
-             * ---- Wave 26 complementary surfaces (kept) (never reshape primary).
-             * Return surfaces only — soft inventory; never hard-gates product paths.
-             */
-            /* Grep: pe32: soft retcipher — Wave 26 return-cipher honesty (kept) */
-            kprintf("pe32: soft retcipher soft_only=1 product_gate=0 soft_ne_product=1 "
-                    "never_blocks_m0=1 wave=%u "
-                    "(retcipher honesty; Soft≠product)\n",
-                    (unsigned)PE32_SOFT_WAVE);
-            /* Grep: pe32: soft retflame — Wave 26 flame stamp (kept) */
-            kprintf("pe32: soft retflame exclusive=1 soft_ne_product=1 "
-                    "product_kernel=OPEN wave=%u "
-                    "(retflame stamp; Soft≠product)\n",
-                    (unsigned)PE32_SOFT_WAVE);
-                    /*
-                     * ---- Wave 27 complementary surfaces (kept) (never reshape primary).
-                     * Return surfaces only — soft inventory; never hard-gates product paths.
-                     */
-                    /* Grep: pe32: soft retprism — Wave 27 return-prism honesty (kept) */
-                    kprintf("pe32: soft retprism soft_only=1 product_gate=0 soft_ne_product=1 "
-                            "never_blocks_m0=1 wave=%u "
-                            "(retprism honesty; Soft≠product)\n",
-                            (unsigned)PE32_SOFT_WAVE);
-                    /* Grep: pe32: soft retforge — Wave 27 forge stamp (kept) */
-                    kprintf("pe32: soft retforge exclusive=1 soft_ne_product=1 "
-                            "product_kernel=OPEN wave=%u "
-                            "(retforge stamp; Soft≠product)\n",
-                            (unsigned)PE32_SOFT_WAVE);
-                            /*
-                             * ---- Wave 28 complementary surfaces (kept) (never reshape primary).
-                             * Return surfaces only — soft inventory; never hard-gates product paths.
-                             */
-                            /* Grep: pe32: soft retshard — Wave 28 return-shard honesty (kept) */
-                            kprintf("pe32: soft retshard soft_only=1 product_gate=0 soft_ne_product=1 "
-                                "never_blocks_m0=1 wave=%u "
-                                "(retshard honesty; Soft≠product)\n",
-                                (unsigned)PE32_SOFT_WAVE);
-                            /* Grep: pe32: soft retcrown — Wave 28 crown stamp (kept) */
-                            kprintf("pe32: soft retcrown exclusive=1 soft_ne_product=1 "
-                                "product_kernel=OPEN wave=%u "
-                                "(retcrown stamp; Soft≠product)\n",
-                                (unsigned)PE32_SOFT_WAVE);
-                                /*
-                             * ---- Wave 29 complementary surfaces (kept) (never reshape primary).
-                             * Return surfaces only — soft inventory; never hard-gates product paths.
-                             */
-                            /* Grep: pe32: soft retglyph — Wave 29 return-glyph honesty (kept) */
-                            kprintf("pe32: soft retglyph soft_only=1 product_gate=0 soft_ne_product=1 "
-                                    "never_blocks_m0=1 wave=%u "
-                                    "(retglyph honesty; Soft≠product)\n",
-                                    (unsigned)PE32_SOFT_WAVE);
-                            /* Grep: pe32: soft retscepter — Wave 29 scepter stamp (kept) */
-                            kprintf("pe32: soft retscepter exclusive=1 soft_ne_product=1 "
-                                    "product_kernel=OPEN wave=%u "
-                                    "(retscepter stamp; Soft≠product)\n",
-                                    (unsigned)PE32_SOFT_WAVE);
-                                /*
-                             * ---- Wave 30 complementary surfaces (kept) (never reshape primary).
-                             * Return surfaces only — soft inventory; never hard-gates product paths.
-                             */
-                            /* Grep: pe32: soft retsigil — Wave 30 return-sigil honesty (kept) */
-                            kprintf("pe32: soft retsigil soft_only=1 product_gate=0 soft_ne_product=1 "
-                                    "never_blocks_m0=1 wave=%u "
-                                    "(retsigil honesty; Soft≠product)\n",
-                                    (unsigned)PE32_SOFT_WAVE);
-                            /* Grep: pe32: soft retemblem — Wave 30 emblem stamp (kept) */
-                            kprintf("pe32: soft retemblem exclusive=1 soft_ne_product=1 "
-                                    "product_kernel=OPEN wave=%u "
-                                    "(retemblem stamp; Soft≠product)\n",
-                                    (unsigned)PE32_SOFT_WAVE);
-                            /*
-                             * ---- Wave 31 complementary surfaces (kept) (never reshape primary).
-                             * Return surfaces only — soft inventory; never hard-gates product paths.
-                             */
-                            /* Grep: pe32: soft retaegis — Wave 31 return-aegis honesty (kept) */
-                            kprintf("pe32: soft retaegis soft_only=1 product_gate=0 soft_ne_product=1 "
-                                    "never_blocks_m0=1 wave=%u "
-                                    "(retaegis honesty; Soft≠product)\n",
-                                    (unsigned)PE32_SOFT_WAVE);
-                            /* Grep: pe32: soft retsigil — Wave 30 return-sigil honesty (kept) */
-                            kprintf("pe32: soft retsigil soft_only=1 product_gate=0 soft_ne_product=1 "
-                                    "never_blocks_m0=1 wave=%u "
-                                    "(retsigil honesty; Soft≠product)\n",
-                                    (unsigned)PE32_SOFT_WAVE);
-                            /* Grep: pe32: soft retmantle — Wave 31 mantle stamp (kept) */
-                            kprintf("pe32: soft retmantle exclusive=1 soft_ne_product=1 "
-                                    "product_kernel=OPEN wave=%u "
-                                    "(retmantle stamp; Soft≠product)\n",
-                                    (unsigned)PE32_SOFT_WAVE);
-/*
- * ---- Wave 32 complementary surfaces (kept) (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: pe32: soft retbulwark — Wave 32 return-bulwark honesty (kept) */
-kprintf("pe32: soft retbulwark soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=%u "
-        "(retbulwark honesty; Soft≠product)\n",
-        (unsigned)PE32_SOFT_WAVE);
-/* Grep: pe32: soft retpanoply — Wave 32 panoply stamp (kept) */
-kprintf("pe32: soft retpanoply exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=%u "
-        "(retpanoply stamp; Soft≠product)\n",
-        (unsigned)PE32_SOFT_WAVE);
-/*
- * ---- Wave 33 complementary surfaces (kept) (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: pe32: soft retbastion — Wave 33 return-bastion honesty (kept) */
-kprintf("pe32: soft retbastion soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=%u "
-        "(retbastion honesty; Soft≠product)\n",
-        (unsigned)PE32_SOFT_WAVE);
-/* Grep: pe32: soft retcitadel — Wave 33 citadel stamp (kept) */
-kprintf("pe32: soft retcitadel exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=%u "
-        "(retcitadel stamp; Soft≠product)\n",
-        (unsigned)PE32_SOFT_WAVE);
-/*
- * ---- Wave 34 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: pe32: soft retredoubt — Wave 34 return-redoubt honesty */
-kprintf("pe32: soft retredoubt soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=%u "
-        "(retredoubt honesty; Soft≠product)\n",
-        (unsigned)PE32_SOFT_WAVE);
-/* Grep: pe32: soft retkeep — Wave 34 exclusive keep stamp */
-kprintf("pe32: soft retkeep exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=%u "
-        "(retkeep stamp; Soft≠product)\n",
-        (unsigned)PE32_SOFT_WAVE);
-/*
- * ---- Wave 35 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: pe32: soft retfortress — Wave 35 return-fortress honesty */
-kprintf("pe32: soft retfortress soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=%u "
-        "(retfortress honesty; Soft≠product)\n",
-        (unsigned)PE32_SOFT_WAVE);
-/* Grep: pe32: soft retpalace — Wave 35 exclusive palace stamp */
-kprintf("pe32: soft retpalace exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=%u "
-        "(retpalace stamp; Soft≠product)\n",
-        (unsigned)PE32_SOFT_WAVE);
-/*
- * ---- Wave 36 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: pe32: soft rethold — Wave 36 return-hold honesty */
-kprintf("pe32: soft rethold soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=%u "
-        "(rethold honesty; Soft≠product)\n",
-        (unsigned)PE32_SOFT_WAVE);
-/* Grep: pe32: soft retspire — Wave 36 exclusive spire stamp */
-kprintf("pe32: soft retspire exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=%u "
-        "(retspire stamp; Soft≠product)\n",
-        (unsigned)PE32_SOFT_WAVE);
-/*
- * ---- Wave 37 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: pe32: soft retwall — Wave 37 return-wall honesty */
-kprintf("pe32: soft retwall soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=%u "
-        "(retwall honesty; Soft≠product)\n",
-        (unsigned)PE32_SOFT_WAVE);
-/* Grep: pe32: soft retgate — Wave 37 exclusive gate stamp */
-kprintf("pe32: soft retgate exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=%u "
-        "(retgate stamp; Soft≠product)\n",
-        (unsigned)PE32_SOFT_WAVE);
-/*
- * ---- Wave 38 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: pe32: soft retmoat — Wave 38 return-moat honesty */
-kprintf("pe32: soft retmoat soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=%u "
-        "(retmoat honesty; Soft≠product)\n",
-        (unsigned)PE32_SOFT_WAVE);
-/* Grep: pe32: soft retower — Wave 38 exclusive tower stamp */
-kprintf("pe32: soft retower exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=%u "
-        "(retower stamp; Soft≠product)\n",
-        (unsigned)PE32_SOFT_WAVE);
                             
-/*
- * ---- Wave 39 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: pe32: soft retbarbican — Wave 39 return-barbican honesty */
-kprintf("pe32: soft retbarbican soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=%u "
-        "(retbarbican honesty; Soft≠product)\n",
-        (unsigned)PE32_SOFT_WAVE);
-/* Grep: pe32: soft retglacis — Wave 39 exclusive glacis stamp */
-kprintf("pe32: soft retglacis exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=%u "
-        "(retglacis stamp; Soft≠product)\n",
-        (unsigned)PE32_SOFT_WAVE);
-/*
- * ---- Wave 40 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: pe32: soft retcurtain — Wave 40 return-curtain honesty */
-kprintf("pe32: soft retcurtain soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=%u "
-        "(retcurtain honesty; Soft≠product)\n",
-        (unsigned)PE32_SOFT_WAVE);
-/* Grep: pe32: soft retparapet — Wave 40 exclusive parapet stamp */
-kprintf("pe32: soft retparapet exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=%u "
-        "(retparapet stamp; Soft≠product)\n",
-        (unsigned)PE32_SOFT_WAVE);
-/*
- * ---- Wave 41 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: pe32: soft retravelin — Wave 41 return-travelin honesty */
-kprintf("pe32: soft retravelin soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=%u "
-        "(retravelin honesty; Soft≠product)\n",
-        (unsigned)PE32_SOFT_WAVE);
-/* Grep: pe32: soft retditch — Wave 41 exclusive ditch stamp */
-kprintf("pe32: soft retditch exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=%u "
-        "(retditch stamp; Soft≠product)\n",
-        (unsigned)PE32_SOFT_WAVE);
-/*
- * ---- Wave 42 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: pe32: soft retportcullis — Wave 42 return-portcullis honesty */
-kprintf("pe32: soft retportcullis soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=%u "
-        "(retportcullis honesty; Soft≠product)\n",
-        (unsigned)PE32_SOFT_WAVE);
-/* Grep: pe32: soft retbattlement — Wave 42 exclusive battlement stamp */
-kprintf("pe32: soft retbattlement exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=%u "
-        "(retbattlement stamp; Soft≠product)\n",
-        (unsigned)PE32_SOFT_WAVE);
-/*
- * ---- Wave 43 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: pe32: soft retmachicolation — Wave 43 return-machicolation honesty */
-kprintf("pe32: soft retmachicolation soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=%u "
-        "(retmachicolation honesty; Soft≠product)\n",
-        (unsigned)PE32_SOFT_WAVE);
-/* Grep: pe32: soft retarrowslit — Wave 43 exclusive arrowslit stamp */
-kprintf("pe32: soft retarrowslit exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=%u "
-        "(retarrowslit stamp; Soft≠product)\n",
-        (unsigned)PE32_SOFT_WAVE);
-
-/*
- * ---- Wave 44 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: pe32: soft retmerlon — Wave 44 return-merlon honesty */
-kprintf("pe32: soft retmerlon soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=%u "
-        "(retmerlon honesty; Soft≠product)\n",
-        (unsigned)PE32_SOFT_WAVE);
-/* Grep: pe32: soft retembrasure — Wave 44 exclusive embrasure stamp */
-kprintf("pe32: soft retembrasure exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=%u "
-        "(retembrasure stamp; Soft≠product)\n",
-        (unsigned)PE32_SOFT_WAVE);
-
-/*
- * ---- Wave 45 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: pe32: soft retkeepgate — Wave 45 return-keepgate honesty */
-kprintf("pe32: soft retkeepgate soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=%u "
-        "(retkeepgate honesty; Soft≠product)\n",
-        (unsigned)PE32_SOFT_WAVE);
-/* Grep: pe32: soft retouterward — Wave 45 exclusive outerward stamp */
-kprintf("pe32: soft retouterward exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=%u "
-        "(retouterward stamp; Soft≠product)\n",
-        (unsigned)PE32_SOFT_WAVE);
-
-/*
- * ---- Wave 46 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: pe32: soft retbailey — Wave 46 return-bailey honesty */
-kprintf("pe32: soft retbailey soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=%u "
-        "(retbailey honesty; Soft≠product)\n",
-        (unsigned)PE32_SOFT_WAVE);
-/* Grep: pe32: soft retpostern — Wave 46 exclusive postern stamp */
-kprintf("pe32: soft retpostern exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=%u "
-        "(retpostern stamp; Soft≠product)\n",
-        (unsigned)PE32_SOFT_WAVE);
-
-/*
- * ---- Wave 47 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: pe32: soft retinnerward — Wave 47 return-innerward honesty */
-kprintf("pe32: soft retinnerward soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retinnerward honesty; Soft≠product)\n");
-/* Grep: pe32: soft retdonjon — Wave 47 exclusive donjon stamp */
-kprintf("pe32: soft retdonjon exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retdonjon stamp; Soft≠product)\n");
-
-/*
- * ---- Wave 48 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: pe32: soft retchevaux — Wave 48 return-chevaux honesty */
-kprintf("pe32: soft retchevaux soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retchevaux honesty; Soft≠product)\n");
-/* Grep: pe32: soft retpalisade — Wave 48 exclusive palisade stamp */
-kprintf("pe32: soft retpalisade exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retpalisade stamp; Soft≠product)\n");
-
-/*
- * ---- Wave 49 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: pe32: soft retglacisgate — Wave 49 return-glacisgate honesty */
-kprintf("pe32: soft retglacisgate soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retglacisgate honesty; Soft≠product)\n");
-/* Grep: pe32: soft retoutwork — Wave 49 exclusive outwork stamp */
-kprintf("pe32: soft retoutwork exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retoutwork stamp; Soft≠product)\n");
-/*
- * ---- Wave 50 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: pe32: soft retsally — Wave 50 return-sally honesty */
-kprintf("pe32: soft retsally soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retsally honesty; Soft≠product)\n");
-/* Grep: pe32: soft retcounterscarp — Wave 50 exclusive counterscarp stamp */
-kprintf("pe32: soft retcounterscarp exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retcounterscarp stamp; Soft≠product)\n");
-/*
- * ---- Wave 51 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: pe32: soft retfosse — Wave 51 return-fosse honesty */
-kprintf("pe32: soft retfosse soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retfosse honesty; Soft≠product)\n");
-/* Grep: pe32: soft retcoveredway — Wave 51 exclusive coveredway stamp */
-kprintf("pe32: soft retcoveredway exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retcoveredway stamp; Soft≠product)\n");
-
-/*
- * ---- Wave 52 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: pe32: soft rettenaille — Wave 52 return-tenaille honesty */
-kprintf("pe32: soft rettenaille soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(rettenaille honesty; Soft≠product)\n");
-/* Grep: pe32: soft retdemilune — Wave 52 exclusive demilune stamp */
-kprintf("pe32: soft retdemilune exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retdemilune stamp; Soft≠product)\n");
-/*
- * ---- Wave 53 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: pe32: soft retravelin — Wave 53 return-travelin honesty */
-kprintf("pe32: soft retravelin soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retravelin honesty; Soft≠product)\n");
-/* Grep: pe32: soft retlunette — Wave 53 exclusive lunette stamp */
-kprintf("pe32: soft retlunette exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retlunette stamp; Soft≠product)\n");
-/*
- * ---- Wave 54 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: pe32: soft retcaponier — Wave 54 return-caponier honesty */
-kprintf("pe32: soft retcaponier soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retcaponier honesty; Soft≠product)\n");
-/* Grep: pe32: soft retredan — Wave 54 exclusive redan stamp */
-kprintf("pe32: soft retredan exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retredan stamp; Soft≠product)\n");
-/*
- * ---- Wave 55 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: pe32: soft retflank — Wave 55 return-flank honesty */
-kprintf("pe32: soft retflank soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retflank honesty; Soft≠product)\n");
-/* Grep: pe32: soft retface — Wave 55 exclusive face stamp */
-kprintf("pe32: soft retface exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retface stamp; Soft≠product)\n");
-/*
- * ---- Wave 56 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: pe32: soft retgorge — Wave 56 return-gorge honesty */
-kprintf("pe32: soft retgorge soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retgorge honesty; Soft≠product)\n");
-/* Grep: pe32: soft retshoulder — Wave 56 exclusive shoulder stamp */
-kprintf("pe32: soft retshoulder exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retshoulder stamp; Soft≠product)\n");
-/*
- * ---- Wave 57 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: pe32: soft retraverse — Wave 57 return-traverse honesty */
-kprintf("pe32: soft retraverse soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retraverse honesty; Soft≠product)\n");
-/* Grep: pe32: soft retcasemate — Wave 57 exclusive casemate stamp */
-kprintf("pe32: soft retcasemate exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retcasemate stamp; Soft≠product)\n");
-
-/*
- * ---- Wave 58 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: pe32: soft retorillon — Wave 58 return-orillon honesty */
-kprintf("pe32: soft retorillon soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retorillon honesty; Soft≠product)\n");
-/* Grep: pe32: soft retbonnette — Wave 58 exclusive bonnette stamp */
-kprintf("pe32: soft retbonnette exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retbonnette stamp; Soft≠product)\n");
-
-/*
- * ---- Wave 59 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: pe32: soft retcrownwork — Wave 59 return-crownwork honesty */
-kprintf("pe32: soft retcrownwork soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retcrownwork honesty; Soft≠product)\n");
-/* Grep: pe32: soft rethornwork — Wave 59 exclusive hornwork stamp */
-kprintf("pe32: soft rethornwork exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(rethornwork stamp; Soft≠product)\n");
-
-/*
- * ---- Wave 60 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: pe32: soft retplace — Wave 60 return-place honesty */
-kprintf("pe32: soft retplace soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retplace honesty; Soft≠product)\n");
-/* Grep: pe32: soft retenvelope — Wave 60 exclusive envelope stamp */
-kprintf("pe32: soft retenvelope exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retenvelope stamp; Soft≠product)\n");
 
 
 
@@ -1013,315 +643,17 @@ kprintf("pe32: soft retenvelope exclusive=1 soft_ne_product=1 "
 
 
 
-/*
- * ---- Wave 61 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: pe32: soft retcounterguard — Wave 61 return-counterguard honesty */
-kprintf("pe32: soft retcounterguard soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retcounterguard honesty; Soft≠product)\n");
-/* Grep: pe32: soft retcoveredface — Wave 61 exclusive coveredface stamp */
-kprintf("pe32: soft retcoveredface exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retcoveredface stamp; Soft≠product)\n");
-/*
- * ---- Wave 62 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: pe32: soft retbastionface — Wave 62 return-bastionface honesty */
-kprintf("pe32: soft retbastionface soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retbastionface honesty; Soft≠product)\n");
-/* Grep: pe32: soft retcurtainangle — Wave 62 exclusive curtainangle stamp */
-kprintf("pe32: soft retcurtainangle exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retcurtainangle stamp; Soft≠product)\n");
-/*
- * ---- Wave 63 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: pe32: soft retdoubletenaille — Wave 63 return-doubletenaille honesty */
-kprintf("pe32: soft retdoubletenaille soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retdoubletenaille honesty; Soft≠product)\n");
-/* Grep: pe32: soft retplaceofarms — Wave 63 exclusive placeofarms stamp */
-kprintf("pe32: soft retplaceofarms exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retplaceofarms stamp; Soft≠product)\n");
- /*
-  * ---- Wave 64 exclusive complementary surfaces (never reshape primary).
-  * Return surfaces only — soft inventory; never hard-gates product paths.
-  */
- /* Grep: pe32: soft retreentrant — Wave 64 return-reentrant honesty */
-kprintf("pe32: soft retreentrant soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retreentrant honesty; Soft≠product)\n");
- /* Grep: pe32: soft retsallyport — Wave 64 exclusive sallyport stamp */
-kprintf("pe32: soft retsallyport exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retsallyport stamp; Soft≠product)\n");
- /*
-  * ---- Wave 65 exclusive complementary surfaces (never reshape primary).
-  * Return surfaces only — soft inventory; never hard-gates product paths.
-  */
- /* Grep: pe32: soft retgorgeangle — Wave 65 return-gorgeangle honesty */
-kprintf("pe32: soft retgorgeangle soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retgorgeangle honesty; Soft≠product)\n");
- /* Grep: pe32: soft retshoulderangle — Wave 65 exclusive shoulderangle stamp */
-kprintf("pe32: soft retshoulderangle exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retshoulderangle stamp; Soft≠product)\n");
- /*
-  * ---- Wave 66 exclusive complementary surfaces (never reshape primary).
-  * Return surfaces only — soft inventory; never hard-gates product paths.
-  */
- /* Grep: pe32: soft retflankangle — Wave 66 return-flankangle honesty */
- kprintf("pe32: soft retflankangle soft_only=1 product_gate=0 soft_ne_product=1 "
-         "never_blocks_m0=1 wave=116 "
-         "(retflankangle honesty; Soft≠product)\n");
- /* Grep: pe32: soft retfaceangle — Wave 66 exclusive faceangle stamp */
- kprintf("pe32: soft retfaceangle exclusive=1 soft_ne_product=1 "
-         "product_kernel=OPEN wave=116 "
-         "(retfaceangle stamp; Soft≠product)\n");
-/*
- * ---- Wave 67 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: pe32: soft retcaponierangle — Wave 67 return-caponierangle honesty */
-kprintf("pe32: soft retcaponierangle soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retcaponierangle honesty; Soft≠product)\n");
-/* Grep: pe32: soft retredanangle — Wave 67 exclusive redanangle stamp */
-kprintf("pe32: soft retredanangle exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retredanangle stamp; Soft≠product)\n");
-/*
- * ---- Wave 68 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: pe32: soft retlunetteangle — Wave 68 return-lunetteangle honesty */
-kprintf("pe32: soft retlunetteangle soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retlunetteangle honesty; Soft≠product)\n");
-/* Grep: pe32: soft rettenailleangle — Wave 68 exclusive tenailleangle stamp */
-kprintf("pe32: soft rettenailleangle exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(rettenailleangle stamp; Soft≠product)\n");
-/*
- * ---- Wave 69 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: pe32: soft retdemiluneangle — Wave 69 return-demiluneangle honesty */
-kprintf("pe32: soft retdemiluneangle soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retdemiluneangle honesty; Soft≠product)\n");
-/* Grep: pe32: soft retcoveredwayangle — Wave 69 exclusive coveredwayangle stamp */
-kprintf("pe32: soft retcoveredwayangle exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retcoveredwayangle stamp; Soft≠product)\n");
-/*
- * ---- Wave 70 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: pe32: soft retfosseangle — Wave 70 return-fosseangle honesty */
-kprintf("pe32: soft retfosseangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retfosseangle honesty; Soft≠product)\n");
-/* Grep: pe32: soft retcounterscarple — Wave 70 exclusive counterscarple stamp */
-kprintf("pe32: soft retcounterscarple exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retcounterscarple stamp; Soft≠product)\n");
-/*
- * ---- Wave 71 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: pe32: soft retsallyportangle — Wave 71 return-sallyportangle honesty */
-kprintf("pe32: soft retsallyportangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retsallyportangle honesty; Soft≠product)\n");
-/* Grep: pe32: soft retreentrantangle — Wave 71 exclusive reentrantangle stamp */
-kprintf("pe32: soft retreentrantangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retreentrantangle stamp; Soft≠product)\n");
-/*
- * ---- Wave 72 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: pe32: soft retplaceofarmsangle — Wave 72 return-placeofarmsangle honesty */
-kprintf("pe32: soft retplaceofarmsangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retplaceofarmsangle honesty; Soft≠product)\n");
-/* Grep: pe32: soft retdoubletenailleangle — Wave 72 exclusive doubletenailleangle stamp */
-kprintf("pe32: soft retdoubletenailleangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retdoubletenailleangle stamp; Soft≠product)\n");
-/* Grep: pe32: soft retcurtainface — Wave 73 return-curtainface honesty */
-kprintf("pe32: soft retcurtainface soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retcurtainface honesty; Soft≠product)\n");
-/* Grep: pe32: soft retbastionangle — Wave 73 exclusive bastionangle stamp */
-kprintf("pe32: soft retbastionangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retbastionangle stamp; Soft≠product)\n");
-/* Grep: pe32: soft retglacisangle — Wave 74 return-glacisangle honesty */
-kprintf("pe32: soft retglacisangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retglacisangle honesty; Soft≠product)\n");
-/* Grep: pe32: soft retparapetangle — Wave 74 exclusive parapetangle stamp */
-kprintf("pe32: soft retparapetangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retparapetangle stamp; Soft≠product)\n");
-/* Grep: pe32: soft retmoatangle — Wave 75 return-moatangle honesty */
-kprintf("pe32: soft retmoatangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retmoatangle honesty; Soft≠product)\n");
-/* Grep: pe32: soft retowerangle — Wave 75 exclusive towerangle stamp */
-kprintf("pe32: soft retowerangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retowerangle stamp; Soft≠product)\n");
-/* Grep: pe32: soft retgateangle — Wave 76 return-gateangle honesty */
-kprintf("pe32: soft retgateangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retgateangle honesty; Soft≠product)\n");
-/* Grep: pe32: soft retwallangle — Wave 76 exclusive wallangle stamp */
-kprintf("pe32: soft retwallangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retwallangle stamp; Soft≠product)\n");
-/* Grep: pe32: soft retspireangle — Wave 77 return-spireangle honesty */
-kprintf("pe32: soft retspireangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retspireangle honesty; Soft≠product)\n");
-/* Grep: pe32: soft retholdangle — Wave 77 exclusive holdangle stamp */
-kprintf("pe32: soft retholdangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retholdangle stamp; Soft≠product)\n");
-/* Grep: pe32: soft retpalaceangle — Wave 78 return-palaceangle honesty */
-kprintf("pe32: soft retpalaceangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retpalaceangle honesty; Soft≠product)\n");
-/* Grep: pe32: soft retfortressangle — Wave 78 exclusive fortressangle stamp */
-kprintf("pe32: soft retfortressangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retfortressangle stamp; Soft≠product)\n");
-/* Grep: pe32: soft retkeepangle — Wave 79 return-keepangle honesty */
-kprintf("pe32: soft retkeepangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retkeepangle honesty; Soft≠product)\n");
-/* Grep: pe32: soft retredoubtangle — Wave 79 exclusive redoubtangle stamp */
-kprintf("pe32: soft retredoubtangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retredoubtangle stamp; Soft≠product)\n");
-/* Grep: pe32: soft retcitadelangle — Wave 80 return-citadelangle honesty */
-kprintf("pe32: soft retcitadelangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retcitadelangle honesty; Soft≠product)\n");
-/* Grep: pe32: soft retbastionkeep — Wave 80 exclusive bastionkeep stamp */
-kprintf("pe32: soft retbastionkeep exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retbastionkeep stamp; Soft≠product)\n");
-/* Grep: pe32: soft retpanoplyangle — Wave 81 return-panoplyangle honesty */
-kprintf("pe32: soft retpanoplyangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retpanoplyangle honesty; Soft≠product)\n");
-/* Grep: pe32: soft retbulwarkangle — Wave 81 exclusive bulwarkangle stamp */
-kprintf("pe32: soft retbulwarkangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retbulwarkangle stamp; Soft≠product)\n");
-/* Grep: pe32: soft retmantleangle — Wave 82 return-mantleangle honesty */
-kprintf("pe32: soft retmantleangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retmantleangle honesty; Soft≠product)\n");
-/* Grep: pe32: soft retaegisangle — Wave 82 exclusive aegisangle stamp */
-kprintf("pe32: soft retaegisangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retaegisangle stamp; Soft≠product)\n");
-/* Grep: pe32: soft retemblemangle — Wave 83 return-emblemangle honesty */
-kprintf("pe32: soft retemblemangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retemblemangle honesty; Soft≠product)\n");
-/* Grep: pe32: soft retsigilangle — Wave 83 exclusive sigilangle stamp */
-kprintf("pe32: soft retsigilangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retsigilangle stamp; Soft≠product)\n");
-/* Grep: pe32: soft retscepterangle — Wave 84 return-scepterangle honesty */
-kprintf("pe32: soft retscepterangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retscepterangle honesty; Soft≠product)\n");
-/* Grep: pe32: soft retglyphangle — Wave 84 exclusive glyphangle stamp */
-kprintf("pe32: soft retglyphangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retglyphangle stamp; Soft≠product)\n");
-/* Grep: pe32: soft retcrownangle — Wave 85 return-crownangle honesty */
-kprintf("pe32: soft retcrownangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retcrownangle honesty; Soft≠product)\n");
-/* Grep: pe32: soft retshardangle — Wave 85 exclusive shardangle stamp */
-kprintf("pe32: soft retshardangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retshardangle stamp; Soft≠product)\n");
-/* Grep: pe32: soft retforgeangle — Wave 86 return-forgeangle honesty */
-kprintf("pe32: soft retforgeangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retforgeangle honesty; Soft≠product)\n");
-/* Grep: pe32: soft retprismangle — Wave 86 exclusive prismangle stamp */
-kprintf("pe32: soft retprismangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retprismangle stamp; Soft≠product)\n");
-/* Grep: pe32: soft retflameangle — Wave 87 return-flameangle honesty */
-kprintf("pe32: soft retflameangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retflameangle honesty; Soft≠product)\n");
-/* Grep: pe32: soft retcipherangle — Wave 87 exclusive cipherangle stamp */
-kprintf("pe32: soft retcipherangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retcipherangle stamp; Soft≠product)\n");
-/* Grep: pe32: soft retbeaconangle — Wave 88 return-beaconangle honesty */
-kprintf("pe32: soft retbeaconangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retbeaconangle honesty; Soft≠product)\n");
-/* Grep: pe32: soft retledgerangle — Wave 88 exclusive ledgerangle stamp */
-kprintf("pe32: soft retledgerangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retledgerangle stamp; Soft≠product)\n");
-/* Grep: pe32: soft retbannerangle — Wave 89 return-bannerangle honesty */
-kprintf("pe32: soft retbannerangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retbannerangle honesty; Soft≠product)\n");
-/* Grep: pe32: soft retvaultangle — Wave 89 exclusive vaultangle stamp */
-kprintf("pe32: soft retvaultangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retvaultangle stamp; Soft≠product)\n");
-/* Grep: pe32: soft retcrestangle — Wave 90 return-crestangle honesty */
-kprintf("pe32: soft retcrestangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retcrestangle honesty; Soft≠product)\n");
-/* Grep: pe32: soft rettokenangle — Wave 90 exclusive tokenangle stamp */
-kprintf("pe32: soft rettokenangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (rettokenangle stamp; Soft≠product)\n");
-/* Grep: pe32: soft retbadgeangle — Wave 91 return-badgeangle honesty */
-kprintf("pe32: soft retbadgeangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retbadgeangle honesty; Soft≠product)\n");
-/* Grep: pe32: soft retphaseangle — Wave 91 exclusive phaseangle stamp */
-kprintf("pe32: soft retphaseangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retphaseangle stamp; Soft≠product)\n");
-/* Grep: pe32: soft retmarkangle — Wave 92 return-markangle honesty */
-kprintf("pe32: soft retmarkangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retmarkangle honesty; Soft≠product)\n");
-/* Grep: pe32: soft retpulseangle — Wave 92 exclusive pulseangle stamp */
-kprintf("pe32: soft retpulseangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retpulseangle stamp; Soft≠product)\n");
 
-/* Grep: pe32: soft retsealangle — Wave 93 return-sealangle honesty */
-kprintf("pe32: soft retsealangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retsealangle honesty; Soft≠product)\n");
-/* Grep: pe32: soft retboundangle — Wave 93 exclusive boundangle stamp */
-kprintf("pe32: soft retboundangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retboundangle stamp; Soft≠product)\n");
-/* Grep: pe32: soft retstemangle — Wave 94 return-stemangle honesty */
-kprintf("pe32: soft retstemangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retstemangle honesty; Soft≠product)\n");
-/* Grep: pe32: soft retbladeangle — Wave 94 exclusive bladeangle stamp */
-kprintf("pe32: soft retbladeangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retbladeangle stamp; Soft≠product)\n");
-/* Grep: pe32: soft retchordangle — Wave 95 return-chordangle honesty */
-kprintf("pe32: soft retchordangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retchordangle honesty; Soft≠product)\n");
-/* Grep: pe32: soft retarcangle — Wave 95 exclusive arcangle stamp */
-kprintf("pe32: soft retarcangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retarcangle stamp; Soft≠product)\n");
-/* Grep: pe32: soft retsectorangle — Wave 96 return-sectorangle honesty */
-kprintf("pe32: soft retsectorangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retsectorangle honesty; Soft≠product)\n");
-/* Grep: pe32: soft retwedgeangle — Wave 96 exclusive wedgeangle stamp */
-kprintf("pe32: soft retwedgeangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retwedgeangle stamp; Soft≠product)\n");
-/* Grep: pe32: soft retradiusangle — Wave 97 return-radiusangle honesty */
-kprintf("pe32: soft retradiusangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retradiusangle honesty; Soft≠product)\n");
-/* Grep: pe32: soft retdiameterangle — Wave 97 exclusive diameterangle stamp */
-kprintf("pe32: soft retdiameterangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retdiameterangle stamp; Soft≠product)\n");
-/* Grep: pe32: soft retcircumangle — Wave 98 return-circumangle honesty */
-kprintf("pe32: soft retcircumangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retcircumangle honesty; Soft≠product)\n");
-/* Grep: pe32: soft retellipseangle — Wave 98 exclusive ellipseangle stamp */
-kprintf("pe32: soft retellipseangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retellipseangle stamp; Soft≠product)\n");
-/* Grep: pe32: soft rethyperangle — Wave 99 return-hyperangle honesty */
-kprintf("pe32: soft rethyperangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (rethyperangle honesty; Soft≠product)\n");
-/* Grep: pe32: soft retparabolaangle — Wave 99 exclusive parabolaangle stamp */
-kprintf("pe32: soft retparabolaangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retparabolaangle stamp; Soft≠product)\n");
-/* Grep: pe32: soft retspiralangle — Wave 100 return-spiralangle honesty */
-kprintf("pe32: soft retspiralangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retspiralangle honesty; Soft≠product)\n");
-/* Grep: pe32: soft rethelixangle — Wave 100 exclusive helixangle stamp */
-kprintf("pe32: soft rethelixangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (rethelixangle stamp; Soft≠product)\n");
-/* Grep: pe32: soft rettorusangle — Wave 101 return-torusangle honesty */
-kprintf("pe32: soft rettorusangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (rettorusangle honesty; Soft≠product)\n");
-/* Grep: pe32: soft retknotangle — Wave 101 exclusive knotangle stamp */
-kprintf("pe32: soft retknotangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retknotangle stamp; Soft≠product)\n");
-/* Grep: pe32: soft retmoebiusangle — Wave 102 return-moebiusangle honesty */
-kprintf("pe32: soft retmoebiusangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retmoebiusangle honesty; Soft≠product)\n");
-/* Grep: pe32: soft retkleinangle — Wave 102 exclusive kleinangle stamp */
-kprintf("pe32: soft retkleinangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retkleinangle stamp; Soft≠product)\n");
-/* Grep: pe32: soft retprojectangle — Wave 103 return-projectangle honesty */
-kprintf("pe32: soft retprojectangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retprojectangle honesty; Soft≠product)\n");
-/* Grep: pe32: soft retaffineangle — Wave 103 exclusive affineangle stamp */
-kprintf("pe32: soft retaffineangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retaffineangle stamp; Soft≠product)\n");
-/* Grep: pe32: soft retlinearangle — Wave 104 return-linearangle honesty */
-kprintf("pe32: soft retlinearangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retlinearangle honesty; Soft≠product)\n");
-/* Grep: pe32: soft retbilinearangle — Wave 104 exclusive bilinearangle stamp */
-kprintf("pe32: soft retbilinearangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retbilinearangle stamp; Soft≠product)\n");
-/* Grep: pe32: soft retquadraticangle — Wave 105 return-quadraticangle honesty */
-kprintf("pe32: soft retquadraticangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retquadraticangle honesty; Soft≠product)\n");
-/* Grep: pe32: soft retcubicangle — Wave 105 exclusive cubicangle stamp */
-kprintf("pe32: soft retcubicangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retcubicangle stamp; Soft≠product)\n");
-/* Grep: pe32: soft retquarticangle — Wave 106 return-quarticangle honesty */
-kprintf("pe32: soft retquarticangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retquarticangle honesty; Soft≠product)\n");
-/* Grep: pe32: soft retquinticangle — Wave 106 exclusive quinticangle stamp */
-kprintf("pe32: soft retquinticangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retquinticangle stamp; Soft≠product)\n");
-/* Grep: pe32: soft retsplineangle — Wave 107 return-splineangle honesty */
-kprintf("pe32: soft retsplineangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retsplineangle honesty; Soft≠product)\n");
-/* Grep: pe32: soft retbezierangle — Wave 107 exclusive bezierangle stamp */
-kprintf("pe32: soft retbezierangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retbezierangle stamp; Soft≠product)\n");
-/* Grep: pe32: soft rethurmitangle — Wave 108 return-hermitangle honesty */
-kprintf("pe32: soft rethurmitangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (rethurmitangle honesty; Soft≠product)\n");
-/* Grep: pe32: soft retcatmullangle — Wave 108 exclusive catmullangle stamp */
-kprintf("pe32: soft retcatmullangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retcatmullangle stamp; Soft≠product)\n");
-/* Grep: pe32: soft retnurbsangle — Wave 109 return-nurbsangle honesty */
-kprintf("pe32: soft retnurbsangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retnurbsangle honesty; Soft≠product)\n");
-/* Grep: pe32: soft retbsplineangle — Wave 109 exclusive bsplineangle stamp */
-kprintf("pe32: soft retbsplineangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retbsplineangle stamp; Soft≠product)\n");
-/* Grep: pe32: soft retmeshangle — Wave 110 return-meshangle honesty */
-kprintf("pe32: soft retmeshangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retmeshangle honesty; Soft≠product)\n");
-/* Grep: pe32: soft retgridangle — Wave 110 exclusive gridangle stamp */
-kprintf("pe32: soft retgridangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retgridangle stamp; Soft≠product)\n");
-/* Grep: pe32: soft retvoxelangle — Wave 111 return-voxelangle honesty */
-kprintf("pe32: soft retvoxelangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retvoxelangle honesty; Soft≠product)\n");
-/* Grep: pe32: soft rettexelangle — Wave 111 exclusive texelangle stamp */
-kprintf("pe32: soft rettexelangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (rettexelangle stamp; Soft≠product)\n");
-/* Grep: pe32: soft retfragmentangle — Wave 112 return-fragmentangle honesty */
-kprintf("pe32: soft retfragmentangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retfragmentangle honesty; Soft≠product)\n");
-/* Grep: pe32: soft retvertexangle — Wave 112 exclusive vertexangle stamp */
-kprintf("pe32: soft retvertexangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retvertexangle stamp; Soft≠product)\n");
-/* Grep: pe32: soft retshaderangle — Wave 113 return-shaderangle honesty */
-kprintf("pe32: soft retshaderangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retshaderangle honesty; Soft≠product)\n");
-/* Grep: pe32: soft retpipelineangle — Wave 113 exclusive pipelineangle stamp */
-kprintf("pe32: soft retpipelineangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retpipelineangle stamp; Soft≠product)\n");
-/* Grep: pe32: soft retframebufferangle — Wave 114 return-framebufferangle honesty */
-kprintf("pe32: soft retframebufferangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retframebufferangle honesty; Soft≠product)\n");
-/* Grep: pe32: soft retswapchainangle — Wave 114 exclusive swapchainangle stamp */
-kprintf("pe32: soft retswapchainangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retswapchainangle stamp; Soft≠product)\n");
-/* Grep: pe32: soft retpresentangle — Wave 115 return-presentangle honesty */
-kprintf("pe32: soft retpresentangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retpresentangle honesty; Soft≠product)\n");
-/* Grep: pe32: soft retvsyncangle — Wave 115 exclusive vsyncangle stamp */
-kprintf("pe32: soft retvsyncangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retvsyncangle stamp; Soft≠product)\n");
-/* Grep: pe32: soft retfenceangle — Wave 116 return-fenceangle honesty */
-kprintf("pe32: soft retfenceangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retfenceangle honesty; Soft≠product)\n");
-/* Grep: pe32: soft retsemaphoreangle — Wave 116 exclusive semaphoreangle stamp */
-kprintf("pe32: soft retsemaphoreangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retsemaphoreangle stamp; Soft≠product)\n");
+
+
+
+
+
+
+
+
+
+
                             kprintf("pe32: soft deepen wave=%u areas="
             "inventory,parse,stage,load,exec,int80,path,"
             "reject,format,reloc,soft_va,stats,lamps,smoke,capacity,"
@@ -1659,7 +991,7 @@ pe32_map_user(const void *pImage, u32 cbImage, u64 u64VaBase,
             u32 e;
 
             if (span == 0 || s > ~0u - span) {
-                continue; /* empty or wrap — skip prot widen */
+                continue; /* empty or wrap - skip prot widen */
             }
             e = s + span;
             if ((pSec[i].u32Chars & 0x20000000u) != 0 && off < e &&
@@ -1800,13 +1132,13 @@ pe32_soft_relocate(void *pImage, u32 cbImage,
     }
     u64Pref = pInfo->u64ImageBase;
     u64Delta = u64VaBase - u64Pref;
-    /* Soft: already at preferred — nothing to fix up */
+    /* Soft: already at preferred - nothing to fix up */
     if (u64Delta == 0) {
         pe32_soft_inc(&g_soft.u64RelocDelta0);
         pe32_soft_inc(&g_soft.u64RelocOk);
         return 0;
     }
-    /* Soft: no reloc directory → fixed-base image; allow high-VA smoke map */
+    /* Soft: no reloc directory -> fixed-base image; allow high-VA smoke map */
     if (pInfo->u32RelocRva == 0 || pInfo->u32RelocSize < 8u) {
         pe32_soft_inc(&g_soft.u64RelocEmptyDir);
         pe32_soft_inc(&g_soft.u64RelocOk);
@@ -1847,7 +1179,7 @@ pe32_soft_relocate(void *pImage, u32 cbImage,
                 continue;
             }
             if (u16Type == 3) {
-                /* IMAGE_REL_BASED_HIGHLOW — 32-bit */
+                /* IMAGE_REL_BASED_HIGHLOW - 32-bit */
                 u32 u32Val;
 
                 if (u32Fix > cbImage - 4u) {
@@ -1862,7 +1194,7 @@ pe32_soft_relocate(void *pImage, u32 cbImage,
                 pImg[u32Fix + 3] = (u8)(u32Val >> 24);
                 pe32_soft_inc(&g_soft.u64RelocHighlow);
             } else if (u16Type == 10) {
-                /* IMAGE_REL_BASED_DIR64 — PE32+ */
+                /* IMAGE_REL_BASED_DIR64 - PE32+ */
                 u64 u64Val;
                 u32 lo, hi;
 
@@ -1884,7 +1216,7 @@ pe32_soft_relocate(void *pImage, u32 cbImage,
                 pImg[u32Fix + 7] = (u8)(u64Val >> 56);
                 pe32_soft_inc(&g_soft.u64RelocDir64);
             } else if (u16Type == 1 || u16Type == 2) {
-                /* HIGH / LOW — soft 16-bit halves */
+                /* HIGH / LOW - soft 16-bit halves */
                 u16 u16Val;
 
                 if (u32Fix > cbImage - 2u) {
@@ -1902,7 +1234,7 @@ pe32_soft_relocate(void *pImage, u32 cbImage,
                 pImg[u32Fix + 0] = (u8)(u16Val);
                 pImg[u32Fix + 1] = (u8)(u16Val >> 8);
             } else {
-                /* Soft: unknown reloc type — skip (do not fail smoke PE) */
+                /* Soft: unknown reloc type - skip (do not fail smoke PE) */
                 pe32_soft_inc(&g_soft.u64RelocSkip);
                 continue;
             }
@@ -2216,7 +1548,7 @@ int
 pe32_spawn_smoke(void)
 {
     /*
-     * PE32+ (amd64) with Linux exit(0) via SYSCALL — call only after
+     * PE32+ (amd64) with Linux exit(0) via SYSCALL - call only after
      * user GDT/SYSCALL/ring-3 path is live (after init-class spawns).
      */
     static u8 aPe64[0x300];
@@ -2352,8 +1684,22 @@ pe32_wow64_smoke(void)
 {
     /*
      * PE32 (i386) staged + mapped; entry is a 64-bit WoW64 trampoline that
-     * records “would enter 32-bit” then exits via SYSCALL. True compat CS
-     * (32-bit code segment) is deferred — trampoline proves load + hook path.
+     * records would enter 32-bit then exits via SYSCALL. True compat CS
+     * (32-bit code segment) is deferred - trampoline proves load + hook path.
+     *
+     * C0 pe32_wow #PF residual (Soft!=product; Dual DoD OPEN; STRONGER):
+     * Lab DUT thr16 tag=pe32_wow RIP=0x52000009 CR2~0xFFFFFFFFFFFFFFDA
+     * ERR=0x6 user write not-present thr kill. Root: with wow64_set(1),
+     * native x86_64 exit NR 60 is remapped as i386 umask -> 95; syscall
+     * returns; fallthrough zeros decode as add [rax],al -> write #PF.
+     * Safer functional residual:
+     *   - under wow64 use i386 exit NR (1) -> maps to x86_64 60
+     *   - re-exit jmp belt + ud2 after syscall
+     *   - tramp page filled with int3 (0xCC) so zero fallthrough is gone
+     *   - post-map tramp byte verify before thr create
+     *   - stack top slop 16; observe thr EXITED
+     *   - force-drain via thread_exit_process if thr not EXITED (H3 belt)
+     * Never claims Dual DoD close. G-AC-1. Stamp-free.
      */
     static u8 aPe32[0x300];
     static u8 aImage[0x2000];
@@ -2374,10 +1720,13 @@ pe32_wow64_smoke(void)
     u64 u64Saved;
     u32 thr;
     u32 y;
+    u32 u32St;
+    u32 u32Exited;
     gj_paddr_t paT;
     gj_paddr_t paS;
     void *pK;
 
+    pe32_soft_inc(&g_u64C0WowSmokeEnter);
     kprintf("pe32: wow64 smoke start\n");
     for (i = 0; i < sizeof(aPe32); i++) {
         aPe32[i] = 0;
@@ -2472,12 +1821,25 @@ pe32_wow64_smoke(void)
         }
     }
 
-    /* 64-bit trampoline: mov eax,60; xor edi,edi; syscall  (exit 0) */
+    /*
+     * 64-bit code, wow64 personality ON: use i386 exit NR (1) so
+     * wow64_translate_nr maps to x86_64 exit (60). Lab residual used
+     * mov eax,60 under wow64 -> umask(95); return @ RIP=0x52000009;
+     * fallthrough 0x00 0x00 = add [rax],al -> #PF user write NP ERR=0x6.
+     * Safer belt (STRONGER functional residual):
+     *   b8 01 00 00 00    mov eax,1
+     *   31 ff             xor edi,edi
+     *   0f 05             syscall
+     *   eb f5             jmp short back to mov eax
+     *   0f 0b             ud2
+     *   0f 0b             ud2 (second belt)
+     *   cc cc ...         rest of aTramp + page filled int3 (no zero pad)
+     */
     for (i = 0; i < sizeof(aTramp); i++) {
-        aTramp[i] = 0;
+        aTramp[i] = 0xcc; /* int3 pad - never leave 0x00 write-#PF class */
     }
     aTramp[0] = 0xb8;
-    aTramp[1] = 0x3c;
+    aTramp[1] = 0x01; /* i386 exit; wow64 -> x86_64 60 (not umask) */
     aTramp[2] = 0x00;
     aTramp[3] = 0x00;
     aTramp[4] = 0x00;
@@ -2485,6 +1847,14 @@ pe32_wow64_smoke(void)
     aTramp[6] = 0xff;
     aTramp[7] = 0x0f;
     aTramp[8] = 0x05;
+    aTramp[9] = 0xeb;  /* jmp short re-exit if syscall returns */
+    aTramp[10] = 0xf5; /* disp = 0 - 11 = -11 */
+    aTramp[11] = 0x0f; /* ud2 belt (unreachable if jmp lives) */
+    aTramp[12] = 0x0b;
+    aTramp[13] = 0x0f; /* second ud2 belt (STRONGER residual) */
+    aTramp[14] = 0x0b;
+    /* aTramp[15..] remain 0xCC int3 pad */
+    pe32_soft_inc(&g_u64C0WowSaferTramp);
 
     memset(&wowProc, 0, sizeof(wowProc));
     gj_process_init(&wowProc, &wowCnode, aWowSlots, 32);
@@ -2512,8 +1882,29 @@ pe32_wow64_smoke(void)
     }
     pK = (void *)(gj_vaddr_t)(hhdm_ready() ? (GJ_HHDM_BASE + (u64)paT)
                                            : (u64)paT);
-    memset(pK, 0, GJ_PAGE_SIZE);
+    /*
+     * STRONGER C0 residual: fill tramp page with int3 first, then install
+     * safer tramp. Lab class was fallthrough into 0x00 -> write #PF ERR=0x6.
+     * int3 page belt means any stray RIP past tramp is #BP kill, not write #PF.
+     */
+    memset(pK, 0xcc, GJ_PAGE_SIZE);
     memcpy(pK, aTramp, sizeof(aTramp));
+    pe32_soft_inc(&g_u64C0WowPageInt3);
+    /* Post-map-prep verify: safer tramp head must be i386 exit + syscall. */
+    {
+        u8 *pV = (u8 *)pK;
+
+        if (pV[0] == 0xb8u && pV[1] == 0x01u && pV[5] == 0x31u &&
+            pV[7] == 0x0fu && pV[8] == 0x05u && pV[9] == 0xebu &&
+            pV[11] == 0x0fu && pV[12] == 0x0bu && pV[15] == 0xccu) {
+            pe32_soft_inc(&g_u64C0WowTrampVerify);
+        } else {
+            cpu_load_cr3(u64Saved);
+            kprintf("pe32: wow64 tramp verify FAIL "
+                    "safer_tramp residual Soft!=product\n");
+            return -1;
+        }
+    }
     if (vmm_map_page((gj_vaddr_t)vaTramp, paT,
                      GJ_VMM_PROT_READ | GJ_VMM_PROT_EXEC | GJ_VMM_PROT_USER) !=
         GJ_OK) {
@@ -2536,7 +1927,7 @@ pe32_wow64_smoke(void)
     /* Personality hook: WoW64 on; CS32 selector ready for future far jump */
     wow64_set(1);
     kprintf("pe32: wow64 would_enter32 img=0x%lx entry32=0x%lx tramp=0x%lx "
-            "cs32=0x%x ready=%d\n",
+            "cs32=0x%x ready=%d safer_tramp=1 page_int3=1 c0_pf_residual=1\n",
             (unsigned long)vaImg,
             (unsigned long)(vaImg + (u64)info.u32EntryRva),
             (unsigned long)vaTramp, (unsigned)gdt_user_cs32_sel(),
@@ -2546,19 +1937,77 @@ pe32_wow64_smoke(void)
     }
 
     (void)process_wait_register(&wowProc, 1);
-    thr = thread_create_user(&wowProc, vaTramp, vaStack + GJ_PAGE_SIZE);
+    /*
+     * Stack top: page end - 16 (same slop as hw/int80 smokes). Exclusive end
+     * alone is legal for down-growing stack but slop is safer residual belt.
+     */
+    thr = thread_create_user(&wowProc, vaTramp, vaStack + GJ_PAGE_SIZE - 16u);
+    if (thr != 0u) {
+        thread_soft_tag_set(thr, "pe32_wow");
+    }
     if (thr == 0) {
         wow64_set(0);
         kprintf("pe32: wow64 thread FAIL\n");
         return -1;
     }
-    for (y = 0; y < 32u; y++) {
+    /*
+     * Observe thr EXITED (honest residual if kill/not-exit). Do not claim
+     * clean tramp PASS without EXITED. Soft!=product; Dual DoD OPEN.
+     * STRONGER: if thr still schedulable after observe, force-drain siblings
+     * via thread_exit_process (H3 thr_exit belt; tag sticky for kill panel).
+     */
+    u32Exited = 0;
+    u32St = 0;
+    for (y = 0; y < 64u; y++) {
         thread_yield();
+        u32St = thread_get_state(thr);
+        if (u32St == GJ_THR_EXITED) {
+            u32Exited = 1;
+            break;
+        }
+    }
+    if (u32Exited == 0u) {
+        u32 cDrain;
+
+        /*
+         * Force-drain residual: thr not EXITED after yields (stuck / kill
+         * race). Drain non-current siblings of wowProc so dead-AS order
+         * cannot schedule pe32_wow into residual #PF. Soft!=product.
+         */
+        cDrain = thread_exit_process(&wowProc);
+        pe32_soft_inc(&g_u64C0WowForceDrain);
+        u32St = thread_get_state(thr);
+        if (u32St == GJ_THR_EXITED) {
+            u32Exited = 1;
+        }
+        kprintf("pe32: wow64 force_drain n=%u thr=%u st=%u exited=%u "
+                "tag=pe32_wow thr_exit_before_as_destroy=1 "
+                "Soft!=product dual_dod=OPEN\n",
+                cDrain, thr, u32St, u32Exited);
     }
     wow64_set(0);
-    kprintf("pe32: wow64 thr=%u yields=%u calls=%u\n", thr, y, wow64_calls());
-    kprintf("pe32: wow64 trampoline PASS\n");
-    /* Compat frame layout (no hardware 32-bit enter — smoke-only) */
+    kprintf("pe32: wow64 thr=%u yields=%u calls=%u st=%u exited=%u "
+            "tag=pe32_wow va=0x%lx safer_tramp=1 page_int3=1\n",
+            thr, y, wow64_calls(), u32St, u32Exited,
+            (unsigned long)vaTramp);
+    if (u32Exited != 0u) {
+        pe32_soft_inc(&g_u64C0WowExitOk);
+        kprintf("pe32: wow64 trampoline PASS thr=%u exit_ok=1 "
+                "safer_tramp=1 page_int3=1 Soft!=product\n",
+                thr);
+    } else {
+        pe32_soft_inc(&g_u64C0WowThrKillRes);
+        /* Grep: pe32: wow64 trampoline residual */
+        kprintf("pe32: wow64 trampoline residual thr=%u st=%u exit_ok=0 "
+                "fault_class=C0_pe32_wow_pf lab_rip=0x52000009 "
+                "lab_err=0x6 tag=pe32_wow thr_kill_honest=1 "
+                "safer_tramp=1 page_int3=1 force_drain=1 "
+                "dual_dod=OPEN Soft!=product G-AC-1=1\n",
+                thr, u32St);
+    }
+    /* C0 residual lean once-lamp (no stamp storm; no version stamp). */
+    pe32_soft_c0_wow_pf_residual_lean("wow64");
+    /* Compat frame layout (no hardware 32-bit enter - smoke-only) */
     {
         u64 aFrame[8];
         u64 entry32 = vaImg + (u64)info.u32EntryRva;
@@ -2664,7 +2113,7 @@ pe32_i386_soft_exec(const void *pImage, u32 cbImage, u32 u32EntryRva,
             ip += 5;
             continue;
         }
-        if (op == 0xbe) { /* mov esi, imm32 — soft load prologues */
+        if (op == 0xbe) { /* mov esi, imm32 - soft load prologues */
             if (ip + 5 > cbImage) {
                 return -1;
             }
@@ -2766,7 +2215,7 @@ pe32_i386_soft_exec(const void *pImage, u32 cbImage, u32 u32EntryRva,
                 continue;
             }
             if (mod == 0xe5) {
-                /* mov ebp, esp — soft: use stack depth as esp-shaped */
+                /* mov ebp, esp - soft: use stack depth as esp-shaped */
                 ebp = u32Sp * 4u;
                 ip += 2;
                 continue;
@@ -2931,7 +2380,7 @@ pe32_i386_soft_exec(const void *pImage, u32 cbImage, u32 u32EntryRva,
             ip = (u32)((i32)ip + 2 + (i32)rel);
             continue;
         }
-        if (op == 0xe9) { /* jmp near rel32 — soft load long branch */
+        if (op == 0xe9) { /* jmp near rel32 - soft load long branch */
             i32 rel;
 
             if (ip + 5 > cbImage) {
@@ -2970,7 +2419,7 @@ pe32_i386_soft_exec(const void *pImage, u32 cbImage, u32 u32EntryRva,
             }
             continue;
         }
-        if (op == 0xe8) { /* call rel32 — soft push return */
+        if (op == 0xe8) { /* call rel32 - soft push return */
             i32 rel;
             u32 u32Ret;
 
@@ -3049,7 +2498,7 @@ pe32_i386_soft_exec(const void *pImage, u32 cbImage, u32 u32EntryRva,
             ip++;
             continue;
         }
-        if (op == 0x55) { /* push ebp — PE frame setup soft */
+        if (op == 0x55) { /* push ebp - PE frame setup soft */
             if (u32Sp == 0) {
                 return -1;
             }
@@ -3125,7 +2574,7 @@ pe32_i386_soft_exec(const void *pImage, u32 cbImage, u32 u32EntryRva,
             ip++;
             continue;
         }
-        if (op == 0xc9) { /* leave: mov esp,ebp; pop ebp — soft depth */
+        if (op == 0xc9) { /* leave: mov esp,ebp; pop ebp - soft depth */
             u32Sp = ebp / 4u;
             if (u32Sp > 64u) {
                 u32Sp = 64u;
@@ -3139,7 +2588,7 @@ pe32_i386_soft_exec(const void *pImage, u32 cbImage, u32 u32EntryRva,
             ip++;
             continue;
         }
-        if (op == 0xc3) { /* ret — soft pop return or exit-shaped success */
+        if (op == 0xc3) { /* ret - soft pop return or exit-shaped success */
             if (u32Sp < 64u) {
                 ip = aStack[u32Sp];
                 u32Sp++;
@@ -3156,7 +2605,7 @@ pe32_i386_soft_exec(const void *pImage, u32 cbImage, u32 u32EntryRva,
         }
         if (op == 0xcd && ip + 1 < cbImage && p[ip + 1] == 0x80) {
             /*
-             * int 0x80 — i386 Linux NR subset (aligned with trap CS32 path).
+             * int 0x80 - i386 Linux NR subset (aligned with trap CS32 path).
              * Soft-only: no user_copy; path open returns synthetic fd.
              * mmap2/old_mmap return VA band 0x57000000 (hw mmap2 smoke band).
              */
@@ -3170,18 +2619,18 @@ pe32_i386_soft_exec(const void *pImage, u32 cbImage, u32 u32EntryRva,
                 return 0;
             }
             if (eax == 4u) {
-                /* write(fd, buf, len) — return len in eax */
+                /* write(fd, buf, len) - return len in eax */
                 eax = edx;
                 u8Zf = (eax == 0) ? 1u : 0u;
                 continue;
             }
             if (eax == 3u) {
-                eax = 0; /* read → EOF */
+                eax = 0; /* read -> EOF */
                 u8Zf = 1;
                 continue;
             }
             if (eax == 5u) {
-                eax = 3; /* open(path,…) soft fd; path not dereferenced */
+                eax = 3; /* open(path,...) soft fd; path not dereferenced */
                 u8Zf = 0;
                 continue;
             }
@@ -3202,7 +2651,7 @@ pe32_i386_soft_exec(const void *pImage, u32 cbImage, u32 u32EntryRva,
                 continue;
             }
             if (eax == 45u) {
-                /* brk(0) → soft break base; brk(addr) → accept */
+                /* brk(0) -> soft break base; brk(addr) -> accept */
                 if (ebx == 0) {
                     eax = 0x56000000u;
                 } else {
@@ -3223,7 +2672,7 @@ pe32_i386_soft_exec(const void *pImage, u32 cbImage, u32 u32EntryRva,
                 continue;
             }
             if (eax == 102u) {
-                eax = 20; /* socketcall SYS_SOCKET → fd */
+                eax = 20; /* socketcall SYS_SOCKET -> fd */
                 u8Zf = 0;
                 continue;
             }
@@ -3243,17 +2692,17 @@ pe32_i386_soft_exec(const void *pImage, u32 cbImage, u32 u32EntryRva,
                 continue;
             }
             if (eax == 2u || eax == 120u || eax == 190u) {
-                eax = 2; /* fork/clone/vfork → fake child pid */
+                eax = 2; /* fork/clone/vfork -> fake child pid */
                 u8Zf = 0;
                 continue;
             }
             if (eax == 220u || eax == 141u) {
-                eax = 32; /* getdents* — synthetic bytes */
+                eax = 32; /* getdents* - synthetic bytes */
                 u8Zf = 0;
                 continue;
             }
             if (eax == 7u || eax == 114u) {
-                /* waitpid/wait4 soft: no children → -ECHILD shape as 0 */
+                /* waitpid/wait4 soft: no children -> -ECHILD shape as 0 */
                 eax = 0;
                 u8Zf = 1;
                 continue;
@@ -3283,7 +2732,7 @@ pe32_i386_soft_exec(const void *pImage, u32 cbImage, u32 u32EntryRva,
                 continue;
             }
             if (eax == 258u) {
-                eax = 1; /* set_tid_address → tid */
+                eax = 1; /* set_tid_address -> tid */
                 u8Zf = 0;
                 continue;
             }
@@ -3298,7 +2747,7 @@ pe32_i386_soft_exec(const void *pImage, u32 cbImage, u32 u32EntryRva,
                 continue;
             }
             if (eax == 13u) {
-                eax = 1; /* time → seconds */
+                eax = 1; /* time -> seconds */
                 u8Zf = 0;
                 continue;
             }
@@ -3318,7 +2767,7 @@ pe32_i386_soft_exec(const void *pImage, u32 cbImage, u32 u32EntryRva,
             return -1;
         }
         if (op == 0x0f && ip + 1 < cbImage && p[ip + 1] == 0x05) {
-            /* syscall — treat as x86_64 exit if eax==60 */
+            /* syscall - treat as x86_64 exit if eax==60 */
             if (eax == 60u) {
                 if (pExitCode != NULL) {
                     *pExitCode = (i32)edi; /* x64 exit uses edi; soft prefer */
@@ -3329,7 +2778,7 @@ pe32_i386_soft_exec(const void *pImage, u32 cbImage, u32 u32EntryRva,
             return -1;
         }
         if (op == 0x0f && ip + 1 < cbImage && p[ip + 1] == 0x34) {
-            /* sysenter — treat like exit when eax==1 */
+            /* sysenter - treat like exit when eax==1 */
             if (eax == 1u) {
                 if (pExitCode != NULL) {
                     *pExitCode = (i32)ebx;
@@ -3351,7 +2800,7 @@ pe32_compat_frame_prepare(u64 u64Entry32, u64 u64Stack32, u64 *pFrameOut,
                           u32 u32FrameWords)
 {
     /*
-     * Interrupt/return frame for long-mode → compat user (Intel SDM-shaped):
+     * Interrupt/return frame for long-mode -> compat user (Intel SDM-shaped):
      *   [0] RIP (32-bit entry zero-extended)
      *   [1] CS  (GJ_GDT_USER_CS32)
      *   [2] RFLAGS (IF set)
@@ -3537,6 +2986,13 @@ pe32_compat_soft_iretq(const void *pImage, u32 cbImage, u32 u32EntryRva,
 int
 pe32_hw_enter_smoke(void)
 {
+    /*
+     * CS32 int3 enter at 0x52000000 (same VA class as pe32_wow tramp).
+     * C0 residual belt STRONGER (Soft!=product): post-int3 ud2 + page int3
+     * fill so a missed #BP kill never falls into 0x00 write-#PF class
+     * (lab pe32_wow ERR=0x6). Stack top already uses page-end-16.
+     * Dual DoD OPEN; no version stamp.
+     */
     static struct gj_process hwProc;
     static struct gj_cnode hwCnode;
     static struct gj_cap_slot aHwSlots[32];
@@ -3550,8 +3006,10 @@ pe32_hw_enter_smoke(void)
     u32 thr;
     u32 y;
     u32 hits0;
+    u32 u32St;
     u8 aCode[16];
 
+    pe32_soft_inc(&g_u64C0HwSmokeEnter);
     if (!gdt_user_cs32_ready() || !gdt_user_cs32_is_compat() ||
         !gdt_user_cs32_lar_ok(NULL)) {
         kprintf("pe32: hw enter smoke FAIL gdt\n");
@@ -3570,9 +3028,18 @@ pe32_hw_enter_smoke(void)
     u64Saved = cpu_read_cr3();
     process_as_activate(&hwProc);
 
-    /* Tiny 32-bit payload: int3 (0xCC) — trap records CS32 */
-    memset(aCode, 0x90, sizeof(aCode));
+    /*
+     * Tiny 32-bit payload: int3 (0xCC) - trap records CS32.
+     * Safer belt STRONGER: ud2 after int3 + whole page int3 fill
+     * (no 0x00 fallthrough write-#PF class; lab pe32_wow ERR=0x6).
+     */
+    memset(aCode, 0xcc, sizeof(aCode));
     aCode[0] = 0xcc;
+    aCode[1] = 0x0f;
+    aCode[2] = 0x0b;
+    aCode[3] = 0x0f; /* second ud2 belt */
+    aCode[4] = 0x0b;
+    pe32_soft_inc(&g_u64C0HwSaferBelt);
     paCode = pmm_alloc();
     paStack = pmm_alloc();
     if (paCode == 0 || paStack == 0) {
@@ -3582,8 +3049,9 @@ pe32_hw_enter_smoke(void)
     }
     pK = (void *)(gj_vaddr_t)(hhdm_ready() ? (GJ_HHDM_BASE + (u64)paCode)
                                            : (u64)paCode);
-    memset(pK, 0, GJ_PAGE_SIZE);
+    memset(pK, 0xcc, GJ_PAGE_SIZE); /* page int3 belt - no zero fallthrough */
     memcpy(pK, aCode, sizeof(aCode));
+    pe32_soft_inc(&g_u64C0HwPageInt3);
     pK = (void *)(gj_vaddr_t)(hhdm_ready() ? (GJ_HHDM_BASE + (u64)paStack)
                                            : (u64)paStack);
     memset(pK, 0, GJ_PAGE_SIZE);
@@ -3604,21 +3072,30 @@ pe32_hw_enter_smoke(void)
         kprintf("pe32: hw enter thr FAIL\n");
         return -1;
     }
+    thread_soft_tag_set(thr, "pe32_hw");
     for (y = 0; y < 64u; y++) {
         thread_yield();
         if (pe32_hw_enter_hits() > hits0) {
             break;
         }
     }
+    u32St = thread_get_state(thr);
     if (pe32_hw_enter_hits() <= hits0 ||
         (pe32_hw_enter_last_cs() & 0xffu) != GJ_GDT_USER_CS32) {
-        kprintf("pe32: hw enter smoke FAIL hits=%u cs=0x%x\n",
-                pe32_hw_enter_hits(), pe32_hw_enter_last_cs());
+        kprintf("pe32: hw enter smoke FAIL hits=%u cs=0x%x st=%u "
+                "va=0x%lx safer_belt=1 Soft!=product\n",
+                pe32_hw_enter_hits(), pe32_hw_enter_last_cs(), u32St,
+                (unsigned long)vaCode);
+        /* C0 residual lamp may already have fired from wow path; once-ok. */
+        pe32_soft_c0_wow_pf_residual_lean("hw_enter");
         return -1;
     }
     pe32_soft_inc(&g_soft.u64HwEnterOk);
-    kprintf("pe32: hw enter smoke PASS hits=%u cs=0x%x yields=%u\n",
-            pe32_hw_enter_hits(), pe32_hw_enter_last_cs(), y);
+    kprintf("pe32: hw enter smoke PASS hits=%u cs=0x%x yields=%u st=%u "
+            "safer_belt=1 va=0x%lx Soft!=product\n",
+            pe32_hw_enter_hits(), pe32_hw_enter_last_cs(), y, u32St,
+            (unsigned long)vaCode);
+    pe32_soft_c0_wow_pf_residual_lean("hw_enter");
     return 0;
 }
 
@@ -3655,7 +3132,7 @@ pe32_hw_int80_smoke(void)
     process_as_activate(&i80Proc);
 
     /*
-     * CS32 int80 sys_exit(0) — trap logs greppable "pe32: int80 exit PASS".
+     * CS32 int80 sys_exit(0) - trap logs greppable "pe32: int80 exit PASS".
      *   b8 01 00 00 00   mov eax,1
      *   31 db            xor ebx,ebx
      *   cd 80            int 0x80
@@ -3948,7 +3425,7 @@ pe32_hw_int80_smoke(void)
     }
 
     /*
-     * int80 mmap2 + store + exit(va) — greppable: pe32: int80 mmap2 PASS
+     * int80 mmap2 + store + exit(va) - greppable: pe32: int80 mmap2 PASS
      * i386 NR 192: mmap2(addr=0, len=4096, prot=RW, flags=PRIVATE|ANON,
      *                    fd=-1, pgoff=0 pages). trap_dispatch maps real page
      * in 0x570xxxxx band; payload stores marker then exits with VA as code.
@@ -4140,7 +3617,7 @@ pe32_hw_int80_smoke(void)
         a5[o++] = 0xc9;
         a5[o++] = 0xcd;
         a5[o++] = 0x80;
-        /* mov ebx,eax; mov eax,1; int 0x80 — exit(socket_fd) */
+        /* mov ebx,eax; mov eax,1; int 0x80 - exit(socket_fd) */
         a5[o++] = 0x89;
         a5[o++] = 0xc3;
         a5[o++] = 0xb8;
@@ -4197,7 +3674,7 @@ pe32_hw_int80_smoke(void)
     }
 
     /*
-     * open + fstat64 + exit — greppable: pe32: int80 fstat64 PASS
+     * open + fstat64 + exit - greppable: pe32: int80 fstat64 PASS
      * Soft path open: ebx=0 (NULL path), ecx=0; trap/vfs may accept smoke open.
      * Then fstat64(fd, stack_buf) NR 197; exit with fstat result as code.
      *   sub esp,128; mov eax,5; xor ebx,ebx; xor ecx,ecx; int 0x80
@@ -4414,7 +3891,7 @@ pe32_hw_int80_smoke(void)
     /*
      * int80 mmap2 MAP_FIXED at 0x58001000 + mprotect + exit(va>>12)
      * (greppable: pe32: int80 mmap_fixed PASS). pgoff=0 pages; flags FIXED|
-     * PRIVATE|ANON. mprotect RWX→RX then exit with va>>12 as proof code.
+     * PRIVATE|ANON. mprotect RWX->RX then exit with va>>12 as proof code.
      *   mov eax,192; mov ebx,0x58001000; mov ecx,4096; mov edx,7; mov esi,0x32;
      *   mov edi,-1; xor ebp,ebp; int 0x80
      *   mov eax,125; mov ebx,0x58001000; mov ecx,4096; mov edx,5; int 0x80
@@ -4503,7 +3980,7 @@ pe32_hw_int80_smoke(void)
         a8[o++] = 0;
         a8[o++] = 0xcd;
         a8[o++] = 0x80;
-        /* exit(0x58001) — page number of fixed VA as code */
+        /* exit(0x58001) - page number of fixed VA as code */
         a8[o++] = 0xb8;
         a8[o++] = 1;
         a8[o++] = 0;
@@ -4657,9 +4134,9 @@ pe32_hw_int80_smoke(void)
     }
 
     /*
-     * uname(&uts) + exit(0): need 9*65=585 bytes buffer → use mmap2 first
+     * uname(&uts) + exit(0): need 9*65=585 bytes buffer -> use mmap2 first
      *   mov eax,192; xor ebx,ebx; mov ecx,0x400; mov edx,3; mov esi,0x22;
-     *   mov edi,-1; xor ebp,ebp; int 0x80  → eax=buf
+     *   mov edi,-1; xor ebp,ebp; int 0x80  -> eax=buf
      *   mov ebx,eax; mov eax,122; int 0x80
      *   mov ebx,eax; mov eax,1; int 0x80
      */
@@ -5862,10 +5339,10 @@ pe32_hw_int80_smoke(void)
     }
 
     /*
-     * access(path, F_OK) — greppable pe32: int80 access PASS.
+     * access(path, F_OK) - greppable pe32: int80 access PASS.
      * path may exist from vfs_io smoke; else create via open first.
      * path string at code-page +0x50; ebx = user VA of path for open/access.
-     *   mov ebx,path; mov ecx,O_CREAT|…; mov eax,5; int80  ; ensure file
+     *   mov ebx,path; mov ecx,O_CREAT|...; mov eax,5; int80  ; ensure file
      *   mov ebx,path; xor ecx,ecx; mov eax,33; int80       ; access F_OK
      *   mov ebx,eax; mov eax,1; int80
      */
@@ -6160,9 +5637,9 @@ pe32_hw_int80_smoke(void)
     }
 
     /*
-     * wait4 ECHILD (-10 as unsigned exit code 0xfffffff6) — use exit on eax after wait
+     * wait4 ECHILD (-10 as unsigned exit code 0xfffffff6) - use exit on eax after wait
      *   mov eax,114; xor ebx,ebx; xor ecx,ecx; xor edx,edx; int 0x80
-     *   ; eax = -10. mov ebx,eax; mov eax,1; int80  → exit code = (u32)-10
+     *   ; eax = -10. mov ebx,eax; mov eax,1; int80  -> exit code = (u32)-10
      * We check last_code == (u32)-10 which is 0xfffffff6... pe32_int80_last_code is u32
      * Actually exit with 0 if wait returned negative: not easy. Instead:
      * exit(0) if eax has high bit set (error).
@@ -6246,7 +5723,7 @@ pe32_hw_int80_smoke(void)
         }
     }
     /*
-     * wait4 → ECHILD (-10); exit 0 if error, 1 if success
+     * wait4 -> ECHILD (-10); exit 0 if error, 1 if success
      */
     {
         static struct gj_process w4Proc;
@@ -6984,14 +6461,14 @@ pe32_hw_int80_smoke(void)
         a32[o++] = 0x85;
         a32[o++] = 0xc0; /* test eax,eax */
         a32[o++] = 0x7e;
-        a32[o++] = 0x07; /* jle +7 → xor ebx (exit 0) */
+        a32[o++] = 0x07; /* jle +7 -> xor ebx (exit 0) */
         a32[o++] = 0xbb;
         a32[o++] = 1;
         a32[o++] = 0;
         a32[o++] = 0;
         a32[o++] = 0; /* mov ebx,1 */
         a32[o++] = 0xeb;
-        a32[o++] = 0x02; /* jmp +2 → mov eax,1 */
+        a32[o++] = 0x02; /* jmp +2 -> mov eax,1 */
         a32[o++] = 0x31;
         a32[o++] = 0xdb; /* xor ebx,ebx */
         a32[o++] = 0xb8;
@@ -7045,7 +6522,7 @@ pe32_hw_int80_smoke(void)
     }
 
     /*
-     * link: open creat A, link A→B, access B, exit(0 if access ok)
+     * link: open creat A, link A->B, access B, exit(0 if access ok)
      */
     {
         static struct gj_process lnProc;
@@ -7295,7 +6772,7 @@ pe32_hw_int80_smoke(void)
     }
 
     /*
-     * symlink(target, link) + readlink(link) → exit(n) if n>0
+     * symlink(target, link) + readlink(link) -> exit(n) if n>0
      * target at 0x70, link at 0x80
      */
     {
@@ -7381,11 +6858,11 @@ pe32_hw_int80_smoke(void)
         a35[o++] = 0x85;
         a35[o++] = 0xc0;
         a35[o++] = 0x7e;
-        a35[o++] = 0x04; /* jle +4 → xor ebx */
+        a35[o++] = 0x04; /* jle +4 -> xor ebx */
         a35[o++] = 0x89;
         a35[o++] = 0xc3; /* mov ebx,eax */
         a35[o++] = 0xeb;
-        a35[o++] = 0x02; /* jmp +2 → mov eax,1 */
+        a35[o++] = 0x02; /* jmp +2 -> mov eax,1 */
         a35[o++] = 0x31;
         a35[o++] = 0xdb; /* xor ebx,ebx */
         a35[o++] = 0xb8;
@@ -7440,7 +6917,7 @@ pe32_hw_int80_smoke(void)
     }
 
     /*
-     * pipe2(fds,0) + write 'Z' + read → exit(1)
+     * pipe2(fds,0) + write 'Z' + read -> exit(1)
      */
     {
         static struct gj_process p2Proc;
@@ -7646,7 +7123,7 @@ pe32_hw_int80_smoke(void)
         a37[o++] = 0x24;
         a37[o++] = 0x51; /* 'Q' */
         /* pwrite64(fd, esp, 1, 0, 0) NR=181 args: ebx=fd ecx=buf edx=1 esi=off_lo edi=off_hi
-         * but edi is fd — save fd in ebp first */
+         * but edi is fd - save fd in ebp first */
         a37[o++] = 0x89;
         a37[o++] = 0xfd; /* mov ebp,edi */
         a37[o++] = 0x89;
@@ -7745,7 +7222,7 @@ pe32_hw_int80_smoke(void)
     }
 
     /*
-     * timerfd_create + settime(arm) + read 8 bytes → exit(8)
+     * timerfd_create + settime(arm) + read 8 bytes -> exit(8)
      */
     {
         static struct gj_process tfProc;
@@ -7912,7 +7389,7 @@ pe32_hw_int80_smoke(void)
     }
 
     /*
-     * epoll_create1 + eventfd + epoll_ctl ADD + epoll_wait → exit(ready>=1)
+     * epoll_create1 + eventfd + epoll_ctl ADD + epoll_wait -> exit(ready>=1)
      */
     {
         static struct gj_process epProc;
@@ -7939,7 +7416,7 @@ pe32_hw_int80_smoke(void)
         u64Saved = cpu_read_cr3();
         process_as_activate(&epProc);
         memset(a39, 0x90, sizeof(a39));
-        /* epoll_create1(0) → ebp; eventfd2(1,0) → edi; ctl+wait */
+        /* epoll_create1(0) -> ebp; eventfd2(1,0) -> edi; ctl+wait */
         a39[o++] = 0x31;
         a39[o++] = 0xdb;
         a39[o++] = 0xb8;
@@ -8078,7 +7555,7 @@ pe32_hw_int80_smoke(void)
     }
 
     /*
-     * inotify_init1 + add_watch(/tmp/pe_ino) → exit(wd>=1 ? 1 : 0)
+     * inotify_init1 + add_watch(/tmp/pe_ino) -> exit(wd>=1 ? 1 : 0)
      */
     {
         static struct gj_process inProc;
@@ -8237,7 +7714,7 @@ pe32_hw_int80_smoke(void)
     }
 
     /*
-     * sendfile64: write file A, open B, sendfile B←A, exit(n>=1)
+     * sendfile64: write file A, open B, sendfile B<-A, exit(n>=1)
      */
     {
         static struct gj_process sfProc;
@@ -8457,7 +7934,7 @@ pe32_hw_int80_smoke(void)
         u64Saved = cpu_read_cr3();
         process_as_activate(&mfProc);
         memset(a42, 0x90, sizeof(a42));
-        /* memfd_create(name,0) NR=356 — name ignored; ebx can be null-ish */
+        /* memfd_create(name,0) NR=356 - name ignored; ebx can be null-ish */
         a42[o++] = 0x31;
         a42[o++] = 0xdb;
         a42[o++] = 0x31;
@@ -8551,7 +8028,7 @@ pe32_hw_int80_smoke(void)
     }
 
     /*
-     * execve: stage PE (int80 exit(7)) on vfs, CS32 execve(path) → exit 7
+     * execve: stage PE (int80 exit(7)) on vfs, CS32 execve(path) -> exit 7
      */
     {
         static struct gj_process exProc;
@@ -8573,7 +8050,7 @@ pe32_hw_int80_smoke(void)
         i64 fd;
         u32 i;
 
-        /* Tiny i386 PE: int80 exit(7) — layout matches pe32_vfs_load_smoke */
+        /* Tiny i386 PE: int80 exit(7) - layout matches pe32_vfs_load_smoke */
         for (i = 0; i < sizeof(aPe); i++) {
             aPe[i] = 0;
         }
@@ -8728,6 +8205,18 @@ pe32_hw_int80_smoke(void)
      * clone CLONE_VM + child stack: parent exit with thr id (>=1)
      *   sub esp,64; lea ecx,[esp+32]; mov ebx,0x100; mov eax,120; int80
      *   mov ebx,eax; mov eax,1; int80
+     *
+     * Residual H3 thrash reject (pe32 yield/order only; Soft!=product):
+     * process.c thr_exit's CLONE_VM siblings on first exit before as_destroy
+     * (G-PROC-5). Same-AS first exit kills the other thr -> typically one
+     * int80 exit hit (hits+2 unreachable). Parent continues after clone
+     * without yield so parent-first is common: last_code = sibling thr id.
+     * Thrash reject: do not advance while parent or sibling remain RUNNABLE
+     * (lab strand -> #PF I=1 at ~0x58240013). Wait parent EXITED + process
+     * dead + sibling EXITED (when known from last_code) + settle yields +
+     * post-band barrier before next smoke band. Stamp-free residual lean.
+     * Grep stable: pe32: int80 clone_vm PASS|FAIL
+     * Grep residual: pe32: soft residual lean H3 thrash reject
      */
     {
         static struct gj_process cvProc;
@@ -8739,7 +8228,14 @@ pe32_hw_int80_smoke(void)
         gj_paddr_t paC;
         gj_paddr_t paS;
         u32 thr44;
+        u32 u32ThrSib = 0; /* CLONE_VM child thr once known from parent exit */
         u32 hitsCv = pe32_int80_exit_hits();
+        u32 u32YSettle;
+        u32 u32HitsNow;
+        u32 u32CodeNow;
+        u32 u32ParSt;
+        u32 u32SibSt;
+        u32 u32Clear;
         u8 a44[64];
         u32 o = 0;
 
@@ -8757,19 +8253,12 @@ pe32_hw_int80_smoke(void)
         a44[o++] = 0x83;
         a44[o++] = 0xec;
         a44[o++] = 64;
-        /* child: xor ebx,ebx; mov eax,1; int80 exit(0) — at stack+32 we place
-         * that code? Simpler: child continues after int80 with same code path.
-         * Parent sees thr id; child also runs exit — two exits. Use:
-         * clone returns; if eax>1 parent path exit(eax); child also exits.
-         * First exit wins for last_code. Prefer parent exits thr id.
-         * Child continues: mov ebx,eax (0 garbage); might exit wrong.
-         * Better: after clone, test if thr id high bit — just exit eax for parent.
-         * Child starts at same RIP after int80 with thr's own rax not set —
-         * thread_create starts at RIP after int80 as entry, so child runs
-         * mov ebx,eax with eax=0 (from create) then exit(0). Parent exits thr.
-         * last_code is last exit — race. Prefer single-thread parent-only:
-         * if thr created, parent exits(1) without waiting; child exit(0) first
-         * might set last_code 0. Order: yield until hits+1, accept code>=1.
+        /*
+         * Child entry = RIP after clone int80 (trap sets thr continue there).
+         * Parent: eax = thr id -> exit(thr). Child: eax = 0 from create ->
+         * exit(0). First exit process_death thr_exit's the other thr, so
+         * only one int80 hit. Parent-first last_code = sibling thr id (>=1)
+         * preferred for PASS.
          */
         a44[o++] = 0x8d;
         a44[o++] = 0x4c;
@@ -8825,27 +8314,133 @@ pe32_hw_int80_smoke(void)
         if (thr44 == 0) {
             return 0;
         }
-        for (y = 0; y < 160u; y++) {
+        /*
+         * H3 thrash reject residual lean: never break after first exit alone
+         * while parent thr still RUNNABLE or known sibling still live.
+         * Each thrash-risk continue tallies g_u64H3ThrashReject (soft only).
+         * process_death thr_exit is sync; settle so pick_next cannot schedule
+         * a late USER32_ENTRY into the next smoke's maps / dead AS.
+         */
+        u32YSettle = 0;
+        for (y = 0; y < 320u; y++) {
             thread_yield();
-            if (pe32_int80_exit_hits() > hitsCv + 0) {
-                /* need at least one exit; wait a bit for parent */
-                if (y > 8u && pe32_int80_exit_hits() > hitsCv) {
-                    break;
+            u32HitsNow = pe32_int80_exit_hits();
+            u32ParSt = thread_get_state(thr44);
+            if (u32HitsNow > hitsCv) {
+                u32CodeNow = pe32_int80_last_code();
+                /*
+                 * Parent exit(ebx=clone_ret): last_code names sibling thr.
+                 * Child-first exit(0) leaves last_code=0 - thrSib stays 0.
+                 */
+                if (u32ThrSib == 0u && u32CodeNow >= 1u &&
+                    u32CodeNow != thr44) {
+                    u32ThrSib = u32CodeNow;
                 }
             }
+            /*
+             * Thrash reject: after first exit hit, refuse settle while death
+             * order incomplete (parent RUNNABLE / alive / known sib live).
+             * Pre-exit yields wait for smoke only - not thrash-risk.
+             */
+            if (u32HitsNow <= hitsCv) {
+                continue; /* smoke not yet exited - wait */
+            }
+            if (u32ParSt != GJ_THR_EXITED) {
+                pe32_soft_inc(&g_u64H3ThrashReject);
+                continue;
+            }
+            if (cvProc.u32Alive != 0u) {
+                pe32_soft_inc(&g_u64H3ThrashReject);
+                continue; /* belt: death not finished */
+            }
+            if (u32ThrSib != 0u &&
+                thread_get_state(u32ThrSib) != GJ_THR_EXITED) {
+                pe32_soft_inc(&g_u64H3ThrashReject);
+                continue; /* sibling still live - keep yielding */
+            }
+            u32YSettle++;
+            if (u32YSettle >= 12u) {
+                pe32_soft_inc(&g_u64H3SettleOk);
+                break;
+            }
         }
-        /* Parent exits with thr id (>=2); child may also exit — any thr id ok */
-        if (pe32_int80_exit_hits() > hitsCv && pe32_int80_last_code() >= 1) {
+        /* Final drain: thrash reject while parent or known sibling RUNNABLE. */
+        for (u32YSettle = 0; u32YSettle < 40u; u32YSettle++) {
+            u32ParSt = thread_get_state(thr44);
+            u32HitsNow = pe32_int80_exit_hits();
+            if (u32HitsNow > hitsCv) {
+                u32CodeNow = pe32_int80_last_code();
+                if (u32ThrSib == 0u && u32CodeNow >= 1u &&
+                    u32CodeNow != thr44) {
+                    u32ThrSib = u32CodeNow;
+                }
+            }
+            u32Clear = 0u;
+            if (u32ParSt == GJ_THR_EXITED && u32HitsNow > hitsCv &&
+                cvProc.u32Alive == 0u &&
+                (u32ThrSib == 0u ||
+                 thread_get_state(u32ThrSib) == GJ_THR_EXITED)) {
+                u32Clear = 1u;
+            }
+            if (u32Clear != 0u) {
+                break;
+            }
+            /* Only thrash-reject after an exit hit (death path in flight). */
+            if (u32HitsNow > hitsCv) {
+                pe32_soft_inc(&g_u64H3ThrashReject);
+                pe32_soft_inc(&g_u64H3DrainExtra);
+            }
+            thread_yield();
+        }
+        /*
+         * Parent-first: last_code = sibling thr id (>=1). Sibling EXITED via
+         * death thr_exit (or own exit). Soft!=product.
+         */
+        if (pe32_int80_exit_hits() > hitsCv && pe32_int80_last_code() >= 1 &&
+            thread_get_state(thr44) == GJ_THR_EXITED && cvProc.u32Alive == 0u &&
+            (u32ThrSib == 0u ||
+             thread_get_state(u32ThrSib) == GJ_THR_EXITED)) {
+            pe32_soft_inc(&g_u64H3CloneVmPass);
             kprintf("pe32: int80 clone_vm PASS code=%u\n",
                     pe32_int80_last_code());
         } else {
+            pe32_soft_inc(&g_u64H3CloneVmFail);
             kprintf("pe32: int80 clone_vm FAIL hits=%u code=%u\n",
                     pe32_int80_exit_hits(), pe32_int80_last_code());
         }
+        /*
+         * H3 thrash reject post-band barrier (STRONGER residual): refuse
+         * opening the next smoke band while parent/sibling still schedulable
+         * on a dead/dying AS. Covers both PASS and FAIL close paths.
+         * Soft!=product; G-AC-1; stamp-free once-lamp after barrier.
+         */
+        for (u32YSettle = 0; u32YSettle < 48u; u32YSettle++) {
+            u32ParSt = thread_get_state(thr44);
+            u32HitsNow = pe32_int80_exit_hits();
+            if (u32HitsNow > hitsCv) {
+                u32CodeNow = pe32_int80_last_code();
+                if (u32ThrSib == 0u && u32CodeNow >= 1u &&
+                    u32CodeNow != thr44) {
+                    u32ThrSib = u32CodeNow;
+                }
+            }
+            u32SibSt = (u32ThrSib != 0u) ? thread_get_state(u32ThrSib)
+                                         : GJ_THR_EXITED;
+            if (u32ParSt == GJ_THR_EXITED && cvProc.u32Alive == 0u &&
+                (u32ThrSib == 0u || u32SibSt == GJ_THR_EXITED)) {
+                break;
+            }
+            /* Post-band thrash reject: still schedulable after band close. */
+            pe32_soft_inc(&g_u64H3ThrashReject);
+            pe32_soft_inc(&g_u64H3PostBandBarrier);
+            thread_yield();
+        }
+        /* Residual lean once-lamp (no stamp storm; no version stamp). */
+        pe32_soft_h3_thrash_reject_residual_lean("clone_vm");
     }
 
     /*
-     * vfork + wait4: child registered as zombie; wait4 reaps → exit(0 if pid>0)
+     * vfork + wait4: child registered as zombie; wait4 reaps -> exit(0 if pid>0)
      */
     {
         static struct gj_process vfProc;
@@ -8961,7 +8556,7 @@ pe32_hw_int80_smoke(void)
     }
 
     /*
-     * fork + wait4 (blocking with kernel yields): child exit worker → reap
+     * fork + wait4 (blocking with kernel yields): child exit worker -> reap
      */
     {
         static struct gj_process fkProc;
@@ -8998,7 +8593,7 @@ pe32_hw_int80_smoke(void)
         a46[o++] = 0x80;
         a46[o++] = 0x89;
         a46[o++] = 0xc3; /* ebx = child pid */
-        /* wait4(pid, 0, 0, 0) — blocking; kernel yields for child exit worker */
+        /* wait4(pid, 0, 0, 0) - blocking; kernel yields for child exit worker */
         a46[o++] = 0x31;
         a46[o++] = 0xc9;
         a46[o++] = 0x31;

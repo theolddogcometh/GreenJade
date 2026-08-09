@@ -2,15 +2,27 @@
  * SPDX-License-Identifier: MIT OR Apache-2.0
  * Copyright (c) 2026 Project GreenJade contributors
  *
- * Futex wait queues — Linux-true keying (G-FUT / G-MO-3).
+ * Futex wait queues - Linux-true keying (G-FUT / G-MO-3).
+ * Dual MIT OR Apache-2.0 product source. Soft!=product (diagnostics only;
+ * soft inventory != RR/preempt complete != image version claim).
  *
  * Scope
  * -----
  * In-kernel wait/wake on a 32-bit user (or smoke kernel) word. Keys match
  * Linux private vs shared semantics so aliasing maps and cross-process
  * shared memory share one queue when they should. Product path parks via
- * thread_block + schedule only — never busy-spin (G-FUT-3). Fixed waiter
- * table (no heap); table full → -LINUX_ENOMEM.
+ * thread_block + schedule only - never busy-spin (G-FUT-3). Fixed waiter
+ * table (no heap); table full -> -LINUX_ENOMEM.
+ *
+ * Linux-shaped UDX host threads (lean residual)
+ * ---------------------------------------------
+ * UDX multi-thr hosts (rtl8168_udx / xhci_udx / ddi_host_gj) use this
+ * surface from pthread-shaped userspace (private + shared words). Host thr
+ * teardown companions: futex_cancel_thr + soft robust exit clear orphans
+ * alongside thread H3 thr_exit_before_as_destroy (udx_host_teardown=1).
+ * Soft residual != product multi-CPU thr-kill / Dual DoD A/B close / bar3.
+ * freestanding class SKIP; product = ABI + UDX.
+ * greppable: futex: soft residual lean * udx_host_teardown=1 * soft_ne_product=1
  *
  * Keying (G-FUT-1)
  * ----------------
@@ -27,30 +39,30 @@
  *
  * Wait path (lost-wake safe)
  * --------------------------
- *   1. Fast load: *uaddr != expected → -LINUX_EAGAIN (no lock).
+ *   1. Fast load: *uaddr != expected -> -LINUX_EAGAIN (no lock).
  *   2. irqsave-lock waiter table; claim slot; recheck *uaddr under lock.
  *   3. Register thread_block on the slot *before* unlock so concurrent
  *      wake/timer cannot miss this waiter.
  *   4. Unlock, schedule(); on resume free slot; return 0 or -LINUX_ETIMEDOUT.
  *   Value changes after enqueue may cancel and return -LINUX_EAGAIN without
- *   sleeping. Immediate past-deadline → -LINUX_ETIMEDOUT without park.
+ *   sleeping. Immediate past-deadline -> -LINUX_ETIMEDOUT without park.
  *
  * Wake / timer
  * ------------
  *   Wake and futex_timer_check hold the same irqsave lock as wait (G-SMP /
  *   SECURITY_CORE §4) so IRQ tick cannot race table surgery.
  *   Timeouts: absolute mono-nsec deadline (timer_mono_nsec); 0 = no deadline.
- *   timer_tick / timer_tick_apic → futex_timer_check reaps with ETIMEDOUT
+ *   timer_tick / timer_tick_apic -> futex_timer_check reaps with ETIMEDOUT
  *   (G-FUT-2). Wait object for thread_block/wake is the futex_waiter slot
  *   itself; block tag 0.
  *
  * Soft product surface (this header / futex.c)
  * --------------------------------------------
- *   G-FUT-1         — shared key by PA (cross-proc / alias)
- *   G-FUT-2         — absolute mono timeout reaped on tick
- *   G-FUT-3         — sleep via thread_block only (no product spin)
- *   G-FUT-BITSET    — FUTEX_WAIT_BITSET / FUTEX_WAKE_BITSET
- *   G-FUT-ROBUST    — set/get_robust_list + soft exit OWNER_DIED wake
+ *   G-FUT-1         - shared key by PA (cross-proc / alias)
+ *   G-FUT-2         - absolute mono timeout reaped on tick
+ *   G-FUT-3         - sleep via thread_block only (no product spin)
+ *   G-FUT-BITSET    - FUTEX_WAIT_BITSET / FUTEX_WAKE_BITSET
+ *   G-FUT-ROBUST    - set/get_robust_list + soft exit OWNER_DIED wake
  *
  * Opcode catalog below is clean-room public Linux ABI numbering. Only WAIT,
  * WAKE, WAIT_BITSET, WAKE_BITSET, and robust-list helpers are product-active;
@@ -145,7 +157,7 @@ void futex_init(void);
  * else resolve PA via vmm under the active / thr process CR3 (shared).
  *
  * Requires uaddr 4-byte aligned; returns GJ_ERR_INVAL if not or pOut NULL.
- * Shared PA resolution failure → GJ_ERR_FAULT.
+ * Shared PA resolution failure -> GJ_ERR_FAULT.
  * Shared PA path: G-FUT-1 (futex: shared key PA).
  */
 gj_status_t futex_key_from_uaddr(struct gj_futex_key *pOut, u64 u64Uaddr,
@@ -163,7 +175,7 @@ gj_status_t futex_key_from_uaddr_proc(struct gj_futex_key *pOut, u64 u64Uaddr,
 
 /**
  * Non-zero if keys refer to the same wait queue (private AS+VA or shared PA).
- * NULL either side → 0. Shared zero-PA keys never equal.
+ * NULL either side -> 0. Shared zero-PA keys never equal.
  */
 int futex_key_eq(const struct gj_futex_key *pA, const struct gj_futex_key *pB);
 
@@ -177,7 +189,7 @@ int futex_key_eq(const struct gj_futex_key *pA, const struct gj_futex_key *pB);
  *   -LINUX_ENOMEM     waiter table full
  *
  * u64DeadlineMonoNsec is absolute timer_mono_nsec, or 0 for no deadline.
- * Requires a current thread (G-FUT-3 — no product spin fallback).
+ * Requires a current thread (G-FUT-3 - no product spin fallback).
  * Internally waits with GJ_FUTEX_BITSET_MATCH_ANY.
  */
 i64 futex_wait(volatile u32 *pU32, u32 u32Val, const struct gj_futex_key *pKey,
@@ -186,7 +198,7 @@ i64 futex_wait(volatile u32 *pU32, u32 u32Val, const struct gj_futex_key *pKey,
 /**
  * Soft FUTEX_WAIT_BITSET (G-FUT-BITSET / futex: wait_bitset):
  * Same as futex_wait, but only WAKE_BITSET with overlapping bits unblocks.
- * u32Bitset 0 → -LINUX_EINVAL (Linux). Stores bitset on the waiter slot.
+ * u32Bitset 0 -> -LINUX_EINVAL (Linux). Stores bitset on the waiter slot.
  */
 i64 futex_wait_bitset(volatile u32 *pU32, u32 u32Val,
                       const struct gj_futex_key *pKey, u64 u64DeadlineMonoNsec,
@@ -203,7 +215,7 @@ i64 futex_wake(const struct gj_futex_key *pKey, u32 u32Count);
 /**
  * Soft FUTEX_WAKE_BITSET (G-FUT-BITSET / futex: wake_bitset):
  * Wake waiters whose stored bitset shares any bit with u32Bitset.
- * u32Bitset 0 → -LINUX_EINVAL. Match is (waiter_bitset & wake_bitset) != 0.
+ * u32Bitset 0 -> -LINUX_EINVAL. Match is (waiter_bitset & wake_bitset) != 0.
  */
 i64 futex_wake_bitset(const struct gj_futex_key *pKey, u32 u32Count,
                       u32 u32Bitset);
@@ -241,13 +253,21 @@ gj_status_t futex_get_robust_list(u32 u32Tid, u64 *pHeadOut, u64 *pLenOut);
  * (private key by thr AS, shared by PA of the word).
  * Safe to call with NULL thr or empty list (returns 0).
  * Returns count of OWNER_DIED marks applied (best-effort soft).
- * greppable: G-FUT-ROBUST
+ * Also cancels thr waiters (UDX multi-thr host death residual).
+ * greppable: G-FUT-ROBUST * udx_host_teardown=1
  */
 i64 futex_exit_robust_list(struct gj_thread *pThr);
 
 /**
  * Drop all waiters owned by pThr (e.g. death path). Wakes them so they
  * do not hang forever. Clears slots under the futex lock.
- * Returns number of slots cleared. NULL thr → 0.
+ * Returns number of slots cleared. NULL thr -> 0.
+ *
+ * Lean residual for Linux-shaped UDX host threads (Soft!=product):
+ *   Multi-thr UDX hosts share one process AS; cancel before/with thr exit
+ *   so schedule cannot resume a waiter into a torn-down host.
+ *   Companion to thr_exit_before_as_destroy (udx_host_teardown=1).
+ *   Soft residual != product multi-CPU thr-kill / Dual DoD close.
+ * greppable: futex: soft thr * udx_host_teardown=1 * soft_ne_product=1
  */
 u32 futex_cancel_thr(struct gj_thread *pThr);

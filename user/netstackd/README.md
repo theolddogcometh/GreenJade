@@ -1,7 +1,13 @@
 # netstackd (product)
 
 Userspace network stack host for GreenJade — freestanding live daemon + host
-UDP-echo smoke.
+UDP-echo smoke. Middle of Dual DoD **B** chain:
+
+```text
+rtl8168_udx (UDX NIC residual) → netstackd (this) → sshd :22
+```
+
+**Soft!=product.** Dual DoD B **OPEN** until glass L3 (arping / ssh on lab wire).
 
 ## License
 
@@ -16,8 +22,9 @@ path; **no GPL**.
 | `build/netstackd` | `make netstackd` | Host POSIX UDP-echo smoke |
 
 - Kernel (interim doors): `net_lo` (UDP/dgram), **`net_tcp`** (IPv4 TCP over virtio-net + loopback pairs), `net_eth` (ARP/ICMP/UDP echo).
+- UDX ready residual: lab IP **10.200.125.50** + `LAB_MAC_UDX` pin when freestanding rtl **SKIP** (`net_l2: soft udx ready`).
 - Freestanding `netstackd-gj`: door CLAIM, dgram echo, **TCP listen/accept/send/recv**, **multi-segment TX/RX**, virtio ring path, **soft door deepen**.
-- Product direction: own more of the stack in this process; kernel retains IRQ/DMA windows.
+- Product direction: own more of the stack in this process; kernel retains IRQ/DMA windows; laptop wire via **rtl8168_udx** thr L2 inject/pull.
 - **Live product path:** embedded ELF spawned at boot (`netstackd: live spawn PASS` + freestanding `netstackd-gj: live path PASS`).
 
 ## Layout
@@ -252,3 +259,7 @@ Kernel live spawn embeds `netstackd.elf` via `kernel/proc/netstackd_embed.S`
 (not part of this directory).
 
 See also: [ABI-first pivot](../../docs/ABI_FIRST_PIVOT.md) (product direction).
+
+---
+
+**Project:** GreenJade · Soft≠product · Dual DoD A/B **OPEN**. [root README](../../README.md). Support: [Patreon — TheOldDog](https://www.patreon.com/cw/TheOldDog).

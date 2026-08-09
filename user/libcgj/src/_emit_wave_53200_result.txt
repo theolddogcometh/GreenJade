@@ -1,0 +1,5 @@
+created=0
+already_existed=400
+planned=400
+range=52801..53200
+note=CREATE-ONLY O_EXCL: all graph_batch52801.c..graph_batch53200.c already present (verified by marker inventory). Lamps at *91-*99 and capstones at *00 present for 52900/53000/53100/53200.

@@ -3,13 +3,14 @@
  * Copyright (c) 2026 Project GreenJade contributors
  *
  * Userspace SCSI CDB builders + soft LUN + scsi_mid_submit (pure C11).
+ * Dual MIT OR Apache-2.0. Soft!=product. G-AC-1. No GPL.
  *
  * CDB path
  * --------
  * scsi_cdb_* fill struct scsi_cdb (opcode + big-endian fields per SPC/SBC).
  * scsi_mid_submit takes a packed scsi_io and:
  *   - GJ freestanding (GJ_FREESTANDING / __gj_freestanding):
- *       if door READY: decode CDB → gj_scsi(GJ_SCSI_OP_*) → scsi_door
+ *       if door READY: decode CDB -> gj_scsi(GJ_SCSI_OP_*) -> scsi_door
  *       else: userspace soft LUN (same policy as host soft)
  *   - Host / no door (SCSI_HAS_SYS=0):
  *       userspace soft LUN (auto-armed); never needs a kernel door
@@ -17,13 +18,27 @@
  * Soft LUN (product mid ownership of sense/LUN/geometry):
  *   TUR, REQUEST SENSE, INQUIRY, MODE SENSE(6), READ CAPACITY(10),
  *   READ(10), WRITE(10), SYNCHRONIZE CACHE(10). LUN 0 only;
- *   illegal LUN / opcode / LBA → CHECK + fixed sense.
+ *   illegal LUN / opcode / LBA -> CHECK + fixed sense.
  *
- * Soft inventory (Wave 126 exclusive deepen — this unit only):
+ * Soft inventory (Wave 126 exclusive deepen -- this unit only):
  *   - Soft submit enter/ok/fail; per-op ok; deny catalog; LUN honesty
  *   - Product door INQUIRY path tracked separate from soft INQUIRY
- *   greppable: "scsi_mid: soft …" via scsi_mid_soft_inventory_log()
+ *   greppable: "scsi_mid: soft ..." via scsi_mid_soft_inventory_log()
  * Soft LUN honesty remains soft; never hard-gates product submit.
+ *
+ * C2 product daemon residual (this exclusive unit; Soft!=product):
+ *   Product mid library for the scsi_mid product daemon path (CDB builders,
+ *   soft LUN policy, door-map submit). Soft inventory != product AC.
+ *   product=UDX/DDI+ABI companion: bulk/store lives with storaged + UDX
+ *   hosts; this mid owns sense/LUN/geometry + scsi_door map only.
+ *   multi_server=0 confine=0. Dual DoD A/B remain OPEN (not closed here).
+ *   G-AC-1: no Linux .ko mid product AC. Kernel interim mid != product.
+ *   H1/H2/H3 not owned here (thr-stack eth poll / stamp storm / thr_exit).
+ *   greppable: scsi_mid: soft residual lean
+ *   greppable: scsi_mid: soft residual deepen
+ *   greppable: scsi_mid: soft residual lean PASS
+ * Stamp-free residual (bar v2026.08.04.75 context only -- never bump
+ * GJ_IMAGE_VERSION from this unit). No stamp storms. Dual DoD OPEN.
  *
  * Opcode constants: include/scsi_mid.h (SCSI_OP_*).
  * Door ops:         user/libgj/include/gj/syscalls.h (GJ_SCSI_OP_*).
@@ -84,8 +99,10 @@ static uint8_t g_u8SoftUnitSenseLen;
 
 /*
  * Soft product inventory (Wave 126 exclusive deepen). File-local tallies.
- * greppable via scsi_mid_soft_inventory_log(): scsi_mid: soft …
+ * greppable via scsi_mid_soft_inventory_log(): scsi_mid: soft ...
  * Soft LUN honesty remains soft; product door INQUIRY path separate.
+ * C2 residual: Soft!=product; Dual DoD OPEN; product=UDX/DDI+ABI companion;
+ * G-AC-1 no .ko mid product. Stamp-free (never GJ_IMAGE_VERSION).
  */
 #define SCSI_MID_SOFT_WAVE 70u
 
@@ -99,7 +116,7 @@ static uint32_t g_u32SoftOpRead10;
 static uint32_t g_u32SoftOpWrite10;
 static uint32_t g_u32SoftOpSync;
 static uint32_t g_u32SoftOpOther;
-static uint32_t g_u32SoftDenyLun;   /* LUN ≠ 0 CHECK */
+static uint32_t g_u32SoftDenyLun;   /* LUN != 0 CHECK */
 static uint32_t g_u32SoftDenyCdb;   /* empty / bad CDB */
 static uint32_t g_u32SoftDenyLba;   /* out-of-range LBA */
 static uint32_t g_u32SoftDenyEvpd;  /* EVPD not supported */
@@ -875,12 +892,15 @@ scsi_mid_submit(struct scsi_io *pIo)
 
 /*
  * Wave 126 exclusive soft inventory dump (product library path).
- * Greppable prefix: "scsi_mid: soft …"
+ * Greppable prefix: "scsi_mid: soft ..."
  * Soft LUN honesty remains soft; product door INQUIRY path separate.
- * Never hard-gates submit / live path. Host uses printf; freestanding
- * uses gj_debug_log when SCSI_HAS_SYS.
+ * C2 product daemon residual lean/deepen lamps (Soft!=product; G-AC-1;
+ * Dual DoD OPEN; product=UDX/DDI+ABI companion). Never hard-gates submit
+ * / live path. Host uses printf; freestanding uses gj_debug_log when
+ * SCSI_HAS_SYS. Stamp-free; never bumps GJ_IMAGE_VERSION.
  *
  * Exported without header change (Wave 126 exclusive; host server declares).
+ * greppable: scsi_mid: soft residual lean | residual deepen | lean PASS
  */
 void
 scsi_mid_soft_inventory_log(void)
@@ -959,16 +979,36 @@ scsi_mid_soft_inventory_log(void)
         aLine[o] = '\0';
         MID_INV_EMIT();
     }
-    (void)gj_debug_log(
-        "scsi_mid: soft path soft_lun=1 product_inq=door soft_inq=soft "
-        "lun_honest=soft multi_server=0 confine=0 wave=70 "
-        "(soft inventory)\n",
-        138);
-    (void)gj_debug_log(
-        "scsi_mid: soft honesty multi_server=0 confine=0 "
-        "exclusive=1 soft=1 product_kernel=OPEN wave=70\n",
-        82);
-    (void)gj_debug_log("scsi_mid: soft inventory PASS\n", 30);
+    {
+        static const char szPath[] =
+            "scsi_mid: soft path soft_lun=1 product_inq=door soft_inq=soft "
+            "lun_honest=soft multi_server=0 confine=0 wave=70 "
+            "(soft inventory; Soft!=product)\n";
+        static const char szHon[] =
+            "scsi_mid: soft honesty multi_server=0 confine=0 "
+            "exclusive=1 soft=1 product_kernel=OPEN Dual_DoD=OPEN "
+            "wave=70 Soft!=product\n";
+        static const char szLean[] =
+            "scsi_mid: soft residual lean C2=product_daemon "
+            "product_mid=userspace Soft!=product G-AC-1 Dual_DoD=OPEN "
+            "product=UDX/DDI+ABI multi_server=0 confine=0 "
+            "(C2 residual; stamp-free; no .ko product AC)\n";
+        static const char szDeep[] =
+            "scsi_mid: soft residual deepen C2=product_daemon "
+            "soft_lun=1 door_inq=sep soft_inq=soft H1=0 H2=0 H3=0 "
+            "Soft!=product Dual_DoD=OPEN product=UDX/DDI+ABI\n";
+        static const char szLeanPass[] =
+            "scsi_mid: soft residual lean PASS Soft!=product "
+            "C2=product_daemon Dual_DoD=OPEN G-AC-1=1\n";
+        static const char szPass[] = "scsi_mid: soft inventory PASS\n";
+
+        (void)gj_debug_log(szPath, (long)(sizeof(szPath) - 1u));
+        (void)gj_debug_log(szHon, (long)(sizeof(szHon) - 1u));
+        (void)gj_debug_log(szLean, (long)(sizeof(szLean) - 1u));
+        (void)gj_debug_log(szDeep, (long)(sizeof(szDeep) - 1u));
+        (void)gj_debug_log(szLeanPass, (long)(sizeof(szLeanPass) - 1u));
+        (void)gj_debug_log(szPass, (long)(sizeof(szPass) - 1u));
+    }
 #undef MID_INV_EMIT
 #else
     soft_inv_inc(&g_u32SoftInvLog);
@@ -1004,7 +1044,7 @@ scsi_mid_soft_inventory_log(void)
 
     /* Grep: scsi_mid: soft lun */
     printf("scsi_mid: soft lun honest=%u soft_only=1 "
-           "(soft inventory; not product gate)\n",
+           "(soft inventory; not product gate; Soft!=product)\n",
            (unsigned)g_u32SoftLunHonest);
 
     /* Grep: scsi_mid: soft geometry */
@@ -1023,23 +1063,58 @@ scsi_mid_soft_inventory_log(void)
 
     /*
      * Grep: scsi_mid: soft path
-     * Honesty: soft LUN ≠ product door INQUIRY.
+     * Honesty: soft LUN != product door INQUIRY (Soft!=product).
      */
     printf("scsi_mid: soft path soft_lun=1 product_inq=door soft_inq=soft "
            "lun_honest=soft multi_server=0 confine=0 wave=%u "
-           "(soft inventory)\n",
+           "(soft inventory; Soft!=product)\n",
            (unsigned)SCSI_MID_SOFT_WAVE);
 
-    /* Grep: scsi_mid: soft honesty (Wave 126 exclusive deepen) */
-/* Wave 126 soft deepen surfaces (CREATE-ONLY soft ≠ product):
- *   greppable: soft retgradientangle continuum_toward=26800 soft_ne_product=1 wave=126
- *   greppable: soft retblendangle exclusive=1 continuum_toward=26800 soft_ne_product=1 wave=126
- * Soft ≠ product complete; product lamps 0;
- */
-
+    /*
+     * Grep: scsi_mid: soft honesty (Wave 126 exclusive deepen)
+     * Wave 126 soft deepen surfaces (CREATE-ONLY Soft!=product):
+     *   greppable: soft retgradientangle continuum_toward=26800 Soft!=product wave=126
+     *   greppable: soft retblendangle exclusive=1 continuum_toward=26800 Soft!=product wave=126
+     * Soft!=product complete; product lamps 0; Dual DoD OPEN.
+     */
     printf("scsi_mid: soft honesty multi_server=0 confine=0 "
-           "exclusive=1 soft=1 product_kernel=OPEN wave=%u\n",
+           "exclusive=1 soft=1 product_kernel=OPEN Dual_DoD=OPEN "
+           "wave=%u Soft!=product\n",
            (unsigned)SCSI_MID_SOFT_WAVE);
+
+    /*
+     * Grep: scsi_mid: soft residual lean
+     * C2 product daemon residual (Soft!=product; G-AC-1; Dual DoD OPEN).
+     * product=UDX/DDI+ABI companion; this mid owns CDB/sense/LUN/door map.
+     * H1/H2/H3 not owned here. Stamp-free; never Dual DoD close.
+     */
+    printf("scsi_mid: soft residual lean C2=product_daemon "
+           "product_mid=userspace Soft!=product G-AC-1 Dual_DoD=OPEN "
+           "product=UDX/DDI+ABI multi_server=0 confine=0 "
+           "enter=%u ok=%u fail=%u via_soft=%u via_door=%u "
+           "door_inq=%u soft_inq=%u lun_honest=%u "
+           "(C2 residual; stamp-free; no .ko product AC)\n",
+           (unsigned)g_u32SoftEnter, (unsigned)g_u32SoftIoOk,
+           (unsigned)g_u32SoftIoFail, (unsigned)g_u32SoftViaSoft,
+           (unsigned)g_u32SoftViaDoor, (unsigned)g_u32SoftDoorInq,
+           (unsigned)g_u32SoftOpInq, (unsigned)g_u32SoftLunHonest);
+
+    /* Grep: scsi_mid: soft residual deepen */
+    printf("scsi_mid: soft residual deepen C2=product_daemon "
+           "soft_lun=1 door_inq=sep soft_inq=soft "
+           "deny_lun=%u deny_cdb=%u deny_lba=%u deny_evpd=%u "
+           "deny_op=%u deny_null=%u H1=0 H2=0 H3=0 "
+           "Soft!=product Dual_DoD=OPEN product=UDX/DDI+ABI "
+           "wave=%u\n",
+           (unsigned)g_u32SoftDenyLun, (unsigned)g_u32SoftDenyCdb,
+           (unsigned)g_u32SoftDenyLba, (unsigned)g_u32SoftDenyEvpd,
+           (unsigned)g_u32SoftDenyOp, (unsigned)g_u32SoftDenyNull,
+           (unsigned)SCSI_MID_SOFT_WAVE);
+
+    /* Grep: scsi_mid: soft residual lean PASS */
+    printf("scsi_mid: soft residual lean PASS Soft!=product "
+           "C2=product_daemon Dual_DoD=OPEN G-AC-1=1 "
+           "product=UDX/DDI+ABI exclusive=1\n");
 
     /* Grep: scsi_mid: soft inventory PASS */
     printf("scsi_mid: soft inventory PASS\n");

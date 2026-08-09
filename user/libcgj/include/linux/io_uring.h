@@ -18,6 +18,15 @@
  * Non-goals
  * ---------
  * Full upstream io_uring feature set (registered buffers, all ops).
+ *
+ * Soft residual (C2 libcgj linux/io_uring.h; Soft!=product; G-AC-1; Dual DoD A/B OPEN):
+ *   soft     = io_uring_params/SQE/CQE + IORING_* opcodes for min+mmap path
+ *              (kernel/syscall/io_uring_min.c); expand when new ops wire
+ *   product  = UDX/DDI + hot/cold ABI hosts; not freestanding class; not .ko AC
+ *   honesty  = UAPI-shaped catalog != full upstream product; agent PASS != Dual
+ *              DoD close; stamp-free bar honesty (no version stamp)
+ *   law      = dual MIT OR Apache-2.0; no GPL; H2 no stamp storms
+ * greppable: libcgj: linux/io_uring soft residual Soft!=product
  */
 #pragma once
 

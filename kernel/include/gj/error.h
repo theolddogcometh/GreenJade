@@ -20,11 +20,11 @@
  * ---------------------------------------------------
  * Cap use after revoke / gen bump must never succeed. Prefer the specific
  * codes below over a generic INVAL when the failure class is known:
- *   object DEAD after Phase A     → GJ_ERR_DEAD
- *   slot/object generation mismatch → GJ_ERR_STALE_CAP
- *   rights or authority missing   → GJ_ERR_PERM
- *   peer gone mid-IPC             → GJ_ERR_PEER_DEAD
- *   revoke woken waiter           → GJ_ERR_REVOKED (when not PEER_DEAD)
+ *   object DEAD after Phase A     -> GJ_ERR_DEAD
+ *   slot/object generation mismatch -> GJ_ERR_STALE_CAP
+ *   rights or authority missing   -> GJ_ERR_PERM
+ *   peer gone mid-IPC             -> GJ_ERR_PEER_DEAD
+ *   revoke woken waiter           -> GJ_ERR_REVOKED (when not PEER_DEAD)
  *
  * See also docs/CAP_ADDRESSING.md (slot resolve table) and G-Q / quota notes
  * in docs/DESIGN_SPEC_COMPLETE.md (hard GJ_ERR_QUOTA is v1 default).
@@ -107,7 +107,7 @@ enum {
 
     /**
      * Bad address / failed user access: copyin/copyout fault, unmapped VA,
-     * pager absence leading to fault failure (G-PTR-3: user fault → error,
+     * pager absence leading to fault failure (G-PTR-3: user fault -> error,
      * never kernel panic on untrusted addresses).
      */
     GJ_ERR_FAULT     = -8,
@@ -115,7 +115,7 @@ enum {
     /**
      * Object is DEAD after revoke Phase A (state DEAD + object gen bumped).
      * Cap ops that resolve the object must return DEAD/STALE and never
-     * succeed (SECURITY_CORE_DESIGN S1–S2). Prefer over INVAL when DEAD is
+     * succeed (SECURITY_CORE_DESIGN S1-S2). Prefer over INVAL when DEAD is
      * known so callers can distinguish revoke from bad arguments.
      */
     GJ_ERR_DEAD      = -9,
@@ -124,7 +124,7 @@ enum {
      * Slot or object generation mismatch: user handle gen does not match
      * slot gen, or object gen at install no longer matches. Typical after
      * slot reuse or revoke hygiene (CAP_ADDRESSING resolve table). Fail
-     * closed — never treat as success even if pObj still looks non-NULL.
+     * closed - never treat as success even if pObj still looks non-NULL.
      */
     GJ_ERR_STALE_CAP = -10,
 
@@ -143,7 +143,7 @@ enum {
 
     /**
      * IPC peer died or object marked peer-dead mid-rendezvous. Waiters must
-     * wake with PEER_DEAD (no hang — SECURITY_CORE_DESIGN dead-peer rule).
+     * wake with PEER_DEAD (no hang - SECURITY_CORE_DESIGN dead-peer rule).
      * Doors may surface this class as Linux -EIO at the personality edge.
      */
     GJ_ERR_PEER_DEAD = -13,

@@ -3,23 +3,26 @@
  * Copyright (c) 2026 Project GreenJade contributors
  *
  * Clean-room Linux x86_64 syscall surface (public man pages / ABI docs).
- * Not Linux source. Hybrid Option C: hot paths in kernel, cold → personality.
- * Pure C11 freestanding — dual MIT OR Apache-2.0.
+ * Not Linux source. Hybrid Option C: hot paths in kernel, cold -> personality.
+ * Pure C11 freestanding - dual MIT OR Apache-2.0.
  *
  * -------------------------------------------------------------------------
  * Scope (header-only ABI catalog)
  * -------------------------------------------------------------------------
  * Stable numeric surface consumed by hybrid dispatch, PE32/WoW64 soft paths,
- * freestanding libgj, and cold personality (libprotonrt / doors):
+ * freestanding libgj, UDX driver hosts, and cold personality (libprotonrt /
+ * doors):
  *   LINUX_E*           errno values returned as -errno in rax / i64Ret
  *   LINUX_NR_*         x86_64 SYSCALL numbers (public syscall_64.tbl ABI)
  *   LINUX_PROT_*, LINUX_MAP_*, CLOCK_*, ARCH_*, open/at/seek/wait/clone
+ *   LINUX_F_*, LINUX_AF_*, LINUX_SOCK_*, LINUX_MSG_*, LINUX_SHUT_*, MADV_*
  *   struct gj_linux_regs, linux_timespec, enum gj_linux_path
  *
  * This header is macros + small POD types + optional static inlines only.
  * No .c, no runtime state, no GPL paste. Values match public Linux ABI
  * numbers; code that implements them lives in linux_hot, linux_dispatch,
- * and cold_ipc.
+ * cold_ipc, and userspace UDX hosts (apps / driver hosts over the same NR
+ * surface). Catalog presence ≠ implemented product path.
  *
  * -------------------------------------------------------------------------
  * Contract
@@ -35,18 +38,39 @@
  *   - Option C (docs/LINUX_ABI_HYBRID.md): HOT in-kernel, COLD doors to
  *     personality, NONE -> ENOSYS. Classification is not encoded in NR
  *     values; see enum gj_linux_path and gj_linux_classify().
+ *   - x32-only public NRs (512..547) are outside GJ_LINUX_NR_TABLE and are
+ *     not catalogued here; native x86_64 product path only.
+ *
+ * -------------------------------------------------------------------------
+ * Hot + cold product path (UDX hosts + apps) — honesty
+ * -------------------------------------------------------------------------
+ * Typical HOT (linux_hot / in-kernel): getpid/tid/uid family, write vector
+ * I/O, mmap/mprotect/munmap/brk/mremap, futex family, clock_ and nanosleep,
+ * arch_prctl, rseq, getrandom, sched yield/affinity/priority soft, exit.
+ * Typical COLD (doors / protonrt / UDX-facing FS+net+ioctl): openat family,
+ * read/close/stat/getdents, poll/epoll/select, socket and *msg, clone/exec,
+ * ioctl, memfd, io_uring, mount graph, module load NRs (soft only).
+ * UDX driver hosts are userspace processes on this same SYSCALL surface;
+ * they do not embed Linux .ko into the kernel (G-AC-1). Soft continuum /
+ * catalog deepen != product complete, != bar3, != Steam title PASS.
+ * Per-NR family notes (HOT/COLD typical + apps vs UDX host diet) live under
+ * the LINUX_NR_* catalog block below — comments only; values ABI-stable.
+ * greppable: Soft!=product G-AC-1 UDX_host hot_cold NR_catalog
  *
  * -------------------------------------------------------------------------
  * Clean-room / product notes
  * -------------------------------------------------------------------------
  * Derived from published man-pages and architecture ABI tables only.
  * Companion: docs/LINUX_ABI_HYBRID.md, docs/PROTON_PERSONALITY.md,
- *            docs/GLIBC_COMPAT.md, docs/SECURITY_CORE_DESIGN.md
+ *            docs/GLIBC_COMPAT.md, docs/SECURITY_CORE_DESIGN.md,
+ *            docs/UDX_LINUX_PORTER.md
  * PE32 int80 / i386 NR map is wow64.h (maps into these x86_64 NRs).
  *
  * greppable: LINUX_NR_ LINUX_E LINUX_PROT_ LINUX_MAP_ LINUX_CLOCK_
  * greppable: GJ_LINUX_PATH LINUX_ABI_HYBRID Option_C gj_linux_regs
  * greppable: LINUX_O_ LINUX_AT_ LINUX_SEEK_ LINUX_CLONE_ LINUX_WNOHANG
+ * greppable: LINUX_F_ LINUX_AF_ LINUX_SOCK_ LINUX_MSG_ LINUX_MADV_
+ * greppable: LINUX_NR_MAX_CATALOG
  */
 #pragma once
 
@@ -55,12 +79,12 @@
 /* ---- Linux errno (subset; return as -errno in rax) ---------------------- */
 /*
  * Public Linux/x86 errno numbers (asm-generic/errno*.h shape). Incomplete by
- * design — product hot/cold paths only need the classes they actually return.
+ * design - product hot/cold paths only need the classes they actually return.
  * Append new codes with their true public values; never renumber.
  *
- * Soft mapping tip (native → Linux edge): GJ_ERR_NOENT→ENOENT, PERM→EACCES
- * or EPERM, NOMEM→ENOMEM, FAULT→EFAULT, TIMEOUT→ETIMEDOUT, NOSUPPORT→ENOSYS,
- * BUSY→EBUSY, AGAIN→EAGAIN, PEER_DEAD often →EIO at doors (product choice).
+ * Soft mapping tip (native -> Linux edge): GJ_ERR_NOENT->ENOENT, PERM->EACCES
+ * or EPERM, NOMEM->ENOMEM, FAULT->EFAULT, TIMEOUT->ETIMEDOUT, NOSUPPORT->ENOSYS,
+ * BUSY->EBUSY, AGAIN->EAGAIN, PEER_DEAD often ->EIO at doors (product choice).
  */
 #define LINUX_EPERM        1
 #define LINUX_ENOENT       2
@@ -150,66 +174,151 @@
 
 /* ---- x86_64 Linux syscall numbers (public ABI) -------------------------- */
 /*
- * Numbers are the public x86_64 Linux SYSCALL ABI (syscall_64.tbl). Order in
- * this file is historical / grouped for greppability — not NR order. Values
+ * Numbers are the public x86_64 Linux SYSCALL ABI (syscall_64.tbl shape from
+ * man-pages / published arch tables — clean-room, not a GPL paste). Order in
+ * this file is historical / grouped for greppability - not NR order. Values
  * alone are the ABI contract.
  *
- * Soft product use:
- *   - HOT set registered in linux_dispatch (getpid, write, mmap, futex, …)
- *   - COLD → doors / protonrt_cold_linux for FS/net/poll/ioctl-heavy NRs
- *   - Unregistered / PATH_NONE → -ENOSYS (fail closed, not silent success)
+ * Soft product use (Option C; registration lives in linux_dispatch.c):
+ *   - HOT set registered in linux_dispatch (getpid, write, mmap, futex, ...)
+ *   - COLD -> doors / protonrt_cold_linux for FS/net/poll/ioctl-heavy NRs
+ *   - Unregistered / PATH_NONE -> -ENOSYS (fail closed, not silent success)
+ *   - UDX hosts + freestanding apps issue the same NRs; host process, not
+ *     in-kernel .ko (G-AC-1). Catalog name ≠ HOT/COLD registration.
  *
- * Deepen policy: fill historical gaps used by glibc/musl/Steam/Proton soft
- * paths; keep every pre-existing LINUX_NR_* value unchanged.
+ * Public NR topology (x86_64 native):
+ *   0..334     classic + modern pre-gap surface (rseq = 334)
+ *   335..336   uretprobe / uprobe (probe residual)
+ *   337..423   intentional public hole — do not invent NRs here
+ *   424..471   post-gap modern surface (pidfd, io_uring, clone3, mseal, …)
+ *   512..547   x32-only (not product; outside GJ_LINUX_NR_TABLE)
+ *
+ * Deepen policy: fill residuals used by glibc/musl/Steam/Proton/UDX soft
+ * paths from public ABI only; keep every pre-existing LINUX_NR_* value
+ * unchanged. Soft!=product.
+ *
+ * -------------------------------------------------------------------------
+ * NR catalog map — UDX hosts + apps (hot / cold typical roles)
+ * -------------------------------------------------------------------------
+ * Consumers share one SYSCALL surface. Classification is runtime
+ * (linux_dispatch set_hot/set_cold); comments below are *typical* product
+ * intent for Option C, not live registration truth. Soft!=product · G-AC-1.
+ *
+ * Consumers
+ *   apps     - shell, init, sshd, netstackd, vfsd, storaged, sessiond,
+ *              freestanding libgj / glibc-shaped bring-up, Proton soft
+ *   UDX host - rtl8168_udx, xhci_udx, ddi_host_gj, skeleton_pci_driver;
+ *              Linux-shaped userspace drivers over DDI caps + this NR set
+ *              (MMIO/IRQ/DMA via caps/doors — not via init_module .ko)
+ *
+ * Typical HOT (linux_hot / in-kernel; low-latency identity / MM / sync):
+ *   pid/tid/uid/gid family, getgroups*, setsid/setpgid, exit/exit_group
+ *   write / writev / readv / p{read,write}{,v,v2} (vector I/O hot subset)
+ *   mmap / mprotect / munmap / brk / mremap / msync / mincore / madvise
+ *   mlock* / mbind / *mempolicy / membarrier / rseq / getrandom
+ *   futex / futex_waitv / futex_wake|wait|requeue / set_robust_list*
+ *   clock_gettime / clock_getres / clock_nanosleep / nanosleep
+ *   sched_yield / affinity / priority / setattr soft, arch_prctl, prctl soft
+ *   tkill / tgkill / sigaltstack (signal hot residual)
+ *
+ * Typical COLD (doors / protonrt / personality; FS + net + poll + ioctl):
+ *   open / openat / openat2 / close / close_range / read / lseek / *stat*
+ *   getdents* / faccessat* / rename* / *at path family / fcntl / flock
+ *   poll / ppoll / select / pselect6 / epoll_* / eventfd* / timerfd_*
+ *   socket / *msg / *mmsg / connect / bind / listen / accept* / *sockopt
+ *   pipe* / splice / tee / sendfile / ioctl (TTY + UDX device control)
+ *   clone / clone3 / fork / vfork / execve* / wait* / kill
+ *   memfd_create / io_uring_* / mount graph / inotify / fanotify
+ *   module NRs (catalog + eng soft cold only — never product .ko AC)
+ *
+ * UDX host NR diet (what a driver host actually needs day-to-day)
+ *   HOT-heavy: mmap/mprotect for BAR/DMA windows once granted; futex for
+ *     threaded IRQ / work queues; clock_*; gettid/getpid; sched_*;
+ *     writev/readv for ring kick soft paths; exit_group on teardown
+ *   COLD-heavy: openat of control nodes / logs; ioctl for device ops soft
+ *     until pure cap path; epoll/eventfd for Notification bridge soft;
+ *     socket* only if host talks netstackd control plane; clone for
+ *     IRQ-thread + work thr; prctl/arch_prctl TLS; memfd for bounce
+ *   NOT product path: init_module / finit_module / delete_module as
+ *     “load Linux .ko into kernel” — forbidden G-AC-1 product AC
+ *
+ * App NR diet (sshd / netstackd / shell / vfsd shape)
+ *   HOT: identity, mmap heap, futex locks, clock, yield, vector write
+ *   COLD: full openat graph, socket lifecycle, poll/epoll, clone/exec,
+ *     getdents, fcntl, ioctl TTY — personality owns until native doors
+ *
+ * Honesty: greppable Soft!=product G-AC-1 UDX_host apps hot_cold NR_catalog
+ * Catalog deepen / continuum set_hot count ≠ Dual DoD A/B close ≠ bar3.
  */
 
-/* I/O + classic path */
-#define LINUX_NR_read              0
-#define LINUX_NR_write             1
-#define LINUX_NR_open              2
-#define LINUX_NR_close             3
-#define LINUX_NR_stat              4
-#define LINUX_NR_fstat             5
-#define LINUX_NR_lstat             6
-#define LINUX_NR_poll              7
-#define LINUX_NR_lseek             8
-#define LINUX_NR_mmap              9
-#define LINUX_NR_mprotect         10
-#define LINUX_NR_munmap           11
-#define LINUX_NR_brk              12
-#define LINUX_NR_rt_sigaction     13
-#define LINUX_NR_rt_sigprocmask   14
-#define LINUX_NR_ioctl            16
-#define LINUX_NR_pread64          17
-#define LINUX_NR_pwrite64         18
-#define LINUX_NR_readv            19
-#define LINUX_NR_writev           20
-#define LINUX_NR_preadv          295
-#define LINUX_NR_pwritev         296
-#define LINUX_NR_preadv2         327
-#define LINUX_NR_pwritev2        328
-#define LINUX_NR_access           21
-#define LINUX_NR_pipe             22
-#define LINUX_NR_select           23
-#define LINUX_NR_sched_yield      24
-#define LINUX_NR_mremap           25
-#define LINUX_NR_msync            26
-#define LINUX_NR_mincore          27
-#define LINUX_NR_madvise         28
+/* ---- I/O + classic path (apps COLD read/open; write* often HOT) -------- */
+/*
+ * read/open/close/stat/poll/lseek: typical COLD (doors FS).
+ * write / p{read,write}* / *v: often HOT when registered (linux_hot).
+ * mmap/mprotect/munmap/brk: HOT MM — UDX hosts map BAR/DMA after grant.
+ * ioctl: COLD (TTY apps + UDX device control residual).
+ * greppable: NR_IO_CLASSIC apps_cold UDX_mmap_hot
+ */
+#define LINUX_NR_read              0   /* COLD: apps / UDX host file read */
+#define LINUX_NR_write             1   /* HOT typical: apps + host logs */
+#define LINUX_NR_open              2   /* COLD: legacy open; prefer openat */
+#define LINUX_NR_close             3   /* COLD: fd lifecycle apps + UDX */
+#define LINUX_NR_stat              4   /* COLD: path stat (apps) */
+#define LINUX_NR_fstat             5   /* COLD: fd stat */
+#define LINUX_NR_lstat             6   /* COLD: no-follow stat */
+#define LINUX_NR_poll              7   /* COLD: apps poll; UDX soft wait */
+#define LINUX_NR_lseek             8   /* COLD: file offset */
+#define LINUX_NR_mmap              9   /* HOT: apps heap + UDX BAR/DMA map */
+#define LINUX_NR_mprotect         10   /* HOT: CapJit / UDX window prot */
+#define LINUX_NR_munmap           11   /* HOT: unmap */
+#define LINUX_NR_brk              12   /* HOT: heap break (apps) */
+#define LINUX_NR_rt_sigaction     13   /* COLD/soft: signal install */
+#define LINUX_NR_rt_sigprocmask   14   /* COLD/soft: mask */
+#define LINUX_NR_ioctl            16   /* COLD: TTY apps + UDX devctl */
+#define LINUX_NR_pread64          17   /* HOT typical: positioned read */
+#define LINUX_NR_pwrite64         18   /* HOT typical: positioned write */
+#define LINUX_NR_readv            19   /* HOT typical: vector read */
+#define LINUX_NR_writev           20   /* HOT typical: vector write */
+#define LINUX_NR_preadv          295   /* HOT typical: positioned readv */
+#define LINUX_NR_pwritev         296   /* HOT typical: positioned writev */
+#define LINUX_NR_preadv2         327   /* HOT soft: preadv flags */
+#define LINUX_NR_pwritev2        328   /* HOT soft: pwritev flags */
+#define LINUX_NR_access           21   /* COLD: path access check */
+#define LINUX_NR_pipe             22   /* COLD: apps IPC; UDX rare */
+#define LINUX_NR_select           23   /* COLD: legacy multiplex */
+#define LINUX_NR_sched_yield      24   /* HOT: apps + UDX work thr yield */
+#define LINUX_NR_mremap           25   /* HOT: remap */
+#define LINUX_NR_msync            26   /* HOT soft: sync mapping */
+#define LINUX_NR_mincore          27   /* HOT soft: residency probe */
+#define LINUX_NR_madvise         28   /* HOT soft: advise */
+
 /* SysV IPC (deepen catalog; typically COLD / ENOSYS until product wires) */
+/*
+ * shm/sem/msg: residual catalog for glibc/Proton soft; not UDX product
+ * datapath. PATH_NONE or COLD until wired. Soft!=product.
+ */
 #define LINUX_NR_shmget           29
 #define LINUX_NR_shmat            30
 #define LINUX_NR_shmctl           31
-#define LINUX_NR_dup              32
+#define LINUX_NR_dup              32   /* COLD: fd dup apps + UDX */
 #define LINUX_NR_dup2             33
 #define LINUX_NR_dup3            292
-#define LINUX_NR_recvmmsg        299
-#define LINUX_NR_sendmmsg        307
-#define LINUX_NR_nanosleep        35
-#define LINUX_NR_getitimer        36
+#define LINUX_NR_recvmmsg        299   /* COLD: net apps (sshd/netstackd) */
+#define LINUX_NR_sendmmsg        307   /* COLD: net apps batch send */
+#define LINUX_NR_nanosleep        35   /* HOT typical: sleep */
+#define LINUX_NR_getitimer        36   /* COLD/soft: interval timer */
 #define LINUX_NR_setitimer        38
-#define LINUX_NR_getpid           39
-#define LINUX_NR_socket           41
+#define LINUX_NR_getpid           39   /* HOT: apps + UDX host identity */
+
+/* ---- Net family (apps COLD; UDX only if control-plane socket) ----------- */
+/*
+ * socket / *msg / connect / bind / listen / accept / *sockopt: COLD doors.
+ * Primary consumers: sshd, netstackd, shell tools. UDX NIC hosts own wire
+ * via DDI caps + ring programming — not by replacing this socket ABI with
+ * in-kernel .ko (G-AC-1). Soft listen :22 ≠ product UDX wire close.
+ * greppable: NR_NET_COLD apps_sshd netstackd UDX_not_ko
+ */
+#define LINUX_NR_socket           41   /* COLD: apps net create */
 #define LINUX_NR_connect          42
 #define LINUX_NR_accept           43
 #define LINUX_NR_sendto           44
@@ -224,17 +333,27 @@
 #define LINUX_NR_getpeername      52
 #define LINUX_NR_setsockopt       54
 #define LINUX_NR_getsockopt       55
-#define LINUX_NR_clone            56
-#define LINUX_NR_fork             57
+
+/* ---- Process / thread lifecycle (clone COLD; exit HOT; UDX multi-thr) -- */
+/*
+ * clone/fork/exec/wait: typical COLD (personality). exit/exit_group HOT.
+ * UDX hosts: clone for IRQ-thread + work thr sharing one AS; exit_group
+ * on host teardown. apps: full fork/exec for shell/sshd children.
+ * greppable: NR_PROC apps_clone UDX_irq_thr
+ */
+#define LINUX_NR_clone            56   /* COLD: apps + UDX thr spawn */
+#define LINUX_NR_fork             57   /* COLD: apps */
 #define LINUX_NR_vfork            58
-#define LINUX_NR_execve           59
+#define LINUX_NR_execve           59   /* COLD: apps image load */
 #define LINUX_NR_execveat        322
-#define LINUX_NR_exit             60
-#define LINUX_NR_wait4            61
-#define LINUX_NR_kill             62
-#define LINUX_NR_tkill           200
-#define LINUX_NR_tgkill          234
-#define LINUX_NR_uname            63
+#define LINUX_NR_exit             60   /* HOT: thread exit */
+#define LINUX_NR_wait4            61   /* COLD: apps reaper */
+#define LINUX_NR_kill             62   /* COLD/soft: signal send */
+#define LINUX_NR_tkill           200   /* HOT typical: thr-directed */
+#define LINUX_NR_tgkill          234   /* HOT typical: tgid+tid */
+#define LINUX_NR_uname            63   /* COLD/soft: utsname apps */
+
+/* SysV sem/msg residual (COLD / ENOSYS until product; not UDX datapath) */
 #define LINUX_NR_semget           64
 #define LINUX_NR_semop            65
 #define LINUX_NR_semctl           66
@@ -243,23 +362,27 @@
 #define LINUX_NR_msgsnd           69
 #define LINUX_NR_msgrcv           70
 #define LINUX_NR_msgctl           71
-#define LINUX_NR_rt_sigreturn     15
+
+/* ---- Signals + sched (mix; yield/affinity often HOT for UDX thr) ------- */
+#define LINUX_NR_rt_sigreturn     15   /* HOT/soft: return frame */
 #define LINUX_NR_rt_sigpending    127
 #define LINUX_NR_rt_sigtimedwait  128
 #define LINUX_NR_rt_sigqueueinfo  129
 #define LINUX_NR_rt_sigsuspend    130
-#define LINUX_NR_sigaltstack      131
-#define LINUX_NR_sched_setparam   142
+#define LINUX_NR_sigaltstack      131  /* HOT typical: alt stack */
+#define LINUX_NR_sched_setparam   142  /* HOT soft: UDX thr priority */
 #define LINUX_NR_sched_getparam   143
 #define LINUX_NR_sched_setscheduler 144
 #define LINUX_NR_sched_getscheduler 145
 #define LINUX_NR_sched_get_priority_max 146
 #define LINUX_NR_sched_get_priority_min 147
 #define LINUX_NR_sched_rr_get_interval 148
-#define LINUX_NR_unshare          272
+#define LINUX_NR_unshare          272  /* COLD: ns residual apps */
 #define LINUX_NR_setns            308
+
+/* ---- Mount / admin residual (COLD; not UDX product bind path) ---------- */
 #define LINUX_NR_chroot            161
-#define LINUX_NR_mount            165
+#define LINUX_NR_mount            165  /* COLD: apps/personality mount */
 #define LINUX_NR_umount2          166
 #define LINUX_NR_pivot_root       155
 #define LINUX_NR_swapon           167
@@ -270,19 +393,27 @@
 #define LINUX_NR_readahead        187
 #define LINUX_NR_sync_file_range  277
 #define LINUX_NR_vmsplice         278
-#define LINUX_NR_getdents          78
+#define LINUX_NR_getdents          78  /* COLD: apps directory read */
 #define LINUX_NR_syslog           103
-#define LINUX_NR_getsid           124
+#define LINUX_NR_getsid           124  /* HOT typical: session id */
+
 /*
  * Slot 134 public name is uselib; historical tree used bdflush for this
- * number — value kept, alias added (do not renumber).
+ * number - value kept, alias added (do not renumber).
  */
 #define LINUX_NR_bdflush          134
 #define LINUX_NR_uselib           134
-#define LINUX_NR_personality      135
+#define LINUX_NR_personality      135  /* COLD/soft: persona select */
 #define LINUX_NR_ustat            136
 #define LINUX_NR_sysfs            139
-#define LINUX_NR_fcntl            72
+
+/* ---- FS path ops (COLD doors; apps vfsd + UDX host open of nodes) ------ */
+/*
+ * fcntl/fsync + *at family: typical COLD. UDX hosts open control
+ * and fcntl(F_SETFL) nonblock; apps own the full rename/link/stat graph.
+ * greppable: NR_FS_COLD apps_vfs UDX_openat
+ */
+#define LINUX_NR_fcntl            72   /* COLD: apps + UDX fd control */
 #define LINUX_NR_fsync            74
 #define LINUX_NR_fdatasync        75
 #define LINUX_NR_truncate          76
@@ -306,7 +437,7 @@
 #define LINUX_NR_chown            92
 #define LINUX_NR_lchown           94
 #define LINUX_NR_umask            95
-#define LINUX_NR_getxattr        191
+#define LINUX_NR_getxattr        191  /* COLD: xattr residual apps */
 #define LINUX_NR_lgetxattr       192
 #define LINUX_NR_fgetxattr       193
 #define LINUX_NR_setxattr        188
@@ -321,8 +452,15 @@
 #define LINUX_NR_utime            132
 #define LINUX_NR_mknod            133
 #define LINUX_NR_utimensat        280
-#define LINUX_NR_ptrace           101
-#define LINUX_NR_getuid          102
+#define LINUX_NR_ptrace           101  /* COLD/soft: debug residual */
+
+/* ---- Credential / identity (HOT typical; apps + UDX host get*id) ------ */
+/*
+ * getuid/gettid/set*uid family: typically HOT in linux_hot. Both apps and
+ * UDX hosts need cheap identity for logging and TLS setup.
+ * greppable: NR_CRED_HOT apps_id UDX_gettid
+ */
+#define LINUX_NR_getuid          102  /* HOT: apps + UDX */
 #define LINUX_NR_getgid          104
 #define LINUX_NR_setuid          105
 #define LINUX_NR_setgid          106
@@ -343,18 +481,22 @@
 #define LINUX_NR_getpgid         121
 #define LINUX_NR_setfsuid        122
 #define LINUX_NR_setfsgid        123
-#define LINUX_NR_mlock           149
+
+/* ---- MM lock / policy (HOT soft; UDX DMA window pin residual) ---------- */
+#define LINUX_NR_mlock           149  /* HOT soft: pin pages / UDX residual */
 #define LINUX_NR_munlock         150
 #define LINUX_NR_mlockall        151
 #define LINUX_NR_munlockall      152
 #define LINUX_NR_vhangup         153
-#define LINUX_NR_modify_ldt      154
+#define LINUX_NR_modify_ldt      154  /* soft: PE32 / TLS bridge residual */
 #define LINUX_NR_sysctl          156  /* historical _sysctl */
 #define LINUX_NR_mlock2          325
-#define LINUX_NR_pkey_mprotect   329
+#define LINUX_NR_pkey_mprotect   329  /* HOT soft: pkey residual */
 #define LINUX_NR_pkey_alloc      330
 #define LINUX_NR_pkey_free       331
-#define LINUX_NR_gettimeofday     96
+
+/* ---- Time / rlimit / resource (clock* HOT; rlimit mix) ------------------ */
+#define LINUX_NR_gettimeofday     96  /* HOT/soft: timeval edge */
 #define LINUX_NR_getrlimit        97
 #define LINUX_NR_setrlimit       160
 #define LINUX_NR_getrusage        98
@@ -364,37 +506,47 @@
 #define LINUX_NR_adjtimex        159
 #define LINUX_NR_settimeofday    164
 #define LINUX_NR_acct            163
-#define LINUX_NR_iopl            172
+#define LINUX_NR_iopl            172  /* not UDX product; port I/O residual */
 #define LINUX_NR_ioperm          173
-#define LINUX_NR_getpriority     140
+#define LINUX_NR_getpriority     140  /* HOT soft */
 #define LINUX_NR_setpriority     141
-#define LINUX_NR_capget          125
+#define LINUX_NR_capget          125  /* COLD/soft: Linux caps ≠ GJ caps */
 #define LINUX_NR_capset          126
-#define LINUX_NR_sched_setaffinity 203
+#define LINUX_NR_sched_setaffinity 203 /* HOT: apps + UDX thr pin */
 #define LINUX_NR_sched_getaffinity 204
 #define LINUX_NR_set_thread_area 205  /* PE32 TLS soft / glibc i386 bridge */
 #define LINUX_NR_get_thread_area 211
-#define LINUX_NR_getcpu          309
+#define LINUX_NR_getcpu          309  /* HOT soft: CPU id */
 #define LINUX_NR_alarm           37
 #define LINUX_NR_pause           34
-#define LINUX_NR_flock           73
+#define LINUX_NR_flock           73   /* COLD: file lock apps */
 #define LINUX_NR_fchmod          91
 #define LINUX_NR_fchown          93
-#define LINUX_NR_arch_prctl      158
-#define LINUX_NR_gettid          186
-#define LINUX_NR_futex           202
-#define LINUX_NR_set_tid_address 218
-#define LINUX_NR_clock_gettime   228
+
+/* ---- Hot core: TLS / futex / clock / exit_group / epoll ctl edge ------- */
+/*
+ * arch_prctl, futex*, clock_*, gettid, exit_group: HOT spine for apps and
+ * UDX hosts (glibc TLS, mutex, timed wait, thr id, process exit).
+ * epoll_*: COLD multiplex — apps event loops + UDX Notification soft bridge.
+ * greppable: NR_HOT_CORE futex clock UDX_tls apps_epoll_cold
+ */
+#define LINUX_NR_arch_prctl      158  /* HOT: FS/GS TLS apps + UDX */
+#define LINUX_NR_gettid          186  /* HOT: thr id */
+#define LINUX_NR_futex           202  /* HOT: locks apps + UDX work/IRQ thr */
+#define LINUX_NR_set_tid_address 218  /* HOT: clear_child_tid */
+#define LINUX_NR_clock_gettime   228  /* HOT: monotonic/realtime */
 #define LINUX_NR_clock_getres    229
-#define LINUX_NR_clock_nanosleep 230
-#define LINUX_NR_exit_group      231
-#define LINUX_NR_epoll_wait      232
-#define LINUX_NR_epoll_ctl       233
-#define LINUX_NR_sendfile         40
-#define LINUX_NR_prctl           157
-#define LINUX_NR_getdents64      217
-#define LINUX_NR_waitid          247
-#define LINUX_NR_openat          257
+#define LINUX_NR_clock_nanosleep 230  /* HOT: absolute/relative sleep */
+#define LINUX_NR_exit_group      231  /* HOT: process exit apps + UDX host */
+#define LINUX_NR_epoll_wait      232  /* COLD: apps + UDX soft wait */
+#define LINUX_NR_epoll_ctl       233  /* COLD: register fds */
+#define LINUX_NR_sendfile         40  /* COLD: apps zero-copy residual */
+#define LINUX_NR_prctl           157  /* HOT/soft: name/PDEATHSIG etc */
+#define LINUX_NR_getdents64      217  /* COLD: modern dirent apps */
+#define LINUX_NR_waitid          247  /* COLD: apps reaper */
+
+/* ---- *at(2) modern FS (COLD; openat primary for apps + UDX hosts) ------ */
+#define LINUX_NR_openat          257  /* COLD: primary open apps + UDX */
 #define LINUX_NR_mkdirat         258
 #define LINUX_NR_mknodat         259
 #define LINUX_NR_fchownat        260
@@ -402,13 +554,13 @@
 #define LINUX_NR_newfstatat      262
 #define LINUX_NR_unlinkat        263
 #define LINUX_NR_faccessat       269
-#define LINUX_NR_pselect6        270
+#define LINUX_NR_pselect6        270  /* COLD: multiplex apps */
 #define LINUX_NR_ppoll           271
-#define LINUX_NR_set_robust_list 273
+#define LINUX_NR_set_robust_list 273  /* HOT: robust futex list */
 #define LINUX_NR_get_robust_list 274
-#define LINUX_NR_splice          275
+#define LINUX_NR_splice          275  /* COLD: pipe splice apps */
 #define LINUX_NR_tee             276
-#define LINUX_NR_inotify_init1   294
+#define LINUX_NR_inotify_init1   294  /* COLD: watch residual */
 #define LINUX_NR_inotify_add_watch 254
 #define LINUX_NR_inotify_rm_watch  255
 #define LINUX_NR_renameat        264
@@ -416,83 +568,125 @@
 #define LINUX_NR_symlinkat       266
 #define LINUX_NR_renameat2       316
 #define LINUX_NR_copy_file_range 326
-#define LINUX_NR_clock_settime   227
+#define LINUX_NR_clock_settime   227  /* COLD/soft: set clock */
 #define LINUX_NR_clock_adjtime   305
-#define LINUX_NR_io_pgetevents   333
-#define LINUX_NR_userfaultfd     323
-#define LINUX_NR_seccomp         317
-#define LINUX_NR_bpf             321
+#define LINUX_NR_io_pgetevents   333  /* COLD: AIO residual */
+#define LINUX_NR_userfaultfd     323  /* COLD/soft: uffd residual */
+#define LINUX_NR_seccomp         317  /* COLD/soft: filter residual */
+#define LINUX_NR_bpf             321  /* COLD/soft: not UDX product path */
 #define LINUX_NR_keyctl          250
 #define LINUX_NR_add_key         248
 #define LINUX_NR_request_key     249
 #define LINUX_NR_name_to_handle_at 303
 #define LINUX_NR_open_by_handle_at 304
-#define LINUX_NR_epoll_pwait     281
+#define LINUX_NR_epoll_pwait     281  /* COLD: epoll + sigmask */
 #define LINUX_NR_signalfd4       282
-#define LINUX_NR_timerfd_create  283
-#define LINUX_NR_eventfd         284
+#define LINUX_NR_timerfd_create  283  /* COLD: apps timers; UDX soft */
+#define LINUX_NR_eventfd         284  /* COLD: eventfd apps + UDX notify */
 #define LINUX_NR_fallocate       285
 #define LINUX_NR_timerfd_settime 286
 #define LINUX_NR_timerfd_gettime 287
-#define LINUX_NR_accept4         288
+#define LINUX_NR_accept4         288  /* COLD: apps accept + flags */
 #define LINUX_NR_signalfd        289
 #define LINUX_NR_eventfd2        290
-#define LINUX_NR_io_setup        206
+#define LINUX_NR_io_setup        206  /* COLD: legacy AIO */
 #define LINUX_NR_io_destroy      207
 #define LINUX_NR_io_getevents    208
 #define LINUX_NR_io_submit       209
 #define LINUX_NR_io_cancel       210
-#define LINUX_NR_epoll_create    213
+#define LINUX_NR_epoll_create    213  /* COLD */
 #define LINUX_NR_epoll_create1   291
 #define LINUX_NR_pipe2           293
-#define LINUX_NR_prlimit64       302
-#define LINUX_NR_getrandom       318
-#define LINUX_NR_memfd_create    319
-#define LINUX_NR_process_vm_readv  310
+#define LINUX_NR_prlimit64       302  /* HOT/soft: rlimit64 */
+#define LINUX_NR_getrandom       318  /* HOT: CSPRNG apps + UDX */
+#define LINUX_NR_memfd_create    319  /* COLD: apps shm; UDX bounce soft */
+#define LINUX_NR_process_vm_readv  310 /* COLD/soft: cross-process */
 #define LINUX_NR_process_vm_writev 311
-#define LINUX_NR_membarrier      324
-#define LINUX_NR_statfs          137
+#define LINUX_NR_membarrier      324  /* HOT soft: barrier */
+#define LINUX_NR_statfs          137  /* COLD */
 #define LINUX_NR_fstatfs         138
-#define LINUX_NR_statx           332
-#define LINUX_NR_rseq            334
-#define LINUX_NR_openat2         437
-#define LINUX_NR_faccessat2      439
-#define LINUX_NR_pidfd_send_signal 424
-#define LINUX_NR_pidfd_open      434
-#define LINUX_NR_clone3          435
-#define LINUX_NR_close_range     436
-#define LINUX_NR_landlock_create_ruleset 444
-#define LINUX_NR_landlock_add_rule       445
-#define LINUX_NR_landlock_restrict_self  446
-#define LINUX_NR_memfd_secret    447
-#define LINUX_NR_process_mrelease 448
-#define LINUX_NR_futex_waitv     449
-#define LINUX_NR_set_mempolicy_home_node 450
-#define LINUX_NR_cachestat       451
-#define LINUX_NR_fchmodat2       452
-#define LINUX_NR_map_shadow_stack 453
-#define LINUX_NR_futex_wake      454
-#define LINUX_NR_futex_wait      455
-#define LINUX_NR_futex_requeue   456
-#define LINUX_NR_io_uring_setup  425
+#define LINUX_NR_statx           332  /* COLD: modern stat apps */
+#define LINUX_NR_rseq            334  /* HOT: restartable sequences */
+
+/* Probe residual (public; typically PATH_NONE / soft until wired) */
+#define LINUX_NR_uretprobe       335  /* PATH_NONE residual; not product */
+#define LINUX_NR_uprobe          336
+/*
+ * Public intentional hole 337..423 — no native x86_64 common NRs. Next
+ * assigned block starts at 424 (pidfd_send_signal). Do not fill with
+ * invented numbers.
+ */
+
+/* ---- post-gap modern NRs (424+) : apps / pidfd / io_uring / mount graph -- */
+/*
+ * Post-gap surface for modern glibc/musl/Steam soft + future app stacks.
+ * io_uring_*: COLD soft min rings (≠ game I/O / bar3). clone3/openat2:
+ * COLD lifecycle. futex_waitv / futex_wake|wait|requeue: HOT-adjacent.
+ * UDX hosts: may use eventfd/epoll/clone3/memfd; not io_uring as product
+ * datapath claim. Soft!=product.
+ * greppable: NR_POST_GAP apps_io_uring UDX_clone3_cold
+ */
+#define LINUX_NR_pidfd_send_signal 424 /* COLD: pidfd apps residual */
+#define LINUX_NR_io_uring_setup  425   /* COLD soft: ring setup ≠ bar3 */
 #define LINUX_NR_io_uring_enter  426
 #define LINUX_NR_io_uring_register 427
-#define LINUX_NR_open_tree       428
+#define LINUX_NR_open_tree       428   /* COLD: mount graph */
 #define LINUX_NR_move_mount      429
 #define LINUX_NR_fsopen          430
 #define LINUX_NR_fsconfig        431
 #define LINUX_NR_fsmount         432
 #define LINUX_NR_fspick          433
+#define LINUX_NR_pidfd_open      434
+#define LINUX_NR_clone3          435   /* COLD: modern clone apps + UDX thr */
+#define LINUX_NR_close_range     436   /* COLD: batch close */
+#define LINUX_NR_openat2         437   /* COLD: resolved open */
+#define LINUX_NR_pidfd_getfd     438
+#define LINUX_NR_faccessat2      439
+#define LINUX_NR_process_madvise 440   /* HOT/soft: remote madvise */
+#define LINUX_NR_epoll_pwait2    441   /* COLD: epoll timeout_ns */
 #define LINUX_NR_mount_setattr   442
 #define LINUX_NR_quotactl_fd     443
-#define LINUX_NR_pidfd_getfd     438
-#define LINUX_NR_process_madvise 440
-#define LINUX_NR_epoll_pwait2    441
-#define LINUX_NR_fanotify_init   300
+#define LINUX_NR_landlock_create_ruleset 444 /* COLD: sandbox residual */
+#define LINUX_NR_landlock_add_rule       445
+#define LINUX_NR_landlock_restrict_self  446
+#define LINUX_NR_memfd_secret    447   /* COLD soft */
+#define LINUX_NR_process_mrelease 448
+#define LINUX_NR_futex_waitv     449   /* HOT-adj: multi futex wait */
+#define LINUX_NR_set_mempolicy_home_node 450
+#define LINUX_NR_cachestat       451
+#define LINUX_NR_fchmodat2       452
+#define LINUX_NR_map_shadow_stack 453  /* HOT/soft: CET residual */
+#define LINUX_NR_futex_wake      454   /* HOT-adj: modern futex op */
+#define LINUX_NR_futex_wait      455
+#define LINUX_NR_futex_requeue   456
+
+/* Residual deepen 457+ (public post-futex_requeue; cold / ENOSYS until wired) */
+/*
+ * Mount/LSM/xattrat residuals: COLD catalog. mseal / rseq_slice_yield:
+ * soft hot-adjacent MM. Not UDX Dual DoD close.
+ */
+#define LINUX_NR_statmount       457  /* cold mount graph residual */
+#define LINUX_NR_listmount       458
+#define LINUX_NR_lsm_get_self_attr 459
+#define LINUX_NR_lsm_set_self_attr 460
+#define LINUX_NR_lsm_list_modules  461
+#define LINUX_NR_mseal           462  /* memory seal; soft hot-adjacent */
+#define LINUX_NR_setxattrat      463
+#define LINUX_NR_getxattrat      464
+#define LINUX_NR_listxattrat     465
+#define LINUX_NR_removexattrat   466
+#define LINUX_NR_open_tree_attr  467
+#define LINUX_NR_file_getattr    468
+#define LINUX_NR_file_setattr    469
+#define LINUX_NR_listns          470
+#define LINUX_NR_rseq_slice_yield 471 /* rseq residual; soft hot-adjacent */
+
+/* ---- Fanotify / kcmp / module / sched attr / kexec residual ------------- */
+#define LINUX_NR_fanotify_init   300  /* COLD: fanotify apps residual */
 #define LINUX_NR_fanotify_mark   301
 #define LINUX_NR_kcmp            312
-#define LINUX_NR_finit_module    313
-#define LINUX_NR_sched_setattr   314
+#define LINUX_NR_finit_module    313  /* COLD eng only — not product .ko AC */
+#define LINUX_NR_sched_setattr   314  /* HOT soft: modern sched apps/UDX */
 #define LINUX_NR_sched_getattr   315
 #define LINUX_NR_kexec_file_load 320
 #define LINUX_NR_quotactl        179
@@ -506,18 +700,22 @@
 #define LINUX_NR_epoll_ctl_old   214
 #define LINUX_NR_epoll_wait_old  215
 #define LINUX_NR_remap_file_pages 216
-#define LINUX_NR_restart_syscall 219
+#define LINUX_NR_restart_syscall 219  /* soft: restart helper */
 #define LINUX_NR_semtimedop      220
-#define LINUX_NR_fadvise64       221
+#define LINUX_NR_fadvise64       221  /* COLD/soft: advise apps */
 #define LINUX_NR_utimes          235
 #define LINUX_NR_vserver         236  /* obsolete placeholder NR */
-#define LINUX_NR_mbind           237
+
+/* ---- NUMA / migrate (HOT soft MM policy; UDX pin residual) ------------- */
+#define LINUX_NR_mbind           237  /* HOT soft: NUMA bind */
 #define LINUX_NR_set_mempolicy   238
 #define LINUX_NR_get_mempolicy   239
 #define LINUX_NR_migrate_pages   256
 #define LINUX_NR_move_pages      279
-#define LINUX_NR_perf_event_open 298
+#define LINUX_NR_perf_event_open 298  /* COLD/soft: perf residual */
 #define LINUX_NR_rt_tgsigqueueinfo 297
+
+/* ---- POSIX timers + mq (COLD residual; apps soft, not UDX datapath) ---- */
 #define LINUX_NR_timer_create    222
 #define LINUX_NR_timer_settime   223
 #define LINUX_NR_timer_gettime   224
@@ -530,23 +728,33 @@
 #define LINUX_NR_mq_notify       244
 #define LINUX_NR_mq_getsetattr   245
 #define LINUX_NR_kexec_load      246
-#define LINUX_NR_ioprio_set      251
+#define LINUX_NR_ioprio_set      251  /* HOT/soft: ioprio */
 #define LINUX_NR_ioprio_get      252
 #define LINUX_NR_inotify_init    253
-/* Module / legacy create (deepen; product usually ENOSYS) */
+
+/*
+ * Module / legacy create NRs (catalog only). Product path: userspace UDX
+ * hosts (rtl8168_udx / xhci_udx / ddi_host) over hot+cold ABI + DDI caps —
+ * not init_module-style .ko product AC in kernel (G-AC-1). Soft continuum
+ * may set_cold these for eng residual; freestanding_no_exec skips .ko init.
+ * Catalog presence ≠ product driver path. Soft!=product.
+ * greppable: NR_MODULE_NOT_PRODUCT G-AC-1 UDX_host
+ */
 #define LINUX_NR_create_module   174
-#define LINUX_NR_init_module     175
+#define LINUX_NR_init_module     175  /* eng COLD residual; not product AC */
 #define LINUX_NR_delete_module   176
 #define LINUX_NR_get_kernel_syms 177
 #define LINUX_NR_query_module    178
 
 /*
- * Highest NR value currently catalogued above (inclusive). Soft inventory /
- * greps only — dispatch table size remains GJ_LINUX_NR_TABLE in
- * linux_dispatch.h (must be > this for set_hot/set_cold of max NR).
+ * Highest named NR value currently catalogued above (inclusive). Soft
+ * inventory / greps only — dispatch table size remains GJ_LINUX_NR_TABLE
+ * in linux_dispatch.h (must be > this for set_hot/set_cold of max NR;
+ * currently 512 > 471). x32 range 512+ deliberately not catalogued.
+ * UDX hosts + apps may issue any catalogued NR; unregistered -> ENOSYS.
  * greppable: LINUX_NR_MAX_CATALOG
  */
-#define LINUX_NR_MAX_CATALOG     456
+#define LINUX_NR_MAX_CATALOG     471
 
 /* clock_gettime clock ids (public clockid_t subset) */
 #define LINUX_CLOCK_REALTIME           0
@@ -588,7 +796,10 @@
 #define LINUX_MREMAP_FIXED   2
 #define LINUX_MREMAP_DONTUNMAP 4
 
-/* open(2) / openat flags (asm-generic/fcntl.h shape; deepen for cold FS) */
+/*
+ * open(2) / openat flags (asm-generic/fcntl.h shape). Cold FS + UDX host
+ * open paths decode these; Soft!=product if unregistered.
+ */
 #define LINUX_O_ACCMODE      0x3
 #define LINUX_O_RDONLY       0x0
 #define LINUX_O_WRONLY       0x1
@@ -610,6 +821,49 @@
 #define LINUX_O_SYNC         0x101000
 #define LINUX_O_PATH         0x200000
 #define LINUX_O_TMPFILE      0x410000
+
+/*
+ * fcntl(2) command subset (public; cold fcntl / UDX host fd control).
+ * greppable: LINUX_F_
+ */
+#define LINUX_F_DUPFD         0
+#define LINUX_F_GETFD         1
+#define LINUX_F_SETFD         2
+#define LINUX_F_GETFL         3
+#define LINUX_F_SETFL         4
+#define LINUX_F_GETLK         5
+#define LINUX_F_SETLK         6
+#define LINUX_F_SETLKW        7
+#define LINUX_F_SETOWN        8
+#define LINUX_F_GETOWN        9
+#define LINUX_F_SETSIG       10
+#define LINUX_F_GETSIG       11
+#define LINUX_F_GETLK64      12
+#define LINUX_F_SETLK64      13
+#define LINUX_F_SETLKW64     14
+#define LINUX_F_SETOWN_EX    15
+#define LINUX_F_GETOWN_EX    16
+#define LINUX_F_GETOWNER_UIDS 17
+#define LINUX_F_OFD_GETLK    36
+#define LINUX_F_OFD_SETLK    37
+#define LINUX_F_OFD_SETLKW   38
+#define LINUX_F_SETLEASE     1024
+#define LINUX_F_GETLEASE     1025
+#define LINUX_F_NOTIFY       1026
+#define LINUX_F_DUPFD_CLOEXEC 1030
+#define LINUX_F_SETPIPE_SZ   1031
+#define LINUX_F_GETPIPE_SZ   1032
+#define LINUX_F_ADD_SEALS    1033
+#define LINUX_F_GET_SEALS    1034
+#define LINUX_FD_CLOEXEC     1
+
+/* memfd / F_ADD_SEALS seal bits (public; cold memfd + mseal residual) */
+#define LINUX_F_SEAL_SEAL         0x0001
+#define LINUX_F_SEAL_SHRINK       0x0002
+#define LINUX_F_SEAL_GROW         0x0004
+#define LINUX_F_SEAL_WRITE        0x0008
+#define LINUX_F_SEAL_FUTURE_WRITE 0x0010
+#define LINUX_F_SEAL_EXEC         0x0020
 
 /* *at(2) dirfd / flag bits */
 #define LINUX_AT_FDCWD            (-100)
@@ -643,7 +897,7 @@
 #define LINUX_WALL       0x40000000
 #define LINUX_WCLONE     0x80000000
 
-/* clone(2) flag subset (public sched.h values; soft product / PE32) */
+/* clone(2) flag subset (public sched.h values; soft product / PE32 / clone3) */
 #define LINUX_CSIGNAL              0x000000ff
 #define LINUX_CLONE_VM             0x00000100
 #define LINUX_CLONE_FS             0x00000200
@@ -670,11 +924,104 @@
 #define LINUX_CLONE_NEWNET         0x40000000
 #define LINUX_CLONE_IO             0x80000000u
 
-/* arch_prctl codes (x86_64 public) */
+/* arch_prctl codes (x86_64 public; hot arch_prctl) */
 #define LINUX_ARCH_SET_GS 0x1001
 #define LINUX_ARCH_SET_FS 0x1002
 #define LINUX_ARCH_GET_FS 0x1003
 #define LINUX_ARCH_GET_GS 0x1004
+
+/*
+ * madvise(2) advice subset (public; cold madvise / process_madvise residual).
+ * greppable: LINUX_MADV_
+ */
+#define LINUX_MADV_NORMAL      0
+#define LINUX_MADV_RANDOM      1
+#define LINUX_MADV_SEQUENTIAL  2
+#define LINUX_MADV_WILLNEED    3
+#define LINUX_MADV_DONTNEED    4
+#define LINUX_MADV_FREE        8
+#define LINUX_MADV_REMOVE      9
+#define LINUX_MADV_DONTFORK    10
+#define LINUX_MADV_DOFORK      11
+#define LINUX_MADV_HWPOISON    100
+#define LINUX_MADV_SOFT_OFFLINE 101
+#define LINUX_MADV_MERGEABLE   12
+#define LINUX_MADV_UNMERGEABLE 13
+#define LINUX_MADV_HUGEPAGE    14
+#define LINUX_MADV_NOHUGEPAGE  15
+#define LINUX_MADV_DONTDUMP    16
+#define LINUX_MADV_DODUMP      17
+#define LINUX_MADV_WIPEONFORK  18
+#define LINUX_MADV_KEEPONFORK  19
+#define LINUX_MADV_COLD        20
+#define LINUX_MADV_PAGEOUT     21
+#define LINUX_MADV_POPULATE_READ  22
+#define LINUX_MADV_POPULATE_WRITE 23
+#define LINUX_MADV_DONTNEED_LOCKED 24
+#define LINUX_MADV_COLLAPSE    25
+
+/*
+ * socket(2) domain / type / msg / shutdown subset (public; cold net + UDX
+ * host control-plane sockets). Product STREAM path is AF_INET SOCK_STREAM
+ * via cold net; Soft!=product for full stack claims.
+ * greppable: LINUX_AF_ LINUX_SOCK_ LINUX_MSG_ LINUX_SHUT_
+ */
+#define LINUX_AF_UNSPEC   0
+#define LINUX_AF_UNIX     1
+#define LINUX_AF_LOCAL    LINUX_AF_UNIX
+#define LINUX_AF_INET     2
+#define LINUX_AF_INET6    10
+#define LINUX_AF_NETLINK  16
+#define LINUX_AF_PACKET   17
+
+#define LINUX_SOCK_STREAM    1
+#define LINUX_SOCK_DGRAM     2
+#define LINUX_SOCK_RAW       3
+#define LINUX_SOCK_RDM       4
+#define LINUX_SOCK_SEQPACKET 5
+#define LINUX_SOCK_DCCP      6
+#define LINUX_SOCK_PACKET    10
+#define LINUX_SOCK_CLOEXEC   0x80000
+#define LINUX_SOCK_NONBLOCK  0x800
+
+#define LINUX_MSG_OOB          0x01
+#define LINUX_MSG_PEEK         0x02
+#define LINUX_MSG_DONTROUTE    0x04
+#define LINUX_MSG_CTRUNC       0x08
+#define LINUX_MSG_PROXY        0x10
+#define LINUX_MSG_TRUNC        0x20
+#define LINUX_MSG_DONTWAIT     0x40
+#define LINUX_MSG_EOR          0x80
+#define LINUX_MSG_WAITALL      0x100
+#define LINUX_MSG_FIN          0x200
+#define LINUX_MSG_SYN          0x400
+#define LINUX_MSG_CONFIRM      0x800
+#define LINUX_MSG_RST          0x1000
+#define LINUX_MSG_ERRQUEUE     0x2000
+#define LINUX_MSG_NOSIGNAL     0x4000
+#define LINUX_MSG_MORE         0x8000
+#define LINUX_MSG_WAITFORONE   0x10000
+#define LINUX_MSG_BATCH        0x40000
+#define LINUX_MSG_ZEROCOPY     0x4000000
+#define LINUX_MSG_FASTOPEN     0x20000000
+#define LINUX_MSG_CMSG_CLOEXEC 0x40000000
+
+#define LINUX_SHUT_RD   0
+#define LINUX_SHUT_WR   1
+#define LINUX_SHUT_RDWR 2
+
+#define LINUX_SOL_SOCKET 1
+#define LINUX_SO_ERROR   4
+#define LINUX_SO_REUSEADDR 2
+#define LINUX_SO_TYPE    3
+#define LINUX_SO_KEEPALIVE 9
+#define LINUX_SO_RCVBUF  8
+#define LINUX_SO_SNDBUF  7
+#define LINUX_SO_LINGER  13
+#define LINUX_SO_RCVTIMEO_OLD 20
+#define LINUX_SO_SNDTIMEO_OLD 21
+#define LINUX_SO_PROTOCOL 38
+#define LINUX_SO_DOMAIN  39
 
 /* poll(2) event bits (subset; cold poll/ppoll) */
 #define LINUX_POLLIN     0x0001
@@ -688,7 +1035,7 @@
 #define LINUX_POLLWRNORM 0x0100
 #define LINUX_POLLWRBAND 0x0200
 
-/* epoll_ctl ops + event bits (subset) */
+/* epoll_ctl ops + event bits (subset; cold epoll* for apps / UDX hosts) */
 #define LINUX_EPOLL_CTL_ADD 1
 #define LINUX_EPOLL_CTL_DEL 2
 #define LINUX_EPOLL_CTL_MOD 3
@@ -700,24 +1047,35 @@
 #define LINUX_EPOLLRDHUP   0x00002000u
 #define LINUX_EPOLLET      0x80000000u
 #define LINUX_EPOLLONESHOT 0x40000000u
+#define LINUX_EPOLLWAKEUP  0x20000000u
+#define LINUX_EPOLLEXCLUSIVE 0x10000000u
 
-/* common ioctl request numbers used by soft TTY/cold paths */
+/* common ioctl request numbers used by soft TTY/cold paths + UDX hosts */
 #define LINUX_TIOCGWINSZ  0x5413
 #define LINUX_TIOCSWINSZ  0x5414
 #define LINUX_FIONREAD    0x541B
 #define LINUX_FIONBIO     0x5421
 #define LINUX_FIONCLEX    0x5450
 #define LINUX_FIOCLEX     0x5451
+#define LINUX_TCGETS      0x5401
+#define LINUX_TCSETS      0x5402
+#define LINUX_TCSETSW     0x5403
+#define LINUX_TCSETSF     0x5404
+#define LINUX_TIOCGPGRP   0x540F
+#define LINUX_TIOCSPGRP   0x5410
+#define LINUX_TIOCSCTTY   0x540E
+#define LINUX_TIOCNOTTY   0x5422
 
 /*
- * Linux x86_64 calling convention at syscall entry:
+ * Linux x86_64 calling convention at syscall entry (apps + UDX hosts):
  *   nr  = rax
  *   a0  = rdi, a1 = rsi, a2 = rdx, a3 = r10 (not rcx), a4 = r8, a5 = r9
  *   ret = rax  (negative = -errno)
  *
  * SYSCALL clobbers rcx/r11; arg3 is deliberately r10. Hybrid dispatcher
  * fills this POD from the trap frame / soft smoke without assuming C ABI
- * argument layout for the six slots.
+ * argument layout for the six slots. Same POD is used on cold door
+ * submit and freestanding soft staging.
  *
  * greppable: gj_linux_regs
  */
@@ -749,12 +1107,26 @@ struct linux_timeval {
     i64 i64Usec;
 };
 
-/* Path classification for hybrid Option C (docs/LINUX_ABI_HYBRID.md) */
+/*
+ * Path classification for hybrid Option C (docs/LINUX_ABI_HYBRID.md).
+ * Not stored in NR values — runtime table in linux_dispatch owns HOT/COLD.
+ * Soft!=product: registration coverage ≠ end-to-end app/UDX readiness.
+ */
 enum gj_linux_path {
     GJ_LINUX_PATH_HOT  = 0, /* handled entirely in kernel (linux_hot) */
     GJ_LINUX_PATH_COLD = 1, /* upcall / personality (doors / protonrt) */
-    GJ_LINUX_PATH_NONE = 2, /* unknown / unregistered → -ENOSYS */
+    GJ_LINUX_PATH_NONE = 2, /* unknown / unregistered -> -ENOSYS */
 };
+
+/*
+ * Public intentional NR hole bounds (native x86_64); not syscall numbers —
+ * named LINUX_ABI_* so they do not pollute LINUX_NR_* greps.
+ * greppable: LINUX_ABI_PUBLIC_HOLE LINUX_ABI_POST_GAP
+ */
+#define LINUX_ABI_PUBLIC_HOLE_LO  337u
+#define LINUX_ABI_PUBLIC_HOLE_HI  423u
+/* First post-gap modern NR (pidfd_send_signal). */
+#define LINUX_ABI_POST_GAP_BASE   424u
 
 /* ---- Header-only soft helpers (no .c) ----------------------------------- */
 
@@ -784,9 +1156,10 @@ gj_linux_nr_in_table_span(u64 u64Nr)
 }
 
 /**
- * Non-zero if u64Nr is at most LINUX_NR_MAX_CATALOG (this header's catalog).
- * Does not imply the NR is registered HOT/COLD — only that it is named here
- * or falls under the catalog high-water mark.
+ * Non-zero if u64Nr is at most LINUX_NR_MAX_CATALOG (this header's catalog
+ * high-water, currently 471). Does not imply the NR is registered HOT/COLD
+ * or that a product handler exists — Soft!=product.
+ * greppable: gj_linux_nr_in_catalog
  */
 static inline int
 gj_linux_nr_in_catalog(u64 u64Nr)
@@ -795,8 +1168,33 @@ gj_linux_nr_in_catalog(u64 u64Nr)
 }
 
 /**
+ * Non-zero if u64Nr falls in the public intentional hole 337..423.
+ * Those numbers are not assigned on native x86_64; treat as PATH_NONE.
+ * greppable: gj_linux_nr_in_public_hole
+ */
+static inline int
+gj_linux_nr_in_public_hole(u64 u64Nr)
+{
+    return (u64Nr >= (u64)LINUX_ABI_PUBLIC_HOLE_LO &&
+            u64Nr <= (u64)LINUX_ABI_PUBLIC_HOLE_HI) ? 1 : 0;
+}
+
+/**
+ * Non-zero if u64Nr is in the post-gap modern block (>= 424) and still
+ * within the catalog high-water. Soft inventory helper for residual NRs.
+ * greppable: gj_linux_nr_is_post_gap
+ */
+static inline int
+gj_linux_nr_is_post_gap(u64 u64Nr)
+{
+    return (u64Nr >= (u64)LINUX_ABI_POST_GAP_BASE &&
+            u64Nr <= (u64)LINUX_NR_MAX_CATALOG) ? 1 : 0;
+}
+
+/**
  * Soft: zero a regs block and set NR + six args (ret left 0).
- * NULL pRegs → no-op. Used by soft smokes / PE32 int80 staging.
+ * NULL pRegs -> no-op. Used by soft smokes / PE32 int80 staging / UDX host
+ * freestanding probes.
  */
 static inline void
 gj_linux_regs_set(struct gj_linux_regs *pRegs, u64 u64Nr,
@@ -834,4 +1232,16 @@ gj_linux_ret_errno(i64 i64Ret)
         return 0;
     }
     return (int)(-i64Ret);
+}
+
+/**
+ * Soft: true if open flags request write access (WRONLY or RDWR).
+ * Cold openat / UDX host helpers; does not interpret O_PATH alone as write.
+ */
+static inline int
+gj_linux_oflags_write_p(u64 u64Flags)
+{
+    u64 u64Acc = u64Flags & (u64)LINUX_O_ACCMODE;
+    return (u64Acc == (u64)LINUX_O_WRONLY ||
+            u64Acc == (u64)LINUX_O_RDWR) ? 1 : 0;
 }

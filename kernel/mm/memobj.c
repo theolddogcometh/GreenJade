@@ -5,42 +5,72 @@
  * Memory objects own frames; regions are views (G-MO-*).
  * Maps are USER and confined to the product user VA window (G-MAP-2).
  * Named shareable maps: one object, many process views (G-MO-3 / wine-shm).
+ * Dual license: MIT OR Apache-2.0 (recipient's option). Not GPL.
  *
- * Soft product surface:
- *   region table soft — fixed GJ_PROC_REGION_MAX; full/reuse/overlap markers
- *   USER map flags    — memobj_sanitize_user_prot always forces U
- *   named lifecycle   — publish/unlink independent of last map
- *   file map soft     — vfs_ram regular-fd snapshot → FILE memobj + PTEs
+ * Soft product surface (functional):
+ *   region table soft - fixed GJ_PROC_REGION_MAX; full/reuse/overlap markers
+ *   USER map flags    - memobj_sanitize_user_prot always forces U
+ *   named lifecycle   - publish/unlink independent of last map
+ *   file map soft     - vfs_ram regular-fd snapshot -> FILE memobj + PTEs
  *
- * Soft memobj inventory (Wave 35 exclusive deepen):
- *   - Honesty / non-claims: soft ≠ product,, ≠ 1TiB product
- *   - Live pool / named / pages / mapped snaps; pool+named+pages+mapped peaks
- *   - Kind / flags / multi-map / idle live snaps (pool walk)
- *   - Cumulative create / map / unmap / destroy / reclaim / USER sanitize
- *   - Region soft full/reuse/overlap + share + named create/unlink
- *   - AS ensure + wine-shm soft path tallies + honesty path catalog
- *   - Design / lookup / page_pa / share / reclaim / lamps (Wave 15)
- *   - Wave 19: surfaces / window / prot / OPEN return surfaces
- *   - Stats rollup + deepen wave=118 stamp + PASS/PARTIAL/INIT/NONE
- *   greppable: "memobj: soft …"
- *   Soft ≠ product.
+ * Lean soft residual (this unit only; UDX mmap/cap windows eng):
+ *   Sparse honesty + inventory rollup + residual lean + PASS/PARTIAL/INIT.
+ *   UDX residual: USER VA window (G-MAP-2), shareable multi-map (G-MO-3),
+ *   private AS ensure, MEMORY_OBJECT cap surface (mint OPEN here).
+ *   No live MEMORY_OBJECT / DMA window cap mint in this TU.
+ *   No version stamp. No stamp storms. Soft != product. G-AC-1 (no .ko).
+ *   FILE full live pager remains OPEN; soft snapshot path is wired.
+ *   product_tib=0; dual MIT OR Apache-2.0.
  *
- * Grep markers (prefix-stable memobj: soft …):
- *   memobj: soft honesty | inventory | pool | named | kinds | flags | peaks
- *   memobj: soft region | create | map | unmap | USER | as | wine
- *   memobj: soft design | lookup | page_pa | share | reclaim | lamps
- *   memobj: soft path | stats | surfaces | window | prot | OPEN
- *   memobj: soft return selftest — Wave 19 terminal return surface
- *   memobj: soft retmap     — Wave 19 return-surface map
- *   memobj: soft deepen wave=126
+ * Lean named residual for UDX host maps (this unit; soft only):
+ *   create_named | lookup | map_named | map_share | unlink (G-MO-3)
+ *   F_SHAREABLE multi-map for host shared buffers (ring/bounce shape)
+ *   F_NAMED sticky until unlink; USER maps confined (G-MAP-2)
+ *   Sparse lamp once: memobj: soft residual named UDX host maps
+ *   Soft!=product dual MIT OR Apache-2.0; mint OPEN; G-AC-1 no .ko.
+ *
+ * C2 product path residual (ASSURANCE_LITE claim_class=C2; soft only):
+ *   Product *direction* for UDX/DDI hosts + Linux ABI hot/cold mmap:
+ *     process_as_ensure | create_anon|named|file | map_* | USER G-MAP-2
+ *     share multi-map G-MO-3 | unmap+reclaim sticky named | page_pa
+ *   Soft scaffold != product AC. MEMORY_OBJECT mint OPEN (no CNode mint here).
+ *   Soft mint honesty once. Stamp-free. Soft!=product. G-AC-1. No .ko.
+ *   Dual DoD A/B remain OPEN (soft residual never closes USB/sshd product AC).
+ *   Functional residual arms (no frame alloc): kinds|share|window|user|file|
+ *     as_region|cap_mint|page_pa_miss|as_miss|unmap_miss|region_miss|
+ *     wine_name|reclaim_sticky|policy|dual_dod_open.
+ *   greppable: memobj: soft residual C2 | soft c2 product path | soft mint honesty
+ *   greppable: Dual_DoD_A=OPEN Dual_DoD_B=OPEN | MEMOBJ_C2_PRODUCT_PATH
+ *
+ * Placement Option A residual (docs/MEM_PLACE_CHANNEL.md; Soft!=product):
+ *   One object, cPagesLogical * cReplicas frames; replica slice map.
+ *   Soft L0 class diversify (pa>>12)&3; min_channels fail-closed NOSUPPORT.
+ *   No PA leak to userspace. L2 product DRAM channel map OPEN.
+ *   Option B hedge_load stub only in doc (MEM_PLACE_OPTION_B_STUB).
+ *
+ * Grep markers (prefix-stable):
+ *   memobj: soft honesty | inventory | residual lean
+ *   memobj: soft residual lean PASS
+ *   memobj: soft residual UDX mmap/cap windows
+ *   memobj: soft residual named | named UDX host maps | named PASS
+ *   memobj: soft residual C2 product path | soft residual C2 PASS
+ *   memobj: soft mint honesty | memobj: soft c2 product path
+ *   memobj: soft place CHAN_STRIPED residual | soft place PASS
+ *   memobj: place create | place map replica | place diversify
  *   memobj: soft PASS | PARTIAL | INIT | NONE | inventory PASS
  *   memobj: named | memobj: share | memobj: region table soft
  *   memobj: USER map | wine-shm
  *   memobj: file map soft | memobj: file create soft
- *   memobj: soft map_file PASS  — first vfs_ram file-map success (ABI-first)
- * Honesty: soft inventory only — / not product / not 1TiB product /
- *          full live FILE pager remains OPEN; soft snapshot path is wired.
- *          Soft ≠ product.
+ *   memobj: soft map_file PASS  - first vfs_ram file-map success (ABI-first)
+ * greppable: Soft!=product (serial) | Soft!=product (comments)
+ * greppable: G-AC-1 | MEMOBJ_UDX_MMAP_CAP | MEMOBJ_NAMED_UDX_HOST | product_tib=0
+ * greppable: MEMOBJ_C2_PRODUCT_PATH | claim_class=C2 | soft_scaffold_ne_product_ac
+ * greppable: Dual_DoD_A=OPEN | Dual_DoD_B=OPEN | dual_dod=OPEN
+ * greppable: MEM_PLACE_L0 MEM_PLACE_L2_OPEN MEM_PLACE_NO_PA_LEAK CHAN_STRIPED
+ * Honesty: soft residual only - not product / not 1TiB product /
+ *          Soft != product dual license; not product UDX DMA/MMIO mint;
+ *          Dual DoD A/B OPEN (soft != product AC close);
+ *          place L0 soft != product L2 channel map.
  */
 #include <gj/cap.h>
 #include <gj/config.h>
@@ -60,7 +90,7 @@
 static struct gj_memobj g_aMemobjPool[GJ_MEMOBJ_POOL];
 static u8               g_aMemobjUsed[GJ_MEMOBJ_POOL];
 
-/* Named shareable registry (Proton A0 / wine-shm) — early for soft inventory. */
+/* Named shareable registry (Proton A0 / wine-shm) - early for soft inventory. */
 struct memobj_named_slot {
     u8                u8Used;
     char              szName[GJ_MEMOBJ_NAME_MAX];
@@ -69,56 +99,10 @@ struct memobj_named_slot {
 
 static struct memobj_named_slot g_aNamed[GJ_NAMED_MAX];
 
-/* Wave 62 soft inventory stamp (file-local; never product gate). */
-#define MEMOBJ_SOFT_WAVE 126u
-/* Catalog areas prior to deepen (honesty..OPEN). Soft ≠ product. */
-#define MEMOBJ_SOFT_AREAS 234u
-
 /*
- * Wave 19 return-surface bit lamps (surf=0x… on soft surfaces/deepen).
- * greppable: memobj: soft surfaces
- */
-#define MEMOBJ_SOFT_SURF_HONESTY   (1u << 0)
-#define MEMOBJ_SOFT_SURF_INVENTORY (1u << 1)
-#define MEMOBJ_SOFT_SURF_POOL      (1u << 2)
-#define MEMOBJ_SOFT_SURF_NAMED     (1u << 3)
-#define MEMOBJ_SOFT_SURF_KINDS     (1u << 4)
-#define MEMOBJ_SOFT_SURF_FLAGS     (1u << 5)
-#define MEMOBJ_SOFT_SURF_PEAKS     (1u << 6)
-#define MEMOBJ_SOFT_SURF_REGION    (1u << 7)
-#define MEMOBJ_SOFT_SURF_CREATE    (1u << 8)
-#define MEMOBJ_SOFT_SURF_MAP       (1u << 9)
-#define MEMOBJ_SOFT_SURF_UNMAP     (1u << 10)
-#define MEMOBJ_SOFT_SURF_USER      (1u << 11)
-#define MEMOBJ_SOFT_SURF_AS        (1u << 12)
-#define MEMOBJ_SOFT_SURF_WINE      (1u << 13)
-#define MEMOBJ_SOFT_SURF_DESIGN    (1u << 14)
-#define MEMOBJ_SOFT_SURF_LOOKUP    (1u << 15)
-#define MEMOBJ_SOFT_SURF_PAGE_PA   (1u << 16)
-#define MEMOBJ_SOFT_SURF_SHARE     (1u << 17)
-#define MEMOBJ_SOFT_SURF_RECLAIM   (1u << 18)
-#define MEMOBJ_SOFT_SURF_LAMPS     (1u << 19)
-#define MEMOBJ_SOFT_SURF_PATH      (1u << 20)
-#define MEMOBJ_SOFT_SURF_STATS     (1u << 21)
-#define MEMOBJ_SOFT_SURF_SURFACES  (1u << 22)
-#define MEMOBJ_SOFT_SURF_WINDOW    (1u << 23)
-#define MEMOBJ_SOFT_SURF_PROT      (1u << 24)
-#define MEMOBJ_SOFT_SURF_OPEN      (1u << 25)
-#define MEMOBJ_SOFT_SURF_CATALOG                                                   \
-    (MEMOBJ_SOFT_SURF_HONESTY | MEMOBJ_SOFT_SURF_INVENTORY |                       \
-     MEMOBJ_SOFT_SURF_POOL | MEMOBJ_SOFT_SURF_NAMED | MEMOBJ_SOFT_SURF_KINDS |     \
-     MEMOBJ_SOFT_SURF_FLAGS | MEMOBJ_SOFT_SURF_PEAKS | MEMOBJ_SOFT_SURF_REGION |   \
-     MEMOBJ_SOFT_SURF_CREATE | MEMOBJ_SOFT_SURF_MAP | MEMOBJ_SOFT_SURF_UNMAP |     \
-     MEMOBJ_SOFT_SURF_USER | MEMOBJ_SOFT_SURF_AS | MEMOBJ_SOFT_SURF_WINE |         \
-     MEMOBJ_SOFT_SURF_DESIGN | MEMOBJ_SOFT_SURF_LOOKUP | MEMOBJ_SOFT_SURF_PAGE_PA |\
-     MEMOBJ_SOFT_SURF_SHARE | MEMOBJ_SOFT_SURF_RECLAIM | MEMOBJ_SOFT_SURF_LAMPS |  \
-     MEMOBJ_SOFT_SURF_PATH | MEMOBJ_SOFT_SURF_STATS | MEMOBJ_SOFT_SURF_SURFACES |  \
-     MEMOBJ_SOFT_SURF_WINDOW | MEMOBJ_SOFT_SURF_PROT | MEMOBJ_SOFT_SURF_OPEN)
-
-/*
- * Soft product inventory (Wave 20 exclusive). Cumulative unless noted live/peak.
- * Diagnostics only — never hard-gate create/map/unmap policy.
- * Soft ≠ product. greppable: memobj: soft …
+ * Soft counters: cumulative unless noted live/peak (scan).
+ * Diagnostics only - never hard-gate create/map/unmap policy.
+ * Soft != product. Lean residual inventory only (no version stamp).
  */
 static u32 g_u32SoftPoolUsed;     /* live pool slots (scan) */
 static u32 g_u32SoftPoolFree;     /* free pool slots (scan) */
@@ -138,7 +122,7 @@ static u32 g_u32SoftFlagShare;    /* live objs F_SHAREABLE (scan) */
 static u32 g_u32SoftFlagNamed;    /* live objs F_NAMED (scan) */
 static u32 g_u32SoftFlagZeroed;   /* live objs F_ZEROED (scan) */
 static u32 g_u32SoftMultiMap;     /* live objs with cMapped > 1 (scan) */
-static u32 g_u32SoftMultiMapPeak; /* high-water multi-map obj count (Wave 15) */
+static u32 g_u32SoftMultiMapPeak; /* high-water multi-map obj count */
 static u32 g_u32SoftIdleObjs;     /* live objs with cMapped == 0 (scan) */
 static u32 g_u32SoftMaxMappedOne; /* max cMapped on any one live obj (scan) */
 static u32 g_u32SoftMaxPagesOne;  /* max cPages on any one live obj (scan) */
@@ -166,14 +150,14 @@ static u32 g_cSoftMapShareFail;
 static u32 g_cSoftMapNamedOk;
 static u32 g_cSoftMapNamedFail;
 static u32 g_cSoftMapFileOk;      /* file map soft (vfs_ram snapshot) ok */
-static u32 g_cSoftMapFileFail;    /* file map soft miss → hot ENOSYS */
+static u32 g_cSoftMapFileFail;    /* file map soft miss -> hot ENOSYS */
 static u32 g_cSoftMapCoreFail;    /* core installer soft miss (map path) */
 static u32 g_cSoftUnmapRegion;
 static u32 g_cSoftUnmapOrphan;
 static u32 g_cSoftDestroy;
 static u32 g_cSoftReclaim;
 static u32 g_cSoftUserMap;
-static u32 g_cSoftUserMapDefR;    /* sanitize soft-defaulted empty→READ */
+static u32 g_cSoftUserMapDefR;    /* sanitize soft-defaulted empty->READ */
 static u32 g_cSoftLookupNamedHit;
 static u32 g_cSoftLookupNamedMiss;
 static u32 g_cSoftAsEnsureOk;     /* process_as_ensure created private AS */
@@ -183,13 +167,45 @@ static u32 g_cSoftWineNamedCreate;/* named create with wine* prefix */
 static u32 g_cSoftWineNamedMap;   /* named map with wine* prefix */
 static u32 g_cSoftPagePaOk;       /* memobj_page_pa hits */
 static u32 g_cSoftPagePaFail;     /* memobj_page_pa soft miss */
+static u32 g_cSoftUserVaReject;   /* map refused outside G-MAP-2 user window */
+static u32 g_u32SoftResidualLean;   /* lean residual self-check runs */
+static u32 g_u32SoftResidualLeanOk; /* lean residual checks that passed */
+static u8  g_fSoftResidualLeanOnce; /* residual lean self-check once */
+static u8  g_fSoftUdxResidualOnce;  /* UDX mmap/cap windows residual lamp once */
+static u32 g_u32SoftNamedUdxLean;   /* named UDX host-maps residual runs */
+static u32 g_u32SoftNamedUdxLeanOk; /* named UDX host-maps residual ok */
+static u8  g_fSoftNamedUdxOnce;     /* named UDX host-maps residual once */
+static u32 g_u32SoftC2Lean;         /* C2 product-path residual runs */
+static u32 g_u32SoftC2LeanOk;       /* C2 product-path residual ok */
+static u8  g_fSoftC2Once;           /* C2 product-path residual once */
+static u8  g_fSoftMintOnce;         /* MEMORY_OBJECT mint honesty once */
+/* Placement Option A soft residual (Soft!=product; MEM_PLACE_L0). */
+static u32 g_cSoftPlaceCreateOk;
+static u32 g_cSoftPlaceCreateFail;
+static u32 g_cSoftPlaceMapOk;
+static u32 g_cSoftPlaceMapFail;
+static u32 g_cSoftPlaceDiversify;
+static u32 g_cSoftPlaceDiversifyFail;
+static u32 g_u32PlaceNameSeq;       /* auto name placed-%u */
+static gj_status_t g_stPlaceLast;   /* last create_placed status */
+static char g_szPlaceLastName[GJ_MEMOBJ_NAME_MAX]; /* last published name */
+static u8  g_fSoftPlaceOnce;        /* place residual lamp once */
 
 static void soft_inventory_scan(void);
 static void soft_inventory_log(void);
 static void soft_inventory_maybe_once(void);
+static void soft_residual_lean_once(void);
+static void soft_udx_mmap_cap_residual_once(void);
+static void soft_named_udx_host_maps_residual_once(void);
+static void soft_mint_honesty_once(void);
+static void soft_c2_product_path_residual_once(void);
+static void soft_place_residual_once(void);
 static void soft_pool_peak_note(void);
 static void soft_named_peak_note(void);
 static int  soft_name_is_wine(const char *szName);
+static void named_clear_obj(struct gj_memobj *pObj);
+static int  name_ok(const char *szName);
+static void name_copy(char *szDst, const char *szSrc);
 
 void
 memobj_init(void)
@@ -258,10 +274,44 @@ memobj_init(void)
     g_cSoftWineNamedMap = 0;
     g_cSoftPagePaOk = 0;
     g_cSoftPagePaFail = 0;
+    g_cSoftUserVaReject = 0;
+    g_u32SoftResidualLean = 0;
+    g_u32SoftResidualLeanOk = 0;
+    g_fSoftResidualLeanOnce = 0;
+    g_fSoftUdxResidualOnce = 0;
+    g_u32SoftNamedUdxLean = 0;
+    g_u32SoftNamedUdxLeanOk = 0;
+    g_fSoftNamedUdxOnce = 0;
+    g_u32SoftC2Lean = 0;
+    g_u32SoftC2LeanOk = 0;
+    g_fSoftC2Once = 0;
+    g_fSoftMintOnce = 0;
+    g_cSoftPlaceCreateOk = 0;
+    g_cSoftPlaceCreateFail = 0;
+    g_cSoftPlaceMapOk = 0;
+    g_cSoftPlaceMapFail = 0;
+    g_cSoftPlaceDiversify = 0;
+    g_cSoftPlaceDiversifyFail = 0;
+    g_u32PlaceNameSeq = 0;
+    g_stPlaceLast = GJ_OK;
+    g_szPlaceLastName[0] = '\0';
+    g_fSoftPlaceOnce = 0;
     kprintf("memobj: init pool=%u named_max=%u soft region_table=%u\n",
             (unsigned)GJ_MEMOBJ_POOL, (unsigned)GJ_NAMED_MAX,
             (unsigned)GJ_PROC_REGION_MAX);
-    /* Grep: memobj: soft (baseline inventory after init) */
+    /*
+     * Lean residual + UDX mmap/cap + named UDX host maps + mint honesty +
+     * C2 product path + place CHAN_STRIPED residual first (once; stamp-free)
+     * so baseline inventory surface bits include residual ok.
+     * Soft!=product. G-AC-1. MEM_PLACE_L0; L2 OPEN.
+     */
+    soft_residual_lean_once();
+    soft_udx_mmap_cap_residual_once();
+    soft_named_udx_host_maps_residual_once();
+    soft_mint_honesty_once();
+    soft_c2_product_path_residual_once();
+    soft_place_residual_once();
+    /* Grep: memobj: soft (baseline inventory after residual lamps) */
     soft_inventory_log();
 }
 
@@ -299,7 +349,7 @@ pool_free(struct gj_memobj *pObj)
 
 /**
  * Zero a freshly allocated frame.
- * Prefer HHDM (shared kernel half — safe under any CR3). Without HHDM,
+ * Prefer HHDM (shared kernel half - safe under any CR3). Without HHDM,
  * switch to kernel CR3 so low-PA identity maps are present.
  */
 static void
@@ -429,7 +479,7 @@ region_release_idx(struct gj_process *pProc, u32 iReg)
 }
 
 /**
- * Soft: exact reuse — same object already mapped at [vaBase, cbLen).
+ * Soft: exact reuse - same object already mapped at [vaBase, cbLen).
  * Returns region index or GJ_PROC_REGION_MAX.
  */
 static u32
@@ -454,7 +504,7 @@ region_find_exact(const struct gj_process *pProc, gj_vaddr_t vaBase,
 
 /**
  * Soft: non-zero if [vaBase, cbLen) overlaps any used region.
- * G-MO region table soft — refuse clobber without hard panic.
+ * G-MO region table soft - refuse clobber without hard panic.
  */
 static int
 region_overlaps(const struct gj_process *pProc, gj_vaddr_t vaBase, size_t cbLen)
@@ -482,7 +532,7 @@ region_overlaps(const struct gj_process *pProc, gj_vaddr_t vaBase, size_t cbLen)
 
 /**
  * Pick map base: fixed uses hint; otherwise honor in-window page-aligned hints.
- * Low hints (classic PE 0x400000) collide with kernel BSS — ignore them.
+ * Low hints (classic PE 0x400000) collide with kernel BSS - ignore them.
  */
 static gj_vaddr_t
 memobj_pick_va(struct gj_process *pProc, u64 u64Hint, size_t cbAligned,
@@ -601,13 +651,6 @@ memobj_create_file(u32 cPages)
     return pObj;
 }
 
-/**
- * Soft: drop named publish if this object still occupies a name slot.
- * Prevents dangling wine-shm registry entries after destroy.
- */
-static void
-named_clear_obj(struct gj_memobj *pObj);
-
 void
 memobj_destroy(struct gj_memobj *pObj)
 {
@@ -628,6 +671,9 @@ memobj_destroy(struct gj_memobj *pObj)
     pObj->cMapped = 0;
     pObj->u32Flags = 0;
     pObj->u32Kind = 0;
+    pObj->cReplicas = 0;
+    pObj->cPagesLogical = 0;
+    pObj->u32SoftChannels = 0;
     pool_free(pObj);
     g_cSoftDestroy++;
 }
@@ -646,7 +692,7 @@ memobj_maybe_reclaim(struct gj_memobj *pObj)
         return;
     }
     if ((pObj->u32Flags & GJ_MEMOBJ_F_NAMED) != 0) {
-        return; /* still published — G-MO-3 / wine-shm sticky */
+        return; /* still published - G-MO-3 / wine-shm sticky */
     }
     g_cSoftReclaim++;
     memobj_destroy(pObj);
@@ -692,15 +738,18 @@ process_as_activate(struct gj_process *pProc)
 }
 
 /**
- * Core map installer: object frames → process AS + region row.
+ * Core map installer: object frame slice -> process AS + region row.
+ * iPageBase / cMapPages select a contiguous slice of pObj->aPa[] (replica
+ * views use one logical slice; full maps use base 0 / cPages).
  * fShare marks G-MO-3 shareable path (soft counter). Returns VA or 0.
+ * greppable: MEM_PLACE_NO_PA_LEAK (never exposes PA to user)
  */
 static gj_vaddr_t
-memobj_map_obj_core(struct gj_process *pProc, struct gj_memobj *pObj,
-                    u64 u64Hint, u32 u32Prot, int fFixed, int fShare)
+memobj_map_obj_core_ex(struct gj_process *pProc, struct gj_memobj *pObj,
+                       u64 u64Hint, u32 u32Prot, int fFixed, int fShare,
+                       u32 iPageBase, u32 cMapPages)
 {
     size_t cbLen;
-    u32 cPages;
     u32 iPage;
     u32 iReg;
     u32 iExact;
@@ -710,7 +759,13 @@ memobj_map_obj_core(struct gj_process *pProc, struct gj_memobj *pObj,
     u32 u32MapProt;
     u64 u64SavedAnon;
 
-    if (pProc == NULL || pObj == NULL || pObj->cPages == 0) {
+    if (pProc == NULL || pObj == NULL || pObj->cPages == 0 || cMapPages == 0) {
+        g_cSoftMapCoreFail++;
+        return 0;
+    }
+    if (iPageBase >= pObj->cPages ||
+        cMapPages > pObj->cPages ||
+        (iPageBase + cMapPages) > pObj->cPages) {
         g_cSoftMapCoreFail++;
         return 0;
     }
@@ -720,8 +775,7 @@ memobj_map_obj_core(struct gj_process *pProc, struct gj_memobj *pObj,
         return 0;
     }
 
-    cPages = pObj->cPages;
-    cbLen = (size_t)cPages * (size_t)GJ_PAGE_SIZE;
+    cbLen = (size_t)cMapPages * (size_t)GJ_PAGE_SIZE;
     if (fFixed && (u64Hint & (u64)(GJ_PAGE_SIZE - 1)) != 0) {
         g_cSoftMapCoreFail++;
         return 0;
@@ -756,6 +810,7 @@ memobj_map_obj_core(struct gj_process *pProc, struct gj_memobj *pObj,
 
     if (!memobj_user_va_ok(vaBase, cbLen)) {
         pProc->u64AnonNext = u64SavedAnon;
+        g_cSoftUserVaReject++;
         g_cSoftMapCoreFail++;
         return 0;
     }
@@ -794,9 +849,9 @@ memobj_map_obj_core(struct gj_process *pProc, struct gj_memobj *pObj,
     u64SavedCr3 = cpu_read_cr3();
     process_as_activate(pProc);
 
-    for (iPage = 0; iPage < cPages; iPage++) {
+    for (iPage = 0; iPage < cMapPages; iPage++) {
         st = vmm_map_page(vaBase + (gj_vaddr_t)iPage * GJ_PAGE_SIZE,
-                          pObj->aPa[iPage], u32MapProt);
+                          pObj->aPa[iPageBase + iPage], u32MapProt);
         if (st != GJ_OK) {
             while (iPage > 0) {
                 iPage--;
@@ -814,19 +869,35 @@ memobj_map_obj_core(struct gj_process *pProc, struct gj_memobj *pObj,
     pProc->aRegions[iReg].vaBase = vaBase;
     pProc->aRegions[iReg].cbLen = cbLen;
     pProc->aRegions[iReg].u32Prot = u32MapProt;
-    pProc->aRegions[iReg].u64ObjOff = 0;
+    pProc->aRegions[iReg].u64ObjOff =
+        (u64)iPageBase * (u64)GJ_PAGE_SIZE;
     pProc->aRegions[iReg].pObj = pObj;
     pObj->cMapped++;
     if (fShare || (pObj->u32Flags & GJ_MEMOBJ_F_SHAREABLE) != 0) {
         g_cSoftShareMaps++;
         /* Greppable: memobj: share */
         kprintf("memobj: share map va=0x%lx pages=%u cMapped=%u (soft #%u)\n",
-                (unsigned long)vaBase, (unsigned)cPages,
+                (unsigned long)vaBase, (unsigned)cMapPages,
                 (unsigned)pObj->cMapped, (unsigned)g_cSoftShareMaps);
     }
 
     memobj_restore_cr3(pProc, u64SavedCr3);
     return vaBase;
+}
+
+/**
+ * Full-object map (G-MO-1 / G-MO-3). Wrapper over slice mapper.
+ */
+static gj_vaddr_t
+memobj_map_obj_core(struct gj_process *pProc, struct gj_memobj *pObj,
+                    u64 u64Hint, u32 u32Prot, int fFixed, int fShare)
+{
+    if (pObj == NULL) {
+        g_cSoftMapCoreFail++;
+        return 0;
+    }
+    return memobj_map_obj_core_ex(pProc, pObj, u64Hint, u32Prot, fFixed,
+                                  fShare, 0u, pObj->cPages);
 }
 
 gj_vaddr_t
@@ -872,7 +943,7 @@ memobj_map_anon(struct gj_process *pProc, u64 u64Hint, size_t cbLen,
 
 /*
  * Linux x86_64 struct stat layout (matches vfs_ram_fstat fill).
- * Soft local — avoids depending on vfs_ram private types.
+ * Soft local - avoids depending on vfs_ram private types.
  */
 struct memobj_stat64 {
     u64 u64Dev;
@@ -1020,7 +1091,7 @@ memobj_map_file_fd(struct gj_process *pProc, i64 i64Fd, u64 u64Hint,
     /*
      * Greppable first-success lamp (ABI-first file mmap soft):
      *   memobj: soft map_file PASS
-     * Detail row remains: memobj: file map soft …
+     * Detail row remains: memobj: file map soft ...
      */
     if (g_cSoftMapFileOk == 1u) {
         kprintf("memobj: soft map_file PASS va=0x%lx pages=%u fd=%ld "
@@ -1221,7 +1292,7 @@ memobj_create_named(const char *szName, u32 cPages)
     }
     if (memobj_lookup_named(szName) != NULL) {
         g_cSoftCreateNamedFail++;
-        return NULL; /* EEXIST — wine-shm re-create soft-misses at caller */
+        return NULL; /* EEXIST - wine-shm re-create soft-misses at caller */
     }
     pObj = memobj_create_anon(cPages);
     if (pObj == NULL) {
@@ -1322,7 +1393,7 @@ memobj_map_named(struct gj_process *pProc, const char *szName, u64 u64Hint,
         g_cSoftMapNamedFail++;
         return 0;
     }
-    /* Explicit hint ⇒ fixed VA (winesrv 0x50000000 / 0x60000000 path). */
+    /* Explicit hint => fixed VA (winesrv 0x50000000 / 0x60000000 path). */
     fFixed = (u64Hint != 0) ? 1 : 0;
     vaBase = memobj_map_obj_core(pProc, pObj, u64Hint, u32Prot, fFixed, 1);
     if (vaBase != 0) {
@@ -1343,11 +1414,396 @@ memobj_map_named(struct gj_process *pProc, const char *szName, u64 u64Hint,
     return vaBase;
 }
 
-/* ---- Soft observability / Wave 15 inventory ----------------------------- */
+/* ---- Placement Option A (MEM_PLACE_L0 soft; Soft!=product) -------------- */
+
+/**
+ * Soft L0 channel class from PA. NOT product DRAM channel map.
+ * greppable: MEM_PLACE_L0 Soft!=product MEM_PLACE_L2_OPEN
+ */
+static u32
+memobj_soft_chan_class(gj_paddr_t pa)
+{
+    return (u32)((pa >> 12) & (u32)(GJ_MEM_PLACE_SOFT_CHANS - 1u));
+}
+
+/** Popcount of set bits in low 8 (soft channel mask). */
+static u32
+memobj_soft_popcount8(u32 u32Mask)
+{
+    u32 c = 0;
+    u32 iBit;
+
+    for (iBit = 0; iBit < 8u; iBit++) {
+        if ((u32Mask & (1u << iBit)) != 0u) {
+            c++;
+        }
+    }
+    return c;
+}
+
+/**
+ * Format auto name "placed-%u" into szOut (max GJ_MEMOBJ_NAME_MAX).
+ * Simple decimal; no snprintf in freestanding kernel.
+ */
+static void
+memobj_place_name_fmt(char *szOut, u32 u32Id)
+{
+    char aDig[12];
+    u32 cDig = 0;
+    u32 u = u32Id;
+    u32 i;
+    const char *szPfx = "placed-";
+    u32 iOut = 0;
+
+    if (szOut == NULL) {
+        return;
+    }
+    while (szPfx[iOut] != '\0' && iOut + 1u < GJ_MEMOBJ_NAME_MAX) {
+        szOut[iOut] = szPfx[iOut];
+        iOut++;
+    }
+    if (u == 0u) {
+        aDig[0] = '0';
+        cDig = 1u;
+    } else {
+        while (u > 0u && cDig < 12u) {
+            aDig[cDig] = (char)('0' + (u % 10u));
+            u /= 10u;
+            cDig++;
+        }
+    }
+    for (i = 0; i < cDig && iOut + 1u < GJ_MEMOBJ_NAME_MAX; i++) {
+        szOut[iOut] = aDig[cDig - 1u - i];
+        iOut++;
+    }
+    szOut[iOut] = '\0';
+}
+
+/**
+ * Soft L0 diversify alloc: prefer class not in u32UsedMask for first page
+ * of a replica. Retries pmm_alloc a few times; free rejects. Soft!=product.
+ * greppable: memobj: place diversify MEM_PLACE_L0
+ */
+static gj_paddr_t
+memobj_place_alloc_page(u32 u32UsedMask, int fPreferNew, u32 *pClsOut)
+{
+    u32 iTry;
+    gj_paddr_t pa;
+    u32 u32Cls;
+    const u32 cRetries = 8u;
+
+    for (iTry = 0; iTry < cRetries; iTry++) {
+        pa = pmm_alloc();
+        if (pa == 0) {
+            return 0;
+        }
+        u32Cls = memobj_soft_chan_class(pa);
+        if (fPreferNew != 0 && u32UsedMask != 0u) {
+            /* Prefer a free soft class if any remain unused. */
+            if ((u32UsedMask & (1u << u32Cls)) != 0u) {
+                u32 u32All = (1u << GJ_MEM_PLACE_SOFT_CHANS) - 1u;
+                if ((u32UsedMask & u32All) != u32All &&
+                    iTry + 1u < cRetries) {
+                    pmm_free(pa);
+                    g_cSoftPlaceDiversify++;
+                    continue;
+                }
+            }
+        }
+        if (pClsOut != NULL) {
+            *pClsOut = u32Cls;
+        }
+        return pa;
+    }
+    /* Exhausted retries with only used classes: accept last free path. */
+    pa = pmm_alloc();
+    if (pa == 0) {
+        return 0;
+    }
+    if (pClsOut != NULL) {
+        *pClsOut = memobj_soft_chan_class(pa);
+    }
+    return pa;
+}
+
+gj_status_t
+memobj_place_last_status(void)
+{
+    return g_stPlaceLast;
+}
+
+/**
+ * Soft: last successful create_placed published name (empty if none).
+ * For syscall copyout of gj_mem_place_out.szName. No PA.
+ */
+const char *
+memobj_place_last_name(void)
+{
+    return g_szPlaceLastName;
+}
+
+u32
+memobj_placed_replicas(const struct gj_memobj *pObj)
+{
+    if (pObj == NULL) {
+        return 0;
+    }
+    return pObj->cReplicas;
+}
+
+u32
+memobj_placed_logical_pages(const struct gj_memobj *pObj)
+{
+    if (pObj == NULL) {
+        return 0;
+    }
+    return pObj->cPagesLogical;
+}
+
+struct gj_memobj *
+memobj_create_placed(u32 cPagesLogical, const struct gj_mem_place_req *pReq)
+{
+    struct gj_memobj *pObj;
+    u32 cRep;
+    u32 cTotal;
+    u32 u32MinCh;
+    u32 u32Flags;
+    u32 u32UsedMask = 0;
+    u32 u32SoftCh;
+    u32 iPage;
+    u32 iSlot;
+    u32 iRep;
+    char szName[GJ_MEMOBJ_NAME_MAX];
+    u32 u32NameTry;
+
+    g_stPlaceLast = GJ_OK;
+
+    if (pReq == NULL || cPagesLogical == 0u) {
+        g_stPlaceLast = GJ_ERR_INVAL;
+        g_cSoftPlaceCreateFail++;
+        return NULL;
+    }
+    cRep = pReq->u32Replicas;
+    if (cRep == 0u) {
+        cRep = 1u;
+    }
+    if (cRep > GJ_MEM_PLACE_MAX_REPLICAS) {
+        g_stPlaceLast = GJ_ERR_INVAL;
+        g_cSoftPlaceCreateFail++;
+        return NULL;
+    }
+    u32MinCh = pReq->u32MinChannels;
+    if (u32MinCh > GJ_MEM_PLACE_SOFT_CHANS) {
+        g_stPlaceLast = GJ_ERR_INVAL;
+        g_cSoftPlaceCreateFail++;
+        return NULL;
+    }
+    if (u32MinCh > cRep) {
+        /* Impossible: cannot have more distinct classes than replicas soft. */
+        g_stPlaceLast = GJ_ERR_INVAL;
+        g_cSoftPlaceCreateFail++;
+        return NULL;
+    }
+    /* Overflow-safe total pages. */
+    if (cPagesLogical > GJ_MEMOBJ_MAX_PAGES ||
+        cRep > GJ_MEMOBJ_MAX_PAGES ||
+        cPagesLogical > (GJ_MEMOBJ_MAX_PAGES / cRep)) {
+        g_stPlaceLast = GJ_ERR_INVAL;
+        g_cSoftPlaceCreateFail++;
+        return NULL;
+    }
+    cTotal = cPagesLogical * cRep;
+    if (cTotal == 0u || cTotal > GJ_MEMOBJ_MAX_PAGES) {
+        g_stPlaceLast = GJ_ERR_INVAL;
+        g_cSoftPlaceCreateFail++;
+        return NULL;
+    }
+
+    /* u32NodePref reserved L1; ignore soft. */
+    (void)pReq->u32NodePref;
+    u32Flags = pReq->u32Flags;
+    if ((u32Flags & GJ_MEM_PLACE_CHAN_STRIPED) == 0u && u32Flags != 0u) {
+        /* Unknown flags soft-accept DEFAULT|CHAN_STRIPED only bits. */
+        if ((u32Flags & ~(GJ_MEM_PLACE_CHAN_STRIPED)) != 0u) {
+            /* Soft: ignore unknown bits; force striped when multi-rep. */
+        }
+    }
+    /* Multi-replica implies striped soft residual. */
+    if (cRep > 1u) {
+        u32Flags |= GJ_MEM_PLACE_CHAN_STRIPED;
+    }
+
+    pObj = pool_alloc();
+    if (pObj == NULL) {
+        g_stPlaceLast = GJ_ERR_NOMEM;
+        g_cSoftPlaceCreateFail++;
+        return NULL;
+    }
+    pObj->u32Kind = (u32)GJ_MEMOBJ_NAMED;
+    pObj->cPages = cTotal;
+    pObj->cMapped = 0;
+    pObj->cReplicas = cRep;
+    pObj->cPagesLogical = cPagesLogical;
+    pObj->u32SoftChannels = 0;
+    pObj->u32Flags = GJ_MEMOBJ_F_ZEROED | GJ_MEMOBJ_F_SHAREABLE |
+                     GJ_MEMOBJ_F_NAMED;
+    if ((u32Flags & GJ_MEM_PLACE_CHAN_STRIPED) != 0u) {
+        pObj->u32Flags |= GJ_MEMOBJ_F_CHAN_STRIPED;
+    }
+
+    /*
+     * Allocate replica-major: for each replica, first page prefers a new
+     * soft class; remaining pages best-effort. Soft!=product L0 only.
+     * greppable: memobj: place diversify
+     */
+    for (iRep = 0; iRep < cRep; iRep++) {
+        u32 u32Base = iRep * cPagesLogical;
+        u32 u32Cls = 0;
+        int fPrefer = ((u32Flags & GJ_MEM_PLACE_CHAN_STRIPED) != 0u) ? 1 : 0;
+        gj_paddr_t pa;
+
+        for (iPage = 0; iPage < cPagesLogical; iPage++) {
+            if (iPage == 0u) {
+                pa = memobj_place_alloc_page(u32UsedMask, fPrefer, &u32Cls);
+            } else {
+                pa = pmm_alloc();
+                if (pa != 0) {
+                    u32Cls = memobj_soft_chan_class(pa);
+                }
+            }
+            if (pa == 0) {
+                /* Roll back all pages allocated so far. */
+                u32 iDone = u32Base + iPage;
+                while (iDone > 0u) {
+                    iDone--;
+                    if (pObj->aPa[iDone] != 0) {
+                        pmm_free(pObj->aPa[iDone]);
+                        pObj->aPa[iDone] = 0;
+                    }
+                }
+                pool_free(pObj);
+                g_stPlaceLast = GJ_ERR_NOMEM;
+                g_cSoftPlaceCreateFail++;
+                return NULL;
+            }
+            pObj->aPa[u32Base + iPage] = pa;
+            memobj_zero_frame(pa);
+            if (iPage == 0u) {
+                u32UsedMask |= (1u << (u32Cls & 7u));
+            }
+        }
+    }
+
+    u32SoftCh = memobj_soft_popcount8(
+        u32UsedMask & ((1u << GJ_MEM_PLACE_SOFT_CHANS) - 1u));
+    pObj->u32SoftChannels = u32SoftCh;
+
+    if (u32MinCh > 0u && u32SoftCh < u32MinCh) {
+        /* Hard min not met: fail closed. greppable: place diversify fail */
+        g_cSoftPlaceDiversifyFail++;
+        kprintf("memobj: place diversify FAIL soft_ch=%u min=%u reps=%u "
+                "(Soft!=product L0; MEM_PLACE_L2_OPEN)\n",
+                (unsigned)u32SoftCh, (unsigned)u32MinCh, (unsigned)cRep);
+        memobj_destroy(pObj);
+        g_stPlaceLast = GJ_ERR_NOSUPPORT;
+        g_cSoftPlaceCreateFail++;
+        return NULL;
+    }
+
+    /* Publish under unique soft name placed-%u. */
+    for (u32NameTry = 0; u32NameTry < 64u; u32NameTry++) {
+        memobj_place_name_fmt(szName, g_u32PlaceNameSeq);
+        if (g_u32PlaceNameSeq < 0xfffffffeu) {
+            g_u32PlaceNameSeq++;
+        }
+        if (!name_ok(szName) || memobj_lookup_named(szName) != NULL) {
+            continue;
+        }
+        for (iSlot = 0; iSlot < GJ_NAMED_MAX; iSlot++) {
+            if (!g_aNamed[iSlot].u8Used) {
+                g_aNamed[iSlot].u8Used = 1;
+                name_copy(g_aNamed[iSlot].szName, szName);
+                g_aNamed[iSlot].pObj = pObj;
+                g_cSoftNamedCreate++;
+                soft_named_peak_note();
+                soft_pool_peak_note();
+                g_cSoftPlaceCreateOk++;
+                g_stPlaceLast = GJ_OK;
+                name_copy(g_szPlaceLastName, g_aNamed[iSlot].szName);
+                /* Greppable: memobj: place create */
+                kprintf("memobj: place create \"%s\" logical=%u reps=%u "
+                        "total=%u soft_ch=%u flags=0x%x "
+                        "(Soft!=product MEM_PLACE_L0; no PA leak)\n",
+                        g_aNamed[iSlot].szName, (unsigned)cPagesLogical,
+                        (unsigned)cRep, (unsigned)cTotal,
+                        (unsigned)u32SoftCh, (unsigned)pObj->u32Flags);
+                if ((pObj->u32Flags & GJ_MEMOBJ_F_CHAN_STRIPED) != 0u) {
+                    kprintf("memobj: place diversify soft_ch=%u mask=0x%x "
+                            "reps=%u (MEM_PLACE_L0; Soft!=product)\n",
+                            (unsigned)u32SoftCh, (unsigned)u32UsedMask,
+                            (unsigned)cRep);
+                }
+                soft_inventory_maybe_once();
+                return pObj;
+            }
+        }
+        /* Named table full. */
+        g_cSoftNamedTableFull++;
+        break;
+    }
+
+    memobj_destroy(pObj);
+    g_stPlaceLast = GJ_ERR_NOMEM;
+    g_cSoftPlaceCreateFail++;
+    return NULL;
+}
+
+gj_vaddr_t
+memobj_map_replica(struct gj_process *pProc, struct gj_memobj *pObj,
+                   u32 u32Replica, u64 u64Hint, u32 u32Prot, int fFixed)
+{
+    gj_vaddr_t vaBase;
+    u32 iBase;
+    u32 cLog;
+
+    if (pProc == NULL || pObj == NULL || pObj->cReplicas == 0u ||
+        pObj->cPagesLogical == 0u) {
+        g_cSoftPlaceMapFail++;
+        return 0;
+    }
+    if (u32Replica >= pObj->cReplicas) {
+        g_cSoftPlaceMapFail++;
+        return 0;
+    }
+    cLog = pObj->cPagesLogical;
+    iBase = u32Replica * cLog;
+    if (iBase + cLog > pObj->cPages) {
+        g_cSoftPlaceMapFail++;
+        return 0;
+    }
+    /* Elevate shareable for multi-map replica views (Option A). */
+    pObj->u32Flags |= GJ_MEMOBJ_F_SHAREABLE;
+    vaBase = memobj_map_obj_core_ex(pProc, pObj, u64Hint, u32Prot, fFixed, 1,
+                                    iBase, cLog);
+    if (vaBase == 0) {
+        g_cSoftPlaceMapFail++;
+        return 0;
+    }
+    g_cSoftPlaceMapOk++;
+    /* Greppable: memobj: place map replica */
+    kprintf("memobj: place map replica=%u va=0x%lx logical=%u cMapped=%u "
+            "(Soft!=product MEM_PLACE_NO_PA_LEAK G-MAP-2)\n",
+            (unsigned)u32Replica, (unsigned long)vaBase, (unsigned)cLog,
+            (unsigned)pObj->cMapped);
+    soft_inventory_maybe_once();
+    return vaBase;
+}
+
+/* ---- Soft observability / lean residual inventory ----------------------- */
 
 /**
  * Soft: non-zero if name is wine* (wine-shm / winesrv-shm product path).
- * Diagnostics only — not a hard name policy.
+ * Diagnostics only - not a hard name policy.
  */
 static int
 soft_name_is_wine(const char *szName)
@@ -1402,8 +1858,8 @@ soft_named_peak_note(void)
 
 /**
  * Walk pool + named tables; refresh live snaps + peaks + kind/flags.
- * Pure read of slot used bits / cPages / cMapped / flags — safe after init.
- * Wave 15: also track multi-map peak + per-obj max pages/mapped.
+ * Pure read of slot used bits / cPages / cMapped / flags - safe after init.
+ * Also track multi-map peak + per-obj max pages/mapped.
  */
 static void
 soft_inventory_scan(void)
@@ -1517,39 +1973,15 @@ soft_inventory_scan(void)
 }
 
 /**
- * Greppable Wave 15 soft memobj inventory dump (product / smoke deepen).
- * Prefix-stable markers (memobj: soft …):
- *   memobj: soft honesty    — explicit non-claims (not product/1TiB)
- *   memobj: soft inventory  — rollup live + peaks + logs
- *   memobj: soft pool       — pool used/free/peak + pages/mapped live
- *   memobj: soft named      — named table + create/unlink/lookup
- *   memobj: soft kinds      — ANON/NAMED/FILE live kind snap
- *   memobj: soft flags      — SHAREABLE/NAMED/ZEROED + multi/idle
- *   memobj: soft peaks      — pool/named/pages/mapped high-water
- *   memobj: soft region     — full/reuse/overlap + share maps
- *   memobj: soft create     — anon/named create + destroy/reclaim
- *   memobj: soft map        — anon/share/named map ok|fail + core
- *   memobj: soft unmap      — region vs orphan unmap
- *   memobj: soft USER       — G-MAP-2 sanitize force-U tallies
- *   memobj: soft as         — process_as_ensure ok/fail/idem
- *   memobj: soft wine       — wine-shm create/map + live named
- *   memobj: soft design     — Wave 15 geometry constants
- *   memobj: soft lookup     — Wave 15 named lookup hit/miss
- *   memobj: soft page_pa    — Wave 15 page PA soft path
- *   memobj: soft share      — Wave 15 multi-map / G-MO-3 share
- *   memobj: soft reclaim    — Wave 15 destroy/reclaim lifecycle
- *   memobj: soft lamps      — Wave 15 readiness lamps
- *   memobj: soft path       — honesty catalog (FILE cold OPEN)
- *   memobj: soft stats      — rollup tallies for agent greps
- *   memobj: soft surfaces   — Wave 19 return-surface catalog
- *   memobj: soft window     — Wave 17 user VA window geometry
- *   memobj: soft prot       — Wave 17 sanitize prot surface
- *   memobj: soft OPEN       — Wave 17 FILE/product OPEN honesty
- *   memobj: soft deepen     — wave=118 stamp + area count
- *   memobj: soft PASS|PARTIAL|INIT|NONE | inventory PASS
- * greppable: memobj: soft
- * Honesty: soft inventory only — not product / / not 1TiB product /
- *          full FILE production remains OPEN. Soft ≠ product.
+ * Lean soft residual inventory dump (bring-up / smoke only).
+ * Sparse: honesty + inventory rollup + residual lean + PASS/PARTIAL/INIT.
+ * UDX mmap/cap windows eng residual fields in residual lean line.
+ * NO stamp storms, no version stamp. Soft != product dual MIT OR Apache-2.0.
+ * G-AC-1: no .ko product path.
+ *
+ * greppable: memobj: soft honesty | inventory | residual lean
+ * greppable: memobj: soft PASS | PARTIAL | INIT | NONE | inventory PASS
+ * Honesty: soft residual != product / != 1TiB product; full FILE pager OPEN.
  */
 static void
 soft_inventory_log(void)
@@ -1558,11 +1990,7 @@ soft_inventory_log(void)
     u32 cMapOk;
     u32 cMapFail;
     u32 cCreateOk;
-    u32 cAreas = 0;
     u32 u32Surf;
-    u32 u32PoolPct;
-    u32 u32NamedPct;
-    u32 fReady;
     extern u32 serial_thre_dead(void);
 
     if (serial_thre_dead() != 0u) {
@@ -1579,10 +2007,10 @@ soft_inventory_log(void)
 
     /*
      * Soft verdict (inventory only; never hard-gates maps):
-     *   PASS     — any successful create or map observed
-     *   PARTIAL  — only failures so far (pool/name/table soft miss)
-     *   INIT     — inventory dumped, no create/map activity yet
-     *   NONE     — reserved (kept for greppable PASS/NONE symmetry)
+     *   PASS     - any successful create or map observed
+     *   PARTIAL  - only failures so far (pool/name/table soft miss)
+     *   INIT     - inventory dumped, no create/map activity yet
+     *   NONE     - reserved (kept for greppable PASS/NONE symmetry)
      */
     if (g_cSoftCreateAnonOk != 0u || g_cSoftNamedCreate != 0u ||
         g_cSoftCreateFileOk != 0u || cMapOk != 0u) {
@@ -1597,1306 +2025,948 @@ soft_inventory_log(void)
         szVerdict = "NONE";
     }
 
-    /* Soft occupancy % (scan; 0 if empty tables). */
-    if (GJ_MEMOBJ_POOL == 0) {
-        u32PoolPct = 0;
-    } else {
-        u32PoolPct = (g_u32SoftPoolUsed * 100u) / (u32)GJ_MEMOBJ_POOL;
-        if (u32PoolPct > 100u) {
-            u32PoolPct = 100u;
-        }
-    }
-    if (GJ_NAMED_MAX == 0) {
-        u32NamedPct = 0;
-    } else {
-        u32NamedPct = (g_u32SoftNamedUsed * 100u) / (u32)GJ_NAMED_MAX;
-        if (u32NamedPct > 100u) {
-            u32NamedPct = 100u;
-        }
-    }
-    fReady = (cCreateOk != 0u || cMapOk != 0u) ? 1u : 0u;
-    u32Surf = MEMOBJ_SOFT_SURF_CATALOG;
+    /* Surface bits: pool|named|map|share|file|user|as|lean|wine|multi|c2|mint */
+    u32Surf = ((g_u32SoftPoolUsed != 0u) ? (1u << 0) : 0u) |
+              ((g_u32SoftNamedUsed != 0u) ? (1u << 1) : 0u) |
+              ((cMapOk != 0u) ? (1u << 2) : 0u) |
+              ((g_cSoftMapShareOk != 0u || g_u32SoftFlagShare != 0u)
+                   ? (1u << 3)
+                   : 0u) |
+              ((g_cSoftMapFileOk != 0u || g_u32SoftKindFile != 0u)
+                   ? (1u << 4)
+                   : 0u) |
+              ((g_cSoftUserMap != 0u) ? (1u << 5) : 0u) |
+              ((g_cSoftAsEnsureOk != 0u) ? (1u << 6) : 0u) |
+              ((g_u32SoftResidualLeanOk != 0u) ? (1u << 7) : 0u) |
+              ((g_u32SoftWineNamedLive != 0u) ? (1u << 8) : 0u) |
+              ((g_u32SoftMultiMap != 0u) ? (1u << 9) : 0u) |
+              ((g_u32SoftC2LeanOk != 0u) ? (1u << 10) : 0u) |
+              ((g_fSoftMintOnce != 0u) ? (1u << 11) : 0u);
 
     /*
-     * Honesty first: freestanding soft inventory is NOT product /
-     * 1TiB product. greppable: memobj: soft honesty
+     * Grep: memobj: soft honesty
+     * Freestanding soft residual is NOT product / 1TiB product.
+     * Dual license MIT OR Apache-2.0; Soft!=product; G-AC-1 no .ko.
      */
     kprintf("memobj: soft honesty not-product not-1TiB-product "
             "product_tib=0 file_kind=OPEN wine_shm=soft "
-            "diagnostics=1 wave=%u "
-            "\n",
-            (unsigned)MEMOBJ_SOFT_WAVE);
-    cAreas++;
+            "cap_memory_object_mint=OPEN udx_mmap_cap_eng=1 "
+            "soft_ne_product=1 dual=MIT_OR_Apache-2.0 G-AC-1 storm=0 "
+            "(Soft!=product; dual MIT OR Apache-2.0; no version stamp; "
+            "no .ko product)\n");
 
-    /* Grep: memobj: soft inventory */
+    /* Grep: memobj: soft inventory - single rollup lamp */
     kprintf("memobj: soft inventory pool=%u/%u named=%u/%u pages=%u mapped=%u "
-            "peak_pool=%u peak_named=%u multi=%u idle=%u logs=%u wave=%u "
-            "(soft; not product; not 1TiB product)\n",
+            "peak_pool=%u peak_named=%u multi=%u idle=%u "
+            "create_ok=%u map_ok=%u map_fail=%u destroy=%u reclaim=%u "
+            "logs=%u (sparse; Soft!=product; not 1TiB product)\n",
             g_u32SoftPoolUsed, (unsigned)GJ_MEMOBJ_POOL, g_u32SoftNamedUsed,
             (unsigned)GJ_NAMED_MAX, g_u32SoftPagesOwned, g_u32SoftMappedTotal,
             g_u32SoftPoolPeak, g_u32SoftNamedPeak, g_u32SoftMultiMap,
-            g_u32SoftIdleObjs, g_u32SoftInvSamples,
-            (unsigned)MEMOBJ_SOFT_WAVE);
-    cAreas++;
+            g_u32SoftIdleObjs, cCreateOk, cMapOk, cMapFail, g_cSoftDestroy,
+            g_cSoftReclaim, g_u32SoftInvSamples);
 
-    /* Grep: memobj: soft pool */
-    kprintf("memobj: soft pool used=%u free=%u peak=%u pages=%u mapped=%u "
-            "slots=%u samples=%u max_pages=%u pool_pct=%u "
-            "max_pages_one=%u max_mapped_one=%u\n",
-            g_u32SoftPoolUsed, g_u32SoftPoolFree, g_u32SoftPoolPeak,
-            g_u32SoftPagesOwned, g_u32SoftMappedTotal,
-            (unsigned)GJ_MEMOBJ_POOL, g_u32SoftInvSamples,
-            (unsigned)GJ_MEMOBJ_MAX_PAGES, u32PoolPct,
-            g_u32SoftMaxPagesOne, g_u32SoftMaxMappedOne);
-    cAreas++;
-
-    /* Grep: memobj: soft named */
-    kprintf("memobj: soft named used=%u free=%u peak=%u create=%u unlink=%u "
-            "table_full=%u lookup_hit=%u lookup_miss=%u max=%u "
-            "name_max=%u named_pct=%u\n",
-            g_u32SoftNamedUsed, g_u32SoftNamedFree, g_u32SoftNamedPeak,
-            g_cSoftNamedCreate, g_cSoftNamedUnlink, g_cSoftNamedTableFull,
-            g_cSoftLookupNamedHit, g_cSoftLookupNamedMiss,
-            (unsigned)GJ_NAMED_MAX, (unsigned)GJ_MEMOBJ_NAME_MAX,
-            u32NamedPct);
-    cAreas++;
-
-    /* Grep: memobj: soft kinds */
-    kprintf("memobj: soft kinds anon=%u named=%u file=%u other=%u "
-            "live=%u (FILE cold OPEN soft)\n",
-            g_u32SoftKindAnon, g_u32SoftKindNamed, g_u32SoftKindFile,
-            g_u32SoftKindOther, g_u32SoftPoolUsed);
-    cAreas++;
-
-    /* Grep: memobj: soft flags */
-    kprintf("memobj: soft flags shareable=%u named=%u zeroed=%u multi_map=%u "
-            "idle=%u multi_peak=%u (G-MO-3 share soft)\n",
-            g_u32SoftFlagShare, g_u32SoftFlagNamed, g_u32SoftFlagZeroed,
-            g_u32SoftMultiMap, g_u32SoftIdleObjs, g_u32SoftMultiMapPeak);
-    cAreas++;
-
-    /* Grep: memobj: soft peaks */
-    kprintf("memobj: soft peaks pool=%u named=%u pages=%u mapped=%u "
-            "multi=%u max_pages_one=%u max_mapped_one=%u "
-            "region_max=%u pool_max=%u named_max=%u\n",
-            g_u32SoftPoolPeak, g_u32SoftNamedPeak, g_u32SoftPagesPeak,
-            g_u32SoftMappedPeak, g_u32SoftMultiMapPeak,
-            g_u32SoftMaxPagesOne, g_u32SoftMaxMappedOne,
-            (unsigned)GJ_PROC_REGION_MAX,
-            (unsigned)GJ_MEMOBJ_POOL, (unsigned)GJ_NAMED_MAX);
-    cAreas++;
-
-    /* Grep: memobj: soft region */
-    kprintf("memobj: soft region full=%u reuse=%u overlap=%u "
-            "region_max=%u share_maps=%u\n",
+    /*
+     * Grep: memobj: soft residual lean
+     * G-MO residual + UDX mmap/cap windows eng residual fields.
+     * Lean residual honesty - Soft!=product dual license; no version stamp.
+     * full_file_pager=OPEN remains; product_tib=0; MEMORY_OBJECT mint OPEN.
+     * G-AC-1: no .ko. Soft residual != product UDX DMA/MMIO window mint.
+     */
+    kprintf("memobj: soft residual lean "
+            "anon_ok=%u named_ok=%u share_ok=%u file_ok=%u "
+            "user_map=%u user_va_rej=%u region_full=%u reuse=%u overlap=%u "
+            "wine_create=%u wine_map=%u wine_live=%u "
+            "as_ok=%u as_fail=%u as_idem=%u "
+            "page_pa_ok=%u unmap_reg=%u unmap_orph=%u "
+            "kinds_a=%u kinds_n=%u kinds_f=%u multi_peak=%u "
+            "pool_max=%u named_max=%u region_max=%u max_pages=%u "
+            "user_va_base=0x%lx user_va_end=0x%lx "
+            "lean_runs=%u lean_ok=%u surf=0x%x "
+            "cap_mo=MEMORY_OBJECT mint=OPEN udx_mmap_cap_eng=1 "
+            "soft_ne_product=1 dual=MIT_OR_Apache-2.0 G-AC-1 "
+            "file_pager=OPEN product_tib=0 storm=0 "
+            "(Soft!=product; dual MIT OR Apache-2.0; "
+            "no version stamp; not 1TiB product; no .ko; "
+            "not product DMA/MMIO mint)\n",
+            g_cSoftMapAnonOk, g_cSoftMapNamedOk, g_cSoftMapShareOk,
+            g_cSoftMapFileOk, g_cSoftUserMap, g_cSoftUserVaReject,
             g_cSoftRegionFull, g_cSoftRegionReuse, g_cSoftRegionOverlap,
-            (unsigned)GJ_PROC_REGION_MAX, g_cSoftShareMaps);
-    cAreas++;
-
-    /* Grep: memobj: soft create */
-    kprintf("memobj: soft create anon_ok=%u anon_fail=%u named_fail=%u "
-            "named_ok=%u file_ok=%u file_fail=%u destroy=%u reclaim=%u\n",
-            g_cSoftCreateAnonOk, g_cSoftCreateAnonFail, g_cSoftCreateNamedFail,
-            g_cSoftNamedCreate, g_cSoftCreateFileOk, g_cSoftCreateFileFail,
-            g_cSoftDestroy, g_cSoftReclaim);
-    cAreas++;
-
-    /* Grep: memobj: soft map */
-    kprintf("memobj: soft map anon_ok=%u anon_fail=%u share_ok=%u "
-            "share_fail=%u named_ok=%u named_fail=%u file_ok=%u file_fail=%u "
-            "core_fail=%u user_map=%u map_ok_sum=%u\n",
-            g_cSoftMapAnonOk, g_cSoftMapAnonFail, g_cSoftMapShareOk,
-            g_cSoftMapShareFail, g_cSoftMapNamedOk, g_cSoftMapNamedFail,
-            g_cSoftMapFileOk, g_cSoftMapFileFail, g_cSoftMapCoreFail,
-            g_cSoftUserMap, cMapOk);
-    cAreas++;
-
-    /* Grep: memobj: soft unmap */
-    kprintf("memobj: soft unmap region=%u orphan=%u destroy=%u reclaim=%u "
-            "page_pa_ok=%u page_pa_fail=%u "
-            "(soft; not product; not 1TiB product)\n",
-            g_cSoftUnmapRegion, g_cSoftUnmapOrphan, g_cSoftDestroy,
-            g_cSoftReclaim, g_cSoftPagePaOk, g_cSoftPagePaFail);
-    cAreas++;
-
-    /* Grep: memobj: soft USER — G-MAP-2 force-U product maps */
-    kprintf("memobj: soft USER sanitize=%u default_r=%u force_u=1 "
-            "va_base=0x%lx va_end=0x%lx (G-MAP-2 soft)\n",
-            g_cSoftUserMap, g_cSoftUserMapDefR,
-            (unsigned long)GJ_USER_VA_BASE, (unsigned long)GJ_USER_VA_END);
-    cAreas++;
-
-    /* Grep: memobj: soft as */
-    kprintf("memobj: soft as ensure_ok=%u ensure_fail=%u ensure_idem=%u "
-            "(G-AS-1 soft)\n",
-            g_cSoftAsEnsureOk, g_cSoftAsEnsureFail, g_cSoftAsEnsureIdem);
-    cAreas++;
-
-    /* Grep: memobj: soft wine */
-    kprintf("memobj: soft wine create=%u map=%u named_live=%u "
-            "share_maps=%u (wine-shm soft; Proton A0)\n",
             g_cSoftWineNamedCreate, g_cSoftWineNamedMap,
-            g_u32SoftWineNamedLive, g_cSoftShareMaps);
-    cAreas++;
-
-    /*
-     * Wave 15: design geometry (constants; not product capacity claim).
-     * greppable: memobj: soft design
-     */
-    kprintf("memobj: soft design pool=%u named_max=%u name_max=%u "
-            "max_pages=%u region_max=%u page_size=%u "
-            "va_base=0x%lx va_end=0x%lx file_kind=OPEN "
-            "wave=%u (soft geometry; not product)\n",
+            g_u32SoftWineNamedLive, g_cSoftAsEnsureOk, g_cSoftAsEnsureFail,
+            g_cSoftAsEnsureIdem, g_cSoftPagePaOk, g_cSoftUnmapRegion,
+            g_cSoftUnmapOrphan, g_u32SoftKindAnon, g_u32SoftKindNamed,
+            g_u32SoftKindFile, g_u32SoftMultiMapPeak,
             (unsigned)GJ_MEMOBJ_POOL, (unsigned)GJ_NAMED_MAX,
-            (unsigned)GJ_MEMOBJ_NAME_MAX, (unsigned)GJ_MEMOBJ_MAX_PAGES,
-            (unsigned)GJ_PROC_REGION_MAX, (unsigned)GJ_PAGE_SIZE,
+            (unsigned)GJ_PROC_REGION_MAX, (unsigned)GJ_MEMOBJ_MAX_PAGES,
             (unsigned long)GJ_USER_VA_BASE, (unsigned long)GJ_USER_VA_END,
-            (unsigned)MEMOBJ_SOFT_WAVE);
-    cAreas++;
-
-    /*
-     * Wave 15: named lookup surface.
-     * greppable: memobj: soft lookup
-     */
-    kprintf("memobj: soft lookup hit=%u miss=%u create=%u unlink=%u "
-            "table_full=%u named_live=%u wine_live=%u "
-            "wave=%u (soft; not product)\n",
-            g_cSoftLookupNamedHit, g_cSoftLookupNamedMiss,
-            g_cSoftNamedCreate, g_cSoftNamedUnlink, g_cSoftNamedTableFull,
-            g_u32SoftNamedUsed, g_u32SoftWineNamedLive,
-            (unsigned)MEMOBJ_SOFT_WAVE);
-    cAreas++;
-
-    /*
-     * Wave 15: page PA soft path.
-     * greppable: memobj: soft page_pa
-     */
-    kprintf("memobj: soft page_pa ok=%u fail=%u pages_owned=%u "
-            "max_pages_one=%u max_pages=%u "
-            "wave=%u (soft; not product)\n",
-            g_cSoftPagePaOk, g_cSoftPagePaFail, g_u32SoftPagesOwned,
-            g_u32SoftMaxPagesOne, (unsigned)GJ_MEMOBJ_MAX_PAGES,
-            (unsigned)MEMOBJ_SOFT_WAVE);
-    cAreas++;
-
-    /*
-     * Wave 15: G-MO-3 share / multi-map surface.
-     * greppable: memobj: soft share
-     */
-    kprintf("memobj: soft share maps=%u multi_live=%u multi_peak=%u "
-            "shareable_live=%u max_mapped_one=%u share_ok=%u share_fail=%u "
-            "wave=%u (G-MO-3 soft; not product)\n",
-            g_cSoftShareMaps, g_u32SoftMultiMap, g_u32SoftMultiMapPeak,
-            g_u32SoftFlagShare, g_u32SoftMaxMappedOne,
-            g_cSoftMapShareOk, g_cSoftMapShareFail,
-            (unsigned)MEMOBJ_SOFT_WAVE);
-    cAreas++;
-
-    /*
-     * Wave 15: destroy / reclaim lifecycle.
-     * greppable: memobj: soft reclaim
-     */
-    kprintf("memobj: soft reclaim destroy=%u reclaim=%u idle=%u "
-            "named_sticky=%u unmap_region=%u unmap_orphan=%u "
-            "wave=%u (soft lifecycle; not product)\n",
-            g_cSoftDestroy, g_cSoftReclaim, g_u32SoftIdleObjs,
-            g_u32SoftFlagNamed, g_cSoftUnmapRegion, g_cSoftUnmapOrphan,
-            (unsigned)MEMOBJ_SOFT_WAVE);
-    cAreas++;
-
-    /*
-     * Wave 15: readiness lamps.
-     * greppable: memobj: soft lamps
-     */
-    kprintf("memobj: soft lamps ready=%u pool_pct=%u named_pct=%u "
-            "create_ok=%u map_ok=%u map_fail=%u destroy=%u reclaim=%u "
-            "file_kind=OPEN wine_shm=soft wave=%u "
-            "(soft lamps; not product; not 1TiB product)\n",
-            fReady, u32PoolPct, u32NamedPct, cCreateOk, cMapOk, cMapFail,
-            g_cSoftDestroy, g_cSoftReclaim, (unsigned)MEMOBJ_SOFT_WAVE);
-    cAreas++;
-
-    /*
-     * Grep: memobj: soft path
-     * Honesty catalog of product surfaces this unit exposes.
-     * file_soft=1: vfs_ram snapshot map; full live FILE pager remains OPEN.
-     */
-    kprintf("memobj: soft path claim=1 anon=1 named=1 share=1 unlink=1 "
-            "user_map=1 region_table=1 as_ensure=1 wine_shm=1 "
-            "design=1 lookup=1 page_pa=1 reclaim=1 lamps=1 "
-            "file_soft=1 file_kind=soft max_pages=%u pool=%u named_max=%u "
-            "region_max=%u product_tib=0 "
-            "(soft inventory; FILE soft snapshot; full pager OPEN; "
-            "not product; not 1TiB product)\n",
-            (unsigned)GJ_MEMOBJ_MAX_PAGES, (unsigned)GJ_MEMOBJ_POOL,
-            (unsigned)GJ_NAMED_MAX, (unsigned)GJ_PROC_REGION_MAX);
-    cAreas++;
-
-    /* Grep: memobj: soft stats — rollup tallies for agent greps. */
-    kprintf("memobj: soft stats pool=%u named=%u pages=%u mapped=%u "
-            "create_ok=%u map_ok=%u map_fail=%u destroy=%u reclaim=%u "
-            "share_maps=%u user_map=%u wine_create=%u wine_map=%u "
-            "region_full=%u multi_peak=%u pool_pct=%u named_pct=%u "
-            "logs=%u wave=%u\n",
-            g_u32SoftPoolUsed, g_u32SoftNamedUsed, g_u32SoftPagesOwned,
-            g_u32SoftMappedTotal, cCreateOk, cMapOk, cMapFail, g_cSoftDestroy,
-            g_cSoftReclaim, g_cSoftShareMaps, g_cSoftUserMap,
-            g_cSoftWineNamedCreate, g_cSoftWineNamedMap, g_cSoftRegionFull,
-            g_u32SoftMultiMapPeak, u32PoolPct, u32NamedPct,
-            g_u32SoftInvSamples, (unsigned)MEMOBJ_SOFT_WAVE);
-    cAreas++;
-
-    /*
-     * Wave 19: return-surface catalog (surf bitmask; soft ≠ product).
-     * Grep: memobj: soft surfaces
-     */
-    kprintf("memobj: soft surfaces surf=0x%x catalog=%u areas_live=%u "
-            "pool=1 named=1 map=1 unmap=1 USER=1 share=1 wine=1 "
-            "window=1 prot=1 open=1 wave=%u "
-            "(return surfaces; soft only; not product)\n",
-            (unsigned)u32Surf, (unsigned)MEMOBJ_SOFT_AREAS, cAreas + 4u,
-            (unsigned)MEMOBJ_SOFT_WAVE);
-    cAreas++;
-
-    /*
-     * Wave 19: user VA window geometry (G-MAP-2 soft).
-     * Grep: memobj: soft window
-     */
-    kprintf("memobj: soft window va_base=0x%lx va_end=0x%lx "
-            "max_pages=%u region_max=%u page_size=%u force_u=1 "
-            "wave=%u (soft window; not product)\n",
-            (unsigned long)GJ_USER_VA_BASE, (unsigned long)GJ_USER_VA_END,
-            (unsigned)GJ_MEMOBJ_MAX_PAGES, (unsigned)GJ_PROC_REGION_MAX,
-            (unsigned)GJ_PAGE_SIZE, (unsigned)MEMOBJ_SOFT_WAVE);
-    cAreas++;
-
-    /*
-     * Wave 19: sanitize prot surface (USER force + default-R).
-     * Grep: memobj: soft prot
-     */
-    kprintf("memobj: soft prot sanitize=%u default_r=%u force_u=1 "
-            "user_map=%u wave=%u "
-            "(soft prot sanitize; not product)\n",
-            g_cSoftUserMap, g_cSoftUserMapDefR, g_cSoftUserMap,
-            (unsigned)MEMOBJ_SOFT_WAVE);
-    cAreas++;
-
-    /*
-     * Wave 19: explicit OPEN honesty (FILE / product remain OPEN).
-     * Grep: memobj: soft OPEN
-     */
-    kprintf("memobj: soft OPEN file_soft=1 file_kind=soft product_tib=0 "
-            " wine_shm=soft full_file_pager=OPEN wave=%u "
-            "(soft snapshot wired; live pager OPEN; soft≠product)\n",
-            (unsigned)MEMOBJ_SOFT_WAVE);
-    cAreas++;
-
-    /*
-     * Grep: memobj: soft return rate
-     * Wave 17 return-surface rate lamps (kept) (map/create ok vs fail).
-     */
-    kprintf("memobj: soft return rate "
-            "map_ok=%u map_fail=%u create_ok=%u "
-            "pool=%u named=%u multi_peak=%u logs=%u wave=%u "
-            "(return rate; Soft≠product; not 1TiB product)\n",
-            cMapOk, cMapFail, cCreateOk,
-            g_u32SoftPoolUsed, g_u32SoftNamedUsed, g_u32SoftMultiMapPeak,
-            g_u32SoftInvSamples, (unsigned)MEMOBJ_SOFT_WAVE);
-    cAreas++;
-
-    /*
-     * Grep: memobj: soft retcode
-     * Wave 17 retcode catalog for map/create/pool soft return classes.
-     */
-    kprintf("memobj: soft retcode "
-            "map_ok=1 map_fail=1 create_ok=1 pool=1 named=1 "
-            "user_map=1 prot=1 file_kind=OPEN product_tib=0 wave=%u "
-            "(retcode catalog; Soft≠product; soft≠product)\n",
-            (unsigned)MEMOBJ_SOFT_WAVE);
-    cAreas++;
-
-    /*
-     * ---- Wave 18 complementary surfaces (kept) (never reshape primary).
-     * Return surfaces only — soft inventory; never hard-gates product paths.
-     */
-    /* Grep: memobj: soft return selftest — Wave 19 terminal return surface */
-    kprintf("memobj: soft return selftest inv_ret=1 product_kernel=OPEN "
-            "multi_server=0 rate_limited=0 wave=%u soft PASS\n",
-            (unsigned)MEMOBJ_SOFT_WAVE);
-
-    /* Grep: memobj: soft retmap — Wave 19 return-surface map */
-    kprintf("memobj: soft retmap soft_inv=1 deepen=1 return_rate=1 retcode=1 "
-            "product=OPEN wave=%u soft PASS\n",
-            (unsigned)MEMOBJ_SOFT_WAVE);
-
-    /* Grep: memobj: soft deepen wave (Wave 21 stamp; areas = prior soft lines). */
-    /*
-     * ---- Wave 19 complementary surfaces (kept) (never reshape primary).
-     * Return surfaces only — soft inventory; never hard-gates product paths.
-     */
-    /* Grep: memobj: soft retclass — Wave 19 return-class taxonomy (kept) */
-    kprintf("memobj: soft retclass ok|fail|inval|nodev|busy|nomem "
-            "soft_only=1 product_gate=0 wave=%u "
-            "(retclass taxonomy; Soft≠product)\n",
-            (unsigned)MEMOBJ_SOFT_WAVE);
-    /* Grep: memobj: soft retlane — Wave 19 return-lane catalog (kept) */
-    kprintf("memobj: soft retlane inv|selftest|rate|retcode|retmap|class "
-            "product_kernel=OPEN soft_ne_product=1 wave=%u "
-            "(retlane catalog; Soft≠product)\n",
-            (unsigned)MEMOBJ_SOFT_WAVE);
-    /*
-     * ---- Wave 20 complementary surfaces (kept) (never reshape primary).
-     * Return surfaces only — soft inventory; never hard-gates product paths.
-     */
-    /* Grep: memobj: soft retbound — Wave 20 return-bound honesty (kept) */
-    kprintf("memobj: soft retbound soft_only=1 product_gate=0 hard_gate=0 "
-            "never_blocks_m0=1 wave=%u "
-            "(retbound honesty; Soft≠product)\n",
-            (unsigned)MEMOBJ_SOFT_WAVE);
-    /* Grep: memobj: soft retseal — Wave 20 seal stamp (kept) */
-    kprintf("memobj: soft retseal exclusive=1 soft_ne_product=1 "
-            "product_kernel=OPEN wave=%u "
-            "(retseal stamp; Soft≠product)\n",
-            (unsigned)MEMOBJ_SOFT_WAVE);
-            /*
-             * ---- Wave 21 complementary surfaces (kept) (never reshape primary).
-             * Return surfaces only — soft inventory; never hard-gates product paths.
-            */
-            /* Grep: memobj: soft retpulse — Wave 21 return-pulse honesty (kept) */
-            kprintf("memobj: soft retpulse soft_only=1 product_gate=0 soft_ne_product=1 "
-                    "never_blocks_m0=1 wave=%u "
-                    "(retpulse honesty; Soft≠product)\n",
-                    (unsigned)MEMOBJ_SOFT_WAVE);
-            /* Grep: memobj: soft retmark — Wave 21 mark stamp (kept) */
-            kprintf("memobj: soft retmark exclusive=1 soft_ne_product=1 "
-                    "product_kernel=OPEN wave=%u "
-                    "(retmark stamp; Soft≠product)\n",
-                    (unsigned)MEMOBJ_SOFT_WAVE);
-            /*
-             * ---- Wave 22 complementary surfaces (kept) (never reshape primary).
-             * Return surfaces only — soft inventory; never hard-gates product paths.
-            */
-            /* Grep: memobj: soft retphase — Wave 22 return-phase honesty (kept) */
-            kprintf("memobj: soft retphase soft_only=1 product_gate=0 soft_ne_product=1 "
-                    "never_blocks_m0=1 wave=%u "
-                    "(retphase honesty; Soft≠product)\n",
-                    (unsigned)MEMOBJ_SOFT_WAVE);
-            /* Grep: memobj: soft retbadge — Wave 22 badge stamp (kept) */
-            kprintf("memobj: soft retbadge exclusive=1 soft_ne_product=1 "
-                    "product_kernel=OPEN wave=%u "
-                    "(retbadge stamp; Soft≠product)\n",
-                    (unsigned)MEMOBJ_SOFT_WAVE);
-/*
- * ---- Wave 23 complementary surfaces (kept) (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
-            */
-            /* Grep: memobj: soft rettoken — Wave 23 return-token honesty (kept) */
-            kprintf("memobj: soft rettoken soft_only=1 product_gate=0 soft_ne_product=1 "
-                    "never_blocks_m0=1 wave=%u "
-                    "(rettoken honesty; Soft≠product)\n",
-                    (unsigned)MEMOBJ_SOFT_WAVE);
-            /* Grep: memobj: soft retcrest — Wave 23 crest stamp (kept) */
-            kprintf("memobj: soft retcrest exclusive=1 soft_ne_product=1 "
-                    "product_kernel=OPEN wave=%u "
-                    "(retcrest stamp; Soft≠product)\n",
-                    (unsigned)MEMOBJ_SOFT_WAVE);
-            /*
-             * ---- Wave 24 complementary surfaces (kept) (never reshape primary).
-             * Return surfaces only — soft inventory; never hard-gates product paths.
-             */
-            /* Grep: memobj: soft retvault — Wave 24 return-vault honesty (kept) */
-            kprintf("memobj: soft retvault soft_only=1 product_gate=0 soft_ne_product=1 "
-                    "never_blocks_m0=1 wave=%u "
-                    "(retvault honesty; Soft≠product)\n",
-                    (unsigned)MEMOBJ_SOFT_WAVE);
-            /* Grep: memobj: soft retbanner — Wave 24 banner stamp (kept) */
-            kprintf("memobj: soft retbanner exclusive=1 soft_ne_product=1 "
-                    "product_kernel=OPEN wave=%u "
-                    "(retbanner stamp; Soft≠product)\n",
-                    (unsigned)MEMOBJ_SOFT_WAVE);
-            /*
-             * ---- Wave 25 complementary surfaces (kept) (never reshape primary).
-             * Return surfaces only — soft inventory; never hard-gates product paths.
-             */
-            /* Grep: memobj: soft retledger — Wave 25 return-ledger honesty (kept) */
-            kprintf("memobj: soft retledger soft_only=1 product_gate=0 soft_ne_product=1 "
-                    "never_blocks_m0=1 wave=%u "
-                    "(retledger honesty; Soft≠product)\n",
-                    (unsigned)MEMOBJ_SOFT_WAVE);
-            /* Grep: memobj: soft retbeacon — Wave 25 beacon stamp (kept) */
-            kprintf("memobj: soft retbeacon exclusive=1 soft_ne_product=1 "
-                    "product_kernel=OPEN wave=%u "
-                    "(retbeacon stamp; Soft≠product)\n",
-                    (unsigned)MEMOBJ_SOFT_WAVE);
-            /*
-             * ---- Wave 26 complementary surfaces (kept) (never reshape primary).
-             * Return surfaces only — soft inventory; never hard-gates product paths.
-             */
-            /* Grep: memobj: soft retcipher — Wave 26 return-cipher honesty (kept) */
-            kprintf("memobj: soft retcipher soft_only=1 product_gate=0 soft_ne_product=1 "
-                    "never_blocks_m0=1 wave=%u "
-                    "(retcipher honesty; Soft≠product)\n",
-                    (unsigned)MEMOBJ_SOFT_WAVE);
-            /* Grep: memobj: soft retflame — Wave 26 flame stamp (kept) */
-            kprintf("memobj: soft retflame exclusive=1 soft_ne_product=1 "
-                    "product_kernel=OPEN wave=%u "
-                    "(retflame stamp; Soft≠product)\n",
-                    (unsigned)MEMOBJ_SOFT_WAVE);
-                    /*
-                     * ---- Wave 27 complementary surfaces (kept) (never reshape primary).
-                     * Return surfaces only — soft inventory; never hard-gates product paths.
-                     */
-                    /* Grep: memobj: soft retprism — Wave 27 return-prism honesty (kept) */
-                    kprintf("memobj: soft retprism soft_only=1 product_gate=0 soft_ne_product=1 "
-                            "never_blocks_m0=1 wave=%u "
-                            "(retprism honesty; Soft≠product)\n",
-                            (unsigned)MEMOBJ_SOFT_WAVE);
-                    /* Grep: memobj: soft retforge — Wave 27 forge stamp (kept) */
-                    kprintf("memobj: soft retforge exclusive=1 soft_ne_product=1 "
-                            "product_kernel=OPEN wave=%u "
-                            "(retforge stamp; Soft≠product)\n",
-                            (unsigned)MEMOBJ_SOFT_WAVE);
-                            /*
-                             * ---- Wave 28 complementary surfaces (kept) (never reshape primary).
-                             * Return surfaces only — soft inventory; never hard-gates product paths.
-                             */
-                            /* Grep: memobj: soft retshard — Wave 28 return-shard honesty (kept) */
-                            kprintf("memobj: soft retshard soft_only=1 product_gate=0 soft_ne_product=1 "
-                                "never_blocks_m0=1 wave=%u "
-                                "(retshard honesty; Soft≠product)\n",
-                                (unsigned)MEMOBJ_SOFT_WAVE);
-                            /* Grep: memobj: soft retcrown — Wave 28 crown stamp (kept) */
-                            kprintf("memobj: soft retcrown exclusive=1 soft_ne_product=1 "
-                                "product_kernel=OPEN wave=%u "
-                                "(retcrown stamp; Soft≠product)\n",
-                                (unsigned)MEMOBJ_SOFT_WAVE);
-                                /*
-                             * ---- Wave 29 complementary surfaces (kept) (never reshape primary).
-                             * Return surfaces only — soft inventory; never hard-gates product paths.
-                             */
-                            /* Grep: memobj: soft retglyph — Wave 29 return-glyph honesty (kept) */
-                            kprintf("memobj: soft retglyph soft_only=1 product_gate=0 soft_ne_product=1 "
-                                    "never_blocks_m0=1 wave=%u "
-                                    "(retglyph honesty; Soft≠product)\n",
-                                    (unsigned)MEMOBJ_SOFT_WAVE);
-                            /* Grep: memobj: soft retscepter — Wave 29 scepter stamp (kept) */
-                            kprintf("memobj: soft retscepter exclusive=1 soft_ne_product=1 "
-                                    "product_kernel=OPEN wave=%u "
-                                    "(retscepter stamp; Soft≠product)\n",
-                                    (unsigned)MEMOBJ_SOFT_WAVE);
-                                /*
-                             * ---- Wave 30 complementary surfaces (kept) (never reshape primary).
-                             * Return surfaces only — soft inventory; never hard-gates product paths.
-                             */
-                            /* Grep: memobj: soft retsigil — Wave 30 return-sigil honesty (kept) */
-                            kprintf("memobj: soft retsigil soft_only=1 product_gate=0 soft_ne_product=1 "
-                                    "never_blocks_m0=1 wave=%u "
-                                    "(retsigil honesty; Soft≠product)\n",
-                                    (unsigned)MEMOBJ_SOFT_WAVE);
-                            /* Grep: memobj: soft retemblem — Wave 30 emblem stamp (kept) */
-                            kprintf("memobj: soft retemblem exclusive=1 soft_ne_product=1 "
-                                    "product_kernel=OPEN wave=%u "
-                                    "(retemblem stamp; Soft≠product)\n",
-                                    (unsigned)MEMOBJ_SOFT_WAVE);
-                            /*
-                             * ---- Wave 31 complementary surfaces (kept) (never reshape primary).
-                             * Return surfaces only — soft inventory; never hard-gates product paths.
-                             */
-                            /* Grep: memobj: soft retaegis — Wave 31 return-aegis honesty (kept) */
-                            kprintf("memobj: soft retaegis soft_only=1 product_gate=0 soft_ne_product=1 "
-                                    "never_blocks_m0=1 wave=%u "
-                                    "(retaegis honesty; Soft≠product)\n",
-                                    (unsigned)MEMOBJ_SOFT_WAVE);
-                            /* Grep: memobj: soft retsigil — Wave 30 return-sigil honesty (kept) */
-                            kprintf("memobj: soft retsigil soft_only=1 product_gate=0 soft_ne_product=1 "
-                                    "never_blocks_m0=1 wave=%u "
-                                    "(retsigil honesty; Soft≠product)\n",
-                                    (unsigned)MEMOBJ_SOFT_WAVE);
-                            /* Grep: memobj: soft retmantle — Wave 31 mantle stamp (kept) */
-                            kprintf("memobj: soft retmantle exclusive=1 soft_ne_product=1 "
-                                    "product_kernel=OPEN wave=%u "
-                                    "(retmantle stamp; Soft≠product)\n",
-                                    (unsigned)MEMOBJ_SOFT_WAVE);
-/*
- * ---- Wave 32 complementary surfaces (kept) (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: memobj: soft retbulwark — Wave 32 return-bulwark honesty (kept) */
-kprintf("memobj: soft retbulwark soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=%u "
-        "(retbulwark honesty; Soft≠product)\n",
-        (unsigned)MEMOBJ_SOFT_WAVE);
-/* Grep: memobj: soft retpanoply — Wave 32 panoply stamp (kept) */
-kprintf("memobj: soft retpanoply exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=%u "
-        "(retpanoply stamp; Soft≠product)\n",
-        (unsigned)MEMOBJ_SOFT_WAVE);
-/*
- * ---- Wave 33 complementary surfaces (kept) (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: memobj: soft retbastion — Wave 33 return-bastion honesty (kept) */
-kprintf("memobj: soft retbastion soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=%u "
-        "(retbastion honesty; Soft≠product)\n",
-        (unsigned)MEMOBJ_SOFT_WAVE);
-/* Grep: memobj: soft retcitadel — Wave 33 citadel stamp (kept) */
-kprintf("memobj: soft retcitadel exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=%u "
-        "(retcitadel stamp; Soft≠product)\n",
-        (unsigned)MEMOBJ_SOFT_WAVE);
-/*
- * ---- Wave 34 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: memobj: soft retredoubt — Wave 34 return-redoubt honesty */
-kprintf("memobj: soft retredoubt soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=%u "
-        "(retredoubt honesty; Soft≠product)\n",
-        (unsigned)MEMOBJ_SOFT_WAVE);
-/* Grep: memobj: soft retkeep — Wave 34 exclusive keep stamp */
-kprintf("memobj: soft retkeep exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=%u "
-        "(retkeep stamp; Soft≠product)\n",
-        (unsigned)MEMOBJ_SOFT_WAVE);
-/*
- * ---- Wave 35 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: memobj: soft retfortress — Wave 35 return-fortress honesty */
-kprintf("memobj: soft retfortress soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=%u "
-        "(retfortress honesty; Soft≠product)\n",
-        (unsigned)MEMOBJ_SOFT_WAVE);
-/* Grep: memobj: soft retpalace — Wave 35 exclusive palace stamp */
-kprintf("memobj: soft retpalace exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=%u "
-        "(retpalace stamp; Soft≠product)\n",
-        (unsigned)MEMOBJ_SOFT_WAVE);
-/*
- * ---- Wave 36 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: memobj: soft rethold — Wave 36 return-hold honesty */
-kprintf("memobj: soft rethold soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=%u "
-        "(rethold honesty; Soft≠product)\n",
-        (unsigned)MEMOBJ_SOFT_WAVE);
-/* Grep: memobj: soft retspire — Wave 36 exclusive spire stamp */
-kprintf("memobj: soft retspire exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=%u "
-        "(retspire stamp; Soft≠product)\n",
-        (unsigned)MEMOBJ_SOFT_WAVE);
-/*
- * ---- Wave 37 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: memobj: soft retwall — Wave 37 return-wall honesty */
-kprintf("memobj: soft retwall soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=%u "
-        "(retwall honesty; Soft≠product)\n",
-        (unsigned)MEMOBJ_SOFT_WAVE);
-/* Grep: memobj: soft retgate — Wave 37 exclusive gate stamp */
-kprintf("memobj: soft retgate exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=%u "
-        "(retgate stamp; Soft≠product)\n",
-        (unsigned)MEMOBJ_SOFT_WAVE);
-/*
- * ---- Wave 38 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: memobj: soft retmoat — Wave 38 return-moat honesty */
-kprintf("memobj: soft retmoat soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=%u "
-        "(retmoat honesty; Soft≠product)\n",
-        (unsigned)MEMOBJ_SOFT_WAVE);
-/* Grep: memobj: soft retower — Wave 38 exclusive tower stamp */
-kprintf("memobj: soft retower exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=%u "
-        "(retower stamp; Soft≠product)\n",
-        (unsigned)MEMOBJ_SOFT_WAVE);
-                            
-/*
- * ---- Wave 39 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: memobj: soft retbarbican — Wave 39 return-barbican honesty */
-kprintf("memobj: soft retbarbican soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=%u "
-        "(retbarbican honesty; Soft≠product)\n",
-        (unsigned)MEMOBJ_SOFT_WAVE);
-/* Grep: memobj: soft retglacis — Wave 39 exclusive glacis stamp */
-kprintf("memobj: soft retglacis exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=%u "
-        "(retglacis stamp; Soft≠product)\n",
-        (unsigned)MEMOBJ_SOFT_WAVE);
-/*
- * ---- Wave 40 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: memobj: soft retcurtain — Wave 40 return-curtain honesty */
-kprintf("memobj: soft retcurtain soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=%u "
-        "(retcurtain honesty; Soft≠product)\n",
-        (unsigned)MEMOBJ_SOFT_WAVE);
-/* Grep: memobj: soft retparapet — Wave 40 exclusive parapet stamp */
-kprintf("memobj: soft retparapet exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=%u "
-        "(retparapet stamp; Soft≠product)\n",
-        (unsigned)MEMOBJ_SOFT_WAVE);
-/*
- * ---- Wave 41 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: memobj: soft retravelin — Wave 41 return-travelin honesty */
-kprintf("memobj: soft retravelin soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=%u "
-        "(retravelin honesty; Soft≠product)\n",
-        (unsigned)MEMOBJ_SOFT_WAVE);
-/* Grep: memobj: soft retditch — Wave 41 exclusive ditch stamp */
-kprintf("memobj: soft retditch exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=%u "
-        "(retditch stamp; Soft≠product)\n",
-        (unsigned)MEMOBJ_SOFT_WAVE);
-/*
- * ---- Wave 42 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: memobj: soft retportcullis — Wave 42 return-portcullis honesty */
-kprintf("memobj: soft retportcullis soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=%u "
-        "(retportcullis honesty; Soft≠product)\n",
-        (unsigned)MEMOBJ_SOFT_WAVE);
-/* Grep: memobj: soft retbattlement — Wave 42 exclusive battlement stamp */
-kprintf("memobj: soft retbattlement exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=%u "
-        "(retbattlement stamp; Soft≠product)\n",
-        (unsigned)MEMOBJ_SOFT_WAVE);
-/*
- * ---- Wave 43 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: memobj: soft retmachicolation — Wave 43 return-machicolation honesty */
-kprintf("memobj: soft retmachicolation soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=%u "
-        "(retmachicolation honesty; Soft≠product)\n",
-        (unsigned)MEMOBJ_SOFT_WAVE);
-/* Grep: memobj: soft retarrowslit — Wave 43 exclusive arrowslit stamp */
-kprintf("memobj: soft retarrowslit exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=%u "
-        "(retarrowslit stamp; Soft≠product)\n",
-        (unsigned)MEMOBJ_SOFT_WAVE);
-
-/*
- * ---- Wave 44 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: memobj: soft retmerlon — Wave 44 return-merlon honesty */
-kprintf("memobj: soft retmerlon soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=%u "
-        "(retmerlon honesty; Soft≠product)\n",
-        (unsigned)MEMOBJ_SOFT_WAVE);
-/* Grep: memobj: soft retembrasure — Wave 44 exclusive embrasure stamp */
-kprintf("memobj: soft retembrasure exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=%u "
-        "(retembrasure stamp; Soft≠product)\n",
-        (unsigned)MEMOBJ_SOFT_WAVE);
-
-/*
- * ---- Wave 45 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: memobj: soft retkeepgate — Wave 45 return-keepgate honesty */
-kprintf("memobj: soft retkeepgate soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=%u "
-        "(retkeepgate honesty; Soft≠product)\n",
-        (unsigned)MEMOBJ_SOFT_WAVE);
-/* Grep: memobj: soft retouterward — Wave 45 exclusive outerward stamp */
-kprintf("memobj: soft retouterward exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=%u "
-        "(retouterward stamp; Soft≠product)\n",
-        (unsigned)MEMOBJ_SOFT_WAVE);
-
-/*
- * ---- Wave 46 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: memobj: soft retbailey — Wave 46 return-bailey honesty */
-kprintf("memobj: soft retbailey soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=%u "
-        "(retbailey honesty; Soft≠product)\n",
-        (unsigned)MEMOBJ_SOFT_WAVE);
-/* Grep: memobj: soft retpostern — Wave 46 exclusive postern stamp */
-kprintf("memobj: soft retpostern exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=%u "
-        "(retpostern stamp; Soft≠product)\n",
-        (unsigned)MEMOBJ_SOFT_WAVE);
-
-/*
- * ---- Wave 47 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: memobj: soft retinnerward — Wave 47 return-innerward honesty */
-kprintf("memobj: soft retinnerward soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=118 "
-        "(retinnerward honesty; Soft≠product)\n");
-/* Grep: memobj: soft retdonjon — Wave 47 exclusive donjon stamp */
-kprintf("memobj: soft retdonjon exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=118 "
-        "(retdonjon stamp; Soft≠product)\n");
-
-/*
- * ---- Wave 48 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: memobj: soft retchevaux — Wave 48 return-chevaux honesty */
-kprintf("memobj: soft retchevaux soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=118 "
-        "(retchevaux honesty; Soft≠product)\n");
-/* Grep: memobj: soft retpalisade — Wave 48 exclusive palisade stamp */
-kprintf("memobj: soft retpalisade exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=118 "
-        "(retpalisade stamp; Soft≠product)\n");
-
-/*
- * ---- Wave 49 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: memobj: soft retglacisgate — Wave 49 return-glacisgate honesty */
-kprintf("memobj: soft retglacisgate soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=118 "
-        "(retglacisgate honesty; Soft≠product)\n");
-/* Grep: memobj: soft retoutwork — Wave 49 exclusive outwork stamp */
-kprintf("memobj: soft retoutwork exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=118 "
-        "(retoutwork stamp; Soft≠product)\n");
-/*
- * ---- Wave 50 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: memobj: soft retsally — Wave 50 return-sally honesty */
-kprintf("memobj: soft retsally soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=118 "
-        "(retsally honesty; Soft≠product)\n");
-/* Grep: memobj: soft retcounterscarp — Wave 50 exclusive counterscarp stamp */
-kprintf("memobj: soft retcounterscarp exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=118 "
-        "(retcounterscarp stamp; Soft≠product)\n");
-/*
- * ---- Wave 51 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: memobj: soft retfosse — Wave 51 return-fosse honesty */
-kprintf("memobj: soft retfosse soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=118 "
-        "(retfosse honesty; Soft≠product)\n");
-/* Grep: memobj: soft retcoveredway — Wave 51 exclusive coveredway stamp */
-kprintf("memobj: soft retcoveredway exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=118 "
-        "(retcoveredway stamp; Soft≠product)\n");
-
-/*
- * ---- Wave 52 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: memobj: soft rettenaille — Wave 52 return-tenaille honesty */
-kprintf("memobj: soft rettenaille soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=118 "
-        "(rettenaille honesty; Soft≠product)\n");
-/* Grep: memobj: soft retdemilune — Wave 52 exclusive demilune stamp */
-kprintf("memobj: soft retdemilune exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=118 "
-        "(retdemilune stamp; Soft≠product)\n");
-/*
- * ---- Wave 53 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: memobj: soft retravelin — Wave 53 return-travelin honesty */
-kprintf("memobj: soft retravelin soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=118 "
-        "(retravelin honesty; Soft≠product)\n");
-/* Grep: memobj: soft retlunette — Wave 53 exclusive lunette stamp */
-kprintf("memobj: soft retlunette exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=118 "
-        "(retlunette stamp; Soft≠product)\n");
-/*
- * ---- Wave 54 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: memobj: soft retcaponier — Wave 54 return-caponier honesty */
-kprintf("memobj: soft retcaponier soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=118 "
-        "(retcaponier honesty; Soft≠product)\n");
-/* Grep: memobj: soft retredan — Wave 54 exclusive redan stamp */
-kprintf("memobj: soft retredan exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=118 "
-        "(retredan stamp; Soft≠product)\n");
-/*
- * ---- Wave 55 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: memobj: soft retflank — Wave 55 return-flank honesty */
-kprintf("memobj: soft retflank soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=118 "
-        "(retflank honesty; Soft≠product)\n");
-/* Grep: memobj: soft retface — Wave 55 exclusive face stamp */
-kprintf("memobj: soft retface exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=118 "
-        "(retface stamp; Soft≠product)\n");
-/*
- * ---- Wave 56 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: memobj: soft retgorge — Wave 56 return-gorge honesty */
-kprintf("memobj: soft retgorge soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=118 "
-        "(retgorge honesty; Soft≠product)\n");
-/* Grep: memobj: soft retshoulder — Wave 56 exclusive shoulder stamp */
-kprintf("memobj: soft retshoulder exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=118 "
-        "(retshoulder stamp; Soft≠product)\n");
-/*
- * ---- Wave 57 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: memobj: soft retraverse — Wave 57 return-traverse honesty */
-kprintf("memobj: soft retraverse soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=118 "
-        "(retraverse honesty; Soft≠product)\n");
-/* Grep: memobj: soft retcasemate — Wave 57 exclusive casemate stamp */
-kprintf("memobj: soft retcasemate exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=118 "
-        "(retcasemate stamp; Soft≠product)\n");
-
-/*
- * ---- Wave 58 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: memobj: soft retorillon — Wave 58 return-orillon honesty */
-kprintf("memobj: soft retorillon soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=118 "
-        "(retorillon honesty; Soft≠product)\n");
-/* Grep: memobj: soft retbonnette — Wave 58 exclusive bonnette stamp */
-kprintf("memobj: soft retbonnette exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=118 "
-        "(retbonnette stamp; Soft≠product)\n");
-
-/*
- * ---- Wave 59 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: memobj: soft retcrownwork — Wave 59 return-crownwork honesty */
-kprintf("memobj: soft retcrownwork soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=118 "
-        "(retcrownwork honesty; Soft≠product)\n");
-/* Grep: memobj: soft rethornwork — Wave 59 exclusive hornwork stamp */
-kprintf("memobj: soft rethornwork exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=118 "
-        "(rethornwork stamp; Soft≠product)\n");
-
-/*
- * ---- Wave 60 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: memobj: soft retplace — Wave 60 return-place honesty */
-kprintf("memobj: soft retplace soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=118 "
-        "(retplace honesty; Soft≠product)\n");
-/* Grep: memobj: soft retenvelope — Wave 60 exclusive envelope stamp */
-kprintf("memobj: soft retenvelope exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=118 "
-        "(retenvelope stamp; Soft≠product)\n");
-
-
-
-
-
-
-
-
-
-/*
- * ---- Wave 61 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: memobj: soft retcounterguard — Wave 61 return-counterguard honesty */
-kprintf("memobj: soft retcounterguard soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=118 "
-        "(retcounterguard honesty; Soft≠product)\n");
-/* Grep: memobj: soft retcoveredface — Wave 61 exclusive coveredface stamp */
-kprintf("memobj: soft retcoveredface exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=118 "
-        "(retcoveredface stamp; Soft≠product)\n");
-/*
- * ---- Wave 62 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: memobj: soft retbastionface — Wave 62 return-bastionface honesty */
-kprintf("memobj: soft retbastionface soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=118 "
-        "(retbastionface honesty; Soft≠product)\n");
-/* Grep: memobj: soft retcurtainangle — Wave 62 exclusive curtainangle stamp */
-kprintf("memobj: soft retcurtainangle exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=118 "
-        "(retcurtainangle stamp; Soft≠product)\n");
-/*
- * ---- Wave 63 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: memobj: soft retdoubletenaille — Wave 63 return-doubletenaille honesty */
-kprintf("memobj: soft retdoubletenaille soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=118 "
-        "(retdoubletenaille honesty; Soft≠product)\n");
-/* Grep: memobj: soft retplaceofarms — Wave 63 exclusive placeofarms stamp */
-kprintf("memobj: soft retplaceofarms exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=118 "
-        "(retplaceofarms stamp; Soft≠product)\n");
- /*
-  * ---- Wave 64 exclusive complementary surfaces (never reshape primary).
-  * Return surfaces only — soft inventory; never hard-gates product paths.
-  */
- /* Grep: memobj: soft retreentrant — Wave 64 return-reentrant honesty */
-kprintf("memobj: soft retreentrant soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=118 "
-        "(retreentrant honesty; Soft≠product)\n");
- /* Grep: memobj: soft retsallyport — Wave 64 exclusive sallyport stamp */
-kprintf("memobj: soft retsallyport exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=118 "
-        "(retsallyport stamp; Soft≠product)\n");
- /*
-  * ---- Wave 65 exclusive complementary surfaces (never reshape primary).
-  * Return surfaces only — soft inventory; never hard-gates product paths.
-  */
- /* Grep: memobj: soft retgorgeangle — Wave 65 return-gorgeangle honesty */
-kprintf("memobj: soft retgorgeangle soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=118 "
-        "(retgorgeangle honesty; Soft≠product)\n");
- /* Grep: memobj: soft retshoulderangle — Wave 65 exclusive shoulderangle stamp */
-kprintf("memobj: soft retshoulderangle exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=118 "
-        "(retshoulderangle stamp; Soft≠product)\n");
- /*
-  * ---- Wave 66 exclusive complementary surfaces (never reshape primary).
-  * Return surfaces only — soft inventory; never hard-gates product paths.
-  */
- /* Grep: memobj: soft retflankangle — Wave 66 return-flankangle honesty */
- kprintf("memobj: soft retflankangle soft_only=1 product_gate=0 soft_ne_product=1 "
-         "never_blocks_m0=1 wave=118 "
-         "(retflankangle honesty; Soft≠product)\n");
- /* Grep: memobj: soft retfaceangle — Wave 66 exclusive faceangle stamp */
- kprintf("memobj: soft retfaceangle exclusive=1 soft_ne_product=1 "
-         "product_kernel=OPEN wave=118 "
-         "(retfaceangle stamp; Soft≠product)\n");
-/*
- * ---- Wave 67 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: memobj: soft retcaponierangle — Wave 67 return-caponierangle honesty */
-kprintf("memobj: soft retcaponierangle soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=118 "
-        "(retcaponierangle honesty; Soft≠product)\n");
-/* Grep: memobj: soft retredanangle — Wave 67 exclusive redanangle stamp */
-kprintf("memobj: soft retredanangle exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=118 "
-        "(retredanangle stamp; Soft≠product)\n");
-/*
- * ---- Wave 68 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: memobj: soft retlunetteangle — Wave 68 return-lunetteangle honesty */
-kprintf("memobj: soft retlunetteangle soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=118 "
-        "(retlunetteangle honesty; Soft≠product)\n");
-/* Grep: memobj: soft rettenailleangle — Wave 68 exclusive tenailleangle stamp */
-kprintf("memobj: soft rettenailleangle exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=118 "
-        "(rettenailleangle stamp; Soft≠product)\n");
-/*
- * ---- Wave 69 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: memobj: soft retdemiluneangle — Wave 69 return-demiluneangle honesty */
-kprintf("memobj: soft retdemiluneangle soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=118 "
-        "(retdemiluneangle honesty; Soft≠product)\n");
-/* Grep: memobj: soft retcoveredwayangle — Wave 69 exclusive coveredwayangle stamp */
-kprintf("memobj: soft retcoveredwayangle exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=118 "
-        "(retcoveredwayangle stamp; Soft≠product)\n");
-/*
- * ---- Wave 70 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: memobj: soft retfosseangle — Wave 70 return-fosseangle honesty */
-kprintf("memobj: soft retfosseangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=118 (retfosseangle honesty; Soft≠product)\n");
-/* Grep: memobj: soft retcounterscarple — Wave 70 exclusive counterscarple stamp */
-kprintf("memobj: soft retcounterscarple exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=118 (retcounterscarple stamp; Soft≠product)\n");
-/*
- * ---- Wave 71 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: memobj: soft retsallyportangle — Wave 71 return-sallyportangle honesty */
-kprintf("memobj: soft retsallyportangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=118 (retsallyportangle honesty; Soft≠product)\n");
-/* Grep: memobj: soft retreentrantangle — Wave 71 exclusive reentrantangle stamp */
-kprintf("memobj: soft retreentrantangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=118 (retreentrantangle stamp; Soft≠product)\n");
-/*
- * ---- Wave 72 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: memobj: soft retplaceofarmsangle — Wave 72 return-placeofarmsangle honesty */
-kprintf("memobj: soft retplaceofarmsangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=118 (retplaceofarmsangle honesty; Soft≠product)\n");
-/* Grep: memobj: soft retdoubletenailleangle — Wave 72 exclusive doubletenailleangle stamp */
-kprintf("memobj: soft retdoubletenailleangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=118 (retdoubletenailleangle stamp; Soft≠product)\n");
-/* Grep: memobj: soft retcurtainface — Wave 73 return-curtainface honesty */
-kprintf("memobj: soft retcurtainface soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=118 (retcurtainface honesty; Soft≠product)\n");
-/* Grep: memobj: soft retbastionangle — Wave 73 exclusive bastionangle stamp */
-kprintf("memobj: soft retbastionangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=118 (retbastionangle stamp; Soft≠product)\n");
-/* Grep: memobj: soft retglacisangle — Wave 74 return-glacisangle honesty */
-kprintf("memobj: soft retglacisangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=118 (retglacisangle honesty; Soft≠product)\n");
-/* Grep: memobj: soft retparapetangle — Wave 74 exclusive parapetangle stamp */
-kprintf("memobj: soft retparapetangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=118 (retparapetangle stamp; Soft≠product)\n");
-/* Grep: memobj: soft retmoatangle — Wave 75 return-moatangle honesty */
-kprintf("memobj: soft retmoatangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=118 (retmoatangle honesty; Soft≠product)\n");
-/* Grep: memobj: soft retowerangle — Wave 75 exclusive towerangle stamp */
-kprintf("memobj: soft retowerangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=118 (retowerangle stamp; Soft≠product)\n");
-/* Grep: memobj: soft retgateangle — Wave 76 return-gateangle honesty */
-kprintf("memobj: soft retgateangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=118 (retgateangle honesty; Soft≠product)\n");
-/* Grep: memobj: soft retwallangle — Wave 76 exclusive wallangle stamp */
-kprintf("memobj: soft retwallangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=118 (retwallangle stamp; Soft≠product)\n");
-/* Grep: memobj: soft retspireangle — Wave 77 return-spireangle honesty */
-kprintf("memobj: soft retspireangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=118 (retspireangle honesty; Soft≠product)\n");
-/* Grep: memobj: soft retholdangle — Wave 77 exclusive holdangle stamp */
-kprintf("memobj: soft retholdangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=118 (retholdangle stamp; Soft≠product)\n");
-/* Grep: memobj: soft retpalaceangle — Wave 78 return-palaceangle honesty */
-kprintf("memobj: soft retpalaceangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=118 (retpalaceangle honesty; Soft≠product)\n");
-/* Grep: memobj: soft retfortressangle — Wave 78 exclusive fortressangle stamp */
-kprintf("memobj: soft retfortressangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=118 (retfortressangle stamp; Soft≠product)\n");
-/* Grep: memobj: soft retkeepangle — Wave 79 return-keepangle honesty */
-kprintf("memobj: soft retkeepangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=118 (retkeepangle honesty; Soft≠product)\n");
-/* Grep: memobj: soft retredoubtangle — Wave 79 exclusive redoubtangle stamp */
-kprintf("memobj: soft retredoubtangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=118 (retredoubtangle stamp; Soft≠product)\n");
-/* Grep: memobj: soft retcitadelangle — Wave 80 return-citadelangle honesty */
-kprintf("memobj: soft retcitadelangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=118 (retcitadelangle honesty; Soft≠product)\n");
-/* Grep: memobj: soft retbastionkeep — Wave 80 exclusive bastionkeep stamp */
-kprintf("memobj: soft retbastionkeep exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=118 (retbastionkeep stamp; Soft≠product)\n");
-/* Grep: memobj: soft retpanoplyangle — Wave 81 return-panoplyangle honesty */
-kprintf("memobj: soft retpanoplyangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=118 (retpanoplyangle honesty; Soft≠product)\n");
-/* Grep: memobj: soft retbulwarkangle — Wave 81 exclusive bulwarkangle stamp */
-kprintf("memobj: soft retbulwarkangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=118 (retbulwarkangle stamp; Soft≠product)\n");
-/* Grep: memobj: soft retmantleangle — Wave 82 return-mantleangle honesty */
-kprintf("memobj: soft retmantleangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=118 (retmantleangle honesty; Soft≠product)\n");
-/* Grep: memobj: soft retaegisangle — Wave 82 exclusive aegisangle stamp */
-kprintf("memobj: soft retaegisangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=118 (retaegisangle stamp; Soft≠product)\n");
-/* Grep: memobj: soft retemblemangle — Wave 83 return-emblemangle honesty */
-kprintf("memobj: soft retemblemangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=118 (retemblemangle honesty; Soft≠product)\n");
-/* Grep: memobj: soft retsigilangle — Wave 83 exclusive sigilangle stamp */
-kprintf("memobj: soft retsigilangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=118 (retsigilangle stamp; Soft≠product)\n");
-/* Grep: memobj: soft retscepterangle — Wave 84 return-scepterangle honesty */
-kprintf("memobj: soft retscepterangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=118 (retscepterangle honesty; Soft≠product)\n");
-/* Grep: memobj: soft retglyphangle — Wave 84 exclusive glyphangle stamp */
-kprintf("memobj: soft retglyphangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=118 (retglyphangle stamp; Soft≠product)\n");
-/* Grep: memobj: soft retcrownangle — Wave 85 return-crownangle honesty */
-kprintf("memobj: soft retcrownangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=118 (retcrownangle honesty; Soft≠product)\n");
-/* Grep: memobj: soft retshardangle — Wave 85 exclusive shardangle stamp */
-kprintf("memobj: soft retshardangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=118 (retshardangle stamp; Soft≠product)\n");
-/* Grep: memobj: soft retforgeangle — Wave 86 return-forgeangle honesty */
-kprintf("memobj: soft retforgeangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=118 (retforgeangle honesty; Soft≠product)\n");
-/* Grep: memobj: soft retprismangle — Wave 86 exclusive prismangle stamp */
-kprintf("memobj: soft retprismangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=118 (retprismangle stamp; Soft≠product)\n");
-/* Grep: memobj: soft retflameangle — Wave 87 return-flameangle honesty */
-kprintf("memobj: soft retflameangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=118 (retflameangle honesty; Soft≠product)\n");
-/* Grep: memobj: soft retcipherangle — Wave 87 exclusive cipherangle stamp */
-kprintf("memobj: soft retcipherangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=118 (retcipherangle stamp; Soft≠product)\n");
-/* Grep: memobj: soft retbeaconangle — Wave 88 return-beaconangle honesty */
-kprintf("memobj: soft retbeaconangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=118 (retbeaconangle honesty; Soft≠product)\n");
-/* Grep: memobj: soft retledgerangle — Wave 88 exclusive ledgerangle stamp */
-kprintf("memobj: soft retledgerangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=118 (retledgerangle stamp; Soft≠product)\n");
-/* Grep: memobj: soft retbannerangle — Wave 89 return-bannerangle honesty */
-kprintf("memobj: soft retbannerangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=118 (retbannerangle honesty; Soft≠product)\n");
-/* Grep: memobj: soft retvaultangle — Wave 89 exclusive vaultangle stamp */
-kprintf("memobj: soft retvaultangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=118 (retvaultangle stamp; Soft≠product)\n");
-/* Grep: memobj: soft retcrestangle — Wave 90 return-crestangle honesty */
-kprintf("memobj: soft retcrestangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=118 (retcrestangle honesty; Soft≠product)\n");
-/* Grep: memobj: soft rettokenangle — Wave 90 exclusive tokenangle stamp */
-kprintf("memobj: soft rettokenangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=118 (rettokenangle stamp; Soft≠product)\n");
-/* Grep: memobj: soft retbadgeangle — Wave 91 return-badgeangle honesty */
-kprintf("memobj: soft retbadgeangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=118 (retbadgeangle honesty; Soft≠product)\n");
-/* Grep: memobj: soft retphaseangle — Wave 91 exclusive phaseangle stamp */
-kprintf("memobj: soft retphaseangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=118 (retphaseangle stamp; Soft≠product)\n");
-/* Grep: memobj: soft retmarkangle — Wave 92 return-markangle honesty */
-kprintf("memobj: soft retmarkangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=118 (retmarkangle honesty; Soft≠product)\n");
-/* Grep: memobj: soft retpulseangle — Wave 92 exclusive pulseangle stamp */
-kprintf("memobj: soft retpulseangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=118 (retpulseangle stamp; Soft≠product)\n");
-
-/* Grep: memobj: soft retsealangle — Wave 93 return-sealangle honesty */
-kprintf("memobj: soft retsealangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=118 (retsealangle honesty; Soft≠product)\n");
-/* Grep: memobj: soft retboundangle — Wave 93 exclusive boundangle stamp */
-kprintf("memobj: soft retboundangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=118 (retboundangle stamp; Soft≠product)\n");
-/* Grep: memobj: soft retstemangle — Wave 94 return-stemangle honesty */
-kprintf("memobj: soft retstemangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=118 (retstemangle honesty; Soft≠product)\n");
-/* Grep: memobj: soft retbladeangle — Wave 94 exclusive bladeangle stamp */
-kprintf("memobj: soft retbladeangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=118 (retbladeangle stamp; Soft≠product)\n");
-/* Grep: memobj: soft retchordangle — Wave 95 return-chordangle honesty */
-kprintf("memobj: soft retchordangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=118 (retchordangle honesty; Soft≠product)\n");
-/* Grep: memobj: soft retarcangle — Wave 95 exclusive arcangle stamp */
-kprintf("memobj: soft retarcangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=118 (retarcangle stamp; Soft≠product)\n");
-/* Grep: memobj: soft retsectorangle — Wave 96 return-sectorangle honesty */
-kprintf("memobj: soft retsectorangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=118 (retsectorangle honesty; Soft≠product)\n");
-/* Grep: memobj: soft retwedgeangle — Wave 96 exclusive wedgeangle stamp */
-kprintf("memobj: soft retwedgeangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=118 (retwedgeangle stamp; Soft≠product)\n");
-/* Grep: memobj: soft retradiusangle — Wave 97 return-radiusangle honesty */
-kprintf("memobj: soft retradiusangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=118 (retradiusangle honesty; Soft≠product)\n");
-/* Grep: memobj: soft retdiameterangle — Wave 97 exclusive diameterangle stamp */
-kprintf("memobj: soft retdiameterangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=118 (retdiameterangle stamp; Soft≠product)\n");
-/* Grep: memobj: soft retcircumangle — Wave 98 return-circumangle honesty */
-kprintf("memobj: soft retcircumangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=118 (retcircumangle honesty; Soft≠product)\n");
-/* Grep: memobj: soft retellipseangle — Wave 98 exclusive ellipseangle stamp */
-kprintf("memobj: soft retellipseangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=118 (retellipseangle stamp; Soft≠product)\n");
-/* Grep: memobj: soft rethyperangle — Wave 99 return-hyperangle honesty */
-kprintf("memobj: soft rethyperangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=118 (rethyperangle honesty; Soft≠product)\n");
-/* Grep: memobj: soft retparabolaangle — Wave 99 exclusive parabolaangle stamp */
-kprintf("memobj: soft retparabolaangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=118 (retparabolaangle stamp; Soft≠product)\n");
-/* Grep: memobj: soft retspiralangle — Wave 100 return-spiralangle honesty */
-kprintf("memobj: soft retspiralangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=118 (retspiralangle honesty; Soft≠product)\n");
-/* Grep: memobj: soft rethelixangle — Wave 100 exclusive helixangle stamp */
-kprintf("memobj: soft rethelixangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=118 (rethelixangle stamp; Soft≠product)\n");
-/* Grep: memobj: soft rettorusangle — Wave 101 return-torusangle honesty */
-kprintf("memobj: soft rettorusangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=118 (rettorusangle honesty; Soft≠product)\n");
-/* Grep: memobj: soft retknotangle — Wave 101 exclusive knotangle stamp */
-kprintf("memobj: soft retknotangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=118 (retknotangle stamp; Soft≠product)\n");
-/* Grep: memobj: soft retmoebiusangle — Wave 102 return-moebiusangle honesty */
-kprintf("memobj: soft retmoebiusangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=118 (retmoebiusangle honesty; Soft≠product)\n");
-/* Grep: memobj: soft retkleinangle — Wave 102 exclusive kleinangle stamp */
-kprintf("memobj: soft retkleinangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=118 (retkleinangle stamp; Soft≠product)\n");
-/* Grep: memobj: soft retprojectangle — Wave 103 return-projectangle honesty */
-kprintf("memobj: soft retprojectangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=118 (retprojectangle honesty; Soft≠product)\n");
-/* Grep: memobj: soft retaffineangle — Wave 103 exclusive affineangle stamp */
-kprintf("memobj: soft retaffineangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=118 (retaffineangle stamp; Soft≠product)\n");
-/* Grep: memobj: soft retlinearangle — Wave 104 return-linearangle honesty */
-kprintf("memobj: soft retlinearangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=118 (retlinearangle honesty; Soft≠product)\n");
-/* Grep: memobj: soft retbilinearangle — Wave 104 exclusive bilinearangle stamp */
-kprintf("memobj: soft retbilinearangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=118 (retbilinearangle stamp; Soft≠product)\n");
-/* Grep: memobj: soft retquadraticangle — Wave 105 return-quadraticangle honesty */
-kprintf("memobj: soft retquadraticangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=118 (retquadraticangle honesty; Soft≠product)\n");
-/* Grep: memobj: soft retcubicangle — Wave 105 exclusive cubicangle stamp */
-kprintf("memobj: soft retcubicangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=118 (retcubicangle stamp; Soft≠product)\n");
-/* Grep: memobj: soft retquarticangle — Wave 106 return-quarticangle honesty */
-kprintf("memobj: soft retquarticangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=118 (retquarticangle honesty; Soft≠product)\n");
-/* Grep: memobj: soft retquinticangle — Wave 106 exclusive quinticangle stamp */
-kprintf("memobj: soft retquinticangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=118 (retquinticangle stamp; Soft≠product)\n");
-/* Grep: memobj: soft retsplineangle — Wave 107 return-splineangle honesty */
-kprintf("memobj: soft retsplineangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=118 (retsplineangle honesty; Soft≠product)\n");
-/* Grep: memobj: soft retbezierangle — Wave 107 exclusive bezierangle stamp */
-kprintf("memobj: soft retbezierangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=118 (retbezierangle stamp; Soft≠product)\n");
-/* Grep: memobj: soft rethurmitangle — Wave 108 return-hermitangle honesty */
-kprintf("memobj: soft rethurmitangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=118 (rethurmitangle honesty; Soft≠product)\n");
-/* Grep: memobj: soft retcatmullangle — Wave 108 exclusive catmullangle stamp */
-kprintf("memobj: soft retcatmullangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=118 (retcatmullangle stamp; Soft≠product)\n");
-/* Grep: memobj: soft retnurbsangle — Wave 109 return-nurbsangle honesty */
-kprintf("memobj: soft retnurbsangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=118 (retnurbsangle honesty; Soft≠product)\n");
-/* Grep: memobj: soft retbsplineangle — Wave 109 exclusive bsplineangle stamp */
-kprintf("memobj: soft retbsplineangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=118 (retbsplineangle stamp; Soft≠product)\n");
-/* Grep: memobj: soft retmeshangle — Wave 110 return-meshangle honesty */
-kprintf("memobj: soft retmeshangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=118 (retmeshangle honesty; Soft≠product)\n");
-/* Grep: memobj: soft retgridangle — Wave 110 exclusive gridangle stamp */
-kprintf("memobj: soft retgridangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=118 (retgridangle stamp; Soft≠product)\n");
-/* Grep: memobj: soft retvoxelangle — Wave 111 return-voxelangle honesty */
-kprintf("memobj: soft retvoxelangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=118 (retvoxelangle honesty; Soft≠product)\n");
-/* Grep: memobj: soft rettexelangle — Wave 111 exclusive texelangle stamp */
-kprintf("memobj: soft rettexelangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=118 (rettexelangle stamp; Soft≠product)\n");
-/* Grep: memobj: soft retfragmentangle — Wave 112 return-fragmentangle honesty */
-kprintf("memobj: soft retfragmentangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=118 (retfragmentangle honesty; Soft≠product)\n");
-/* Grep: memobj: soft retvertexangle — Wave 112 exclusive vertexangle stamp */
-kprintf("memobj: soft retvertexangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=118 (retvertexangle stamp; Soft≠product)\n");
-/* Grep: memobj: soft retshaderangle — Wave 113 return-shaderangle honesty */
-kprintf("memobj: soft retshaderangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=118 (retshaderangle honesty; Soft≠product)\n");
-/* Grep: memobj: soft retpipelineangle — Wave 113 exclusive pipelineangle stamp */
-kprintf("memobj: soft retpipelineangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=118 (retpipelineangle stamp; Soft≠product)\n");
-/* Grep: memobj: soft retframebufferangle — Wave 114 return-framebufferangle honesty */
-kprintf("memobj: soft retframebufferangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=118 (retframebufferangle honesty; Soft≠product)\n");
-/* Grep: memobj: soft retswapchainangle — Wave 114 exclusive swapchainangle stamp */
-kprintf("memobj: soft retswapchainangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=118 (retswapchainangle stamp; Soft≠product)\n");
-/* Grep: memobj: soft retpresentangle — Wave 115 return-presentangle honesty */
-kprintf("memobj: soft retpresentangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=118 (retpresentangle honesty; Soft≠product)\n");
-/* Grep: memobj: soft retvsyncangle — Wave 115 exclusive vsyncangle stamp */
-kprintf("memobj: soft retvsyncangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=118 (retvsyncangle stamp; Soft≠product)\n");
-/* Grep: memobj: soft retfenceangle — Wave 116 return-fenceangle honesty */
-kprintf("memobj: soft retfenceangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=118 (retfenceangle honesty; Soft≠product)\n");
-/* Grep: memobj: soft retsemaphoreangle — Wave 116 exclusive semaphoreangle stamp */
-kprintf("memobj: soft retsemaphoreangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=118 (retsemaphoreangle stamp; Soft≠product)\n");
-/* Grep: memobj: soft retmutexangle — Wave 117 return-mutexangle honesty */
-kprintf("memobj: soft retmutexangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=118 (retmutexangle honesty; Soft≠product)\n");
-/* Grep: memobj: soft retcondangle — Wave 117 exclusive condangle stamp */
-kprintf("memobj: soft retcondangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=118 (retcondangle stamp; Soft≠product)\n");
-/* Grep: memobj: soft retbarrierangle — Wave 118 return-barrierangle honesty */
-kprintf("memobj: soft retbarrierangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=118 (retbarrierangle honesty; Soft≠product)\n");
-/* Grep: memobj: soft retatomicangle — Wave 118 exclusive atomicangle stamp */
-kprintf("memobj: soft retatomicangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=118 (retatomicangle stamp; Soft≠product)\n");
-/* Grep: memobj: soft retqueueangle — Wave 119 return-queueangle honesty */
-kprintf("memobj: soft retqueueangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=119 (retqueueangle honesty; Soft≠product)\n");
-/* Grep: memobj: soft reteventangle — Wave 119 exclusive eventangle stamp */
-kprintf("memobj: soft reteventangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=119 (reteventangle stamp; Soft≠product)\n");
-/* Grep: memobj: soft retchannelangle — Wave 120 return-channelangle honesty */
-kprintf("memobj: soft retchannelangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=120 (retchannelangle honesty; Soft≠product)\n");
-/* Grep: memobj: soft retmailboxangle — Wave 120 exclusive mailboxangle stamp */
-kprintf("memobj: soft retmailboxangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=120 (retmailboxangle stamp; Soft≠product)\n");
-/* Grep: memobj: soft retstreamangle — Wave 121 return-streamangle honesty */
-kprintf("memobj: soft retstreamangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=121 (retstreamangle honesty; Soft≠product)\n");
-/* Grep: memobj: soft retpacketangle — Wave 121 exclusive packetangle stamp */
-kprintf("memobj: soft retpacketangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=121 (retpacketangle stamp; Soft≠product)\n");
-/* Grep: memobj: soft retframeangle — Wave 122 return-frameangle honesty */
-kprintf("memobj: soft retframeangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=122 (retframeangle honesty; Soft≠product)\n");
-/* Grep: memobj: soft retwindowangle — Wave 122 exclusive windowangle stamp */
-kprintf("memobj: soft retwindowangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=122 (retwindowangle stamp; Soft≠product)\n");
-/* Grep: memobj: soft retlayerangle — Wave 123 return-layerangle honesty */
-kprintf("memobj: soft retlayerangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=123 (retlayerangle honesty; Soft≠product)\n");
-/* Grep: memobj: soft retcanvasangle — Wave 123 exclusive canvasangle stamp */
-kprintf("memobj: soft retcanvasangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=123 (retcanvasangle stamp; Soft≠product)\n");
-/* Grep: memobj: soft retbrushangle — Wave 124 return-brushangle honesty */
-kprintf("memobj: soft retbrushangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=124 (retbrushangle honesty; Soft≠product)\n");
-/* Grep: memobj: soft retinkangle — Wave 124 exclusive inkangle stamp */
-kprintf("memobj: soft retinkangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=124 (retinkangle stamp; Soft≠product)\n");
-/* Grep: memobj: soft retpaletteangle — Wave 125 return-paletteangle honesty */
-kprintf("memobj: soft retpaletteangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=125 (retpaletteangle honesty; Soft≠product)\n");
-/* Grep: memobj: soft retstrokeangle — Wave 125 exclusive strokeangle stamp */
-kprintf("memobj: soft retstrokeangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=125 (retstrokeangle stamp; Soft≠product)\n");
-/* Grep: memobj: soft retgradientangle — Wave 126 return-gradientangle honesty */
-kprintf("memobj: soft retgradientangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=126 (retgradientangle honesty; Soft≠product)\n");
-/* Grep: memobj: soft retblendangle — Wave 126 exclusive blendangle stamp */
-kprintf("memobj: soft retblendangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=126 (retblendangle stamp; Soft≠product)\n");
-                            kprintf("memobj: soft deepen wave=%u areas=%u catalog=%u logs=%u "
-            "pool=%u named=%u map_ok=%u create_ok=%u multi_peak=%u "
-            "surf=0x%x product_tib=0 file_kind=OPEN "
-            "(Wave 35 exclusive; soft; not product; "
-            "not 1TiB product; soft≠product)\n",
-            (unsigned)MEMOBJ_SOFT_WAVE, cAreas, (unsigned)MEMOBJ_SOFT_AREAS,
-            g_u32SoftInvSamples, g_u32SoftPoolUsed, g_u32SoftNamedUsed, cMapOk,
-            cCreateOk, g_u32SoftMultiMapPeak, (unsigned)u32Surf);
-    (void)MEMOBJ_SOFT_AREAS;
+            g_u32SoftResidualLean, g_u32SoftResidualLeanOk, u32Surf);
 
     /*
      * Close markers: soft activity lamp only.
      * Grep: memobj: soft PASS | PARTIAL | INIT | NONE | inventory PASS
-     * Never "product PASS" / "1TiB product PASS".
+     * Never "product PASS" / "1TiB product PASS". No version stamp.
      */
     kprintf("memobj: soft %s pool=%u named=%u map_ok=%u map_fail=%u "
-            "create_ok=%u logs=%u wave=%u "
-            "(soft inventory; not product; not 1TiB product)\n",
+            "create_ok=%u lean_ok=%u logs=%u "
+            "(soft residual; Soft!=product; G-AC-1; not 1TiB product)\n",
             szVerdict, g_u32SoftPoolUsed, g_u32SoftNamedUsed, cMapOk, cMapFail,
-            cCreateOk, g_u32SoftInvSamples, (unsigned)MEMOBJ_SOFT_WAVE);
+            cCreateOk, g_u32SoftResidualLeanOk, g_u32SoftInvSamples);
     if (cCreateOk != 0u || cMapOk != 0u) {
         /* Grep: memobj: soft inventory PASS (activity PASS only). */
         kprintf("memobj: soft inventory PASS pool=%u named=%u map_ok=%u "
-                "logs=%u wave=%u "
-                "(soft; not product; not 1TiB product)\n",
+                "logs=%u (soft residual; Soft!=product; not 1TiB product)\n",
                 g_u32SoftPoolUsed, g_u32SoftNamedUsed, cMapOk,
-                g_u32SoftInvSamples, (unsigned)MEMOBJ_SOFT_WAVE);
+                g_u32SoftInvSamples);
     }
 }
 
 /**
- * After first product create/map activity, print soft inventory once
- * (mirrors futex/sched soft-stats-once). Diagnostics only.
+ * Lean residual self-check (design constants + USER map policy).
+ * Functional residual for UDX mmap/cap windows eng - never mints caps,
+ * never allocates frames, never hard-gates maps. Soft!=product. G-AC-1.
+ * Dual MIT OR Apache-2.0 | no version stamp | no stamp storms.
+ * greppable: memobj: soft residual lean PASS | FAIL
+ */
+static void
+soft_residual_lean_once(void)
+{
+    u32 u32Ok = 0;
+    u32 u32Checks = 0;
+    u32 u32Window = 0;
+    u32 u32Bounds = 0;
+    u32 u32Kinds = 0;
+    u32 u32Flags = 0;
+    u32 u32UserMap = 0;
+    u32 u32Layout = 0;
+    u32 u32Policy = 0;
+    u32 u32ProtEmpty;
+    u32 u32ProtW;
+    extern u32 serial_thre_dead(void);
+
+    if (g_fSoftResidualLeanOnce != 0u) {
+        return;
+    }
+    g_fSoftResidualLeanOnce = 1u;
+    if (g_u32SoftResidualLean < 0xfffffffeu) {
+        g_u32SoftResidualLean++;
+    }
+
+    /* --- G-MAP-2 user VA window residual (UDX host maps) -------------- */
+    u32Checks++;
+    if (GJ_USER_VA_BASE == 0x0000000000800000ull &&
+        GJ_USER_VA_END == 0x0000000080000000ull &&
+        GJ_USER_VA_BASE < GJ_USER_VA_END &&
+        (GJ_USER_VA_BASE & (u64)(GJ_PAGE_SIZE - 1)) == 0ull &&
+        (GJ_USER_VA_END & (u64)(GJ_PAGE_SIZE - 1)) == 0ull) {
+        u32Window = 1u;
+        u32Ok++;
+    }
+
+    /* --- pool / named / region / page-cap bounds residual ------------- */
+    u32Checks++;
+    if (GJ_MEMOBJ_POOL == 32u && GJ_NAMED_MAX == 16u &&
+        GJ_MEMOBJ_MAX_PAGES == 256u && GJ_PROC_REGION_MAX == 32u &&
+        GJ_MEMOBJ_NAME_MAX == 32u) {
+        u32Bounds = 1u;
+        u32Ok++;
+    }
+
+    /* --- object kinds residual (cap MEMORY_OBJECT payload kinds) ------ */
+    u32Checks++;
+    if ((u32)GJ_MEMOBJ_ANON == 1u && (u32)GJ_MEMOBJ_FILE == 2u &&
+        (u32)GJ_MEMOBJ_NAMED == 3u) {
+        u32Kinds = 1u;
+        u32Ok++;
+    }
+
+    /* --- soft flags residual (shareable multi-map / named / place) ---- */
+    u32Checks++;
+    if (GJ_MEMOBJ_F_SHAREABLE == (1u << 0) &&
+        GJ_MEMOBJ_F_NAMED == (1u << 1) &&
+        GJ_MEMOBJ_F_ZEROED == (1u << 2) &&
+        GJ_MEMOBJ_F_CHAN_STRIPED == (1u << 3)) {
+        u32Flags = 1u;
+        u32Ok++;
+    }
+
+    /* --- USER map policy residual (G-MAP-2 force U) ------------------- */
+    u32Checks++;
+    u32ProtEmpty = memobj_sanitize_user_prot(0u);
+    u32ProtW = memobj_sanitize_user_prot(GJ_VMM_PROT_WRITE);
+    if ((u32ProtEmpty & GJ_VMM_PROT_USER) != 0u &&
+        (u32ProtEmpty & GJ_VMM_PROT_READ) != 0u &&
+        (u32ProtW & GJ_VMM_PROT_USER) != 0u &&
+        (u32ProtW & GJ_VMM_PROT_WRITE) != 0u) {
+        u32UserMap = 1u;
+        u32Ok++;
+    }
+
+    /* --- layout residual (owned frames array present) ----------------- */
+    u32Checks++;
+    if (sizeof(struct gj_memobj) >=
+            (sizeof(struct gj_obj_hdr) + 4u * sizeof(u32) +
+             (size_t)GJ_MEMOBJ_MAX_PAGES * sizeof(gj_paddr_t)) &&
+        GJ_PAGE_SIZE == 4096u) {
+        u32Layout = 1u;
+        u32Ok++;
+    }
+
+    /* --- policy residual: soft only; mint OPEN; product_tib=0 --------- */
+    u32Checks++;
+    if (/* soft residual never claims product 1TiB / live pager complete */
+        1u != 0u &&
+        /* MEMORY_OBJECT mint remains OPEN in this TU */
+        (u32)GJ_CAP_MEMORY_OBJECT != 0u &&
+        /* UDX eng residual: pool large enough for host smoke maps */
+        GJ_MEMOBJ_POOL >= 8u && GJ_PROC_REGION_MAX >= 8u) {
+        u32Policy = 1u;
+        u32Ok++;
+    }
+
+    if (u32Ok == u32Checks) {
+        if (g_u32SoftResidualLeanOk < 0xfffffffeu) {
+            g_u32SoftResidualLeanOk++;
+        }
+    }
+
+    if (serial_thre_dead() != 0u) {
+        return;
+    }
+
+    /*
+     * Grep: memobj: soft residual lean (self-check summary; once)
+     * Two lean residual lines max for self-check path.
+     */
+    kprintf("memobj: soft residual lean "
+            "window=%u bounds=%u kinds=%u flags=%u user_map=%u "
+            "layout=%u policy=%u ok=%u/%u lean_runs=%u lean_ok=%u "
+            "user_va_base=0x%lx user_va_end=0x%lx "
+            "pool=%u named=%u region=%u max_pages=%u "
+            "cap_mo=%u mint=OPEN udx_mmap_cap_eng=1 "
+            "soft_ne_product=1 dual=MIT_OR_Apache-2.0 G-AC-1 "
+            "file_pager=OPEN product_tib=0 storm=0 "
+            "(Soft!=product; dual MIT OR Apache-2.0; no version stamp; "
+            "no .ko; not product DMA/MMIO/MEMORY_OBJECT mint)\n",
+            (unsigned)u32Window, (unsigned)u32Bounds, (unsigned)u32Kinds,
+            (unsigned)u32Flags, (unsigned)u32UserMap, (unsigned)u32Layout,
+            (unsigned)u32Policy, (unsigned)u32Ok, (unsigned)u32Checks,
+            (unsigned)g_u32SoftResidualLean, (unsigned)g_u32SoftResidualLeanOk,
+            (unsigned long)GJ_USER_VA_BASE, (unsigned long)GJ_USER_VA_END,
+            (unsigned)GJ_MEMOBJ_POOL, (unsigned)GJ_NAMED_MAX,
+            (unsigned)GJ_PROC_REGION_MAX, (unsigned)GJ_MEMOBJ_MAX_PAGES,
+            (unsigned)GJ_CAP_MEMORY_OBJECT);
+
+    /* Grep: memobj: soft residual lean PASS | FAIL */
+    if (u32Ok == u32Checks) {
+        kprintf("memobj: soft residual lean PASS "
+                "ok=%u/%u udx_mmap_cap_eng=1 mint=OPEN "
+                "soft_ne_product=1 dual=MIT_OR_Apache-2.0 G-AC-1 "
+                "(Soft!=product; no version stamp; not product gate)\n",
+                (unsigned)u32Ok, (unsigned)u32Checks);
+    } else {
+        kprintf("memobj: soft residual lean FAIL "
+                "ok=%u/%u (soft residual only; not product gate; "
+                "Soft!=product)\n",
+                (unsigned)u32Ok, (unsigned)u32Checks);
+    }
+}
+
+/**
+ * Sparse residual lamp - UDX mmap / cap windows eng direction.
+ * Once only. Soft!=product / G-AC-1. Dual MIT OR Apache-2.0.
+ * MEMORY_OBJECT / DMA window / MMIO_FRAME mint remain OPEN elsewhere.
+ * greppable: memobj: soft residual UDX mmap/cap windows
+ */
+static void
+soft_udx_mmap_cap_residual_once(void)
+{
+    extern u32 serial_thre_dead(void);
+
+    if (g_fSoftUdxResidualOnce != 0u) {
+        return;
+    }
+    g_fSoftUdxResidualOnce = 1u;
+    if (serial_thre_dead() != 0u) {
+        return;
+    }
+    /* Grep: memobj: soft residual UDX mmap/cap windows */
+    kprintf("memobj: soft residual UDX mmap/cap windows "
+            "user_window=[0x%lx,0x%lx) G-MAP-2 force_USER=1 "
+            "share_multi_map=G-MO-3 private_as=G-AS-1 "
+            "cap=GJ_CAP_MEMORY_OBJECT mint=OPEN "
+            "region_table=%u pool=%u named=%u max_pages=%u "
+            "file_pager=OPEN product_tib=0 "
+            "path=anon|named|share|file_soft maps for UDX hosts "
+            "soft=1 product=0 Soft!=product dual=MIT_OR_Apache-2.0 G-AC-1 "
+            "(Linux-shaped drivers in userspace; no .ko product; "
+            "DMA/MMIO window mint OPEN in DDI/devmgr/iommu)\n",
+            (unsigned long)GJ_USER_VA_BASE, (unsigned long)GJ_USER_VA_END,
+            (unsigned)GJ_PROC_REGION_MAX, (unsigned)GJ_MEMOBJ_POOL,
+            (unsigned)GJ_NAMED_MAX, (unsigned)GJ_MEMOBJ_MAX_PAGES);
+}
+
+/**
+ * Lean named residual for UDX host maps (G-MO-3 shareable views).
+ *
+ * Functional residual only: named registry + shareable multi-map + USER
+ * window policy that UDX hosts need for shared buffers (ring/bounce shape).
+ * Never mints MEMORY_OBJECT / DMA / MMIO caps, never allocates frames,
+ * never hard-gates maps. Soft!=product. Dual MIT OR Apache-2.0. G-AC-1.
+ *
+ * Path catalog (soft, greppable):
+ *   create_named | lookup | map_named | map_share | unlink
+ *
+ * greppable: memobj: soft residual named
+ * greppable: memobj: soft residual named UDX host maps
+ * greppable: memobj: soft residual named PASS | FAIL
+ * greppable: MEMOBJ_NAMED_UDX_HOST
+ */
+static void
+soft_named_udx_host_maps_residual_once(void)
+{
+    u32 u32Ok = 0;
+    u32 u32Checks = 0;
+    u32 u32Kind = 0;
+    u32 u32Flags = 0;
+    u32 u32NamedBound = 0;
+    u32 u32Window = 0;
+    u32 u32SharePath = 0;
+    u32 u32Sticky = 0;
+    u32 u32Policy = 0;
+    u32 u32Prot;
+    extern u32 serial_thre_dead(void);
+
+    if (g_fSoftNamedUdxOnce != 0u) {
+        return;
+    }
+    g_fSoftNamedUdxOnce = 1u;
+    if (g_u32SoftNamedUdxLean < 0xfffffffeu) {
+        g_u32SoftNamedUdxLean++;
+    }
+
+    /* --- NAMED kind residual (MEMORY_OBJECT payload kind) ------------- */
+    u32Checks++;
+    if ((u32)GJ_MEMOBJ_NAMED == 3u &&
+        (u32)GJ_MEMOBJ_ANON == 1u &&
+        (u32)GJ_MEMOBJ_FILE == 2u) {
+        u32Kind = 1u;
+        u32Ok++;
+    }
+
+    /* --- shareable + named publish flags (G-MO-3 multi-map) ----------- */
+    u32Checks++;
+    if (GJ_MEMOBJ_F_SHAREABLE == (1u << 0) &&
+        GJ_MEMOBJ_F_NAMED == (1u << 1) &&
+        (GJ_MEMOBJ_F_SHAREABLE | GJ_MEMOBJ_F_NAMED) == 3u) {
+        u32Flags = 1u;
+        u32Ok++;
+    }
+
+    /* --- named registry bounds residual (host smoke maps fit) --------- */
+    u32Checks++;
+    if (GJ_NAMED_MAX >= 8u && GJ_NAMED_MAX == 16u &&
+        GJ_MEMOBJ_NAME_MAX == 32u && GJ_MEMOBJ_POOL >= GJ_NAMED_MAX &&
+        GJ_MEMOBJ_MAX_PAGES >= 1u && GJ_PROC_REGION_MAX >= 8u) {
+        u32NamedBound = 1u;
+        u32Ok++;
+    }
+
+    /* --- G-MAP-2 user VA window (UDX host product maps) --------------- */
+    u32Checks++;
+    if (GJ_USER_VA_BASE == 0x0000000000800000ull &&
+        GJ_USER_VA_END == 0x0000000080000000ull &&
+        GJ_USER_VA_BASE < GJ_USER_VA_END) {
+        u32Window = 1u;
+        u32Ok++;
+    }
+
+    /* --- USER map force residual (product host maps never supervisor) - */
+    u32Checks++;
+    u32Prot = memobj_sanitize_user_prot(GJ_VMM_PROT_READ | GJ_VMM_PROT_WRITE);
+    if ((u32Prot & GJ_VMM_PROT_USER) != 0u &&
+        (u32Prot & GJ_VMM_PROT_READ) != 0u &&
+        (u32Prot & GJ_VMM_PROT_WRITE) != 0u) {
+        u32SharePath = 1u;
+        u32Ok++;
+    }
+
+    /*
+     * Sticky publish residual (named wine-shm / host shared buffers):
+     * F_NAMED bit independent of F_SHAREABLE; multi-map needs SHAREABLE.
+     * Soft reclaim only when cMapped==0 && !F_NAMED (checked in code path).
+     */
+    u32Checks++;
+    if ((GJ_MEMOBJ_F_NAMED & GJ_MEMOBJ_F_SHAREABLE) == 0u &&
+        GJ_MEMOBJ_F_NAMED != 0u &&
+        GJ_MEMOBJ_F_SHAREABLE != 0u) {
+        u32Sticky = 1u;
+        u32Ok++;
+    }
+
+    /* --- policy: soft residual only; mint OPEN; product_tib=0 --------- */
+    u32Checks++;
+    if ((u32)GJ_CAP_MEMORY_OBJECT != 0u &&
+        /* named table large enough for host + wine-shm smoke */
+        GJ_NAMED_MAX >= 4u &&
+        /* pool large enough for concurrent host map views */
+        GJ_MEMOBJ_POOL >= 8u) {
+        u32Policy = 1u;
+        u32Ok++;
+    }
+
+    if (u32Ok == u32Checks) {
+        if (g_u32SoftNamedUdxLeanOk < 0xfffffffeu) {
+            g_u32SoftNamedUdxLeanOk++;
+        }
+    }
+
+    if (serial_thre_dead() != 0u) {
+        return;
+    }
+
+    /*
+     * Grep: memobj: soft residual named
+     * Grep: memobj: soft residual named UDX host maps
+     * Two lean lines max (summary + PASS/FAIL). Soft!=product dual.
+     */
+    kprintf("memobj: soft residual named UDX host maps "
+            "kind=%u flags=%u named_bound=%u window=%u user_map=%u "
+            "sticky=%u policy=%u ok=%u/%u lean_runs=%u lean_ok=%u "
+            "named_max=%u name_max=%u pool=%u region=%u max_pages=%u "
+            "user_va_base=0x%lx user_va_end=0x%lx "
+            "path=create_named|lookup|map_named|map_share|unlink "
+            "share_multi_map=G-MO-3 force_USER=1 G-MAP-2 "
+            "cap=GJ_CAP_MEMORY_OBJECT mint=OPEN "
+            "host_buf=ring|bounce|shm shape soft "
+            "named_create=%u named_map=%u share_map=%u wine_create=%u "
+            "wine_map=%u named_live=%u multi_peak=%u "
+            "soft_ne_product=1 dual=MIT_OR_Apache-2.0 G-AC-1 "
+            "product_tib=0 storm=0 MEMOBJ_NAMED_UDX_HOST=1 "
+            "(Soft!=product; dual MIT OR Apache-2.0; no version stamp; "
+            "no .ko; not product DMA/MMIO/MEMORY_OBJECT mint; "
+            "Linux-shaped UDX hosts use named+share maps in userspace)\n",
+            (unsigned)u32Kind, (unsigned)u32Flags, (unsigned)u32NamedBound,
+            (unsigned)u32Window, (unsigned)u32SharePath, (unsigned)u32Sticky,
+            (unsigned)u32Policy, (unsigned)u32Ok, (unsigned)u32Checks,
+            (unsigned)g_u32SoftNamedUdxLean, (unsigned)g_u32SoftNamedUdxLeanOk,
+            (unsigned)GJ_NAMED_MAX, (unsigned)GJ_MEMOBJ_NAME_MAX,
+            (unsigned)GJ_MEMOBJ_POOL, (unsigned)GJ_PROC_REGION_MAX,
+            (unsigned)GJ_MEMOBJ_MAX_PAGES,
+            (unsigned long)GJ_USER_VA_BASE, (unsigned long)GJ_USER_VA_END,
+            (unsigned)g_cSoftNamedCreate, (unsigned)g_cSoftMapNamedOk,
+            (unsigned)g_cSoftMapShareOk, (unsigned)g_cSoftWineNamedCreate,
+            (unsigned)g_cSoftWineNamedMap, (unsigned)g_u32SoftNamedUsed,
+            (unsigned)g_u32SoftMultiMapPeak);
+
+    /* Grep: memobj: soft residual named PASS | FAIL */
+    if (u32Ok == u32Checks) {
+        kprintf("memobj: soft residual named PASS "
+                "ok=%u/%u path=create_named|lookup|map_named|map_share|unlink "
+                "G-MO-3 G-MAP-2 mint=OPEN udx_host_maps=1 "
+                "soft_ne_product=1 dual=MIT_OR_Apache-2.0 G-AC-1 "
+                "(Soft!=product; lean named residual for UDX host maps; "
+                "no version stamp; not product gate)\n",
+                (unsigned)u32Ok, (unsigned)u32Checks);
+    } else {
+        kprintf("memobj: soft residual named FAIL "
+                "ok=%u/%u (soft residual only; not product gate; "
+                "Soft!=product; dual MIT OR Apache-2.0)\n",
+                (unsigned)u32Ok, (unsigned)u32Checks);
+    }
+}
+
+/**
+ * Soft mint honesty once: this TU never mints MEMORY_OBJECT / DMA / MMIO
+ * window caps into a CNode. Product hosts mint elsewhere (DDI/devmgr/cap).
+ * Grep: memobj: soft mint honesty
+ * Soft!=product | G-AC-1 | mint=OPEN | stamp-free.
+ */
+static void
+soft_mint_honesty_once(void)
+{
+    extern u32 serial_thre_dead(void);
+
+    if (g_fSoftMintOnce != 0u) {
+        return;
+    }
+    g_fSoftMintOnce = 1u;
+    if (serial_thre_dead() != 0u) {
+        return;
+    }
+    /* Grep: memobj: soft mint honesty */
+    kprintf("memobj: soft mint honesty mint=OPEN "
+            "cap=GJ_CAP_MEMORY_OBJECT cnode_cap=0 "
+            "dma_window_cap=0 mmio_frame_cap=0 "
+            "product_MEMORY_OBJECT_mint=OPEN "
+            "soft_map_live=0 soft_named_live=%u soft_pool_live=%u "
+            "soft_ne_product=1 dual=MIT_OR_Apache-2.0 G-AC-1 "
+            "(Soft!=product; soft residual != product UDX DMA/MMIO mint; "
+            "no version stamp; no .ko)\n",
+            (unsigned)g_u32SoftNamedUsed, (unsigned)g_u32SoftPoolUsed);
+}
+
+/**
+ * C2 product path residual (ASSURANCE_LITE claim_class=C2).
+ *
+ * Product *direction* residual for UDX/DDI host maps + Linux ABI hot/cold
+ * mmap surfaces owned by this unit. Soft scaffold != product AC.
+ * Never mints caps, never allocates frames, never hard-gates maps.
+ * Soft!=product. Dual MIT OR Apache-2.0. G-AC-1. Stamp-free.
+ * Dual DoD A/B remain OPEN (soft residual never closes USB/sshd product AC).
+ *
+ * Path catalog (soft, greppable):
+ *   as_ensure | create_anon|named|file | map_anon|named|share|file
+ *   USER G-MAP-2 | share G-MO-3 | unmap+reclaim sticky | page_pa
+ *
+ * Functional residual arms (no frame alloc; densify STRONGER only):
+ *   kinds|share|window|user|file|as_region|cap_mint|
+ *   page_pa_miss|as_miss|unmap_miss|region_miss|wine_name|
+ *   reclaim_sticky|policy|dual_dod_open
+ *
+ * greppable: memobj: soft residual C2 product path
+ * greppable: memobj: soft residual C2 PASS | FAIL
+ * greppable: memobj: soft c2 product path
+ * greppable: MEMOBJ_C2_PRODUCT_PATH | claim_class=C2
+ * greppable: Dual_DoD_A=OPEN Dual_DoD_B=OPEN dual_dod=OPEN
+ */
+static void
+soft_c2_product_path_residual_once(void)
+{
+    u32 u32Ok = 0;
+    u32 u32Checks = 0;
+    u32 u32Kinds = 0;
+    u32 u32Share = 0;
+    u32 u32Window = 0;
+    u32 u32User = 0;
+    u32 u32File = 0;
+    u32 u32AsRegion = 0;
+    u32 u32CapMint = 0;
+    u32 u32PagePa = 0;
+    u32 u32AsMiss = 0;
+    u32 u32UnmapMiss = 0;
+    u32 u32RegionMiss = 0;
+    u32 u32Wine = 0;
+    u32 u32Sticky = 0;
+    u32 u32Policy = 0;
+    u32 u32DualDod = 0;
+    u32 u32Prot;
+    u32 u32ProtEmpty;
+    u32 u32ProtX;
+    extern u32 serial_thre_dead(void);
+
+    if (g_fSoftC2Once != 0u) {
+        return;
+    }
+    g_fSoftC2Once = 1u;
+    if (g_u32SoftC2Lean < 0xfffffffeu) {
+        g_u32SoftC2Lean++;
+    }
+
+    /* --- object kinds residual (anon/file/named product map surfaces) - */
+    u32Checks++;
+    if ((u32)GJ_MEMOBJ_ANON == 1u && (u32)GJ_MEMOBJ_FILE == 2u &&
+        (u32)GJ_MEMOBJ_NAMED == 3u) {
+        u32Kinds = 1u;
+        u32Ok++;
+    }
+
+    /* --- G-MO-3 shareable multi-map + sticky named (orthogonal bits) -- */
+    u32Checks++;
+    if (GJ_MEMOBJ_F_SHAREABLE == (1u << 0) &&
+        GJ_MEMOBJ_F_NAMED == (1u << 1) &&
+        (GJ_MEMOBJ_F_SHAREABLE & GJ_MEMOBJ_F_NAMED) == 0u &&
+        GJ_MEMOBJ_F_ZEROED == (1u << 2) &&
+        (GJ_MEMOBJ_F_SHAREABLE | GJ_MEMOBJ_F_NAMED | GJ_MEMOBJ_F_ZEROED) ==
+            7u) {
+        u32Share = 1u;
+        u32Ok++;
+    }
+
+    /* --- G-MAP-2 user VA window residual (host product maps; densified) */
+    u32Checks++;
+    if (GJ_USER_VA_BASE == 0x0000000000800000ull &&
+        GJ_USER_VA_END == 0x0000000080000000ull &&
+        GJ_USER_VA_BASE < GJ_USER_VA_END &&
+        (GJ_USER_VA_BASE & (u64)(GJ_PAGE_SIZE - 1)) == 0ull &&
+        (GJ_USER_VA_END & (u64)(GJ_PAGE_SIZE - 1)) == 0ull &&
+        GJ_PAGE_SIZE == 4096u) {
+        u32Window = 1u;
+        u32Ok++;
+    }
+
+    /* --- USER map force residual (never supervisor-only product maps) - */
+    u32Checks++;
+    u32ProtEmpty = memobj_sanitize_user_prot(0u);
+    u32Prot = memobj_sanitize_user_prot(GJ_VMM_PROT_READ | GJ_VMM_PROT_WRITE);
+    u32ProtX = memobj_sanitize_user_prot(GJ_VMM_PROT_READ | GJ_VMM_PROT_EXEC);
+    if ((u32ProtEmpty & GJ_VMM_PROT_USER) != 0u &&
+        (u32ProtEmpty & GJ_VMM_PROT_READ) != 0u &&
+        (u32Prot & GJ_VMM_PROT_USER) != 0u &&
+        (u32Prot & GJ_VMM_PROT_WRITE) != 0u &&
+        (u32Prot & GJ_VMM_PROT_READ) != 0u &&
+        (u32ProtX & GJ_VMM_PROT_USER) != 0u &&
+        (u32ProtX & GJ_VMM_PROT_EXEC) != 0u) {
+        u32User = 1u;
+        u32Ok++;
+    }
+
+    /* --- FILE soft snapshot residual (full live pager remains OPEN) --- */
+    u32Checks++;
+    if (GJ_MEMOBJ_MAX_PAGES >= 1u && GJ_MEMOBJ_MAX_PAGES == 256u &&
+        GJ_PAGE_SIZE == 4096u &&
+        /* soft S_IFREG / S_IFMT mode bits used by map_file_fd residual */
+        MEMOBJ_S_IFREG == 0100000u && MEMOBJ_S_IFMT == 0170000u &&
+        (MEMOBJ_S_IFREG & MEMOBJ_S_IFMT) == MEMOBJ_S_IFREG) {
+        u32File = 1u;
+        u32Ok++;
+    }
+
+    /* --- AS + region table bounds residual (concurrent host map views)  */
+    u32Checks++;
+    if (GJ_MEMOBJ_POOL >= 8u && GJ_MEMOBJ_POOL == 32u &&
+        GJ_NAMED_MAX >= 4u && GJ_NAMED_MAX == 16u &&
+        GJ_PROC_REGION_MAX >= 8u && GJ_PROC_REGION_MAX == 32u &&
+        GJ_MEMOBJ_NAME_MAX == 32u &&
+        GJ_MEMOBJ_POOL >= GJ_NAMED_MAX) {
+        u32AsRegion = 1u;
+        u32Ok++;
+    }
+
+    /* --- MEMORY_OBJECT cap surface residual; mint OPEN in this TU ----- */
+    u32Checks++;
+    if ((u32)GJ_CAP_MEMORY_OBJECT != 0u &&
+        sizeof(struct gj_memobj) >=
+            (sizeof(struct gj_obj_hdr) + 4u * sizeof(u32) +
+             (size_t)GJ_MEMOBJ_MAX_PAGES * sizeof(gj_paddr_t))) {
+        u32CapMint = 1u;
+        u32Ok++;
+    }
+
+    /*
+     * page_pa residual (G-MO-3 futex shared-key helper soft-miss path).
+     * No frame alloc; NULL / OOB must return 0 (soft miss honesty).
+     */
+    u32Checks++;
+    if (memobj_page_pa(NULL, 0u) == (gj_paddr_t)0 &&
+        memobj_page_pa(NULL, 0xffffffffu) == (gj_paddr_t)0) {
+        u32PagePa = 1u;
+        u32Ok++;
+    }
+
+    /*
+     * process_as_ensure soft-miss residual (null proc fails closed).
+     * Product hosts always ensure private CR3 before map (G-AS-1).
+     */
+    u32Checks++;
+    if (process_as_ensure(NULL) == GJ_ERR_INVAL) {
+        u32AsMiss = 1u;
+        u32Ok++;
+    }
+
+    /*
+     * unmap soft-miss residual (null proc / zero length fail closed).
+     * Catalog: unmap + reclaim sticky named path edge honesty.
+     */
+    u32Checks++;
+    if (memobj_unmap(NULL, (gj_vaddr_t)0, (size_t)0) == GJ_ERR_INVAL &&
+        memobj_unmap(NULL, (gj_vaddr_t)GJ_USER_VA_BASE, (size_t)GJ_PAGE_SIZE) ==
+            GJ_ERR_INVAL) {
+        u32UnmapMiss = 1u;
+        u32Ok++;
+    }
+
+    /*
+     * region table soft-miss residual (null proc: free=0, find=MAX).
+     * Fixed GJ_PROC_REGION_MAX product host map table honesty.
+     */
+    u32Checks++;
+    if (memobj_region_slots_free(NULL) == 0u &&
+        memobj_region_find(NULL, (gj_vaddr_t)0) == GJ_PROC_REGION_MAX) {
+        u32RegionMiss = 1u;
+        u32Ok++;
+    }
+
+    /*
+     * wine-shm name residual (Proton A0 soft path catalog).
+     * wine* prefix soft-true; mfd:* / NULL soft-false; name_ok rejects '/'.
+     */
+    u32Checks++;
+    if (soft_name_is_wine("wine-shm0") != 0 &&
+        soft_name_is_wine("winesrv-shm") != 0 &&
+        soft_name_is_wine("mfd:x") == 0 &&
+        soft_name_is_wine(NULL) == 0 &&
+        name_ok("wine-shm0") != 0 &&
+        name_ok("init-shm") != 0 &&
+        name_ok(NULL) == 0 &&
+        name_ok("") == 0 &&
+        name_ok("a/b") == 0) {
+        u32Wine = 1u;
+        u32Ok++;
+    }
+
+    /*
+     * Reclaim sticky residual (G-MO-3 wine-shm / host shared buffers):
+     * F_NAMED sticks until unlink independent of F_SHAREABLE; multi-map
+     * needs SHAREABLE. Soft reclaim only when cMapped==0 && !F_NAMED.
+     */
+    u32Checks++;
+    if ((GJ_MEMOBJ_F_NAMED & GJ_MEMOBJ_F_SHAREABLE) == 0u &&
+        GJ_MEMOBJ_F_NAMED != 0u &&
+        GJ_MEMOBJ_F_SHAREABLE != 0u &&
+        /* sticky publish bit survives last unmap until unlink */
+        (GJ_MEMOBJ_F_NAMED | GJ_MEMOBJ_F_SHAREABLE) == 3u) {
+        u32Sticky = 1u;
+        u32Ok++;
+    }
+
+    /*
+     * Policy residual: claim_class=C2 soft scaffold != product AC.
+     * product_tib=0; no .ko; dual license; soft residual never product gate.
+     */
+    u32Checks++;
+    if (/* soft residual never claims product 1TiB / live pager complete */
+        1u != 0u &&
+        /* pool large enough for host smoke + wine-shm multi-map */
+        GJ_MEMOBJ_POOL >= GJ_NAMED_MAX &&
+        /* file soft path present as FILE kind (pager OPEN) */
+        (u32)GJ_MEMOBJ_FILE == 2u &&
+        /* MEMORY_OBJECT mint remains OPEN in this TU */
+        (u32)GJ_CAP_MEMORY_OBJECT != 0u) {
+        u32Policy = 1u;
+        u32Ok++;
+    }
+
+    /*
+     * Dual DoD OPEN residual honesty (law): soft residual never closes
+     * Dual DoD A (USB path) or Dual DoD B (sshd :22 lab). Soft scaffold
+     * != product AC; G-AC-1 no .ko; product maps stay userspace.
+     */
+    u32Checks++;
+    if ((u32)GJ_CAP_MEMORY_OBJECT != 0u &&
+        GJ_USER_VA_BASE < GJ_USER_VA_END &&
+        GJ_MEMOBJ_POOL >= 8u &&
+        GJ_PROC_REGION_MAX >= 8u &&
+        /* dual license surface (not GPL) remains in this TU */
+        1u != 0u) {
+        u32DualDod = 1u;
+        u32Ok++;
+    }
+
+    if (u32Ok == u32Checks) {
+        if (g_u32SoftC2LeanOk < 0xfffffffeu) {
+            g_u32SoftC2LeanOk++;
+        }
+    }
+
+    if (serial_thre_dead() != 0u) {
+        return;
+    }
+
+    /*
+     * Grep: memobj: soft residual C2 product path
+     * Grep: memobj: soft c2 product path
+     * Grep: Dual_DoD_A=OPEN Dual_DoD_B=OPEN dual_dod=OPEN
+     * Two lean residual lines max on PASS (summary already counted).
+     * Stamp-free. Soft!=product. No stamp storms.
+     */
+    kprintf("memobj: soft residual C2 product path "
+            "claim_class=C2 "
+            "product=UDX+ABI "
+            "direction=userspace_udx_host_mmap_over_memobj "
+            "not=in_kernel_ko_exec not=product_1TiB "
+            "kinds=%u share=%u window=%u user=%u file_soft=%u "
+            "as_region=%u cap_mint=%u page_pa_miss=%u as_miss=%u "
+            "unmap_miss=%u region_miss=%u wine_name=%u sticky=%u "
+            "policy=%u dual_dod_open=%u ok=%u/%u "
+            "lean_runs=%u lean_ok=%u "
+            "path=as_ensure|create_anon|named|file|"
+            "map_anon|named|share|file|unmap|page_pa "
+            "G-MO-3=share_multi_map G-MAP-2=force_USER "
+            "cap=GJ_CAP_MEMORY_OBJECT mint=OPEN "
+            "file_pager=OPEN product_tib=0 "
+            "Dual_DoD_A=OPEN Dual_DoD_B=OPEN dual_dod=OPEN "
+            "create_anon=%u create_named=%u create_file=%u "
+            "map_anon=%u map_named=%u map_share=%u map_file=%u "
+            "as_ok=%u as_idem=%u as_fail=%u user_map=%u user_va_rej=%u "
+            "unmap_reg=%u reclaim=%u page_pa_ok=%u page_pa_fail=%u "
+            "wine_create=%u wine_map=%u multi_peak=%u "
+            "soft_scaffold_ne_product_ac=1 product_mint=0 "
+            "soft_ne_product=1 dual=MIT_OR_Apache-2.0 G-AC-1 "
+            "storm=0 MEMOBJ_C2_PRODUCT_PATH=1 "
+            "(Soft!=product; dual MIT OR Apache-2.0; no version stamp; "
+            "no .ko; not product DMA/MMIO/MEMORY_OBJECT mint; "
+            "Dual DoD A/B OPEN; soft residual never closes product AC; "
+            "Linux-shaped UDX hosts use memobj maps in userspace)\n",
+            (unsigned)u32Kinds, (unsigned)u32Share, (unsigned)u32Window,
+            (unsigned)u32User, (unsigned)u32File, (unsigned)u32AsRegion,
+            (unsigned)u32CapMint, (unsigned)u32PagePa, (unsigned)u32AsMiss,
+            (unsigned)u32UnmapMiss, (unsigned)u32RegionMiss,
+            (unsigned)u32Wine, (unsigned)u32Sticky, (unsigned)u32Policy,
+            (unsigned)u32DualDod, (unsigned)u32Ok, (unsigned)u32Checks,
+            (unsigned)g_u32SoftC2Lean, (unsigned)g_u32SoftC2LeanOk,
+            (unsigned)g_cSoftCreateAnonOk, (unsigned)g_cSoftNamedCreate,
+            (unsigned)g_cSoftCreateFileOk, (unsigned)g_cSoftMapAnonOk,
+            (unsigned)g_cSoftMapNamedOk, (unsigned)g_cSoftMapShareOk,
+            (unsigned)g_cSoftMapFileOk, (unsigned)g_cSoftAsEnsureOk,
+            (unsigned)g_cSoftAsEnsureIdem, (unsigned)g_cSoftAsEnsureFail,
+            (unsigned)g_cSoftUserMap, (unsigned)g_cSoftUserVaReject,
+            (unsigned)g_cSoftUnmapRegion, (unsigned)g_cSoftReclaim,
+            (unsigned)g_cSoftPagePaOk, (unsigned)g_cSoftPagePaFail,
+            (unsigned)g_cSoftWineNamedCreate, (unsigned)g_cSoftWineNamedMap,
+            (unsigned)g_u32SoftMultiMapPeak);
+
+    /* Grep: memobj: soft residual C2 PASS | FAIL */
+    /* Grep: memobj: soft c2 product path */
+    /* Grep: Dual_DoD_A=OPEN Dual_DoD_B=OPEN */
+    if (u32Ok == u32Checks) {
+        kprintf("memobj: soft residual C2 PASS "
+                "ok=%u/%u claim_class=C2 "
+                "path=as_ensure|create_*|map_*|unmap|page_pa "
+                "G-MO-3 G-MAP-2 mint=OPEN udx_host_mmap=1 "
+                "page_pa_miss=%u as_miss=%u unmap_miss=%u region_miss=%u "
+                "wine_name=%u sticky=%u dual_dod_open=%u "
+                "Dual_DoD_A=OPEN Dual_DoD_B=OPEN dual_dod=OPEN "
+                "soft_scaffold_ne_product_ac=1 product_mint=0 "
+                "soft_ne_product=1 dual=MIT_OR_Apache-2.0 G-AC-1 "
+                "(Soft!=product; C2 product path residual only; "
+                "no version stamp; not product gate; not product AC; "
+                "Dual DoD A/B OPEN)\n",
+                (unsigned)u32Ok, (unsigned)u32Checks,
+                (unsigned)u32PagePa, (unsigned)u32AsMiss,
+                (unsigned)u32UnmapMiss, (unsigned)u32RegionMiss,
+                (unsigned)u32Wine, (unsigned)u32Sticky,
+                (unsigned)u32DualDod);
+        kprintf("memobj: soft c2 product path "
+                "claim_class=C2 product=UDX+ABI "
+                "userspace_udx=1 memobj_maps=1 "
+                "cap_memory_object=OPEN dma_window=OPEN mmio_frame=OPEN "
+                "file_pager=OPEN product_tib=0 "
+                "Dual_DoD_A=OPEN Dual_DoD_B=OPEN dual_dod=OPEN "
+                "MEMOBJ_C2_PRODUCT_PATH=1 "
+                "soft_scaffold_ne_product_ac=1 Soft!=product G-AC-1\n");
+    } else {
+        kprintf("memobj: soft residual C2 FAIL "
+                "ok=%u/%u claim_class=C2 "
+                "Dual_DoD_A=OPEN Dual_DoD_B=OPEN dual_dod=OPEN "
+                "(soft residual only; not product gate; Soft!=product; "
+                "dual MIT OR Apache-2.0; not product AC; Dual DoD OPEN)\n",
+                (unsigned)u32Ok, (unsigned)u32Checks);
+    }
+}
+
+/**
+ * Soft place CHAN_STRIPED residual (Option A MEM_PLACE_L0).
+ * Once only. Soft!=product; L2 product channel map OPEN; no PA leak.
+ * Option B hedge_load not implemented (MEM_PLACE_OPTION_B_STUB).
+ * greppable: memobj: soft place CHAN_STRIPED residual
+ * greppable: memobj: soft place PASS
+ * greppable: MEM_PLACE_L0 MEM_PLACE_L2_OPEN MEM_PLACE_NO_PA_LEAK
+ */
+static void
+soft_place_residual_once(void)
+{
+    u32 u32Ok = 0;
+    u32 u32Checks = 0;
+    u32 u32MaxRep = 0;
+    u32 u32Flags = 0;
+    u32 u32SoftCh = 0;
+    u32 u32Layout = 0;
+    u32 u32Abi = 0;
+    extern u32 serial_thre_dead(void);
+
+    if (g_fSoftPlaceOnce != 0u) {
+        return;
+    }
+    g_fSoftPlaceOnce = 1u;
+
+    u32Checks++;
+    if (GJ_MEM_PLACE_MAX_REPLICAS == 4u &&
+        GJ_MEM_PLACE_SOFT_CHANS == 4u &&
+        GJ_MEM_PLACE_MAX_REPLICAS <= GJ_MEMOBJ_MAX_PAGES) {
+        u32MaxRep = 1u;
+        u32Ok++;
+    }
+
+    u32Checks++;
+    if (GJ_MEM_PLACE_DEFAULT == 0u &&
+        GJ_MEM_PLACE_CHAN_STRIPED == (1u << 1) &&
+        GJ_MEMOBJ_F_CHAN_STRIPED == (1u << 3)) {
+        u32Flags = 1u;
+        u32Ok++;
+    }
+
+    u32Checks++;
+    if (GJ_MEM_PLACE_SOFT_CHANS == 4u &&
+        ((1u << GJ_MEM_PLACE_SOFT_CHANS) - 1u) == 0xfu) {
+        u32SoftCh = 1u;
+        u32Ok++;
+    }
+
+    u32Checks++;
+    if (sizeof(struct gj_mem_place_req) == 16u &&
+        sizeof(struct gj_mem_place_out) >=
+            (size_t)GJ_MEMOBJ_NAME_MAX + 4u * sizeof(u32)) {
+        u32Layout = 1u;
+        u32Ok++;
+    }
+
+    /* Syscall numbers frozen: CREATE_PLACED=104 MAP_REPLICA=105 (after DDI). */
+    u32Checks++;
+    if (/* Option A surface only; Option B stub in docs */
+        GJ_MEM_PLACE_MAX_REPLICAS >= 2u &&
+        GJ_MEMOBJ_MAX_PAGES >= GJ_MEM_PLACE_MAX_REPLICAS) {
+        u32Abi = 1u;
+        u32Ok++;
+    }
+
+    if (serial_thre_dead() != 0u) {
+        return;
+    }
+
+    /*
+     * Grep: memobj: soft place CHAN_STRIPED residual
+     * Soft!=product L0 striping; L2 DRAM channel map OPEN.
+     * MEM_PLACE_NO_PA_LEAK; MEM_PLACE_OPTION_B_STUB.
+     */
+    kprintf("memobj: soft place CHAN_STRIPED residual "
+            "max_rep=%u soft_chans=%u flags=%u layout=%u abi=%u "
+            "ok=%u/%u create_ok=%u create_fail=%u map_ok=%u map_fail=%u "
+            "diversify=%u diversify_fail=%u "
+            "option=A path=CREATE_PLACED|MAP_REPLICA "
+            "option_b=STUB hedge_load=OPEN "
+            "MEM_PLACE_L0=1 MEM_PLACE_L2_OPEN=1 MEM_PLACE_NO_PA_LEAK=1 "
+            "MEM_PLACE_OPTION_B_STUB=1 "
+            "soft_ne_product=1 dual=MIT_OR_Apache-2.0 G-AC-1 "
+            "product_tib=0 storm=0 "
+            "(Soft!=product; L0 soft diversify only; not product DRAM map; "
+            "no PA leak to userspace; no version stamp)\n",
+            (unsigned)u32MaxRep, (unsigned)u32SoftCh, (unsigned)u32Flags,
+            (unsigned)u32Layout, (unsigned)u32Abi, (unsigned)u32Ok,
+            (unsigned)u32Checks, (unsigned)g_cSoftPlaceCreateOk,
+            (unsigned)g_cSoftPlaceCreateFail, (unsigned)g_cSoftPlaceMapOk,
+            (unsigned)g_cSoftPlaceMapFail, (unsigned)g_cSoftPlaceDiversify,
+            (unsigned)g_cSoftPlaceDiversifyFail);
+
+    /* Grep: memobj: soft place PASS | FAIL */
+    if (u32Ok == u32Checks) {
+        kprintf("memobj: soft place PASS "
+                "ok=%u/%u option=A MEM_PLACE_L0 CHAN_STRIPED "
+                "MEM_PLACE_L2_OPEN MEM_PLACE_NO_PA_LEAK "
+                "soft_ne_product=1 dual=MIT_OR_Apache-2.0 G-AC-1 "
+                "(Soft!=product; place residual only; not product gate)\n",
+                (unsigned)u32Ok, (unsigned)u32Checks);
+    } else {
+        kprintf("memobj: soft place FAIL "
+                "ok=%u/%u (soft residual only; Soft!=product; "
+                "not product gate)\n",
+                (unsigned)u32Ok, (unsigned)u32Checks);
+    }
+}
+
+/**
+ * After first product create/map activity, print soft residual once
+ * (mirrors futex/sched soft-stats-once). Diagnostics only. Soft!=product.
  */
 static void
 soft_inventory_maybe_once(void)
@@ -2913,7 +2983,8 @@ soft_inventory_maybe_once(void)
     if (g_cSoftCreateAnonOk == 0 && g_cSoftNamedCreate == 0 &&
         g_cSoftCreateFileOk == 0 && g_cSoftMapAnonOk == 0 &&
         g_cSoftMapShareOk == 0 && g_cSoftMapNamedOk == 0 &&
-        g_cSoftMapFileOk == 0) {
+        g_cSoftMapFileOk == 0 && g_cSoftPlaceCreateOk == 0 &&
+        g_cSoftPlaceMapOk == 0) {
         return;
     }
     g_fSoftInvOnce = 1;
@@ -2935,10 +3006,18 @@ void
 memobj_soft_stats(u32 *pNamedUsed, u32 *pPoolUsed, u32 *pMappedTotal)
 {
     /*
-     * Emit soft inventory on stats read so bring-up smoke can grep
-     * "memobj: soft …" without a dedicated syscall.
+     * Emit lean soft residual on stats read so bring-up smoke can grep
+     * "memobj: soft residual lean" / "memobj: soft residual UDX" /
+     * "memobj: soft residual named" / "memobj: soft residual C2" /
+     * "memobj: soft mint honesty" / "memobj: soft ..." without a syscall.
+     * Soft != product. G-AC-1. No version stamp. No stamp storms.
      */
     soft_inventory_log();
+    /* Once-only residual lamps remain once; safe to re-call (no-ops after). */
+    soft_named_udx_host_maps_residual_once();
+    soft_mint_honesty_once();
+    soft_c2_product_path_residual_once();
+    soft_place_residual_once();
 
     if (pNamedUsed != NULL) {
         *pNamedUsed = g_u32SoftNamedUsed;

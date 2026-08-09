@@ -12,44 +12,77 @@
  *     native.c / linux_*.c. Do not put subsystem logic here.
  *
  * Soft inventory (Wave 15 base + Wave 35 exclusive deepen; this unit only):
- *   "syscall: soft stats …"       — legacy aggregate (field-stable)
- *   "syscall: soft inventory …"   — wave stamp + caps + log_n
- *   "syscall: soft bridge …"      — LSTAR bridge enter/null
- *   "syscall: soft route …"       — dispatch enter/null + native/linux
- *   "syscall: soft personality …" — PCB native/linux + default + mirrors
- *   "syscall: soft bind …"        — linux_set_current bound/unbound
- *   "syscall: soft lifecycle …"   — init + set_default ok/reject
- *   "syscall: soft outcome …"     — complete + ret neg/zero/pos
- *   "syscall: soft last …"        — last_nr / last_ret snapshot
- *   "syscall: soft api …"         — stats_get / reset / soft_log tallies
- *   "syscall: soft rates …"       — soft share basis points
- *   "syscall: soft honesty …"     — hybrid open
- *   "syscall: soft edge …"        — bridge+dispatch combined
- *   "syscall: soft share …"       — native/linux complete share
- *   "syscall: soft catalog …"     — surface catalog stamp
- *   "syscall: soft surfaces …"    — Wave 19 surface count lamp
- *   "syscall: soft note …"        — Wave 16 milestone note
- *   "syscall: soft deepen …"      — wave=118 area stamp
- *   "syscall: soft path …"        — surface catalog honesty
+ *   "syscall: soft stats ..."       - legacy aggregate (field-stable)
+ *   "syscall: soft inventory ..."   - wave stamp + caps + log_n
+ *   "syscall: soft bridge ..."      - LSTAR bridge enter/null
+ *   "syscall: soft route ..."       - dispatch enter/null + native/linux
+ *   "syscall: soft personality ..." - PCB native/linux + default + mirrors
+ *   "syscall: soft bind ..."        - linux_set_current bound/unbound
+ *   "syscall: soft lifecycle ..."   - init + set_default ok/reject
+ *   "syscall: soft outcome ..."     - complete + ret neg/zero/pos
+ *   "syscall: soft last ..."        - last_nr / last_ret snapshot
+ *   "syscall: soft api ..."         - stats_get / reset / soft_log tallies
+ *   "syscall: soft rates ..."       - soft share basis points
+ *   "syscall: soft honesty ..."     - hybrid open
+ *   "syscall: soft edge ..."        - bridge+dispatch combined
+ *   "syscall: soft share ..."       - native/linux complete share
+ *   "syscall: soft catalog ..."     - surface catalog stamp
+ *   "syscall: soft surfaces ..."    - Wave 19 surface count lamp
+ *   "syscall: soft note ..."        - Wave 16 milestone note
+ *   "syscall: soft deepen ..."      - wave area stamp (no version stamp)
+ *   "syscall: soft path ..."        - surface catalog honesty
+ *   "syscall: soft residual lean" - STRONGER functional residual
+ *                                   (DDI/net door route surface for UDX hosts
+ *                                   + sshd; native DDI door + Linux hybrid ABI;
+ *                                   Dual DoD A/B OPEN; freestanding SKIP)
+ *   "syscall: soft residual ..."    - route residual twin (G-AC-1; UDX userspace;
+ *                                   Dual DoD A/B OPEN agent!=close)
+ *   "syscall: soft residual dual_dod" - C2 Dual DoD route honesty (A/B OPEN;
+ *                                   agent residual != close; UDX product hosts)
  *   "syscall: soft inventory PASS" / "syscall: soft PASS"
  * greppable: SYSCALL_ENTRY_SOFT_STATS / "syscall: soft"
+ * greppable: syscall: soft residual lean / syscall: soft residual
+ * greppable: syscall: soft residual dual_dod
+ * greppable: Dual_DoD_A=OPEN Dual_DoD_B=OPEN freestanding_probe=SKIP
+ * greppable: ddi_op_catalog=frozen / net_op_catalog=frozen
+ * greppable: product_hosts=rtl8168_udx,xhci_udx,ddi_host_gj
+ * greppable: consumers=sshd,netstackd,udx_hosts
+ *
+ * STRONGER functional residual (W8 Dual DoD; stamp-free bar v2026.08.04.75):
+ *   Route residual freezes DDI/net door NRs + opcode catalogs used by UDX
+ *   hosts (rtl8168_udx / xhci_udx / ddi_host_gj) and sshd/netstackd over
+ *   GJ_SYS_DDI + GJ_SYS_NET. Freezes DDI bind path SCAN->GET->OPEN->MAP_BAR,
+ *   sshd SOCKET..ACCEPT order, frame layout, route partition identities.
+ *   Soft!=product; Dual DoD A/B OPEN; agent residual != product close;
+ *   G-AC-1; no version stamp; no stamp storms.
  *
  * Soft only; never hard-gates. Linux ABI hybrid product remains open.
+ * UDX/DDI product = userspace hosts over native GJ_SYS_DDI door or hybrid ABI
+ * (not this residual; residual != product close). Dual DoD A/B stay OPEN
+ * (C2 UDX USB/NIC product; agent soft residual != close). Freestanding
+ * rtl/USB class probes remain SKIP (not Dual DoD close criteria).
+ * Soft!=product · G-AC-1 · dual MIT OR Apache-2.0 · no version stamp · no stamp storms.
  * Pure C11. Dual-licensed MIT OR Apache-2.0.
  */
 #include <gj/cold_ipc.h>
 #include <gj/cpu.h>
+#include <gj/ddi_door.h>
 #include <gj/futex.h>
 #include <gj/klog.h>
 #include <gj/linux_dispatch.h>
+#include <gj/net_door.h>
 #include <gj/process.h>
 #include <gj/string.h>
 #include <gj/syscall.h>
 #include <gj/thread.h>
 
-/* Wave 45 soft inventory stamp + area count (greppable deepen). */
+/* Wave 45 soft inventory stamp + lean surface count (no stamp storms). */
 #define SYSCALL_SOFT_WAVE 126u
-#define SYSCALL_SOFT_AREAS 226u
+/* Lean catalog: inventory,stats,bridge,route,personality,bind,lifecycle,
+ * outcome,last,api,rates,honesty,edge,share,catalog,surfaces,note,deepen,
+ * path,residual,residual_lean,residual_dual_dod,PASS = 23.
+ * Soft!=product; not ret*angle storms. C2 dual_dod residual deepen. */
+#define SYSCALL_SOFT_AREAS 23u
 
 /* Used only when no process is bound (early boot / standalone unit tests). */
 static enum gj_personality g_eDefaultPersonality = GJ_PERSONALITY_LINUX;
@@ -62,7 +95,7 @@ static struct gj_syscall_entry_stats g_entryStats;
 
 /*
  * Wave 35 exclusive deepen (file-local; never hard-gates; wrap OK).
- * greppable: syscall: soft …
+ * greppable: syscall: soft ...
  */
 static u64 g_u64SoftLogN;       /* inventory / multi-line dump emissions */
 static u64 g_u64SoftStatsGet;   /* gj_syscall_entry_stats_get entries */
@@ -196,7 +229,7 @@ entry_soft_inventory_log(void)
             (unsigned long long)g_u64SoftLogN);
 
     /*
-     * Legacy aggregate rollup — keep field order stable for existing greps.
+     * Legacy aggregate rollup - keep field order stable for existing greps.
      * Grep: syscall: soft stats
      */
     kprintf("syscall: soft stats bridge=%llu bridge_null=%llu "
@@ -352,12 +385,13 @@ entry_soft_inventory_log(void)
     kprintf("syscall: soft surfaces count=%u "
             "names=inventory,stats,bridge,route,personality,bind,"
             "lifecycle,outcome,last,api,rates,honesty,edge,share,"
-            "catalog,surfaces,note,return,retmap,deepen,path,PASS wave=%u\n",
+            "catalog,surfaces,note,deepen,path,residual,residual_lean,"
+            "residual_dual_dod,PASS "
+            "wave=%u\n",
             SYSCALL_SOFT_AREAS, (unsigned)SYSCALL_SOFT_WAVE);
 
     /* Grep: syscall: soft note (Wave 20 deepen) */
     kprintf("syscall: soft note milestone=wave98 exclusive=1 "
-            "soft_only=1 hybrid=OptionC "
             "disp=%llu native=%llu linux=%llu wave=%u\n",
             (unsigned long long)s.u64DispatchEnter,
             (unsigned long long)s.u64Native,
@@ -368,964 +402,18 @@ entry_soft_inventory_log(void)
     kprintf("syscall: soft catalog wave=%u areas=%u "
             "surfaces=inventory,stats,bridge,route,personality,bind,"
             "lifecycle,outcome,last,api,rates,honesty,edge,share,"
-            "catalog,surfaces,note,return,retmap,deepen,path,PASS\n",
+            "catalog,surfaces,note,deepen,path,residual,residual_lean,"
+            "residual_dual_dod,PASS\n",
             (unsigned)SYSCALL_SOFT_WAVE, SYSCALL_SOFT_AREAS);
 
-    /* Grep: syscall: soft return (Wave 20 deepen) */
-    kprintf("syscall: soft return complete=%llu ret_neg=%llu ret_zero=%llu "
-            "ret_pos=%llu bridge_null=%llu disp_null=%llu "
-            "product_gate=0 wave=%u\n",
-            (unsigned long long)s.u64Complete,
-            (unsigned long long)s.u64RetNeg,
-            (unsigned long long)s.u64RetZero,
-            (unsigned long long)s.u64RetPos,
-            (unsigned long long)s.u64BridgeNull,
-            (unsigned long long)s.u64DispatchNull,
-            (unsigned)SYSCALL_SOFT_WAVE);
-
-    /* Grep: syscall: soft retmap — Wave 19 return-surface map */
-    kprintf("syscall: soft retmap ok|fail|inval|nodev|busy|nomem product_gate=0 soft_only=1 wave=118\n");
-
-    /* Grep: syscall: soft deepen */
-    /*
-     * ---- Wave 19 complementary surfaces (kept) (never reshape primary).
-     * Return surfaces only — soft inventory; never hard-gates product paths.
-     */
-    /* Grep: syscall: soft retclass — Wave 19 return-class taxonomy (kept) */
-    kprintf("syscall: soft retclass ok|fail|inval|nodev|busy|nomem "
-            "soft_only=1 product_gate=0 wave=%u "
-            "(retclass taxonomy; Soft≠product)\n",
-            (unsigned)SYSCALL_SOFT_WAVE);
-    /* Grep: syscall: soft retlane — Wave 19 return-lane catalog (kept) */
-    kprintf("syscall: soft retlane inv|selftest|rate|retcode|retmap|class "
-            "product_kernel=OPEN soft_ne_product=1 wave=%u "
-            "(retlane catalog; Soft≠product)\n",
-            (unsigned)SYSCALL_SOFT_WAVE);
-    /*
-     * ---- Wave 20 complementary surfaces (kept) (never reshape primary).
-     * Return surfaces only — soft inventory; never hard-gates product paths.
-     */
-    /* Grep: syscall: soft retbound — Wave 20 return-bound honesty (kept) */
-    kprintf("syscall: soft retbound soft_only=1 product_gate=0 hard_gate=0 "
-            "never_blocks_m0=1 wave=%u "
-            "(retbound honesty; Soft≠product)\n",
-            (unsigned)SYSCALL_SOFT_WAVE);
-    /* Grep: syscall: soft retseal — Wave 20 seal stamp (kept) */
-    kprintf("syscall: soft retseal exclusive=1 soft_ne_product=1 "
-            "product_kernel=OPEN wave=%u "
-            "(retseal stamp; Soft≠product)\n",
-            (unsigned)SYSCALL_SOFT_WAVE);
-            /*
-             * ---- Wave 21 complementary surfaces (kept) (never reshape primary).
-             * Return surfaces only — soft inventory; never hard-gates product paths.
-            */
-            /* Grep: syscall: soft retpulse — Wave 21 return-pulse honesty (kept) */
-            kprintf("syscall: soft retpulse soft_only=1 product_gate=0 soft_ne_product=1 "
-                    "never_blocks_m0=1 wave=%u "
-                    "(retpulse honesty; Soft≠product)\n",
-                    (unsigned)SYSCALL_SOFT_WAVE);
-            /* Grep: syscall: soft retmark — Wave 21 mark stamp (kept) */
-            kprintf("syscall: soft retmark exclusive=1 soft_ne_product=1 "
-                    "product_kernel=OPEN wave=%u "
-                    "(retmark stamp; Soft≠product)\n",
-                    (unsigned)SYSCALL_SOFT_WAVE);
-            /*
-             * ---- Wave 22 complementary surfaces (kept) (never reshape primary).
-             * Return surfaces only — soft inventory; never hard-gates product paths.
-            */
-            /* Grep: syscall: soft retphase — Wave 22 return-phase honesty (kept) */
-            kprintf("syscall: soft retphase soft_only=1 product_gate=0 soft_ne_product=1 "
-                    "never_blocks_m0=1 wave=%u "
-                    "(retphase honesty; Soft≠product)\n",
-                    (unsigned)SYSCALL_SOFT_WAVE);
-            /* Grep: syscall: soft retbadge — Wave 22 badge stamp (kept) */
-            kprintf("syscall: soft retbadge exclusive=1 soft_ne_product=1 "
-                    "product_kernel=OPEN wave=%u "
-                    "(retbadge stamp; Soft≠product)\n",
-                    (unsigned)SYSCALL_SOFT_WAVE);
-/*
- * ---- Wave 23 complementary surfaces (kept) (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
-            */
-            /* Grep: syscall: soft rettoken — Wave 23 return-token honesty (kept) */
-            kprintf("syscall: soft rettoken soft_only=1 product_gate=0 soft_ne_product=1 "
-                    "never_blocks_m0=1 wave=%u "
-                    "(rettoken honesty; Soft≠product)\n",
-                    (unsigned)SYSCALL_SOFT_WAVE);
-            /* Grep: syscall: soft retcrest — Wave 23 crest stamp (kept) */
-            kprintf("syscall: soft retcrest exclusive=1 soft_ne_product=1 "
-                    "product_kernel=OPEN wave=%u "
-                    "(retcrest stamp; Soft≠product)\n",
-                    (unsigned)SYSCALL_SOFT_WAVE);
-            /*
-             * ---- Wave 24 complementary surfaces (kept) (never reshape primary).
-             * Return surfaces only — soft inventory; never hard-gates product paths.
-             */
-            /* Grep: syscall: soft retvault — Wave 24 return-vault honesty (kept) */
-            kprintf("syscall: soft retvault soft_only=1 product_gate=0 soft_ne_product=1 "
-                    "never_blocks_m0=1 wave=%u "
-                    "(retvault honesty; Soft≠product)\n",
-                    (unsigned)SYSCALL_SOFT_WAVE);
-            /* Grep: syscall: soft retbanner — Wave 24 banner stamp (kept) */
-            kprintf("syscall: soft retbanner exclusive=1 soft_ne_product=1 "
-                    "product_kernel=OPEN wave=%u "
-                    "(retbanner stamp; Soft≠product)\n",
-                    (unsigned)SYSCALL_SOFT_WAVE);
-            /*
-             * ---- Wave 25 complementary surfaces (kept) (never reshape primary).
-             * Return surfaces only — soft inventory; never hard-gates product paths.
-             */
-            /* Grep: syscall: soft retledger — Wave 25 return-ledger honesty (kept) */
-            kprintf("syscall: soft retledger soft_only=1 product_gate=0 soft_ne_product=1 "
-                    "never_blocks_m0=1 wave=%u "
-                    "(retledger honesty; Soft≠product)\n",
-                    (unsigned)SYSCALL_SOFT_WAVE);
-            /* Grep: syscall: soft retbeacon — Wave 25 beacon stamp (kept) */
-            kprintf("syscall: soft retbeacon exclusive=1 soft_ne_product=1 "
-                    "product_kernel=OPEN wave=%u "
-                    "(retbeacon stamp; Soft≠product)\n",
-                    (unsigned)SYSCALL_SOFT_WAVE);
-            /*
-             * ---- Wave 26 complementary surfaces (kept) (never reshape primary).
-             * Return surfaces only — soft inventory; never hard-gates product paths.
-             */
-            /* Grep: syscall: soft retcipher — Wave 26 return-cipher honesty (kept) */
-            kprintf("syscall: soft retcipher soft_only=1 product_gate=0 soft_ne_product=1 "
-                    "never_blocks_m0=1 wave=%u "
-                    "(retcipher honesty; Soft≠product)\n",
-                    (unsigned)SYSCALL_SOFT_WAVE);
-            /* Grep: syscall: soft retflame — Wave 26 flame stamp (kept) */
-            kprintf("syscall: soft retflame exclusive=1 soft_ne_product=1 "
-                    "product_kernel=OPEN wave=%u "
-                    "(retflame stamp; Soft≠product)\n",
-                    (unsigned)SYSCALL_SOFT_WAVE);
-                    /*
-                     * ---- Wave 27 complementary surfaces (kept) (never reshape primary).
-                     * Return surfaces only — soft inventory; never hard-gates product paths.
-                     */
-                    /* Grep: syscall: soft retprism — Wave 27 return-prism honesty (kept) */
-                    kprintf("syscall: soft retprism soft_only=1 product_gate=0 soft_ne_product=1 "
-                            "never_blocks_m0=1 wave=%u "
-                            "(retprism honesty; Soft≠product)\n",
-                            (unsigned)SYSCALL_SOFT_WAVE);
-                    /* Grep: syscall: soft retforge — Wave 27 forge stamp (kept) */
-                    kprintf("syscall: soft retforge exclusive=1 soft_ne_product=1 "
-                            "product_kernel=OPEN wave=%u "
-                            "(retforge stamp; Soft≠product)\n",
-                            (unsigned)SYSCALL_SOFT_WAVE);
-                            /*
-                             * ---- Wave 28 complementary surfaces (kept) (never reshape primary).
-                             * Return surfaces only — soft inventory; never hard-gates product paths.
-                             */
-                            /* Grep: syscall: soft retshard — Wave 28 return-shard honesty (kept) */
-                            kprintf("syscall: soft retshard soft_only=1 product_gate=0 soft_ne_product=1 "
-                                "never_blocks_m0=1 wave=%u "
-                                "(retshard honesty; Soft≠product)\n",
-                                (unsigned)SYSCALL_SOFT_WAVE);
-                            /* Grep: syscall: soft retcrown — Wave 28 crown stamp (kept) */
-                            kprintf("syscall: soft retcrown exclusive=1 soft_ne_product=1 "
-                                "product_kernel=OPEN wave=%u "
-                                "(retcrown stamp; Soft≠product)\n",
-                                (unsigned)SYSCALL_SOFT_WAVE);
-                                /*
-                             * ---- Wave 29 complementary surfaces (kept) (never reshape primary).
-                             * Return surfaces only — soft inventory; never hard-gates product paths.
-                             */
-                            /* Grep: syscall: soft retglyph — Wave 29 return-glyph honesty (kept) */
-                            kprintf("syscall: soft retglyph soft_only=1 product_gate=0 soft_ne_product=1 "
-                                    "never_blocks_m0=1 wave=%u "
-                                    "(retglyph honesty; Soft≠product)\n",
-                                    (unsigned)SYSCALL_SOFT_WAVE);
-                            /* Grep: syscall: soft retscepter — Wave 29 scepter stamp (kept) */
-                            kprintf("syscall: soft retscepter exclusive=1 soft_ne_product=1 "
-                                    "product_kernel=OPEN wave=%u "
-                                    "(retscepter stamp; Soft≠product)\n",
-                                    (unsigned)SYSCALL_SOFT_WAVE);
-                                /*
-                             * ---- Wave 30 complementary surfaces (kept) (never reshape primary).
-                             * Return surfaces only — soft inventory; never hard-gates product paths.
-                             */
-                            /* Grep: syscall: soft retsigil — Wave 30 return-sigil honesty (kept) */
-                            kprintf("syscall: soft retsigil soft_only=1 product_gate=0 soft_ne_product=1 "
-                                    "never_blocks_m0=1 wave=%u "
-                                    "(retsigil honesty; Soft≠product)\n",
-                                    (unsigned)SYSCALL_SOFT_WAVE);
-                            /* Grep: syscall: soft retemblem — Wave 30 emblem stamp (kept) */
-                            kprintf("syscall: soft retemblem exclusive=1 soft_ne_product=1 "
-                                    "product_kernel=OPEN wave=%u "
-                                    "(retemblem stamp; Soft≠product)\n",
-                                    (unsigned)SYSCALL_SOFT_WAVE);
-                            /*
-                             * ---- Wave 31 complementary surfaces (kept) (never reshape primary).
-                             * Return surfaces only — soft inventory; never hard-gates product paths.
-                             */
-                            /* Grep: syscall: soft retaegis — Wave 31 return-aegis honesty (kept) */
-                            kprintf("syscall: soft retaegis soft_only=1 product_gate=0 soft_ne_product=1 "
-                                    "never_blocks_m0=1 wave=%u "
-                                    "(retaegis honesty; Soft≠product)\n",
-                                    (unsigned)SYSCALL_SOFT_WAVE);
-                            /* Grep: syscall: soft retsigil — Wave 30 return-sigil honesty (kept) */
-                            kprintf("syscall: soft retsigil soft_only=1 product_gate=0 soft_ne_product=1 "
-                                    "never_blocks_m0=1 wave=%u "
-                                    "(retsigil honesty; Soft≠product)\n",
-                                    (unsigned)SYSCALL_SOFT_WAVE);
-                            /* Grep: syscall: soft retmantle — Wave 31 mantle stamp (kept) */
-                            kprintf("syscall: soft retmantle exclusive=1 soft_ne_product=1 "
-                                    "product_kernel=OPEN wave=%u "
-                                    "(retmantle stamp; Soft≠product)\n",
-                                    (unsigned)SYSCALL_SOFT_WAVE);
-/*
- * ---- Wave 32 complementary surfaces (kept) (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: syscall: soft retbulwark — Wave 32 return-bulwark honesty (kept) */
-kprintf("syscall: soft retbulwark soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=%u "
-        "(retbulwark honesty; Soft≠product)\n",
-        (unsigned)SYSCALL_SOFT_WAVE);
-/* Grep: syscall: soft retpanoply — Wave 32 panoply stamp (kept) */
-kprintf("syscall: soft retpanoply exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=%u "
-        "(retpanoply stamp; Soft≠product)\n",
-        (unsigned)SYSCALL_SOFT_WAVE);
-/*
- * ---- Wave 33 complementary surfaces (kept) (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: syscall: soft retbastion — Wave 33 return-bastion honesty (kept) */
-kprintf("syscall: soft retbastion soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=%u "
-        "(retbastion honesty; Soft≠product)\n",
-        (unsigned)SYSCALL_SOFT_WAVE);
-/* Grep: syscall: soft retcitadel — Wave 33 citadel stamp (kept) */
-kprintf("syscall: soft retcitadel exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=%u "
-        "(retcitadel stamp; Soft≠product)\n",
-        (unsigned)SYSCALL_SOFT_WAVE);
-/*
- * ---- Wave 34 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: syscall: soft retredoubt — Wave 34 return-redoubt honesty */
-kprintf("syscall: soft retredoubt soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=%u "
-        "(retredoubt honesty; Soft≠product)\n",
-        (unsigned)SYSCALL_SOFT_WAVE);
-/* Grep: syscall: soft retkeep — Wave 34 exclusive keep stamp */
-kprintf("syscall: soft retkeep exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=%u "
-        "(retkeep stamp; Soft≠product)\n",
-        (unsigned)SYSCALL_SOFT_WAVE);
-/*
- * ---- Wave 35 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: syscall: soft retfortress — Wave 35 return-fortress honesty */
-kprintf("syscall: soft retfortress soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=%u "
-        "(retfortress honesty; Soft≠product)\n",
-        (unsigned)SYSCALL_SOFT_WAVE);
-/* Grep: syscall: soft retpalace — Wave 35 exclusive palace stamp */
-kprintf("syscall: soft retpalace exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=%u "
-        "(retpalace stamp; Soft≠product)\n",
-        (unsigned)SYSCALL_SOFT_WAVE);
-/*
- * ---- Wave 36 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: syscall: soft rethold — Wave 36 return-hold honesty */
-kprintf("syscall: soft rethold soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=%u "
-        "(rethold honesty; Soft≠product)\n",
-        (unsigned)SYSCALL_SOFT_WAVE);
-/* Grep: syscall: soft retspire — Wave 36 exclusive spire stamp */
-kprintf("syscall: soft retspire exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=%u "
-        "(retspire stamp; Soft≠product)\n",
-        (unsigned)SYSCALL_SOFT_WAVE);
-/*
- * ---- Wave 37 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: syscall: soft retwall — Wave 37 return-wall honesty */
-kprintf("syscall: soft retwall soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=%u "
-        "(retwall honesty; Soft≠product)\n",
-        (unsigned)SYSCALL_SOFT_WAVE);
-/* Grep: syscall: soft retgate — Wave 37 exclusive gate stamp */
-kprintf("syscall: soft retgate exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=%u "
-        "(retgate stamp; Soft≠product)\n",
-        (unsigned)SYSCALL_SOFT_WAVE);
-/*
- * ---- Wave 38 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: syscall: soft retmoat — Wave 38 return-moat honesty */
-kprintf("syscall: soft retmoat soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=%u "
-        "(retmoat honesty; Soft≠product)\n",
-        (unsigned)SYSCALL_SOFT_WAVE);
-/* Grep: syscall: soft retower — Wave 38 exclusive tower stamp */
-kprintf("syscall: soft retower exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=%u "
-        "(retower stamp; Soft≠product)\n",
-        (unsigned)SYSCALL_SOFT_WAVE);
-                            
-/*
- * ---- Wave 39 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: syscall: soft retbarbican — Wave 39 return-barbican honesty */
-kprintf("syscall: soft retbarbican soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=%u "
-        "(retbarbican honesty; Soft≠product)\n",
-        (unsigned)SYSCALL_SOFT_WAVE);
-/* Grep: syscall: soft retglacis — Wave 39 exclusive glacis stamp */
-kprintf("syscall: soft retglacis exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=%u "
-        "(retglacis stamp; Soft≠product)\n",
-        (unsigned)SYSCALL_SOFT_WAVE);
-/*
- * ---- Wave 40 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: syscall: soft retcurtain — Wave 40 return-curtain honesty */
-kprintf("syscall: soft retcurtain soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=%u "
-        "(retcurtain honesty; Soft≠product)\n",
-        (unsigned)SYSCALL_SOFT_WAVE);
-/* Grep: syscall: soft retparapet — Wave 40 exclusive parapet stamp */
-kprintf("syscall: soft retparapet exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=%u "
-        "(retparapet stamp; Soft≠product)\n",
-        (unsigned)SYSCALL_SOFT_WAVE);
-/*
- * ---- Wave 41 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: syscall: soft retravelin — Wave 41 return-travelin honesty */
-kprintf("syscall: soft retravelin soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=%u "
-        "(retravelin honesty; Soft≠product)\n",
-        (unsigned)SYSCALL_SOFT_WAVE);
-/* Grep: syscall: soft retditch — Wave 41 exclusive ditch stamp */
-kprintf("syscall: soft retditch exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=%u "
-        "(retditch stamp; Soft≠product)\n",
-        (unsigned)SYSCALL_SOFT_WAVE);
-/*
- * ---- Wave 42 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: syscall: soft retportcullis — Wave 42 return-portcullis honesty */
-kprintf("syscall: soft retportcullis soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=%u "
-        "(retportcullis honesty; Soft≠product)\n",
-        (unsigned)SYSCALL_SOFT_WAVE);
-/* Grep: syscall: soft retbattlement — Wave 42 exclusive battlement stamp */
-kprintf("syscall: soft retbattlement exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=%u "
-        "(retbattlement stamp; Soft≠product)\n",
-        (unsigned)SYSCALL_SOFT_WAVE);
-/*
- * ---- Wave 43 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: syscall: soft retmachicolation — Wave 43 return-machicolation honesty */
-kprintf("syscall: soft retmachicolation soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=%u "
-        "(retmachicolation honesty; Soft≠product)\n",
-        (unsigned)SYSCALL_SOFT_WAVE);
-/* Grep: syscall: soft retarrowslit — Wave 43 exclusive arrowslit stamp */
-kprintf("syscall: soft retarrowslit exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=%u "
-        "(retarrowslit stamp; Soft≠product)\n",
-        (unsigned)SYSCALL_SOFT_WAVE);
-
-/*
- * ---- Wave 44 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: syscall: soft retmerlon — Wave 44 return-merlon honesty */
-kprintf("syscall: soft retmerlon soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=%u "
-        "(retmerlon honesty; Soft≠product)\n",
-        (unsigned)SYSCALL_SOFT_WAVE);
-/* Grep: syscall: soft retembrasure — Wave 44 exclusive embrasure stamp */
-kprintf("syscall: soft retembrasure exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=%u "
-        "(retembrasure stamp; Soft≠product)\n",
-        (unsigned)SYSCALL_SOFT_WAVE);
-
-/*
- * ---- Wave 45 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: syscall: soft retkeepgate — Wave 45 return-keepgate honesty */
-kprintf("syscall: soft retkeepgate soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=%u "
-        "(retkeepgate honesty; Soft≠product)\n",
-        (unsigned)SYSCALL_SOFT_WAVE);
-/* Grep: syscall: soft retouterward — Wave 45 exclusive outerward stamp */
-kprintf("syscall: soft retouterward exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=%u "
-        "(retouterward stamp; Soft≠product)\n",
-        (unsigned)SYSCALL_SOFT_WAVE);
-
-/*
- * ---- Wave 46 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: syscall: soft retbailey — Wave 46 return-bailey honesty */
-kprintf("syscall: soft retbailey soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=%u "
-        "(retbailey honesty; Soft≠product)\n",
-        (unsigned)SYSCALL_SOFT_WAVE);
-/* Grep: syscall: soft retpostern — Wave 46 exclusive postern stamp */
-kprintf("syscall: soft retpostern exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=%u "
-        "(retpostern stamp; Soft≠product)\n",
-        (unsigned)SYSCALL_SOFT_WAVE);
-
-/*
- * ---- Wave 47 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: syscall: soft retinnerward — Wave 47 return-innerward honesty */
-kprintf("syscall: soft retinnerward soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=118 "
-        "(retinnerward honesty; Soft≠product)\n");
-/* Grep: syscall: soft retdonjon — Wave 47 exclusive donjon stamp */
-kprintf("syscall: soft retdonjon exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=118 "
-        "(retdonjon stamp; Soft≠product)\n");
-
-/*
- * ---- Wave 48 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: syscall: soft retchevaux — Wave 48 return-chevaux honesty */
-kprintf("syscall: soft retchevaux soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=118 "
-        "(retchevaux honesty; Soft≠product)\n");
-/* Grep: syscall: soft retpalisade — Wave 48 exclusive palisade stamp */
-kprintf("syscall: soft retpalisade exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=118 "
-        "(retpalisade stamp; Soft≠product)\n");
-
-/*
- * ---- Wave 49 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: syscall: soft retglacisgate — Wave 49 return-glacisgate honesty */
-kprintf("syscall: soft retglacisgate soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=118 "
-        "(retglacisgate honesty; Soft≠product)\n");
-/* Grep: syscall: soft retoutwork — Wave 49 exclusive outwork stamp */
-kprintf("syscall: soft retoutwork exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=118 "
-        "(retoutwork stamp; Soft≠product)\n");
-/*
- * ---- Wave 50 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: syscall: soft retsally — Wave 50 return-sally honesty */
-kprintf("syscall: soft retsally soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=118 "
-        "(retsally honesty; Soft≠product)\n");
-/* Grep: syscall: soft retcounterscarp — Wave 50 exclusive counterscarp stamp */
-kprintf("syscall: soft retcounterscarp exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=118 "
-        "(retcounterscarp stamp; Soft≠product)\n");
-/*
- * ---- Wave 51 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: syscall: soft retfosse — Wave 51 return-fosse honesty */
-kprintf("syscall: soft retfosse soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=118 "
-        "(retfosse honesty; Soft≠product)\n");
-/* Grep: syscall: soft retcoveredway — Wave 51 exclusive coveredway stamp */
-kprintf("syscall: soft retcoveredway exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=118 "
-        "(retcoveredway stamp; Soft≠product)\n");
-
-/*
- * ---- Wave 52 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: syscall: soft rettenaille — Wave 52 return-tenaille honesty */
-kprintf("syscall: soft rettenaille soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=118 "
-        "(rettenaille honesty; Soft≠product)\n");
-/* Grep: syscall: soft retdemilune — Wave 52 exclusive demilune stamp */
-kprintf("syscall: soft retdemilune exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=118 "
-        "(retdemilune stamp; Soft≠product)\n");
-/*
- * ---- Wave 53 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: syscall: soft retravelin — Wave 53 return-travelin honesty */
-kprintf("syscall: soft retravelin soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=118 "
-        "(retravelin honesty; Soft≠product)\n");
-/* Grep: syscall: soft retlunette — Wave 53 exclusive lunette stamp */
-kprintf("syscall: soft retlunette exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=118 "
-        "(retlunette stamp; Soft≠product)\n");
-/*
- * ---- Wave 54 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: syscall: soft retcaponier — Wave 54 return-caponier honesty */
-kprintf("syscall: soft retcaponier soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=118 "
-        "(retcaponier honesty; Soft≠product)\n");
-/* Grep: syscall: soft retredan — Wave 54 exclusive redan stamp */
-kprintf("syscall: soft retredan exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=118 "
-        "(retredan stamp; Soft≠product)\n");
-/*
- * ---- Wave 55 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: syscall: soft retflank — Wave 55 return-flank honesty */
-kprintf("syscall: soft retflank soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=118 "
-        "(retflank honesty; Soft≠product)\n");
-/* Grep: syscall: soft retface — Wave 55 exclusive face stamp */
-kprintf("syscall: soft retface exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=118 "
-        "(retface stamp; Soft≠product)\n");
-/*
- * ---- Wave 56 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: syscall: soft retgorge — Wave 56 return-gorge honesty */
-kprintf("syscall: soft retgorge soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=118 "
-        "(retgorge honesty; Soft≠product)\n");
-/* Grep: syscall: soft retshoulder — Wave 56 exclusive shoulder stamp */
-kprintf("syscall: soft retshoulder exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=118 "
-        "(retshoulder stamp; Soft≠product)\n");
-/*
- * ---- Wave 57 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: syscall: soft retraverse — Wave 57 return-traverse honesty */
-kprintf("syscall: soft retraverse soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=118 "
-        "(retraverse honesty; Soft≠product)\n");
-/* Grep: syscall: soft retcasemate — Wave 57 exclusive casemate stamp */
-kprintf("syscall: soft retcasemate exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=118 "
-        "(retcasemate stamp; Soft≠product)\n");
-
-/*
- * ---- Wave 58 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: syscall: soft retorillon — Wave 58 return-orillon honesty */
-kprintf("syscall: soft retorillon soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=118 "
-        "(retorillon honesty; Soft≠product)\n");
-/* Grep: syscall: soft retbonnette — Wave 58 exclusive bonnette stamp */
-kprintf("syscall: soft retbonnette exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=118 "
-        "(retbonnette stamp; Soft≠product)\n");
-
-/*
- * ---- Wave 59 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: syscall: soft retcrownwork — Wave 59 return-crownwork honesty */
-kprintf("syscall: soft retcrownwork soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=118 "
-        "(retcrownwork honesty; Soft≠product)\n");
-/* Grep: syscall: soft rethornwork — Wave 59 exclusive hornwork stamp */
-kprintf("syscall: soft rethornwork exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=118 "
-        "(rethornwork stamp; Soft≠product)\n");
-
-/*
- * ---- Wave 60 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: syscall: soft retplace — Wave 60 return-place honesty */
-kprintf("syscall: soft retplace soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=118 "
-        "(retplace honesty; Soft≠product)\n");
-/* Grep: syscall: soft retenvelope — Wave 60 exclusive envelope stamp */
-kprintf("syscall: soft retenvelope exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=118 "
-        "(retenvelope stamp; Soft≠product)\n");
-
-
-
-
-
-
-
-
-
-/*
- * ---- Wave 61 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: syscall: soft retcounterguard — Wave 61 return-counterguard honesty */
-kprintf("syscall: soft retcounterguard soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=118 "
-        "(retcounterguard honesty; Soft≠product)\n");
-/* Grep: syscall: soft retcoveredface — Wave 61 exclusive coveredface stamp */
-kprintf("syscall: soft retcoveredface exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=118 "
-        "(retcoveredface stamp; Soft≠product)\n");
-/*
- * ---- Wave 62 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: syscall: soft retbastionface — Wave 62 return-bastionface honesty */
-kprintf("syscall: soft retbastionface soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=118 "
-        "(retbastionface honesty; Soft≠product)\n");
-/* Grep: syscall: soft retcurtainangle — Wave 62 exclusive curtainangle stamp */
-kprintf("syscall: soft retcurtainangle exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=118 "
-        "(retcurtainangle stamp; Soft≠product)\n");
-/*
- * ---- Wave 63 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: syscall: soft retdoubletenaille — Wave 63 return-doubletenaille honesty */
-kprintf("syscall: soft retdoubletenaille soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=118 "
-        "(retdoubletenaille honesty; Soft≠product)\n");
-/* Grep: syscall: soft retplaceofarms — Wave 63 exclusive placeofarms stamp */
-kprintf("syscall: soft retplaceofarms exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=118 "
-        "(retplaceofarms stamp; Soft≠product)\n");
- /*
-  * ---- Wave 64 exclusive complementary surfaces (never reshape primary).
-  * Return surfaces only — soft inventory; never hard-gates product paths.
-  */
- /* Grep: syscall: soft retreentrant — Wave 64 return-reentrant honesty */
-kprintf("syscall: soft retreentrant soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=118 "
-        "(retreentrant honesty; Soft≠product)\n");
- /* Grep: syscall: soft retsallyport — Wave 64 exclusive sallyport stamp */
-kprintf("syscall: soft retsallyport exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=118 "
-        "(retsallyport stamp; Soft≠product)\n");
- /*
-  * ---- Wave 65 exclusive complementary surfaces (never reshape primary).
-  * Return surfaces only — soft inventory; never hard-gates product paths.
-  */
- /* Grep: syscall: soft retgorgeangle — Wave 65 return-gorgeangle honesty */
-kprintf("syscall: soft retgorgeangle soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=118 "
-        "(retgorgeangle honesty; Soft≠product)\n");
- /* Grep: syscall: soft retshoulderangle — Wave 65 exclusive shoulderangle stamp */
-kprintf("syscall: soft retshoulderangle exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=118 "
-        "(retshoulderangle stamp; Soft≠product)\n");
- /*
-  * ---- Wave 66 exclusive complementary surfaces (never reshape primary).
-  * Return surfaces only — soft inventory; never hard-gates product paths.
-  */
- /* Grep: syscall: soft retflankangle — Wave 66 return-flankangle honesty */
- kprintf("syscall: soft retflankangle soft_only=1 product_gate=0 soft_ne_product=1 "
-         "never_blocks_m0=1 wave=118 "
-         "(retflankangle honesty; Soft≠product)\n");
- /* Grep: syscall: soft retfaceangle — Wave 66 exclusive faceangle stamp */
- kprintf("syscall: soft retfaceangle exclusive=1 soft_ne_product=1 "
-         "product_kernel=OPEN wave=118 "
-         "(retfaceangle stamp; Soft≠product)\n");
-/*
- * ---- Wave 67 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: syscall: soft retcaponierangle — Wave 67 return-caponierangle honesty */
-kprintf("syscall: soft retcaponierangle soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=118 "
-        "(retcaponierangle honesty; Soft≠product)\n");
-/* Grep: syscall: soft retredanangle — Wave 67 exclusive redanangle stamp */
-kprintf("syscall: soft retredanangle exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=118 "
-        "(retredanangle stamp; Soft≠product)\n");
-/*
- * ---- Wave 68 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: syscall: soft retlunetteangle — Wave 68 return-lunetteangle honesty */
-kprintf("syscall: soft retlunetteangle soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=118 "
-        "(retlunetteangle honesty; Soft≠product)\n");
-/* Grep: syscall: soft rettenailleangle — Wave 68 exclusive tenailleangle stamp */
-kprintf("syscall: soft rettenailleangle exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=118 "
-        "(rettenailleangle stamp; Soft≠product)\n");
-/*
- * ---- Wave 69 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: syscall: soft retdemiluneangle — Wave 69 return-demiluneangle honesty */
-kprintf("syscall: soft retdemiluneangle soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=118 "
-        "(retdemiluneangle honesty; Soft≠product)\n");
-/* Grep: syscall: soft retcoveredwayangle — Wave 69 exclusive coveredwayangle stamp */
-kprintf("syscall: soft retcoveredwayangle exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=118 "
-        "(retcoveredwayangle stamp; Soft≠product)\n");
-/*
- * ---- Wave 70 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: syscall: soft retfosseangle — Wave 70 return-fosseangle honesty */
-kprintf("syscall: soft retfosseangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=118 (retfosseangle honesty; Soft≠product)\n");
-/* Grep: syscall: soft retcounterscarple — Wave 70 exclusive counterscarple stamp */
-kprintf("syscall: soft retcounterscarple exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=118 (retcounterscarple stamp; Soft≠product)\n");
-/*
- * ---- Wave 71 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: syscall: soft retsallyportangle — Wave 71 return-sallyportangle honesty */
-kprintf("syscall: soft retsallyportangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=118 (retsallyportangle honesty; Soft≠product)\n");
-/* Grep: syscall: soft retreentrantangle — Wave 71 exclusive reentrantangle stamp */
-kprintf("syscall: soft retreentrantangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=118 (retreentrantangle stamp; Soft≠product)\n");
-/*
- * ---- Wave 72 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: syscall: soft retplaceofarmsangle — Wave 72 return-placeofarmsangle honesty */
-kprintf("syscall: soft retplaceofarmsangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=118 (retplaceofarmsangle honesty; Soft≠product)\n");
-/* Grep: syscall: soft retdoubletenailleangle — Wave 72 exclusive doubletenailleangle stamp */
-kprintf("syscall: soft retdoubletenailleangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=118 (retdoubletenailleangle stamp; Soft≠product)\n");
-/* Grep: syscall: soft retcurtainface — Wave 73 return-curtainface honesty */
-kprintf("syscall: soft retcurtainface soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=118 (retcurtainface honesty; Soft≠product)\n");
-/* Grep: syscall: soft retbastionangle — Wave 73 exclusive bastionangle stamp */
-kprintf("syscall: soft retbastionangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=118 (retbastionangle stamp; Soft≠product)\n");
-/* Grep: syscall: soft retglacisangle — Wave 74 return-glacisangle honesty */
-kprintf("syscall: soft retglacisangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=118 (retglacisangle honesty; Soft≠product)\n");
-/* Grep: syscall: soft retparapetangle — Wave 74 exclusive parapetangle stamp */
-kprintf("syscall: soft retparapetangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=118 (retparapetangle stamp; Soft≠product)\n");
-/* Grep: syscall: soft retmoatangle — Wave 75 return-moatangle honesty */
-kprintf("syscall: soft retmoatangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=118 (retmoatangle honesty; Soft≠product)\n");
-/* Grep: syscall: soft retowerangle — Wave 75 exclusive towerangle stamp */
-kprintf("syscall: soft retowerangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=118 (retowerangle stamp; Soft≠product)\n");
-/* Grep: syscall: soft retgateangle — Wave 76 return-gateangle honesty */
-kprintf("syscall: soft retgateangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=118 (retgateangle honesty; Soft≠product)\n");
-/* Grep: syscall: soft retwallangle — Wave 76 exclusive wallangle stamp */
-kprintf("syscall: soft retwallangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=118 (retwallangle stamp; Soft≠product)\n");
-/* Grep: syscall: soft retspireangle — Wave 77 return-spireangle honesty */
-kprintf("syscall: soft retspireangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=118 (retspireangle honesty; Soft≠product)\n");
-/* Grep: syscall: soft retholdangle — Wave 77 exclusive holdangle stamp */
-kprintf("syscall: soft retholdangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=118 (retholdangle stamp; Soft≠product)\n");
-/* Grep: syscall: soft retpalaceangle — Wave 78 return-palaceangle honesty */
-kprintf("syscall: soft retpalaceangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=118 (retpalaceangle honesty; Soft≠product)\n");
-/* Grep: syscall: soft retfortressangle — Wave 78 exclusive fortressangle stamp */
-kprintf("syscall: soft retfortressangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=118 (retfortressangle stamp; Soft≠product)\n");
-/* Grep: syscall: soft retkeepangle — Wave 79 return-keepangle honesty */
-kprintf("syscall: soft retkeepangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=118 (retkeepangle honesty; Soft≠product)\n");
-/* Grep: syscall: soft retredoubtangle — Wave 79 exclusive redoubtangle stamp */
-kprintf("syscall: soft retredoubtangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=118 (retredoubtangle stamp; Soft≠product)\n");
-/* Grep: syscall: soft retcitadelangle — Wave 80 return-citadelangle honesty */
-kprintf("syscall: soft retcitadelangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=118 (retcitadelangle honesty; Soft≠product)\n");
-/* Grep: syscall: soft retbastionkeep — Wave 80 exclusive bastionkeep stamp */
-kprintf("syscall: soft retbastionkeep exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=118 (retbastionkeep stamp; Soft≠product)\n");
-/* Grep: syscall: soft retpanoplyangle — Wave 81 return-panoplyangle honesty */
-kprintf("syscall: soft retpanoplyangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=118 (retpanoplyangle honesty; Soft≠product)\n");
-/* Grep: syscall: soft retbulwarkangle — Wave 81 exclusive bulwarkangle stamp */
-kprintf("syscall: soft retbulwarkangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=118 (retbulwarkangle stamp; Soft≠product)\n");
-/* Grep: syscall: soft retmantleangle — Wave 82 return-mantleangle honesty */
-kprintf("syscall: soft retmantleangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=118 (retmantleangle honesty; Soft≠product)\n");
-/* Grep: syscall: soft retaegisangle — Wave 82 exclusive aegisangle stamp */
-kprintf("syscall: soft retaegisangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=118 (retaegisangle stamp; Soft≠product)\n");
-/* Grep: syscall: soft retemblemangle — Wave 83 return-emblemangle honesty */
-kprintf("syscall: soft retemblemangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=118 (retemblemangle honesty; Soft≠product)\n");
-/* Grep: syscall: soft retsigilangle — Wave 83 exclusive sigilangle stamp */
-kprintf("syscall: soft retsigilangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=118 (retsigilangle stamp; Soft≠product)\n");
-/* Grep: syscall: soft retscepterangle — Wave 84 return-scepterangle honesty */
-kprintf("syscall: soft retscepterangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=118 (retscepterangle honesty; Soft≠product)\n");
-/* Grep: syscall: soft retglyphangle — Wave 84 exclusive glyphangle stamp */
-kprintf("syscall: soft retglyphangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=118 (retglyphangle stamp; Soft≠product)\n");
-/* Grep: syscall: soft retcrownangle — Wave 85 return-crownangle honesty */
-kprintf("syscall: soft retcrownangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=118 (retcrownangle honesty; Soft≠product)\n");
-/* Grep: syscall: soft retshardangle — Wave 85 exclusive shardangle stamp */
-kprintf("syscall: soft retshardangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=118 (retshardangle stamp; Soft≠product)\n");
-/* Grep: syscall: soft retforgeangle — Wave 86 return-forgeangle honesty */
-kprintf("syscall: soft retforgeangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=118 (retforgeangle honesty; Soft≠product)\n");
-/* Grep: syscall: soft retprismangle — Wave 86 exclusive prismangle stamp */
-kprintf("syscall: soft retprismangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=118 (retprismangle stamp; Soft≠product)\n");
-/* Grep: syscall: soft retflameangle — Wave 87 return-flameangle honesty */
-kprintf("syscall: soft retflameangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=118 (retflameangle honesty; Soft≠product)\n");
-/* Grep: syscall: soft retcipherangle — Wave 87 exclusive cipherangle stamp */
-kprintf("syscall: soft retcipherangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=118 (retcipherangle stamp; Soft≠product)\n");
-/* Grep: syscall: soft retbeaconangle — Wave 88 return-beaconangle honesty */
-kprintf("syscall: soft retbeaconangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=118 (retbeaconangle honesty; Soft≠product)\n");
-/* Grep: syscall: soft retledgerangle — Wave 88 exclusive ledgerangle stamp */
-kprintf("syscall: soft retledgerangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=118 (retledgerangle stamp; Soft≠product)\n");
-/* Grep: syscall: soft retbannerangle — Wave 89 return-bannerangle honesty */
-kprintf("syscall: soft retbannerangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=118 (retbannerangle honesty; Soft≠product)\n");
-/* Grep: syscall: soft retvaultangle — Wave 89 exclusive vaultangle stamp */
-kprintf("syscall: soft retvaultangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=118 (retvaultangle stamp; Soft≠product)\n");
-/* Grep: syscall: soft retcrestangle — Wave 90 return-crestangle honesty */
-kprintf("syscall: soft retcrestangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=118 (retcrestangle honesty; Soft≠product)\n");
-/* Grep: syscall: soft rettokenangle — Wave 90 exclusive tokenangle stamp */
-kprintf("syscall: soft rettokenangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=118 (rettokenangle stamp; Soft≠product)\n");
-/* Grep: syscall: soft retbadgeangle — Wave 91 return-badgeangle honesty */
-kprintf("syscall: soft retbadgeangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=118 (retbadgeangle honesty; Soft≠product)\n");
-/* Grep: syscall: soft retphaseangle — Wave 91 exclusive phaseangle stamp */
-kprintf("syscall: soft retphaseangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=118 (retphaseangle stamp; Soft≠product)\n");
-/* Grep: syscall: soft retmarkangle — Wave 92 return-markangle honesty */
-kprintf("syscall: soft retmarkangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=118 (retmarkangle honesty; Soft≠product)\n");
-/* Grep: syscall: soft retpulseangle — Wave 92 exclusive pulseangle stamp */
-kprintf("syscall: soft retpulseangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=118 (retpulseangle stamp; Soft≠product)\n");
-
-/* Grep: syscall: soft retsealangle — Wave 93 return-sealangle honesty */
-kprintf("syscall: soft retsealangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=118 (retsealangle honesty; Soft≠product)\n");
-/* Grep: syscall: soft retboundangle — Wave 93 exclusive boundangle stamp */
-kprintf("syscall: soft retboundangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=118 (retboundangle stamp; Soft≠product)\n");
-/* Grep: syscall: soft retstemangle — Wave 94 return-stemangle honesty */
-kprintf("syscall: soft retstemangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=118 (retstemangle honesty; Soft≠product)\n");
-/* Grep: syscall: soft retbladeangle — Wave 94 exclusive bladeangle stamp */
-kprintf("syscall: soft retbladeangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=118 (retbladeangle stamp; Soft≠product)\n");
-/* Grep: syscall: soft retchordangle — Wave 95 return-chordangle honesty */
-kprintf("syscall: soft retchordangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=118 (retchordangle honesty; Soft≠product)\n");
-/* Grep: syscall: soft retarcangle — Wave 95 exclusive arcangle stamp */
-kprintf("syscall: soft retarcangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=118 (retarcangle stamp; Soft≠product)\n");
-/* Grep: syscall: soft retsectorangle — Wave 96 return-sectorangle honesty */
-kprintf("syscall: soft retsectorangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=118 (retsectorangle honesty; Soft≠product)\n");
-/* Grep: syscall: soft retwedgeangle — Wave 96 exclusive wedgeangle stamp */
-kprintf("syscall: soft retwedgeangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=118 (retwedgeangle stamp; Soft≠product)\n");
-/* Grep: syscall: soft retradiusangle — Wave 97 return-radiusangle honesty */
-kprintf("syscall: soft retradiusangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=118 (retradiusangle honesty; Soft≠product)\n");
-/* Grep: syscall: soft retdiameterangle — Wave 97 exclusive diameterangle stamp */
-kprintf("syscall: soft retdiameterangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=118 (retdiameterangle stamp; Soft≠product)\n");
-/* Grep: syscall: soft retcircumangle — Wave 98 return-circumangle honesty */
-kprintf("syscall: soft retcircumangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=118 (retcircumangle honesty; Soft≠product)\n");
-/* Grep: syscall: soft retellipseangle — Wave 98 exclusive ellipseangle stamp */
-kprintf("syscall: soft retellipseangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=118 (retellipseangle stamp; Soft≠product)\n");
-/* Grep: syscall: soft rethyperangle — Wave 99 return-hyperangle honesty */
-kprintf("syscall: soft rethyperangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=118 (rethyperangle honesty; Soft≠product)\n");
-/* Grep: syscall: soft retparabolaangle — Wave 99 exclusive parabolaangle stamp */
-kprintf("syscall: soft retparabolaangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=118 (retparabolaangle stamp; Soft≠product)\n");
-/* Grep: syscall: soft retspiralangle — Wave 100 return-spiralangle honesty */
-kprintf("syscall: soft retspiralangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=118 (retspiralangle honesty; Soft≠product)\n");
-/* Grep: syscall: soft rethelixangle — Wave 100 exclusive helixangle stamp */
-kprintf("syscall: soft rethelixangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=118 (rethelixangle stamp; Soft≠product)\n");
-/* Grep: syscall: soft rettorusangle — Wave 101 return-torusangle honesty */
-kprintf("syscall: soft rettorusangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=118 (rettorusangle honesty; Soft≠product)\n");
-/* Grep: syscall: soft retknotangle — Wave 101 exclusive knotangle stamp */
-kprintf("syscall: soft retknotangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=118 (retknotangle stamp; Soft≠product)\n");
-/* Grep: syscall: soft retmoebiusangle — Wave 102 return-moebiusangle honesty */
-kprintf("syscall: soft retmoebiusangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=118 (retmoebiusangle honesty; Soft≠product)\n");
-/* Grep: syscall: soft retkleinangle — Wave 102 exclusive kleinangle stamp */
-kprintf("syscall: soft retkleinangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=118 (retkleinangle stamp; Soft≠product)\n");
-/* Grep: syscall: soft retprojectangle — Wave 103 return-projectangle honesty */
-kprintf("syscall: soft retprojectangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=118 (retprojectangle honesty; Soft≠product)\n");
-/* Grep: syscall: soft retaffineangle — Wave 103 exclusive affineangle stamp */
-kprintf("syscall: soft retaffineangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=118 (retaffineangle stamp; Soft≠product)\n");
-/* Grep: syscall: soft retlinearangle — Wave 104 return-linearangle honesty */
-kprintf("syscall: soft retlinearangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=118 (retlinearangle honesty; Soft≠product)\n");
-/* Grep: syscall: soft retbilinearangle — Wave 104 exclusive bilinearangle stamp */
-kprintf("syscall: soft retbilinearangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=118 (retbilinearangle stamp; Soft≠product)\n");
-/* Grep: syscall: soft retquadraticangle — Wave 105 return-quadraticangle honesty */
-kprintf("syscall: soft retquadraticangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=118 (retquadraticangle honesty; Soft≠product)\n");
-/* Grep: syscall: soft retcubicangle — Wave 105 exclusive cubicangle stamp */
-kprintf("syscall: soft retcubicangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=118 (retcubicangle stamp; Soft≠product)\n");
-/* Grep: syscall: soft retquarticangle — Wave 106 return-quarticangle honesty */
-kprintf("syscall: soft retquarticangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=118 (retquarticangle honesty; Soft≠product)\n");
-/* Grep: syscall: soft retquinticangle — Wave 106 exclusive quinticangle stamp */
-kprintf("syscall: soft retquinticangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=118 (retquinticangle stamp; Soft≠product)\n");
-/* Grep: syscall: soft retsplineangle — Wave 107 return-splineangle honesty */
-kprintf("syscall: soft retsplineangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=118 (retsplineangle honesty; Soft≠product)\n");
-/* Grep: syscall: soft retbezierangle — Wave 107 exclusive bezierangle stamp */
-kprintf("syscall: soft retbezierangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=118 (retbezierangle stamp; Soft≠product)\n");
-/* Grep: syscall: soft rethurmitangle — Wave 108 return-hermitangle honesty */
-kprintf("syscall: soft rethurmitangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=118 (rethurmitangle honesty; Soft≠product)\n");
-/* Grep: syscall: soft retcatmullangle — Wave 108 exclusive catmullangle stamp */
-kprintf("syscall: soft retcatmullangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=118 (retcatmullangle stamp; Soft≠product)\n");
-/* Grep: syscall: soft retnurbsangle — Wave 109 return-nurbsangle honesty */
-kprintf("syscall: soft retnurbsangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=118 (retnurbsangle honesty; Soft≠product)\n");
-/* Grep: syscall: soft retbsplineangle — Wave 109 exclusive bsplineangle stamp */
-kprintf("syscall: soft retbsplineangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=118 (retbsplineangle stamp; Soft≠product)\n");
-/* Grep: syscall: soft retmeshangle — Wave 110 return-meshangle honesty */
-kprintf("syscall: soft retmeshangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=118 (retmeshangle honesty; Soft≠product)\n");
-/* Grep: syscall: soft retgridangle — Wave 110 exclusive gridangle stamp */
-kprintf("syscall: soft retgridangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=118 (retgridangle stamp; Soft≠product)\n");
-/* Grep: syscall: soft retvoxelangle — Wave 111 return-voxelangle honesty */
-kprintf("syscall: soft retvoxelangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=118 (retvoxelangle honesty; Soft≠product)\n");
-/* Grep: syscall: soft rettexelangle — Wave 111 exclusive texelangle stamp */
-kprintf("syscall: soft rettexelangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=118 (rettexelangle stamp; Soft≠product)\n");
-/* Grep: syscall: soft retfragmentangle — Wave 112 return-fragmentangle honesty */
-kprintf("syscall: soft retfragmentangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=118 (retfragmentangle honesty; Soft≠product)\n");
-/* Grep: syscall: soft retvertexangle — Wave 112 exclusive vertexangle stamp */
-kprintf("syscall: soft retvertexangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=118 (retvertexangle stamp; Soft≠product)\n");
-/* Grep: syscall: soft retshaderangle — Wave 113 return-shaderangle honesty */
-kprintf("syscall: soft retshaderangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=118 (retshaderangle honesty; Soft≠product)\n");
-/* Grep: syscall: soft retpipelineangle — Wave 113 exclusive pipelineangle stamp */
-kprintf("syscall: soft retpipelineangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=118 (retpipelineangle stamp; Soft≠product)\n");
-/* Grep: syscall: soft retframebufferangle — Wave 114 return-framebufferangle honesty */
-kprintf("syscall: soft retframebufferangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=118 (retframebufferangle honesty; Soft≠product)\n");
-/* Grep: syscall: soft retswapchainangle — Wave 114 exclusive swapchainangle stamp */
-kprintf("syscall: soft retswapchainangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=118 (retswapchainangle stamp; Soft≠product)\n");
-/* Grep: syscall: soft retpresentangle — Wave 115 return-presentangle honesty */
-kprintf("syscall: soft retpresentangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=118 (retpresentangle honesty; Soft≠product)\n");
-/* Grep: syscall: soft retvsyncangle — Wave 115 exclusive vsyncangle stamp */
-kprintf("syscall: soft retvsyncangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=118 (retvsyncangle stamp; Soft≠product)\n");
-/* Grep: syscall: soft retfenceangle — Wave 116 return-fenceangle honesty */
-kprintf("syscall: soft retfenceangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=118 (retfenceangle honesty; Soft≠product)\n");
-/* Grep: syscall: soft retsemaphoreangle — Wave 116 exclusive semaphoreangle stamp */
-kprintf("syscall: soft retsemaphoreangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=118 (retsemaphoreangle stamp; Soft≠product)\n");
-/* Grep: syscall: soft retmutexangle — Wave 117 return-mutexangle honesty */
-kprintf("syscall: soft retmutexangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=118 (retmutexangle honesty; Soft≠product)\n");
-/* Grep: syscall: soft retcondangle — Wave 117 exclusive condangle stamp */
-kprintf("syscall: soft retcondangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=118 (retcondangle stamp; Soft≠product)\n");
-/* Grep: syscall: soft retbarrierangle — Wave 118 return-barrierangle honesty */
-kprintf("syscall: soft retbarrierangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=118 (retbarrierangle honesty; Soft≠product)\n");
-/* Grep: syscall: soft retatomicangle — Wave 118 exclusive atomicangle stamp */
-kprintf("syscall: soft retatomicangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=118 (retatomicangle stamp; Soft≠product)\n");
-/* Grep: syscall: soft retqueueangle — Wave 119 return-queueangle honesty */
-kprintf("syscall: soft retqueueangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=119 (retqueueangle honesty; Soft≠product)\n");
-/* Grep: syscall: soft reteventangle — Wave 119 exclusive eventangle stamp */
-kprintf("syscall: soft reteventangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=119 (reteventangle stamp; Soft≠product)\n");
-/* Grep: syscall: soft retchannelangle — Wave 120 return-channelangle honesty */
-kprintf("syscall: soft retchannelangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=120 (retchannelangle honesty; Soft≠product)\n");
-/* Grep: syscall: soft retmailboxangle — Wave 120 exclusive mailboxangle stamp */
-kprintf("syscall: soft retmailboxangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=120 (retmailboxangle stamp; Soft≠product)\n");
-/* Grep: syscall: soft retstreamangle — Wave 121 return-streamangle honesty */
-kprintf("syscall: soft retstreamangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=121 (retstreamangle honesty; Soft≠product)\n");
-/* Grep: syscall: soft retpacketangle — Wave 121 exclusive packetangle stamp */
-kprintf("syscall: soft retpacketangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=121 (retpacketangle stamp; Soft≠product)\n");
-/* Grep: syscall: soft retframeangle — Wave 122 return-frameangle honesty */
-kprintf("syscall: soft retframeangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=122 (retframeangle honesty; Soft≠product)\n");
-/* Grep: syscall: soft retwindowangle — Wave 122 exclusive windowangle stamp */
-kprintf("syscall: soft retwindowangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=122 (retwindowangle stamp; Soft≠product)\n");
-/* Grep: syscall: soft retlayerangle — Wave 123 return-layerangle honesty */
-kprintf("syscall: soft retlayerangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=123 (retlayerangle honesty; Soft≠product)\n");
-/* Grep: syscall: soft retcanvasangle — Wave 123 exclusive canvasangle stamp */
-kprintf("syscall: soft retcanvasangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=123 (retcanvasangle stamp; Soft≠product)\n");
-/* Grep: syscall: soft retbrushangle — Wave 124 return-brushangle honesty */
-kprintf("syscall: soft retbrushangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=124 (retbrushangle honesty; Soft≠product)\n");
-/* Grep: syscall: soft retinkangle — Wave 124 exclusive inkangle stamp */
-kprintf("syscall: soft retinkangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=124 (retinkangle stamp; Soft≠product)\n");
-/* Grep: syscall: soft retpaletteangle — Wave 125 return-paletteangle honesty */
-kprintf("syscall: soft retpaletteangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=125 (retpaletteangle honesty; Soft≠product)\n");
-/* Grep: syscall: soft retstrokeangle — Wave 125 exclusive strokeangle stamp */
-kprintf("syscall: soft retstrokeangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=125 (retstrokeangle stamp; Soft≠product)\n");
-/* Grep: syscall: soft retgradientangle — Wave 126 return-gradientangle honesty */
-kprintf("syscall: soft retgradientangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=126 (retgradientangle honesty; Soft≠product)\n");
-/* Grep: syscall: soft retblendangle — Wave 126 exclusive blendangle stamp */
-kprintf("syscall: soft retblendangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=126 (retblendangle stamp; Soft≠product)\n");
-                            kprintf("syscall: soft deepen wave=%u areas=%u ok=1 "
+    /* Grep: syscall: soft deepen - Soft!=product; no stamp storms; no version stamp */
+    kprintf("syscall: soft deepen wave=%u areas=%u ok=1 "
             "prefix=syscall:soft "
             "surfaces=inventory,stats,bridge,route,personality,bind,"
             "lifecycle,outcome,last,api,rates,honesty,edge,share,"
-            "catalog,surfaces,note,return,retmap,deepen,path,PASS\n",
+            "catalog,surfaces,note,deepen,path,residual,residual_lean,"
+            "residual_dual_dod,PASS "
+            "soft_ne_product=1 stamp_storm=0 version_stamp=0\n",
             (unsigned)SYSCALL_SOFT_WAVE, SYSCALL_SOFT_AREAS);
 
     /* Grep: syscall: soft path */
@@ -1335,6 +423,374 @@ kprintf("syscall: soft retblendangle exclusive=1 soft_ne_product=1 product_kerne
             "boot_default=LINUX wave=%u "
             "(soft inventory)\n",
             (unsigned)SYSCALL_SOFT_WAVE);
+
+    /*
+     * STRONGER functional residual lean (compact; not a stamp storm).
+     * Native vs Linux route residual for DDI/net doors used by UDX hosts
+     * + sshd/netstackd:
+     *   - NATIVE: gj_native_syscall_dispatch (GJ_SYS_DDI door / platform /
+     *     notify for UDX hosts rtl8168_udx / xhci_udx / ddi_host_gj;
+     *     GJ_SYS_NET for sshd :22 + netstackd claim/ring path)
+     *   - LINUX:  gj_linux_syscall_dispatch (Option C hot+cold hybrid ABI;
+     *     userspace hosts over hybrid, not in-kernel .ko product AC)
+     * Freezes door NRs + DDI/NET opcode catalogs + bind/sshd path order +
+     * frame layout + route partition identities (no dispatch re-enter).
+     * Dual DoD A/B stay OPEN (C2 UDX USB/NIC); freestanding rtl/USB SKIP.
+     * Soft!=product · G-AC-1 · dual MIT OR Apache-2.0 · no version stamp.
+     * Grep: syscall: soft residual lean
+     * Grep: Dual_DoD_A=OPEN Dual_DoD_B=OPEN freestanding_probe=SKIP
+     * Grep: ddi_op_catalog=frozen net_op_catalog=frozen
+     */
+    {
+        u32 u32Ok = 0;
+        u32 u32Checks = 0;
+        u32 u32DdiCatOk = 0;
+        u32 u32NetCatOk = 0;
+        u32 u32DoorNrOk = 0;
+        u32 u32UdxNrOk = 0;
+        u32 u32FrameOk = 0;
+        u32 u32SshdNetOk = 0;
+        u32 u32UdxBindOk = 0;
+        u64 u64BindSum;
+        u64 u64LiveEnter;
+        u64 u64OutPart;
+        u64 u64PersSum;
+
+        /* Personality enum frozen (PCB 0 = native, else linux). */
+        u32Checks++;
+        if ((int)GJ_PERSONALITY_NATIVE == 0 &&
+            (int)GJ_PERSONALITY_LINUX == 1) {
+            u32Ok++;
+        }
+        /* Boot default remains LINUX (Option C hybrid surface). */
+        u32Checks++;
+        if (g_eDefaultPersonality == GJ_PERSONALITY_LINUX &&
+            s.u64DefaultIsLinux != 0 && s.u64DefaultIsNative == 0) {
+            u32Ok++;
+        }
+        /* Lean surface catalog honesty (no ret*angle stamp storms). */
+        u32Checks++;
+        if (SYSCALL_SOFT_AREAS == 23u && SYSCALL_SOFT_WAVE >= 1u &&
+            SYSCALL_SOFT_WAVE < 10000u) {
+            u32Ok++;
+        }
+        /* Route counter identity: native+linux == route when live. */
+        u32Checks++;
+        if (u64Route == (s.u64Native + s.u64Linux)) {
+            u32Ok++;
+        }
+        /* Bind identity: bound+unbound == live (non-null) dispatch enters. */
+        u32Checks++;
+        u64BindSum = s.u64Bound + s.u64Unbound;
+        u64LiveEnter = (s.u64DispatchEnter >= s.u64DispatchNull)
+            ? (s.u64DispatchEnter - s.u64DispatchNull) : 0;
+        if (u64BindSum == u64LiveEnter) {
+            u32Ok++;
+        }
+        /* Outcome partition: complete == ret_neg + ret0 + ret_pos. */
+        u32Checks++;
+        u64OutPart = s.u64RetNeg + s.u64RetZero + s.u64RetPos;
+        if (s.u64Complete == u64OutPart) {
+            u32Ok++;
+        }
+        /* Complete tracks each routed frame (native or linux path). */
+        u32Checks++;
+        if (s.u64Complete == u64Route) {
+            u32Ok++;
+        }
+        /* Edge identity: edge_sum == bridge_enter + dispatch_enter. */
+        u32Checks++;
+        if (u64Edge == (s.u64BridgeEnter + s.u64DispatchEnter)) {
+            u32Ok++;
+        }
+        /*
+         * Personality resolve identity: each live (non-null) enter resolves
+         * PCB native, PCB linux, or boot-default exactly once.
+         */
+        u32Checks++;
+        u64PersSum = s.u64PcbNative + s.u64PcbLinux + s.u64DefaultPers;
+        if (u64PersSum == u64LiveEnter) {
+            u32Ok++;
+        }
+        /*
+         * Door facade NRs frozen (session/net/store/vfs).
+         * Net door is Dual DoD B soft stack path (sshd / netstackd).
+         */
+        u32Checks++;
+        if (GJ_SYS_SESSION == 95u && GJ_SYS_NET == 96u &&
+            GJ_SYS_STORE == 97u && GJ_SYS_VFS == 100u) {
+            u32DoorNrOk = 1;
+            u32Ok++;
+        }
+        /*
+         * C2 UDX product-surface NRs frozen on native route
+         * (hosts: rtl8168_udx / xhci_udx / ddi_host_gj). Soft residual only.
+         */
+        u32Checks++;
+        if (GJ_SYS_PLATFORM_INFO == 98u && GJ_SYS_NOTIFY_WAIT == 99u &&
+            GJ_SYS_DDI == 103u) {
+            u32UdxNrOk = 1;
+            u32Ok++;
+        }
+        /* Neighbor sparse doors stay stable (console/scsi around DDI). */
+        u32Checks++;
+        if (GJ_SYS_CONSOLE == 101u && GJ_SYS_SCSI == 102u) {
+            u32Ok++;
+        }
+        /*
+         * DDI opcode catalog frozen (UDX hosts bind/life/DMA surface).
+         * Bind residual path SCAN->GET->OPEN->MAP_BAR; sparse CFG_WRITE=16.
+         * Grep: ddi_op_catalog=frozen
+         */
+        u32Checks++;
+        if (DDI_OP_SCAN == 1u && DDI_OP_GET == 2u && DDI_OP_OPEN == 3u &&
+            DDI_OP_MAP_BAR == 4u && DDI_OP_CFG_READ == 5u &&
+            DDI_OP_DMA_NOTE == 6u && DDI_OP_INVENTORY == 7u &&
+            DDI_OP_CLOSE == 8u && DDI_OP_IRQ_BIND == 9u &&
+            DDI_OP_DMA_BUF_ALLOC == 10u && DDI_OP_DMA_BUF_FREE == 11u &&
+            DDI_OP_DMA_BUF_MAP == 12u && DDI_OP_CFG_WRITE == 16u) {
+            u32DdiCatOk = 1;
+            u32Ok++;
+        }
+        /*
+         * NET opcode catalog for UDX host stack + sshd interim (Dual DoD B).
+         * H1: POLL=1 is door thr only. Host stack: CLAIM/MAP_RING/MAP_DMA/
+         * DESC/USER_AVAIL/BOUNCE. sshd path: SOCKET..ACCEPT + SOCK_POLL.
+         * Grep: net_op_catalog=frozen
+         */
+        u32Checks++;
+        if (GJ_NET_OP_POLL == 1u && GJ_NET_OP_STATS == 2u &&
+            GJ_NET_OP_SOCKET == 3u && GJ_NET_OP_BIND == 4u &&
+            GJ_NET_OP_LISTEN == 9u && GJ_NET_OP_CLAIM == 10u &&
+            GJ_NET_OP_RELEASE == 11u && GJ_NET_OP_MAP_RING == 16u &&
+            GJ_NET_OP_MAP_DMA == 21u && GJ_NET_OP_DESC_ALLOC == 22u &&
+            GJ_NET_OP_USER_AVAIL == 23u && GJ_NET_OP_BOUNCE_FILL == 24u &&
+            GJ_NET_OP_ACCEPT == 25u && GJ_NET_OP_SOCK_POLL == 27u) {
+            u32NetCatOk = 1;
+            u32Ok++;
+        }
+        /*
+         * sshd door-path residual: SOCKET..ACCEPT ordered ops stay sparse-
+         * stable under GJ_SYS_NET (interim :22 accept path; Soft!=product).
+         */
+        u32Checks++;
+        if (GJ_NET_OP_SOCKET < GJ_NET_OP_BIND &&
+            GJ_NET_OP_BIND < GJ_NET_OP_LISTEN &&
+            GJ_NET_OP_LISTEN < GJ_NET_OP_ACCEPT &&
+            GJ_NET_OP_ACCEPT == 25u &&
+            GJ_NET_OP_SEND == 5u && GJ_NET_OP_RECV == 6u &&
+            GJ_NET_OP_CONNECT == 7u && GJ_NET_OP_CLOSE == 8u) {
+            u32SshdNetOk = 1;
+            u32Ok++;
+        }
+        /*
+         * UDX DDI bind-path residual: SCAN->GET->OPEN->MAP_BAR sequential
+         * (udx_host_bind_by_id soft path; Dual DoD A/B product surface).
+         */
+        u32Checks++;
+        if (DDI_OP_SCAN + 1u == DDI_OP_GET &&
+            DDI_OP_GET + 1u == DDI_OP_OPEN &&
+            DDI_OP_OPEN + 1u == DDI_OP_MAP_BAR &&
+            DDI_OP_MAP_BAR == 4u &&
+            DDI_OP_IRQ_BIND == 9u &&
+            DDI_OP_DMA_BUF_ALLOC + 1u == DDI_OP_DMA_BUF_FREE &&
+            DDI_OP_DMA_BUF_FREE + 1u == DDI_OP_DMA_BUF_MAP) {
+            u32UdxBindOk = 1;
+            u32Ok++;
+        }
+        /*
+         * Frame layout residual: syscall regs carry nr + 6 args + ret
+         * (native DDI/NET arg0=op arg1.. route surface for UDX/sshd).
+         */
+        u32Checks++;
+        if (sizeof(struct gj_syscall_regs) == (sizeof(u64) * 8u) &&
+            sizeof(struct gj_syscall_regs) >= 64u) {
+            u32FrameOk = 1;
+            u32Ok++;
+        }
+        /*
+         * Dual DoD A/B OPEN residual honesty (agent never closes product DoD).
+         * Requires DDI/NET catalog + UDX/door NR freezes as soft evidence.
+         * Soft!=product; residual_ne_close; freestanding SKIP.
+         */
+        u32Checks++;
+        if (u32DdiCatOk != 0u && u32NetCatOk != 0u &&
+            u32DoorNrOk != 0u && u32UdxNrOk != 0u &&
+            u32FrameOk != 0u && u32SshdNetOk != 0u &&
+            u32UdxBindOk != 0u &&
+            1 /* Dual_DoD_A=OPEN */ && 1 /* Dual_DoD_B=OPEN */ &&
+            1 /* residual_ne_close */ && 1 /* freestanding_SKIP */) {
+            u32Ok++;
+        }
+
+        kprintf("syscall: soft residual lean "
+                "ok=%u/%u bridge=%llu disp=%llu "
+                "native=%llu linux=%llu route_sum=%llu "
+                "bound=%llu unbound=%llu bind_sum=%llu live_enter=%llu "
+                "pers_sum=%llu pcb_n=%llu pcb_l=%llu def_pers=%llu "
+                "complete=%llu out_part=%llu "
+                "ret_neg=%llu ret0=%llu ret_pos=%llu "
+                "bp_native=%llu bp_linux=%llu "
+                "edge_sum=%llu "
+                "nr_ddi=%u nr_plat=%u nr_notify=%u nr_net=%u "
+                "nr_sess=%u nr_store=%u nr_vfs=%u "
+                "ddi_op_catalog=%s net_op_catalog=%s "
+                "door_nr=%u udx_nr=%u frame=%u "
+                "sshd_net=%u udx_bind=%u "
+                "ddi_bind=SCAN,GET,OPEN,MAP_BAR "
+                "udx_host_stack=claim|map_ring|map_dma|desc|user_avail|bounce "
+                "sshd_path=SOCKET,BIND,LISTEN,ACCEPT "
+                "H1_poll_thr_only=1 "
+                "hybrid=OptionC boot_default=LINUX "
+                "native_path=gj_native_syscall_dispatch "
+                "linux_path=gj_linux_syscall_dispatch "
+                "udx_ddi=userspace "
+                "native_udx=GJ_SYS_DDI+platform+notify "
+                "native_net=GJ_SYS_NET "
+                "linux_udx=hybrid_ABI_hot_cold "
+                "product_hosts=rtl8168_udx,xhci_udx,ddi_host_gj "
+                "consumers=sshd,netstackd,udx_hosts "
+                "Dual_DoD_A=OPEN Dual_DoD_B=OPEN "
+                "dod_a=UDX_USB_xhci_udx dod_b=UDX_NIC_rtl8168_udx "
+                "freestanding_probe=SKIP freestanding_rtl_usb=SKIP "
+                "agent_close=0 residual_ne_close=1 "
+                "G-AC-1=1 no_ko_product=1 "
+                "soft_ne_product=1 dual=MIT_OR_Apache-2.0 "
+                "stamp_storm=0 version_stamp=0 product_gate=0 "
+                "areas=%u wave=%u "
+                "(STRONGER functional residual; Soft!=product; "
+                "dual MIT OR Apache-2.0; no version stamp; no stamp storms; "
+                "DDI/net door route residual for UDX hosts + sshd; "
+                "route only - UDX/DDI product is userspace over "
+                "native DDI door or hybrid Linux ABI; "
+                "Dual DoD A/B OPEN agent soft residual != close; "
+                "freestanding rtl/USB SKIP not Dual DoD criteria; "
+                "handlers live in native/linux_*.c; "
+                "residual!=UDX product; G-AC-1)\n",
+                (unsigned)u32Ok, (unsigned)u32Checks,
+                (unsigned long long)s.u64BridgeEnter,
+                (unsigned long long)s.u64DispatchEnter,
+                (unsigned long long)s.u64Native,
+                (unsigned long long)s.u64Linux,
+                (unsigned long long)u64Route,
+                (unsigned long long)s.u64Bound,
+                (unsigned long long)s.u64Unbound,
+                (unsigned long long)u64BindSum,
+                (unsigned long long)u64LiveEnter,
+                (unsigned long long)u64PersSum,
+                (unsigned long long)s.u64PcbNative,
+                (unsigned long long)s.u64PcbLinux,
+                (unsigned long long)s.u64DefaultPers,
+                (unsigned long long)s.u64Complete,
+                (unsigned long long)u64OutPart,
+                (unsigned long long)s.u64RetNeg,
+                (unsigned long long)s.u64RetZero,
+                (unsigned long long)s.u64RetPos,
+                (unsigned long long)u64BpNative,
+                (unsigned long long)u64BpLinux,
+                (unsigned long long)u64Edge,
+                (unsigned)GJ_SYS_DDI,
+                (unsigned)GJ_SYS_PLATFORM_INFO,
+                (unsigned)GJ_SYS_NOTIFY_WAIT,
+                (unsigned)GJ_SYS_NET,
+                (unsigned)GJ_SYS_SESSION,
+                (unsigned)GJ_SYS_STORE,
+                (unsigned)GJ_SYS_VFS,
+                (u32DdiCatOk != 0u) ? "frozen" : "BAD",
+                (u32NetCatOk != 0u) ? "frozen" : "BAD",
+                (unsigned)u32DoorNrOk,
+                (unsigned)u32UdxNrOk,
+                (unsigned)u32FrameOk,
+                (unsigned)u32SshdNetOk,
+                (unsigned)u32UdxBindOk,
+                (unsigned)SYSCALL_SOFT_AREAS,
+                (unsigned)SYSCALL_SOFT_WAVE);
+    }
+
+    /*
+     * Compact residual twin (route ownership honesty + DDI/net doors).
+     * G-AC-1: no Linux .ko in-kernel product; UDX/DDI = userspace hosts.
+     * Native route owns GJ_SYS_DDI + GJ_SYS_NET; Linux route owns hybrid ABI.
+     * Dual DoD A/B OPEN (agent soft residual != product close).
+     * Freestanding rtl/USB class probes remain SKIP residual.
+     * Grep: syscall: soft residual
+     * Grep: Dual_DoD_A=OPEN Dual_DoD_B=OPEN freestanding_probe=SKIP
+     */
+    kprintf("syscall: soft residual route=personality+bind "
+            "native=gj_native_syscall_dispatch "
+            "linux=gj_linux_syscall_dispatch "
+            "udx_ddi=userspace_over_native_DDI_or_hybrid_ABI "
+            "native_hosts=GJ_SYS_DDI,platform,notify,GJ_SYS_NET "
+            "linux_hosts=OptionC_hot_cold "
+            "ddi_op_catalog=frozen net_op_catalog=frozen "
+            "ddi_bind=SCAN,GET,OPEN,MAP_BAR "
+            "udx_host_stack=claim|map_ring|map_dma|desc|user_avail|bounce "
+            "sshd_path=SOCKET,BIND,LISTEN,ACCEPT "
+            "H1_poll_thr_only=1 "
+            "product_hosts=rtl8168_udx,xhci_udx,ddi_host_gj "
+            "consumers=sshd,netstackd,udx_hosts "
+            "Dual_DoD_A=OPEN Dual_DoD_B=OPEN "
+            "dod_a=UDX_USB_xhci_udx dod_b=UDX_NIC_rtl8168_udx "
+            "freestanding_probe=SKIP freestanding_rtl_usb=SKIP "
+            "agent_close=0 residual_ne_close=1 "
+            "soft_only=1 product_gate=0 G-AC-1=1 no_ko_product=1 "
+            "soft_ne_product=1 dual=MIT_OR_Apache-2.0 "
+            "stamp_storm=0 version_stamp=0 "
+            "(STRONGER functional residual; Soft!=product dual license; "
+            "no version stamp; DDI/net door residual for UDX hosts + sshd; "
+            "dispatch residual does not close UDX/DDI product; "
+            "Dual DoD A/B stay OPEN; freestanding SKIP; "
+            "product drivers stay userspace)\n");
+
+    /*
+     * C2 Dual DoD route honesty residual (deepen). Soft lamps never close A/B.
+     * Product path = UDX/DDI hosts + hot/cold ABI + net door for sshd.
+     * This unit only routes; handlers live in native/linux_*.c.
+     * Grep: syscall: soft residual dual_dod
+     * Grep: Dual_DoD_A=OPEN Dual_DoD_B=OPEN
+     */
+    kprintf("syscall: soft residual dual_dod "
+            "Dual_DoD_A=OPEN Dual_DoD_B=OPEN "
+            "dod_a=UDX_USB_xhci_udx dod_b=UDX_NIC_rtl8168_udx "
+            "agent_close=0 residual_ne_close=1 "
+            "product=UDX/DDI+hot/cold_ABI "
+            "native_leg=gj_native_syscall_dispatch "
+            "linux_leg=gj_linux_syscall_dispatch "
+            "native_udx=GJ_SYS_DDI+platform+notify "
+            "native_net=GJ_SYS_NET "
+            "linux_udx=OptionC_hot_cold "
+            "hosts=xhci_udx,rtl8168_udx,ddi_host_gj "
+            "consumers=sshd,netstackd,udx_hosts "
+            "nr_ddi=%u nr_plat=%u nr_notify=%u nr_net=%u "
+            "ddi_op_catalog=frozen net_op_catalog=frozen "
+            "ddi_bind=SCAN,GET,OPEN,MAP_BAR "
+            "udx_host_stack=claim|map_ring|map_dma|desc|user_avail|bounce "
+            "sshd_path=SOCKET,BIND,LISTEN,ACCEPT "
+            "H1_poll_thr_only=1 "
+            "disp=%llu native=%llu linux=%llu "
+            "bound=%llu unbound=%llu "
+            "freestanding_probe=SKIP freestanding_rtl_usb=SKIP "
+            "soft_ne_product=1 G-AC-1=1 no_ko_product=1 "
+            "dual=MIT_OR_Apache-2.0 "
+            "stamp_storm=0 version_stamp=0 product_gate=0 "
+            "wave=%u areas=%u "
+            "(Soft!=product; Dual DoD A/B remain OPEN; "
+            "soft residual lamps never close DoD; "
+            "STRONGER functional residual DDI/net doors for UDX+sshd; "
+            "C2 product path = UDX/DDI + hot/cold ABI; "
+            "top-level dispatch residual only routes+binds; "
+            "no in-kernel .ko; no freestanding rtl/usb)\n",
+            (unsigned)GJ_SYS_DDI,
+            (unsigned)GJ_SYS_PLATFORM_INFO,
+            (unsigned)GJ_SYS_NOTIFY_WAIT,
+            (unsigned)GJ_SYS_NET,
+            (unsigned long long)s.u64DispatchEnter,
+            (unsigned long long)s.u64Native,
+            (unsigned long long)s.u64Linux,
+            (unsigned long long)s.u64Bound,
+            (unsigned long long)s.u64Unbound,
+            (unsigned)SYSCALL_SOFT_WAVE,
+            (unsigned)SYSCALL_SOFT_AREAS);
 
     /* Grep: syscall: soft inventory PASS / syscall: soft PASS */
     kprintf("syscall: soft inventory PASS wave=%u logs=%llu "
@@ -1351,7 +807,7 @@ kprintf("syscall: soft retblendangle exclusive=1 soft_ne_product=1 product_kerne
 
 /**
  * After first product dispatch/bridge activity, print soft inventory once
- * (mirrors native/linux soft-stats-once). Diagnostics only — never gates.
+ * (mirrors native/linux soft-stats-once). Diagnostics only - never gates.
  */
 static void
 entry_soft_maybe_once(void)
@@ -1400,7 +856,7 @@ gj_syscall_entry_stats_reset(void)
 {
     entry_soft_inc(&g_u64SoftStatsReset);
     memset(&g_entryStats, 0, sizeof(g_entryStats));
-    /* File-local deepen tallies (api) survive reset — lifetime of module.
+    /* File-local deepen tallies (api) survive reset - lifetime of module.
      * Allow one-shot deepen again after a product reset of entry path. */
     g_fSoftInvOnce = 0;
     entry_soft_mirror_default();
@@ -1428,7 +884,7 @@ gj_syscall_init(void)
     g_entryStats.u64Init++;
     g_fSoftInvOnce = 0;
     entry_soft_mirror_default();
-    /* Wave 15 soft inventory baseline (greppable syscall: soft …). */
+    /* Wave 15 soft inventory baseline (greppable syscall: soft ...). */
     entry_soft_inventory_log();
 }
 

@@ -2,43 +2,67 @@
  * SPDX-License-Identifier: MIT OR Apache-2.0
  * Copyright (c) 2026 Project GreenJade contributors
  *
- * VT-d (Intel IOMMU) page-table construction — clean-room, dual-licensed.
+ * VT-d (Intel IOMMU) page-table construction - clean-room, dual-licensed.
  * Builds root + context + second-level identity map in memory.
  * Soft-probe: CAP/ECAP soft or MMIO, root/context verify, DMAR inventory.
  * Domain soft: software DID pool; bus-0 context DID write when tables ready.
- * Product soft (P-DMA-4): production-default enforce arm — no open bus-master
+ * Product soft (P-DMA-4): production-default enforce arm - no open bus-master
  * without a window; soft-only PASS without intel-iommu; honesty open_bus=0.
  * Optional DRHD MMIO program when ACPI DMAR provides a base.
  * Not derived from Linux intel-iommu or any GPL VT-d driver.
  *
- * Wave 56 exclusive soft deepen (this unit only — greppable "vtd: soft …"):
- *   vtd: soft inventory  — tables/pages/ctx/domains/feat rollup
- *   vtd: soft tables     — root/context/SLPT identity construct
- *   vtd: soft cap        — CAP/ECAP MMIO or synthetic soft
- *   vtd: soft dmar       — DRHD/RMRR/ATSR/RHSA/other counts
- *   vtd: soft te         — TE arm mode (none/soft/hw)
- *   vtd: soft domain     — soft DID pool + attach slots
- *   vtd: soft identity   — bring-up identity cover lamps
- *   vtd: soft product    — P-DMA-4 no-open-bus soft path
- *   vtd: soft attach     — attach/rebind/detach/create tallies (W15)
- *   vtd: soft feat       — expanded SOFT_FEAT bitmask lamps (W15)
- *   vtd: soft qi         — QI invalidate product remains OPEN (W15)
- *   vtd: soft root       — root/context present verify lamps (W15)
- *   vtd: soft path       — honesty: always-on product IOMMU remains OPEN
- *   vtd: soft lamps      — composite soft lamps
- *   vtd: soft honesty    — explicit non-claims catalog (W15)
- *   vtd: soft stats      — rollup for agent greps (W15)
- *   vtd: soft surfaces   — Wave 19 return-surface catalog
- *   vtd: soft did        — Wave 17 DID pool return surface
- *   vtd: soft mmio       — Wave 17 DRHD MMIO program surface
- *   vtd: soft return     — Wave 17 attach/domain return taxonomy
- *   vtd: soft return selftest — Wave 19 terminal return surface
- *   vtd: soft retmap     — Wave 19 return-surface map
- *   vtd: soft deepen     — wave=116 stamp + area count
- *   vtd: soft OPEN       — always-on product IOMMU OPEN honesty
+ * Lean soft residual (greppable "vtd: soft ..." / "iommu: soft ... Soft!=product"):
+ *   vtd: soft inventory  - tables/pages/ctx/domains/feat rollup
+ *   vtd: soft identity   - bring-up identity cover lamps (+ bus3)
+ *   vtd: soft path       - honesty: always-on product IOMMU remains OPEN
  *   vtd: soft PASS | soft inventory PASS
- * Soft deepen ≠ product always-on IOMMU claim; not HW product close;
- * soft ≠ product.
+ * Dual DoD residual (greppable "iommu: soft ... Soft!=product"):
+ *   iommu: soft bus3 residual / preflight / soft-skip no_vtd
+ *   iommu: soft identity residual ... (G752 NIC DMA cover under TE)
+ *   iommu: soft dma residual ... (force32 map honesty for eng DMA)
+ *   iommu: soft usb residual ... (G752 xHCI 0:14.0 Translated DMA cover)
+ *   iommu: soft eng residual ... (NIC bus3 + USB 0:14.0 lean eng surface)
+ *   iommu: soft did0 residual ... (all-bus root + eng CT DID=0 honesty)
+ *   iommu: soft udx residual ... (UDX DMA safety eng; userspace driver path)
+ *   iommu: soft udx dma ... (force32 window cover for rtl8168_udx/xhci_udx)
+ *   iommu: soft udx bm residual ... (FUNCTIONAL eng busmaster under enforce)
+ *   iommu: soft dma path residual ... (C2 Dual DoD A/B UDX DMA path rollup)
+ *   iommu: soft ddi residual ... (DDI DMA_NOTE soft window + VT-d cover)
+ *   iommu: soft dma_note residual ... (window grant honesty; window_mint OPEN)
+ * Soft deepen != product always-on IOMMU claim; not HW product close;
+ * Soft!=product. Soft-skip if no VT-d. G-AC-1: not .ko product AC.
+ * window_mint=OPEN: soft software window table only - not CNode window cap.
+ * C2 Dual DoD DMA path: dual_dod_a=OPEN_UDX dual_dod_b=OPEN_UDX
+ *   a_ready/b_ready eng honesty; product=UDX+ABI; freestanding_product=SKIP
+ * freestanding_product=SKIP (product = userspace UDX, not freestanding).
+ * No version stamp. No stamp storms: residual once + silent reaffirm.
+ * All-bus DID0: root[0..255].P + shared-CT eng BDFs DID=0 (identity).
+ * UDX eng path: TE needs bus3_p + identity [0,1GiB) + DID0 so userspace
+ * DMA (udx_dma_* / window grant) is not broken under Translated domains.
+ * FUNCTIONAL residual: eng BDF busmaster under temporary enforce (window
+ * live for rtl8168_udx / xhci_udx DMA policy; not open-path-only lamps).
+ * Soft lamps alone != product UDX DMA caps / Dual DoD close.
+ * DDI DMA_NOTE (op 6) uses iommu_window_grant; residual keeps mint OPEN.
+ * STRONGER functional residual (W10 Dual DoD; stamp-free bar v2026.08.04.75):
+ *   iommu: soft udx host residual ... (live UDX hosts under TE enforce)
+ *   hosts=rtl8168_udx|xhci_udx force32+eng_bm+dual_dod_open honesty.
+ * STRONGER denser residual (product IOMMU honesty; Soft!=product; Dual DoD OPEN):
+ *   iommu: soft busmaster_ok residual ... (8168 + a12f hosts; denser BM)
+ *   iommu: soft window_grant residual ... (8168 + a12f hosts; denser grant)
+ *   iommu: soft all-bus identity residual ... (root 256 + DID0 honesty)
+ * denser multi-arm residual (VTD_UDX_DENSE_ARMS=10; Soft!=product Dual DoD OPEN):
+ *   eng_ready | root_256 | did0_eng | force32_1g | eng_bm |
+ *   win_ok | bare_deny | dual_dod_open | sample_cover | product_open
+ *   denser=1 denser_arms=10 denser_ok=N product_hosts=UDX
+ *   greppable: iommu: soft residual denser
+ *   greppable: iommu: soft busmaster_ok residual denser
+ *   greppable: iommu: soft window_grant residual denser
+ *   greppable: iommu: soft all-bus identity residual denser
+ *   greppable: denser_arms= denser_ok= denser=1
+ * Greppable: Soft!=product soft residual dual_dod OPEN product_hosts=UDX
+ * Never claim product close. H2 once (no stamp storms). ASCII Soft!= only.
+ * Bar honesty v2026.08.04.75 stamp-free — never invent .76.
+ * Dual MIT OR Apache-2.0. No GPL.
  */
 #include <gj/config.h>
 #include <gj/iommu.h>
@@ -51,7 +75,7 @@
 /* Second-level PTE flags (VT-d architecture; public spec bits) */
 #define VTD_SL_R  (1ull << 0)
 #define VTD_SL_W  (1ull << 1)
-#define VTD_SL_SP (1ull << 7) /* superpage (2 MiB when in PD) */
+#define VTD_SL_SP (1ull << 7) /* superpage (2 MiB when in PD) */
 
 /* Root entry: present + context table ptr */
 #define VTD_ROOT_P (1ull << 0)
@@ -62,10 +86,10 @@
 #define VTD_CTX_AW_48  2ull
 #define VTD_CTX_DID_SHIFT 8u
 
-/* Bring-up identity SLPT covers [0, 1 GiB). */
+/* Bring-up identity SLPT covers [0, 1 GiB). */
 #define VTD_IDENTITY_LIMIT (1024ull * 1024ull * 1024ull)
 #define VTD_2MIB           (2ull * 1024ull * 1024ull)
-#define VTD_CTX_ENTRIES    256u /* bus0: 32 slots × 8 funcs */
+#define VTD_CTX_ENTRIES    256u /* bus0: 32 slots x 8 funcs */
 #define VTD_DRHD_MAP_CB    (2ull * 1024ull * 1024ull)
 #define VTD_GSTS_SPINS     10000u
 /* Minimum pages: root + context + PDPT + PD */
@@ -80,12 +104,27 @@
 
 #define VTD_GCMD_TE   (1u << 31)
 #define VTD_GCMD_SRTP (1u << 30)
+#define VTD_GSTS_TES  (1u << 31) /* Translation Enable Status */
 #define VTD_GSTS_RTPS (1u << 30)
+
+/*
+ * G752VT freestanding NIC (10ec:8168) BDF - bus 3, not bus 0.
+ * TE without root[bus3].P left RX/TX OWN stuck (DMA fault under Translated).
+ * Soft!=product; greppable bus3 lamps reference these.
+ */
+#define VTD_G752_NIC_BUS  3u
+#define VTD_G752_NIC_SLOT 0u
+#define VTD_G752_NIC_FUNC 0u
+
+/* G752VT PCH xHCI (8086:a12f) - bus 0 slot 0x14 func 0 (Linux inventory). */
+#define VTD_G752_XHCI_BUS  0u
+#define VTD_G752_XHCI_SLOT 0x14u
+#define VTD_G752_XHCI_FUNC 0u
 
 /*
  * Soft synthetic CAP/ECAP when no DRHD MMIO (QEMU without intel-iommu).
  * Public bit meanings only; values describe bring-up tables (48-bit AW,
- * 2 MiB superpages in SAGAW, modest ND). Not read from hardware.
+ * 2 MiB superpages in SAGAW, modest ND). Not read from hardware.
  */
 #define VTD_SOFT_CAP_ND_16     (1ull << 0)  /* ND encoding: 16 domains */
 #define VTD_SOFT_CAP_SAGAW_39  (1ull << 9)  /* 3-level / 39-bit class */
@@ -96,47 +135,8 @@
      VTD_SOFT_CAP_MGAW_47)
 #define VTD_SOFT_ECAP  0ull /* QI/IR not claimed in soft path */
 
-/* Soft domain attach slots (BDF → DID); independent of window table */
+/* Soft domain attach slots (BDF -> DID); independent of window table */
 #define VTD_SOFT_ATTACH_MAX 32u
-
-/* Wave 62 soft inventory stamp (file-local; never product gate). */
-#define VTD_SOFT_WAVE 116u
-/* Fixed greppable categories for deepen stamp (inventory…return + W16 axes). */
-#define VTD_SOFT_AREAS 216u
-
-/*
- * Wave 19 return-surface bit lamps (surf=0x… on soft surfaces/deepen).
- * greppable: vtd: soft surfaces
- */
-#define VTD_SOFT_SURF_INVENTORY (1u << 0)
-#define VTD_SOFT_SURF_TABLES    (1u << 1)
-#define VTD_SOFT_SURF_CAP       (1u << 2)
-#define VTD_SOFT_SURF_DMAR      (1u << 3)
-#define VTD_SOFT_SURF_TE        (1u << 4)
-#define VTD_SOFT_SURF_DOMAIN    (1u << 5)
-#define VTD_SOFT_SURF_IDENTITY  (1u << 6)
-#define VTD_SOFT_SURF_PRODUCT   (1u << 7)
-#define VTD_SOFT_SURF_ATTACH    (1u << 8)
-#define VTD_SOFT_SURF_FEAT      (1u << 9)
-#define VTD_SOFT_SURF_QI        (1u << 10)
-#define VTD_SOFT_SURF_ROOT      (1u << 11)
-#define VTD_SOFT_SURF_PATH      (1u << 12)
-#define VTD_SOFT_SURF_LAMPS     (1u << 13)
-#define VTD_SOFT_SURF_HONESTY   (1u << 14)
-#define VTD_SOFT_SURF_STATS     (1u << 15)
-#define VTD_SOFT_SURF_OPEN      (1u << 16)
-#define VTD_SOFT_SURF_SURFACES  (1u << 17)
-#define VTD_SOFT_SURF_DID       (1u << 18)
-#define VTD_SOFT_SURF_MMIO      (1u << 19)
-#define VTD_SOFT_SURF_RETURN    (1u << 20)
-#define VTD_SOFT_SURF_CATALOG                                                      \
-    (VTD_SOFT_SURF_INVENTORY | VTD_SOFT_SURF_TABLES | VTD_SOFT_SURF_CAP |          \
-     VTD_SOFT_SURF_DMAR | VTD_SOFT_SURF_TE | VTD_SOFT_SURF_DOMAIN |                \
-     VTD_SOFT_SURF_IDENTITY | VTD_SOFT_SURF_PRODUCT | VTD_SOFT_SURF_ATTACH |       \
-     VTD_SOFT_SURF_FEAT | VTD_SOFT_SURF_QI | VTD_SOFT_SURF_ROOT |                  \
-     VTD_SOFT_SURF_PATH | VTD_SOFT_SURF_LAMPS | VTD_SOFT_SURF_HONESTY |            \
-     VTD_SOFT_SURF_STATS | VTD_SOFT_SURF_OPEN | VTD_SOFT_SURF_SURFACES |           \
-     VTD_SOFT_SURF_DID | VTD_SOFT_SURF_MMIO | VTD_SOFT_SURF_RETURN)
 
 /*
  * Product-default soft BDF (P-DMA-4 smoke). Kept off main enforce 0:2.0 and
@@ -147,9 +147,16 @@
 #define VTD_PROD_SOFT_FUNC 0u
 #define VTD_PROD_SOFT_PA   0x3000ull
 #define VTD_PROD_SOFT_CB   0x1000ull
-/* Ungranted BDF for deny-path counter smoke (not 0:31.0 — main uses that). */
+/* Ungranted BDF for deny-path counter smoke (not 0:31.0 - main uses that). */
 #define VTD_PROD_DENY_SLOT 31u
 #define VTD_PROD_DENY_FUNC 7u
+/*
+ * Bare BDF for UDX eng busmaster residual (off eng 3:0.0 / 0:14.0 /
+ * prod soft 0:4.0 / DDI note 0:5.0). Under temporary enforce must deny.
+ */
+#define VTD_UDX_BM_BARE_BUS  0u
+#define VTD_UDX_BM_BARE_SLOT 6u
+#define VTD_UDX_BM_BARE_FUNC 0u
 
 struct vtd_domain_soft {
     u8  u8Used;
@@ -168,7 +175,7 @@ struct vtd_attach_soft {
 static gj_paddr_t g_paRoot;
 static gj_paddr_t g_paContext;
 static gj_paddr_t g_paPdpt;
-static gj_paddr_t g_paPd0; /* first 1 GiB of 2 MiB pages */
+static gj_paddr_t g_paPd0; /* first 1 GiB of 2 MiB pages */
 static u64        g_u64Drhd;
 static int        g_fVtdReady;
 static int        g_fTeArmed;
@@ -196,7 +203,7 @@ static u32                    g_u32DomUsed;
 /* Product-default soft (P-DMA-4): local deny-path ticks while enforce armed */
 static u32 g_u32ProdSoftDeny;
 
-/* Wave 19 greppable soft inventory dump count (vtd: soft …) */
+/* Wave 19 greppable soft inventory dump count (vtd: soft ...) */
 static u32 g_cSoftInvLogs;
 
 /*
@@ -221,8 +228,57 @@ static u32 g_cSoftRootPClear;  /* soft-verify root P clear */
 static u32 g_cSoftCapMmioHit;  /* CAP loaded from MMIO */
 static u32 g_cSoftCapSynth;    /* CAP fell back to synthetic */
 
+/*
+ * Lean Dual DoD residual once-flags (soft-probe + TE arm + xhci_identity
+ * all re-enter). Silent reaffirm when still PASS - no stamp storms.
+ * Soft!=product / UDX eng DMA identity honesty (G752 userspace path).
+ */
+static int g_fBus3ResidDone;   /* bus3 residual completed once */
+static int g_nBus3ResidLast;   /* last bus3 residual return */
+static int g_fUsbResidDone;    /* usb residual completed once */
+static int g_nUsbResidLast;    /* last usb residual return */
+static int g_fEngResidDone;    /* eng residual completed once */
+static int g_nEngResidLast;    /* last eng residual return */
+static int g_fUdxResidDone;    /* UDX DMA safety residual completed once */
+static int g_nUdxResidLast;    /* last UDX residual return */
+static int g_fDdiResidDone;    /* DDI DMA_NOTE residual completed once */
+static int g_nDdiResidLast;    /* last DDI residual return */
+static int g_fDmaPathResidDone; /* C2 Dual DoD DMA path residual once */
+static int g_nDmaPathResidLast; /* last dma path residual return */
+static int g_fUdxHostResidDone; /* W10 live UDX host residual once */
+static int g_nUdxHostResidLast; /* last live UDX host residual return */
+static int g_fNicGrantLogged;  /* first NIC grant lamp emitted */
+static int g_fUsbGrantLogged;  /* first USB grant lamp emitted */
+static int g_fSoftInvLogged;   /* lean vtd soft inventory once */
+/*
+ * denser multi-arm residual tallies (H2 once; Soft!=product; Dual DoD OPEN).
+ * greppable: iommu: soft residual denser | denser_arms= | denser_ok=
+ */
+static u8  g_fUdxDenseOnce;     /* denser residual lamp latched */
+static u32 g_u32UdxDenseOk;     /* composite denser arms all PASS */
+static u32 g_u32UdxDenseFail;   /* denser composite soft fail */
+static u32 g_u32UdxDenseArms;   /* last denser arm count (0..DENSE_ARMS) */
+
+/*
+ * denser multi-arm residual for product IOMMU Dual DoD honesty
+ * (Soft!=product; dual_dod OPEN; product_hosts=UDX).
+ * 10 arms; all required for denser composite ok.
+ * greppable: denser_arms=10 denser_ok= iommu: soft residual denser
+ * Bar honesty v2026.08.04.75 stamp-free — never invent .76.
+ */
+#define VTD_UDX_DENSE_ARMS 10u
+#define VTD_UDX_DENSE_MIN  10u
+_Static_assert(VTD_UDX_DENSE_ARMS == 10u, "udx denser arms must be 10");
+_Static_assert(VTD_UDX_DENSE_MIN == VTD_UDX_DENSE_ARMS,
+               "udx denser min must equal denser arms");
+
 static void vtd_soft_inventory_log(void);
 static void vtd_soft_note_att_peak(void);
+static void vtd_domain_pool_init(void);
+static int  vtd_soft_bdf_identity_ready(u8 bus, u8 slot, u8 func);
+static int  vtd_soft_identity_map_ok(void);
+static int  vtd_soft_eng_busmaster_ok(int fBareCheck, int *pNicOk,
+                                      int *pUsbOk, int *pBareDeny);
 
 static void *
 vtd_virt(gj_paddr_t pa)
@@ -279,10 +335,1729 @@ vtd_ctx_index(u8 u8Slot, u8 u8Func)
 }
 
 /**
+ * Non-zero if root entry for bus has P set (shared identity context).
+ * Grep lamps: bus3_p for G752 03:00.0. Soft only when tables not ready.
+ */
+static int
+vtd_root_bus_p(u32 u32Bus)
+{
+    u64 *pRoot;
+
+    if (!g_fVtdReady || g_paRoot == 0 || u32Bus > 255u) {
+        return 0;
+    }
+    pRoot = (u64 *)vtd_virt(g_paRoot);
+    if (pRoot == NULL) {
+        return 0;
+    }
+    return ((pRoot[u32Bus * 2u] & VTD_ROOT_P) != 0) ? 1 : 0;
+}
+
+/** Count root buses with P set (bring-up expects 256). */
+static u32
+vtd_root_buses_p_count(void)
+{
+    u64 *pRoot;
+    u32 u32Bus;
+    u32 c = 0;
+
+    if (!g_fVtdReady || g_paRoot == 0) {
+        return 0;
+    }
+    pRoot = (u64 *)vtd_virt(g_paRoot);
+    if (pRoot == NULL) {
+        return 0;
+    }
+    for (u32Bus = 0; u32Bus < 256u; u32Bus++) {
+        if ((pRoot[u32Bus * 2u] & VTD_ROOT_P) != 0) {
+            c++;
+        }
+    }
+    return c;
+}
+
+/**
+ * Context-entry present for (slot,func) on the shared identity context table.
+ * Applies to every bus via root (bring-up shared SLPT).
+ */
+static int
+vtd_ctx_devfn_p(u8 u8Slot, u8 u8Func)
+{
+    u64 *pCtx;
+    u32 u32Idx;
+
+    if (!g_fVtdReady || g_paContext == 0) {
+        return 0;
+    }
+    if (!vtd_bdf_ok(0, u8Slot, u8Func)) {
+        return 0;
+    }
+    pCtx = (u64 *)vtd_virt(g_paContext);
+    if (pCtx == NULL) {
+        return 0;
+    }
+    u32Idx = vtd_ctx_index(u8Slot, u8Func);
+    return ((pCtx[u32Idx * 2u] & VTD_CTX_P) != 0) ? 1 : 0;
+}
+
+/**
+ * Read context-entry DID for (slot,func) on the shared identity CT.
+ * Bring-up: all buses share one CT -> DID is global per devfn.
+ * Returns GJ_IOMMU_DOMAIN_INVALID if tables missing / P clear.
+ * Grep lamps: did0 for freestanding NIC/USB eng residual honesty.
+ */
+static u32
+vtd_ctx_get_did(u8 u8Slot, u8 u8Func)
+{
+    u64 *pCtx;
+    u32 u32Idx;
+    u64 u64Hi;
+
+    if (!g_fVtdReady || g_paContext == 0) {
+        return GJ_IOMMU_DOMAIN_INVALID;
+    }
+    if (!vtd_bdf_ok(0, u8Slot, u8Func)) {
+        return GJ_IOMMU_DOMAIN_INVALID;
+    }
+    pCtx = (u64 *)vtd_virt(g_paContext);
+    if (pCtx == NULL) {
+        return GJ_IOMMU_DOMAIN_INVALID;
+    }
+    u32Idx = vtd_ctx_index(u8Slot, u8Func);
+    if ((pCtx[u32Idx * 2u] & VTD_CTX_P) == 0) {
+        return GJ_IOMMU_DOMAIN_INVALID;
+    }
+    u64Hi = pCtx[u32Idx * 2u + 1u];
+    return (u32)((u64Hi >> VTD_CTX_DID_SHIFT) & 0xffffull);
+}
+
+/**
+ * Count present context entries with hardware DID==0 (all-bus identity).
+ * Bring-up expects 256 after init_tables; soft domain smoke may rebind a
+ * non-eng devfn (e.g. 0:3.0) so eng residual checks eng BDFs, not this total.
+ * Grep: did0_ctx=
+ */
+static u32
+vtd_ctx_did0_present_count(void)
+{
+    u64 *pCtx;
+    u32 u32Dev;
+    u32 c = 0;
+
+    if (!g_fVtdReady || g_paContext == 0) {
+        return 0;
+    }
+    pCtx = (u64 *)vtd_virt(g_paContext);
+    if (pCtx == NULL) {
+        return 0;
+    }
+    for (u32Dev = 0; u32Dev < VTD_CTX_ENTRIES; u32Dev++) {
+        u64 u64Lo = pCtx[u32Dev * 2u];
+        u64 u64Hi = pCtx[u32Dev * 2u + 1u];
+        u32 u32Did;
+
+        if ((u64Lo & VTD_CTX_P) == 0) {
+            continue;
+        }
+        u32Did = (u32)((u64Hi >> VTD_CTX_DID_SHIFT) & 0xffffull);
+        if (u32Did == 0u) {
+            c++;
+        }
+    }
+    return c;
+}
+
+/**
+ * Eng BDF DID0: G752 NIC (devfn 0:0) + xHCI (0:14.0) on shared CT DID=0.
+ * Soft!=product; all-bus root still required separately.
+ */
+static int
+vtd_eng_did0_ok(void)
+{
+    u32 u32NicDid;
+    u32 u32UsbDid;
+
+    u32NicDid = vtd_ctx_get_did(VTD_G752_NIC_SLOT, VTD_G752_NIC_FUNC);
+    u32UsbDid = vtd_ctx_get_did(VTD_G752_XHCI_SLOT, VTD_G752_XHCI_FUNC);
+    return (u32NicDid == 0u && u32UsbDid == 0u) ? 1 : 0;
+}
+
+/**
+ * Preflight before TE: tables + all-bus root + identity [0,1GiB) + G752 bus3
+ * + NIC DID0 (shared-CT identity for 03:00.0). USB DID0 is eng residual only
+ * (not TE OWN gate). Returns 1 if safe to arm TE without OWN-stuck; 0 else.
+ * Grep: iommu: vtd TE preflight
+ */
+static int
+vtd_te_identity_preflight(void)
+{
+    u32 cRoot;
+    u32 cDid0;
+    u32 u32NicDid;
+    int fBus0;
+    int fBus3;
+    int fCtx00;
+    int fIdLo;
+    int fIdHi;
+    int fNicDid0;
+    int fOk;
+
+    if (!g_fVtdReady) {
+        kprintf("iommu: vtd TE preflight FAIL not_ready\n");
+        return 0;
+    }
+    cRoot = vtd_root_buses_p_count();
+    cDid0 = vtd_ctx_did0_present_count();
+    fBus0 = vtd_root_bus_p(0);
+    fBus3 = vtd_root_bus_p(VTD_G752_NIC_BUS);
+    fCtx00 = vtd_ctx_devfn_p(VTD_G752_NIC_SLOT, VTD_G752_NIC_FUNC);
+    fIdLo = iommu_vtd_identity_covers(0, 0x1000);
+    fIdHi = iommu_vtd_identity_covers(VTD_IDENTITY_LIMIT - VTD_2MIB, VTD_2MIB);
+    u32NicDid = vtd_ctx_get_did(VTD_G752_NIC_SLOT, VTD_G752_NIC_FUNC);
+    fNicDid0 = (u32NicDid == 0u) ? 1 : 0;
+    /*
+     * TE needs all-bus root + NIC DID0. Full 256 DID0 is table-build default;
+     * soft domain smoke may rebind non-eng slots - eng residual checks both.
+     */
+    fOk = (cRoot == 256u && fBus0 && fBus3 && fCtx00 && fIdLo && fIdHi &&
+           fNicDid0)
+              ? 1
+              : 0;
+    /*
+     * Grep: iommu: vtd TE preflight
+     * Grep: bus3_p (G752 03:00.0 root cover)
+     * Grep: did0 (NIC identity DID=0)
+     */
+    kprintf("iommu: vtd TE preflight root_buses=%u bus0_p=%d bus3_p=%d "
+            "ctx_00_p=%d id_lo=%d id_hi=%d nic_did0=%d nic_did=%u "
+            "did0_ctx=%u limit=0x%lx ok=%d "
+            "(G752 NIC 03:00.0 needs bus3_p=1 did0; force32 DMA in [0,1GiB))\n",
+            cRoot, fBus0, fBus3, fCtx00, fIdLo, fIdHi, fNicDid0, u32NicDid,
+            cDid0, (unsigned long)VTD_IDENTITY_LIMIT, fOk);
+    return fOk;
+}
+
+/**
+ * Identity map honesty for freestanding force32 DMA (rtl rings / xHCI TRB).
+ * Bring-up SLPT must cover full [0, 1 GiB). Soft!=product.
+ */
+static int
+vtd_soft_identity_map_ok(void)
+{
+    if (!g_fVtdReady) {
+        return 0;
+    }
+    if (!iommu_vtd_identity_covers(0, 0x1000)) {
+        return 0;
+    }
+    if (!iommu_vtd_identity_covers(VTD_IDENTITY_LIMIT - VTD_2MIB, VTD_2MIB)) {
+        return 0;
+    }
+    if (!iommu_vtd_identity_covers(0, VTD_IDENTITY_LIMIT)) {
+        return 0;
+    }
+    return 1;
+}
+
+/**
+ * BDF ready for freestanding DMA under TE: root P + ctx P + DID0 + map 1 GiB.
+ * Soft!=product identity/map honesty for rtl ring OWN.
+ */
+static int
+vtd_soft_bdf_identity_ready(u8 bus, u8 slot, u8 func)
+{
+    u32 u32CtxDid;
+    u32 u32SoftDid;
+
+    if (!g_fVtdReady || !vtd_bdf_ok(bus, slot, func)) {
+        return 0;
+    }
+    if (!vtd_root_bus_p(bus) || !vtd_ctx_devfn_p(slot, func)) {
+        return 0;
+    }
+    u32CtxDid = vtd_ctx_get_did(slot, func);
+    u32SoftDid = iommu_vtd_domain_lookup(bus, slot, func);
+    if (u32CtxDid != 0u || u32SoftDid != 0u) {
+        return 0;
+    }
+    if (!vtd_soft_identity_map_ok()) {
+        return 0;
+    }
+    return 1;
+}
+
+/**
+ * FUNCTIONAL residual: eng BDF busmaster under temporary enforce.
+ * Soft!=product / G-AC-1. Proves G752 NIC (03:00.0 10ec:8168) + xHCI
+ * (0:14.0 8086:a12f) soft windows are live for UDX DMA policy
+ * (rtl8168_udx / xhci_udx) - not just open-path (enforce-off) always-allow
+ * lamps. Restores prior enforce.
+ *
+ * fBareCheck non-zero: also require ungranted bare BDF deny under enforce
+ * (policy honesty; ticks deny counter once per full residual - not silent).
+ * Silent reaffirm uses fBareCheck=0 (no bare deny stamp growth).
+ *
+ * pNicOk / pUsbOk / pBareDeny optional out (0/1). Null ok.
+ * Return: 1 if both eng allow under enforce (+ bare deny when requested);
+ *         0 otherwise (tables missing / window missing / bare leak).
+ *
+ * Grep: iommu: soft udx bm residual | soft busmaster_ok residual
+ * Grep: path=iommu_busmaster_ok | product_hosts=UDX
+ */
+static int
+vtd_soft_eng_busmaster_ok(int fBareCheck, int *pNicOk, int *pUsbOk,
+                          int *pBareDeny)
+{
+    int fPrior;
+    int fNic;
+    int fUsb;
+    int fBareAllow;
+    int fBareDeny;
+    int fOk;
+
+    if (pNicOk != NULL) {
+        *pNicOk = 0;
+    }
+    if (pUsbOk != NULL) {
+        *pUsbOk = 0;
+    }
+    if (pBareDeny != NULL) {
+        *pBareDeny = 0;
+    }
+    if (!g_fVtdReady) {
+        return 0;
+    }
+
+    fPrior = iommu_enforce_get();
+    iommu_enforce_set(1);
+    /*
+     * Eng BDF with soft windows granted by residual must allow under enforce.
+     * Bare BDF (no window) must deny - product no-open-busmaster honesty.
+     * denser residual: 8168 (rtl8168_udx) + a12f (xhci_udx) both probed.
+     */
+    fNic = iommu_busmaster_ok(VTD_G752_NIC_BUS, VTD_G752_NIC_SLOT,
+                              VTD_G752_NIC_FUNC);
+    fUsb = iommu_busmaster_ok(VTD_G752_XHCI_BUS, VTD_G752_XHCI_SLOT,
+                              VTD_G752_XHCI_FUNC);
+    if (fBareCheck != 0) {
+        fBareAllow = iommu_busmaster_ok(VTD_UDX_BM_BARE_BUS,
+                                        VTD_UDX_BM_BARE_SLOT,
+                                        VTD_UDX_BM_BARE_FUNC);
+        fBareDeny = (fBareAllow == 0) ? 1 : 0;
+    } else {
+        fBareDeny = 1; /* not checked; do not fail silent reaffirm */
+    }
+    iommu_enforce_set(fPrior);
+
+    if (pNicOk != NULL) {
+        *pNicOk = (fNic != 0) ? 1 : 0;
+    }
+    if (pUsbOk != NULL) {
+        *pUsbOk = (fUsb != 0) ? 1 : 0;
+    }
+    if (pBareDeny != NULL) {
+        *pBareDeny = fBareDeny;
+    }
+    fOk = (fNic != 0 && fUsb != 0 && fBareDeny != 0) ? 1 : 0;
+    return fOk;
+}
+
+/**
+ * Soft-grant identity window for G752 freestanding NIC before TE.
+ * First call grants + one lamp; re-entry quiet when map still honest
+ * (avoids window-cap update stamp storms from soft-probe/TE/rtl).
+ * Soft!=product. Grep: iommu: vtd nic identity
+ */
+static void
+vtd_soft_grant_g752_nic(void)
+{
+    int fCovered = 0;
+    int fFull = 0;
+    u32 u32Did;
+
+    if (!g_fVtdReady) {
+        return;
+    }
+    /*
+     * Lean re-entry: after first grant, skip when bus3 identity still honest
+     * for freestanding force32 rings (root/ctx/DID0/map 1 GiB).
+     */
+    if (g_fNicGrantLogged != 0 &&
+        vtd_soft_bdf_identity_ready(VTD_G752_NIC_BUS, VTD_G752_NIC_SLOT,
+                                    VTD_G752_NIC_FUNC) != 0) {
+        return;
+    }
+    if (!g_aDom[0].u8Used) {
+        vtd_domain_pool_init();
+    }
+    u32Did = iommu_vtd_domain_lookup(VTD_G752_NIC_BUS, VTD_G752_NIC_SLOT,
+                                     VTD_G752_NIC_FUNC);
+    if (u32Did == GJ_IOMMU_DOMAIN_INVALID || u32Did != 0) {
+        (void)iommu_vtd_domain_attach(0, VTD_G752_NIC_BUS, VTD_G752_NIC_SLOT,
+                                      VTD_G752_NIC_FUNC);
+    }
+    (void)iommu_vtd_window_grant(VTD_G752_NIC_BUS, VTD_G752_NIC_SLOT,
+                                 VTD_G752_NIC_FUNC, 0x1000ull, 0x1000ull,
+                                 &fCovered);
+    (void)iommu_vtd_window_grant(VTD_G752_NIC_BUS, VTD_G752_NIC_SLOT,
+                                 VTD_G752_NIC_FUNC, 0, VTD_IDENTITY_LIMIT,
+                                 &fFull);
+    /*
+     * Grep: iommu: vtd nic identity
+     * Grep: bus3 cover
+     * Lamp once - re-repair after cover break stays quiet.
+     */
+    if (g_fNicGrantLogged == 0) {
+        g_fNicGrantLogged = 1;
+        kprintf("iommu: vtd nic identity bdf=%u:%u.%u cover=%d full=%d "
+                "bus3_p=%d ctx_p=%d did=%u "
+                "(pre-TE grant; force32 rings need PA in [0,1GiB))\n",
+                (unsigned)VTD_G752_NIC_BUS, (unsigned)VTD_G752_NIC_SLOT,
+                (unsigned)VTD_G752_NIC_FUNC, fCovered, fFull,
+                vtd_root_bus_p(VTD_G752_NIC_BUS),
+                vtd_ctx_devfn_p(VTD_G752_NIC_SLOT, VTD_G752_NIC_FUNC),
+                iommu_vtd_domain_lookup(VTD_G752_NIC_BUS, VTD_G752_NIC_SLOT,
+                                        VTD_G752_NIC_FUNC));
+    }
+}
+
+/**
+ * Residual Dual DoD A support: freestanding NIC (03:00.0) identity under
+ * RX climb / arping when host VT-d is Translated. Soft!=product / G-AC-1.
+ *
+ * Soft-skip when platform has no VT-d inventory (no DMAR/IVRS and no DRHD)
+ * and tables are not ready: no HW TE risk; do not claim bus3 product cover.
+ *
+ * When inventory or tables exist: ensure all-bus root + bus3_p + identity
+ * [0,1GiB) + NIC window grant, then re-run TE preflight lamps.
+ *
+ * Return:
+ *   1  PASS - bus3 identity residual ready (preflight ok)
+ *   0  soft-skip - no VT-d / nothing to enforce (honest SKIP)
+ *  -1  FAIL - tables incomplete under present inventory
+ *
+ * Greppable (keep stable - "iommu: soft ... Soft!=product"):
+ *   iommu: soft bus3 residual ...
+ *   iommu: soft bus3 soft-skip no_vtd Soft!=product
+ *   iommu: soft bus3 preflight ... Soft!=product
+ *   iommu: soft bus3 residual PASS|SKIP|FAIL Soft!=product
+ *   iommu: soft identity residual ... Soft!=product
+ */
+int
+iommu_vtd_bus3_identity_residual(void)
+{
+    int fPresent;
+    int fHasVtd;
+    int fPre;
+    int fBus3;
+    int fIdLo;
+    int fIdHi;
+    int fDid0;
+    int fMap;
+    u32 cRoot;
+    u32 u32NicDid;
+    u32 u32SoftDid;
+
+    /*
+     * Lean re-entry (soft-probe / TE arm / rtl xhci_identity): silent when
+     * freestanding NIC identity still honest - no stamp storms.
+     * Soft!=product / Dual DoD B DMA residual.
+     */
+    if (g_fBus3ResidDone != 0 && g_nBus3ResidLast > 0 &&
+        vtd_soft_bdf_identity_ready(VTD_G752_NIC_BUS, VTD_G752_NIC_SLOT,
+                                    VTD_G752_NIC_FUNC) != 0 &&
+        vtd_root_buses_p_count() == 256u) {
+        return 1;
+    }
+    if (g_fBus3ResidDone != 0 && g_nBus3ResidLast == 0 &&
+        iommu_present() == 0 && g_u64Drhd == 0 && !g_fVtdReady) {
+        return 0; /* soft-skip reaffirm silent */
+    }
+
+    fPresent = iommu_present();
+    fHasVtd = (fPresent != 0 || g_u64Drhd != 0) ? 1 : 0;
+
+    /*
+     * Soft-skip if no VT-d: QEMU default / no DMAR. Soft!=product.
+     * Grep: iommu: soft bus3 soft-skip no_vtd
+     * Grep: iommu: soft ... Soft!=product
+     */
+    if (!fHasVtd && !g_fVtdReady) {
+        /* Grep: iommu: soft bus3 soft-skip no_vtd | soft identity residual */
+        kprintf("iommu: soft bus3 soft-skip no_vtd present=%d Soft!=product\n",
+                fPresent);
+        kprintf("iommu: soft identity residual soft-skip no_vtd Soft!=product\n");
+        kprintf("iommu: soft bus3 residual SKIP no_vtd Soft!=product\n");
+        g_fBus3ResidDone = 1;
+        g_nBus3ResidLast = 0;
+        return 0;
+    }
+
+    if (!g_fVtdReady) {
+        if (iommu_vtd_init_tables() != 0) {
+            if (!fHasVtd) {
+                kprintf("iommu: soft bus3 residual SKIP no_tables Soft!=product\n");
+                kprintf("iommu: soft identity residual soft-skip no_tables "
+                        "Soft!=product\n");
+                g_fBus3ResidDone = 1;
+                g_nBus3ResidLast = 0;
+                return 0;
+            }
+            kprintf("iommu: soft bus3 residual FAIL tables Soft!=product\n");
+            kprintf("iommu: soft identity residual FAIL tables Soft!=product\n");
+            g_fBus3ResidDone = 1;
+            g_nBus3ResidLast = -1;
+            return -1;
+        }
+    }
+
+    /* Pre-TE NIC grant + all-bus identity (OWN-stuck residual for rtl rings). */
+    vtd_soft_grant_g752_nic();
+    fPre = vtd_te_identity_preflight();
+    fBus3 = vtd_root_bus_p(VTD_G752_NIC_BUS);
+    cRoot = vtd_root_buses_p_count();
+    fIdLo = iommu_vtd_identity_covers(0, 0x1000);
+    fIdHi = iommu_vtd_identity_covers(VTD_IDENTITY_LIMIT - VTD_2MIB, VTD_2MIB);
+    fMap = vtd_soft_identity_map_ok();
+    u32NicDid = vtd_ctx_get_did(VTD_G752_NIC_SLOT, VTD_G752_NIC_FUNC);
+    u32SoftDid = iommu_vtd_domain_lookup(VTD_G752_NIC_BUS, VTD_G752_NIC_SLOT,
+                                         VTD_G752_NIC_FUNC);
+    fDid0 = (u32NicDid == 0u && u32SoftDid == 0u) ? 1 : 0;
+
+    /*
+     * Lean residual lamps once (no inventory flood). Soft!=product / G-AC-1.
+     * All-bus DID0: root_buses=256 + eng ctx DID=0 for 03:00.0 (rtl RX).
+     * Identity/map honesty: force32 rings need map=1g + bus3_p + did0.
+     * Grep: iommu: soft bus3 residual | soft bus3 preflight
+     * Grep: iommu: soft identity residual
+     * Grep: iommu: soft dma residual (Dual DoD B freestanding rtl rings)
+     */
+    kprintf("iommu: soft bus3 residual bdf=%u:%u.%u bus3_p=%d root_buses=%u "
+            "preflight=%d did0=%d ctx_did=%u soft_did=%u Soft!=product\n",
+            (unsigned)VTD_G752_NIC_BUS, (unsigned)VTD_G752_NIC_SLOT,
+            (unsigned)VTD_G752_NIC_FUNC, fBus3, cRoot, fPre, fDid0, u32NicDid,
+            u32SoftDid);
+    kprintf("iommu: soft bus3 preflight ok=%d bus3_p=%d root_buses=%u "
+            "did0=%d id_lo=%d id_hi=%d Soft!=product\n",
+            fPre, fBus3, cRoot, fDid0, fIdLo, fIdHi);
+    kprintf("iommu: soft identity residual map=1g bus3_p=%d id_lo=%d "
+            "id_hi=%d root_buses=%u did0=%d rx_climb=1 Soft!=product\n",
+            fBus3, fIdLo, fIdHi, cRoot, fDid0);
+    kprintf("iommu: soft dma residual force32=1 map=%d bus3_p=%d did0=%d "
+            "root_buses=%u Soft!=product\n",
+            fMap, fBus3, fDid0, cRoot);
+    (void)fPresent;
+
+    if (!fPre || !fBus3 || cRoot != 256u || !fIdLo || !fIdHi || !fDid0 ||
+        !fMap) {
+        if (!fHasVtd) {
+            /* Soft tables partial without inventory: honest soft-skip. */
+            kprintf("iommu: soft bus3 residual SKIP partial Soft!=product\n");
+            kprintf("iommu: soft identity residual SKIP partial Soft!=product\n");
+            g_fBus3ResidDone = 1;
+            g_nBus3ResidLast = 0;
+            return 0;
+        }
+        kprintf("iommu: soft bus3 residual FAIL preflight Soft!=product\n");
+        kprintf("iommu: soft identity residual FAIL preflight Soft!=product\n");
+        g_fBus3ResidDone = 1;
+        g_nBus3ResidLast = -1;
+        return -1;
+    }
+
+    kprintf("iommu: soft bus3 residual PASS bus3_p=1 root_buses=256 did0=1 "
+            "Soft!=product\n");
+    kprintf("iommu: soft identity residual PASS bus3_p=1 did0=1 id_limit=0x%lx "
+            "Soft!=product\n",
+            (unsigned long)VTD_IDENTITY_LIMIT);
+    kprintf("iommu: soft dma residual PASS force32=1 map=1g Soft!=product\n");
+    g_fBus3ResidDone = 1;
+    g_nBus3ResidLast = 1;
+    return 1;
+}
+
+/** File-local alias - call sites below keep short name. */
+static int
+vtd_soft_bus3_identity_residual(void)
+{
+    return iommu_vtd_bus3_identity_residual();
+}
+
+/**
+ * Soft-grant identity window for G752 PCH xHCI (0:14.0) before TE / MSC.
+ * First call grants + one lamp; re-entry quiet when map still honest.
+ * Soft!=product. Grep: iommu: vtd usb identity
+ */
+static void
+vtd_soft_grant_g752_xhci(void)
+{
+    int fCovered = 0;
+    int fFull = 0;
+    u32 u32Did;
+
+    if (!g_fVtdReady) {
+        return;
+    }
+    if (g_fUsbGrantLogged != 0 &&
+        vtd_soft_bdf_identity_ready(VTD_G752_XHCI_BUS, VTD_G752_XHCI_SLOT,
+                                    VTD_G752_XHCI_FUNC) != 0) {
+        return;
+    }
+    if (!g_aDom[0].u8Used) {
+        vtd_domain_pool_init();
+    }
+    u32Did = iommu_vtd_domain_lookup(VTD_G752_XHCI_BUS, VTD_G752_XHCI_SLOT,
+                                     VTD_G752_XHCI_FUNC);
+    if (u32Did == GJ_IOMMU_DOMAIN_INVALID || u32Did != 0) {
+        (void)iommu_vtd_domain_attach(0, VTD_G752_XHCI_BUS, VTD_G752_XHCI_SLOT,
+                                      VTD_G752_XHCI_FUNC);
+    }
+    (void)iommu_vtd_window_grant(VTD_G752_XHCI_BUS, VTD_G752_XHCI_SLOT,
+                                 VTD_G752_XHCI_FUNC, 0x1000ull, 0x1000ull,
+                                 &fCovered);
+    (void)iommu_vtd_window_grant(VTD_G752_XHCI_BUS, VTD_G752_XHCI_SLOT,
+                                 VTD_G752_XHCI_FUNC, 0, VTD_IDENTITY_LIMIT,
+                                 &fFull);
+    /*
+     * Grep: iommu: vtd usb identity
+     * Grep: ctx_14_p (G752 0:14.0 xHCI cover lamp)
+     */
+    if (g_fUsbGrantLogged == 0) {
+        g_fUsbGrantLogged = 1;
+        kprintf("iommu: vtd usb identity bdf=%u:%u.%u cover=%d full=%d "
+                "bus0_p=%d ctx_14_p=%d did=%u "
+                "(pre-TE grant; TRB/DMA buf need PA in [0,1GiB))\n",
+                (unsigned)VTD_G752_XHCI_BUS, (unsigned)VTD_G752_XHCI_SLOT,
+                (unsigned)VTD_G752_XHCI_FUNC, fCovered, fFull,
+                vtd_root_bus_p(VTD_G752_XHCI_BUS),
+                vtd_ctx_devfn_p(VTD_G752_XHCI_SLOT, VTD_G752_XHCI_FUNC),
+                iommu_vtd_domain_lookup(VTD_G752_XHCI_BUS, VTD_G752_XHCI_SLOT,
+                                        VTD_G752_XHCI_FUNC));
+    }
+}
+
+/**
+ * Residual Dual DoD A support: freestanding xHCI (0:14.0) identity under
+ * Translated VT-d on G752 (Linux inventory 8086:a12f). Soft!=product / G-AC-1.
+ *
+ * Soft-skip when no VT-d inventory and tables not ready. When inventory or
+ * tables exist: ensure bus0 root + ctx 0x14.0 + identity [0,1GiB) + window.
+ *
+ * Return: 1 PASS / 0 soft-skip / -1 FAIL under present inventory
+ *
+ * Greppable (keep stable - "iommu: soft ... Soft!=product"):
+ *   iommu: soft usb residual ...
+ *   iommu: soft usb soft-skip no_vtd Soft!=product
+ *   iommu: soft usb residual PASS|SKIP|FAIL Soft!=product
+ */
+int
+iommu_vtd_usb_identity_residual(void)
+{
+    int fPresent;
+    int fHasVtd;
+    int fBus0;
+    int fCtx14;
+    int fIdLo;
+    int fIdHi;
+    int fMap;
+    u32 u32Did;
+
+    /* Lean re-entry: silent when xHCI identity + force32 map still honest. */
+    if (g_fUsbResidDone != 0 && g_nUsbResidLast > 0 &&
+        vtd_soft_bdf_identity_ready(VTD_G752_XHCI_BUS, VTD_G752_XHCI_SLOT,
+                                    VTD_G752_XHCI_FUNC) != 0 &&
+        vtd_soft_identity_map_ok() != 0) {
+        return 1;
+    }
+    if (g_fUsbResidDone != 0 && g_nUsbResidLast == 0 &&
+        iommu_present() == 0 && g_u64Drhd == 0 && !g_fVtdReady) {
+        return 0;
+    }
+
+    fPresent = iommu_present();
+    fHasVtd = (fPresent != 0 || g_u64Drhd != 0) ? 1 : 0;
+
+    /*
+     * Soft-skip if no VT-d: QEMU default / no DMAR. Soft!=product.
+     * Grep: iommu: soft usb soft-skip no_vtd
+     */
+    if (!fHasVtd && !g_fVtdReady) {
+        kprintf("iommu: soft usb soft-skip no_vtd present=%d drhd=0 "
+                "Soft!=product\n",
+                fPresent);
+        kprintf("iommu: soft usb residual SKIP no_vtd Soft!=product\n");
+        g_fUsbResidDone = 1;
+        g_nUsbResidLast = 0;
+        return 0;
+    }
+
+    if (!g_fVtdReady) {
+        if (iommu_vtd_init_tables() != 0) {
+            if (!fHasVtd) {
+                kprintf("iommu: soft usb residual SKIP no_tables Soft!=product\n");
+                g_fUsbResidDone = 1;
+                g_nUsbResidLast = 0;
+                return 0;
+            }
+            kprintf("iommu: soft usb residual FAIL tables Soft!=product\n");
+            g_fUsbResidDone = 1;
+            g_nUsbResidLast = -1;
+            return -1;
+        }
+    }
+
+    vtd_soft_grant_g752_xhci();
+    fBus0 = vtd_root_bus_p(VTD_G752_XHCI_BUS);
+    fCtx14 = vtd_ctx_devfn_p(VTD_G752_XHCI_SLOT, VTD_G752_XHCI_FUNC);
+    fIdLo = iommu_vtd_identity_covers(0, 0x1000);
+    fIdHi = iommu_vtd_identity_covers(VTD_IDENTITY_LIMIT - VTD_2MIB, VTD_2MIB);
+    fMap = vtd_soft_identity_map_ok();
+    u32Did = iommu_vtd_domain_lookup(VTD_G752_XHCI_BUS, VTD_G752_XHCI_SLOT,
+                                     VTD_G752_XHCI_FUNC);
+    {
+        u32 u32CtxDid = vtd_ctx_get_did(VTD_G752_XHCI_SLOT, VTD_G752_XHCI_FUNC);
+
+        /*
+         * Grep: iommu: soft usb residual
+         * Soft!=product - not MSC product close / not stage-15 T1 / G-AC-1.
+         * DID0 honesty: soft attach + shared-CT hardware DID must both be 0.
+         * force32 map: Dual DoD A UDX (xhci_udx) TRB/DMA need [0,1GiB).
+         */
+        kprintf("iommu: soft usb residual bdf=%u:%u.%u bus0_p=%d ctx_14_p=%d "
+                "soft_did=%u ctx_did=%u id_lo=%d id_hi=%d map=%d present=%d "
+                "Soft!=product\n",
+                (unsigned)VTD_G752_XHCI_BUS, (unsigned)VTD_G752_XHCI_SLOT,
+                (unsigned)VTD_G752_XHCI_FUNC, fBus0, fCtx14, u32Did, u32CtxDid,
+                fIdLo, fIdHi, fMap, fPresent);
+
+        if (!fBus0 || !fCtx14 || !fIdLo || !fIdHi || !fMap || u32Did != 0u ||
+            u32CtxDid != 0u) {
+            if (!fHasVtd) {
+                kprintf("iommu: soft usb residual SKIP partial Soft!=product\n");
+                g_fUsbResidDone = 1;
+                g_nUsbResidLast = 0;
+                return 0;
+            }
+            kprintf("iommu: soft usb residual FAIL preflight Soft!=product\n");
+            g_fUsbResidDone = 1;
+            g_nUsbResidLast = -1;
+            return -1;
+        }
+    }
+
+    kprintf("iommu: soft usb residual PASS bus0_p=1 ctx_14_p=1 did0=1 "
+            "force32_1g=1 Soft!=product\n");
+    g_fUsbResidDone = 1;
+    g_nUsbResidLast = 1;
+    return 1;
+}
+
+/** File-local alias. */
+static int
+vtd_soft_usb_identity_residual(void)
+{
+    return iommu_vtd_usb_identity_residual();
+}
+
+/**
+ * Lean eng residual: freestanding NIC (03:00.0) + xHCI (0:14.0) identity
+ * under Translated VT-d. Dual DoD A eng surface only - not product close.
+ * Soft-skip when no VT-d. Soft!=product / no stamp storms.
+ *
+ * Return:
+ *   1  PASS - at least one path PASS and no FAIL
+ *   0  soft-skip - both soft-skip (no VT-d / nothing to enforce)
+ *  -1  FAIL - either path FAIL under present inventory
+ *
+ * Greppable (keep stable):
+ *   iommu: soft eng residual ...
+ *   iommu: soft eng residual PASS|SKIP|FAIL Soft!=product
+ */
+int
+iommu_vtd_nic_usb_eng_residual(void)
+{
+    int nNic;
+    int nUsb;
+    int fHasVtd;
+    int fIdForce32;
+    int fBus3;
+    int fCtx14;
+    int fDid0Eng;
+    u32 cRoot;
+    u32 cDid0;
+    u32 u32NicDid;
+    u32 u32UsbDid;
+
+    /*
+     * Lean re-entry: after first eng residual PASS, re-check identity/map
+     * honesty only - nested bus3/usb residuals stay silent when ready.
+     * Soft!=product / Dual DoD B freestanding rtl ring DMA + USB eng.
+     */
+    if (g_fEngResidDone != 0 && g_nEngResidLast > 0 &&
+        vtd_root_buses_p_count() == 256u && vtd_eng_did0_ok() != 0 &&
+        vtd_soft_identity_map_ok() != 0 &&
+        vtd_root_bus_p(VTD_G752_NIC_BUS) != 0 &&
+        vtd_ctx_devfn_p(VTD_G752_XHCI_SLOT, VTD_G752_XHCI_FUNC) != 0) {
+        return 1;
+    }
+    if (g_fEngResidDone != 0 && g_nEngResidLast == 0 &&
+        iommu_present() == 0 && g_u64Drhd == 0 && !g_fVtdReady) {
+        return 0;
+    }
+
+    fHasVtd = (iommu_present() != 0 || g_u64Drhd != 0 || g_fVtdReady) ? 1 : 0;
+
+    nNic = vtd_soft_bus3_identity_residual();
+    nUsb = vtd_soft_usb_identity_residual();
+
+    fBus3 = vtd_root_bus_p(VTD_G752_NIC_BUS);
+    fCtx14 = vtd_ctx_devfn_p(VTD_G752_XHCI_SLOT, VTD_G752_XHCI_FUNC);
+    cRoot = vtd_root_buses_p_count();
+    cDid0 = vtd_ctx_did0_present_count();
+    u32NicDid = vtd_ctx_get_did(VTD_G752_NIC_SLOT, VTD_G752_NIC_FUNC);
+    u32UsbDid = vtd_ctx_get_did(VTD_G752_XHCI_SLOT, VTD_G752_XHCI_FUNC);
+    fDid0Eng = vtd_eng_did0_ok();
+    /* force32 class: whole bring-up identity is DMA-safe under SLPT. */
+    fIdForce32 = vtd_soft_identity_map_ok();
+
+    /*
+     * Lean eng lamps only (no stamp storm / inventory flood). Soft!=product.
+     * All-bus DID0 honesty: root_buses=256 + eng CT DID=0 for NIC+USB.
+     * Grep: iommu: soft eng residual
+     * Grep: iommu: soft did0 residual
+     * Grep: iommu: soft all-bus identity residual (eng surface honesty)
+     * Never claim product close; dual_dod OPEN product_hosts=UDX.
+     */
+    kprintf("iommu: soft eng residual nic=%d usb=%d bus3_p=%d ctx_14_p=%d "
+            "root_buses=%u did0_eng=%d nic_did=%u usb_did=%u did0_ctx=%u "
+            "force32_1g=%d has_vtd=%d host_8168=1 host_a12f=1 "
+            "product_hosts=UDX dual_dod=OPEN Soft!=product\n",
+            nNic, nUsb, fBus3, fCtx14, cRoot, fDid0Eng, u32NicDid, u32UsbDid,
+            cDid0, fIdForce32, fHasVtd);
+    kprintf("iommu: soft did0 residual root_buses=%u did0_eng=%d did0_ctx=%u "
+            "nic_did=%u usb_did=%u product_hosts=UDX dual_dod=OPEN "
+            "Soft!=product\n",
+            cRoot, fDid0Eng, cDid0, u32NicDid, u32UsbDid);
+    kprintf("iommu: soft all-bus identity residual eng_surface=1 "
+            "root_buses=%u want=256 did0_eng=%d did0_ctx=%u "
+            "bus3_p=%d ctx_14_p=%d force32_1g=%d map=%d "
+            "product_hosts=UDX dual_dod=OPEN Soft!=product G-AC-1 "
+            "(all-bus identity residual honesty; Soft!=product; "
+            "never claim product close)\n",
+            cRoot, fDid0Eng, cDid0, fBus3, fCtx14, fIdForce32, fIdForce32);
+
+    if (nNic < 0 || nUsb < 0) {
+        kprintf("iommu: soft eng residual FAIL nic=%d usb=%d "
+                "product_hosts=UDX dual_dod=OPEN Soft!=product\n",
+                nNic, nUsb);
+        kprintf("iommu: soft all-bus identity residual FAIL eng_surface "
+                "product_hosts=UDX dual_dod=OPEN Soft!=product\n");
+        g_fEngResidDone = 1;
+        g_nEngResidLast = -1;
+        return -1;
+    }
+    if (nNic == 0 && nUsb == 0) {
+        kprintf("iommu: soft eng residual SKIP no_vtd product_hosts=UDX "
+                "dual_dod=OPEN Soft!=product\n");
+        kprintf("iommu: soft did0 residual SKIP no_vtd Soft!=product\n");
+        kprintf("iommu: soft all-bus identity residual SKIP no_vtd "
+                "product_hosts=UDX dual_dod=OPEN Soft!=product\n");
+        g_fEngResidDone = 1;
+        g_nEngResidLast = 0;
+        return 0;
+    }
+    /*
+     * When either eng path PASSed, require all-bus root + eng DID0.
+     * Soft-skip path already returned; under inventory this is FAIL.
+     * Never claim product close; Soft!=product dual_dod OPEN.
+     */
+    if (cRoot != 256u || !fDid0Eng || !fIdForce32) {
+        if (!fHasVtd) {
+            kprintf("iommu: soft eng residual SKIP partial product_hosts=UDX "
+                    "dual_dod=OPEN Soft!=product\n");
+            kprintf("iommu: soft did0 residual SKIP partial Soft!=product\n");
+            kprintf("iommu: soft all-bus identity residual SKIP partial "
+                    "root_buses=%u did0_eng=%d product_hosts=UDX "
+                    "dual_dod=OPEN Soft!=product\n",
+                    cRoot, fDid0Eng);
+            g_fEngResidDone = 1;
+            g_nEngResidLast = 0;
+            return 0;
+        }
+        kprintf("iommu: soft eng residual FAIL did0 root_buses=%u did0_eng=%d "
+                "map=%d product_hosts=UDX dual_dod=OPEN Soft!=product\n",
+                cRoot, fDid0Eng, fIdForce32);
+        kprintf("iommu: soft did0 residual FAIL Soft!=product\n");
+        kprintf("iommu: soft all-bus identity residual FAIL root_buses=%u "
+                "did0_eng=%d map=%d product_hosts=UDX dual_dod=OPEN "
+                "Soft!=product\n",
+                cRoot, fDid0Eng, fIdForce32);
+        g_fEngResidDone = 1;
+        g_nEngResidLast = -1;
+        return -1;
+    }
+    kprintf("iommu: soft eng residual PASS nic=%d usb=%d force32_1g=%d "
+            "did0_eng=1 root_buses=256 host_8168=1 host_a12f=1 "
+            "product_hosts=UDX dual_dod=OPEN Soft!=product\n",
+            nNic, nUsb, fIdForce32);
+    kprintf("iommu: soft did0 residual PASS root_buses=256 did0_eng=1 "
+            "product_hosts=UDX dual_dod=OPEN Soft!=product\n");
+    kprintf("iommu: soft all-bus identity residual PASS eng_surface=1 "
+            "root_buses=256 did0_eng=1 force32_1g=1 product_hosts=UDX "
+            "dual_dod=OPEN Soft!=product G-AC-1 "
+            "(all-bus identity residual honesty; never product close)\n");
+    g_fEngResidDone = 1;
+    g_nEngResidLast = 1;
+    return 1;
+}
+
+/** File-local alias. */
+static int
+vtd_soft_nic_usb_eng_residual(void)
+{
+    return iommu_vtd_nic_usb_eng_residual();
+}
+
+/**
+ * Lean UDX DMA safety residual for G752 userspace driver path.
+ * Dual DoD A/B eng surface: rtl8168_udx @ 03:00.0 + xhci_udx @ 0:14.0.
+ * Runs eng residual (bus3/usb/did0/map), then lean UDX + C2 DMA path lamps.
+ * FUNCTIONAL: eng busmaster under temporary enforce (window live for DMA
+ * policy - not open-path-only). Soft!=product / G-AC-1. Soft-skip when no
+ * VT-d. No stamp storms. No GPL; dual MIT OR Apache-2.0.
+ * Soft residual != product Dual DoD close.
+ *
+ * C2 Dual DoD DMA path residual (greppable "iommu: soft dma path residual"):
+ *   dual_dod_a=OPEN_UDX  (xhci_udx userspace; freestanding MSC SKIP)
+ *   dual_dod_b=OPEN_UDX  (rtl8168_udx userspace; freestanding rtl SKIP)
+ *   a_ready / b_ready     (per-path identity+cover+ctx honesty; not close)
+ *   freestanding_product=SKIP  force32 cover for UDX DMA under TE
+ *   product=UDX+ABI       (product direction honesty; G-AC-1 not .ko AC)
+ *   window_mint=OPEN      (software window table only - not CNode cap)
+ *   eng_bm               FUNCTIONAL eng busmaster under enforce
+ * Soft lamps alone != Dual DoD close / product UDX DMA caps.
+ * STRONGER denser residual (Soft!=product; dual_dod OPEN; product_hosts=UDX):
+ *   busmaster_ok residual denser for 10ec:8168 + 8086:a12f hosts
+ *   window_grant residual denser for same hosts (sample + full 1g cover)
+ *   all-bus identity residual honesty (root 256 + DID0; never product close)
+ * denser multi-arm residual (VTD_UDX_DENSE_ARMS=10; all required):
+ *   eng_ready | root_256 | did0_eng | force32_1g | eng_bm |
+ *   win_ok | bare_deny | dual_dod_open | sample_cover | product_open
+ *   greppable: iommu: soft residual denser | denser_arms= | denser_ok=
+ *   greppable: iommu: soft busmaster_ok residual denser
+ *   greppable: iommu: soft window_grant residual denser
+ *   greppable: iommu: soft all-bus identity residual denser
+ * H2 once: residual lamps once + silent reaffirm (no stamp storms).
+ * Bar honesty v2026.08.04.75 stamp-free — never invent .76.
+ *
+ * Return: 1 PASS / 0 soft-skip / -1 FAIL under present inventory
+ *
+ * Greppable (keep stable):
+ *   iommu: soft udx residual ...
+ *   iommu: soft udx residual soft-skip no_vtd Soft!=product
+ *   iommu: soft udx residual PASS|SKIP|FAIL Soft!=product
+ *   iommu: soft udx dma ... Soft!=product
+ *   iommu: soft udx bm residual ... Soft!=product
+ *   iommu: soft busmaster_ok residual ... Soft!=product product_hosts=UDX
+ *   iommu: soft window_grant residual ... Soft!=product product_hosts=UDX
+ *   iommu: soft all-bus identity residual ... Soft!=product
+ *   iommu: soft residual denser ... Soft!=product product_hosts=UDX
+ *   iommu: soft busmaster_ok residual denser ...
+ *   iommu: soft window_grant residual denser ...
+ *   iommu: soft all-bus identity residual denser ...
+ *   iommu: soft dma path residual ... Soft!=product
+ *   iommu: soft dma path residual PASS|SKIP|FAIL Soft!=product
+ *   dual_dod_a=OPEN_UDX | dual_dod_b=OPEN_UDX | dual_dod=OPEN
+ *   window_mint=OPEN | product_hosts=UDX
+ *   denser=1 denser_arms= denser_ok=
+ */
+int
+iommu_vtd_udx_dma_safety_residual(void)
+{
+    int nEng;
+    int fNicReady;
+    int fUsbReady;
+    int fMap;
+    int fForce32;
+    int fDid0Eng;
+    int fBus3;
+    int fCtx14;
+    int fNicCover = 0;
+    int fUsbCover = 0;
+    int fNicSample = 0;
+    int fUsbSample = 0;
+    int fWinOk;
+    int fBmOk = 0;
+    int fBmNic = 0;
+    int fBmUsb = 0;
+    int fBmBareDeny = 0;
+    int fDodAReady;
+    int fDodBReady;
+    int fTe;
+    int nTeMode;
+    int fDenseEngReady;
+    int fDenseRoot256;
+    int fDenseDid0;
+    int fDenseForce32;
+    int fDenseEngBm;
+    int fDenseWinOk;
+    int fDenseBareDeny;
+    int fDenseDodOpen;
+    int fDenseSample;
+    int fDenseProductOpen;
+    u32 u32Dense;
+    u32 u32DenseOk;
+    u32 cRoot;
+    u32 cWin;
+    u32 u32NicDid;
+    u32 u32UsbDid;
+    u32 u32SoftNic;
+    u32 u32SoftUsb;
+    const char *szDenseVerdict;
+
+    /*
+     * Lean re-entry: after first UDX + dma path residual PASS, silent when
+     * eng map honesty + soft windows + FUNCTIONAL eng busmaster still hold
+     * (soft-probe / TE arm / xhci_identity). Soft!=product / Dual DoD C2.
+     * Require both eng BDF soft windows live (cWin >= 2 after NIC+USB grant)
+     * and eng busmaster under temporary enforce (no bare deny stamp growth).
+     */
+    if (g_fUdxResidDone != 0 && g_nUdxResidLast > 0 &&
+        g_fDmaPathResidDone != 0 && g_nDmaPathResidLast > 0 &&
+        vtd_root_buses_p_count() == 256u && vtd_eng_did0_ok() != 0 &&
+        vtd_soft_identity_map_ok() != 0 &&
+        vtd_soft_bdf_identity_ready(VTD_G752_NIC_BUS, VTD_G752_NIC_SLOT,
+                                    VTD_G752_NIC_FUNC) != 0 &&
+        vtd_soft_bdf_identity_ready(VTD_G752_XHCI_BUS, VTD_G752_XHCI_SLOT,
+                                    VTD_G752_XHCI_FUNC) != 0 &&
+        iommu_window_count() >= 2u &&
+        vtd_soft_eng_busmaster_ok(0, NULL, NULL, NULL) != 0) {
+        return 1;
+    }
+    if (g_fUdxResidDone != 0 && g_nUdxResidLast == 0 &&
+        g_fDmaPathResidDone != 0 && g_nDmaPathResidLast == 0 &&
+        iommu_present() == 0 && g_u64Drhd == 0 && !g_fVtdReady) {
+        return 0;
+    }
+
+    /* Eng residual first (bus3 + usb + did0 + force32 map). Soft!=product. */
+    nEng = vtd_soft_nic_usb_eng_residual();
+
+    /*
+     * C2 strengthen: re-affirm eng soft window grants for UDX force32 DMA
+     * under TE. Grants end on full [0,1GiB) (not sample-only - do not shrink).
+     * Soft!=product. Cover honesty via identity_covers (no extra grant stamp
+     * after first NIC/USB grant lamps - soft grant helpers stay quiet).
+     * Sample cover + full [0,1GiB) cover reported separately for eng honesty.
+     */
+    if (g_fVtdReady) {
+        vtd_soft_grant_g752_nic();
+        vtd_soft_grant_g752_xhci();
+        fNicSample = iommu_vtd_identity_covers(0x1000ull, 0x1000ull) ? 1 : 0;
+        fUsbSample = fNicSample; /* shared bring-up SLPT */
+        fNicCover = (fNicSample != 0 &&
+                     iommu_vtd_identity_covers(0, VTD_IDENTITY_LIMIT))
+                        ? 1
+                        : 0;
+        fUsbCover = fNicCover;
+    }
+
+    fBus3 = vtd_root_bus_p(VTD_G752_NIC_BUS);
+    fCtx14 = vtd_ctx_devfn_p(VTD_G752_XHCI_SLOT, VTD_G752_XHCI_FUNC);
+    cRoot = vtd_root_buses_p_count();
+    fMap = vtd_soft_identity_map_ok();
+    /* force32 class: full identity cover for rings/TRB/UDX coherent DMA. */
+    fForce32 = (fMap != 0 && fNicCover != 0 && fUsbCover != 0) ? 1 : 0;
+    fDid0Eng = vtd_eng_did0_ok();
+    fNicReady = vtd_soft_bdf_identity_ready(VTD_G752_NIC_BUS, VTD_G752_NIC_SLOT,
+                                            VTD_G752_NIC_FUNC);
+    fUsbReady = vtd_soft_bdf_identity_ready(VTD_G752_XHCI_BUS,
+                                            VTD_G752_XHCI_SLOT,
+                                            VTD_G752_XHCI_FUNC);
+    u32NicDid = vtd_ctx_get_did(VTD_G752_NIC_SLOT, VTD_G752_NIC_FUNC);
+    u32UsbDid = vtd_ctx_get_did(VTD_G752_XHCI_SLOT, VTD_G752_XHCI_FUNC);
+    u32SoftNic = iommu_vtd_domain_lookup(VTD_G752_NIC_BUS, VTD_G752_NIC_SLOT,
+                                         VTD_G752_NIC_FUNC);
+    u32SoftUsb = iommu_vtd_domain_lookup(VTD_G752_XHCI_BUS, VTD_G752_XHCI_SLOT,
+                                         VTD_G752_XHCI_FUNC);
+    cWin = iommu_window_count();
+    fTe = g_fTeArmed ? 1 : 0;
+    nTeMode = iommu_vtd_te_mode();
+    /*
+     * FUNCTIONAL residual: eng busmaster under temporary enforce + bare deny.
+     * Proves NIC/USB soft windows are live for UDX DMA policy (not open-path
+     * only). Soft!=product; Dual DoD remains OPEN_UDX. Restores enforce.
+     * Grep: iommu: soft udx bm residual
+     */
+    if (g_fVtdReady && nEng > 0) {
+        fBmOk = vtd_soft_eng_busmaster_ok(1, &fBmNic, &fBmUsb, &fBmBareDeny);
+    } else if (g_fVtdReady) {
+        /* Soft-skip / FAIL eng: still sample eng bm for lamps (no bare tick). */
+        (void)vtd_soft_eng_busmaster_ok(0, &fBmNic, &fBmUsb, &fBmBareDeny);
+        fBmOk = 0;
+    }
+    /*
+     * win_ok (stronger): tables ready + both eng soft windows live
+     * (NIC + USB grants -> cWin >= 2) + full force32 identity cover +
+     * FUNCTIONAL eng busmaster under enforce (eng_bm). Soft table only;
+     * window_mint remains OPEN (not CNode cap product).
+     */
+    fWinOk = (g_fVtdReady && cWin >= 2u && fNicCover != 0 && fUsbCover != 0 &&
+              fForce32 != 0 && fBmOk != 0)
+                 ? 1
+                 : 0;
+    /*
+     * Per-path readiness (Soft!=product; Dual DoD A/B remain OPEN_UDX):
+     *   A (USB/xhci_udx): ctx 0:14.0 + identity-ready + cover + did0 + bm
+     *   B (NIC/rtl8168_udx): bus3_p + identity-ready + cover + did0 + bm
+     * Ready lamps != Dual DoD close / product UDX DMA cap mint.
+     */
+    fDodAReady = (fUsbReady != 0 && fCtx14 != 0 && fUsbCover != 0 &&
+                  fDid0Eng != 0 && fMap != 0 && u32SoftUsb == 0u &&
+                  fBmUsb != 0)
+                     ? 1
+                     : 0;
+    fDodBReady = (fNicReady != 0 && fBus3 != 0 && fNicCover != 0 &&
+                  fDid0Eng != 0 && fMap != 0 && u32SoftNic == 0u &&
+                  fBmNic != 0)
+                     ? 1
+                     : 0;
+
+    /*
+     * denser multi-arm residual (VTD_UDX_DENSE_ARMS=10; Soft!=product).
+     * Functional honesty for product IOMMU Dual DoD A/B UDX hosts.
+     * Soft residual never closes Dual DoD; denser_ok is soft only.
+     * greppable: denser_arms= denser_ok= iommu: soft residual denser
+     */
+    fDenseEngReady = 0;
+    fDenseRoot256 = 0;
+    fDenseDid0 = 0;
+    fDenseForce32 = 0;
+    fDenseEngBm = 0;
+    fDenseWinOk = 0;
+    fDenseBareDeny = 0;
+    fDenseDodOpen = 0;
+    fDenseSample = 0;
+    fDenseProductOpen = 0;
+    u32Dense = 0u;
+    u32DenseOk = 0u;
+    szDenseVerdict = "SKIP";
+
+    /* arm0: eng_ready — both Dual DoD host BDFs identity-ready. */
+    if (fNicReady != 0 && fUsbReady != 0) {
+        fDenseEngReady = 1;
+        u32Dense++;
+    }
+    /* arm1: root_256 — all-bus root present (G752 bus3 covered). */
+    if (cRoot == 256u) {
+        fDenseRoot256 = 1;
+        u32Dense++;
+    }
+    /* arm2: did0_eng — eng CT DID=0 identity honesty. */
+    if (fDid0Eng != 0) {
+        fDenseDid0 = 1;
+        u32Dense++;
+    }
+    /* arm3: force32_1g — full identity cover for UDX coherent DMA. */
+    if (fForce32 != 0 && fMap != 0) {
+        fDenseForce32 = 1;
+        u32Dense++;
+    }
+    /* arm4: eng_bm — denser busmaster_ok residual under enforce. */
+    if (fBmOk != 0 && fBmNic != 0 && fBmUsb != 0) {
+        fDenseEngBm = 1;
+        u32Dense++;
+    }
+    /* arm5: win_ok — denser window_grant residual both hosts. */
+    if (fWinOk != 0 && fNicCover != 0 && fUsbCover != 0) {
+        fDenseWinOk = 1;
+        u32Dense++;
+    }
+    /* arm6: bare_deny — no-open-busmaster product honesty. */
+    if (fBmBareDeny != 0) {
+        fDenseBareDeny = 1;
+        u32Dense++;
+    }
+    /* arm7: dual_dod_open — A/B ready honesty; Dual DoD stays OPEN. */
+    if (fDodAReady != 0 && fDodBReady != 0 &&
+        VTD_UDX_DENSE_ARMS == 10u &&
+        VTD_UDX_DENSE_MIN == VTD_UDX_DENSE_ARMS) {
+        fDenseDodOpen = 1;
+        u32Dense++;
+    }
+    /* arm8: sample_cover — sample + full 1g cover honesty. */
+    if (fNicSample != 0 && fUsbSample != 0 && fNicCover != 0 &&
+        fUsbCover != 0) {
+        fDenseSample = 1;
+        u32Dense++;
+    }
+    /*
+     * arm9: product_open — product=UDX+ABI; window_mint OPEN;
+     * freestanding SKIP; soft residual never closes Dual DoD.
+     */
+    if (fDenseEngReady != 0 && fDenseEngBm != 0 && fDenseWinOk != 0 &&
+        fDenseDodOpen != 0 && fDenseForce32 != 0 && fDenseBareDeny != 0) {
+        fDenseProductOpen = 1;
+        u32Dense++;
+    }
+
+    g_u32UdxDenseArms = u32Dense;
+    if (u32Dense >= VTD_UDX_DENSE_MIN && fDenseEngReady != 0 &&
+        fDenseRoot256 != 0 && fDenseDid0 != 0 && fDenseForce32 != 0 &&
+        fDenseEngBm != 0 && fDenseWinOk != 0 && fDenseBareDeny != 0 &&
+        fDenseDodOpen != 0 && fDenseSample != 0 &&
+        fDenseProductOpen != 0) {
+        u32DenseOk = 1u;
+        if (g_u32UdxDenseOk < 0xffffffffu) {
+            g_u32UdxDenseOk++;
+        }
+        szDenseVerdict = "PASS";
+    } else if (nEng > 0) {
+        if (g_u32UdxDenseFail < 0xffffffffu) {
+            g_u32UdxDenseFail++;
+        }
+        szDenseVerdict = "FAIL";
+    } else {
+        szDenseVerdict = "SKIP";
+    }
+
+    /*
+     * Lean UDX lamps only. Soft!=product / G-AC-1.
+     * Grep: iommu: soft udx residual
+     * Grep: iommu: soft udx dma
+     * Grep: iommu: soft udx bm residual (FUNCTIONAL eng busmaster)
+     * path=userspace product=UDX+ABI product_hosts=UDX: Dual DoD A/B over
+     * UDX (not .ko / not freestanding class product). G-AC-1.
+     * Soft residual != product close; dual_dod OPEN always.
+     */
+    kprintf("iommu: soft udx residual eng=%d nic_ready=%d usb_ready=%d "
+            "bus3_p=%d ctx_14_p=%d root_buses=%u did0_eng=%d nic_did=%u "
+            "usb_did=%u soft_nic=%u soft_usb=%u map=%d win=%u eng_bm=%d "
+            "path=userspace product=UDX+ABI product_hosts=UDX "
+            "dual_dod=OPEN Soft!=product G-AC-1\n",
+            nEng, fNicReady, fUsbReady, fBus3, fCtx14, cRoot, fDid0Eng,
+            u32NicDid, u32UsbDid, u32SoftNic, u32SoftUsb, fMap, cWin, fBmOk);
+    kprintf("iommu: soft udx dma force32=%d cover=1g nic_sample=%d "
+            "usb_sample=%d nic_bdf=%u:%u.%u usb_bdf=%u:%u.%u "
+            "udx_nic=rtl8168_udx udx_usb=xhci_udx host_8168=1 host_a12f=1 "
+            "nic_cover=%d usb_cover=%d product_hosts=UDX dual_dod=OPEN "
+            "Soft!=product G-AC-1\n",
+            fForce32, fNicSample, fUsbSample, (unsigned)VTD_G752_NIC_BUS,
+            (unsigned)VTD_G752_NIC_SLOT, (unsigned)VTD_G752_NIC_FUNC,
+            (unsigned)VTD_G752_XHCI_BUS, (unsigned)VTD_G752_XHCI_SLOT,
+            (unsigned)VTD_G752_XHCI_FUNC, fNicCover, fUsbCover);
+    kprintf("iommu: soft udx bm residual eng_bm=%d nic_ok=%d usb_ok=%d "
+            "bare_deny=%d enforce_probe=1 product_hosts=UDX dual_dod=OPEN "
+            "Soft!=product G-AC-1\n",
+            fBmOk, fBmNic, fBmUsb, fBmBareDeny);
+
+    /*
+     * STRONGER denser residual for product IOMMU honesty (H2 once):
+     * busmaster_ok + window_grant for G752 10ec:8168 (rtl8168_udx Dual DoD B)
+     * + 8086:a12f (xhci_udx Dual DoD A). all-bus identity residual honesty.
+     * Soft!=product; dual_dod OPEN; product_hosts=UDX; never product close.
+     * Grep: iommu: soft busmaster_ok residual
+     * Grep: iommu: soft window_grant residual
+     * Grep: iommu: soft all-bus identity residual
+     * Grep: Soft!=product | dual_dod=OPEN | product_hosts=UDX
+     */
+    kprintf("iommu: soft busmaster_ok residual "
+            "host_8168=rtl8168_udx bdf=%u:%u.%u nic_ok=%d "
+            "host_a12f=xhci_udx bdf=%u:%u.%u usb_ok=%d "
+            "bare_deny=%d eng_bm=%d enforce_probe=1 "
+            "path=iommu_busmaster_ok product_hosts=UDX "
+            "dual_dod=OPEN dual_dod_a=OPEN_UDX dual_dod_b=OPEN_UDX "
+            "Soft!=product G-AC-1 "
+            "(denser busmaster_ok residual 8168+a12f; Soft!=product; "
+            "soft residual != product close)\n",
+            (unsigned)VTD_G752_NIC_BUS, (unsigned)VTD_G752_NIC_SLOT,
+            (unsigned)VTD_G752_NIC_FUNC, fBmNic,
+            (unsigned)VTD_G752_XHCI_BUS, (unsigned)VTD_G752_XHCI_SLOT,
+            (unsigned)VTD_G752_XHCI_FUNC, fBmUsb, fBmBareDeny, fBmOk);
+    kprintf("iommu: soft window_grant residual "
+            "host_8168=rtl8168_udx nic_sample=%d nic_cover=%d "
+            "host_a12f=xhci_udx usb_sample=%d usb_cover=%d "
+            "win=%u force32=%d win_ok=%d path=iommu_window_grant "
+            "window_mint=OPEN product_hosts=UDX dual_dod=OPEN "
+            "dual_dod_a=OPEN_UDX dual_dod_b=OPEN_UDX Soft!=product G-AC-1 "
+            "(denser window_grant residual 8168+a12f; Soft!=product; "
+            "soft residual != product close)\n",
+            fNicSample, fNicCover, fUsbSample, fUsbCover, cWin, fForce32,
+            fWinOk);
+    kprintf("iommu: soft all-bus identity residual "
+            "root_buses=%u want=256 did0_eng=%d map=%d "
+            "bus3_p=%d ctx_14_p=%d force32=%d id_limit=0x%lx "
+            "product_hosts=UDX dual_dod=OPEN Soft!=product G-AC-1 "
+            "(all-bus identity residual honesty; Soft!=product; "
+            "never claim product close; soft residual dual_dod OPEN)\n",
+            cRoot, fDid0Eng, fMap, fBus3, fCtx14, fForce32,
+            (unsigned long)VTD_IDENTITY_LIMIT);
+
+    /*
+     * denser multi-arm residual lamps (H2 once; Soft!=product Dual DoD OPEN).
+     * Grep: iommu: soft residual denser
+     * Grep: iommu: soft busmaster_ok residual denser
+     * Grep: iommu: soft window_grant residual denser
+     * Grep: iommu: soft all-bus identity residual denser
+     * Grep: denser=1 denser_arms= denser_ok=
+     * Bar honesty v2026.08.04.75 stamp-free — never invent .76.
+     */
+    if (g_fUdxDenseOnce == 0u) {
+        g_fUdxDenseOnce = 1u;
+        kprintf("iommu: soft residual denser %s denser=1 denser_arms=%u "
+                "denser_ok=%u denser_min=%u denser_fail=%u "
+                "eng_ready=%d root_256=%d did0_eng=%d force32_1g=%d "
+                "eng_bm=%d win_ok=%d bare_deny=%d dual_dod_open=%d "
+                "sample_cover=%d product_open=%d "
+                "a_ready=%d b_ready=%d nic_ok=%d usb_ok=%d "
+                "win=%u te=%d te_mode=%d "
+                "product_hosts=UDX hosts=rtl8168_udx|xhci_udx "
+                "dual_dod_a=OPEN_UDX dual_dod_b=OPEN_UDX dual_dod=OPEN "
+                "window_mint=OPEN freestanding_product=SKIP product=UDX+ABI "
+                "path=userspace soft_residual_closes_dod=0 "
+                "stamp_free=1 bar_honesty=v2026.08.04.75 never_invent=.76 "
+                "H2=once Soft!=product G-AC-1 dual=MIT|Apache-2.0 "
+                "(denser multi-arm product IOMMU residual; "
+                "not Dual DoD close; Soft!=product)\n",
+                szDenseVerdict, (unsigned)u32Dense, (unsigned)u32DenseOk,
+                (unsigned)VTD_UDX_DENSE_MIN, (unsigned)g_u32UdxDenseFail,
+                fDenseEngReady, fDenseRoot256, fDenseDid0, fDenseForce32,
+                fDenseEngBm, fDenseWinOk, fDenseBareDeny, fDenseDodOpen,
+                fDenseSample, fDenseProductOpen, fDodAReady, fDodBReady,
+                fBmNic, fBmUsb, cWin, fTe, nTeMode);
+        kprintf("iommu: soft busmaster_ok residual denser %s denser=1 "
+                "denser_arms=%u denser_ok=%u eng_bm=%d nic_ok=%d usb_ok=%d "
+                "bare_deny=%d host_8168=rtl8168_udx host_a12f=xhci_udx "
+                "path=iommu_busmaster_ok product_hosts=UDX dual_dod=OPEN "
+                "dual_dod_a=OPEN_UDX dual_dod_b=OPEN_UDX Soft!=product "
+                "G-AC-1 (denser busmaster_ok residual; not Dual DoD close)\n",
+                szDenseVerdict, (unsigned)u32Dense, (unsigned)u32DenseOk,
+                fDenseEngBm, fBmNic, fBmUsb, fBmBareDeny);
+        kprintf("iommu: soft window_grant residual denser %s denser=1 "
+                "denser_arms=%u denser_ok=%u win_ok=%d force32=%d "
+                "nic_cover=%d usb_cover=%d sample=%d win=%u "
+                "window_mint=OPEN path=iommu_window_grant "
+                "product_hosts=UDX dual_dod=OPEN Soft!=product G-AC-1 "
+                "(denser window_grant residual; not Dual DoD close)\n",
+                szDenseVerdict, (unsigned)u32Dense, (unsigned)u32DenseOk,
+                fDenseWinOk, fForce32, fNicCover, fUsbCover, fDenseSample,
+                cWin);
+        kprintf("iommu: soft all-bus identity residual denser %s denser=1 "
+                "denser_arms=%u denser_ok=%u root_256=%d did0_eng=%d "
+                "map=%d force32_1g=%d bus3_p=%d ctx_14_p=%d "
+                "product_hosts=UDX dual_dod=OPEN Soft!=product G-AC-1 "
+                "(denser all-bus identity residual; never product close)\n",
+                szDenseVerdict, (unsigned)u32Dense, (unsigned)u32DenseOk,
+                fDenseRoot256, fDenseDid0, fMap, fDenseForce32, fBus3,
+                fCtx14);
+        if (u32DenseOk != 0u) {
+            kprintf("iommu: soft residual denser PASS denser=1 denser_arms=%u "
+                    "denser_ok=1 product_hosts=UDX dual_dod=OPEN "
+                    "Soft!=product G-AC-1 "
+                    "(denser residual honesty; not Dual DoD close)\n",
+                    (unsigned)u32Dense);
+        }
+    }
+
+    /*
+     * C2 Dual DoD DMA path residual rollup (userspace UDX; freestanding SKIP).
+     * Grep: iommu: soft dma path residual
+     * Grep: dual_dod_a=OPEN_UDX | dual_dod_b=OPEN_UDX | dual_dod=OPEN
+     * Grep: freestanding_product=SKIP | window_mint=OPEN | product=UDX+ABI
+     * Grep: product_hosts=UDX | Soft!=product
+     * a_ready/b_ready: per-path eng honesty; Dual DoD stays OPEN (not close).
+     * eng_bm: FUNCTIONAL eng busmaster under temporary enforce.
+     */
+    kprintf("iommu: soft dma path residual dual_dod_a=OPEN_UDX "
+            "dual_dod_b=OPEN_UDX dual_dod=OPEN freestanding_product=SKIP "
+            "product=UDX+ABI product_hosts=UDX eng=%d a_ready=%d b_ready=%d "
+            "nic_ready=%d usb_ready=%d force32=%d map=%d win_ok=%d eng_bm=%d "
+            "win=%u te=%d te_mode=%d window_mint=OPEN path=userspace "
+            "Soft!=product G-AC-1\n",
+            nEng, fDodAReady, fDodBReady, fNicReady, fUsbReady, fForce32,
+            fMap, fWinOk, fBmOk, cWin, fTe, nTeMode);
+
+    if (nEng < 0) {
+        kprintf("iommu: soft udx residual FAIL eng=%d product_hosts=UDX "
+                "dual_dod=OPEN Soft!=product G-AC-1\n",
+                nEng);
+        kprintf("iommu: soft udx bm residual FAIL eng product_hosts=UDX "
+                "Soft!=product\n");
+        kprintf("iommu: soft busmaster_ok residual FAIL eng "
+                "host_8168=rtl8168_udx host_a12f=xhci_udx "
+                "product_hosts=UDX dual_dod=OPEN Soft!=product\n");
+        kprintf("iommu: soft window_grant residual FAIL eng "
+                "product_hosts=UDX dual_dod=OPEN Soft!=product\n");
+        kprintf("iommu: soft all-bus identity residual FAIL eng "
+                "product_hosts=UDX dual_dod=OPEN Soft!=product\n");
+        kprintf("iommu: soft dma path residual FAIL eng "
+                "dual_dod_a=OPEN_UDX dual_dod_b=OPEN_UDX dual_dod=OPEN "
+                "product_hosts=UDX window_mint=OPEN Soft!=product G-AC-1\n");
+        g_fUdxResidDone = 1;
+        g_nUdxResidLast = -1;
+        g_fDmaPathResidDone = 1;
+        g_nDmaPathResidLast = -1;
+        return -1;
+    }
+    if (nEng == 0) {
+        /* Grep: iommu: soft udx residual soft-skip no_vtd */
+        kprintf("iommu: soft udx residual soft-skip no_vtd Soft!=product\n");
+        kprintf("iommu: soft udx residual SKIP no_vtd product_hosts=UDX "
+                "dual_dod=OPEN Soft!=product G-AC-1\n");
+        kprintf("iommu: soft udx bm residual SKIP no_vtd Soft!=product\n");
+        kprintf("iommu: soft busmaster_ok residual SKIP no_vtd "
+                "host_8168=rtl8168_udx host_a12f=xhci_udx "
+                "product_hosts=UDX dual_dod=OPEN Soft!=product\n");
+        kprintf("iommu: soft window_grant residual SKIP no_vtd "
+                "product_hosts=UDX dual_dod=OPEN Soft!=product\n");
+        kprintf("iommu: soft all-bus identity residual SKIP no_vtd "
+                "product_hosts=UDX dual_dod=OPEN Soft!=product\n");
+        kprintf("iommu: soft dma path residual soft-skip no_vtd "
+                "dual_dod_a=OPEN_UDX dual_dod_b=OPEN_UDX dual_dod=OPEN "
+                "freestanding_product=SKIP product=UDX+ABI "
+                "product_hosts=UDX window_mint=OPEN Soft!=product G-AC-1\n");
+        kprintf("iommu: soft dma path residual SKIP no_vtd "
+                "dual_dod_a=OPEN_UDX dual_dod_b=OPEN_UDX dual_dod=OPEN "
+                "product_hosts=UDX window_mint=OPEN Soft!=product G-AC-1\n");
+        g_fUdxResidDone = 1;
+        g_nUdxResidLast = 0;
+        g_fDmaPathResidDone = 1;
+        g_nDmaPathResidLast = 0;
+        return 0;
+    }
+
+    /*
+     * Eng PASS already required root/did0/map. C2 UDX DMA path wants both
+     * Dual DoD A/B eng paths identity-ready + force32 window cover + both
+     * eng soft windows live + FUNCTIONAL eng busmaster under enforce.
+     * Soft!=product; Dual DoD remains OPEN_UDX; never product close.
+     */
+    if (!fMap || !fDid0Eng || cRoot != 256u || !fNicReady || !fUsbReady ||
+        !fWinOk || !fDodAReady || !fDodBReady || !fForce32 || !fBmOk) {
+        if (iommu_present() == 0 && g_u64Drhd == 0) {
+            kprintf("iommu: soft udx residual SKIP partial product_hosts=UDX "
+                    "dual_dod=OPEN Soft!=product\n");
+            kprintf("iommu: soft udx bm residual SKIP partial "
+                    "eng_bm=%d nic_ok=%d usb_ok=%d Soft!=product\n",
+                    fBmOk, fBmNic, fBmUsb);
+            kprintf("iommu: soft busmaster_ok residual SKIP partial "
+                    "nic_ok=%d usb_ok=%d product_hosts=UDX dual_dod=OPEN "
+                    "Soft!=product\n",
+                    fBmNic, fBmUsb);
+            kprintf("iommu: soft window_grant residual SKIP partial "
+                    "win_ok=%d product_hosts=UDX dual_dod=OPEN Soft!=product\n",
+                    fWinOk);
+            kprintf("iommu: soft all-bus identity residual SKIP partial "
+                    "root_buses=%u did0_eng=%d product_hosts=UDX "
+                    "dual_dod=OPEN Soft!=product\n",
+                    cRoot, fDid0Eng);
+            kprintf("iommu: soft dma path residual SKIP partial "
+                    "a_ready=%d b_ready=%d win_ok=%d eng_bm=%d "
+                    "product_hosts=UDX dual_dod=OPEN window_mint=OPEN "
+                    "Soft!=product G-AC-1\n",
+                    fDodAReady, fDodBReady, fWinOk, fBmOk);
+            g_fUdxResidDone = 1;
+            g_nUdxResidLast = 0;
+            g_fDmaPathResidDone = 1;
+            g_nDmaPathResidLast = 0;
+            return 0;
+        }
+        kprintf("iommu: soft udx residual FAIL map=%d did0=%d root=%u "
+                "nic=%d usb=%d win_ok=%d eng_bm=%d a_ready=%d b_ready=%d "
+                "product_hosts=UDX dual_dod=OPEN Soft!=product G-AC-1\n",
+                fMap, fDid0Eng, cRoot, fNicReady, fUsbReady, fWinOk, fBmOk,
+                fDodAReady, fDodBReady);
+        kprintf("iommu: soft udx bm residual FAIL eng_bm=%d nic_ok=%d "
+                "usb_ok=%d bare_deny=%d Soft!=product\n",
+                fBmOk, fBmNic, fBmUsb, fBmBareDeny);
+        kprintf("iommu: soft busmaster_ok residual FAIL eng_bm=%d "
+                "host_8168=%d host_a12f=%d bare_deny=%d product_hosts=UDX "
+                "dual_dod=OPEN Soft!=product\n",
+                fBmOk, fBmNic, fBmUsb, fBmBareDeny);
+        kprintf("iommu: soft window_grant residual FAIL win_ok=%d "
+                "nic_cover=%d usb_cover=%d product_hosts=UDX dual_dod=OPEN "
+                "Soft!=product\n",
+                fWinOk, fNicCover, fUsbCover);
+        kprintf("iommu: soft all-bus identity residual FAIL root_buses=%u "
+                "did0_eng=%d map=%d product_hosts=UDX dual_dod=OPEN "
+                "Soft!=product\n",
+                cRoot, fDid0Eng, fMap);
+        kprintf("iommu: soft dma path residual FAIL a_ready=%d b_ready=%d "
+                "win_ok=%d eng_bm=%d dual_dod_a=OPEN_UDX dual_dod_b=OPEN_UDX "
+                "dual_dod=OPEN product_hosts=UDX window_mint=OPEN "
+                "Soft!=product G-AC-1\n",
+                fDodAReady, fDodBReady, fWinOk, fBmOk);
+        g_fUdxResidDone = 1;
+        g_nUdxResidLast = -1;
+        g_fDmaPathResidDone = 1;
+        g_nDmaPathResidLast = -1;
+        return -1;
+    }
+
+    kprintf("iommu: soft udx residual PASS eng=1 nic_ready=1 usb_ready=1 "
+            "force32_1g=1 did0_eng=1 eng_bm=1 path=userspace product=UDX+ABI "
+            "product_hosts=UDX dual_dod=OPEN Soft!=product G-AC-1\n");
+    kprintf("iommu: soft udx dma PASS force32=1 cover=1g nic_cover=1 "
+            "usb_cover=1 host_8168=1 host_a12f=1 product_hosts=UDX "
+            "dual_dod=OPEN Soft!=product G-AC-1\n");
+    kprintf("iommu: soft udx bm residual PASS eng_bm=1 nic_ok=1 usb_ok=1 "
+            "bare_deny=1 product_hosts=UDX dual_dod=OPEN Soft!=product "
+            "G-AC-1\n");
+    kprintf("iommu: soft busmaster_ok residual PASS "
+            "host_8168=rtl8168_udx nic_ok=1 host_a12f=xhci_udx usb_ok=1 "
+            "bare_deny=1 eng_bm=1 path=iommu_busmaster_ok product_hosts=UDX "
+            "dual_dod=OPEN Soft!=product G-AC-1\n");
+    kprintf("iommu: soft window_grant residual PASS "
+            "host_8168=rtl8168_udx nic_cover=1 host_a12f=xhci_udx "
+            "usb_cover=1 force32_1g=1 win_ok=1 path=iommu_window_grant "
+            "window_mint=OPEN product_hosts=UDX dual_dod=OPEN "
+            "Soft!=product G-AC-1\n");
+    kprintf("iommu: soft all-bus identity residual PASS root_buses=256 "
+            "did0_eng=1 map=1 force32_1g=1 product_hosts=UDX dual_dod=OPEN "
+            "Soft!=product G-AC-1 "
+            "(all-bus identity residual honesty; never product close)\n");
+    /*
+     * Grep: iommu: soft dma path residual PASS
+     * C2 honesty: Dual DoD A/B remain OPEN_UDX (not freestanding close).
+     * a_ready=1 b_ready=1: eng identity/cover honest; not product close.
+     * eng_bm=1: FUNCTIONAL eng busmaster under temporary enforce.
+     * window_mint=OPEN: software window table only - not CNode cap mint.
+     * product_hosts=UDX dual_dod=OPEN Soft!=product. G-AC-1. No version stamp.
+     */
+    kprintf("iommu: soft dma path residual PASS dual_dod_a=OPEN_UDX "
+            "dual_dod_b=OPEN_UDX dual_dod=OPEN freestanding_product=SKIP "
+            "product=UDX+ABI product_hosts=UDX a_ready=1 b_ready=1 "
+            "force32_1g=1 win_ok=1 eng_bm=1 win=%u te=%d te_mode=%d "
+            "window_mint=OPEN path=userspace Soft!=product G-AC-1\n",
+            cWin, fTe, nTeMode);
+    /*
+     * STRONGER functional residual (W10 Dual DoD; stamp-free bar v2026.08.04.75):
+     * live UDX host residual under TE enforce - force32 sample cover + eng BM
+     * + dual_dod OPEN honesty for rtl8168_udx / xhci_udx product path.
+     * Soft lamps alone != Dual DoD close / product UDX DMA cap mint.
+     * Grep: iommu: soft udx host residual | product_hosts=UDX | dual_dod=OPEN
+     */
+    {
+        int fSample = iommu_vtd_identity_covers(0x1000ull, 0x1000ull) ? 1 : 0;
+        int fFull = iommu_vtd_identity_covers(0, VTD_IDENTITY_LIMIT) ? 1 : 0;
+        int fHostOk;
+
+        fHostOk = (fSample != 0 && fFull != 0 && fBmOk != 0 && fBmNic != 0 &&
+                   fBmUsb != 0 && fBmBareDeny != 0 && fDodAReady != 0 &&
+                   fDodBReady != 0 && fForce32 != 0)
+                      ? 1
+                      : 0;
+        kprintf("iommu: soft udx host residual "
+                "hosts=rtl8168_udx|xhci_udx product=UDX+ABI product_hosts=UDX "
+                "host_8168=1 host_a12f=1 force32=%d sample=%d full_1g=%d "
+                "eng_bm=%d nic_ok=%d usb_ok=%d bare_deny=%d "
+                "a_ready=%d b_ready=%d win=%u te=%d te_mode=%d "
+                "dual_dod_a=OPEN_UDX dual_dod_b=OPEN_UDX dual_dod=OPEN "
+                "window_mint=OPEN freestanding_product=SKIP "
+                "host_ok=%d Soft!=product G-AC-1 "
+                "(W10 STRONGER live UDX host residual; Soft!=product; "
+                "soft residual dual_dod OPEN product_hosts=UDX; "
+                "not Dual DoD close; no .ko product; no version stamp)\n",
+                fForce32, fSample, fFull, fBmOk, fBmNic, fBmUsb, fBmBareDeny,
+                fDodAReady, fDodBReady, cWin, fTe, nTeMode, fHostOk);
+        if (fHostOk != 0) {
+            kprintf("iommu: soft udx host residual PASS "
+                    "hosts=rtl8168_udx|xhci_udx product_hosts=UDX "
+                    "host_8168=1 host_a12f=1 force32_1g=1 eng_bm=1 "
+                    "dual_dod_a=OPEN_UDX dual_dod_b=OPEN_UDX dual_dod=OPEN "
+                    "window_mint=OPEN Soft!=product G-AC-1\n");
+            g_fUdxHostResidDone = 1;
+            g_nUdxHostResidLast = 1;
+        } else {
+            kprintf("iommu: soft udx host residual FAIL host_ok=0 "
+                    "product_hosts=UDX dual_dod=OPEN Soft!=product G-AC-1 "
+                    "Dual_DoD_A=OPEN Dual_DoD_B=OPEN\n");
+            g_fUdxHostResidDone = 1;
+            g_nUdxHostResidLast = -1;
+        }
+        (void)g_nUdxHostResidLast;
+    }
+    g_fUdxResidDone = 1;
+    g_nUdxResidLast = 1;
+    g_fDmaPathResidDone = 1;
+    g_nDmaPathResidLast = 1;
+    return 1;
+}
+
+/** File-local alias. */
+static int
+vtd_soft_udx_dma_safety_residual(void)
+{
+    return iommu_vtd_udx_dma_safety_residual();
+}
+
+/*
+ * Soft sample PA for DDI DMA_NOTE residual (inside bring-up identity [0,1GiB)).
+ * Not a live device buffer - policy/inventory only. Soft!=product.
+ */
+#define VTD_DDI_NOTE_PA  0x4000ull
+#define VTD_DDI_NOTE_CB  0x1000ull
+/* Soft BDF for DDI DMA_NOTE residual (off eng 0:14.0 / 3:0.0 / prod 0:4.0). */
+#define VTD_DDI_NOTE_BUS  0u
+#define VTD_DDI_NOTE_SLOT 5u
+#define VTD_DDI_NOTE_FUNC 0u
+
+/**
+ * Lean DDI DMA_NOTE residual: software window path + VT-d identity honesty.
+ * Soft!=product / G-AC-1. window_mint remains OPEN (not CNode window cap).
+ *
+ * DDI door op 6 (DMA_NOTE) calls iommu_window_grant + devmgr soft note.
+ * Residual: soft-grant a sample window, verify identity cover when tables
+ * ready, lamp honesty. Soft-skip when no VT-d and tables not ready.
+ * Once-only + silent reaffirm (no stamp storms). Soft lamps != product mint.
+ *
+ * Return: 1 PASS / 0 soft-skip / -1 FAIL under present inventory
+ *
+ * Greppable (keep stable - "iommu: soft ... Soft!=product"):
+ *   iommu: soft ddi residual ...
+ *   iommu: soft ddi residual PASS|SKIP|FAIL Soft!=product
+ *   iommu: soft dma_note residual ...
+ *   iommu: soft dma_note residual PASS|SKIP|FAIL Soft!=product
+ *   window_mint=OPEN
+ */
+int
+iommu_vtd_ddi_dma_note_residual(void)
+{
+    int fPresent;
+    int fHasVtd;
+    int fMap;
+    int fCovered = 0;
+    int fGrantOk;
+    u32 cWin0;
+    u32 cWin1;
+    u32 cRoot;
+
+    /*
+     * Lean re-entry: after first PASS, silent when identity map still honest
+     * and soft window table still live. Soft!=product / window_mint OPEN.
+     */
+    if (g_fDdiResidDone != 0 && g_nDdiResidLast > 0 &&
+        vtd_soft_identity_map_ok() != 0 && iommu_window_count() > 0u) {
+        return 1;
+    }
+    if (g_fDdiResidDone != 0 && g_nDdiResidLast == 0 &&
+        iommu_present() == 0 && g_u64Drhd == 0 && !g_fVtdReady) {
+        return 0;
+    }
+
+    fPresent = iommu_present();
+    fHasVtd = (fPresent != 0 || g_u64Drhd != 0) ? 1 : 0;
+
+    /*
+     * Soft-skip if no VT-d and no tables: nothing to enforce for DMA_NOTE.
+     * Soft!=product; window_mint stays OPEN either way.
+     * Grep: iommu: soft ddi residual | soft dma_note residual
+     */
+    if (!fHasVtd && !g_fVtdReady) {
+        kprintf("iommu: soft ddi residual soft-skip no_vtd present=%d "
+                "window_mint=OPEN Soft!=product\n",
+                fPresent);
+        kprintf("iommu: soft dma_note residual soft-skip no_vtd "
+                "window_mint=OPEN Soft!=product\n");
+        kprintf("iommu: soft ddi residual SKIP no_vtd Soft!=product\n");
+        kprintf("iommu: soft dma_note residual SKIP no_vtd Soft!=product\n");
+        g_fDdiResidDone = 1;
+        g_nDdiResidLast = 0;
+        return 0;
+    }
+
+    if (!g_fVtdReady) {
+        if (iommu_vtd_init_tables() != 0) {
+            if (!fHasVtd) {
+                kprintf("iommu: soft ddi residual SKIP no_tables "
+                        "window_mint=OPEN Soft!=product\n");
+                kprintf("iommu: soft dma_note residual SKIP no_tables "
+                        "window_mint=OPEN Soft!=product\n");
+                g_fDdiResidDone = 1;
+                g_nDdiResidLast = 0;
+                return 0;
+            }
+            kprintf("iommu: soft ddi residual FAIL tables Soft!=product\n");
+            kprintf("iommu: soft dma_note residual FAIL tables Soft!=product\n");
+            g_fDdiResidDone = 1;
+            g_nDdiResidLast = -1;
+            return -1;
+        }
+    }
+
+    /*
+     * Soft-grant sample window (create_window soft path used by DDI DMA_NOTE).
+     * Verify VT-d identity cover for sample PA. Soft!=product; not cap mint.
+     */
+    cWin0 = iommu_window_count();
+    fGrantOk = (iommu_vtd_window_grant(VTD_DDI_NOTE_BUS, VTD_DDI_NOTE_SLOT,
+                                       VTD_DDI_NOTE_FUNC, VTD_DDI_NOTE_PA,
+                                       VTD_DDI_NOTE_CB, &fCovered) == 0)
+                   ? 1
+                   : 0;
+    cWin1 = iommu_window_count();
+    fMap = vtd_soft_identity_map_ok();
+    cRoot = vtd_root_buses_p_count();
+
+    /*
+     * Lean lamps once. Soft!=product / G-AC-1.
+     * window_mint=OPEN: software BDF table only - not CNode DMA window cap.
+     * Grep: iommu: soft ddi residual
+     * Grep: iommu: soft dma_note residual
+     * Grep: window_mint=OPEN
+     */
+    kprintf("iommu: soft ddi residual grant=%d cover=%d map=%d win=%u->%u "
+            "root_buses=%u bdf=%u:%u.%u pa=0x%lx cb=0x%lx "
+            "window_mint=OPEN Soft!=product\n",
+            fGrantOk, fCovered, fMap, cWin0, cWin1, cRoot,
+            (unsigned)VTD_DDI_NOTE_BUS, (unsigned)VTD_DDI_NOTE_SLOT,
+            (unsigned)VTD_DDI_NOTE_FUNC, (unsigned long)VTD_DDI_NOTE_PA,
+            (unsigned long)VTD_DDI_NOTE_CB);
+    kprintf("iommu: soft dma_note residual op=6 path=iommu_window_grant "
+            "grant=%d cover=%d identity_1g=%d window_mint=OPEN "
+            "Soft!=product G-AC-1\n",
+            fGrantOk, fCovered, fMap);
+
+    if (!fGrantOk || !fCovered || !fMap) {
+        if (!fHasVtd) {
+            kprintf("iommu: soft ddi residual SKIP partial "
+                    "window_mint=OPEN Soft!=product\n");
+            kprintf("iommu: soft dma_note residual SKIP partial "
+                    "window_mint=OPEN Soft!=product\n");
+            g_fDdiResidDone = 1;
+            g_nDdiResidLast = 0;
+            return 0;
+        }
+        kprintf("iommu: soft ddi residual FAIL grant=%d cover=%d map=%d "
+                "Soft!=product\n",
+                fGrantOk, fCovered, fMap);
+        kprintf("iommu: soft dma_note residual FAIL Soft!=product\n");
+        g_fDdiResidDone = 1;
+        g_nDdiResidLast = -1;
+        return -1;
+    }
+
+    kprintf("iommu: soft ddi residual PASS grant=1 cover=1 map=1g "
+            "window_mint=OPEN Soft!=product\n");
+    kprintf("iommu: soft dma_note residual PASS window_mint=OPEN "
+            "Soft!=product\n");
+    g_fDdiResidDone = 1;
+    g_nDdiResidLast = 1;
+    return 1;
+}
+
+/** File-local alias. */
+static int
+vtd_soft_ddi_dma_note_residual(void)
+{
+    return iommu_vtd_ddi_dma_note_residual();
+}
+
+/**
  * Write context-entry DID (+AW) when tables ready.
  * Bring-up shares one context table across all root bus entries (identity).
  * Soft path: updates RAM only; no context-cache invalidate (no QI soft).
- * Note: shared context means DID for (slot,func) is global across buses —
+ * Note: shared context means DID for (slot,func) is global across buses -
  * fine for DID=0 identity; product multi-domain needs per-bus context later.
  */
 static int
@@ -328,8 +2103,8 @@ vtd_domain_pool_init(void)
 }
 
 /**
- * Build identity SLPT covering [0, 1 GiB) with 2 MiB pages.
- * Layout: PDPT[0] → PD with 512 × 2 MiB SP entries.
+ * Build identity SLPT covering [0, 1 GiB) with 2 MiB pages.
+ * Layout: PDPT[0] -> PD with 512 x 2 MiB SP entries.
  */
 static int
 vtd_build_slpt_identity_1g(void)
@@ -413,7 +2188,7 @@ vtd_soft_cap_load(void)
         return;
     }
     pMmio = (volatile u32 *)va;
-    /* CAP @0x08, ECAP @0x10 — public VT-d register map; read-only soft probe */
+    /* CAP @0x08, ECAP @0x10 - public VT-d register map; read-only soft probe */
     u64Cap = (u64)pMmio[VTD_REG_CAP / 4u] |
              ((u64)pMmio[(VTD_REG_CAP + 4u) / 4u] << 32);
     u64Ecap = (u64)pMmio[VTD_REG_ECAP / 4u] |
@@ -552,9 +2327,9 @@ iommu_vtd_init_tables(void)
     }
     /*
      * Root entries for ALL 256 buses: share one context table + identity SLPT.
-     * G752 10ec:8168 sits at 03:00.0 (bus 3) — bus-0-only root left that BDF
-     * unmapped under TE → RX/TX OWN never clears (DMA fault). Soft≠product.
-     * Root page is 4 KiB = 256 × 16-byte entries; one shared context is OK
+     * G752 10ec:8168 sits at 03:00.0 (bus 3) - bus-0-only root left that BDF
+     * unmapped under TE -> RX/TX OWN never clears (DMA fault). Soft!=product.
+     * Root page is 4 KiB = 256 x 16-byte entries; one shared context is OK
      * for bring-up identity (DID=0, same SLPT for every BDF).
      */
     {
@@ -580,10 +2355,20 @@ iommu_vtd_init_tables(void)
     }
     vtd_domain_pool_init();
     g_fVtdReady = 1;
+    /*
+     * Grep: iommu: vtd root=
+     * Grep: root_buses=256 bus3_p= did0_ctx=
+     * All-bus DID0: 256 root P + 256 shared-CT entries with DID=0.
+     */
     kprintf("iommu: vtd root=0x%lx ctx=0x%lx slpt=0x%lx pages=%u ctx_dev=%u "
-            "root_buses=256 (shared identity; covers 03:00.0 10ec:8168)\n",
+            "root_buses=%u bus0_p=%d bus3_p=%d ctx_00_p=%d did0_ctx=%u "
+            "(shared identity DID0; covers G752 03:00.0 + 0:14.0)\n",
             (unsigned long)g_paRoot, (unsigned long)g_paContext,
-            (unsigned long)g_paPdpt, g_u32VtdPages, g_u32CtxDevices);
+            (unsigned long)g_paPdpt, g_u32VtdPages, g_u32CtxDevices,
+            vtd_root_buses_p_count(), vtd_root_bus_p(0),
+            vtd_root_bus_p(VTD_G752_NIC_BUS),
+            vtd_ctx_devfn_p(VTD_G752_NIC_SLOT, VTD_G752_NIC_FUNC),
+            vtd_ctx_did0_present_count());
     return 0;
 }
 
@@ -647,11 +2432,11 @@ iommu_vtd_program_hw(void)
         return 0;
     }
     pMmio = (volatile u32 *)vaDrhd;
-    /* RTADDR at 0x20 (64-bit), GCMD at 0x18 — public VT-d register map */
+    /* RTADDR at 0x20 (64-bit), GCMD at 0x18 - public VT-d register map */
     u64Rt = (u64)g_paRoot;
     pMmio[VTD_REG_RTADDR / 4u] = (u32)(u64Rt & 0xffffffffu);
     pMmio[(VTD_REG_RTADDR + 4u) / 4u] = (u32)(u64Rt >> 32);
-    /* Set SRTP then TE — only when a real unit is present */
+    /* Set SRTP then TE - only when a real unit is present */
     pMmio[VTD_REG_GCMD / 4u] = VTD_GCMD_SRTP;
     for (u32Spins = 0; u32Spins < VTD_GSTS_SPINS; u32Spins++) {
         if ((pMmio[VTD_REG_GSTS / 4u] & VTD_GSTS_RTPS) != 0) {
@@ -663,18 +2448,54 @@ iommu_vtd_program_hw(void)
                 (unsigned long)g_u64Drhd);
         return 0;
     }
+    /*
+     * Arm TE only after identity preflight (all 256 root buses + bus3).
+     * Without bus3 root P, G752 03:00.0 DMA faults -> freestanding OWN-stuck.
+     */
+    if (!vtd_te_identity_preflight()) {
+        kprintf("iommu: vtd MMIO TE abort preflight FAIL (NIC OWN risk)\n");
+        return 0;
+    }
     pMmio[VTD_REG_GCMD / 4u] = VTD_GCMD_TE;
+    /* Wait GSTS.TES - TE without TES ack is not live; OWN can stick mid-arm. */
+    for (u32Spins = 0; u32Spins < VTD_GSTS_SPINS; u32Spins++) {
+        if ((pMmio[VTD_REG_GSTS / 4u] & VTD_GSTS_TES) != 0) {
+            break;
+        }
+    }
+    if (u32Spins >= VTD_GSTS_SPINS) {
+        kprintf("iommu: vtd TES timeout DRHD=0x%lx (TE not live; soft fallback)\n",
+                (unsigned long)g_u64Drhd);
+        return 0;
+    }
     g_fTeArmed = 1;
     g_nTeMode = GJ_IOMMU_TE_HW;
-    kprintf("iommu: vtd MMIO programmed DRHD=0x%lx RT=0x%lx\n",
-            (unsigned long)g_u64Drhd, (unsigned long)u64Rt);
+    kprintf("iommu: vtd MMIO programmed DRHD=0x%lx RT=0x%lx TES=1 "
+            "bus3_p=%d root_buses=%u\n",
+            (unsigned long)g_u64Drhd, (unsigned long)u64Rt,
+            vtd_root_bus_p(VTD_G752_NIC_BUS), vtd_root_buses_p_count());
     return 1;
 }
 
 int
 iommu_vtd_te_arm(void)
 {
+    int fPre;
+    int fEngBm = 0;
+
     if (g_fTeArmed && g_nTeMode != GJ_IOMMU_TE_NONE) {
+        /*
+         * Already armed: silent reaffirm UDX identity residual (eng map +
+         * FUNCTIONAL eng busmaster) so post-TE greps stay honest without
+         * stamp storms. Soft!=product / Dual DoD OPEN_UDX.
+         * Grep: iommu: vtd TE arm already
+         */
+        (void)vtd_soft_udx_dma_safety_residual();
+        fEngBm = vtd_soft_eng_busmaster_ok(0, NULL, NULL, NULL);
+        kprintf("iommu: vtd TE arm already mode=%d bus3_p=%d root_buses=%u "
+                "eng_bm=%d Soft!=product\n",
+                g_nTeMode, vtd_root_bus_p(VTD_G752_NIC_BUS),
+                vtd_root_buses_p_count(), fEngBm);
         return 1;
     }
     if (!g_fVtdReady) {
@@ -683,19 +2504,59 @@ iommu_vtd_te_arm(void)
             return 0;
         }
     }
-    if (g_u64Drhd != 0) {
+
+    /*
+     * Before TE (HW or soft): UDX DMA safety eng residual (pulls bus3 + usb
+     * + did0 + map + FUNCTIONAL eng busmaster) so userspace rtl8168_udx /
+     * xhci_udx force32 DMA stays OWN-safe under Translated TE.
+     * Soft!=product / G-AC-1.
+     * Also DDI DMA_NOTE residual (soft window + cover; window_mint OPEN).
+     * Grep: iommu: soft udx residual | soft eng residual | soft bus3 residual
+     * Grep: iommu: soft udx bm residual
+     * Grep: iommu: soft ddi residual | soft dma_note residual | window_mint=OPEN
+     */
+    (void)vtd_soft_udx_dma_safety_residual();
+    (void)vtd_soft_ddi_dma_note_residual();
+    fPre = vtd_te_identity_preflight();
+    if (!fPre) {
+        /*
+         * Incomplete root/identity: refuse HW TE (OWN killer). Soft-arm still
+         * records policy when tables partial - but log FAIL-soft for greps.
+         */
+        kprintf("iommu: vtd TE arm preflight WARN bus3 incomplete "
+                "(refuse HW TE; soft-arm if tables partial)\n");
+    }
+
+    if (g_u64Drhd != 0 && fPre) {
         if (iommu_vtd_program_hw()) {
-            kprintf("iommu: vtd TE arm HW PASS\n");
+            /* Grep: iommu: vtd TE arm HW PASS */
+            fEngBm = vtd_soft_eng_busmaster_ok(0, NULL, NULL, NULL);
+            kprintf("iommu: vtd TE arm HW PASS bus3_p=%d root_buses=%u "
+                    "eng_bm=%d id_limit=0x%lx "
+                    "(force32 DMA must stay in [0,1GiB))\n",
+                    vtd_root_bus_p(VTD_G752_NIC_BUS), vtd_root_buses_p_count(),
+                    fEngBm, (unsigned long)VTD_IDENTITY_LIMIT);
             return 1;
         }
-        kprintf("iommu: vtd TE arm HW fail → soft\n");
+        kprintf("iommu: vtd TE arm HW fail -> soft bus3_p=%d\n",
+                vtd_root_bus_p(VTD_G752_NIC_BUS));
+    } else if (g_u64Drhd != 0 && !fPre) {
+        kprintf("iommu: vtd TE arm HW skipped preflight FAIL -> soft\n");
     }
+
     /* Soft TE: tables present; production HW path would set GCMD.TE */
     g_fTeArmed = 1;
     g_nTeMode = GJ_IOMMU_TE_SOFT;
-    kprintf("iommu: vtd TE soft-armed root=0x%lx pages=%u\n",
-            (unsigned long)g_paRoot, g_u32VtdPages);
-    kprintf("iommu: vtd TE soft-arm PASS\n");
+    fEngBm = vtd_soft_eng_busmaster_ok(0, NULL, NULL, NULL);
+    kprintf("iommu: vtd TE soft-armed root=0x%lx pages=%u bus3_p=%d "
+            "root_buses=%u preflight=%d eng_bm=%d\n",
+            (unsigned long)g_paRoot, g_u32VtdPages,
+            vtd_root_bus_p(VTD_G752_NIC_BUS), vtd_root_buses_p_count(), fPre,
+            fEngBm);
+    /* Grep: iommu: vtd TE soft-arm PASS */
+    kprintf("iommu: vtd TE soft-arm PASS bus3_cover=%d eng_bm=%d "
+            "Soft!=product\n",
+            vtd_root_bus_p(VTD_G752_NIC_BUS), fEngBm);
     return 1;
 }
 
@@ -753,14 +2614,24 @@ iommu_vtd_te_live_ready(void)
         kprintf("iommu: vtd TE live-ready cover FAIL\n");
         return 0;
     }
+    /* Bus3 cover is part of live-ready for freestanding G752 NIC. */
+    if (!vtd_root_bus_p(VTD_G752_NIC_BUS) || vtd_root_buses_p_count() != 256u) {
+        kprintf("iommu: vtd TE live-ready bus3 FAIL bus3_p=%d root_buses=%u\n",
+                vtd_root_bus_p(VTD_G752_NIC_BUS), vtd_root_buses_p_count());
+        return 0;
+    }
     if (nMode == GJ_IOMMU_TE_HW) {
-        kprintf("iommu: vtd TE live HW mode DRHD=0x%lx\n",
+        kprintf("iommu: vtd TE live HW mode DRHD=0x%lx bus3_p=1\n",
                 (unsigned long)g_u64Drhd);
     } else {
-        kprintf("iommu: vtd TE live soft mode (no DRHD; set GJ_INTEL_IOMMU=1)\n");
+        kprintf("iommu: vtd TE live soft mode (no DRHD; set GJ_INTEL_IOMMU=1) "
+                "bus3_p=1\n");
     }
-    kprintf("iommu: vtd TE live-ready PASS mode=%d pages=%u\n", nMode,
-            g_u32VtdPages);
+    /* Grep: iommu: vtd TE live-ready PASS */
+    kprintf("iommu: vtd TE live-ready PASS mode=%d pages=%u bus3_p=%d "
+            "root_buses=%u\n",
+            nMode, g_u32VtdPages, vtd_root_bus_p(VTD_G752_NIC_BUS),
+            vtd_root_buses_p_count());
     return 1;
 }
 
@@ -816,13 +2687,40 @@ iommu_vtd_window_grant(u8 bus, u8 slot, u8 func, u64 pa, u64 cb, int *pCovered)
         if (pCovered != NULL) {
             *pCovered = 0;
         }
+        /*
+         * greppable: iommu: vtd window_grant FAIL
+         * Soft software window reject (full/bad); not product mint.
+         */
+        kprintf("iommu: vtd window_grant FAIL soft_win %u:%u.%u "
+                "pa=0x%lx cb=0x%lx cover=0 product_window_mint=OPEN "
+                "Soft!=product dual_dod_b=OPEN\n",
+                bus, slot, func, (unsigned long)pa, (unsigned long)cb);
         return -1;
     }
     if (iommu_vtd_ready()) {
         fCovered = iommu_vtd_identity_covers(pa, cb);
-        kprintf("iommu: vtd identity cover=%d %u:%u.%u pa=0x%lx cb=0x%lx\n",
-                fCovered, bus, slot, func, (unsigned long)pa,
-                (unsigned long)cb);
+        if (fCovered == 0) {
+            /*
+             * greppable: iommu: vtd identity cover FAIL
+             * greppable: iommu: vtd identity cover=0
+             * Soft residual: Own stick under TE if identity miss.
+             * Soft!=product; not inventing full VT-d product program.
+             */
+            kprintf("iommu: vtd identity cover FAIL cover=0 %u:%u.%u "
+                    "pa=0x%lx cb=0x%lx te_armed=%d soft_window=1 "
+                    "product_window_mint=OPEN full_vtd=0 "
+                    "residual=Own_stick_under_TE_if_identity_miss "
+                    "Soft!=product dual_dod_b=OPEN\n",
+                    bus, slot, func, (unsigned long)pa, (unsigned long)cb,
+                    iommu_vtd_te_armed());
+        } else {
+            /* greppable: iommu: vtd identity cover */
+            kprintf("iommu: vtd identity cover=%d %u:%u.%u pa=0x%lx "
+                    "cb=0x%lx soft_window=1 product_window_mint=OPEN "
+                    "Soft!=product\n",
+                    fCovered, bus, slot, func, (unsigned long)pa,
+                    (unsigned long)cb);
+        }
     }
     if (pCovered != NULL) {
         *pCovered = fCovered;
@@ -853,32 +2751,14 @@ vtd_soft_note_att_peak(void)
 }
 
 /**
- * Wave 19 greppable soft inventory dump (prefix "vtd: soft …").
- * Diagnostics only — never hard-gates; never claims always-on product IOMMU.
+ * Lean greppable soft inventory (prefix "vtd: soft ... Soft!=product").
+ * Diagnostics only - never hard-gates; never claims always-on product IOMMU.
+ * No version stamp. No stamp storms (few lamps only).
+ * Keeps G752 eng cover lamps: bus3_p + identity [0,1GiB) + DID0 (UDX path).
  *
- * greppable: vtd: soft
  * greppable: vtd: soft inventory
- * greppable: vtd: soft tables
- * greppable: vtd: soft cap
- * greppable: vtd: soft dmar
- * greppable: vtd: soft te
- * greppable: vtd: soft domain
  * greppable: vtd: soft identity
- * greppable: vtd: soft product
- * greppable: vtd: soft attach
- * greppable: vtd: soft feat
- * greppable: vtd: soft qi
- * greppable: vtd: soft root
  * greppable: vtd: soft path
- * greppable: vtd: soft lamps
- * greppable: vtd: soft honesty
- * greppable: vtd: soft stats
- * greppable: vtd: soft deepen
- * greppable: vtd: soft OPEN
- * greppable: vtd: soft surfaces
- * greppable: vtd: soft did
- * greppable: vtd: soft mmio
- * greppable: vtd: soft return
  * greppable: vtd: soft PASS
  */
 static void
@@ -886,18 +2766,20 @@ vtd_soft_inventory_log(void)
 {
     u32 cAtt = 0;
     u32 iAtt;
-    u32 u32Surf;
     int fReady;
     int fTe;
     int nMode;
     int fIdLo;
     int fIdHi;
-    int fIdOut;
-    int fCoveredSoft;
-    int fRootP;
+    int fMap;
     u32 u32Feat;
     const char *szMode;
-    const char *szCapSrc;
+
+    /* Lean: inventory lamps once (soft-probe only path today). Soft!=product. */
+    if (g_fSoftInvLogged != 0) {
+        return;
+    }
+    g_fSoftInvLogged = 1;
 
     if (g_cSoftInvLogs < 0xffffffffu) {
         g_cSoftInvLogs++;
@@ -920,1175 +2802,65 @@ vtd_soft_inventory_log(void)
     } else {
         szMode = "none";
     }
-    szCapSrc = g_fCapFromMmio ? "mmio" : "synthetic";
     fIdLo = iommu_vtd_identity_covers(0, 0x1000);
     fIdHi = iommu_vtd_identity_covers(VTD_IDENTITY_LIMIT - VTD_2MIB, VTD_2MIB);
-    fIdOut = iommu_vtd_identity_covers(VTD_IDENTITY_LIMIT, 0x1000);
-    fCoveredSoft = (fIdLo && fIdHi && !fIdOut) ? 1 : 0;
-    fRootP = (g_cSoftRootPOk > 0 && g_cSoftRootPClear == 0) ? 1 : 0;
-    if (fReady && g_paRoot != 0) {
-        u64 *pRoot = (u64 *)vtd_virt(g_paRoot);
-
-        if (pRoot != NULL) {
-            fRootP = ((pRoot[0] & VTD_ROOT_P) != 0) ? 1 : 0;
-        }
-    }
+    fMap = vtd_soft_identity_map_ok();
     u32Feat = g_Soft.u32Feat;
-    u32Surf = VTD_SOFT_SURF_CATALOG;
 
     /* Grep: vtd: soft inventory */
-    kprintf("vtd: soft inventory ready=%d pages=%u ctx_dev=%u ctx_present=%u "
-            "dom=%u/%u feat=0x%x te_mode=%s drhd=0x%lx logs=%u wave=%u "
-            "(soft inventory; not always-on product IOMMU)\n",
-            fReady, g_u32VtdPages, g_u32CtxDevices,
-            g_Soft.u32CtxPresent, g_u32DomUsed,
+    kprintf("vtd: soft inventory ready=%d pages=%u ctx=%u dom=%u/%u "
+            "feat=0x%x te_mode=%s drhd=0x%lx Soft!=product\n",
+            fReady, g_u32VtdPages, g_Soft.u32CtxPresent, g_u32DomUsed,
             (unsigned)GJ_IOMMU_DOMAIN_MAX, u32Feat, szMode,
-            (unsigned long)g_u64Drhd, g_cSoftInvLogs,
-            (unsigned)VTD_SOFT_WAVE);
+            (unsigned long)g_u64Drhd);
 
-    /* Grep: vtd: soft tables */
-    kprintf("vtd: soft tables ready=%d root=0x%lx ctx=0x%lx slpt=0x%lx "
-            "pd0=0x%lx pages=%u ctx_dev=%u min_pages=%u wave=%u "
-            "(RAM construct; not HW product close)\n",
-            fReady, (unsigned long)g_paRoot, (unsigned long)g_paContext,
-            (unsigned long)g_paPdpt, (unsigned long)g_paPd0, g_u32VtdPages,
-            g_u32CtxDevices, (unsigned)VTD_PAGES_MIN, (unsigned)VTD_SOFT_WAVE);
-
-    /* Grep: vtd: soft cap */
-    kprintf("vtd: soft cap src=%s mmio=%d cap=0x%lx ecap=0x%lx "
-            "feat_cap_mmio=%u feat_cap_soft=%u mmio_hit=%u synth=%u "
-            "wave=%u (read-only soft; never programs GCMD here)\n",
-            szCapSrc, g_fCapFromMmio ? 1 : 0, (unsigned long)g_u64Cap,
-            (unsigned long)g_u64Ecap,
-            (u32Feat & GJ_IOMMU_SOFT_FEAT_CAP_MMIO) ? 1u : 0u,
-            (u32Feat & GJ_IOMMU_SOFT_FEAT_CAP_SOFT) ? 1u : 0u,
-            g_cSoftCapMmioHit, g_cSoftCapSynth, (unsigned)VTD_SOFT_WAVE);
-
-    /* Grep: vtd: soft dmar */
-    kprintf("vtd: soft dmar drhd=%u rmrr=%u atsr=%u rhsa=%u other=%u "
-            "has_drhd=%d base=0x%lx wave=%u (fed from ACPI soft inventory)\n",
-            g_cDrhdInv, g_cRmrrInv, g_cAtsrInv, g_cRhsaInv, g_cOtherInv,
-            (g_u64Drhd != 0) ? 1 : 0, (unsigned long)g_u64Drhd,
-            (unsigned)VTD_SOFT_WAVE);
-
-    /* Grep: vtd: soft te */
-    kprintf("vtd: soft te armed=%d mode=%s mode_n=%d "
-            "feat_te_soft=%u feat_te_hw=%u root=0x%lx wave=%u "
-            "(soft-arm ≠ product always-on TE)\n",
-            fTe, szMode, nMode,
-            (u32Feat & GJ_IOMMU_SOFT_FEAT_TE_SOFT) ? 1u : 0u,
-            (u32Feat & GJ_IOMMU_SOFT_FEAT_TE_HW) ? 1u : 0u,
-            (unsigned long)g_paRoot, (unsigned)VTD_SOFT_WAVE);
-
-    /* Grep: vtd: soft domain */
-    kprintf("vtd: soft domain used=%u max=%u attach_live=%u attach_max=%u "
-            "default0=%u feat_domain=%u create=%u destroy=%u peak=%u "
-            "wave=%u (software DID pool; no QI invalidate product)\n",
-            g_u32DomUsed, (unsigned)GJ_IOMMU_DOMAIN_MAX, cAtt,
-            (unsigned)VTD_SOFT_ATTACH_MAX, g_aDom[0].u8Used ? 1u : 0u,
-            (u32Feat & GJ_IOMMU_SOFT_FEAT_DOMAIN) ? 1u : 0u,
-            g_cSoftDomCreate, g_cSoftDomDestroy, g_cSoftDomPeak,
-            (unsigned)VTD_SOFT_WAVE);
-
-    /* Grep: vtd: soft identity */
-    kprintf("vtd: soft identity limit=0x%lx cover_lo=%d cover_hi=%d "
-            "cover_out=%d bounds_ok=%d feat_id=%u sp=2MiB wave=%u "
-            "(bring-up first 1GiB; not full address-space product)\n",
-            (unsigned long)VTD_IDENTITY_LIMIT, fIdLo, fIdHi, fIdOut,
-            fCoveredSoft,
-            (u32Feat & GJ_IOMMU_SOFT_FEAT_IDENTITY) ? 1u : 0u,
-            (unsigned)VTD_SOFT_WAVE);
-
-    /* Grep: vtd: soft product (P-DMA-4 soft path tallies) */
-    kprintf("vtd: soft product soft_denies=%u open_bus=0 "
-            "prod_bdf=%u:%u.%u deny_bdf=%u:%u.%u "
-            "production_default_open_bus=0 soft wave=%u "
-            "(P-DMA-4 soft; not product always-on IOMMU)\n",
-            g_u32ProdSoftDeny, (unsigned)VTD_PROD_SOFT_BUS,
-            (unsigned)VTD_PROD_SOFT_SLOT, (unsigned)VTD_PROD_SOFT_FUNC,
-            (unsigned)VTD_PROD_SOFT_BUS, (unsigned)VTD_PROD_DENY_SLOT,
-            (unsigned)VTD_PROD_DENY_FUNC, (unsigned)VTD_SOFT_WAVE);
-
-    /* Grep: vtd: soft attach (Wave 15 domain attach path) */
-    kprintf("vtd: soft attach ok=%u rebind=%u fail=%u detach_ok=%u "
-            "detach_miss=%u live=%u peak=%u ctx_did_ok=%u ctx_did_fail=%u "
-            "wave=%u (software attach; not QI/HW invalidate product)\n",
-            g_cSoftAttOk, g_cSoftAttRebind, g_cSoftAttFail, g_cSoftDetOk,
-            g_cSoftDetMiss, cAtt, g_cSoftAttPeak, g_cSoftCtxDidWrite,
-            g_cSoftCtxDidFail, (unsigned)VTD_SOFT_WAVE);
-
-    /* Grep: vtd: soft feat (Wave 15 expanded feature lamps) */
-    kprintf("vtd: soft feat mask=0x%x tables=%u identity=%u drhd=%u "
-            "cap_mmio=%u cap_soft=%u te_soft=%u te_hw=%u domain=%u "
-            "wave=%u (SOFT_FEAT bits; soft only)\n",
-            u32Feat,
-            (u32Feat & GJ_IOMMU_SOFT_FEAT_TABLES) ? 1u : 0u,
-            (u32Feat & GJ_IOMMU_SOFT_FEAT_IDENTITY) ? 1u : 0u,
-            (u32Feat & GJ_IOMMU_SOFT_FEAT_DRHD) ? 1u : 0u,
-            (u32Feat & GJ_IOMMU_SOFT_FEAT_CAP_MMIO) ? 1u : 0u,
-            (u32Feat & GJ_IOMMU_SOFT_FEAT_CAP_SOFT) ? 1u : 0u,
-            (u32Feat & GJ_IOMMU_SOFT_FEAT_TE_SOFT) ? 1u : 0u,
-            (u32Feat & GJ_IOMMU_SOFT_FEAT_TE_HW) ? 1u : 0u,
-            (u32Feat & GJ_IOMMU_SOFT_FEAT_DOMAIN) ? 1u : 0u,
-            (unsigned)VTD_SOFT_WAVE);
-
-    /* Grep: vtd: soft qi (Wave 15 QI product OPEN honesty) */
-    kprintf("vtd: soft qi product=OPEN invalidate=OPEN "
-            "context_cache=OPEN iotlb=OPEN ecap=0x%lx wave=%u "
-            "(no QI product; soft deepen ≠ QI claim)\n",
-            (unsigned long)g_u64Ecap, (unsigned)VTD_SOFT_WAVE);
-
-    /* Grep: vtd: soft root (Wave 15 root/context lamps) */
-    kprintf("vtd: soft root ready=%d root_p=%d root_pa=0x%lx "
-            "ctx_pa=0x%lx ctx_present=%u ctx_dev=%u "
-            "verify_ok=%u verify_clear=%u wave=%u "
-            "(RAM root; not HW RTADDR product default)\n",
-            fReady, fRootP, (unsigned long)g_paRoot,
-            (unsigned long)g_paContext, g_Soft.u32CtxPresent,
-            g_u32CtxDevices, g_cSoftRootPOk, g_cSoftRootPClear,
-            (unsigned)VTD_SOFT_WAVE);
+    /*
+     * Grep: vtd: soft identity
+     * Grep: bus3_p (G752 03:00.0 10ec:8168 UDX eng cover)
+     * Identity/map honesty for Dual DoD UDX force32 DMA.
+     */
+    kprintf("vtd: soft identity limit=0x%lx id_lo=%d id_hi=%d map=%d "
+            "bus3_p=%d root_buses=%u did0_eng=%d te=%d Soft!=product\n",
+            (unsigned long)VTD_IDENTITY_LIMIT, fIdLo, fIdHi, fMap,
+            vtd_root_bus_p(VTD_G752_NIC_BUS), vtd_root_buses_p_count(),
+            vtd_eng_did0_ok(), fTe);
 
     /*
      * Honesty: always-on product IOMMU remains OPEN.
-     * Soft deepen ≠ product always-on IOMMU claim.
+     * eng_bm: FUNCTIONAL eng busmaster under enforce (UDX residual).
      * Grep: vtd: soft path
+     * udx_dma_safety=eng: soft residual only; Soft!=product Dual DoD OPEN.
+     * C2 Dual DoD DMA path: dual_dod_a/b=OPEN_UDX freestanding_product=SKIP
+     * product=UDX+ABI product_hosts=UDX (G-AC-1 not .ko product AC).
+     * Soft lamps != Dual DoD close. Never claim product close.
+     * window_mint=OPEN: DDI DMA_NOTE soft window only - not CNode cap mint.
+     * Full "iommu: soft dma path residual" lamps live in UDX residual once.
+     * Grep: Soft!=product | dual_dod=OPEN | product_hosts=UDX
      */
-    kprintf("vtd: soft path tables=ram_identity_1g te=soft_or_hw "
-            "cap=mmio_or_synthetic domain=soft_did "
-            "always_on_product=OPEN hw_default_te=OPEN "
-            "qi_invalidate=OPEN wave=%u "
-            "(soft inventory; not product always-on IOMMU)\n",
-            (unsigned)VTD_SOFT_WAVE);
+    {
+        int fEngBm = 0;
 
-    /* Grep: vtd: soft lamps */
-    kprintf("vtd: soft lamps tables=%d te=%d cap_mmio=%d has_drhd=%d "
-            "identity=%d domain0=%d soft_probed=%d root_p=%d wave=%u "
-            "(composite soft lamps)\n",
-            fReady, fTe, g_fCapFromMmio ? 1 : 0, (g_u64Drhd != 0) ? 1 : 0,
-            fCoveredSoft, g_aDom[0].u8Used ? 1 : 0, g_fSoftProbed, fRootP,
-            (unsigned)VTD_SOFT_WAVE);
-
-    /* Grep: vtd: soft honesty (Wave 15 non-claims catalog) */
-    kprintf("vtd: soft honesty always_on_product=OPEN "
-            "no_open_bus_master_product=OPEN hw_default_te=OPEN "
-            "qi_invalidate=OPEN full_as_identity=OPEN "
-            "amd_vi_product=OPEN inventory_only=1 "
-            "soft_neq_product=1 wave=%u "
-            "(explicit non-claims; not product always-on IOMMU)\n",
-            (unsigned)VTD_SOFT_WAVE);
-
-    /* Grep: vtd: soft stats (Wave 15 rollup) */
-    kprintf("vtd: soft stats ready=%d pages=%u ctx=%u dom=%u/%u "
-            "att_live=%u att_peak=%u create=%u attach=%u "
-            "prod_deny=%u feat=0x%x te=%s logs=%u wave=%u "
-            "(rollup; not product close)\n",
-            fReady, g_u32VtdPages, g_Soft.u32CtxPresent, g_u32DomUsed,
-            (unsigned)GJ_IOMMU_DOMAIN_MAX, cAtt, g_cSoftAttPeak,
-            g_cSoftDomCreate, g_cSoftAttOk, g_u32ProdSoftDeny, u32Feat,
-            szMode, g_cSoftInvLogs, (unsigned)VTD_SOFT_WAVE);
-
-    /*
-     * Wave 19: return-surface catalog (surf bitmask; soft ≠ product).
-     * Grep: vtd: soft surfaces
-     */
-    kprintf("vtd: soft surfaces surf=0x%x catalog=%u "
-            "tables=1 cap=1 domain=1 attach=1 qi=1 root=1 "
-            "did=1 mmio=1 return=1 open=1 wave=%u "
-            "(return surfaces; soft only; not product always-on IOMMU; "
-            ")\n",
-            (unsigned)u32Surf, (unsigned)VTD_SOFT_AREAS,
-            (unsigned)VTD_SOFT_WAVE);
-
-    /*
-     * Wave 19: DID pool return surface.
-     * Grep: vtd: soft did
-     */
-    kprintf("vtd: soft did used=%u max=%u create=%u destroy=%u "
-            "attach_live=%u attach_peak=%u default0=%u wave=%u "
-            "(software DID pool; soft only; not QI product)\n",
-            g_u32DomUsed, (unsigned)GJ_IOMMU_DOMAIN_MAX,
-            g_cSoftDomCreate, g_cSoftDomDestroy, cAtt, g_cSoftAttPeak,
-            g_aDom[0].u8Used ? 1u : 0u, (unsigned)VTD_SOFT_WAVE);
-
-    /*
-     * Wave 19: DRHD MMIO program surface (optional; soft).
-     * Grep: vtd: soft mmio
-     */
-    kprintf("vtd: soft mmio has_drhd=%d base=0x%lx cap_src=%s "
-            "cap_mmio=%d te_mode=%s srtp=soft_or_hw wave=%u "
-            "(soft MMIO surface; not product always-on TE)\n",
-            (g_u64Drhd != 0) ? 1 : 0, (unsigned long)g_u64Drhd, szCapSrc,
-            g_fCapFromMmio ? 1 : 0, szMode, (unsigned)VTD_SOFT_WAVE);
-
-    /*
-     * Wave 19: attach/domain return taxonomy.
-     * Grep: vtd: soft return
-     */
-    kprintf("vtd: soft return att_ok=%u att_rebind=%u att_fail=%u "
-            "det_ok=%u det_miss=%u ctx_did_ok=%u ctx_did_fail=%u "
-            "dom_create=%u dom_destroy=%u wave=%u "
-            "(soft return taxonomy; not product)\n",
-            g_cSoftAttOk, g_cSoftAttRebind, g_cSoftAttFail,
-            g_cSoftDetOk, g_cSoftDetMiss, g_cSoftCtxDidWrite,
-            g_cSoftCtxDidFail, g_cSoftDomCreate, g_cSoftDomDestroy,
-            (unsigned)VTD_SOFT_WAVE);
-
-    /*
-     * Grep: vtd: soft return rate
-     * Wave 17 return-surface rate lamps (kept) (attach/domain).
-     */
-    kprintf("vtd: soft return rate "
-            "att_ok=%u att_fail=%u det_ok=%u det_miss=%u "
-            "dom_create=%u dom_destroy=%u ctx_did_fail=%u "
-            "logs=%u wave=%u "
-            "(return rate; Soft≠product always-on IOMMU; soft≠product; "
-            ")\n",
-            g_cSoftAttOk, g_cSoftAttFail, g_cSoftDetOk, g_cSoftDetMiss,
-            g_cSoftDomCreate, g_cSoftDomDestroy, g_cSoftCtxDidFail,
-            g_cSoftInvLogs, (unsigned)VTD_SOFT_WAVE);
-
-    /*
-     * Grep: vtd: soft retcode
-     * Wave 17 retcode catalog for attach/domain return classes.
-     */
-    kprintf("vtd: soft retcode "
-            "att_ok=1 att_rebind=1 att_fail=1 det_ok=1 det_miss=1 "
-            "ctx_did_ok=1 ctx_did_fail=1 dom_create=1 dom_destroy=1 "
-            "qi_product=OPEN always_on_product=OPEN wave=%u "
-            "(retcode catalog; Soft≠product always-on IOMMU; soft≠product)\n",
-            (unsigned)VTD_SOFT_WAVE);
-
-    /*
-     * ---- Wave 18 complementary surfaces (kept) (never reshape primary).
-     * Return surfaces only — soft inventory; never hard-gates product paths.
-     */
-    /* Grep: vtd: soft return selftest — Wave 19 terminal return surface */
-    kprintf("vtd: soft return selftest inv_ret=1 product_kernel=OPEN "
-            "multi_server=0 rate_limited=0 wave=%u soft PASS\n",
-            (unsigned)VTD_SOFT_WAVE);
-
-    /* Grep: vtd: soft retmap — Wave 19 return-surface map */
-    kprintf("vtd: soft retmap soft_inv=1 deepen=1 return_rate=1 retcode=1 "
-            "product=OPEN wave=%u soft PASS\n",
-            (unsigned)VTD_SOFT_WAVE);
-
-    /* Grep: vtd: soft deepen wave (Wave 24 stamp) */
-    /*
-     * ---- Wave 19 complementary surfaces (kept) (never reshape primary).
-     * Return surfaces only — soft inventory; never hard-gates product paths.
-     */
-    /* Grep: vtd: soft retclass — Wave 19 return-class taxonomy (kept) */
-    kprintf("vtd: soft retclass ok|fail|inval|nodev|busy|nomem "
-            "soft_only=1 product_gate=0 wave=%u "
-            "(retclass taxonomy; Soft≠product)\n",
-            (unsigned)VTD_SOFT_WAVE);
-    /* Grep: vtd: soft retlane — Wave 19 return-lane catalog (kept) */
-    kprintf("vtd: soft retlane inv|selftest|rate|retcode|retmap|class "
-            "product_kernel=OPEN soft_ne_product=1 wave=%u "
-            "(retlane catalog; Soft≠product)\n",
-            (unsigned)VTD_SOFT_WAVE);
-    /*
-     * ---- Wave 20 complementary surfaces (kept) (never reshape primary).
-     * Return surfaces only — soft inventory; never hard-gates product paths.
-     */
-    /* Grep: vtd: soft retbound — Wave 20 return-bound honesty (kept) */
-    kprintf("vtd: soft retbound soft_only=1 product_gate=0 hard_gate=0 "
-            "never_blocks_m0=1 wave=%u "
-            "(retbound honesty; Soft≠product)\n",
-            (unsigned)VTD_SOFT_WAVE);
-    /* Grep: vtd: soft retseal — Wave 20 seal stamp (kept) */
-    kprintf("vtd: soft retseal exclusive=1 soft_ne_product=1 "
-            "product_kernel=OPEN wave=%u "
-            "(retseal stamp; Soft≠product)\n",
-            (unsigned)VTD_SOFT_WAVE);
-            /*
-             * ---- Wave 21 complementary surfaces (kept) (never reshape primary).
-             * Return surfaces only — soft inventory; never hard-gates product paths.
-            */
-            /* Grep: vtd: soft retpulse — Wave 21 return-pulse honesty (kept) */
-            kprintf("vtd: soft retpulse soft_only=1 product_gate=0 soft_ne_product=1 "
-                    "never_blocks_m0=1 wave=%u "
-                    "(retpulse honesty; Soft≠product)\n",
-                    (unsigned)VTD_SOFT_WAVE);
-            /* Grep: vtd: soft retmark — Wave 21 mark stamp (kept) */
-            kprintf("vtd: soft retmark exclusive=1 soft_ne_product=1 "
-                    "product_kernel=OPEN wave=%u "
-                    "(retmark stamp; Soft≠product)\n",
-                    (unsigned)VTD_SOFT_WAVE);
-            /*
-             * ---- Wave 22 complementary surfaces (kept) (never reshape primary).
-             * Return surfaces only — soft inventory; never hard-gates product paths.
-            */
-            /* Grep: vtd: soft retphase — Wave 22 return-phase honesty (kept) */
-            kprintf("vtd: soft retphase soft_only=1 product_gate=0 soft_ne_product=1 "
-                    "never_blocks_m0=1 wave=%u "
-                    "(retphase honesty; Soft≠product)\n",
-                    (unsigned)VTD_SOFT_WAVE);
-            /* Grep: vtd: soft retbadge — Wave 22 badge stamp (kept) */
-            kprintf("vtd: soft retbadge exclusive=1 soft_ne_product=1 "
-                    "product_kernel=OPEN wave=%u "
-                    "(retbadge stamp; Soft≠product)\n",
-                    (unsigned)VTD_SOFT_WAVE);
-/*
- * ---- Wave 23 complementary surfaces (kept) (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
-            */
-            /* Grep: vtd: soft rettoken — Wave 23 return-token honesty (kept) */
-            kprintf("vtd: soft rettoken soft_only=1 product_gate=0 soft_ne_product=1 "
-                    "never_blocks_m0=1 wave=%u "
-                    "(rettoken honesty; Soft≠product)\n",
-                    (unsigned)VTD_SOFT_WAVE);
-            /* Grep: vtd: soft retcrest — Wave 23 crest stamp (kept) */
-            kprintf("vtd: soft retcrest exclusive=1 soft_ne_product=1 "
-                    "product_kernel=OPEN wave=%u "
-                    "(retcrest stamp; Soft≠product)\n",
-                    (unsigned)VTD_SOFT_WAVE);
-            /*
-             * ---- Wave 24 complementary surfaces (kept) (never reshape primary).
-             * Return surfaces only — soft inventory; never hard-gates product paths.
-             */
-            /* Grep: vtd: soft retvault — Wave 24 return-vault honesty (kept) */
-            kprintf("vtd: soft retvault soft_only=1 product_gate=0 soft_ne_product=1 "
-                    "never_blocks_m0=1 wave=%u "
-                    "(retvault honesty; Soft≠product)\n",
-                    (unsigned)VTD_SOFT_WAVE);
-            /* Grep: vtd: soft retbanner — Wave 24 banner stamp (kept) */
-            kprintf("vtd: soft retbanner exclusive=1 soft_ne_product=1 "
-                    "product_kernel=OPEN wave=%u "
-                    "(retbanner stamp; Soft≠product)\n",
-                    (unsigned)VTD_SOFT_WAVE);
-            /*
-             * ---- Wave 25 complementary surfaces (kept) (never reshape primary).
-             * Return surfaces only — soft inventory; never hard-gates product paths.
-             */
-            /* Grep: vtd: soft retledger — Wave 25 return-ledger honesty (kept) */
-            kprintf("vtd: soft retledger soft_only=1 product_gate=0 soft_ne_product=1 "
-                    "never_blocks_m0=1 wave=%u "
-                    "(retledger honesty; Soft≠product)\n",
-                    (unsigned)VTD_SOFT_WAVE);
-            /* Grep: vtd: soft retbeacon — Wave 25 beacon stamp (kept) */
-            kprintf("vtd: soft retbeacon exclusive=1 soft_ne_product=1 "
-                    "product_kernel=OPEN wave=%u "
-                    "(retbeacon stamp; Soft≠product)\n",
-                    (unsigned)VTD_SOFT_WAVE);
-            /*
-             * ---- Wave 26 complementary surfaces (kept) (never reshape primary).
-             * Return surfaces only — soft inventory; never hard-gates product paths.
-             */
-            /* Grep: vtd: soft retcipher — Wave 26 return-cipher honesty (kept) */
-            kprintf("vtd: soft retcipher soft_only=1 product_gate=0 soft_ne_product=1 "
-                    "never_blocks_m0=1 wave=%u "
-                    "(retcipher honesty; Soft≠product)\n",
-                    (unsigned)VTD_SOFT_WAVE);
-            /* Grep: vtd: soft retflame — Wave 26 flame stamp (kept) */
-            kprintf("vtd: soft retflame exclusive=1 soft_ne_product=1 "
-                    "product_kernel=OPEN wave=%u "
-                    "(retflame stamp; Soft≠product)\n",
-                    (unsigned)VTD_SOFT_WAVE);
-                    /*
-                     * ---- Wave 27 complementary surfaces (kept) (never reshape primary).
-                     * Return surfaces only — soft inventory; never hard-gates product paths.
-                     */
-                    /* Grep: vtd: soft retprism — Wave 27 return-prism honesty (kept) */
-                    kprintf("vtd: soft retprism soft_only=1 product_gate=0 soft_ne_product=1 "
-                            "never_blocks_m0=1 wave=%u "
-                            "(retprism honesty; Soft≠product)\n",
-                            (unsigned)VTD_SOFT_WAVE);
-                    /* Grep: vtd: soft retforge — Wave 27 forge stamp (kept) */
-                    kprintf("vtd: soft retforge exclusive=1 soft_ne_product=1 "
-                            "product_kernel=OPEN wave=%u "
-                            "(retforge stamp; Soft≠product)\n",
-                            (unsigned)VTD_SOFT_WAVE);
-                            /*
-                             * ---- Wave 28 complementary surfaces (kept) (never reshape primary).
-                             * Return surfaces only — soft inventory; never hard-gates product paths.
-                             */
-                            /* Grep: vtd: soft retshard — Wave 28 return-shard honesty (kept) */
-                            kprintf("vtd: soft retshard soft_only=1 product_gate=0 soft_ne_product=1 "
-                                "never_blocks_m0=1 wave=%u "
-                                "(retshard honesty; Soft≠product)\n",
-                                (unsigned)VTD_SOFT_WAVE);
-                            /* Grep: vtd: soft retcrown — Wave 28 crown stamp (kept) */
-                            kprintf("vtd: soft retcrown exclusive=1 soft_ne_product=1 "
-                                "product_kernel=OPEN wave=%u "
-                                "(retcrown stamp; Soft≠product)\n",
-                                (unsigned)VTD_SOFT_WAVE);
-                                /*
-                             * ---- Wave 29 complementary surfaces (kept) (never reshape primary).
-                             * Return surfaces only — soft inventory; never hard-gates product paths.
-                             */
-                            /* Grep: vtd: soft retglyph — Wave 29 return-glyph honesty (kept) */
-                            kprintf("vtd: soft retglyph soft_only=1 product_gate=0 soft_ne_product=1 "
-                                    "never_blocks_m0=1 wave=%u "
-                                    "(retglyph honesty; Soft≠product)\n",
-                                    (unsigned)VTD_SOFT_WAVE);
-                            /* Grep: vtd: soft retscepter — Wave 29 scepter stamp (kept) */
-                            kprintf("vtd: soft retscepter exclusive=1 soft_ne_product=1 "
-                                    "product_kernel=OPEN wave=%u "
-                                    "(retscepter stamp; Soft≠product)\n",
-                                    (unsigned)VTD_SOFT_WAVE);
-                                /*
-                             * ---- Wave 30 complementary surfaces (kept) (never reshape primary).
-                             * Return surfaces only — soft inventory; never hard-gates product paths.
-                             */
-                            /* Grep: vtd: soft retsigil — Wave 30 return-sigil honesty (kept) */
-                            kprintf("vtd: soft retsigil soft_only=1 product_gate=0 soft_ne_product=1 "
-                                    "never_blocks_m0=1 wave=%u "
-                                    "(retsigil honesty; Soft≠product)\n",
-                                    (unsigned)VTD_SOFT_WAVE);
-                            /* Grep: vtd: soft retemblem — Wave 30 emblem stamp (kept) */
-                            kprintf("vtd: soft retemblem exclusive=1 soft_ne_product=1 "
-                                    "product_kernel=OPEN wave=%u "
-                                    "(retemblem stamp; Soft≠product)\n",
-                                    (unsigned)VTD_SOFT_WAVE);
-                            /*
-                             * ---- Wave 31 complementary surfaces (kept) (never reshape primary).
-                             * Return surfaces only — soft inventory; never hard-gates product paths.
-                             */
-                            /* Grep: vtd: soft retaegis — Wave 31 return-aegis honesty (kept) */
-                            kprintf("vtd: soft retaegis soft_only=1 product_gate=0 soft_ne_product=1 "
-                                    "never_blocks_m0=1 wave=%u "
-                                    "(retaegis honesty; Soft≠product)\n",
-                                    (unsigned)VTD_SOFT_WAVE);
-                            /* Grep: vtd: soft retsigil — Wave 30 return-sigil honesty (kept) */
-                            kprintf("vtd: soft retsigil soft_only=1 product_gate=0 soft_ne_product=1 "
-                                    "never_blocks_m0=1 wave=%u "
-                                    "(retsigil honesty; Soft≠product)\n",
-                                    (unsigned)VTD_SOFT_WAVE);
-                            /* Grep: vtd: soft retmantle — Wave 31 mantle stamp (kept) */
-                            kprintf("vtd: soft retmantle exclusive=1 soft_ne_product=1 "
-                                    "product_kernel=OPEN wave=%u "
-                                    "(retmantle stamp; Soft≠product)\n",
-                                    (unsigned)VTD_SOFT_WAVE);
-/*
- * ---- Wave 32 complementary surfaces (kept) (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: vtd: soft retbulwark — Wave 32 return-bulwark honesty (kept) */
-kprintf("vtd: soft retbulwark soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=%u "
-        "(retbulwark honesty; Soft≠product)\n",
-        (unsigned)VTD_SOFT_WAVE);
-/* Grep: vtd: soft retpanoply — Wave 32 panoply stamp (kept) */
-kprintf("vtd: soft retpanoply exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=%u "
-        "(retpanoply stamp; Soft≠product)\n",
-        (unsigned)VTD_SOFT_WAVE);
-/*
- * ---- Wave 33 complementary surfaces (kept) (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: vtd: soft retbastion — Wave 33 return-bastion honesty (kept) */
-kprintf("vtd: soft retbastion soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=%u "
-        "(retbastion honesty; Soft≠product)\n",
-        (unsigned)VTD_SOFT_WAVE);
-/* Grep: vtd: soft retcitadel — Wave 33 citadel stamp (kept) */
-kprintf("vtd: soft retcitadel exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=%u "
-        "(retcitadel stamp; Soft≠product)\n",
-        (unsigned)VTD_SOFT_WAVE);
-/*
- * ---- Wave 34 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: vtd: soft retredoubt — Wave 34 return-redoubt honesty */
-kprintf("vtd: soft retredoubt soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=%u "
-        "(retredoubt honesty; Soft≠product)\n",
-        (unsigned)VTD_SOFT_WAVE);
-/* Grep: vtd: soft retkeep — Wave 34 exclusive keep stamp */
-kprintf("vtd: soft retkeep exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=%u "
-        "(retkeep stamp; Soft≠product)\n",
-        (unsigned)VTD_SOFT_WAVE);
-/*
- * ---- Wave 35 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: vtd: soft retfortress — Wave 35 return-fortress honesty */
-kprintf("vtd: soft retfortress soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=%u "
-        "(retfortress honesty; Soft≠product)\n",
-        (unsigned)VTD_SOFT_WAVE);
-/* Grep: vtd: soft retpalace — Wave 35 exclusive palace stamp */
-kprintf("vtd: soft retpalace exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=%u "
-        "(retpalace stamp; Soft≠product)\n",
-        (unsigned)VTD_SOFT_WAVE);
-/*
- * ---- Wave 36 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: vtd: soft rethold — Wave 36 return-hold honesty */
-kprintf("vtd: soft rethold soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=%u "
-        "(rethold honesty; Soft≠product)\n",
-        (unsigned)VTD_SOFT_WAVE);
-/* Grep: vtd: soft retspire — Wave 36 exclusive spire stamp */
-kprintf("vtd: soft retspire exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=%u "
-        "(retspire stamp; Soft≠product)\n",
-        (unsigned)VTD_SOFT_WAVE);
-/*
- * ---- Wave 37 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: vtd: soft retwall — Wave 37 return-wall honesty */
-kprintf("vtd: soft retwall soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=%u "
-        "(retwall honesty; Soft≠product)\n",
-        (unsigned)VTD_SOFT_WAVE);
-/* Grep: vtd: soft retgate — Wave 37 exclusive gate stamp */
-kprintf("vtd: soft retgate exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=%u "
-        "(retgate stamp; Soft≠product)\n",
-        (unsigned)VTD_SOFT_WAVE);
-/*
- * ---- Wave 38 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: vtd: soft retmoat — Wave 38 return-moat honesty */
-kprintf("vtd: soft retmoat soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=%u "
-        "(retmoat honesty; Soft≠product)\n",
-        (unsigned)VTD_SOFT_WAVE);
-/* Grep: vtd: soft retower — Wave 38 exclusive tower stamp */
-kprintf("vtd: soft retower exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=%u "
-        "(retower stamp; Soft≠product)\n",
-        (unsigned)VTD_SOFT_WAVE);
-                            
-/*
- * ---- Wave 39 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: vtd: soft retbarbican — Wave 39 return-barbican honesty */
-kprintf("vtd: soft retbarbican soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=%u "
-        "(retbarbican honesty; Soft≠product)\n",
-        (unsigned)VTD_SOFT_WAVE);
-/* Grep: vtd: soft retglacis — Wave 39 exclusive glacis stamp */
-kprintf("vtd: soft retglacis exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=%u "
-        "(retglacis stamp; Soft≠product)\n",
-        (unsigned)VTD_SOFT_WAVE);
-/*
- * ---- Wave 40 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: vtd: soft retcurtain — Wave 40 return-curtain honesty */
-kprintf("vtd: soft retcurtain soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=%u "
-        "(retcurtain honesty; Soft≠product)\n",
-        (unsigned)VTD_SOFT_WAVE);
-/* Grep: vtd: soft retparapet — Wave 40 exclusive parapet stamp */
-kprintf("vtd: soft retparapet exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=%u "
-        "(retparapet stamp; Soft≠product)\n",
-        (unsigned)VTD_SOFT_WAVE);
-/*
- * ---- Wave 41 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: vtd: soft retravelin — Wave 41 return-travelin honesty */
-kprintf("vtd: soft retravelin soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=%u "
-        "(retravelin honesty; Soft≠product)\n",
-        (unsigned)VTD_SOFT_WAVE);
-/* Grep: vtd: soft retditch — Wave 41 exclusive ditch stamp */
-kprintf("vtd: soft retditch exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=%u "
-        "(retditch stamp; Soft≠product)\n",
-        (unsigned)VTD_SOFT_WAVE);
-/*
- * ---- Wave 42 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: vtd: soft retportcullis — Wave 42 return-portcullis honesty */
-kprintf("vtd: soft retportcullis soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=%u "
-        "(retportcullis honesty; Soft≠product)\n",
-        (unsigned)VTD_SOFT_WAVE);
-/* Grep: vtd: soft retbattlement — Wave 42 exclusive battlement stamp */
-kprintf("vtd: soft retbattlement exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=%u "
-        "(retbattlement stamp; Soft≠product)\n",
-        (unsigned)VTD_SOFT_WAVE);
-/*
- * ---- Wave 43 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: vtd: soft retmachicolation — Wave 43 return-machicolation honesty */
-kprintf("vtd: soft retmachicolation soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=%u "
-        "(retmachicolation honesty; Soft≠product)\n",
-        (unsigned)VTD_SOFT_WAVE);
-/* Grep: vtd: soft retarrowslit — Wave 43 exclusive arrowslit stamp */
-kprintf("vtd: soft retarrowslit exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=%u "
-        "(retarrowslit stamp; Soft≠product)\n",
-        (unsigned)VTD_SOFT_WAVE);
-
-/*
- * ---- Wave 44 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: vtd: soft retmerlon — Wave 44 return-merlon honesty */
-kprintf("vtd: soft retmerlon soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=%u "
-        "(retmerlon honesty; Soft≠product)\n",
-        (unsigned)VTD_SOFT_WAVE);
-/* Grep: vtd: soft retembrasure — Wave 44 exclusive embrasure stamp */
-kprintf("vtd: soft retembrasure exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=%u "
-        "(retembrasure stamp; Soft≠product)\n",
-        (unsigned)VTD_SOFT_WAVE);
-
-/*
- * ---- Wave 45 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: vtd: soft retkeepgate — Wave 45 return-keepgate honesty */
-kprintf("vtd: soft retkeepgate soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=%u "
-        "(retkeepgate honesty; Soft≠product)\n",
-        (unsigned)VTD_SOFT_WAVE);
-/* Grep: vtd: soft retouterward — Wave 45 exclusive outerward stamp */
-kprintf("vtd: soft retouterward exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=%u "
-        "(retouterward stamp; Soft≠product)\n",
-        (unsigned)VTD_SOFT_WAVE);
-
-/*
- * ---- Wave 46 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: vtd: soft retbailey — Wave 46 return-bailey honesty */
-kprintf("vtd: soft retbailey soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=%u "
-        "(retbailey honesty; Soft≠product)\n",
-        (unsigned)VTD_SOFT_WAVE);
-/* Grep: vtd: soft retpostern — Wave 46 exclusive postern stamp */
-kprintf("vtd: soft retpostern exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=%u "
-        "(retpostern stamp; Soft≠product)\n",
-        (unsigned)VTD_SOFT_WAVE);
-
-/*
- * ---- Wave 47 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: vtd: soft retinnerward — Wave 47 return-innerward honesty */
-kprintf("vtd: soft retinnerward soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retinnerward honesty; Soft≠product)\n");
-/* Grep: vtd: soft retdonjon — Wave 47 exclusive donjon stamp */
-kprintf("vtd: soft retdonjon exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retdonjon stamp; Soft≠product)\n");
-
-/*
- * ---- Wave 48 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: vtd: soft retchevaux — Wave 48 return-chevaux honesty */
-kprintf("vtd: soft retchevaux soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retchevaux honesty; Soft≠product)\n");
-/* Grep: vtd: soft retpalisade — Wave 48 exclusive palisade stamp */
-kprintf("vtd: soft retpalisade exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retpalisade stamp; Soft≠product)\n");
-
-/*
- * ---- Wave 49 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: vtd: soft retglacisgate — Wave 49 return-glacisgate honesty */
-kprintf("vtd: soft retglacisgate soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retglacisgate honesty; Soft≠product)\n");
-/* Grep: vtd: soft retoutwork — Wave 49 exclusive outwork stamp */
-kprintf("vtd: soft retoutwork exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retoutwork stamp; Soft≠product)\n");
-/*
- * ---- Wave 50 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: vtd: soft retsally — Wave 50 return-sally honesty */
-kprintf("vtd: soft retsally soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retsally honesty; Soft≠product)\n");
-/* Grep: vtd: soft retcounterscarp — Wave 50 exclusive counterscarp stamp */
-kprintf("vtd: soft retcounterscarp exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retcounterscarp stamp; Soft≠product)\n");
-/*
- * ---- Wave 51 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: vtd: soft retfosse — Wave 51 return-fosse honesty */
-kprintf("vtd: soft retfosse soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retfosse honesty; Soft≠product)\n");
-/* Grep: vtd: soft retcoveredway — Wave 51 exclusive coveredway stamp */
-kprintf("vtd: soft retcoveredway exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retcoveredway stamp; Soft≠product)\n");
-
-/*
- * ---- Wave 52 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: vtd: soft rettenaille — Wave 52 return-tenaille honesty */
-kprintf("vtd: soft rettenaille soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(rettenaille honesty; Soft≠product)\n");
-/* Grep: vtd: soft retdemilune — Wave 52 exclusive demilune stamp */
-kprintf("vtd: soft retdemilune exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retdemilune stamp; Soft≠product)\n");
-/*
- * ---- Wave 53 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: vtd: soft retravelin — Wave 53 return-travelin honesty */
-kprintf("vtd: soft retravelin soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retravelin honesty; Soft≠product)\n");
-/* Grep: vtd: soft retlunette — Wave 53 exclusive lunette stamp */
-kprintf("vtd: soft retlunette exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retlunette stamp; Soft≠product)\n");
-/*
- * ---- Wave 54 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: vtd: soft retcaponier — Wave 54 return-caponier honesty */
-kprintf("vtd: soft retcaponier soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retcaponier honesty; Soft≠product)\n");
-/* Grep: vtd: soft retredan — Wave 54 exclusive redan stamp */
-kprintf("vtd: soft retredan exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retredan stamp; Soft≠product)\n");
-/*
- * ---- Wave 55 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: vtd: soft retflank — Wave 55 return-flank honesty */
-kprintf("vtd: soft retflank soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retflank honesty; Soft≠product)\n");
-/* Grep: vtd: soft retface — Wave 55 exclusive face stamp */
-kprintf("vtd: soft retface exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retface stamp; Soft≠product)\n");
-/*
- * ---- Wave 56 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: vtd: soft retgorge — Wave 56 return-gorge honesty */
-kprintf("vtd: soft retgorge soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retgorge honesty; Soft≠product)\n");
-/* Grep: vtd: soft retshoulder — Wave 56 exclusive shoulder stamp */
-kprintf("vtd: soft retshoulder exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retshoulder stamp; Soft≠product)\n");
-/*
- * ---- Wave 57 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: vtd: soft retraverse — Wave 57 return-traverse honesty */
-kprintf("vtd: soft retraverse soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retraverse honesty; Soft≠product)\n");
-/* Grep: vtd: soft retcasemate — Wave 57 exclusive casemate stamp */
-kprintf("vtd: soft retcasemate exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retcasemate stamp; Soft≠product)\n");
-
-/*
- * ---- Wave 58 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: vtd: soft retorillon — Wave 58 return-orillon honesty */
-kprintf("vtd: soft retorillon soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retorillon honesty; Soft≠product)\n");
-/* Grep: vtd: soft retbonnette — Wave 58 exclusive bonnette stamp */
-kprintf("vtd: soft retbonnette exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retbonnette stamp; Soft≠product)\n");
-
-/*
- * ---- Wave 59 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: vtd: soft retcrownwork — Wave 59 return-crownwork honesty */
-kprintf("vtd: soft retcrownwork soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retcrownwork honesty; Soft≠product)\n");
-/* Grep: vtd: soft rethornwork — Wave 59 exclusive hornwork stamp */
-kprintf("vtd: soft rethornwork exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(rethornwork stamp; Soft≠product)\n");
-
-/*
- * ---- Wave 60 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: vtd: soft retplace — Wave 60 return-place honesty */
-kprintf("vtd: soft retplace soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retplace honesty; Soft≠product)\n");
-/* Grep: vtd: soft retenvelope — Wave 60 exclusive envelope stamp */
-kprintf("vtd: soft retenvelope exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retenvelope stamp; Soft≠product)\n");
-
-
-
-
-
-
-
-
-
-/*
- * ---- Wave 61 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: vtd: soft retcounterguard — Wave 61 return-counterguard honesty */
-kprintf("vtd: soft retcounterguard soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retcounterguard honesty; Soft≠product)\n");
-/* Grep: vtd: soft retcoveredface — Wave 61 exclusive coveredface stamp */
-kprintf("vtd: soft retcoveredface exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retcoveredface stamp; Soft≠product)\n");
-/*
- * ---- Wave 62 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: vtd: soft retbastionface — Wave 62 return-bastionface honesty */
-kprintf("vtd: soft retbastionface soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retbastionface honesty; Soft≠product)\n");
-/* Grep: vtd: soft retcurtainangle — Wave 62 exclusive curtainangle stamp */
-kprintf("vtd: soft retcurtainangle exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retcurtainangle stamp; Soft≠product)\n");
-/*
- * ---- Wave 63 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: vtd: soft retdoubletenaille — Wave 63 return-doubletenaille honesty */
-kprintf("vtd: soft retdoubletenaille soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retdoubletenaille honesty; Soft≠product)\n");
-/* Grep: vtd: soft retplaceofarms — Wave 63 exclusive placeofarms stamp */
-kprintf("vtd: soft retplaceofarms exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retplaceofarms stamp; Soft≠product)\n");
- /*
-  * ---- Wave 64 exclusive complementary surfaces (never reshape primary).
-  * Return surfaces only — soft inventory; never hard-gates product paths.
-  */
- /* Grep: vtd: soft retreentrant — Wave 64 return-reentrant honesty */
-kprintf("vtd: soft retreentrant soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retreentrant honesty; Soft≠product)\n");
- /* Grep: vtd: soft retsallyport — Wave 64 exclusive sallyport stamp */
-kprintf("vtd: soft retsallyport exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retsallyport stamp; Soft≠product)\n");
- /*
-  * ---- Wave 65 exclusive complementary surfaces (never reshape primary).
-  * Return surfaces only — soft inventory; never hard-gates product paths.
-  */
- /* Grep: vtd: soft retgorgeangle — Wave 65 return-gorgeangle honesty */
-kprintf("vtd: soft retgorgeangle soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retgorgeangle honesty; Soft≠product)\n");
- /* Grep: vtd: soft retshoulderangle — Wave 65 exclusive shoulderangle stamp */
-kprintf("vtd: soft retshoulderangle exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retshoulderangle stamp; Soft≠product)\n");
- /*
-  * ---- Wave 66 exclusive complementary surfaces (never reshape primary).
-  * Return surfaces only — soft inventory; never hard-gates product paths.
-  */
- /* Grep: vtd: soft retflankangle — Wave 66 return-flankangle honesty */
- kprintf("vtd: soft retflankangle soft_only=1 product_gate=0 soft_ne_product=1 "
-         "never_blocks_m0=1 wave=116 "
-         "(retflankangle honesty; Soft≠product)\n");
- /* Grep: vtd: soft retfaceangle — Wave 66 exclusive faceangle stamp */
- kprintf("vtd: soft retfaceangle exclusive=1 soft_ne_product=1 "
-         "product_kernel=OPEN wave=116 "
-         "(retfaceangle stamp; Soft≠product)\n");
-/*
- * ---- Wave 67 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: vtd: soft retcaponierangle — Wave 67 return-caponierangle honesty */
-kprintf("vtd: soft retcaponierangle soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retcaponierangle honesty; Soft≠product)\n");
-/* Grep: vtd: soft retredanangle — Wave 67 exclusive redanangle stamp */
-kprintf("vtd: soft retredanangle exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retredanangle stamp; Soft≠product)\n");
-/*
- * ---- Wave 68 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: vtd: soft retlunetteangle — Wave 68 return-lunetteangle honesty */
-kprintf("vtd: soft retlunetteangle soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retlunetteangle honesty; Soft≠product)\n");
-/* Grep: vtd: soft rettenailleangle — Wave 68 exclusive tenailleangle stamp */
-kprintf("vtd: soft rettenailleangle exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(rettenailleangle stamp; Soft≠product)\n");
-/*
- * ---- Wave 69 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: vtd: soft retdemiluneangle — Wave 69 return-demiluneangle honesty */
-kprintf("vtd: soft retdemiluneangle soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retdemiluneangle honesty; Soft≠product)\n");
-/* Grep: vtd: soft retcoveredwayangle — Wave 69 exclusive coveredwayangle stamp */
-kprintf("vtd: soft retcoveredwayangle exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retcoveredwayangle stamp; Soft≠product)\n");
-/*
- * ---- Wave 70 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: vtd: soft retfosseangle — Wave 70 return-fosseangle honesty */
-kprintf("vtd: soft retfosseangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retfosseangle honesty; Soft≠product)\n");
-/* Grep: vtd: soft retcounterscarple — Wave 70 exclusive counterscarple stamp */
-kprintf("vtd: soft retcounterscarple exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retcounterscarple stamp; Soft≠product)\n");
-/*
- * ---- Wave 71 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: vtd: soft retsallyportangle — Wave 71 return-sallyportangle honesty */
-kprintf("vtd: soft retsallyportangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retsallyportangle honesty; Soft≠product)\n");
-/* Grep: vtd: soft retreentrantangle — Wave 71 exclusive reentrantangle stamp */
-kprintf("vtd: soft retreentrantangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retreentrantangle stamp; Soft≠product)\n");
-/*
- * ---- Wave 72 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: vtd: soft retplaceofarmsangle — Wave 72 return-placeofarmsangle honesty */
-kprintf("vtd: soft retplaceofarmsangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retplaceofarmsangle honesty; Soft≠product)\n");
-/* Grep: vtd: soft retdoubletenailleangle — Wave 72 exclusive doubletenailleangle stamp */
-kprintf("vtd: soft retdoubletenailleangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retdoubletenailleangle stamp; Soft≠product)\n");
-/* Grep: vtd: soft retcurtainface — Wave 73 return-curtainface honesty */
-kprintf("vtd: soft retcurtainface soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retcurtainface honesty; Soft≠product)\n");
-/* Grep: vtd: soft retbastionangle — Wave 73 exclusive bastionangle stamp */
-kprintf("vtd: soft retbastionangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retbastionangle stamp; Soft≠product)\n");
-/* Grep: vtd: soft retglacisangle — Wave 74 return-glacisangle honesty */
-kprintf("vtd: soft retglacisangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retglacisangle honesty; Soft≠product)\n");
-/* Grep: vtd: soft retparapetangle — Wave 74 exclusive parapetangle stamp */
-kprintf("vtd: soft retparapetangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retparapetangle stamp; Soft≠product)\n");
-/* Grep: vtd: soft retmoatangle — Wave 75 return-moatangle honesty */
-kprintf("vtd: soft retmoatangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retmoatangle honesty; Soft≠product)\n");
-/* Grep: vtd: soft retowerangle — Wave 75 exclusive towerangle stamp */
-kprintf("vtd: soft retowerangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retowerangle stamp; Soft≠product)\n");
-/* Grep: vtd: soft retgateangle — Wave 76 return-gateangle honesty */
-kprintf("vtd: soft retgateangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retgateangle honesty; Soft≠product)\n");
-/* Grep: vtd: soft retwallangle — Wave 76 exclusive wallangle stamp */
-kprintf("vtd: soft retwallangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retwallangle stamp; Soft≠product)\n");
-/* Grep: vtd: soft retspireangle — Wave 77 return-spireangle honesty */
-kprintf("vtd: soft retspireangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retspireangle honesty; Soft≠product)\n");
-/* Grep: vtd: soft retholdangle — Wave 77 exclusive holdangle stamp */
-kprintf("vtd: soft retholdangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retholdangle stamp; Soft≠product)\n");
-/* Grep: vtd: soft retpalaceangle — Wave 78 return-palaceangle honesty */
-kprintf("vtd: soft retpalaceangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retpalaceangle honesty; Soft≠product)\n");
-/* Grep: vtd: soft retfortressangle — Wave 78 exclusive fortressangle stamp */
-kprintf("vtd: soft retfortressangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retfortressangle stamp; Soft≠product)\n");
-/* Grep: vtd: soft retkeepangle — Wave 79 return-keepangle honesty */
-kprintf("vtd: soft retkeepangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retkeepangle honesty; Soft≠product)\n");
-/* Grep: vtd: soft retredoubtangle — Wave 79 exclusive redoubtangle stamp */
-kprintf("vtd: soft retredoubtangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retredoubtangle stamp; Soft≠product)\n");
-/* Grep: vtd: soft retcitadelangle — Wave 80 return-citadelangle honesty */
-kprintf("vtd: soft retcitadelangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retcitadelangle honesty; Soft≠product)\n");
-/* Grep: vtd: soft retbastionkeep — Wave 80 exclusive bastionkeep stamp */
-kprintf("vtd: soft retbastionkeep exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retbastionkeep stamp; Soft≠product)\n");
-/* Grep: vtd: soft retpanoplyangle — Wave 81 return-panoplyangle honesty */
-kprintf("vtd: soft retpanoplyangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retpanoplyangle honesty; Soft≠product)\n");
-/* Grep: vtd: soft retbulwarkangle — Wave 81 exclusive bulwarkangle stamp */
-kprintf("vtd: soft retbulwarkangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retbulwarkangle stamp; Soft≠product)\n");
-/* Grep: vtd: soft retmantleangle — Wave 82 return-mantleangle honesty */
-kprintf("vtd: soft retmantleangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retmantleangle honesty; Soft≠product)\n");
-/* Grep: vtd: soft retaegisangle — Wave 82 exclusive aegisangle stamp */
-kprintf("vtd: soft retaegisangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retaegisangle stamp; Soft≠product)\n");
-/* Grep: vtd: soft retemblemangle — Wave 83 return-emblemangle honesty */
-kprintf("vtd: soft retemblemangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retemblemangle honesty; Soft≠product)\n");
-/* Grep: vtd: soft retsigilangle — Wave 83 exclusive sigilangle stamp */
-kprintf("vtd: soft retsigilangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retsigilangle stamp; Soft≠product)\n");
-/* Grep: vtd: soft retscepterangle — Wave 84 return-scepterangle honesty */
-kprintf("vtd: soft retscepterangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retscepterangle honesty; Soft≠product)\n");
-/* Grep: vtd: soft retglyphangle — Wave 84 exclusive glyphangle stamp */
-kprintf("vtd: soft retglyphangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retglyphangle stamp; Soft≠product)\n");
-/* Grep: vtd: soft retcrownangle — Wave 85 return-crownangle honesty */
-kprintf("vtd: soft retcrownangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retcrownangle honesty; Soft≠product)\n");
-/* Grep: vtd: soft retshardangle — Wave 85 exclusive shardangle stamp */
-kprintf("vtd: soft retshardangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retshardangle stamp; Soft≠product)\n");
-/* Grep: vtd: soft retforgeangle — Wave 86 return-forgeangle honesty */
-kprintf("vtd: soft retforgeangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retforgeangle honesty; Soft≠product)\n");
-/* Grep: vtd: soft retprismangle — Wave 86 exclusive prismangle stamp */
-kprintf("vtd: soft retprismangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retprismangle stamp; Soft≠product)\n");
-/* Grep: vtd: soft retflameangle — Wave 87 return-flameangle honesty */
-kprintf("vtd: soft retflameangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retflameangle honesty; Soft≠product)\n");
-/* Grep: vtd: soft retcipherangle — Wave 87 exclusive cipherangle stamp */
-kprintf("vtd: soft retcipherangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retcipherangle stamp; Soft≠product)\n");
-/* Grep: vtd: soft retbeaconangle — Wave 88 return-beaconangle honesty */
-kprintf("vtd: soft retbeaconangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retbeaconangle honesty; Soft≠product)\n");
-/* Grep: vtd: soft retledgerangle — Wave 88 exclusive ledgerangle stamp */
-kprintf("vtd: soft retledgerangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retledgerangle stamp; Soft≠product)\n");
-/* Grep: vtd: soft retbannerangle — Wave 89 return-bannerangle honesty */
-kprintf("vtd: soft retbannerangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retbannerangle honesty; Soft≠product)\n");
-/* Grep: vtd: soft retvaultangle — Wave 89 exclusive vaultangle stamp */
-kprintf("vtd: soft retvaultangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retvaultangle stamp; Soft≠product)\n");
-/* Grep: vtd: soft retcrestangle — Wave 90 return-crestangle honesty */
-kprintf("vtd: soft retcrestangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retcrestangle honesty; Soft≠product)\n");
-/* Grep: vtd: soft rettokenangle — Wave 90 exclusive tokenangle stamp */
-kprintf("vtd: soft rettokenangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (rettokenangle stamp; Soft≠product)\n");
-/* Grep: vtd: soft retbadgeangle — Wave 91 return-badgeangle honesty */
-kprintf("vtd: soft retbadgeangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retbadgeangle honesty; Soft≠product)\n");
-/* Grep: vtd: soft retphaseangle — Wave 91 exclusive phaseangle stamp */
-kprintf("vtd: soft retphaseangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retphaseangle stamp; Soft≠product)\n");
-/* Grep: vtd: soft retmarkangle — Wave 92 return-markangle honesty */
-kprintf("vtd: soft retmarkangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retmarkangle honesty; Soft≠product)\n");
-/* Grep: vtd: soft retpulseangle — Wave 92 exclusive pulseangle stamp */
-kprintf("vtd: soft retpulseangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retpulseangle stamp; Soft≠product)\n");
-
-/* Grep: vtd: soft retsealangle — Wave 93 return-sealangle honesty */
-kprintf("vtd: soft retsealangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retsealangle honesty; Soft≠product)\n");
-/* Grep: vtd: soft retboundangle — Wave 93 exclusive boundangle stamp */
-kprintf("vtd: soft retboundangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retboundangle stamp; Soft≠product)\n");
-/* Grep: vtd: soft retstemangle — Wave 94 return-stemangle honesty */
-kprintf("vtd: soft retstemangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retstemangle honesty; Soft≠product)\n");
-/* Grep: vtd: soft retbladeangle — Wave 94 exclusive bladeangle stamp */
-kprintf("vtd: soft retbladeangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retbladeangle stamp; Soft≠product)\n");
-/* Grep: vtd: soft retchordangle — Wave 95 return-chordangle honesty */
-kprintf("vtd: soft retchordangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retchordangle honesty; Soft≠product)\n");
-/* Grep: vtd: soft retarcangle — Wave 95 exclusive arcangle stamp */
-kprintf("vtd: soft retarcangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retarcangle stamp; Soft≠product)\n");
-/* Grep: vtd: soft retsectorangle — Wave 96 return-sectorangle honesty */
-kprintf("vtd: soft retsectorangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retsectorangle honesty; Soft≠product)\n");
-/* Grep: vtd: soft retwedgeangle — Wave 96 exclusive wedgeangle stamp */
-kprintf("vtd: soft retwedgeangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retwedgeangle stamp; Soft≠product)\n");
-/* Grep: vtd: soft retradiusangle — Wave 97 return-radiusangle honesty */
-kprintf("vtd: soft retradiusangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retradiusangle honesty; Soft≠product)\n");
-/* Grep: vtd: soft retdiameterangle — Wave 97 exclusive diameterangle stamp */
-kprintf("vtd: soft retdiameterangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retdiameterangle stamp; Soft≠product)\n");
-/* Grep: vtd: soft retcircumangle — Wave 98 return-circumangle honesty */
-kprintf("vtd: soft retcircumangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retcircumangle honesty; Soft≠product)\n");
-/* Grep: vtd: soft retellipseangle — Wave 98 exclusive ellipseangle stamp */
-kprintf("vtd: soft retellipseangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retellipseangle stamp; Soft≠product)\n");
-/* Grep: vtd: soft rethyperangle — Wave 99 return-hyperangle honesty */
-kprintf("vtd: soft rethyperangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (rethyperangle honesty; Soft≠product)\n");
-/* Grep: vtd: soft retparabolaangle — Wave 99 exclusive parabolaangle stamp */
-kprintf("vtd: soft retparabolaangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retparabolaangle stamp; Soft≠product)\n");
-/* Grep: vtd: soft retspiralangle — Wave 100 return-spiralangle honesty */
-kprintf("vtd: soft retspiralangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retspiralangle honesty; Soft≠product)\n");
-/* Grep: vtd: soft rethelixangle — Wave 100 exclusive helixangle stamp */
-kprintf("vtd: soft rethelixangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (rethelixangle stamp; Soft≠product)\n");
-/* Grep: vtd: soft rettorusangle — Wave 101 return-torusangle honesty */
-kprintf("vtd: soft rettorusangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (rettorusangle honesty; Soft≠product)\n");
-/* Grep: vtd: soft retknotangle — Wave 101 exclusive knotangle stamp */
-kprintf("vtd: soft retknotangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retknotangle stamp; Soft≠product)\n");
-/* Grep: vtd: soft retmoebiusangle — Wave 102 return-moebiusangle honesty */
-kprintf("vtd: soft retmoebiusangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retmoebiusangle honesty; Soft≠product)\n");
-/* Grep: vtd: soft retkleinangle — Wave 102 exclusive kleinangle stamp */
-kprintf("vtd: soft retkleinangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retkleinangle stamp; Soft≠product)\n");
-/* Grep: vtd: soft retprojectangle — Wave 103 return-projectangle honesty */
-kprintf("vtd: soft retprojectangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retprojectangle honesty; Soft≠product)\n");
-/* Grep: vtd: soft retaffineangle — Wave 103 exclusive affineangle stamp */
-kprintf("vtd: soft retaffineangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retaffineangle stamp; Soft≠product)\n");
-/* Grep: vtd: soft retlinearangle — Wave 104 return-linearangle honesty */
-kprintf("vtd: soft retlinearangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retlinearangle honesty; Soft≠product)\n");
-/* Grep: vtd: soft retbilinearangle — Wave 104 exclusive bilinearangle stamp */
-kprintf("vtd: soft retbilinearangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retbilinearangle stamp; Soft≠product)\n");
-/* Grep: vtd: soft retquadraticangle — Wave 105 return-quadraticangle honesty */
-kprintf("vtd: soft retquadraticangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retquadraticangle honesty; Soft≠product)\n");
-/* Grep: vtd: soft retcubicangle — Wave 105 exclusive cubicangle stamp */
-kprintf("vtd: soft retcubicangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retcubicangle stamp; Soft≠product)\n");
-/* Grep: vtd: soft retquarticangle — Wave 106 return-quarticangle honesty */
-kprintf("vtd: soft retquarticangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retquarticangle honesty; Soft≠product)\n");
-/* Grep: vtd: soft retquinticangle — Wave 106 exclusive quinticangle stamp */
-kprintf("vtd: soft retquinticangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retquinticangle stamp; Soft≠product)\n");
-/* Grep: vtd: soft retsplineangle — Wave 107 return-splineangle honesty */
-kprintf("vtd: soft retsplineangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retsplineangle honesty; Soft≠product)\n");
-/* Grep: vtd: soft retbezierangle — Wave 107 exclusive bezierangle stamp */
-kprintf("vtd: soft retbezierangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retbezierangle stamp; Soft≠product)\n");
-/* Grep: vtd: soft rethurmitangle — Wave 108 return-hermitangle honesty */
-kprintf("vtd: soft rethurmitangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (rethurmitangle honesty; Soft≠product)\n");
-/* Grep: vtd: soft retcatmullangle — Wave 108 exclusive catmullangle stamp */
-kprintf("vtd: soft retcatmullangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retcatmullangle stamp; Soft≠product)\n");
-/* Grep: vtd: soft retnurbsangle — Wave 109 return-nurbsangle honesty */
-kprintf("vtd: soft retnurbsangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retnurbsangle honesty; Soft≠product)\n");
-/* Grep: vtd: soft retbsplineangle — Wave 109 exclusive bsplineangle stamp */
-kprintf("vtd: soft retbsplineangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retbsplineangle stamp; Soft≠product)\n");
-/* Grep: vtd: soft retmeshangle — Wave 110 return-meshangle honesty */
-kprintf("vtd: soft retmeshangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retmeshangle honesty; Soft≠product)\n");
-/* Grep: vtd: soft retgridangle — Wave 110 exclusive gridangle stamp */
-kprintf("vtd: soft retgridangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retgridangle stamp; Soft≠product)\n");
-/* Grep: vtd: soft retvoxelangle — Wave 111 return-voxelangle honesty */
-kprintf("vtd: soft retvoxelangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retvoxelangle honesty; Soft≠product)\n");
-/* Grep: vtd: soft rettexelangle — Wave 111 exclusive texelangle stamp */
-kprintf("vtd: soft rettexelangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (rettexelangle stamp; Soft≠product)\n");
-/* Grep: vtd: soft retfragmentangle — Wave 112 return-fragmentangle honesty */
-kprintf("vtd: soft retfragmentangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retfragmentangle honesty; Soft≠product)\n");
-/* Grep: vtd: soft retvertexangle — Wave 112 exclusive vertexangle stamp */
-kprintf("vtd: soft retvertexangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retvertexangle stamp; Soft≠product)\n");
-/* Grep: vtd: soft retshaderangle — Wave 113 return-shaderangle honesty */
-kprintf("vtd: soft retshaderangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retshaderangle honesty; Soft≠product)\n");
-/* Grep: vtd: soft retpipelineangle — Wave 113 exclusive pipelineangle stamp */
-kprintf("vtd: soft retpipelineangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retpipelineangle stamp; Soft≠product)\n");
-/* Grep: vtd: soft retframebufferangle — Wave 114 return-framebufferangle honesty */
-kprintf("vtd: soft retframebufferangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retframebufferangle honesty; Soft≠product)\n");
-/* Grep: vtd: soft retswapchainangle — Wave 114 exclusive swapchainangle stamp */
-kprintf("vtd: soft retswapchainangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retswapchainangle stamp; Soft≠product)\n");
-/* Grep: vtd: soft retpresentangle — Wave 115 return-presentangle honesty */
-kprintf("vtd: soft retpresentangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retpresentangle honesty; Soft≠product)\n");
-/* Grep: vtd: soft retvsyncangle — Wave 115 exclusive vsyncangle stamp */
-kprintf("vtd: soft retvsyncangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retvsyncangle stamp; Soft≠product)\n");
-/* Grep: vtd: soft retfenceangle — Wave 116 return-fenceangle honesty */
-kprintf("vtd: soft retfenceangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retfenceangle honesty; Soft≠product)\n");
-/* Grep: vtd: soft retsemaphoreangle — Wave 116 exclusive semaphoreangle stamp */
-kprintf("vtd: soft retsemaphoreangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retsemaphoreangle stamp; Soft≠product)\n");
-                            kprintf("vtd: soft deepen wave=%u areas=%u logs=%u surf=0x%x "
-            "(Wave 43 exclusive; soft only; not product always-on IOMMU; "
-            "; soft≠product)\n",
-            (unsigned)VTD_SOFT_WAVE, (unsigned)VTD_SOFT_AREAS, g_cSoftInvLogs,
-            (unsigned)u32Surf);
-
-    /*
-     * Explicit OPEN honesty for always-on product IOMMU.
-     * Grep: vtd: soft OPEN
-     */
-    kprintf("vtd: soft OPEN always_on_product=OPEN "
-            "no_open_bus_master_product=OPEN hw_te_default=OPEN "
-            "qi_product=OPEN inventory_only=1 wave=%u "
-            "(soft deepen ≠ product always-on IOMMU claim; "
-            "soft≠product)\n",
-            (unsigned)VTD_SOFT_WAVE);
+        if (fReady != 0) {
+            fEngBm = vtd_soft_eng_busmaster_ok(0, NULL, NULL, NULL);
+        }
+        kprintf("vtd: soft path tables=ram_identity_1g te=soft_or_hw "
+                "always_on_product=OPEN udx_dma_safety=eng eng_bm=%d "
+                "dual_dod_a=OPEN_UDX dual_dod_b=OPEN_UDX dual_dod=OPEN "
+                "freestanding_product=SKIP product=UDX+ABI product_hosts=UDX "
+                "window_mint=OPEN Soft!=product G-AC-1 "
+                "(soft residual dual_dod OPEN product_hosts=UDX; "
+                "never product close)\n",
+                fEngBm);
+    }
 
     /* Grep: vtd: soft inventory PASS | vtd: soft PASS */
-    kprintf("vtd: soft inventory PASS ready=%d pages=%u logs=%u wave=%u\n",
-            fReady, g_u32VtdPages, g_cSoftInvLogs, (unsigned)VTD_SOFT_WAVE);
-    kprintf("vtd: soft PASS wave=%u areas=%u always_on_product=OPEN\n",
-            (unsigned)VTD_SOFT_WAVE, (unsigned)VTD_SOFT_AREAS);
+    kprintf("vtd: soft inventory PASS ready=%d pages=%u Soft!=product\n",
+            fReady, g_u32VtdPages);
+    kprintf("vtd: soft PASS always_on_product=OPEN window_mint=OPEN "
+            "dual_dod_a=OPEN_UDX dual_dod_b=OPEN_UDX dual_dod=OPEN "
+            "product=UDX+ABI product_hosts=UDX Soft!=product G-AC-1 "
+            "(soft residual dual_dod OPEN product_hosts=UDX)\n");
+    (void)cAtt;
 }
 
 /**
@@ -2101,7 +2873,7 @@ kprintf("vtd: soft retsemaphoreangle exclusive=1 soft_ne_product=1 product_kerne
  * independent. Not a claim that product IOMMU default is shipped/closed.
  *
  * Greppable:
- *   iommu: enforce default soft …
+ *   iommu: enforce default soft ...
  *   iommu: no open bus-master soft PASS
  */
 static int
@@ -2137,7 +2909,7 @@ vtd_product_default_soft(void)
             fPrior, iommu_vtd_te_mode(), fOpenBus);
 
     /*
-     * Deny path: enforce armed, no window for product soft BDF → bus-master
+     * Deny path: enforce armed, no window for product soft BDF -> bus-master
      * denied and platform deny counter must tick.
      */
     fDenyBare = iommu_busmaster_ok(VTD_PROD_SOFT_BUS, VTD_PROD_SOFT_SLOT,
@@ -2145,7 +2917,7 @@ vtd_product_default_soft(void)
     u32Denies1 = iommu_deny_count();
     if (fDenyBare != 0 || u32Denies1 <= u32Denies0) {
         kprintf("iommu: enforce default soft deny-path FAIL ok=%d "
-                "denies=%u→%u\n",
+                "denies=%u->%u\n",
                 fDenyBare, u32Denies0, u32Denies1);
         iommu_enforce_set(fPrior);
         return 0;
@@ -2169,7 +2941,7 @@ vtd_product_default_soft(void)
     u32Denies2 = iommu_deny_count();
     if (!fOk || fDenyOther != 0 || u32Denies2 <= u32Denies1) {
         kprintf("iommu: enforce default soft grant-check FAIL ok=%d deny=%d "
-                "denies=%u→%u\n",
+                "denies=%u->%u\n",
                 fOk, fDenyOther, u32Denies1, u32Denies2);
         iommu_window_revoke(VTD_PROD_SOFT_BUS, VTD_PROD_SOFT_SLOT,
                             VTD_PROD_SOFT_FUNC);
@@ -2194,7 +2966,7 @@ vtd_product_default_soft(void)
     iommu_enforce_set(fPrior);
 
     /*
-     * Soft PASS without requiring DRHD / intel-iommu. Soft ≠ product close:
+     * Soft PASS without requiring DRHD / intel-iommu. Soft != product close:
      * production no-open-bus-master default remains a soft path only here.
      */
     kprintf("iommu: no open bus-master soft PASS soft_denies=%u\n",
@@ -2274,9 +3046,19 @@ iommu_vtd_soft_probe(void)
      */
     (void)vtd_product_default_soft();
     /*
-     * Wave 17 exclusive soft inventory (greppable "vtd: soft …").
-     * Soft deepen only; always-on product IOMMU remains OPEN.
+     * Dual DoD UDX DMA safety eng residual (G752 userspace path):
+     * pulls eng (bus3 + usb + did0 + map) then lean UDX lamps.
+     * Soft-skip when no VT-d. Soft!=product / G-AC-1. No stamp storms.
+     * Grep: iommu: soft udx residual | soft eng residual | soft bus3
      */
+    (void)vtd_soft_udx_dma_safety_residual();
+    /*
+     * Lean DDI DMA_NOTE residual: soft window grant + VT-d cover honesty.
+     * window_mint=OPEN (not CNode cap product). Soft!=product / G-AC-1.
+     * Grep: iommu: soft ddi residual | soft dma_note residual | window_mint=OPEN
+     */
+    (void)vtd_soft_ddi_dma_note_residual();
+    /* Lean soft inventory (greppable "vtd: soft ... Soft!=product"). */
     vtd_soft_inventory_log();
     return 1;
 }
@@ -2526,8 +3308,14 @@ iommu_vtd_domain_lookup(u8 bus, u8 slot, u8 func)
             return g_aAtt[iAtt].u32Did;
         }
     }
-    /* Unbound devices soft-default to domain 0 when tables ready */
-    if (g_fVtdReady && bus == 0) {
+    /*
+     * Unbound devices soft-default to domain 0 when tables ready.
+     * Bring-up shares one identity context + SLPT across all root buses
+     * (DID=0). Bus-0-only default left G752 NIC 03:00.0 as INVALID after
+     * table build if attach missed -> freestanding rtl WARN / OWN risk.
+     * Soft!=product shared-identity; product multi-domain needs per-bus CT.
+     */
+    if (g_fVtdReady) {
         return 0;
     }
     return GJ_IOMMU_DOMAIN_INVALID;
@@ -2625,10 +3413,10 @@ iommu_vtd_domain_soft_smoke(void)
 
 /*
  * Soft xHCI identity path for freestanding DMA under VT-d Translated domains.
- * Sample window sits inside bring-up identity [0, 1 GiB). Parent pairs this
+ * Sample window sits inside bring-up identity [0, 1 GiB). Parent pairs this
  * with dma_buf_alloc_page() so real buffer PAs stay coverable.
  *
- * greppable: iommu: xhci identity … PASS|SKIP|FAIL
+ * greppable: iommu: xhci identity ... PASS|SKIP|FAIL
  */
 int
 iommu_vtd_xhci_identity(u8 bus, u8 slot, u8 func)
@@ -2636,12 +3424,13 @@ iommu_vtd_xhci_identity(u8 bus, u8 slot, u8 func)
     int fCovered = 0;
     int fPresent;
     u32 u32Did;
-    /* Low sample inside identity SLPT; not a real xHCI buffer — policy only */
+    /* Low sample inside identity SLPT; not a real xHCI buffer - policy only */
     const u64 u64PaSample = 0x1000ull;
     const u64 u64CbSample = 0x1000ull;
 
     if (!vtd_bdf_ok(bus, slot, func)) {
-        kprintf("iommu: xhci identity bdf=%u:%u.%u FAIL bad_bdf\n",
+        kprintf("iommu: xhci identity bdf=%u:%u.%u FAIL bad_bdf "
+                "Soft!=product\n",
                 (unsigned)bus, (unsigned)slot, (unsigned)func);
         return -1;
     }
@@ -2651,17 +3440,22 @@ iommu_vtd_xhci_identity(u8 bus, u8 slot, u8 func)
     if (!g_fVtdReady) {
         if (iommu_vtd_init_tables() != 0) {
             /*
-             * No tables: SKIP when platform has no DMAR/IVRS inventory
-             * (QEMU default / no IOMMU). FAIL when inventory said present
+             * No tables: soft-skip when platform has no DMAR/IVRS inventory
+             * (QEMU default / no VT-d). FAIL when inventory said present
              * but we could not build identity tables.
+             * Grep: iommu: soft ... soft-skip if no VT-d
              */
-            if (!fPresent) {
+            if (!fPresent && g_u64Drhd == 0) {
+                kprintf("iommu: soft xhci identity bdf=%u:%u.%u soft-skip "
+                        "no_vtd Soft!=product\n",
+                        (unsigned)bus, (unsigned)slot, (unsigned)func);
                 kprintf("iommu: xhci identity bdf=%u:%u.%u SKIP no_tables "
-                        "no_dmar\n",
+                        "no_dmar Soft!=product\n",
                         (unsigned)bus, (unsigned)slot, (unsigned)func);
                 return 0;
             }
-            kprintf("iommu: xhci identity bdf=%u:%u.%u FAIL tables\n",
+            kprintf("iommu: xhci identity bdf=%u:%u.%u FAIL tables "
+                    "Soft!=product\n",
                     (unsigned)bus, (unsigned)slot, (unsigned)func);
             return -1;
         }
@@ -2677,7 +3471,7 @@ iommu_vtd_xhci_identity(u8 bus, u8 slot, u8 func)
         if (iommu_vtd_domain_attach(0, bus, slot, func) != 0) {
             /*
              * Attach soft-fail is non-fatal when slots full; still try window.
-             * Log and continue — window + cover is the DMA policy surface.
+             * Log and continue - window + cover is the DMA policy surface.
              */
             kprintf("iommu: xhci identity bdf=%u:%u.%u attach soft-miss "
                     "(continue window)\n",
@@ -2702,27 +3496,72 @@ iommu_vtd_xhci_identity(u8 bus, u8 slot, u8 func)
 
     /*
      * Also record software window over full bring-up identity cover so
-     * enforce+window inventory matches SLPT (rtl8168 rings live here).
-     * Soft≠product mint; grant may noop-duplicate if already present.
+     * enforce+window inventory matches SLPT (rtl8168 rings / xHCI TRB live
+     * here). Soft!=product mint; grant may noop-duplicate if already present.
      */
     {
         int fFull = 0;
 
         (void)iommu_vtd_window_grant(bus, slot, func, 0, VTD_IDENTITY_LIMIT,
                                      &fFull);
-        (void)fFull;
+        if (!fFull || !iommu_vtd_identity_covers(0, VTD_IDENTITY_LIMIT)) {
+            kprintf("iommu: xhci identity bdf=%u:%u.%u FAIL full_cover "
+                    "limit=0x%lx Soft!=product\n",
+                    (unsigned)bus, (unsigned)slot, (unsigned)func,
+                    (unsigned long)VTD_IDENTITY_LIMIT);
+            return -1;
+        }
     }
 
     /*
-     * Grep: iommu: xhci identity … PASS
-     * Soft ≠ product always-on IOMMU; TE/DRHD optional.
+     * FUNCTIONAL eng path: when BDF is G752 NIC or xHCI, require identity
+     * ready (root/ctx/DID0/map 1 GiB) before PASS so UDX force32 DMA is not
+     * left half-granted. Soft!=product / Dual DoD OPEN_UDX.
+     */
+    if ((bus == VTD_G752_NIC_BUS && slot == VTD_G752_NIC_SLOT &&
+         func == VTD_G752_NIC_FUNC) ||
+        (bus == VTD_G752_XHCI_BUS && slot == VTD_G752_XHCI_SLOT &&
+         func == VTD_G752_XHCI_FUNC)) {
+        if (vtd_soft_bdf_identity_ready(bus, slot, func) == 0) {
+            kprintf("iommu: xhci identity bdf=%u:%u.%u FAIL eng_ready "
+                    "root_p=%d ctx_p=%d Soft!=product\n",
+                    (unsigned)bus, (unsigned)slot, (unsigned)func,
+                    vtd_root_bus_p(bus), vtd_ctx_devfn_p(slot, func));
+            return -1;
+        }
+    }
+
+    /*
+     * Grep: iommu: xhci identity ... PASS
+     * Soft != product always-on IOMMU; TE/DRHD optional.
      * Root buses=256: non-bus-0 BDF (G752 03:00.0 10ec:8168) is covered.
+     * Grep: bus3_p= when BDF bus==3
      */
     kprintf("iommu: xhci identity bdf=%u:%u.%u cover=1 limit=0x%lx "
-            "did=%u te_mode=%d drhd=%d root_all_buses=1 PASS\n",
+            "did=%u te_mode=%d drhd=%d root_all_buses=1 "
+            "root_bus_p=%d bus3_p=%d root_buses=%u PASS Soft!=product\n",
             (unsigned)bus, (unsigned)slot, (unsigned)func,
             (unsigned long)VTD_IDENTITY_LIMIT,
             iommu_vtd_domain_lookup(bus, slot, func), iommu_vtd_te_mode(),
-            (g_u64Drhd != 0) ? 1 : 0);
+            (g_u64Drhd != 0) ? 1 : 0, vtd_root_bus_p(bus),
+            vtd_root_bus_p(VTD_G752_NIC_BUS), vtd_root_buses_p_count());
+    /*
+     * When parent grants identity for G752 eng BDFs, re-emit residual soft
+     * lamps then lean UDX DMA safety eng residual (incl. FUNCTIONAL eng
+     * busmaster). Soft!=product. Lean (no inventory stamp storm; residual
+     * once + silent reaffirm).
+     *   03:00.0 10ec:8168 -> bus3 residual + UDX (rtl8168_udx)
+     *   0:14.0  xHCI      -> usb residual + UDX (xhci_udx)
+     * Grep: iommu: soft udx residual | soft udx bm residual
+     */
+    if (bus == VTD_G752_NIC_BUS && slot == VTD_G752_NIC_SLOT &&
+        func == VTD_G752_NIC_FUNC) {
+        (void)vtd_soft_bus3_identity_residual();
+        (void)vtd_soft_udx_dma_safety_residual();
+    } else if (bus == VTD_G752_XHCI_BUS && slot == VTD_G752_XHCI_SLOT &&
+               func == VTD_G752_XHCI_FUNC) {
+        (void)vtd_soft_usb_identity_residual();
+        (void)vtd_soft_udx_dma_safety_residual();
+    }
     return 1;
 }

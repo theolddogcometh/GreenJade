@@ -20,7 +20,7 @@
  *   P-TIME-4 prefer APIC timer for per-CPU ticks
  *   P-SMP-5  IPI reschedule / TLB shootdown must be reliable
  *
- * Soft cal observability is boot telemetry — not hot-path locks.
+ * Soft cal observability is boot telemetry - not hot-path locks.
  * Soft never hard-gates the timer path; wrap-OK counters only.
  *
  * Mono ownership
@@ -53,7 +53,7 @@
 /**
  * Soft snapshot of APIC timer calibration + programmed period.
  * Filled by apic_cal_soft_snapshot(); zeroed fields mean "not yet".
- * Diagnostics only — product paths consult apic_calibrated / apic_bus_hz.
+ * Diagnostics only - product paths consult apic_calibrated / apic_bus_hz.
  */
 struct gj_apic_cal_soft {
     u32 u32Status;         /* GJ_APIC_CAL_* last outcome */

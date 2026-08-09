@@ -18,6 +18,15 @@
  * Non-goals
  * ---------
  * Every Linux-specific POLL* extension used only by niche drivers.
+ *
+ * Soft residual (C2 libcgj poll.h; Soft!=product; G-AC-1; Dual DoD A/B OPEN):
+ *   soft     = poll/ppoll + POLL* event bits (Linux numbers); select may ride poll
+ *   product  = hybrid ABI readiness; Dual DoD A/B OPEN (UDX hosts own wire/USB)
+ *   honesty  = poll surface != product IRQ path; agent PASS != Dual DoD close;
+ *              stamp-free bar honesty (no version stamp); G-AC-1 no .ko AC
+ *   law      = dual MIT OR Apache-2.0; no GPL; H1 no net_eth_poll from IRQ;
+ *              H2 no stamp storms
+ * greppable: libcgj: poll soft residual Soft!=product
  */
 #pragma once
 

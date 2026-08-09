@@ -4,6 +4,7 @@
  *
  * Clean-room Linux personality helpers (cold path / host).
  * Pure C11. Dual license: MIT OR Apache-2.0 (no GPL source).
+ * Soft!=product. G-AC-1: no Linux .ko product AC.
  *
  * Linked into the kernel smoke path as cold stubs; product shape is a
  * userspace lib + door server. See:
@@ -12,6 +13,22 @@
  *
  * ABI: keep proton_rt_query / protonrt_cold_linux signatures stable.
  * Version and feature bits may grow; do not reorder or shrink fields.
+ *
+ * C2 lib residual (Soft!=product; dual MIT OR Apache-2.0; stamp-free):
+ *   Freestanding host/smoke soft surface for A0-shaped wine-class probes.
+ *   Soft residual != product multi-server confine, != Dual DoD A/B close,
+ *   != bar3, != Deck Top 50 PASS. Agent never closes Dual DoD.
+ *   Dual DoD A (UDX USB) OPEN; Dual DoD B (UDX NIC) OPEN until DUT proof.
+ *   Product path = hot+cold ABI + userspace UDX/DDI hosts (not this soft
+ *   FD table depth alone). Kernel owners before fall-through:
+ *   protonrt_cold_link / vfs_ram / net_lo / io_uring_min.
+ *   H1: no IRQ/timer eth poll from this lib (run_loop_only elsewhere).
+ *   H2: residual law comments only - no stamp storms; storm=0.
+ *   H3: process-death thr AS not this unit; no clone into dead AS.
+ *   Comment law: Soft!=product ASCII != only (never Softneq unicode);
+ *   pure C block comments; no nested star-slash mid-comment.
+ *   greppable: Soft!=product | G-AC-1 | dual_dod_a=OPEN | dual_dod_b=OPEN
+ *   greppable: protonrt: soft residual | C2 residual | product_path=UDX_DDI
  */
 #pragma once
 
@@ -38,6 +55,7 @@ struct proton_rt_info {
 /**
  * Fill *pOut with runtime version and feature bits.
  * Returns 0 on success, -1 if pOut is NULL.
+ * Soft residual advertise only; Soft!=product (never product DoD close).
  */
 int proton_rt_query(struct proton_rt_info *pOut);
 
@@ -49,11 +67,14 @@ int proton_rt_query(struct proton_rt_info *pOut);
  *
  * Unimplemented NRs in this library return -ENOSYS (38).
  *
- * Soft depth (1.10): freestanding host/smoke soft path for A0-shaped
- * surfaces — FD table with pipe/eventfd/socketpair/epoll/memfd kinds,
- * write/dup/poll/ioctl/fsync/madvise soft success, identity/time/rlimit
- * probes. Kernel product path (protonrt_cold_link / vfs_ram / net_lo /
- * io_uring_min) owns real vfs and min rings before fall-through.
+ * Soft depth (1.10; Soft!=product; C2 lib residual): freestanding
+ * host/smoke soft path for A0-shaped surfaces - FD table with
+ * pipe/eventfd/socketpair/epoll/memfd kinds, write/dup/poll/ioctl/
+ * fsync/madvise soft success, identity/time/rlimit probes.
+ * Soft path does not close Dual DoD A/B (both OPEN), bar3, or multi-
+ * server confine. Kernel product path (protonrt_cold_link / vfs_ram /
+ * net_lo / io_uring_min) owns real vfs and min rings before fall-through.
+ * G-AC-1: soft cold NRs are not .ko product AC. product_path=UDX_DDI.
  *
  * Linked into kernel smoke via the tree build (cold_linux.c) or host.
  */

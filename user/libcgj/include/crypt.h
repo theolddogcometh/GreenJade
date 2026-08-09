@@ -19,6 +19,15 @@
  * ---------
  * bcrypt/scrypt/argon2; shipping GPL crypt implementations.
  * See docs/GLIBC_COMPAT.md.
+ *
+ * Soft residual (C2 libcgj crypt.h; Soft!=product; G-AC-1; Dual DoD A/B OPEN):
+ *   soft     = crypt/crypt_r traditional 13-char soft-hash (MD5-folded fill);
+ *              legacy graph link surface only — not production auth
+ *   product  = UDX/DDI + hot/cold ABI hosts; not freestanding class; not .ko AC
+ *   honesty  = soft hash != product password policy; agent PASS != Dual DoD
+ *              close; stamp-free bar honesty (no version stamp)
+ *   law      = dual MIT OR Apache-2.0; no GPL; H2 no stamp storms
+ * greppable: libcgj: crypt soft residual Soft!=product
  */
 #pragma once
 

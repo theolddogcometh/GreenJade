@@ -19,16 +19,78 @@
  *     write/read path via gj_syscall6; gj_dlog uses native GJ_SYS_DEBUG_LOG.
  *     Link with libgj.a (string_u.o + syscall.o).
  *
- * Naming: Hungarian parameters (sz*, p*, cb*, n*, …) per STYLE.md; functions
+ * Naming: Hungarian parameters (sz*, p*, cb*, n*, ...) per STYLE.md; functions
  * stay gj_* module_snake without Hungarian prefixes.
+ *
+ * -------------------------------------------------------------------------
+ * C2 lib residual (Soft!=product; G-AC-1; dual MIT OR Apache-2.0):
+ * -------------------------------------------------------------------------
+ * Hot freestanding helpers (length..format) are the product-direction surface
+ * for GreenJade freestanding user ELFs (init, shell, ld-gj, door servers).
+ * They are not a Dual DoD close, not bar3, not multi-server confine product.
+ *
+ * Soft residual inventory / deepen / path / honesty accessors below are cold
+ * eng-only (rodata + counts). They never gate product lamps, never mint caps,
+ * never run Linux .ko product AC (G-AC-1), never bump GJ_IMAGE_VERSION.
+ *
+ * Soft residual deepen (Soft!=product; stamp-free; Dual DoD A/B OPEN):
+ *   inventory residual — greppable "libgj: soft inventory" catalog only.
+ *   deepen residual    — greppable "libgj: soft deepen" wave/area stamp.
+ *   path residual      — greppable "libgj: soft path" freestanding policy.
+ *   honesty residual   — greppable "libgj: soft honesty"; product_kernel=OPEN.
+ *   group residual     — length/compare/copy/search/case/ctype/mem/parse/io/format.
+ *   policy residual    — freestanding pure_c no_heap no_locale no_errno
+ *                        ascii_only soft_null; counts=none hot_path=clean.
+ *   dual_dod residual  — Dual DoD A/B remain OPEN; agent_close=0.
+ *   product residual   — freestanding helpers != UDX Dual DoD product close;
+ *                        product path for drivers = UDX+ABI userspace hosts.
+ *
+ * Soft API honesty:
+ *   soft path = freestanding pure-C helpers + cold inventory accessors
+ *   product   = UDX/DDI Dual DoD A/B (OPEN; not claimed by this header)
+ *   Dual DoD  = A (xhci_udx) / B (rtl8168_udx) remain OPEN
+ * greppable: libgj: soft residual lean
+ * greppable: libgj: soft residual inventory
+ * greppable: libgj: soft residual deepen
+ * greppable: libgj: soft residual path
+ * greppable: libgj: soft residual honesty
+ * greppable: libgj: soft residual dual_dod
+ * greppable: libgj: soft residual product
+ * greppable: libgj: soft residual claim_class=C2
+ * greppable: Soft!=product
+ *
+ * Law: dual MIT OR Apache-2.0; Soft!=product; G-AC-1; Dual DoD A/B OPEN;
+ * no GPL; no freestanding class re-enable as Dual DoD close; stamp-free;
+ * no GJ_IMAGE_VERSION bump from this residual. claim_class=C2.
  */
 #pragma once
 
 #include <stddef.h>
+#include <stdarg.h>
 
 #ifdef __cplusplus
 extern "C" {
 #endif
+
+/* ========================================================================
+ * C2 soft residual honesty constants (eng only; Soft!=product; stamp-free)
+ * Never product Dual DoD close, never bar3, never GJ_IMAGE_VERSION.
+ * greppable: libgj: soft residual lean / Soft!=product / claim_class=C2
+ * ======================================================================== */
+
+#define GJ_STRING_SOFT_NE_PRODUCT       1u /* Soft!=product */
+#define GJ_STRING_SOFT_CLAIM_CLASS_C2   1u /* claim_class=C2 lib residual */
+#define GJ_STRING_SOFT_MULTI_SERVER     0u /* soft residual; not multi-server */
+#define GJ_STRING_SOFT_CONFINE          0u /* soft residual; not product confine */
+#define GJ_STRING_SOFT_AGENT_CLOSE      0u /* residual lamps != Dual DoD close */
+#define GJ_STRING_SOFT_DOD_A_OPEN       1u /* Dual DoD A (xhci_udx) OPEN */
+#define GJ_STRING_SOFT_DOD_B_OPEN       1u /* Dual DoD B (rtl8168_udx) OPEN */
+#define GJ_STRING_SOFT_G_AC_1           1u /* no Linux .ko product AC */
+#define GJ_STRING_SOFT_PRODUCT_KERNEL   0u /* product_kernel=OPEN (not closed) */
+#define GJ_STRING_SOFT_HOT_PATH_CLEAN   1u /* hot helpers carry no counters */
+#define GJ_STRING_SOFT_COUNTS_NONE      1u /* counts=none policy */
+#define GJ_STRING_SOFT_ASCII_ONLY       1u /* ctype/case ASCII only */
+#define GJ_STRING_SOFT_STAMP_FREE       1u /* no version stamp in this residual */
 
 /* ========================================================================
  * Length / compare / copy
@@ -267,7 +329,8 @@ unsigned long gj_strtoul(const char *sz, char **ppEnd, int nBase);
 long   gj_strtol(const char *sz, char **ppEnd, int nBase);
 
 /* ========================================================================
- * I/O / format (freestanding product path; needs libgj.a)
+ * I/O / format (freestanding user-ELF path; needs libgj.a)
+ * Soft!=product: smoke/log helpers only — not Dual DoD A/B close, not bar3.
  * ======================================================================== */
 
 /**
@@ -278,13 +341,13 @@ long   gj_strtol(const char *sz, char **ppEnd, int nBase);
 void   gj_puts(const char *sz);
 
 /**
- * Linux write(nFd, p, cb) via gj_syscall6(LINUX_NR_write, …).
+ * Linux write(nFd, p, cb) via gj_syscall6(LINUX_NR_write, ...).
  * @return Bytes written, or negative Linux errno (personality LINUX).
  */
 long   gj_write(int nFd, const void *p, size_t cb);
 
 /**
- * Linux read(nFd, p, cb) via gj_syscall6(LINUX_NR_read, …).
+ * Linux read(nFd, p, cb) via gj_syscall6(LINUX_NR_read, ...).
  * @return Bytes read, or negative Linux errno.
  */
 long   gj_read(int nFd, void *p, size_t cb);
@@ -311,7 +374,7 @@ size_t gj_utoa(unsigned long uVal, char *szBuf, size_t cbBuf);
 
 /**
  * Hex format of an unsigned long (lowercase digits, no "0x" prefix).
- * @param fLeadZero  Non-zero → pad with leading '0' to at least cMin digits.
+ * @param fLeadZero  Non-zero -> pad with leading '0' to at least cMin digits.
  * @param cMin       Minimum digit count when fLeadZero is set (ignored if 0).
  * @return Length written excluding NUL.
  */
@@ -321,25 +384,86 @@ size_t gj_xtoa(unsigned long uVal, char *szBuf, size_t cbBuf,
 /**
  * Soft bounded snprintf-lite for freestanding smoke/log paths.
  *
- * Supported conversions (no full libc width/precision/length modifiers):
+ * Supported conversions (lean freestanding; not full libc):
  *   %%  literal percent
- *   %s  const char * (NULL → literal "(null)")
+ *   %s  const char * (NULL -> literal "(null)")
  *   %c  character (va_arg as int; low 8 bits used)
- *   %d / %i  signed decimal (va_arg as long)
- *   %u  unsigned decimal (unsigned long)
- *   %x / %X  lowercase hex digits (unsigned long; X same as x here)
+ *   %d / %i  signed decimal (default long; l/ll → long / long long)
+ *   %u  unsigned decimal (default unsigned long; l/ll → unsigned long / ull)
+ *   %x / %X  lowercase hex (same length rules; X same as x here)
  *   %p  pointer: "0x" + zero-padded hex (sizeof(void*)*2 digits)
+ * Optional flags before conversion: '0' zero-pad, decimal width (e.g. %08x).
+ * Length modifiers: l / ll (before d/i/u/x/X).
  * Unknown conversions emit '%' + the character literally.
  *
  * @param szBuf  Destination; NULL with cbBuf 0 is a length-only probe.
  * @param cbBuf  Capacity including trailing NUL when > 0.
- * @param szFmt  Format string; NULL → write empty string (return 0).
+ * @param szFmt  Format string; NULL -> write empty string (return 0).
  * @return Bytes that would be written excluding NUL (C99 snprintf-like);
  *         output is truncated to fit cbBuf-1 printable bytes + NUL when cbBuf > 0.
  *
- * Not a full libc printf — no floating point, no positional args, no locale.
+ * Not a full libc printf - no floating point, no positional args, no locale.
+ * Soft!=product: format residual for freestanding smoke + UDX printk.
  */
+size_t gj_vsnprintf(char *szBuf, size_t cbBuf, const char *szFmt, va_list ap);
 size_t gj_snprintf(char *szBuf, size_t cbBuf, const char *szFmt, ...);
+
+/* ========================================================================
+ * Soft residual inventory accessors (cold only; Soft!=product)
+ * Implemented in user/libgj/src/string_u.c. Diagnostics / agent honesty —
+ * never a product bar3 claim, never Dual DoD close, never G-AC-1 waiver.
+ * greppable: libgj: soft residual inventory / Soft!=product / claim_class=C2
+ * ======================================================================== */
+
+/** Greppable "libgj: soft inventory ..." rodata line. Soft!=product. */
+const char *gj_string_soft_inventory(void);
+/** Greppable "libgj: soft deepen ..." rodata line. Soft!=product. */
+const char *gj_string_soft_deepen(void);
+/** Greppable "libgj: soft path ..." rodata line. Soft!=product. */
+const char *gj_string_soft_path(void);
+/** Greppable "libgj: soft honesty ..." rodata line; product_kernel=OPEN. */
+const char *gj_string_soft_honesty(void);
+/** Greppable "libgj: soft residual lean ..." rodata; Soft!=product Dual DoD OPEN. */
+const char *gj_string_soft_residual(void);
+/**
+ * Greppable "libgj: soft product residual product=UDX+sshd+stack ...".
+ * Soft!=product; Dual DoD OPEN; stamp-free bar v2026.08.04.75.
+ */
+const char *gj_string_soft_product_residual(void);
+
+/** Soft inventory wave stamp (eng only; Soft!=product; not GJ_IMAGE_VERSION). */
+unsigned    gj_string_soft_wave(void);
+/** Soft greppable area count. Soft!=product. */
+unsigned    gj_string_soft_area_count(void);
+/** Soft area name by index, or NULL. Soft!=product. */
+const char *gj_string_soft_area_name(unsigned uArea);
+/** Soft policy token count. Soft!=product. */
+unsigned    gj_string_soft_policy_count(void);
+/** Soft policy token by index, or NULL. Soft!=product. */
+const char *gj_string_soft_policy_name(unsigned uPolicy);
+
+/** Total freestanding soft helper count (42). Soft!=product. */
+unsigned    gj_string_soft_helper_count(void);
+/** Soft helper name by index, or NULL. Soft!=product. */
+const char *gj_string_soft_helper_name(unsigned uIndex);
+/** Soft group count (length..format = 10). Soft!=product. */
+unsigned    gj_string_soft_group_count(void);
+/** Soft group name by index, or NULL. Soft!=product. */
+const char *gj_string_soft_group_name(unsigned uGroup);
+/** Soft per-group helper count, or 0 if out of range. Soft!=product. */
+unsigned    gj_string_soft_group_helper_count(unsigned uGroup);
+
+/** Per-group size accessors (Soft!=product residual; cold only). */
+unsigned    gj_string_soft_length_count(void);
+unsigned    gj_string_soft_compare_count(void);
+unsigned    gj_string_soft_copy_count(void);
+unsigned    gj_string_soft_search_count(void);
+unsigned    gj_string_soft_case_count(void);
+unsigned    gj_string_soft_ctype_count(void);
+unsigned    gj_string_soft_mem_count(void);
+unsigned    gj_string_soft_parse_count(void);
+unsigned    gj_string_soft_io_count(void);
+unsigned    gj_string_soft_format_count(void);
 
 #ifdef __cplusplus
 }

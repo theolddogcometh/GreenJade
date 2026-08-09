@@ -4,25 +4,26 @@
  *
  * SYSCALL MSRs + ring-3 enter helpers (Option C entry).
  * Pure C11 freestanding; dual-licensed MIT OR Apache-2.0.
+ * Soft!=product; G-AC-1 (no Linux .ko product AC from this unit).
  *
  * -------------------------------------------------------------------------
  * Scope
  * -------------------------------------------------------------------------
  * Program the Intel/AMD SYSCALL/SYSRET control MSRs for long-mode native
- * entry and provide soft-observable enter_user helpers for smoke and PE32
- * (compat) hardware enter. Complements gj/cpu.h (GS/percpu) and gj/gdt.h
- * (STAR selector layout).
+ * entry and provide soft-observable enter_user helpers for smoke, PE32
+ * (compat) hardware enter, and userspace UDX host ring-3 entry.
+ * Complements gj/cpu.h (GS/percpu) and gj/gdt.h (STAR selector layout).
  *
  * Platform / ABI
  * --------------
  *   P-ABI-1  System V AMD64 register convention at syscall edge
  *   Option C SYSCALL entry (not legacy int-only product path)
- *   STAR user base must match GDT indices 3..5 (0x18 base → CS32/DS/CS64)
+ *   STAR user base must match GDT indices 3..5 (0x18 base -> CS32/DS/CS64)
  *
  * Soft SYSCALL MSR observability: boot/bring-up telemetry for
- * STAR/LSTAR/CSTAR/SFMASK/EFER.SCE — counters, last programmed snapshot,
+ * STAR/LSTAR/CSTAR/SFMASK/EFER.SCE - counters, last programmed snapshot,
  * readback verify, greppable logs. Not hot-path locks. Soft never hard-gates
- * product; wrap-OK counters only.
+ * product; wrap-OK counters only. Soft!=product.
  *
  * MSR map (soft snapshot fields)
  * ------------------------------
@@ -32,16 +33,27 @@
  *   IA32_FMASK    RFLAGS mask applied on SYSCALL
  *   IA32_EFER     SCE (and NXE) bits required for product
  *
- * Enter paths
- * -----------
- *   cpu_enter_user   — long-mode SYSRETQ-style path (CS64 + user stack)
- *   cpu_enter_user32 — compat iretq path (CS32 L=0 D=1, SS=user DS)
+ * Enter paths (product preserved; soft residual lean only)
+ * -------------------------------------------------------
+ *   cpu_enter_user   - long-mode SYSRETQ-style path (CS64 + user stack)
+ *   cpu_enter_user32 - compat iretq path (CS32 L=0 D=1, SS=user DS)
  * Both are noreturn on success; soft-count invalid rejections.
+ * Userspace UDX hosts (rtl8168_udx / xhci_udx / ddi_host) land via
+ * enter_user after load; residual lean tallies are Soft!=product honesty
+ * only - not product enter complete, not .ko AC (G-AC-1).
+ *
+ * Lean soft residual (this unit exclusive; Soft!=product):
+ *   greppable: cpu: syscall soft residual lean
+ *   greppable: cpu: syscall soft capacity
+ *   Storm-capped inventory (GJ_CPU_SYSCALL_SOFT_INV_LOG_CAP): storm=0
+ *   No version stamp; dual MIT OR Apache-2.0; ASCII Soft!=product
  *
  * greppable: cpu: syscall soft
+ * greppable: cpu: syscall soft residual lean
  * greppable: GJ_CPU_SYSCALL_STAR_
  * greppable: cpu_syscall_init cpu_syscall_soft_log
  * greppable: STAR LSTAR SFMASK EFER.SCE Option C
+ * greppable: Soft!=product G-AC-1 udx_host enter_user enter_user32
  */
 #pragma once
 
@@ -59,20 +71,23 @@ int cpu_syscall_ready(void);
 
 /**
  * Enter ring 3 at u64Entry with stack u64Stack (must be mapped user-accessible).
- * Does not return on success. Stub returns if not ready / invalid.
- * Soft-counts enter64 attempts and bad rejections.
+ * Does not return on success. HLT-loops if not ready / invalid.
+ * Soft-counts enter64 attempts and bad rejections (Soft!=product).
+ * Product path for userspace UDX hosts / native user tasks (sysretq).
  */
 void cpu_enter_user(u64 u64Entry, u64 u64Stack) __attribute__((noreturn));
 
 /**
  * Enter 32-bit compat ring-3 via iretq (CS32 L=0 D=1, SS=user DS).
  * Does not return on success. Used for PE32/WoW64 hardware enter smoke.
- * Soft-counts enter32 attempts and bad rejections.
+ * Soft-counts enter32 attempts and bad rejections (Soft!=product).
+ * Product path preserved (iretq CS32 / USER_DS / RSP0).
  */
 void cpu_enter_user32(u64 u64Entry, u64 u64Stack) __attribute__((noreturn));
 
 /* ------------------------------------------------------------------ */
-/* Soft SYSCALL MSR observability (boot telemetry — not hot-path)     */
+/* Soft SYSCALL MSR observability (boot telemetry - not hot-path)     */
+/* Soft!=product; storm-capped inventory; residual lean enter paths */
 /* ------------------------------------------------------------------ */
 
 /** Canonical STAR user base for this GDT (CS32=base+0|RPL3, DS=+8, CS64=+16). */
@@ -131,11 +146,15 @@ int  cpu_syscall_soft_info_get(struct gj_cpu_syscall_soft *pOut);
 int  cpu_syscall_soft_verify(void);
 
 /**
- * Greppable soft summary:
- *   cpu: syscall soft inits=… verify_ok=… verify_bad=… enter64=… enter32=… bad=…
- *   cpu: syscall soft STAR=0x… LSTAR=0x… SFMASK=0x… EFER=0x… SCE=… NXE=…
- *   cpu: syscall soft decode kern_cs=0x… user_base=0x… (CS64=base+16)
+ * Greppable soft summary (storm-capped; Soft!=product):
+ *   cpu: syscall soft inventory ...
+ *   cpu: syscall soft inits=... verify_ok=... verify_bad=... enter64=... enter32=... bad=...
+ *   cpu: syscall soft STAR=0x... LSTAR=0x... SFMASK=0x... EFER=0x... SCE=... NXE=...
+ *   cpu: syscall soft decode kern_cs=0x... user_base=0x... (CS64=base+16)
+ *   cpu: syscall soft residual lean enter64=... enter32=... ... storm=0 ...
+ *   cpu: syscall soft capacity ...
  *   cpu: syscall soft verify PASS|FAIL|idle
- * greppable: cpu: syscall soft
+ * greppable: cpu: syscall soft | cpu: syscall soft residual lean
+ * Soft!=product; dual MIT OR Apache-2.0; G-AC-1; no version stamp
  */
 void cpu_syscall_soft_log(void);

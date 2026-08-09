@@ -22,12 +22,12 @@
  * ----------------------------------
  *   - idt_ready after idt_init
  *   - vec 0..31 present, selector = kernel CS (GJ_GDT_KERNEL_CS)
- *   - vec 3,4 DPL3 trap-style (type 0xEF) — BP/OF soft user enter
+ *   - vec 3,4 DPL3 trap-style (type 0xEF) - BP/OF soft user enter
  *   - other exceptions DPL0 interrupt (type 0x8E)
  *   - vec 128 present DPL3 interrupt (type 0xEE)
  *
  * AP load order: gdt_load_ap() then idt_load_ap() before unmasking IRQs
- * (gates encode kernel CS; wrong GDT → #GP on first IRQ).
+ * (gates encode kernel CS; wrong GDT -> #GP on first IRQ).
  *
  * Cross-module: gj/trap.h (frame + dispatch), gj/gdt.h (selectors),
  *               gj/apic.h (IPI vectors 49/50), arch isr stubs.
@@ -52,7 +52,7 @@ int idt_ready(void);
 
 /**
  * lidt the shared IDT (call on each AP after gdt_load_ap).
- * Does not rebuild gates — only reloads IDTR to the BSP-built table.
+ * Does not rebuild gates - only reloads IDTR to the BSP-built table.
  */
 void idt_load_ap(void);
 
@@ -64,7 +64,7 @@ void idt_load_ap(void);
 void idt_set_gate(u32 u32Vec, void *pHandler, u8 u8Type);
 
 /* ------------------------------------------------------------------ */
-/* Soft IDT gate observability (boot telemetry — not hot-path)        */
+/* Soft IDT gate observability (boot telemetry - not hot-path)        */
 /* ------------------------------------------------------------------ */
 
 /** Gate type/DPL decode aids (Intel IDT type attribute byte). */
@@ -106,7 +106,7 @@ u32  idt_gate_soft_installs(void);
 u32  idt_gate_soft_exception(void);
 /** Installs of vector 128 (int 0x80). */
 u32  idt_gate_soft_int80(void);
-/** Installs of other vectors (IRQ / MSI-X / …). */
+/** Installs of other vectors (IRQ / MSI-X / ...). */
 u32  idt_gate_soft_irq(void);
 /** Rejected installs (vec≥256 or NULL handler). */
 u32  idt_gate_soft_reject(void);
@@ -145,9 +145,9 @@ int  idt_gate_soft_info_get(struct gj_idt_gate_soft *pOut);
 
 /**
  * Greppable soft summary:
- *   idt: gate soft inits=… ap=… install=… exc=… int80=… irq=… reject=…
- *   idt: gate soft present=… dpl0=… dpl3=… int=… trap=… verify_ok=… verify_bad=…
- *   idt: gate soft last vec=… type=0x… dpl=… trap=… off=0x… sel=0x…
+ *   idt: gate soft inits=... ap=... install=... exc=... int80=... irq=... reject=...
+ *   idt: gate soft present=... dpl0=... dpl3=... int=... trap=... verify_ok=... verify_bad=...
+ *   idt: gate soft last vec=... type=0x... dpl=... trap=... off=0x... sel=0x...
  *   idt: gate soft verify PASS|FAIL|idle
  * greppable: idt: gate soft
  */

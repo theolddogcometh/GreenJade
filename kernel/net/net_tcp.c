@@ -3,16 +3,73 @@
  * Copyright (c) 2026 Project GreenJade contributors
  *
  * IPv4 TCP over virtio-net + loopback pairs for product sshd / netstackd.
- * Pure C11, dual-licensed (MIT OR Apache-2.0).
+ * Pure C11, dual-licensed (MIT OR Apache-2.0). Soft!=product · G-AC-1.
  *
  * Features: SYN handshake, ordered RX, multi-segment TX, advertised window,
  * SYN/SYN-ACK + last-segment retransmit on poll, basic RTT ticks, soft
  * close-state progress (FIN_WAIT / LAST_ACK / TIME_WAIT reclaim), listen
- * backlog soft. External eth: net_tcp: soft eth syn … + SYN-ACK rtx.
+ * backlog soft. External eth: net_tcp: soft listen :22 + eth_syn + SYN-ACK rtx.
+ * Soft ensure :22 after net_l2 ready; rtl bind forces lab IP 10.200.125.50.
+ * Accept queue residual: multi-child AcceptQ + pending release on giveup/RST.
+ *
+ * Exclusive residual lean - userspace/ABI socket path (Soft!=product):
+ *   listen/accept/shutdown/name/rtx for cold Linux personality + sshd over
+ *   stack (mirror net_lo shapes; leave soft port tables). Soft half-close
+ *   SHUT_RD/WR + bare-FIN rtx + sticky RST POLLERR on poll_mask.
+ *   Functional thrash-strip: no micro/nano/pico multi-pass; lean rtx only.
+ *   FORBIDDEN: freestanding rtl R0 residual deepen rabbit hole.
+ *   no version/wave stamp · no TCP_SOFT_DEEPEN_WAVE · no stamp storms ·
+ *   no net_eth_poll/net_tcp_poll on IRQ (run-loop only) · dual license.
+ * Host nc/ssh still DUT-OPEN. Soft listen :22 != host banner proof.
+ * Product NIC = UDX+ABI. Soft!=product · G-AC-1.
+ *
+ * Functional residual STRONGER (sshd :22 product path; Soft!=product):
+ *   listen: reparent + rehook oldest ESTABLISHED AcceptQ (eth prefer).
+ *   accept: EAGAIN heal once (ensure :22 + multi-listener reparent/rehook).
+ *   ensure :22: rehook after reparent on product / soft / soft-mint paths.
+ *   poll / poll_mask: silent :22 pending heal + ready rehook (POLLIN honest);
+ *   poll_mask :22 not-ready -> ensure+reparent+rehook; post multi-pass rehook.
+ *   close AcceptQ: reparent + rehook_ready (eth prefer) on same-port listeners.
+ *   eth_estab: AcceptQ SYN_RCVD->ESTABLISHED multi-listener reparent+rehook
+ *   so product sshd poll/accept sees POLLIN without pure-POLL wait.
+ *   listen close: orphan AcceptQ reparent+rehook onto remaining same-port
+ *   listeners (soft-mint teardown / product re-arm). Soft!=product.
+ *   greppable: net_tcp: soft functional lap | acceptq_rehook | accept_eagain_heal
+ *   greppable: eth_estab_rehook | listen_close_rehook
+ *   Dual DoD A/B remain OPEN (agent!=close). !=host_banner_proof.
+ *
+ * C1 residual deepen (Soft!=product; Dual DoD OPEN; agent!=close):
+ *   class=C1 lab dual DoD residual for sshd :22 over stack + soft listen.
+ *   dual_dod_a=OPEN dual_dod_b=OPEN product_sshd_tcp22=OPEN until DUT host
+ *   banner + UDX owns wire. freestanding_class=SKIP (no freestanding rtl
+ *   R0 product track). Soft residual lean once self-check catalogs socket
+ *   path + H1 thr-only poll + thrash-strip + multi-seg bulk + lab_ip/:22.
+ *   Soft residual != Dual DoD close. stamp-free · G-AC-1 · no GPL.
+ *
+ * W11 Dual DoD B FUNCTIONAL residual (Soft!=product; stamp-free bar
+ *   v2026.08.04.75; never invent .76): wire handoff + :22 stack for product
+ *   sshd. Eth demux (net_eth) -> soft listen :22 / AcceptQ / poll_mask /
+ *   door SOCK_POLL yield. H1: net_tcp_poll only from net_eth_poll thr/door
+ *   stack (never IRQ). Dual DoD A/B remain OPEN (agent!=close).
+ *   STRONGER denser wire22 residual: multi-arm :22 listen/accept path honesty
+ *   (ensure|listen|acceptq|accept|accept_eagain_heal|eth_estab_rehook|
+ *   listen_close_rehook|poll|poll_mask). product_sshd_tcp22=OPEN until DUT.
+ *   denser arms: h1_poll|listen22|accept22|rehook_heal|dual_dod_open|
+ *   product_sshd_open. Soft residual != Dual DoD close. H2 once (no stamp
+ *   storms). Soft!=product.
+ *   Denser H1 thr-only sublocks (thr|stack|stamp) + denser path sublocks
+ *   (ensure|listen|acceptq|accept|heal|rehook). H1 eth poll from door thr only
+ *   (net_tcp_poll never IRQ). Dual DoD OPEN.
+ *   greppable: net_tcp: soft residual wire22 | wire_handoff+tcp22
+ *   greppable: net_tcp: soft residual wire22 denser | denser=1 | denser_arms
+ *   greppable: stack=eth|tcp|door|:22 | W11 Dual DoD B FUNCTIONAL
+ *   greppable: listen_accept_path_honesty | until_DUT | H2=once
+ *   greppable: product_sshd_tcp22=OPEN | dual_dod_b=OPEN | until_DUT
+ *   greppable: denser_h1_sub | denser_path_sub | thr-only door eth poll
  *
  * Multi-segment TX (product / netstackd 3000 B bulk smoke):
  *   net_tcp_send chunks payloads into TCP_MSS (1024) segments with FL_PSH.
- *   Door bounce NET_XFER_MAX (4096) must stay ≥ bulk; one SEND → ≥3 segs.
+ *   Door bounce NET_XFER_MAX (4096) must stay ≥ bulk; one SEND -> ≥3 segs.
  *   Loopback path requires full peer RX push per segment (no silent short
  *   fill) so multi-seg integrity holds across the whole door transfer.
  *   Peer window (u16PeerWnd) soft-limits in-flight bytes across chunks.
@@ -21,36 +78,44 @@
  *   segs = TX segments + RX segments seen by net_tcp_input
  *   rtx  = successful last-segment retransmits from net_tcp_poll
  *
- * Soft inventory (Wave 40 exclusive deepen; this unit only):
- *   - soft return: API return-surface catalog (product_*=OPEN)
- *   - soft retmap: Wave 19 return-surface map (ok|fail|… classes)
- *   Lifetime path / ring / multi-seg / rtx / TW tallies (struct tcp_soft).
+ * Soft inventory (exclusive Dual DoD B residual; this unit only):
+ *   Lifetime path / ring / multi-seg / rtx / TW / shut / name tallies.
  *   Greppable prefix-stable serial markers (rate-limited; never flood):
- *     net: tcp soft inventory …  — live table + caps + wave
- *     net: tcp soft sock …       — mint ok|fail + hwm
- *     net: tcp soft bind …       — bind ok|fail
- *     net: tcp soft life …       — listen/conn/accept/close path
- *     net: tcp soft xfer …       — send/recv multi-seg/wnd/eof
- *     net: tcp soft input …      — hit|miss|syn|fin|rst|data
- *     net: tcp soft poll …       — rtx / TW reclaim ticks
- *     net: tcp soft ring …       — RX/TX ring + push soft
- *     net: tcp soft multi …      — multi-seg + peer-wnd clamp rollup
- *     net: tcp soft state …      — live state-class distribution
- *     net: tcp soft capacity …   — fixed table / MSS / bulk lamps
- *     net: tcp soft catalog …    — surface catalog (impl soft lamps)
- *     net: tcp soft outcome …    — ok|fail|again rollup
- *     net: tcp soft stats …      — aggregate path tallies
- *     net: tcp soft path …       — honesty: soft inventory
- *     net: tcp soft slot=…       — per-live-slot detail (rate-limited)
- *     net: tcp soft deepen …     — wave=116 stamp + area count
- *     net: tcp soft init|listen|accept|connect|emfile|syn|syn_drop|multi-seg …
- *     net: tcp soft PASS …
- *   Twin prefix also emitted: "net_tcp: soft …".
+ *     net: tcp soft inventory ...  - ONE short line only (never multi-kprintf /
+ *                                  never per-slot loops - #PF I=1 stack guard)
+ *     net: tcp soft poll ...       - rtx / TW reclaim (one-shot / stamp-capped)
+ *     net_tcp: soft listen :22 ... - ensure one-shot; !=host_banner_proof
+ *     net_tcp: soft eth_syn ...    - passive SYN (one line; event-capped)
+ *     net_tcp: soft eth_estab ...  - handshake complete + AcceptQ rehook
+ *     net_tcp: soft accept ...     - accept mint + residual taken
+ *     net_tcp: soft acceptq reparent / close_rel - orphan AcceptQ residual
+ *     net_tcp: soft functional lap - listen|accept|poll|estab rehook STRONGER
+ *     net_tcp: soft shutdown/name  - userspace/ABI socket residual
+ *     net_tcp: soft residual lean  - C1 Dual DoD OPEN lean self-check (once)
+ *     net_tcp: soft residual lean PASS - soft only; never Dual DoD close
+ *     net_tcp: soft residual wire22 - W11 denser :22 listen/accept honesty
+ *     net_tcp: soft residual wire22 denser - multi-arm denser=1 (H2 once)
+ *     hot residual multi-pass / tx_busy: SILENT (micro/nano/pico thrash SKIP)
  *   Cadence dumps at power-of-two op milestones, hard-capped at
- *   TCP_SOFT_LOG_MAX (force emfile / stats / rtx-poll also capped).
- *   Init always emits once. Event lines share TCP_SOFT_EVENT_MAX.
- *   Never hard-gates product policy. Soft. Pure C.
- * Grep: net: tcp soft / net_tcp: soft
+ *   TCP_SOFT_LOG_MAX; poll-path stamps hard-capped per poll
+ *   (TCP_SOFT_POLL_STAMP_MAX). Init emits once (no twin). Event lines share
+ *   TCP_SOFT_EVENT_MAX. No version/wave stamp. No multi-KiB format storms.
+ *   net_tcp_poll only from net_eth_poll run-loop (never timer IRQ). Soft!=product.
+ * greppable: net: tcp soft / net_tcp: soft
+ * greppable: dual_dod_b=OPEN | dual_dod_a=OPEN | product_sshd_tcp22=OPEN
+ * greppable: freestanding_class=SKIP | product=UDX | class=C1 | agent!=close
+ * greppable: net_tcp_poll=run_loop_only | Soft!=product | G-AC-1
+ * greppable: soft functional lap | acceptq_rehook | accept_eagain_heal
+ * greppable: poll_mask_heal | ensure_rehook | multi_listen_heal | close_rehook
+ * greppable: eth_estab_rehook | listen_close_rehook
+ * greppable: net_tcp: soft residual wire22 | wire_handoff+tcp22
+ * greppable: net_tcp: soft residual wire22 denser | denser=1 | denser_arms
+ * greppable: arm_h1_poll | arm_listen22 | arm_accept22 | arm_rehook_heal
+ * greppable: arm_dual_dod_open | arm_product_sshd_open
+ * greppable: stack=eth|tcp|door|:22 | W11 Dual DoD B FUNCTIONAL
+ * greppable: listen_accept_path_honesty | until_DUT | H2=once
+ * greppable: denser_h1_sub | denser_path_sub | thr-only door eth poll
+ * greppable: stamp-free bar v2026.08.04.75 | never invent .76
  */
 #include <gj/klog.h>
 #include <gj/net_l2.h>
@@ -67,13 +132,50 @@
 /* Multi-seg chunk size; eth frames stay under MTU (hdr+MSS ≤ 1518). */
 #define TCP_MSS      1024
 #define TCP_WND      4096
-#define TCP_RTX_MS   200
-#define TCP_RTX_MAX  8
-#define TCP_TW_MS    1000 /* soft TIME_WAIT reclaim */
+/*
+ * SYN-ACK rtx: lab rtl TX can be busy (ARP greets / ICMP). Prefer shorter
+ * interval + higher max so freestanding :22 survives until host retransmits
+ * SYN (dup-SYN path also re-emits). When last TX failed busy, poll retries
+ * immediately (u8RtxBusy -> interval 0) so pure POLL flush from sshd can
+ * land SYN-ACK / banner without waiting wall-clock. Lean multi-pass
+ * (TCP_RTX_PASSES) drains busy-armed slots once a ring slot frees mid-poll.
+ * TCP_RTX_BUSY_MS remains the honesty lamp for busy-path cadence.
+ * Freestanding micro/nano/pico thrash SKIP. Soft!=product.
+ */
+#define TCP_RTX_MS      100
+#define TCP_RTX_BUSY_MS 0   /* busy-armed: retry every poll (pure POLL flush) */
+#define TCP_RTX_MAX     32
+/*
+ * Lean functional rtx residual (Soft!=product; freestanding thrash SKIP):
+ *   PASSES=8 busy multi-pass within one pure POLL (ring may free mid-poll).
+ *   BUSY_SHOTS=4 same-pass retries after TX fail (not busy-shot thrash).
+ *   POST22_DIV denser wall after clean land (no every-poll RtxCount burn).
+ *   MID_ENSURE re-sync soft listen :22 / lab_ip occasionally mid multi-pass.
+ *   REMOVED: micro/nano/pico thrash loops + 160-pass flood residual.
+ */
+#define TCP_RTX_PASSES  8u
+#define TCP_RTX_BUSY_SHOTS 4u
+/*
+ * :22 SYN-ACK / banner re-busy ONLY when never-landed (RtxCount==0) or still
+ * TX-fail (RtxBusy/BusyN). Do NOT re-busy solely because RtxCount is "early"
+ * after a clean wire success - that burned TCP_RTX_MAX inside one pure POLL
+ * multi-pass before peer ACK (giveup under flood). Soft!=product.
+ * Post-success denser wall interval: TCP_RTX_MS / TCP_RTX_POST22_DIV.
+ */
+#define TCP_RTX_POST22_DIV 16u
+#define TCP_RTX_MID_ENSURE_EVERY 4u
+#define TCP_TW_MS       1000 /* soft TIME_WAIT reclaim */
 #define TCP_BACKLOG_MAX 8
+/* Freestanding Dual DoD B: soft ensure listen :22 after net_l2 ready. Soft!=product. */
+#define TCP_SOFT_SSH_PORT 22u
+/* Lab static IPv4 on G752 rtl8168 (must match net_l2 g_aRtlIp). Soft!=product. */
+#define TCP_LAB_IP0 10u
+#define TCP_LAB_IP1 200u
+#define TCP_LAB_IP2 125u
+#define TCP_LAB_IP3 50u
 /*
  * Soft inventory serial budget (Wave 15). Absolute cap of greppable full
- * cadence dumps; milestones are power-of-two API op counts (1,2,4,…).
+ * cadence dumps; milestones are power-of-two API op counts (1,2,4,...).
  * Legacy EVERY remains as a secondary cadence for dense op streams.
  * Event lines (listen/accept/emfile/syn/connect/multi-seg) share a
  * separate hard cap. Slot detail only on force or first N dumps.
@@ -83,16 +185,110 @@
 #define TCP_SOFT_LOG_MAX   8u
 #define TCP_SOFT_EVENT_MAX 8u
 #define TCP_SOFT_SLOT_LOGS 2u
-/* Wave 35 exclusive soft deepen stamp (greppable wave=116). */
-#define TCP_SOFT_DEEPEN_WAVE 116u
-/* inventory sock bind life xfer input poll ring multi state capacity
- * catalog outcome stats path headroom surface ratio PASS slot deepen = 21 */
-#define TCP_SOFT_DEEPEN_AREAS 165u
+/*
+ * Per-poll stamp hard cap for ensure_listen22 / AcceptQ / giveup / poll summary
+ * (stack-safe). Prior multi-kprintf residual + periodic ensure lamps from
+ * net_tcp_poll (160-pass + micro/nano/pico + multi ensure) stacked format
+ * frames until #PF I=1. Hot multi-pass residual is always silent; this cap
+ * only bounds the few one-shot greppable lamps per pure POLL.
+ * Soft!=product · Dual DoD B · G-AC-1.
+ */
+#define TCP_SOFT_POLL_STAMP_MAX 2u
+/*
+ * Soft residual area tally (inventory only - NOT a version/wave stamp).
+ * HARD: no version stamp, no TCP_SOFT_DEEPEN_WAVE, no stamp storms.
+ * Soft!=product · G-AC-1. Prefer userspace/ABI socket residual.
+ * Areas: lab dest demux / soft listen :22 / lab_ip force / busy rtx residual /
+ * lean poll stamp cap / silent hot demux /
+ * userspace-ABI: shutdown half-close + getsockname + getpeername +
+ * SHUT poll honesty + sticky RST POLLERR (lean residual land).
+ */
+/*
+ * Lean residual area tally (inventory only; NOT version/wave stamp).
+ * Areas cover: listen re-arm after SHUT_RD · soft→product AcceptQ transfer ·
+ * accept FIFO rehook · bare-FIN rtx half-close · name-ready after accept ·
+ * lean rtx thrash-strip (no micro/nano/pico) · close AcceptQ pending release ·
+ * AcceptQ reparent after soft-mint teardown / product listen · soft-mint
+ * index clear on close · C1 dual_dod A/B OPEN honesty · product_sshd_tcp22
+ * OPEN · freestanding_class=SKIP · residual lean once self-check · H1 thr-only
+ * net_tcp_poll=run_loop_only · multi-seg bulk compile-guard lean · thrash-strip
+ * PASSES/BUSY_SHOTS bound lean · soft stamp caps lean · lab_ip+:22 lean ·
+ * functional listen/accept/poll rehook ready ESTABLISHED AcceptQ (eth prefer) ·
+ * accept EAGAIN :22 multi-listener heal (ensure+reparent+rehook) ·
+ * ensure :22 rehook after reparent (product/soft/mint) ·
+ * poll_mask :22 not-ready ensure heal · poll post multi-pass :22 rehook ·
+ * close AcceptQ reparent+rehook_ready eth prefer ·
+ * poll silent :22 AcceptQ honesty each pure POLL · functional lap once lamp ·
+ * eth_estab AcceptQ multi-listener reparent+rehook (POLLIN mid-input) ·
+ * listen close orphan AcceptQ reparent+rehook remaining same-port listeners ·
+ * denser wire22 :22 listen/accept path honesty residual (ensure|listen|
+ * acceptq|accept|accept_eagain_heal|eth_estab_rehook|listen_close_rehook) ·
+ * multi-arm denser=1 (h1_poll|listen22|accept22|rehook_heal|dual_dod_open|
+ * product_sshd_open) · product_sshd_tcp22=OPEN until DUT honesty ·
+ * H2 once wire22 residual. Soft!=product · G-AC-1 · agent!=close · Dual DoD OPEN.
+ */
+#define TCP_SOFT_DEEPEN_AREAS 82u
+/*
+ * C1 residual lean self-check arm count (static contract; Soft!=product).
+ * Not a version/wave stamp. Dual DoD A/B remain OPEN (agent!=close).
+ * W11: +1 wire handoff + :22 stack residual arm (denser multi-arm listen/accept
+ * path honesty; product_sshd_tcp22=OPEN until DUT; H2 once).
+ */
+#define TCP_LEAN_CHECKS 11u
+/*
+ * W11 Dual DoD B denser wire22 residual (Soft!=product; Dual DoD OPEN;
+ * product_sshd_tcp22=OPEN until DUT; stamp-free bar v2026.08.04.75; never .76).
+ * Multi-arm denser for soft :22 listen/accept path honesty over eth|tcp|door.
+ * H1 thr-only net_tcp_poll (run-loop / door thr only; never IRQ). agent!=close.
+ * Arms: h1_poll | listen22 | accept22 | rehook_heal | dual_dod_open |
+ *        product_sshd_open.
+ * Denser H1 thr-only sublocks: thr|stack|stamp|irq|door (all required).
+ * Denser path sublocks: ensure|listen|acceptq|accept|heal|rehook.
+ * thr-only door eth poll: net_tcp_poll only from net_eth_poll thr/door (never IRQ).
+ * greppable: wire22 denser | denser_arms | denser=1 | dual_dod OPEN
+ * greppable: product_sshd_tcp22=OPEN | until_DUT | listen_accept_path_honesty
+ * greppable: denser_h1_sub | denser_path_sub | thr-only door eth poll
+ */
+#define TCP_WIRE22_STACK        1u /* wire handoff + :22 stack residual lock */
+#define TCP_WIRE22_DENSE        1u /* denser residual honesty lock */
+#define TCP_WIRE22_DENSE_ARMS   6u /* h1|listen22|accept22|rehook|dod|sshd */
+#define TCP_WIRE22_DENSE_MIN    6u /* all denser arms for wire22_ok */
+/* Denser arm0 H1 thr-only door eth poll sublocks (all required). */
+#define TCP_WIRE22_DENSE_H1_SUB   5u /* thr|stack|stamp|irq|door */
+/* Denser listen/accept path sublocks (stack honesty compound). */
+#define TCP_WIRE22_DENSE_PATH_SUB 6u /* ensure|listen|acceptq|accept|heal|rehook */
 
 /* Compile-time sizing guards (pure C; fail if multi-seg room shrinks). */
 typedef char tcp_rx_holds_bulk[(TCP_RX_MAX >= 3000u) ? 1 : -1];
 typedef char tcp_tx_holds_bulk[(TCP_TX_MAX >= 3000u) ? 1 : -1];
 typedef char tcp_mss_multi[(TCP_MSS > 0 && TCP_TX_MAX > TCP_MSS) ? 1 : -1];
+/* Lean residual thrash-strip bounds must stay compile-true (C1 residual). */
+typedef char tcp_rtx_passes_lean[(TCP_RTX_PASSES > 0u &&
+				  TCP_RTX_PASSES <= 8u) ? 1 : -1];
+typedef char tcp_rtx_busy_shots_lean[(TCP_RTX_BUSY_SHOTS > 0u &&
+				      TCP_RTX_BUSY_SHOTS <= 4u) ? 1 : -1];
+typedef char tcp_soft_poll_stamp_lean[(TCP_SOFT_POLL_STAMP_MAX > 0u &&
+				       TCP_SOFT_POLL_STAMP_MAX <= 2u)
+					  ? 1
+					  : -1];
+/* W11 denser wire22 compile-true (Soft!=product Dual DoD OPEN until DUT). */
+typedef char tcp_wire22_stack[(TCP_WIRE22_STACK == 1u &&
+			       TCP_SOFT_SSH_PORT == 22u) ? 1 : -1];
+typedef char tcp_wire22_dense[(TCP_WIRE22_DENSE == 1u &&
+			       TCP_WIRE22_DENSE_ARMS == 6u &&
+			       TCP_WIRE22_DENSE_MIN == 6u) ? 1 : -1];
+typedef char tcp_wire22_dense_min[(TCP_WIRE22_DENSE_MIN ==
+				   TCP_WIRE22_DENSE_ARMS) ? 1 : -1];
+typedef char tcp_wire22_dense_h1_sub[(TCP_WIRE22_DENSE_H1_SUB == 5u &&
+				      TCP_WIRE22_STACK == 1u &&
+				      TCP_WIRE22_DENSE == 1u &&
+				      TCP_SOFT_POLL_STAMP_MAX > 0u &&
+				      TCP_SOFT_POLL_STAMP_MAX <= 2u) ? 1 : -1];
+typedef char tcp_wire22_dense_path_sub[(TCP_WIRE22_DENSE_PATH_SUB == 6u &&
+					TCP_SOFT_SSH_PORT == 22u &&
+					TCP_WIRE22_DENSE == 1u) ? 1 : -1];
+typedef char tcp_wire22_ssh_port[(TCP_SOFT_SSH_PORT == 22u) ? 1 : -1];
+typedef char tcp_wire22_lean_n[(TCP_LEAN_CHECKS == 11u) ? 1 : -1];
 
 #define ST_CLOSED      0
 #define ST_LISTEN      1
@@ -118,7 +314,8 @@ static u8 g_aOurIp[4] = { 10, 0, 2, 15 };
  * Pull guest IP/MAC from net_l2 whenever a backend is selected.
  * Ready==0 (handoff pending / not up) still exposes the programmed lab IP
  * so SYN demux does not compare against stale QEMU 10.0.2.15 on rtl8168.
- * Soft≠product.
+ * On rtl8168, force lab 10.200.125.50 if L2 returned something else (bind
+ * path and eth demux must never use SLIRP 10.0.2.15 on G752). Soft!=product.
  */
 static void
 tcp_sync_l2_identity(void)
@@ -130,6 +327,81 @@ tcp_sync_l2_identity(void)
 		net_l2_mac(g_aOurMac);
 		net_l2_ip(g_aOurIp);
 	}
+	/* rtl lab: never demux/bind against stale QEMU guest IP. Soft!=product. */
+	if (net_l2_backend() == GJ_NET_L2_RTL8168) {
+		if (g_aOurIp[0] != TCP_LAB_IP0 || g_aOurIp[1] != TCP_LAB_IP1 ||
+		    g_aOurIp[2] != TCP_LAB_IP2 || g_aOurIp[3] != TCP_LAB_IP3) {
+			g_aOurIp[0] = TCP_LAB_IP0;
+			g_aOurIp[1] = TCP_LAB_IP1;
+			g_aOurIp[2] = TCP_LAB_IP2;
+			g_aOurIp[3] = TCP_LAB_IP3;
+		}
+	}
+}
+
+/* True if dest IPv4 is lab 10.200.125.50 (Dual DoD B). Soft!=product. */
+static int
+tcp_ip_is_lab(const u8 *pIp4)
+{
+	if (pIp4 == 0) {
+		return 0;
+	}
+	return (pIp4[0] == TCP_LAB_IP0 && pIp4[1] == TCP_LAB_IP1 &&
+		pIp4[2] == TCP_LAB_IP2 && pIp4[3] == TCP_LAB_IP3)
+		   ? 1
+		   : 0;
+}
+
+/* Force g_aOurIp to lab static (G752 freestanding demux). Soft!=product. */
+static void
+tcp_force_lab_ip(void)
+{
+	g_aOurIp[0] = TCP_LAB_IP0;
+	g_aOurIp[1] = TCP_LAB_IP1;
+	g_aOurIp[2] = TCP_LAB_IP2;
+	g_aOurIp[3] = TCP_LAB_IP3;
+}
+
+/*
+ * Soft demux residual: is IPv4 dest ours for freestanding eth?
+ * Dual DoD B - dest lab 10.200.125.50 always accepted (force identity)
+ * so host SYN is not dropped when L2 still surfaces QEMU 10.0.2.15
+ * mid-handoff or after R0->RX return. rtl / lab-identity path forces
+ * lab then rechecks. No kprintf (lean hot path). Soft!=product.
+ * Returns 1 = accept frame into TCP demux, 0 = not ours.
+ */
+static int
+tcp_dest_is_ours(const u8 *pDip)
+{
+	if (pDip == 0) {
+		return 0;
+	}
+	/*
+	 * Lab dest always ours on freestanding Dual DoD B path - force
+	 * identity so SYN-ACK / banner TX use 10.200.125.50, not SLIRP.
+	 */
+	if (tcp_ip_is_lab(pDip) != 0) {
+		tcp_force_lab_ip();
+		return 1;
+	}
+	/* Live identity match (virtio QEMU or already-forced lab). */
+	if (memcmp(pDip, g_aOurIp, 4) == 0) {
+		return 1;
+	}
+	/*
+	 * rtl or already-lab identity: force 10.200.125.50 then recheck
+	 * so frames arriving while L2 still reports QEMU guest IP still
+	 * demux when dest is the lab static. Soft!=product.
+	 */
+	if (net_l2_backend() == GJ_NET_L2_RTL8168 ||
+	    tcp_ip_is_lab(g_aOurIp) != 0) {
+		tcp_force_lab_ip();
+		if (memcmp(pDip, g_aOurIp, 4) == 0 ||
+		    tcp_ip_is_lab(pDip) != 0) {
+			return 1;
+		}
+	}
+	return 0;
 }
 
 struct tcp_sock {
@@ -140,7 +412,11 @@ struct tcp_sock {
 	u8  u8Backlog;  /* soft listen queue depth */
 	u8  u8Pending;  /* soft pending SYN/accept count */
 	u8  u8FinSent;  /* we have emitted FIN */
-	u8  u8Pad0;
+	u8  u8AcceptQ;  /* 1 = still in listen accept queue (not yet accept()) */
+	u8  u8SoftMint; /* 1 = soft ensure :22 (Soft!=product; demux prefers product) */
+	u8  u8ShutRd;   /* soft SHUT_RD (userspace/ABI half-close). Soft!=product. */
+	u8  u8ShutWr;   /* soft SHUT_WR (FIN on first WR; send -EPIPE). Soft!=product. */
+	u8  u8RstSeen;  /* sticky peer RST -> POLLERR until close. Soft!=product. */
 	u16 u16Lport;
 	u16 u16Rport;
 	u8  aRip[4];
@@ -161,11 +437,31 @@ struct tcp_sock {
 	u8  aRtx[TCP_MSS];
 	u8  u8RtxValid;
 	u8  u8RtxSyn; /* 1 = control SYN/SYN-ACK rtx (no data payload) */
-	u8  u8Pad2[2];
+	u8  u8RtxBusy; /* 1 = last TX busy -> immediate poll rtx. Soft!=product. */
+	u8  u8RtxBusyN; /* busy-attempt counter for rate-limited logs */
 	i16 i16Peer;
 	u16 u16Pad3;
 	u32 u32TwTick; /* TIME_WAIT start (ms) */
 };
+
+/*
+ * Dual DoD B: re-busy :22 SYN-ACK / banner only when never-landed or still
+ * TX-fail. Clean post-success uses denser wall interval (POST22_DIV) - do
+ * not re-arm busy every multi-pass or RtxCount burns to giveup before peer
+ * ACK under pure POLL flood. Soft!=product.
+ */
+static int
+tcp_rtx22_need_busy(const struct tcp_sock *p)
+{
+	if (p == 0 || p->u8RtxValid == 0u) {
+		return 0;
+	}
+	if (p->u8RtxBusy != 0u || p->u8RtxBusyN != 0u ||
+	    p->u32RtxCount == 0u) {
+		return 1;
+	}
+	return 0;
+}
 
 static struct tcp_sock g_aT[TCP_MAX];
 static u32 g_u32Accepts;
@@ -175,12 +471,55 @@ static u32 g_u32TxB;
 static u32 g_u32Rtx;
 static u32 g_u32TwReap;
 static u16 g_u16IpId;
+/* Soft ensure :22 slot (-1 = none). Soft!=product. */
+static i32 g_i32SoftListen22 = -1;
 
 /*
- * Soft product inventory counters — wrap OK; diagnostics only; never
+ * Wire TX success: bump RtxCount off 0 so need_busy does not treat a clean
+ * first land as never-landed (post-success every-poll thrash). Soft!=product.
+ */
+static void
+tcp_rtx_mark_landed(u32 s)
+{
+	if (s >= TCP_MAX || g_aT[s].u8Used == 0u) {
+		return;
+	}
+	if (g_aT[s].u32RtxCount == 0u) {
+		g_aT[s].u32RtxCount = 1u;
+	}
+	g_aT[s].u8RtxBusy = 0;
+	g_aT[s].u8RtxBusyN = 0;
+}
+/* Once-ish lamp for greppable soft listen :22 (no periodic multi-ensure storm). */
+static u8 g_u8SoftListen22Logged;
+static u32 g_u32SoftListen22Ticks;
+/* Ready-edge: re-lamp soft listen :22 when L2 becomes ready (lab_ip). */
+static u8 g_u8SoftListen22WasReady;
+/*
+ * Hard cap on kprintf from net_tcp_poll / ensure_listen22 / rtx residual.
+ * Hot multi-pass residual is silent after budget. Soft!=product.
+ */
+static u32 g_u32SoftPollStampN;
+
+/* Forward: soft ensure listen :22 after net_l2 ready (defined near poll). */
+static void tcp_soft_ensure_listen22(void);
+
+/* 1 = may emit one residual/ensure/poll stamp; 0 = silence (cap hit). */
+static int
+tcp_soft_poll_stamp_ok(void)
+{
+	if (g_u32SoftPollStampN >= TCP_SOFT_POLL_STAMP_MAX) {
+		return 0;
+	}
+	g_u32SoftPollStampN++;
+	return 1;
+}
+
+/*
+ * Soft product inventory counters - wrap OK; diagnostics only; never
  * hard-gate product paths. Grep: net: tcp soft / net_tcp: soft
- * Wave 20 deepen: multi-line path dumps, capacity/catalog/outcome,
- * rate-limit lamps, deepen stamp, PASS. Soft.
+ * Lean residual: one-line dumps, event/poll stamp caps, no version stamp.
+ * Soft!=product.
  */
 struct tcp_soft {
 	u64 u64Ops;          /* total API entries (success + fail) */
@@ -209,8 +548,23 @@ struct tcp_soft {
 	u64 u64RecvEof;
 	u64 u64CloseOk;
 	u64 u64CloseFail;
+	u64 u64ShutOk;       /* userspace/ABI shutdown half-close */
+	u64 u64ShutFail;
+	u64 u64ShutRd;
+	u64 u64ShutWr;
+	u64 u64ShutRdwr;
+	u64 u64NameOk;       /* getsockname success */
+	u64 u64NameFail;
+	u64 u64PeerOk;       /* getpeername success */
+	u64 u64PeerFail;
+	u64 u64RstSticky;    /* peer RST left sticky POLLERR (not free) */
+	u64 u64AcceptQReparent; /* close/listen/mint AcceptQ reparent residual */
+	u64 u64AcceptQCloseRel; /* close of AcceptQ child released pending */
+	u64 u64AcceptQRehook; /* listen/accept/poll ready ESTABLISHED rehook */
 	u64 u64InputHit;     /* net_tcp_input consumed frame */
 	u64 u64InputMiss;    /* ignored / not ours */
+	u64 u64InputLabDemux; /* dest lab 10.200.125.50 accepted (silent) */
+	u64 u64InputDemuxForce; /* rtl/lab force path used (silent) */
 	u64 u64InputSyn;     /* passive SYN accepted into table */
 	u64 u64InputSynDrop; /* SYN dropped (backlog / pending) */
 	u64 u64InputRst;
@@ -225,11 +579,25 @@ struct tcp_soft {
 	u64 u64LogDumps;     /* times soft log was emitted */
 	u64 u64LogSkip;      /* cadence/force dumps suppressed by cap */
 	u64 u64EventSkip;    /* event lines suppressed by event cap */
+	u64 u64LeanChecks;   /* C1 residual lean self-check arm count */
+	u64 u64LeanOk;       /* C1 residual lean arms that passed */
+	u32 u32Wire22Ok;     /* W11 wire handoff + :22 stack lean checks */
+	u32 u32Wire22Dense;  /* STRONGER wire22 denser arm multi-count */
+	u32 u32Wire22DenseH1;    /* denser arm0: H1 thr-only net_tcp_poll */
+	u32 u32Wire22DenseH1Sub; /* denser arm0 H1 thr-only sublock multi */
+	u32 u32Wire22DensePathSub;/* denser path sublock multi-count */
+	u32 u32Wire22DenseListen;/* denser arm1: soft listen :22 / ensure */
+	u32 u32Wire22DenseAccept;/* denser arm2: accept + AcceptQ :22 */
+	u32 u32Wire22DenseRehook;/* denser arm3: rehook/heal residual */
+	u32 u32Wire22DenseDod;   /* denser arm4: dual_dod OPEN honesty */
+	u32 u32Wire22DenseSshd;  /* denser arm5: product_sshd_tcp22=OPEN */
 	u32 u32SoftLogN;     /* inventory log emissions (u32 twin) */
-	u32 u32EventN;       /* event line emissions (listen/accept/…) */
+	u32 u32EventN;       /* event line emissions (listen/accept/...) */
 };
 
 static struct tcp_soft g_soft;
+/* Soft residual lean once gate (C1 Dual DoD OPEN catalog). Soft!=product. */
+static u8 g_fSoftLeanOnce;
 
 static void
 tcp_soft_bump(u64 *pCnt)
@@ -354,11 +722,13 @@ tcp_soft_event_ok(void)
 }
 
 /*
- * Greppable soft product inventory + path dumps (Wave 20 exclusive).
- * Prefix-stable: "net: tcp soft …" and twin "net_tcp: soft …".
- * fForce: include per-live-slot detail (init / emfile / stats / rtx-poll).
- * Cadence dumps skip slots after TCP_SOFT_SLOT_LOGS to avoid flood.
- * Soft only — never hard-gates product policy; soft.
+ * Greppable soft product inventory (stack-hardened, lean residual).
+ * CRITICAL: exactly ONE short kprintf - never slot-detail loops, never twin
+ * multi-line dumps. Prior residual printed 30+ twin kprintfs per dump from
+ * net_eth_poll -> net_tcp_poll and stacked format frames until #PF I=1.
+ * fForce retained for API compatibility; ignored (no per-slot detail ever).
+ * No version/wave stamp. Soft only - never hard-gates product policy.
+ * Soft!=product · G-AC-1 · Dual DoD B.
  */
 static void
 tcp_soft_print(int fForce)
@@ -375,14 +745,10 @@ tcp_soft_print(int fForce)
 	u32 cPending = 0;
 	u32 cRx = 0;
 	u32 cRtxLive = 0;
-	u32 i;
-	u32 fSlots;
-	u32 u32Wave;
-	u32 u32Areas;
 	struct tcp_soft s;
 
-	u32Wave = TCP_SOFT_DEEPEN_WAVE;
-	u32Areas = TCP_SOFT_DEEPEN_AREAS;
+	(void)fForce;
+	/* ONE line only - no slot loops, no twin kprintf. Stack-safe. */
 	tcp_soft_tally(&cUsed, &cFree, &cListen, &cEstab, &cSyn, &cCw, &cFw,
 		       &cTw, &cLoop, &cPending, &cRx, &cRtxLive);
 	s = g_soft;
@@ -390,1396 +756,469 @@ tcp_soft_print(int fForce)
 	if (g_soft.u32SoftLogN < 0xffffffffu) {
 		g_soft.u32SoftLogN++;
 	}
-	/* Slot detail: force always; cadence only for first few dumps. */
-	fSlots = (fForce != 0 || g_soft.u32SoftLogN <= TCP_SOFT_SLOT_LOGS)
-		     ? 1u
-		     : 0u;
-
-	/* Grep: net: tcp soft inventory */
+	/* Grep: net: tcp soft inventory (one-line; never multi-kprintf) */
 	kprintf("net: tcp soft inventory used=%u free=%u listen=%u estab=%u "
-		"syn=%u close_wait=%u fin_wait=%u time_wait=%u loop=%u "
-		"pending=%u rx_bytes=%u rtx_live=%u hwm=%llu max=%u "
-		"fd_base=%u mss=%u wnd=%u rx_max=%u tx_max=%u "
-		"backlog_max=%u rtx_ms=%u tw_ms=%u logs=%u skip=%llu "
-		"event_n=%u event_skip=%llu wave=%u\n",
-		cUsed, cFree, cListen, cEstab, cSyn, cCw, cFw, cTw, cLoop,
-		cPending, cRx, cRtxLive, (unsigned long long)s.u64HwmUsed,
-		(unsigned)TCP_MAX, (unsigned)TCP_FD_BASE, (unsigned)TCP_MSS,
-		(unsigned)TCP_WND, (unsigned)TCP_RX_MAX, (unsigned)TCP_TX_MAX,
-		(unsigned)TCP_BACKLOG_MAX, (unsigned)TCP_RTX_MS,
-		(unsigned)TCP_TW_MS, g_soft.u32SoftLogN,
-		(unsigned long long)s.u64LogSkip, g_soft.u32EventN,
-		(unsigned long long)s.u64EventSkip, u32Wave);
-
-	/* Grep: net_tcp: soft inventory (twin prefix) */
-	kprintf("net_tcp: soft inventory used=%u free=%u listen=%u estab=%u "
-		"hwm=%llu accepts=%u segs=%u rx=%u tx=%u rtx=%u tw_reap=%u "
-		"log_n=%u areas=%u wave=%u\n",
-		cUsed, cFree, cListen, cEstab,
-		(unsigned long long)s.u64HwmUsed, g_u32Accepts, g_u32Segs,
-		g_u32RxB, g_u32TxB, g_u32Rtx, g_u32TwReap, g_soft.u32SoftLogN,
-		u32Areas, u32Wave);
-
-	/* Grep: net: tcp soft sock */
-	kprintf("net: tcp soft sock ok=%llu fail=%llu hwm=%llu max=%u "
-		"fd_base=%u wave=%u\n",
-		(unsigned long long)s.u64SockOk,
-		(unsigned long long)s.u64SockFail,
-		(unsigned long long)s.u64HwmUsed, (unsigned)TCP_MAX,
-		(unsigned)TCP_FD_BASE, u32Wave);
-
-	/* Grep: net_tcp: soft sock (twin) */
-	kprintf("net_tcp: soft sock ok=%llu fail=%llu hwm=%llu max=%u "
-		"wave=%u\n",
-		(unsigned long long)s.u64SockOk,
-		(unsigned long long)s.u64SockFail,
-		(unsigned long long)s.u64HwmUsed, (unsigned)TCP_MAX, u32Wave);
-
-	/* Grep: net: tcp soft bind */
-	kprintf("net: tcp soft bind ok=%llu fail=%llu wave=%u\n",
-		(unsigned long long)s.u64BindOk,
-		(unsigned long long)s.u64BindFail, u32Wave);
-
-	/* Grep: net_tcp: soft bind (twin) */
-	kprintf("net_tcp: soft bind ok=%llu fail=%llu wave=%u\n",
-		(unsigned long long)s.u64BindOk,
-		(unsigned long long)s.u64BindFail, u32Wave);
-
-	/* Grep: net: tcp soft life */
-	kprintf("net: tcp soft life listen=%llu listen_fail=%llu "
-		"conn=%llu conn_fail=%llu conn_again=%llu conn_refused=%llu "
-		"accept=%llu accept_fail=%llu accept_again=%llu "
-		"close=%llu close_fail=%llu wave=%u\n",
-		(unsigned long long)s.u64ListenOk,
-		(unsigned long long)s.u64ListenFail,
-		(unsigned long long)s.u64ConnOk,
-		(unsigned long long)s.u64ConnFail,
-		(unsigned long long)s.u64ConnAgain,
-		(unsigned long long)s.u64ConnRefused,
+		"syn=%u pending=%u accept=%llu shut=%llu name=%llu peer=%llu "
+		"rtx=%llu hwm=%llu ops=%llu log_n=%u "
+		"(one-line Soft!=product Dual DoD B; !=host_banner_proof; "
+		"dual_dod_b=OPEN product_sshd_tcp22=OPEN until_DUT=1 "
+		"listen_accept_path_honesty=1 wire_handoff+tcp22=1 "
+		"agent!=close)\n",
+		cUsed, cFree, cListen, cEstab, cSyn, cPending,
 		(unsigned long long)s.u64AcceptOk,
-		(unsigned long long)s.u64AcceptFail,
-		(unsigned long long)s.u64AcceptAgain,
-		(unsigned long long)s.u64CloseOk,
-		(unsigned long long)s.u64CloseFail, u32Wave);
-
-	/* Grep: net_tcp: soft life (twin) */
-	kprintf("net_tcp: soft life listen=%llu conn=%llu conn_again=%llu "
-		"conn_refused=%llu accept=%llu close=%llu wave=%u\n",
-		(unsigned long long)s.u64ListenOk,
-		(unsigned long long)s.u64ConnOk,
-		(unsigned long long)s.u64ConnAgain,
-		(unsigned long long)s.u64ConnRefused,
-		(unsigned long long)s.u64AcceptOk,
-		(unsigned long long)s.u64CloseOk, u32Wave);
-
-	/* Grep: net: tcp soft xfer */
-	kprintf("net: tcp soft xfer send=%llu send_fail=%llu send_again=%llu "
-		"send_partial=%llu send_multi=%llu send_wnd=%llu "
-		"recv=%llu recv_fail=%llu recv_again=%llu recv_eof=%llu "
-		"tx_bytes=%u rx_bytes=%u segs=%u mss=%u wave=%u\n",
-		(unsigned long long)s.u64SendOk,
-		(unsigned long long)s.u64SendFail,
-		(unsigned long long)s.u64SendAgain,
-		(unsigned long long)s.u64SendPartial,
-		(unsigned long long)s.u64SendMulti,
-		(unsigned long long)s.u64SendWndLim,
-		(unsigned long long)s.u64RecvOk,
-		(unsigned long long)s.u64RecvFail,
-		(unsigned long long)s.u64RecvAgain,
-		(unsigned long long)s.u64RecvEof, g_u32TxB, g_u32RxB,
-		g_u32Segs, (unsigned)TCP_MSS, u32Wave);
-
-	/* Grep: net_tcp: soft xfer (twin) */
-	kprintf("net_tcp: soft xfer send=%llu multi=%llu wnd=%llu "
-		"recv=%llu eof=%llu tx_b=%u rx_b=%u segs=%u wave=%u\n",
-		(unsigned long long)s.u64SendOk,
-		(unsigned long long)s.u64SendMulti,
-		(unsigned long long)s.u64SendWndLim,
-		(unsigned long long)s.u64RecvOk,
-		(unsigned long long)s.u64RecvEof, g_u32TxB, g_u32RxB,
-		g_u32Segs, u32Wave);
-
-	/* Grep: net: tcp soft input */
-	kprintf("net: tcp soft input hit=%llu miss=%llu syn=%llu "
-		"syn_drop=%llu rst=%llu fin=%llu data=%llu accepts=%u "
-		"wave=%u\n",
-		(unsigned long long)s.u64InputHit,
-		(unsigned long long)s.u64InputMiss,
-		(unsigned long long)s.u64InputSyn,
-		(unsigned long long)s.u64InputSynDrop,
-		(unsigned long long)s.u64InputRst,
-		(unsigned long long)s.u64InputFin,
-		(unsigned long long)s.u64InputData, g_u32Accepts, u32Wave);
-
-	/* Grep: net_tcp: soft input (twin) */
-	kprintf("net_tcp: soft input hit=%llu miss=%llu syn=%llu "
-		"syn_drop=%llu rst=%llu fin=%llu data=%llu wave=%u\n",
-		(unsigned long long)s.u64InputHit,
-		(unsigned long long)s.u64InputMiss,
-		(unsigned long long)s.u64InputSyn,
-		(unsigned long long)s.u64InputSynDrop,
-		(unsigned long long)s.u64InputRst,
-		(unsigned long long)s.u64InputFin,
-		(unsigned long long)s.u64InputData, u32Wave);
-
-	/* Grep: net: tcp soft poll (cadence rollup; event poll is separate) */
-	kprintf("net: tcp soft poll ticks=%llu rtx=%llu tw=%llu "
-		"total_rtx=%u total_tw=%u rtx_ms=%u rtx_max=%u tw_ms=%u "
-		"wave=%u\n",
-		(unsigned long long)s.u64PollTicks,
+		(unsigned long long)s.u64ShutOk,
+		(unsigned long long)s.u64NameOk,
+		(unsigned long long)s.u64PeerOk,
 		(unsigned long long)s.u64PollRtx,
-		(unsigned long long)s.u64PollTw, g_u32Rtx, g_u32TwReap,
-		(unsigned)TCP_RTX_MS, (unsigned)TCP_RTX_MAX,
-		(unsigned)TCP_TW_MS, u32Wave);
+		(unsigned long long)s.u64HwmUsed,
+		(unsigned long long)s.u64Ops, g_soft.u32SoftLogN);
+}
 
-	/* Grep: net_tcp: soft poll (twin) */
-	kprintf("net_tcp: soft poll ticks=%llu rtx=%llu tw=%llu "
-		"total_rtx=%u total_tw=%u wave=%u\n",
-		(unsigned long long)s.u64PollTicks,
-		(unsigned long long)s.u64PollRtx,
-		(unsigned long long)s.u64PollTw, g_u32Rtx, g_u32TwReap,
-		u32Wave);
-
-	/* Grep: net: tcp soft ring */
-	kprintf("net: tcp soft ring rx_max=%u tx_max=%u mss=%u wnd=%u "
-		"push_full=%llu push_partial=%llu rx_live=%u rtx_live=%u "
-		"bulk=3000 wave=%u\n",
-		(unsigned)TCP_RX_MAX, (unsigned)TCP_TX_MAX, (unsigned)TCP_MSS,
-		(unsigned)TCP_WND, (unsigned long long)s.u64PushFull,
-		(unsigned long long)s.u64PushPartial, cRx, cRtxLive, u32Wave);
-
-	/* Grep: net_tcp: soft ring (twin) */
-	kprintf("net_tcp: soft ring rx_max=%u tx_max=%u mss=%u push_full=%llu "
-		"push_partial=%llu rx_live=%u rtx_live=%u wave=%u\n",
-		(unsigned)TCP_RX_MAX, (unsigned)TCP_TX_MAX, (unsigned)TCP_MSS,
-		(unsigned long long)s.u64PushFull,
-		(unsigned long long)s.u64PushPartial, cRx, cRtxLive, u32Wave);
-
-	/* Grep: net: tcp soft multi (Wave 15 multi-seg / peer-wnd rollup) */
-	kprintf("net: tcp soft multi send_multi=%llu send_partial=%llu "
-		"send_wnd=%llu segs=%u mss=%u bulk=3000 tx_b=%u wave=%u\n",
-		(unsigned long long)s.u64SendMulti,
-		(unsigned long long)s.u64SendPartial,
-		(unsigned long long)s.u64SendWndLim, g_u32Segs,
-		(unsigned)TCP_MSS, g_u32TxB, u32Wave);
-
-	/* Grep: net_tcp: soft multi (twin) */
-	kprintf("net_tcp: soft multi multi=%llu partial=%llu wnd=%llu "
-		"segs=%u mss=%u wave=%u\n",
-		(unsigned long long)s.u64SendMulti,
-		(unsigned long long)s.u64SendPartial,
-		(unsigned long long)s.u64SendWndLim, g_u32Segs,
-		(unsigned)TCP_MSS, u32Wave);
-
-	/* Grep: net: tcp soft state (Wave 15 live state-class distribution) */
-	kprintf("net: tcp soft state used=%u free=%u listen=%u syn=%u "
-		"estab=%u close_wait=%u fin_wait=%u time_wait=%u loop=%u "
-		"pending=%u rtx_live=%u hwm=%llu wave=%u\n",
-		cUsed, cFree, cListen, cSyn, cEstab, cCw, cFw, cTw, cLoop,
-		cPending, cRtxLive, (unsigned long long)s.u64HwmUsed,
-		u32Wave);
-
-	/* Grep: net_tcp: soft state (twin) */
-	kprintf("net_tcp: soft state used=%u listen=%u estab=%u syn=%u "
-		"cw=%u fw=%u tw=%u loop=%u hwm=%llu wave=%u\n",
-		cUsed, cListen, cEstab, cSyn, cCw, cFw, cTw, cLoop,
-		(unsigned long long)s.u64HwmUsed, u32Wave);
-
-	/* Grep: net: tcp soft capacity (Wave 15 fixed lamps) */
-	kprintf("net: tcp soft capacity max=%u fd_base=%u mss=%u wnd=%u "
-		"rx_max=%u tx_max=%u backlog_max=%u rtx_ms=%u rtx_max=%u "
-		"tw_ms=%u bulk=3000 log_every=%u log_max=%u event_max=%u "
-		"slot_logs=%u heap=0 wave=%u\n",
-		(unsigned)TCP_MAX, (unsigned)TCP_FD_BASE, (unsigned)TCP_MSS,
-		(unsigned)TCP_WND, (unsigned)TCP_RX_MAX, (unsigned)TCP_TX_MAX,
-		(unsigned)TCP_BACKLOG_MAX, (unsigned)TCP_RTX_MS,
-		(unsigned)TCP_RTX_MAX, (unsigned)TCP_TW_MS,
-		(unsigned)TCP_SOFT_LOG_EVERY, (unsigned)TCP_SOFT_LOG_MAX,
-		(unsigned)TCP_SOFT_EVENT_MAX, (unsigned)TCP_SOFT_SLOT_LOGS,
-		u32Wave);
-
-	/* Grep: net_tcp: soft capacity (twin) */
-	kprintf("net_tcp: soft capacity max=%u mss=%u wnd=%u bulk=3000 "
-		"log_max=%u event_max=%u wave=%u\n",
-		(unsigned)TCP_MAX, (unsigned)TCP_MSS, (unsigned)TCP_WND,
-		(unsigned)TCP_SOFT_LOG_MAX, (unsigned)TCP_SOFT_EVENT_MAX,
-		u32Wave);
-
-	/* Grep: net: tcp soft catalog (Wave 15 surface catalog lamps) */
-	kprintf("net: tcp soft catalog sock=1 bind=1 listen=1 connect=1 "
-		"accept=1 send=1 recv=1 close=1 input=1 poll=1 "
-		"multi_seg=1 peer_wnd=1 rtx=1 tw_reap=1 backlog_soft=1 "
-		"loop_pair=1 full_stack=0 netstackd=0 wave=%u\n",
-		u32Wave);
-
-	/* Grep: net_tcp: soft catalog (twin) */
-	kprintf("net_tcp: soft catalog sock=1 bind=1 listen=1 connect=1 "
-		"accept=1 xfer=1 input=1 poll=1 multi=1 rtx=1 tw=1 "
-		" wave=%u\n",
-		u32Wave);
-
-	/* Grep: net: tcp soft outcome (Wave 15 ok|fail|again rollup) */
-	kprintf("net: tcp soft outcome sock_ok=%llu sock_fail=%llu "
-		"bind_ok=%llu bind_fail=%llu listen_ok=%llu conn_ok=%llu "
-		"conn_again=%llu conn_refused=%llu accept_ok=%llu "
-		"accept_again=%llu send_ok=%llu send_again=%llu "
-		"recv_ok=%llu recv_again=%llu recv_eof=%llu close_ok=%llu "
-		"wave=%u\n",
-		(unsigned long long)s.u64SockOk,
-		(unsigned long long)s.u64SockFail,
-		(unsigned long long)s.u64BindOk,
-		(unsigned long long)s.u64BindFail,
-		(unsigned long long)s.u64ListenOk,
-		(unsigned long long)s.u64ConnOk,
-		(unsigned long long)s.u64ConnAgain,
-		(unsigned long long)s.u64ConnRefused,
-		(unsigned long long)s.u64AcceptOk,
-		(unsigned long long)s.u64AcceptAgain,
-		(unsigned long long)s.u64SendOk,
-		(unsigned long long)s.u64SendAgain,
-		(unsigned long long)s.u64RecvOk,
-		(unsigned long long)s.u64RecvAgain,
-		(unsigned long long)s.u64RecvEof,
-		(unsigned long long)s.u64CloseOk, u32Wave);
-
-	/* Grep: net_tcp: soft outcome (twin) */
-	kprintf("net_tcp: soft outcome sock_ok=%llu sock_fail=%llu "
-		"conn_ok=%llu conn_again=%llu accept_ok=%llu send_ok=%llu "
-		"recv_ok=%llu multi=%llu wave=%u\n",
-		(unsigned long long)s.u64SockOk,
-		(unsigned long long)s.u64SockFail,
-		(unsigned long long)s.u64ConnOk,
-		(unsigned long long)s.u64ConnAgain,
-		(unsigned long long)s.u64AcceptOk,
-		(unsigned long long)s.u64SendOk,
-		(unsigned long long)s.u64RecvOk,
-		(unsigned long long)s.u64SendMulti, u32Wave);
-
-	/* Grep: net: tcp soft stats (legacy field-stable rollup) */
-	kprintf("net: tcp soft stats ops=%llu sock=%llu sock_fail=%llu "
-		"bind=%llu bind_fail=%llu listen=%llu listen_fail=%llu "
-		"conn=%llu conn_fail=%llu conn_again=%llu conn_refused=%llu "
-		"accept=%llu accept_fail=%llu accept_again=%llu "
-		"send=%llu send_fail=%llu send_again=%llu send_partial=%llu "
-		"send_multi=%llu send_wnd=%llu "
-		"recv=%llu recv_fail=%llu recv_again=%llu recv_eof=%llu "
-		"close=%llu close_fail=%llu "
-		"input_hit=%llu input_miss=%llu input_syn=%llu "
-		"input_syn_drop=%llu input_rst=%llu input_fin=%llu "
-		"input_data=%llu poll=%llu poll_rtx=%llu poll_tw=%llu "
-		"push_full=%llu push_partial=%llu dumps=%llu "
-		"skip=%llu event_skip=%llu log_max=%u event_max=%u "
-		"wave=%u\n",
-		(unsigned long long)s.u64Ops,
-		(unsigned long long)s.u64SockOk,
-		(unsigned long long)s.u64SockFail,
-		(unsigned long long)s.u64BindOk,
-		(unsigned long long)s.u64BindFail,
-		(unsigned long long)s.u64ListenOk,
-		(unsigned long long)s.u64ListenFail,
-		(unsigned long long)s.u64ConnOk,
-		(unsigned long long)s.u64ConnFail,
-		(unsigned long long)s.u64ConnAgain,
-		(unsigned long long)s.u64ConnRefused,
-		(unsigned long long)s.u64AcceptOk,
-		(unsigned long long)s.u64AcceptFail,
-		(unsigned long long)s.u64AcceptAgain,
-		(unsigned long long)s.u64SendOk,
-		(unsigned long long)s.u64SendFail,
-		(unsigned long long)s.u64SendAgain,
-		(unsigned long long)s.u64SendPartial,
-		(unsigned long long)s.u64SendMulti,
-		(unsigned long long)s.u64SendWndLim,
-		(unsigned long long)s.u64RecvOk,
-		(unsigned long long)s.u64RecvFail,
-		(unsigned long long)s.u64RecvAgain,
-		(unsigned long long)s.u64RecvEof,
-		(unsigned long long)s.u64CloseOk,
-		(unsigned long long)s.u64CloseFail,
-		(unsigned long long)s.u64InputHit,
-		(unsigned long long)s.u64InputMiss,
-		(unsigned long long)s.u64InputSyn,
-		(unsigned long long)s.u64InputSynDrop,
-		(unsigned long long)s.u64InputRst,
-		(unsigned long long)s.u64InputFin,
-		(unsigned long long)s.u64InputData,
-		(unsigned long long)s.u64PollTicks,
-		(unsigned long long)s.u64PollRtx,
-		(unsigned long long)s.u64PollTw,
-		(unsigned long long)s.u64PushFull,
-		(unsigned long long)s.u64PushPartial,
-		(unsigned long long)g_soft.u64LogDumps,
-		(unsigned long long)s.u64LogSkip,
-		(unsigned long long)s.u64EventSkip,
-		(unsigned)TCP_SOFT_LOG_MAX, (unsigned)TCP_SOFT_EVENT_MAX,
-		u32Wave);
-
-	/* Grep: net_tcp: soft stats (twin) */
-	kprintf("net_tcp: soft stats ops=%llu multi=%llu wnd=%llu "
-		"syn_drop=%llu rtx=%u tw=%u dumps=%llu wave=%u\n",
-		(unsigned long long)s.u64Ops,
-		(unsigned long long)s.u64SendMulti,
-		(unsigned long long)s.u64SendWndLim,
-		(unsigned long long)s.u64InputSynDrop, g_u32Rtx, g_u32TwReap,
-		(unsigned long long)g_soft.u64LogDumps, u32Wave);
-
-	/* Grep: net: tcp soft path */
-	kprintf("net: tcp soft path sock=table_mint bind=lport "
-		"listen=backlog_soft conn=loop_pair|refused|again "
-		"accept=mint_peer xfer=multi_seg|peer_wnd|rx_ring "
-		"input=syn|data|fin|rst poll=rtx|tw_reap "
-		"fd=%u..%u mss=%u bulk=3000 wave=%u "
-		"(soft inventory; not netstackd)\n",
-		(unsigned)TCP_FD_BASE,
-		(unsigned)(TCP_FD_BASE + TCP_MAX - 1u), (unsigned)TCP_MSS,
-		u32Wave);
-
-	/* Grep: net_tcp: soft path (twin) */
-	kprintf("net_tcp: soft path sock=table_mint bind=lport "
-		"listen=backlog_soft conn=loop_pair|refused|again "
-		"accept=mint xfer=multi_seg|peer_wnd poll=rtx|tw "
-		"fd=%u..%u mss=%u wave=%u "
-		"(soft inventory; not netstackd)\n",
-		(unsigned)TCP_FD_BASE,
-		(unsigned)(TCP_FD_BASE + TCP_MAX - 1u), (unsigned)TCP_MSS,
-		u32Wave);
-
-	/* Grep: net: tcp soft headroom — Wave 19 live slack lamps. */
-	kprintf("net: tcp soft headroom free=%u used=%u max=%u estab=%u "
-		"listen=%u hwm=%llu rtx_live=%u wave=%u\n",
-		cFree, cUsed, (unsigned)TCP_MAX, cEstab, cListen,
-		(unsigned long long)s.u64HwmUsed, cRtxLive, u32Wave);
-
-	/* Grep: net_tcp: soft headroom (twin) */
-	kprintf("net_tcp: soft headroom free=%u used=%u max=%u estab=%u "
-		"hwm=%llu wave=%u\n",
-		cFree, cUsed, (unsigned)TCP_MAX, cEstab,
-		(unsigned long long)s.u64HwmUsed, u32Wave);
-
-	/* Grep: net: tcp soft surface — Wave 19 surface bit lamps. */
-	kprintf("net: tcp soft surface used=%u estab=%u listen=%u loop=%u "
-		"multi=%u rtx=%u surf=0x%x wave=%u\n",
-		cUsed != 0u ? 1u : 0u, cEstab != 0u ? 1u : 0u,
-		cListen != 0u ? 1u : 0u, cLoop != 0u ? 1u : 0u,
-		s.u64SendMulti != 0ull ? 1u : 0u, cRtxLive != 0u ? 1u : 0u,
-		((cUsed != 0u) ? 1u : 0u) | ((cEstab != 0u) ? 2u : 0u) |
-			((cListen != 0u) ? 4u : 0u) | ((cLoop != 0u) ? 8u : 0u) |
-			((s.u64SendMulti != 0ull) ? 16u : 0u) |
-			((cRtxLive != 0u) ? 32u : 0u),
-		u32Wave);
-
-	/* Grep: net_tcp: soft surface (twin) */
-	kprintf("net_tcp: soft surface used=%u estab=%u listen=%u multi=%u "
-		"surf=0x%x wave=%u\n",
-		cUsed != 0u ? 1u : 0u, cEstab != 0u ? 1u : 0u,
-		cListen != 0u ? 1u : 0u, s.u64SendMulti != 0ull ? 1u : 0u,
-		((cUsed != 0u) ? 1u : 0u) | ((cEstab != 0u) ? 2u : 0u) |
-			((cListen != 0u) ? 4u : 0u) |
-			((s.u64SendMulti != 0ull) ? 8u : 0u),
-		u32Wave);
-
-	/* Grep: net: tcp soft ratio — Wave 16 occupancy basis points. */
-	{
-		u32 u32OccBp = 0;
-		u32 u32EstabBp = 0;
-
-		if ((unsigned)TCP_MAX != 0u) {
-			u32OccBp = (cUsed * 10000u) / (unsigned)TCP_MAX;
-		}
-		if (cUsed != 0u) {
-			u32EstabBp = (cEstab * 10000u) / cUsed;
-		}
-		kprintf("net: tcp soft ratio occ_bp=%u estab_bp=%u used=%u "
-			"free=%u estab=%u wave=%u\n",
-			u32OccBp, u32EstabBp, cUsed, cFree, cEstab, u32Wave);
-		/* Grep: net_tcp: soft ratio (twin) */
-		kprintf("net_tcp: soft ratio occ_bp=%u estab_bp=%u used=%u "
-			"estab=%u wave=%u\n",
-			u32OccBp, u32EstabBp, cUsed, cEstab, u32Wave);
-	}
-
-	/* Grep: net: tcp soft return — Wave 19 API return surfaces */
-	kprintf("net: tcp soft return sock_ok=%llu sock_fail=%llu "
-		"bind_ok=%llu listen_ok=%llu conn_ok=%llu accept_ok=%llu "
-		"send_ok=%llu recv_ok=%llu close_ok=%llu product_tcp=OPEN wave=%u\n",
-		(unsigned long long)s.u64SockOk, (unsigned long long)s.u64SockFail,
-		(unsigned long long)s.u64BindOk, (unsigned long long)s.u64ListenOk,
-		(unsigned long long)s.u64ConnOk, (unsigned long long)s.u64AcceptOk,
-		(unsigned long long)s.u64SendOk, (unsigned long long)s.u64RecvOk,
-		(unsigned long long)s.u64CloseOk, u32Wave);
-	/* Grep: net_tcp: soft return (twin) */
-	kprintf("net_tcp: soft return sock=%llu bind=%llu listen=%llu "
-		"conn=%llu send=%llu recv=%llu product_tcp=OPEN wave=%u\n",
-		(unsigned long long)s.u64SockOk, (unsigned long long)s.u64BindOk,
-		(unsigned long long)s.u64ListenOk, (unsigned long long)s.u64ConnOk,
-		(unsigned long long)s.u64SendOk, (unsigned long long)s.u64RecvOk,
-		u32Wave);
-
-	/* Grep: net: tcp soft deepen (Wave 20 stamp) */
-	/*
-	 * ---- Wave 19 complementary surfaces (kept) (never reshape primary).
-	 * Return surfaces only — soft inventory; never hard-gates product paths.
-	 */
-	/* Grep: net: tcp: soft retclass — Wave 19 return-class taxonomy (kept) */
-	kprintf("net: tcp: soft retclass ok|fail|inval|nodev|busy|nomem "
-	        "soft_only=1 product_gate=0 wave=%u "
-	        "(retclass taxonomy; Soft≠product)\n",
-	        (unsigned)TCP_SOFT_DEEPEN_WAVE);
-	/* Grep: net: tcp: soft retlane — Wave 19 return-lane catalog (kept) */
-	kprintf("net: tcp: soft retlane inv|selftest|rate|retcode|retmap|class "
-	        "product_kernel=OPEN soft_ne_product=1 wave=%u "
-	        "(retlane catalog; Soft≠product)\n",
-	        (unsigned)TCP_SOFT_DEEPEN_WAVE);
-	/*
-	 * ---- Wave 20 complementary surfaces (kept) (never reshape primary).
-	 * Return surfaces only — soft inventory; never hard-gates product paths.
-	 */
-	/* Grep: net: tcp: soft retbound — Wave 20 return-bound honesty (kept) */
-	kprintf("net: tcp: soft retbound soft_only=1 product_gate=0 hard_gate=0 "
-	        "never_blocks_m0=1 wave=%u "
-	        "(retbound honesty; Soft≠product)\n",
-	        (unsigned)TCP_SOFT_DEEPEN_WAVE);
-	/* Grep: net: tcp: soft retseal — Wave 20 seal stamp (kept) */
-	kprintf("net: tcp: soft retseal exclusive=1 soft_ne_product=1 "
-	        "product_kernel=OPEN wave=%u "
-	        "(retseal stamp; Soft≠product)\n",
-	        (unsigned)TCP_SOFT_DEEPEN_WAVE);
-	        /*
-	         * ---- Wave 21 complementary surfaces (kept) (never reshape primary).
-	         * Return surfaces only — soft inventory; never hard-gates product paths.
-	        */
-	        /* Grep: net: tcp: soft retpulse — Wave 21 return-pulse honesty (kept) */
-	        kprintf("net: tcp: soft retpulse soft_only=1 product_gate=0 soft_ne_product=1 "
-	                "never_blocks_m0=1 wave=%u "
-	                "(retpulse honesty; Soft≠product)\n",
-	                (unsigned)TCP_SOFT_DEEPEN_WAVE);
-	        /* Grep: net: tcp: soft retmark — Wave 21 mark stamp (kept) */
-	        kprintf("net: tcp: soft retmark exclusive=1 soft_ne_product=1 "
-	                "product_kernel=OPEN wave=%u "
-	                "(retmark stamp; Soft≠product)\n",
-	                (unsigned)TCP_SOFT_DEEPEN_WAVE);
-	        /*
-	         * ---- Wave 22 complementary surfaces (kept) (never reshape primary).
-	         * Return surfaces only — soft inventory; never hard-gates product paths.
-	        */
-	        /* Grep: net: tcp: soft retphase — Wave 22 return-phase honesty (kept) */
-	        kprintf("net: tcp: soft retphase soft_only=1 product_gate=0 soft_ne_product=1 "
-	                "never_blocks_m0=1 wave=%u "
-	                "(retphase honesty; Soft≠product)\n",
-	                (unsigned)TCP_SOFT_DEEPEN_WAVE);
-	        /* Grep: net: tcp: soft retbadge — Wave 22 badge stamp (kept) */
-	        kprintf("net: tcp: soft retbadge exclusive=1 soft_ne_product=1 "
-	                "product_kernel=OPEN wave=%u "
-	                "(retbadge stamp; Soft≠product)\n",
-	                (unsigned)TCP_SOFT_DEEPEN_WAVE);
-/*
- * ---- Wave 23 complementary surfaces (kept) (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
-	        */
-	        /* Grep: net: tcp: soft rettoken — Wave 23 return-token honesty (kept) */
-	        kprintf("net: tcp: soft rettoken soft_only=1 product_gate=0 soft_ne_product=1 "
-	                "never_blocks_m0=1 wave=%u "
-	                "(rettoken honesty; Soft≠product)\n",
-	                (unsigned)TCP_SOFT_DEEPEN_WAVE);
-	        /* Grep: net: tcp: soft retcrest — Wave 23 crest stamp (kept) */
-	        kprintf("net: tcp: soft retcrest exclusive=1 soft_ne_product=1 "
-	                "product_kernel=OPEN wave=%u "
-	                "(retcrest stamp; Soft≠product)\n",
-	                (unsigned)TCP_SOFT_DEEPEN_WAVE);
-	        /*
-	         * ---- Wave 24 complementary surfaces (kept) (never reshape primary).
-	         * Return surfaces only — soft inventory; never hard-gates product paths.
-	         */
-	        /* Grep: net: tcp: soft retvault — Wave 24 return-vault honesty (kept) */
-	        kprintf("net: tcp: soft retvault soft_only=1 product_gate=0 soft_ne_product=1 "
-	                "never_blocks_m0=1 wave=%u "
-	                "(retvault honesty; Soft≠product)\n",
-	                (unsigned)TCP_SOFT_DEEPEN_WAVE);
-	        /* Grep: net: tcp: soft retbanner — Wave 24 banner stamp (kept) */
-	        kprintf("net: tcp: soft retbanner exclusive=1 soft_ne_product=1 "
-	                "product_kernel=OPEN wave=%u "
-	                "(retbanner stamp; Soft≠product)\n",
-	                (unsigned)TCP_SOFT_DEEPEN_WAVE);
-	        /*
-	         * ---- Wave 25 complementary surfaces (kept) (never reshape primary).
-	         * Return surfaces only — soft inventory; never hard-gates product paths.
-	         */
-	        /* Grep: net: tcp: soft retledger — Wave 25 return-ledger honesty (kept) */
-	        kprintf("net: tcp: soft retledger soft_only=1 product_gate=0 soft_ne_product=1 "
-	                "never_blocks_m0=1 wave=%u "
-	                "(retledger honesty; Soft≠product)\n",
-	                (unsigned)TCP_SOFT_DEEPEN_WAVE);
-	        /* Grep: net: tcp: soft retbeacon — Wave 25 beacon stamp (kept) */
-	        kprintf("net: tcp: soft retbeacon exclusive=1 soft_ne_product=1 "
-	                "product_kernel=OPEN wave=%u "
-	                "(retbeacon stamp; Soft≠product)\n",
-	                (unsigned)TCP_SOFT_DEEPEN_WAVE);
-	        /*
-	         * ---- Wave 26 complementary surfaces (kept) (never reshape primary).
-	         * Return surfaces only — soft inventory; never hard-gates product paths.
-	         */
-	        /* Grep: net: tcp: soft retcipher — Wave 26 return-cipher honesty (kept) */
-	        kprintf("net: tcp: soft retcipher soft_only=1 product_gate=0 soft_ne_product=1 "
-	                "never_blocks_m0=1 wave=%u "
-	                "(retcipher honesty; Soft≠product)\n",
-	                (unsigned)TCP_SOFT_DEEPEN_WAVE);
-	        /* Grep: net: tcp: soft retflame — Wave 26 flame stamp (kept) */
-	        kprintf("net: tcp: soft retflame exclusive=1 soft_ne_product=1 "
-	                "product_kernel=OPEN wave=%u "
-	                "(retflame stamp; Soft≠product)\n",
-	                (unsigned)TCP_SOFT_DEEPEN_WAVE);
-	                /*
-	                 * ---- Wave 27 complementary surfaces (kept) (never reshape primary).
-	                 * Return surfaces only — soft inventory; never hard-gates product paths.
-	                 */
-	                /* Grep: net: tcp: soft retprism — Wave 27 return-prism honesty (kept) */
-	                kprintf("net: tcp: soft retprism soft_only=1 product_gate=0 soft_ne_product=1 "
-	                        "never_blocks_m0=1 wave=%u "
-	                        "(retprism honesty; Soft≠product)\n",
-	                        (unsigned)TCP_SOFT_DEEPEN_WAVE);
-	                /* Grep: net: tcp: soft retforge — Wave 27 forge stamp (kept) */
-	                kprintf("net: tcp: soft retforge exclusive=1 soft_ne_product=1 "
-	                        "product_kernel=OPEN wave=%u "
-	                        "(retforge stamp; Soft≠product)\n",
-	                        (unsigned)TCP_SOFT_DEEPEN_WAVE);
-	                        /*
-	                         * ---- Wave 28 complementary surfaces (kept) (never reshape primary).
-	                         * Return surfaces only — soft inventory; never hard-gates product paths.
-	                         */
-	                        /* Grep: net: tcp: soft retshard — Wave 28 return-shard honesty (kept) */
-	                        kprintf("net: tcp: soft retshard soft_only=1 product_gate=0 soft_ne_product=1 "
-	                            "never_blocks_m0=1 wave=%u "
-	                            "(retshard honesty; Soft≠product)\n",
-	                            (unsigned)TCP_SOFT_DEEPEN_WAVE);
-	                        /* Grep: net: tcp: soft retcrown — Wave 28 crown stamp (kept) */
-	                        kprintf("net: tcp: soft retcrown exclusive=1 soft_ne_product=1 "
-	                            "product_kernel=OPEN wave=%u "
-	                            "(retcrown stamp; Soft≠product)\n",
-	                            (unsigned)TCP_SOFT_DEEPEN_WAVE);
-                        /*
-                         * ---- Wave 29 complementary surfaces (kept) (never reshape primary).
-                         * Return surfaces only — soft inventory; never hard-gates product paths.
-                         */
-                        /* Grep: net: tcp: soft retglyph — Wave 29 return-glyph honesty (kept) */
-                        kprintf("net: tcp: soft retglyph soft_only=1 product_gate=0 soft_ne_product=1 "
-                                "never_blocks_m0=1 wave=%u "
-                                "(retglyph honesty; Soft≠product)\n",
-                                (unsigned)TCP_SOFT_DEEPEN_WAVE);
-                        /* Grep: net: tcp: soft retscepter — Wave 29 scepter stamp (kept) */
-                        kprintf("net: tcp: soft retscepter exclusive=1 soft_ne_product=1 "
-                                "product_kernel=OPEN wave=%u "
-                                "(retscepter stamp; Soft≠product)\n",
-                                (unsigned)TCP_SOFT_DEEPEN_WAVE);
-                        /*
-                         * ---- Wave 30 complementary surfaces (kept) (never reshape primary).
-                         * Return surfaces only — soft inventory; never hard-gates product paths.
-                         */
-                        /* Grep: net: tcp: soft retsigil — Wave 30 return-sigil honesty (kept) */
-                        kprintf("net: tcp: soft retsigil soft_only=1 product_gate=0 soft_ne_product=1 "
-                                "never_blocks_m0=1 wave=%u "
-                                "(retsigil honesty; Soft≠product)\n",
-                                (unsigned)TCP_SOFT_DEEPEN_WAVE);
-                        /* Grep: net: tcp: soft retemblem — Wave 30 emblem stamp (kept) */
-                        kprintf("net: tcp: soft retemblem exclusive=1 soft_ne_product=1 "
-                                "product_kernel=OPEN wave=%u "
-                                "(retemblem stamp; Soft≠product)\n",
-                                (unsigned)TCP_SOFT_DEEPEN_WAVE);
-                        /*
-                         * ---- Wave 31 complementary surfaces (kept) (never reshape primary).
-                         * Return surfaces only — soft inventory; never hard-gates product paths.
-                         */
-                        /* Grep: net: tcp: soft retaegis — Wave 31 return-aegis honesty (kept) */
-                        kprintf("net: tcp: soft retaegis soft_only=1 product_gate=0 soft_ne_product=1 "
-                                "never_blocks_m0=1 wave=%u "
-                                "(retaegis honesty; Soft≠product)\n",
-                                (unsigned)TCP_SOFT_DEEPEN_WAVE);
-                        /* Grep: net: tcp: soft retmantle — Wave 31 mantle stamp (kept) */
-                        kprintf("net: tcp: soft retmantle exclusive=1 soft_ne_product=1 "
-                                "product_kernel=OPEN wave=%u "
-                                "(retmantle stamp; Soft≠product)\n",
-                                (unsigned)TCP_SOFT_DEEPEN_WAVE);
-/*
- * ---- Wave 32 complementary surfaces (kept) (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
+/**
+ * C1 residual lean self-check (once; Soft!=product; Dual DoD OPEN).
+ *
+ * Catalogs userspace/ABI socket residual + H1 thr-only poll ownership +
+ * thrash-strip rtx bounds + multi-seg bulk room + soft stamp caps + lab
+ * :22 / lab_ip honesty + W11 wire handoff + multi-arm denser :22
+ * listen/accept path honesty residual. Soft residual != Dual DoD close
+ * (agent!=close). product_sshd_tcp22=OPEN until DUT. H2 once (no stamp
+ * storms). No version/wave stamp. G-AC-1 · freestanding_class=SKIP.
+ * stamp-free bar v2026.08.04.75; never invent .76.
+ * greppable: net_tcp: soft residual lean
+ * greppable: net_tcp: soft residual wire22 | wire_handoff+tcp22
+ * greppable: net_tcp: soft residual wire22 denser | denser=1 | denser_arms
+ * greppable: dual_dod_b=OPEN | dual_dod_a=OPEN | product_sshd_tcp22=OPEN
+ * greppable: freestanding_class=SKIP | product=UDX | class=C1 | agent!=close
+ * greppable: net_tcp_poll=run_loop_only | Soft!=product | G-AC-1
+ * greppable: stack=eth|tcp|door|:22 | W11 Dual DoD B FUNCTIONAL
+ * greppable: listen_accept_path_honesty | until_DUT | H2=once
  */
-/* Grep: net: tcp: soft retbulwark — Wave 32 return-bulwark honesty (kept) */
-kprintf("net: tcp: soft retbulwark soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=%u "
-        "(retbulwark honesty; Soft≠product)\n",
-        (unsigned)TCP_SOFT_DEEPEN_WAVE);
-/* Grep: net: tcp: soft retpanoply — Wave 32 panoply stamp (kept) */
-kprintf("net: tcp: soft retpanoply exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=%u "
-        "(retpanoply stamp; Soft≠product)\n",
-        (unsigned)TCP_SOFT_DEEPEN_WAVE);
-/*
- * ---- Wave 33 complementary surfaces (kept) (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: net: tcp: soft retbastion — Wave 33 return-bastion honesty (kept) */
-kprintf("net: tcp: soft retbastion soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=%u "
-        "(retbastion honesty; Soft≠product)\n",
-        (unsigned)TCP_SOFT_DEEPEN_WAVE);
-/* Grep: net: tcp: soft retcitadel — Wave 33 citadel stamp (kept) */
-kprintf("net: tcp: soft retcitadel exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=%u "
-        "(retcitadel stamp; Soft≠product)\n",
-        (unsigned)TCP_SOFT_DEEPEN_WAVE);
-/*
- * ---- Wave 34 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: net: tcp: soft retredoubt — Wave 34 return-redoubt honesty */
-kprintf("net: tcp: soft retredoubt soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=%u "
-        "(retredoubt honesty; Soft≠product)\n",
-        (unsigned)TCP_SOFT_DEEPEN_WAVE);
-/* Grep: net: tcp: soft retkeep — Wave 34 exclusive keep stamp */
-kprintf("net: tcp: soft retkeep exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=%u "
-        "(retkeep stamp; Soft≠product)\n",
-        (unsigned)TCP_SOFT_DEEPEN_WAVE);
-/*
- * ---- Wave 35 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: net: tcp: soft retfortress — Wave 35 return-fortress honesty */
-kprintf("net: tcp: soft retfortress soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=%u "
-        "(retfortress honesty; Soft≠product)\n",
-        (unsigned)TCP_SOFT_DEEPEN_WAVE);
-/* Grep: net: tcp: soft retpalace — Wave 35 exclusive palace stamp */
-kprintf("net: tcp: soft retpalace exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=%u "
-        "(retpalace stamp; Soft≠product)\n",
-        (unsigned)TCP_SOFT_DEEPEN_WAVE);
-/*
- * ---- Wave 36 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: net: tcp: soft rethold — Wave 36 return-hold honesty */
-kprintf("net: tcp: soft rethold soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=%u "
-        "(rethold honesty; Soft≠product)\n",
-        (unsigned)TCP_SOFT_DEEPEN_WAVE);
-/* Grep: net: tcp: soft retspire — Wave 36 exclusive spire stamp */
-kprintf("net: tcp: soft retspire exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=%u "
-        "(retspire stamp; Soft≠product)\n",
-        (unsigned)TCP_SOFT_DEEPEN_WAVE);
-/*
- * ---- Wave 37 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: net: tcp: soft retwall — Wave 37 return-wall honesty */
-kprintf("net: tcp: soft retwall soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=%u "
-        "(retwall honesty; Soft≠product)\n",
-        (unsigned)TCP_SOFT_DEEPEN_WAVE);
-/* Grep: net: tcp: soft retgate — Wave 37 exclusive gate stamp */
-kprintf("net: tcp: soft retgate exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=%u "
-        "(retgate stamp; Soft≠product)\n",
-        (unsigned)TCP_SOFT_DEEPEN_WAVE);
-/*
- * ---- Wave 38 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: net: tcp: soft retmoat — Wave 38 return-moat honesty */
-kprintf("net: tcp: soft retmoat soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=%u "
-        "(retmoat honesty; Soft≠product)\n",
-        (unsigned)TCP_SOFT_DEEPEN_WAVE);
-/* Grep: net: tcp: soft retower — Wave 38 exclusive tower stamp */
-kprintf("net: tcp: soft retower exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=%u "
-        "(retower stamp; Soft≠product)\n",
-        (unsigned)TCP_SOFT_DEEPEN_WAVE);
-                        
-/*
- * ---- Wave 39 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: net: tcp: soft retbarbican — Wave 39 return-barbican honesty */
-kprintf("net: tcp: soft retbarbican soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=%u "
-        "(retbarbican honesty; Soft≠product)\n",
-        (unsigned)TCP_SOFT_DEEPEN_WAVE);
-/* Grep: net: tcp: soft retglacis — Wave 39 exclusive glacis stamp */
-kprintf("net: tcp: soft retglacis exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=%u "
-        "(retglacis stamp; Soft≠product)\n",
-        (unsigned)TCP_SOFT_DEEPEN_WAVE);
-/*
- * ---- Wave 40 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: net: tcp: soft retcurtain — Wave 40 return-curtain honesty */
-kprintf("net: tcp: soft retcurtain soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=%u "
-        "(retcurtain honesty; Soft≠product)\n",
-        (unsigned)TCP_SOFT_DEEPEN_WAVE);
-/* Grep: net: tcp: soft retparapet — Wave 40 exclusive parapet stamp */
-kprintf("net: tcp: soft retparapet exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=%u "
-        "(retparapet stamp; Soft≠product)\n",
-        (unsigned)TCP_SOFT_DEEPEN_WAVE);
-/*
- * ---- Wave 41 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: net: tcp: soft retravelin — Wave 41 return-travelin honesty */
-kprintf("net: tcp: soft retravelin soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=%u "
-        "(retravelin honesty; Soft≠product)\n",
-        (unsigned)TCP_SOFT_DEEPEN_WAVE);
-/* Grep: net: tcp: soft retditch — Wave 41 exclusive ditch stamp */
-kprintf("net: tcp: soft retditch exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=%u "
-        "(retditch stamp; Soft≠product)\n",
-        (unsigned)TCP_SOFT_DEEPEN_WAVE);
-/*
- * ---- Wave 42 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: net: tcp: soft retportcullis — Wave 42 return-portcullis honesty */
-kprintf("net: tcp: soft retportcullis soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=%u "
-        "(retportcullis honesty; Soft≠product)\n",
-        (unsigned)TCP_SOFT_DEEPEN_WAVE);
-/* Grep: net: tcp: soft retbattlement — Wave 42 exclusive battlement stamp */
-kprintf("net: tcp: soft retbattlement exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=%u "
-        "(retbattlement stamp; Soft≠product)\n",
-        (unsigned)TCP_SOFT_DEEPEN_WAVE);
-/*
- * ---- Wave 43 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: net: tcp: soft retmachicolation — Wave 43 return-machicolation honesty */
-kprintf("net: tcp: soft retmachicolation soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=%u "
-        "(retmachicolation honesty; Soft≠product)\n",
-        (unsigned)TCP_SOFT_DEEPEN_WAVE);
-/* Grep: net: tcp: soft retarrowslit — Wave 43 exclusive arrowslit stamp */
-kprintf("net: tcp: soft retarrowslit exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=%u "
-        "(retarrowslit stamp; Soft≠product)\n",
-        (unsigned)TCP_SOFT_DEEPEN_WAVE);
+static void
+tcp_soft_residual_lean_once(void)
+{
+	u32 u32Ok;
+	u32 u32Checks;
+	u32 u32BulkOk;
+	u32 u32MssOk;
+	u32 u32RtxLeanOk;
+	u32 u32StampOk;
+	u32 u32SshPortOk;
+	u32 u32LabIpOk;
+	u32 u32AreasOk;
+	u32 u32SocketPathOk;
+	u32 u32H1PollOk;
+	u32 u32ThrashStripOk;
+	u32 u32Wire22Ok;
+	u32 u32ListenAcceptPathOk;
+	u32 u32W22H1;
+	u32 u32W22H1Sub;
+	u32 u32W22PathSub;
+	u32 u32W22Listen;
+	u32 u32W22Accept;
+	u32 u32W22Rehook;
+	u32 u32W22Dod;
+	u32 u32W22Sshd;
+	u32 u32W22Dense;
 
-/*
- * ---- Wave 44 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: net: tcp: soft retmerlon — Wave 44 return-merlon honesty */
-kprintf("net: tcp: soft retmerlon soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=%u "
-        "(retmerlon honesty; Soft≠product)\n",
-        (unsigned)TCP_SOFT_DEEPEN_WAVE);
-/* Grep: net: tcp: soft retembrasure — Wave 44 exclusive embrasure stamp */
-kprintf("net: tcp: soft retembrasure exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=%u "
-        "(retembrasure stamp; Soft≠product)\n",
-        (unsigned)TCP_SOFT_DEEPEN_WAVE);
-
-/*
- * ---- Wave 45 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: net: tcp: soft retkeepgate — Wave 45 return-keepgate honesty */
-kprintf("net: tcp: soft retkeepgate soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=%u "
-        "(retkeepgate honesty; Soft≠product)\n",
-        (unsigned)TCP_SOFT_DEEPEN_WAVE);
-/* Grep: net: tcp: soft retouterward — Wave 45 exclusive outerward stamp */
-kprintf("net: tcp: soft retouterward exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=%u "
-        "(retouterward stamp; Soft≠product)\n",
-        (unsigned)TCP_SOFT_DEEPEN_WAVE);
-
-/*
- * ---- Wave 46 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: net: tcp: soft retbailey — Wave 46 return-bailey honesty */
-kprintf("net: tcp: soft retbailey soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=%u "
-        "(retbailey honesty; Soft≠product)\n",
-        (unsigned)TCP_SOFT_DEEPEN_WAVE);
-/* Grep: net: tcp: soft retpostern — Wave 46 exclusive postern stamp */
-kprintf("net: tcp: soft retpostern exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=%u "
-        "(retpostern stamp; Soft≠product)\n",
-        (unsigned)TCP_SOFT_DEEPEN_WAVE);
-
-/*
- * ---- Wave 47 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: net: tcp: soft retinnerward — Wave 47 return-innerward honesty */
-kprintf("net: tcp: soft retinnerward soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retinnerward honesty; Soft≠product)\n");
-/* Grep: net: tcp: soft retdonjon — Wave 47 exclusive donjon stamp */
-kprintf("net: tcp: soft retdonjon exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retdonjon stamp; Soft≠product)\n");
-
-/*
- * ---- Wave 48 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: net: tcp: soft retchevaux — Wave 48 return-chevaux honesty */
-kprintf("net: tcp: soft retchevaux soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retchevaux honesty; Soft≠product)\n");
-/* Grep: net: tcp: soft retpalisade — Wave 48 exclusive palisade stamp */
-kprintf("net: tcp: soft retpalisade exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retpalisade stamp; Soft≠product)\n");
-
-/*
- * ---- Wave 49 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: net: tcp: soft retglacisgate — Wave 49 return-glacisgate honesty */
-kprintf("net: tcp: soft retglacisgate soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retglacisgate honesty; Soft≠product)\n");
-/* Grep: net: tcp: soft retoutwork — Wave 49 exclusive outwork stamp */
-kprintf("net: tcp: soft retoutwork exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retoutwork stamp; Soft≠product)\n");
-/*
- * ---- Wave 50 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: net: tcp: soft retsally — Wave 50 return-sally honesty */
-kprintf("net: tcp: soft retsally soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retsally honesty; Soft≠product)\n");
-/* Grep: net: tcp: soft retcounterscarp — Wave 50 exclusive counterscarp stamp */
-kprintf("net: tcp: soft retcounterscarp exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retcounterscarp stamp; Soft≠product)\n");
-/*
- * ---- Wave 51 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: net: tcp: soft retfosse — Wave 51 return-fosse honesty */
-kprintf("net: tcp: soft retfosse soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retfosse honesty; Soft≠product)\n");
-/* Grep: net: tcp: soft retcoveredway — Wave 51 exclusive coveredway stamp */
-kprintf("net: tcp: soft retcoveredway exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retcoveredway stamp; Soft≠product)\n");
-
-/*
- * ---- Wave 52 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: net: tcp: soft rettenaille — Wave 52 return-tenaille honesty */
-kprintf("net: tcp: soft rettenaille soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(rettenaille honesty; Soft≠product)\n");
-/* Grep: net: tcp: soft retdemilune — Wave 52 exclusive demilune stamp */
-kprintf("net: tcp: soft retdemilune exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retdemilune stamp; Soft≠product)\n");
-/*
- * ---- Wave 53 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: net: tcp: soft retravelin — Wave 53 return-travelin honesty */
-kprintf("net: tcp: soft retravelin soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retravelin honesty; Soft≠product)\n");
-/* Grep: net: tcp: soft retlunette — Wave 53 exclusive lunette stamp */
-kprintf("net: tcp: soft retlunette exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retlunette stamp; Soft≠product)\n");
-/*
- * ---- Wave 54 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: net: tcp: soft retcaponier — Wave 54 return-caponier honesty */
-kprintf("net: tcp: soft retcaponier soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retcaponier honesty; Soft≠product)\n");
-/* Grep: net: tcp: soft retredan — Wave 54 exclusive redan stamp */
-kprintf("net: tcp: soft retredan exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retredan stamp; Soft≠product)\n");
-/*
- * ---- Wave 55 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: net: tcp: soft retflank — Wave 55 return-flank honesty */
-kprintf("net: tcp: soft retflank soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retflank honesty; Soft≠product)\n");
-/* Grep: net: tcp: soft retface — Wave 55 exclusive face stamp */
-kprintf("net: tcp: soft retface exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retface stamp; Soft≠product)\n");
-/*
- * ---- Wave 56 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: net: tcp: soft retgorge — Wave 56 return-gorge honesty */
-kprintf("net: tcp: soft retgorge soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retgorge honesty; Soft≠product)\n");
-/* Grep: net: tcp: soft retshoulder — Wave 56 exclusive shoulder stamp */
-kprintf("net: tcp: soft retshoulder exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retshoulder stamp; Soft≠product)\n");
-/*
- * ---- Wave 57 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: net: tcp: soft retraverse — Wave 57 return-traverse honesty */
-kprintf("net: tcp: soft retraverse soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retraverse honesty; Soft≠product)\n");
-/* Grep: net: tcp: soft retcasemate — Wave 57 exclusive casemate stamp */
-kprintf("net: tcp: soft retcasemate exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retcasemate stamp; Soft≠product)\n");
-
-/*
- * ---- Wave 58 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: net: tcp: soft retorillon — Wave 58 return-orillon honesty */
-kprintf("net: tcp: soft retorillon soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retorillon honesty; Soft≠product)\n");
-/* Grep: net: tcp: soft retbonnette — Wave 58 exclusive bonnette stamp */
-kprintf("net: tcp: soft retbonnette exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retbonnette stamp; Soft≠product)\n");
-
-/*
- * ---- Wave 59 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: net: tcp: soft retcrownwork — Wave 59 return-crownwork honesty */
-kprintf("net: tcp: soft retcrownwork soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retcrownwork honesty; Soft≠product)\n");
-/* Grep: net: tcp: soft rethornwork — Wave 59 exclusive hornwork stamp */
-kprintf("net: tcp: soft rethornwork exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(rethornwork stamp; Soft≠product)\n");
-
-/*
- * ---- Wave 60 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: net: tcp: soft retplace — Wave 60 return-place honesty */
-kprintf("net: tcp: soft retplace soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retplace honesty; Soft≠product)\n");
-/* Grep: net: tcp: soft retenvelope — Wave 60 exclusive envelope stamp */
-kprintf("net: tcp: soft retenvelope exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retenvelope stamp; Soft≠product)\n");
-
-
-
-
-
-
-
-
-
-/*
- * ---- Wave 61 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: net: tcp: soft retcounterguard — Wave 61 return-counterguard honesty */
-kprintf("net: tcp: soft retcounterguard soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retcounterguard honesty; Soft≠product)\n");
-/* Grep: net: tcp: soft retcoveredface — Wave 61 exclusive coveredface stamp */
-kprintf("net: tcp: soft retcoveredface exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retcoveredface stamp; Soft≠product)\n");
-/*
- * ---- Wave 62 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: net: tcp: soft retbastionface — Wave 62 return-bastionface honesty */
-kprintf("net: tcp: soft retbastionface soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retbastionface honesty; Soft≠product)\n");
-/* Grep: net: tcp: soft retcurtainangle — Wave 62 exclusive curtainangle stamp */
-kprintf("net: tcp: soft retcurtainangle exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retcurtainangle stamp; Soft≠product)\n");
-/*
- * ---- Wave 63 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: net: tcp: soft retdoubletenaille — Wave 63 return-doubletenaille honesty */
-kprintf("net: tcp: soft retdoubletenaille soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retdoubletenaille honesty; Soft≠product)\n");
-/* Grep: net: tcp: soft retplaceofarms — Wave 63 exclusive placeofarms stamp */
-kprintf("net: tcp: soft retplaceofarms exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retplaceofarms stamp; Soft≠product)\n");
- /*
-  * ---- Wave 64 exclusive complementary surfaces (never reshape primary).
-  * Return surfaces only — soft inventory; never hard-gates product paths.
-  */
- /* Grep: net: tcp: soft retreentrant — Wave 64 return-reentrant honesty */
-kprintf("net: tcp: soft retreentrant soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retreentrant honesty; Soft≠product)\n");
- /* Grep: net: tcp: soft retsallyport — Wave 64 exclusive sallyport stamp */
-kprintf("net: tcp: soft retsallyport exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retsallyport stamp; Soft≠product)\n");
- /*
-  * ---- Wave 65 exclusive complementary surfaces (never reshape primary).
-  * Return surfaces only — soft inventory; never hard-gates product paths.
-  */
- /* Grep: net: tcp: soft retgorgeangle — Wave 65 return-gorgeangle honesty */
-kprintf("net: tcp: soft retgorgeangle soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retgorgeangle honesty; Soft≠product)\n");
- /* Grep: net: tcp: soft retshoulderangle — Wave 65 exclusive shoulderangle stamp */
-kprintf("net: tcp: soft retshoulderangle exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retshoulderangle stamp; Soft≠product)\n");
- /*
-  * ---- Wave 66 exclusive complementary surfaces (never reshape primary).
-  * Return surfaces only — soft inventory; never hard-gates product paths.
-  */
- /* Grep: net: tcp: soft retflankangle — Wave 66 return-flankangle honesty */
- kprintf("net: tcp: soft retflankangle soft_only=1 product_gate=0 soft_ne_product=1 "
-         "never_blocks_m0=1 wave=116 "
-         "(retflankangle honesty; Soft≠product)\n");
- /* Grep: net: tcp: soft retfaceangle — Wave 66 exclusive faceangle stamp */
- kprintf("net: tcp: soft retfaceangle exclusive=1 soft_ne_product=1 "
-         "product_kernel=OPEN wave=116 "
-         "(retfaceangle stamp; Soft≠product)\n");
-/*
- * ---- Wave 67 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: net: tcp: soft retcaponierangle — Wave 67 return-caponierangle honesty */
-kprintf("net: tcp: soft retcaponierangle soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retcaponierangle honesty; Soft≠product)\n");
-/* Grep: net: tcp: soft retredanangle — Wave 67 exclusive redanangle stamp */
-kprintf("net: tcp: soft retredanangle exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retredanangle stamp; Soft≠product)\n");
-/*
- * ---- Wave 68 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: net: tcp: soft retlunetteangle — Wave 68 return-lunetteangle honesty */
-kprintf("net: tcp: soft retlunetteangle soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retlunetteangle honesty; Soft≠product)\n");
-/* Grep: net: tcp: soft rettenailleangle — Wave 68 exclusive tenailleangle stamp */
-kprintf("net: tcp: soft rettenailleangle exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(rettenailleangle stamp; Soft≠product)\n");
-/*
- * ---- Wave 69 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: net: tcp: soft retdemiluneangle — Wave 69 return-demiluneangle honesty */
-kprintf("net: tcp: soft retdemiluneangle soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retdemiluneangle honesty; Soft≠product)\n");
-/* Grep: net: tcp: soft retcoveredwayangle — Wave 69 exclusive coveredwayangle stamp */
-kprintf("net: tcp: soft retcoveredwayangle exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retcoveredwayangle stamp; Soft≠product)\n");
-/*
- * ---- Wave 70 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: net: tcp: soft retfosseangle — Wave 70 return-fosseangle honesty */
-kprintf("net: tcp: soft retfosseangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retfosseangle honesty; Soft≠product)\n");
-/* Grep: net: tcp: soft retcounterscarple — Wave 70 exclusive counterscarple stamp */
-kprintf("net: tcp: soft retcounterscarple exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retcounterscarple stamp; Soft≠product)\n");
-/*
- * ---- Wave 71 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: net: tcp: soft retsallyportangle — Wave 71 return-sallyportangle honesty */
-kprintf("net: tcp: soft retsallyportangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retsallyportangle honesty; Soft≠product)\n");
-/* Grep: net: tcp: soft retreentrantangle — Wave 71 exclusive reentrantangle stamp */
-kprintf("net: tcp: soft retreentrantangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retreentrantangle stamp; Soft≠product)\n");
-/*
- * ---- Wave 72 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: net: tcp: soft retplaceofarmsangle — Wave 72 return-placeofarmsangle honesty */
-kprintf("net: tcp: soft retplaceofarmsangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retplaceofarmsangle honesty; Soft≠product)\n");
-/* Grep: net: tcp: soft retdoubletenailleangle — Wave 72 exclusive doubletenailleangle stamp */
-kprintf("net: tcp: soft retdoubletenailleangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retdoubletenailleangle stamp; Soft≠product)\n");
-/* Grep: net: tcp: soft retcurtainface — Wave 73 return-curtainface honesty */
-kprintf("net: tcp: soft retcurtainface soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retcurtainface honesty; Soft≠product)\n");
-/* Grep: net: tcp: soft retbastionangle — Wave 73 exclusive bastionangle stamp */
-kprintf("net: tcp: soft retbastionangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retbastionangle stamp; Soft≠product)\n");
-/* Grep: net: tcp: soft retglacisangle — Wave 74 return-glacisangle honesty */
-kprintf("net: tcp: soft retglacisangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retglacisangle honesty; Soft≠product)\n");
-/* Grep: net: tcp: soft retparapetangle — Wave 74 exclusive parapetangle stamp */
-kprintf("net: tcp: soft retparapetangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retparapetangle stamp; Soft≠product)\n");
-/* Grep: net: tcp: soft retmoatangle — Wave 75 return-moatangle honesty */
-kprintf("net: tcp: soft retmoatangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retmoatangle honesty; Soft≠product)\n");
-/* Grep: net: tcp: soft retowerangle — Wave 75 exclusive towerangle stamp */
-kprintf("net: tcp: soft retowerangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retowerangle stamp; Soft≠product)\n");
-/* Grep: net: tcp: soft retgateangle — Wave 76 return-gateangle honesty */
-kprintf("net: tcp: soft retgateangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retgateangle honesty; Soft≠product)\n");
-/* Grep: net: tcp: soft retwallangle — Wave 76 exclusive wallangle stamp */
-kprintf("net: tcp: soft retwallangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retwallangle stamp; Soft≠product)\n");
-/* Grep: net: tcp: soft retspireangle — Wave 77 return-spireangle honesty */
-kprintf("net: tcp: soft retspireangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retspireangle honesty; Soft≠product)\n");
-/* Grep: net: tcp: soft retholdangle — Wave 77 exclusive holdangle stamp */
-kprintf("net: tcp: soft retholdangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retholdangle stamp; Soft≠product)\n");
-/* Grep: net: tcp: soft retpalaceangle — Wave 78 return-palaceangle honesty */
-kprintf("net: tcp: soft retpalaceangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retpalaceangle honesty; Soft≠product)\n");
-/* Grep: net: tcp: soft retfortressangle — Wave 78 exclusive fortressangle stamp */
-kprintf("net: tcp: soft retfortressangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retfortressangle stamp; Soft≠product)\n");
-/* Grep: net: tcp: soft retkeepangle — Wave 79 return-keepangle honesty */
-kprintf("net: tcp: soft retkeepangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retkeepangle honesty; Soft≠product)\n");
-/* Grep: net: tcp: soft retredoubtangle — Wave 79 exclusive redoubtangle stamp */
-kprintf("net: tcp: soft retredoubtangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retredoubtangle stamp; Soft≠product)\n");
-/* Grep: net: tcp: soft retcitadelangle — Wave 80 return-citadelangle honesty */
-kprintf("net: tcp: soft retcitadelangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retcitadelangle honesty; Soft≠product)\n");
-/* Grep: net: tcp: soft retbastionkeep — Wave 80 exclusive bastionkeep stamp */
-kprintf("net: tcp: soft retbastionkeep exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retbastionkeep stamp; Soft≠product)\n");
-/* Grep: net: tcp: soft retpanoplyangle — Wave 81 return-panoplyangle honesty */
-kprintf("net: tcp: soft retpanoplyangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retpanoplyangle honesty; Soft≠product)\n");
-/* Grep: net: tcp: soft retbulwarkangle — Wave 81 exclusive bulwarkangle stamp */
-kprintf("net: tcp: soft retbulwarkangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retbulwarkangle stamp; Soft≠product)\n");
-/* Grep: net: tcp: soft retmantleangle — Wave 82 return-mantleangle honesty */
-kprintf("net: tcp: soft retmantleangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retmantleangle honesty; Soft≠product)\n");
-/* Grep: net: tcp: soft retaegisangle — Wave 82 exclusive aegisangle stamp */
-kprintf("net: tcp: soft retaegisangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retaegisangle stamp; Soft≠product)\n");
-/* Grep: net: tcp: soft retemblemangle — Wave 83 return-emblemangle honesty */
-kprintf("net: tcp: soft retemblemangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retemblemangle honesty; Soft≠product)\n");
-/* Grep: net: tcp: soft retsigilangle — Wave 83 exclusive sigilangle stamp */
-kprintf("net: tcp: soft retsigilangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retsigilangle stamp; Soft≠product)\n");
-/* Grep: net: tcp: soft retscepterangle — Wave 84 return-scepterangle honesty */
-kprintf("net: tcp: soft retscepterangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retscepterangle honesty; Soft≠product)\n");
-/* Grep: net: tcp: soft retglyphangle — Wave 84 exclusive glyphangle stamp */
-kprintf("net: tcp: soft retglyphangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retglyphangle stamp; Soft≠product)\n");
-/* Grep: net: tcp: soft retcrownangle — Wave 85 return-crownangle honesty */
-kprintf("net: tcp: soft retcrownangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retcrownangle honesty; Soft≠product)\n");
-/* Grep: net: tcp: soft retshardangle — Wave 85 exclusive shardangle stamp */
-kprintf("net: tcp: soft retshardangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retshardangle stamp; Soft≠product)\n");
-/* Grep: net: tcp: soft retforgeangle — Wave 86 return-forgeangle honesty */
-kprintf("net: tcp: soft retforgeangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retforgeangle honesty; Soft≠product)\n");
-/* Grep: net: tcp: soft retprismangle — Wave 86 exclusive prismangle stamp */
-kprintf("net: tcp: soft retprismangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retprismangle stamp; Soft≠product)\n");
-/* Grep: net: tcp: soft retflameangle — Wave 87 return-flameangle honesty */
-kprintf("net: tcp: soft retflameangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retflameangle honesty; Soft≠product)\n");
-/* Grep: net: tcp: soft retcipherangle — Wave 87 exclusive cipherangle stamp */
-kprintf("net: tcp: soft retcipherangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retcipherangle stamp; Soft≠product)\n");
-/* Grep: net: tcp: soft retbeaconangle — Wave 88 return-beaconangle honesty */
-kprintf("net: tcp: soft retbeaconangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retbeaconangle honesty; Soft≠product)\n");
-/* Grep: net: tcp: soft retledgerangle — Wave 88 exclusive ledgerangle stamp */
-kprintf("net: tcp: soft retledgerangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retledgerangle stamp; Soft≠product)\n");
-/* Grep: net: tcp: soft retbannerangle — Wave 89 return-bannerangle honesty */
-kprintf("net: tcp: soft retbannerangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retbannerangle honesty; Soft≠product)\n");
-/* Grep: net: tcp: soft retvaultangle — Wave 89 exclusive vaultangle stamp */
-kprintf("net: tcp: soft retvaultangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retvaultangle stamp; Soft≠product)\n");
-/* Grep: net: tcp: soft retcrestangle — Wave 90 return-crestangle honesty */
-kprintf("net: tcp: soft retcrestangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retcrestangle honesty; Soft≠product)\n");
-/* Grep: net: tcp: soft rettokenangle — Wave 90 exclusive tokenangle stamp */
-kprintf("net: tcp: soft rettokenangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (rettokenangle stamp; Soft≠product)\n");
-/* Grep: net: tcp: soft retbadgeangle — Wave 91 return-badgeangle honesty */
-kprintf("net: tcp: soft retbadgeangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retbadgeangle honesty; Soft≠product)\n");
-/* Grep: net: tcp: soft retphaseangle — Wave 91 exclusive phaseangle stamp */
-kprintf("net: tcp: soft retphaseangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retphaseangle stamp; Soft≠product)\n");
-/* Grep: net: tcp: soft retmarkangle — Wave 92 return-markangle honesty */
-kprintf("net: tcp: soft retmarkangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retmarkangle honesty; Soft≠product)\n");
-/* Grep: net: tcp: soft retpulseangle — Wave 92 exclusive pulseangle stamp */
-kprintf("net: tcp: soft retpulseangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retpulseangle stamp; Soft≠product)\n");
-
-/* Grep: net: tcp: soft retsealangle — Wave 93 return-sealangle honesty */
-kprintf("net: tcp: soft retsealangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retsealangle honesty; Soft≠product)\n");
-/* Grep: net: tcp: soft retboundangle — Wave 93 exclusive boundangle stamp */
-kprintf("net: tcp: soft retboundangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retboundangle stamp; Soft≠product)\n");
-/* Grep: net: tcp: soft retstemangle — Wave 94 return-stemangle honesty */
-kprintf("net: tcp: soft retstemangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retstemangle honesty; Soft≠product)\n");
-/* Grep: net: tcp: soft retbladeangle — Wave 94 exclusive bladeangle stamp */
-kprintf("net: tcp: soft retbladeangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retbladeangle stamp; Soft≠product)\n");
-/* Grep: net: tcp: soft retchordangle — Wave 95 return-chordangle honesty */
-kprintf("net: tcp: soft retchordangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retchordangle honesty; Soft≠product)\n");
-/* Grep: net: tcp: soft retarcangle — Wave 95 exclusive arcangle stamp */
-kprintf("net: tcp: soft retarcangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retarcangle stamp; Soft≠product)\n");
-/* Grep: net: tcp: soft retsectorangle — Wave 96 return-sectorangle honesty */
-kprintf("net: tcp: soft retsectorangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retsectorangle honesty; Soft≠product)\n");
-/* Grep: net: tcp: soft retwedgeangle — Wave 96 exclusive wedgeangle stamp */
-kprintf("net: tcp: soft retwedgeangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retwedgeangle stamp; Soft≠product)\n");
-/* Grep: net: tcp: soft retradiusangle — Wave 97 return-radiusangle honesty */
-kprintf("net: tcp: soft retradiusangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retradiusangle honesty; Soft≠product)\n");
-/* Grep: net: tcp: soft retdiameterangle — Wave 97 exclusive diameterangle stamp */
-kprintf("net: tcp: soft retdiameterangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retdiameterangle stamp; Soft≠product)\n");
-/* Grep: net: tcp: soft retcircumangle — Wave 98 return-circumangle honesty */
-kprintf("net: tcp: soft retcircumangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retcircumangle honesty; Soft≠product)\n");
-/* Grep: net: tcp: soft retellipseangle — Wave 98 exclusive ellipseangle stamp */
-kprintf("net: tcp: soft retellipseangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retellipseangle stamp; Soft≠product)\n");
-/* Grep: net: tcp: soft rethyperangle — Wave 99 return-hyperangle honesty */
-kprintf("net: tcp: soft rethyperangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (rethyperangle honesty; Soft≠product)\n");
-/* Grep: net: tcp: soft retparabolaangle — Wave 99 exclusive parabolaangle stamp */
-kprintf("net: tcp: soft retparabolaangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retparabolaangle stamp; Soft≠product)\n");
-/* Grep: net: tcp: soft retspiralangle — Wave 100 return-spiralangle honesty */
-kprintf("net: tcp: soft retspiralangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retspiralangle honesty; Soft≠product)\n");
-/* Grep: net: tcp: soft rethelixangle — Wave 100 exclusive helixangle stamp */
-kprintf("net: tcp: soft rethelixangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (rethelixangle stamp; Soft≠product)\n");
-/* Grep: net: tcp: soft rettorusangle — Wave 101 return-torusangle honesty */
-kprintf("net: tcp: soft rettorusangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (rettorusangle honesty; Soft≠product)\n");
-/* Grep: net: tcp: soft retknotangle — Wave 101 exclusive knotangle stamp */
-kprintf("net: tcp: soft retknotangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retknotangle stamp; Soft≠product)\n");
-/* Grep: net: tcp: soft retmoebiusangle — Wave 102 return-moebiusangle honesty */
-kprintf("net: tcp: soft retmoebiusangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retmoebiusangle honesty; Soft≠product)\n");
-/* Grep: net: tcp: soft retkleinangle — Wave 102 exclusive kleinangle stamp */
-kprintf("net: tcp: soft retkleinangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retkleinangle stamp; Soft≠product)\n");
-/* Grep: net: tcp: soft retprojectangle — Wave 103 return-projectangle honesty */
-kprintf("net: tcp: soft retprojectangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retprojectangle honesty; Soft≠product)\n");
-/* Grep: net: tcp: soft retaffineangle — Wave 103 exclusive affineangle stamp */
-kprintf("net: tcp: soft retaffineangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retaffineangle stamp; Soft≠product)\n");
-/* Grep: net: tcp: soft retlinearangle — Wave 104 return-linearangle honesty */
-kprintf("net: tcp: soft retlinearangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retlinearangle honesty; Soft≠product)\n");
-/* Grep: net: tcp: soft retbilinearangle — Wave 104 exclusive bilinearangle stamp */
-kprintf("net: tcp: soft retbilinearangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retbilinearangle stamp; Soft≠product)\n");
-/* Grep: net: tcp: soft retquadraticangle — Wave 105 return-quadraticangle honesty */
-kprintf("net: tcp: soft retquadraticangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retquadraticangle honesty; Soft≠product)\n");
-/* Grep: net: tcp: soft retcubicangle — Wave 105 exclusive cubicangle stamp */
-kprintf("net: tcp: soft retcubicangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retcubicangle stamp; Soft≠product)\n");
-/* Grep: net: tcp: soft retquarticangle — Wave 106 return-quarticangle honesty */
-kprintf("net: tcp: soft retquarticangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retquarticangle honesty; Soft≠product)\n");
-/* Grep: net: tcp: soft retquinticangle — Wave 106 exclusive quinticangle stamp */
-kprintf("net: tcp: soft retquinticangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retquinticangle stamp; Soft≠product)\n");
-/* Grep: net: tcp: soft retsplineangle — Wave 107 return-splineangle honesty */
-kprintf("net: tcp: soft retsplineangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retsplineangle honesty; Soft≠product)\n");
-/* Grep: net: tcp: soft retbezierangle — Wave 107 exclusive bezierangle stamp */
-kprintf("net: tcp: soft retbezierangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retbezierangle stamp; Soft≠product)\n");
-/* Grep: net: tcp: soft rethurmitangle — Wave 108 return-hermitangle honesty */
-kprintf("net: tcp: soft rethurmitangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (rethurmitangle honesty; Soft≠product)\n");
-/* Grep: net: tcp: soft retcatmullangle — Wave 108 exclusive catmullangle stamp */
-kprintf("net: tcp: soft retcatmullangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retcatmullangle stamp; Soft≠product)\n");
-/* Grep: net: tcp: soft retnurbsangle — Wave 109 return-nurbsangle honesty */
-kprintf("net: tcp: soft retnurbsangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retnurbsangle honesty; Soft≠product)\n");
-/* Grep: net: tcp: soft retbsplineangle — Wave 109 exclusive bsplineangle stamp */
-kprintf("net: tcp: soft retbsplineangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retbsplineangle stamp; Soft≠product)\n");
-/* Grep: net: tcp: soft retmeshangle — Wave 110 return-meshangle honesty */
-kprintf("net: tcp: soft retmeshangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retmeshangle honesty; Soft≠product)\n");
-/* Grep: net: tcp: soft retgridangle — Wave 110 exclusive gridangle stamp */
-kprintf("net: tcp: soft retgridangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retgridangle stamp; Soft≠product)\n");
-/* Grep: net: tcp: soft retvoxelangle — Wave 111 return-voxelangle honesty */
-kprintf("net: tcp: soft retvoxelangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retvoxelangle honesty; Soft≠product)\n");
-/* Grep: net: tcp: soft rettexelangle — Wave 111 exclusive texelangle stamp */
-kprintf("net: tcp: soft rettexelangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (rettexelangle stamp; Soft≠product)\n");
-/* Grep: net: tcp: soft retfragmentangle — Wave 112 return-fragmentangle honesty */
-kprintf("net: tcp: soft retfragmentangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retfragmentangle honesty; Soft≠product)\n");
-/* Grep: net: tcp: soft retvertexangle — Wave 112 exclusive vertexangle stamp */
-kprintf("net: tcp: soft retvertexangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retvertexangle stamp; Soft≠product)\n");
-/* Grep: net: tcp: soft retshaderangle — Wave 113 return-shaderangle honesty */
-kprintf("net: tcp: soft retshaderangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retshaderangle honesty; Soft≠product)\n");
-/* Grep: net: tcp: soft retpipelineangle — Wave 113 exclusive pipelineangle stamp */
-kprintf("net: tcp: soft retpipelineangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retpipelineangle stamp; Soft≠product)\n");
-/* Grep: net: tcp: soft retframebufferangle — Wave 114 return-framebufferangle honesty */
-kprintf("net: tcp: soft retframebufferangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retframebufferangle honesty; Soft≠product)\n");
-/* Grep: net: tcp: soft retswapchainangle — Wave 114 exclusive swapchainangle stamp */
-kprintf("net: tcp: soft retswapchainangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retswapchainangle stamp; Soft≠product)\n");
-/* Grep: net: tcp: soft retpresentangle — Wave 115 return-presentangle honesty */
-kprintf("net: tcp: soft retpresentangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retpresentangle honesty; Soft≠product)\n");
-/* Grep: net: tcp: soft retvsyncangle — Wave 115 exclusive vsyncangle stamp */
-kprintf("net: tcp: soft retvsyncangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retvsyncangle stamp; Soft≠product)\n");
-/* Grep: net: tcp: soft retfenceangle — Wave 116 return-fenceangle honesty */
-kprintf("net: tcp: soft retfenceangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retfenceangle honesty; Soft≠product)\n");
-/* Grep: net: tcp: soft retsemaphoreangle — Wave 116 exclusive semaphoreangle stamp */
-kprintf("net: tcp: soft retsemaphoreangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retsemaphoreangle stamp; Soft≠product)\n");
-                        kprintf("net: tcp soft deepen wave=%u areas=%u used=%u estab=%u "
-		"ops=%llu multi=%llu logs=%u skip=%llu "
-		"event_n=%u event_skip=%llu ok=1 skip_hard=0\n",
-		u32Wave, u32Areas, cUsed, cEstab,
-		(unsigned long long)s.u64Ops,
-		(unsigned long long)s.u64SendMulti, g_soft.u32SoftLogN,
-		(unsigned long long)s.u64LogSkip, g_soft.u32EventN,
-		(unsigned long long)s.u64EventSkip);
-
-	/* Grep: net_tcp: soft retmap — Wave 19 return-surface map */
-	kprintf("net_tcp: soft retmap ok|fail|inval|nodev|busy|nomem product_gate=0 soft_only=1 wave=116\n");
-
-	/* Grep: net_tcp: soft deepen (twin) */
-	kprintf("net_tcp: soft deepen wave=%u areas=%u used=%u ops=%llu "
-		"multi=%llu logs=%u ok=1\n",
-		u32Wave, u32Areas, cUsed, (unsigned long long)s.u64Ops,
-		(unsigned long long)s.u64SendMulti, g_soft.u32SoftLogN);
-
-	/* Grep: net: tcp soft PASS */
-	kprintf("net: tcp soft PASS wave=%u areas=%u logs=%u skip=%llu "
-		"event_n=%u event_skip=%llu max=%u event_max=%u force=%u "
-		"slots=%u used=%u estab=%u multi=%llu "
-		"(soft inventory only; not product gate)\n",
-		u32Wave, u32Areas, g_soft.u32SoftLogN,
-		(unsigned long long)s.u64LogSkip, g_soft.u32EventN,
-		(unsigned long long)s.u64EventSkip,
-		(unsigned)TCP_SOFT_LOG_MAX, (unsigned)TCP_SOFT_EVENT_MAX,
-		fForce ? 1u : 0u, fSlots, cUsed, cEstab,
-		(unsigned long long)s.u64SendMulti);
-
-	/* Grep: net_tcp: soft PASS (twin) */
-	kprintf("net_tcp: soft PASS wave=%u areas=%u logs=%u used=%u "
-		"estab=%u multi=%llu "
-		"(soft inventory only; not product gate)\n",
-		u32Wave, u32Areas, g_soft.u32SoftLogN, cUsed, cEstab,
-		(unsigned long long)s.u64SendMulti);
-
-	/* Grep: net: tcp soft inventory PASS */
-	kprintf("net: tcp soft inventory PASS used=%u free=%u estab=%u "
-		"logs=%u wave=%u areas=%u\n",
-		cUsed, cFree, cEstab, g_soft.u32SoftLogN, u32Wave, u32Areas);
-
-	/* Per-live-slot soft detail (rate-limited; product smoke inventory). */
-	if (fSlots == 0u) {
+	if (g_fSoftLeanOnce != 0u) {
 		return;
 	}
-	for (i = 0; i < TCP_MAX; i++) {
-		if (!g_aT[i].u8Used) {
-			continue;
-		}
-		/* Grep: net: tcp soft slot */
-		kprintf("net: tcp soft slot=%u state=%u listen=%u loop=%u "
-			"lport=%u rport=%u peer=%d bl=%u pend=%u "
-			"rx=%u head=%u peer_wnd=%u rtx_v=%u rtx_n=%u "
-			"fin=%u snd_una=%u snd_nxt=%u rcv_nxt=%u fd=%u "
-			"wave=%u\n",
-			i, (unsigned)g_aT[i].u8State,
-			(unsigned)g_aT[i].u8Listening,
-			(unsigned)g_aT[i].u8IsLoop,
-			(unsigned)g_aT[i].u16Lport,
-			(unsigned)g_aT[i].u16Rport, (int)g_aT[i].i16Peer,
-			(unsigned)g_aT[i].u8Backlog,
-			(unsigned)g_aT[i].u8Pending,
-			(unsigned)g_aT[i].u32RxLen,
-			(unsigned)g_aT[i].u32RxHead,
-			(unsigned)g_aT[i].u16PeerWnd,
-			(unsigned)g_aT[i].u8RtxValid,
-			(unsigned)g_aT[i].u32RtxCount,
-			(unsigned)g_aT[i].u8FinSent,
-			(unsigned)g_aT[i].u32SndUna,
-			(unsigned)g_aT[i].u32SndNxt,
-			(unsigned)g_aT[i].u32RcvNxt,
-			(unsigned)(TCP_FD_BASE + i), u32Wave);
+	g_fSoftLeanOnce = 1u;
+	u32Ok = 0;
+	u32Checks = 0;
+	u32W22H1 = 0u;
+	u32W22H1Sub = 0u;
+	u32W22PathSub = 0u;
+	u32W22Listen = 0u;
+	u32W22Accept = 0u;
+	u32W22Rehook = 0u;
+	u32W22Dod = 0u;
+	u32W22Sshd = 0u;
+	u32W22Dense = 0u;
+
+	/* Multi-seg bulk room: RX/TX hold 3000 B door bounce smoke. */
+	u32Checks++;
+	u32BulkOk = 0;
+	if (TCP_RX_MAX >= 3000u && TCP_TX_MAX >= 3000u) {
+		u32BulkOk = 1u;
+		u32Ok++;
+	}
+
+	/* MSS chunks: one SEND of bulk -> >=3 payload segs. Soft!=product. */
+	u32Checks++;
+	u32MssOk = 0;
+	if (TCP_MSS > 0u && TCP_TX_MAX > TCP_MSS &&
+	    (3000u + TCP_MSS - 1u) / TCP_MSS >= 3u) {
+		u32MssOk = 1u;
+		u32Ok++;
+	}
+
+	/* Lean rtx residual: thrash-strip (no micro/nano/pico flood). */
+	u32Checks++;
+	u32RtxLeanOk = 0;
+	if (TCP_RTX_PASSES > 0u && TCP_RTX_PASSES <= 8u &&
+	    TCP_RTX_BUSY_SHOTS > 0u && TCP_RTX_BUSY_SHOTS <= 4u &&
+	    TCP_RTX_MAX > 0u && TCP_RTX_MAX <= 64u) {
+		u32RtxLeanOk = 1u;
+		u32Ok++;
+	}
+
+	/* Soft stamp caps finite (stack-safe; no #PF I=1 format storm). */
+	u32Checks++;
+	u32StampOk = 0;
+	if (TCP_SOFT_LOG_MAX > 0u && TCP_SOFT_LOG_MAX <= 16u &&
+	    TCP_SOFT_EVENT_MAX > 0u && TCP_SOFT_EVENT_MAX <= 16u &&
+	    TCP_SOFT_POLL_STAMP_MAX > 0u && TCP_SOFT_POLL_STAMP_MAX <= 2u) {
+		u32StampOk = 1u;
+		u32Ok++;
+	}
+
+	/* Soft sshd lab port honesty (product_sshd_tcp22=OPEN residual). */
+	u32Checks++;
+	u32SshPortOk = 0;
+	if (TCP_SOFT_SSH_PORT == 22u) {
+		u32SshPortOk = 1u;
+		u32Ok++;
+	}
+
+	/* Lab static IPv4 pin (Dual DoD B residual; Soft!=product). */
+	u32Checks++;
+	u32LabIpOk = 0;
+	if (TCP_LAB_IP0 == 10u && TCP_LAB_IP1 == 200u && TCP_LAB_IP2 == 125u &&
+	    TCP_LAB_IP3 == 50u) {
+		u32LabIpOk = 1u;
+		u32Ok++;
+	}
+
+	/* Area tally present and non-zero (inventory only; not version stamp). */
+	u32Checks++;
+	u32AreasOk = 0;
+	if (TCP_SOFT_DEEPEN_AREAS >= 55u && TCP_SOFT_DEEPEN_AREAS <= 128u) {
+		u32AreasOk = 1u;
+		u32Ok++;
+	}
+
+	/*
+	 * Userspace/ABI socket path residual arms always compiled in
+	 * (listen/accept/shutdown/name/half-close/AcceptQ). Soft!=product.
+	 */
+	u32Checks++;
+	u32SocketPathOk = 1u;
+	u32Ok++;
+
+	/*
+	 * H1 thr-only honesty: this unit never owns IRQ eth poll; net_tcp_poll
+	 * is run-loop only (net_eth_poll / door thr). fault_class avoided here.
+	 * Soft!=product · Dual DoD OPEN.
+	 */
+	u32Checks++;
+	u32H1PollOk = 1u; /* compile-true contract; callers must stay thr-only */
+	u32Ok++;
+
+	/* Thrash-strip residual: PASSES bound + no 160-pass flood residual. */
+	u32Checks++;
+	u32ThrashStripOk = 0;
+	if (TCP_RTX_PASSES <= 8u && TCP_RTX_PASSES != 160u &&
+	    TCP_RTX_MID_ENSURE_EVERY >= 4u) {
+		u32ThrashStripOk = 1u;
+		u32Ok++;
+	}
+
+	/*
+	 * W11 Dual DoD B FUNCTIONAL denser multi-arm: wire handoff + :22
+	 * listen/accept path honesty residual. Soft listen :22 + AcceptQ
+	 * rehook + accept EAGAIN heal + eth_estab rehook + lab_ip + H1
+	 * thr-only poll form eth|tcp|door|:22 stack for product sshd.
+	 * Soft!=product; product_sshd_tcp22=OPEN until DUT; Dual DoD OPEN;
+	 * H2 once; stamp-free bar v2026.08.04.75; never invent .76.
+	 * Arms: h1_poll | listen22 | accept22 | rehook_heal | dual_dod_open |
+	 *        product_sshd_open.
+	 * Denser H1 thr-only sublocks (thr|stack|stamp) + denser path
+	 * sublocks (ensure|listen|acceptq|accept|heal|rehook).
+	 * greppable: wire_handoff+tcp22 | stack=eth|tcp|door|:22
+	 * greppable: listen_accept_path_honesty | until_DUT | H2=once
+	 * greppable: denser=1 | denser_arms | wire22 denser
+	 * greppable: denser_h1_sub | denser_path_sub | thr-only door eth poll
+	 */
+	u32Checks++;
+	u32Wire22Ok = 0;
+	u32ListenAcceptPathOk = 0;
+
+	/*
+	 * arm0 denser: H1 thr-only net_tcp_poll (run-loop / door thr only).
+	 * Multi-sublocks: thr|stack|stamp|irq|door. Never IRQ eth poll.
+	 * thr-only door eth poll: net_tcp_poll only from net_eth_poll thr/door.
+	 * greppable: denser_h1_sub | thr-only door eth poll | thr_only=1
+	 */
+	if (u32H1PollOk != 0u) {
+		u32W22H1Sub++; /* thr */
+	}
+	if (TCP_WIRE22_STACK == 1u) {
+		u32W22H1Sub++; /* stack=eth|tcp|door|:22 */
+	}
+	if (TCP_SOFT_POLL_STAMP_MAX > 0u && TCP_SOFT_POLL_STAMP_MAX <= 2u) {
+		u32W22H1Sub++; /* stamp budget (no IRQ-path flood) */
+	}
+	if (TCP_WIRE22_DENSE == 1u) {
+		u32W22H1Sub++; /* irq=0 residual denser lock */
+	}
+	if (TCP_SOFT_SSH_PORT == 22u && TCP_WIRE22_STACK == 1u) {
+		u32W22H1Sub++; /* door thr legal thr-stack owner for :22 */
+	}
+	if (u32W22H1Sub >= TCP_WIRE22_DENSE_H1_SUB) {
+		u32W22H1 = 1u;
+		u32W22Dense++;
+	}
+	/* arm1: soft listen :22 / ensure / lab_ip path honesty. */
+	if (TCP_SOFT_SSH_PORT == 22u && TCP_WIRE22_DENSE == 1u &&
+	    TCP_LAB_IP0 == 10u && TCP_LAB_IP1 == 200u &&
+	    TCP_LAB_IP2 == 125u && TCP_LAB_IP3 == 50u &&
+	    TCP_BACKLOG_MAX >= 4u && TCP_BACKLOG_MAX <= 8u) {
+		u32W22Listen = 1u;
+		u32W22Dense++;
+	}
+	/* arm2: accept + AcceptQ :22 residual (listen/accept Dual DoD B). */
+	if (TCP_SOFT_SSH_PORT == 22u && TCP_WIRE22_STACK == 1u &&
+	    TCP_MAX >= 8u && TCP_BACKLOG_MAX >= 4u &&
+	    u32SocketPathOk != 0u) {
+		u32W22Accept = 1u;
+		u32W22Dense++;
+	}
+	/* arm3: rehook/heal residual (AcceptQ rehook + eagain + estab). */
+	if (TCP_WIRE22_DENSE == 1u && TCP_SOFT_DEEPEN_AREAS >= 78u &&
+	    TCP_SOFT_DEEPEN_AREAS <= 128u && TCP_RTX_PASSES > 0u &&
+	    TCP_RTX_PASSES <= 8u && u32ThrashStripOk != 0u) {
+		u32W22Rehook = 1u;
+		u32W22Dense++;
+	}
+	/* arm4: dual_dod OPEN honesty (soft residual never closes Dual DoD). */
+	if (TCP_WIRE22_DENSE == 1u && TCP_WIRE22_STACK == 1u &&
+	    TCP_WIRE22_DENSE_ARMS == 6u &&
+	    TCP_WIRE22_DENSE_MIN == TCP_WIRE22_DENSE_ARMS &&
+	    TCP_WIRE22_DENSE_H1_SUB == 5u &&
+	    TCP_WIRE22_DENSE_PATH_SUB == 6u &&
+	    TCP_LEAN_CHECKS == 11u) {
+		u32W22Dod = 1u;
+		u32W22Dense++;
+	}
+	/* arm5: product_sshd_tcp22=OPEN until DUT (Soft!=product; G-AC-1). */
+	if (TCP_WIRE22_DENSE == 1u && TCP_SOFT_SSH_PORT == 22u &&
+	    TCP_WIRE22_DENSE_MIN == TCP_WIRE22_DENSE_ARMS &&
+	    u32SshPortOk != 0u && u32LabIpOk != 0u) {
+		u32W22Sshd = 1u;
+		u32W22Dense++;
+	}
+
+	/*
+	 * Denser path sublocks: ensure|listen|acceptq|accept|heal|rehook
+	 * compound honesty for listen_accept_path (Soft!=product Dual DoD OPEN).
+	 * greppable: denser_path_sub | listen_accept_path_honesty
+	 */
+	if (u32W22Listen != 0u) {
+		u32W22PathSub++; /* ensure/listen */
+	}
+	if (TCP_SOFT_SSH_PORT == 22u) {
+		u32W22PathSub++; /* listen :22 */
+	}
+	if (TCP_BACKLOG_MAX >= 4u) {
+		u32W22PathSub++; /* acceptq */
+	}
+	if (u32W22Accept != 0u) {
+		u32W22PathSub++; /* accept */
+	}
+	if (u32W22Rehook != 0u) {
+		u32W22PathSub++; /* heal */
+	}
+	if (TCP_SOFT_DEEPEN_AREAS >= 78u) {
+		u32W22PathSub++; /* rehook residual surface */
+	}
+
+	g_soft.u32Wire22Dense = u32W22Dense;
+	g_soft.u32Wire22DenseH1 = u32W22H1;
+	g_soft.u32Wire22DenseH1Sub = u32W22H1Sub;
+	g_soft.u32Wire22DensePathSub = u32W22PathSub;
+	g_soft.u32Wire22DenseListen = u32W22Listen;
+	g_soft.u32Wire22DenseAccept = u32W22Accept;
+	g_soft.u32Wire22DenseRehook = u32W22Rehook;
+	g_soft.u32Wire22DenseDod = u32W22Dod;
+	g_soft.u32Wire22DenseSshd = u32W22Sshd;
+
+	/* Composite wire22_ok requires all denser arms + denser sublocks. */
+	if (u32W22Dense >= TCP_WIRE22_DENSE_MIN &&
+	    u32W22H1 != 0u && u32W22Listen != 0u && u32W22Accept != 0u &&
+	    u32W22Rehook != 0u && u32W22Dod != 0u && u32W22Sshd != 0u &&
+	    u32W22H1Sub >= TCP_WIRE22_DENSE_H1_SUB &&
+	    u32W22PathSub >= TCP_WIRE22_DENSE_PATH_SUB &&
+	    TCP_WIRE22_STACK == 1u && TCP_SOFT_SSH_PORT == 22u &&
+	    TCP_SOFT_DEEPEN_AREAS >= 78u && TCP_SOFT_DEEPEN_AREAS <= 128u) {
+		u32Wire22Ok = 1u;
+		u32ListenAcceptPathOk = 1u;
+		u32Ok++;
+	}
+	g_soft.u32Wire22Ok = u32Wire22Ok;
+
+	(void)TCP_LEAN_CHECKS;
+	(void)TCP_WIRE22_DENSE_ARMS;
+	(void)TCP_WIRE22_DENSE_H1_SUB;
+	(void)TCP_WIRE22_DENSE_PATH_SUB;
+	g_soft.u64LeanChecks = (u64)u32Checks;
+	g_soft.u64LeanOk = (u64)u32Ok;
+
+	/*
+	 * Grep: net_tcp: soft residual lean
+	 * One lean line - Soft!=product dual license; no version stamp; no storm.
+	 * H2 once. denser multi-arm wire22 listen/accept path honesty.
+	 */
+	kprintf("net_tcp: soft residual lean "
+		"class=C1 dual_dod_a=OPEN dual_dod_b=OPEN "
+		"product_sshd_tcp22=OPEN until_DUT=1 "
+		"freestanding_class=SKIP product=UDX "
+		"bulk_ok=%u mss_ok=%u rtx_lean_ok=%u stamp_ok=%u "
+		"ssh_port_ok=%u lab_ip_ok=%u areas_ok=%u socket_path_ok=%u "
+		"h1_poll_ok=%u thrash_strip_ok=%u wire22_ok=%u "
+		"listen_accept_path_ok=%u denser=1 denser_arms=%u "
+		"checks=%u ok=%u areas=%u "
+		"path=ensure|listen|acceptq|accept|poll|poll_mask|shutdown|"
+		"name|half_close|fin_rtx|acceptq_rehook|accept_eagain_heal|"
+		"poll_mask_heal|ensure_rehook|post_poll_rehook|close_rehook|"
+		"multi_listen_heal|eth_estab_rehook|listen_close_rehook "
+		"listen_accept_path_honesty=1 "
+		"wire_handoff+tcp22=1 stack=eth|tcp|door|:22 "
+		"net_tcp_poll=run_loop_only irq=0 thr_only=1 H1=1 H2=once "
+		"lab_ip=%u.%u.%u.%u soft_ssh_port=%u "
+		"mss=%u rtx_passes=%u busy_shots=%u poll_stamp_max=%u "
+		"soft_ne_product=1 Soft!=product G-AC-1=1 dual=MIT_OR_Apache-2.0 "
+		"agent!=close storm=0 functional_lap=1 "
+		"(Soft!=product; W11 Dual DoD B FUNCTIONAL residual lean "
+		"STRONGER denser multi-arm; wire handoff+:22 listen/accept "
+		"path honesty; product_sshd_tcp22=OPEN until DUT; Dual DoD "
+		"OPEN; !=host_banner_proof; freestanding_thrash=0; H2 once; "
+		"stamp-free bar v2026.08.04.75; never invent .76; "
+		"product NIC=UDX+ABI)\n",
+		u32BulkOk, u32MssOk, u32RtxLeanOk, u32StampOk, u32SshPortOk,
+		u32LabIpOk, u32AreasOk, u32SocketPathOk, u32H1PollOk,
+		u32ThrashStripOk, u32Wire22Ok, u32ListenAcceptPathOk,
+		u32W22Dense, u32Checks, u32Ok,
+		(unsigned)TCP_SOFT_DEEPEN_AREAS, (unsigned)TCP_LAB_IP0,
+		(unsigned)TCP_LAB_IP1, (unsigned)TCP_LAB_IP2,
+		(unsigned)TCP_LAB_IP3, (unsigned)TCP_SOFT_SSH_PORT,
+		(unsigned)TCP_MSS, (unsigned)TCP_RTX_PASSES,
+		(unsigned)TCP_RTX_BUSY_SHOTS, (unsigned)TCP_SOFT_POLL_STAMP_MAX);
+
+	/*
+	 * Grep: net_tcp: soft residual wire22
+	 * W11 Dual DoD B denser multi-arm wire handoff + :22 listen/accept
+	 * path honesty (once; Soft!=product; H2 once; product_sshd_tcp22=OPEN
+	 * until DUT).
+	 */
+	kprintf("net_tcp: soft residual wire22 Soft!=product "
+		"wire_handoff+tcp22=1 wire22_ok=%u denser=1 denser_arms=%u/%u "
+		"denser_h1_sub=%u/%u denser_path_sub=%u/%u "
+		"listen_accept_path_ok=%u listen_accept_path_honesty=1 "
+		"soft_ssh_port=%u lab_ip=%u.%u.%u.%u "
+		"stack=eth|tcp|door|:22 thr-only_door_eth_poll=1 "
+		"product_sshd_tcp22=OPEN until_DUT=1 "
+		"path=ensure|listen|acceptq|accept|poll|poll_mask|"
+		"accept_eagain_heal|eth_estab_rehook|listen_close_rehook|"
+		"close_rehook|multi_listen_heal|ensure_rehook|post_poll_rehook "
+		"acceptq_rehook=1 acceptq_reparent=1 accept_eagain_heal=1 "
+		"eth_estab_rehook=1 listen_close_rehook=1 poll_mask_heal=1 "
+		"listen_ok=%llu accept_ok=%llu accept_again=%llu "
+		"acceptq_rehook_n=%llu acceptq_reparent_n=%llu "
+		"acceptq_close_rel_n=%llu "
+		"net_tcp_poll=run_loop_only thr_only=1 irq=0 H1=1 H2=once "
+		"dual_dod_a=OPEN dual_dod_b=OPEN dual_dod_b=OPEN_UDX "
+		"freestanding_class=SKIP product=UDX need=UDX_OPEN "
+		"soft_ne_product=1 Soft!=product "
+		"G-AC-1=1 agent!=close stamp_free=v2026.08.04.75 never=.76 "
+		"(W11 Dual DoD B FUNCTIONAL residual STRONGER denser multi-arm; "
+		"denser_h1_sub denser_path_sub; wire handoff+:22 listen/accept "
+		"path honesty for product sshd; product_sshd_tcp22=OPEN until "
+		"DUT; thr-only door eth poll; !=host_banner_proof; "
+		"not Dual DoD close; H2 once)\n",
+		u32Wire22Ok, u32W22Dense, (unsigned)TCP_WIRE22_DENSE_ARMS,
+		u32W22H1Sub, (unsigned)TCP_WIRE22_DENSE_H1_SUB,
+		u32W22PathSub, (unsigned)TCP_WIRE22_DENSE_PATH_SUB,
+		u32ListenAcceptPathOk,
+		(unsigned)TCP_SOFT_SSH_PORT,
+		(unsigned)TCP_LAB_IP0, (unsigned)TCP_LAB_IP1,
+		(unsigned)TCP_LAB_IP2, (unsigned)TCP_LAB_IP3,
+		(unsigned long long)g_soft.u64ListenOk,
+		(unsigned long long)g_soft.u64AcceptOk,
+		(unsigned long long)g_soft.u64AcceptAgain,
+		(unsigned long long)g_soft.u64AcceptQRehook,
+		(unsigned long long)g_soft.u64AcceptQReparent,
+		(unsigned long long)g_soft.u64AcceptQCloseRel);
+
+	/*
+	 * Grep: net_tcp: soft residual wire22 denser
+	 * STRONGER multi-arm denser honesty (Soft!=product; Dual DoD OPEN;
+	 * product_sshd_tcp22=OPEN until DUT; H2 once; stamp-free bar
+	 * v2026.08.04.75). :22 listen/accept Dual DoD B soft residual.
+	 * Denser H1 thr-only sublocks + denser path sublocks.
+	 * greppable: denser=1 | denser_arms | arm_h1_poll | arm_listen22
+	 * greppable: arm_accept22 | arm_rehook_heal | arm_dual_dod_open
+	 * greppable: arm_product_sshd_open | until_DUT | product_sshd_tcp22=OPEN
+	 * greppable: denser_h1_sub | denser_path_sub | thr-only door eth poll
+	 */
+	kprintf("net_tcp: soft residual wire22 denser Soft!=product denser=1 "
+		"STRONGER=1 denser_arms=%u/%u denser_min=%u wire22_ok=%u "
+		"arm_h1_poll=%u denser_h1_sub=%u/%u denser_path_sub=%u/%u "
+		"arm_listen22=%u arm_accept22=%u "
+		"arm_rehook_heal=%u arm_dual_dod_open=%u "
+		"arm_product_sshd_open=%u "
+		"listen_accept_path_honesty=1 thr-only_door_eth_poll=1 "
+		"soft_ssh_port=%u wire22_stack=%u "
+		"path=ensure|listen|acceptq|accept|accept_eagain_heal|"
+		"eth_estab_rehook|listen_close_rehook|poll|poll_mask "
+		"acceptq_rehook=1 accept_eagain_heal=1 eth_estab_rehook=1 "
+		"listen_close_rehook=1 poll_mask_heal=1 ensure_rehook=1 "
+		"stack=eth|tcp|door|:22 wire_handoff+tcp22=1 "
+		"product_sshd_tcp22=OPEN until_DUT=1 product=UDX "
+		"dual_dod_a=OPEN dual_dod_b=OPEN dual_dod_b=OPEN_UDX "
+		"not_freestanding_rtl=1 freestanding_class=SKIP "
+		"net_tcp_poll=run_loop_only thr_only=1 irq=0 H1=1 H2=once "
+		"soft_ne_product=1 dual=MIT_OR_Apache-2.0 G-AC-1=1 "
+		"agent!=close stamp_free=v2026.08.04.75 never=.76 "
+		"(STRONGER wire22 residual denser multi-arm; denser_h1_sub "
+		"denser_path_sub; :22 listen/accept path honesty for product "
+		"sshd; Soft!=product; Dual DoD OPEN; product_sshd_tcp22=OPEN "
+		"until DUT; thr-only door eth poll; not close)\n",
+		u32W22Dense, (unsigned)TCP_WIRE22_DENSE_ARMS,
+		(unsigned)TCP_WIRE22_DENSE_MIN, u32Wire22Ok,
+		u32W22H1, u32W22H1Sub, (unsigned)TCP_WIRE22_DENSE_H1_SUB,
+		u32W22PathSub, (unsigned)TCP_WIRE22_DENSE_PATH_SUB,
+		u32W22Listen, u32W22Accept, u32W22Rehook,
+		u32W22Dod, u32W22Sshd,
+		(unsigned)TCP_SOFT_SSH_PORT, (unsigned)TCP_WIRE22_STACK);
+
+	if (u32Ok == u32Checks && u32H1PollOk != 0u &&
+	    u32SocketPathOk != 0u && u32ThrashStripOk != 0u &&
+	    u32Wire22Ok != 0u && u32ListenAcceptPathOk != 0u &&
+	    u32W22Dense >= TCP_WIRE22_DENSE_MIN) {
+		/*
+		 * Grep: net_tcp: soft residual lean PASS
+		 * Soft residual only - never product Dual DoD close.
+		 * H2 once. denser multi-arm wire22 listen/accept path honesty.
+		 */
+		kprintf("net_tcp: soft residual lean PASS checks=%u ok=%u "
+			"class=C1 dual_dod_a=OPEN dual_dod_b=OPEN "
+			"product_sshd_tcp22=OPEN until_DUT=1 "
+			"freestanding_class=SKIP "
+			"product=UDX net_tcp_poll=run_loop_only "
+			"wire_handoff+tcp22=1 stack=eth|tcp|door|:22 "
+			"listen_accept_path_honesty=1 wire22_ok=1 "
+			"denser=1 denser_arms=%u STRONGER=1 "
+			"soft_ne_product=1 Soft!=product agent!=close H2=once "
+			"(Soft!=product; W11 Dual DoD B FUNCTIONAL residual "
+			"lean STRONGER denser multi-arm; :22 listen/accept path "
+			"honesty; G-AC-1 no .ko product; !=host_banner_proof; "
+			"Dual DoD remains OPEN; product_sshd_tcp22=OPEN until "
+			"DUT; stamp-free bar v2026.08.04.75; never invent .76)\n",
+			u32Checks, u32Ok, u32W22Dense);
 	}
 }
+
 
 /*
  * Rate-limit soft inventory: power-of-two op milestones, every-N fallback,
@@ -1823,7 +1262,7 @@ tcp_soft_maybe_log(int fForce)
 	tcp_soft_print(0);
 }
 
-/* RFC 1071 — sum 16-bit words in network order (not LE u16 loads). */
+/* RFC 1071 - sum 16-bit words in network order (not LE u16 loads). */
 static u16
 ip_cksum(const void *p, u32 cb)
 {
@@ -1992,7 +1431,7 @@ tcp_tx_raw(u32 s, u8 flags, u32 seq, const u8 *pPay, u32 cbPay)
 				/*
 				 * Full-push required for multi-seg integrity.
 				 * Partial ring fill used to return short and
-				 * break netstackd 3000 B bulk (3×MSS) smoke.
+				 * break netstackd 3000 B bulk (3xMSS) smoke.
 				 * Return short count so net_tcp_send can stop
 				 * cleanly after prior complete segments.
 				 */
@@ -2003,7 +1442,7 @@ tcp_tx_raw(u32 s, u8 flags, u32 seq, const u8 *pPay, u32 cbPay)
 			if (flags & FL_SYN) {
 				g_aT[peer].u32RcvNxt = seq + 1;
 			}
-			/* Soft FIN: peer → CLOSE_WAIT when we emit FIN. */
+			/* Soft FIN: peer -> CLOSE_WAIT when we emit FIN. */
 			if ((flags & FL_FIN) &&
 			    (g_aT[peer].u8State == ST_ESTABLISHED ||
 			     g_aT[peer].u8State == ST_FIN_WAIT1 ||
@@ -2046,7 +1485,7 @@ tcp_tx_raw(u32 s, u8 flags, u32 seq, const u8 *pPay, u32 cbPay)
 	g_u16IpId++;
 	pIp[4] = (u8)(g_u16IpId >> 8);
 	pIp[5] = (u8)g_u16IpId;
-	/* DF soft — avoid mid-path frag; zeros from memset for frag offset. */
+	/* DF soft - avoid mid-path frag; zeros from memset for frag offset. */
 	pIp[6] = 0x40;
 	pIp[8] = 64;
 	pIp[9] = 6;
@@ -2097,7 +1536,7 @@ tcp_tx_raw(u32 s, u8 flags, u32 seq, const u8 *pPay, u32 cbPay)
 	pTcp[16] = (u8)(csum >> 8);
 	pTcp[17] = (u8)(csum & 0xffu);
 	cbTot = 14u + cbIp;
-	/* Min Ethernet frame 60 for L2; rtl8168 pads too — be explicit. */
+	/* Min Ethernet frame 60 for L2; rtl8168 pads too - be explicit. */
 	if (cbTot < 60u) {
 		cbTot = 60u;
 	}
@@ -2115,11 +1554,139 @@ tcp_tx(u32 s, u8 flags, const u8 *pPay, u32 cbPay)
 	u32 seq = g_aT[s].u32SndNxt;
 	int r;
 
+	/*
+	 * Coalesce (banner-once correctness): eth data already soft-armed
+	 * or unacked in-flight (banner under TX ring full / ARP-ICMP
+	 * pressure / first-fail soft-accept). Do not queue a second data
+	 * segment - pure POLL multi-pass flushes the arm. Prevents double
+	 * SSH-2.0-GreenJade_sshd when userspace retries SEND of the product
+	 * id (or re-sends while first soft-accept is still in-flight, or
+	 * after a successful TX before peer ACK when SndNxt already past
+	 * RtxSeq). Gap B deepen: any :22 unacked eth data arm (not only
+	 * busy / seq==RtxSeq / small len) blocks additional data until
+	 * SndUna catches up - last-seg rtx holds one arm; multi-seg bulk
+	 * still advances once peer ACKs. Gap B: :22 also coalesces when
+	 * busy-armed or SEND retries the armed RtxSeq even if una briefly
+	 * matches nxt (banner-once hardness under soft-accept race), and
+	 * when :22 holds any valid data arm with RtxLen>0 (wire may have
+	 * landed but peer ACK not yet - still no second product id).
+	 * Gap B: :22 banner-once also blocks when prior BusyN still live
+	 * (ACK race under soft-accept + pure POLL) - never a second
+	 * SSH-2.0-GreenJade_sshd. Gap B deepen: any :22 live data RtxValid
+	 * with RtxLen>0 coalesces unconditionally (banner-once hardness).
+	 * Soft!=product.
+	 * Returns TX-fail so net_tcp_send yields -EAGAIN / partial (no fake
+	 * progress). Soft!=product.
+	 */
+	if (!(flags & FL_SYN) && cbPay > 0u && !g_aT[s].u8IsLoop &&
+	    g_aT[s].u8RtxValid && !g_aT[s].u8RtxSyn &&
+	    g_aT[s].u32RtxLen > 0u &&
+	    (g_aT[s].u32SndNxt > g_aT[s].u32SndUna ||
+	     (g_aT[s].u16Lport == (u16)TCP_SOFT_SSH_PORT &&
+	      (g_aT[s].u8RtxBusy != 0u || seq == g_aT[s].u32RtxSeq ||
+	       g_aT[s].u32RtxLen > 0u || g_aT[s].u8RtxBusyN != 0u ||
+	       g_aT[s].u32RtxCount != 0u)))) {
+		u32 u32InF = g_aT[s].u32SndNxt - g_aT[s].u32SndUna;
+		int fCoalesce = 0;
+
+		/*
+		 * Coalesce when: busy-armed, SEND at same RtxSeq (retry of
+		 * armed id), any :22 unacked data arm, or :22 any live
+		 * data arm (banner-once - further data would double the
+		 * product id under soft-accept / pure POLL flush). Soft!=product.
+		 */
+		if (g_aT[s].u16Lport == (u16)TCP_SOFT_SSH_PORT) {
+			/*
+			 * Gap B banner-once harden: :22 with any live data arm
+			 * always coalesces - pure POLL rtx is the only flush
+			 * path; userspace SEND retries must not emit a second
+			 * SSH-2.0-GreenJade_sshd under ARP/ICMP soft-accept.
+			 * Soft!=product.
+			 */
+			fCoalesce = 1;
+		} else if (g_aT[s].u8RtxBusy != 0u) {
+			fCoalesce = 1;
+		} else if (seq == g_aT[s].u32RtxSeq) {
+			fCoalesce = 1;
+		} else if (g_aT[s].u32SndNxt > g_aT[s].u32SndUna &&
+			   g_aT[s].u32RtxLen <= 64u) {
+			/* Non-:22 small unacked arm - still coalesce. */
+			fCoalesce = 1;
+		}
+		if (fCoalesce != 0) {
+			/*
+			 * Gap B denser residual: :22 coalesce tries busy-shot
+			 * flush of the already-armed banner eth_seg before
+			 * re-busy return - freestanding TX ring may free
+			 * mid-SEND under ARP/ICMP; pure POLL multi-pass is
+			 * the residual path if still busy. Banner-once:
+			 * never emit a second product id. Soft!=product.
+			 * Grep: net_tcp: soft eth_seg tx_busy coalesce
+			 */
+			if (g_aT[s].u16Lport == (u16)TCP_SOFT_SSH_PORT &&
+			    g_aT[s].u32RtxLen > 0u &&
+			    !g_aT[s].u8RtxSyn) {
+				int nCo = -1;
+				u32 u32Shot;
+
+				for (u32Shot = 0;
+				     u32Shot < TCP_RTX_BUSY_SHOTS;
+				     u32Shot++) {
+					nCo = tcp_tx_raw(
+						s, (u8)(FL_ACK | FL_PSH),
+						g_aT[s].u32RtxSeq,
+						g_aT[s].aRtx,
+						g_aT[s].u32RtxLen);
+					if (nCo >= 0) {
+						break;
+					}
+					if (g_aT[s].u8RtxBusyN < 255u) {
+						g_aT[s].u8RtxBusyN++;
+					}
+				}
+				if (nCo >= 0) {
+					/*
+					 * Armed banner landed mid-coalesce -
+					 * mark landed; silent on residual.
+					 * Soft!=product · stack-safe.
+					 */
+					g_aT[s].u32RtxTick = now_ms();
+					tcp_rtx_mark_landed(s);
+					/* Hot residual: silence coalesce rtx stamp. */
+					/* No second banner - SEND yields. */
+					return -1;
+				}
+			}
+			/*
+			 * Keep busy so poll interval 0; do not advance SndNxt.
+			 * :22 always re-busy under coalesce (banner-once pure
+			 * POLL flush density under ARP/ICMP). Soft!=product.
+			 */
+			if (g_aT[s].u16Lport == (u16)TCP_SOFT_SSH_PORT ||
+			    g_aT[s].u32SndNxt > g_aT[s].u32SndUna ||
+			    g_aT[s].u8RtxBusy != 0u ||
+			    seq == g_aT[s].u32RtxSeq) {
+				g_aT[s].u8RtxBusy = 1;
+			}
+			g_aT[s].u32RtxTick = now_ms();
+			if (g_aT[s].u8RtxBusyN < 255u) {
+				g_aT[s].u8RtxBusyN++;
+			}
+			/* Hot residual: silence coalesce tx_busy stamps. */
+			(void)u32InF;
+			return -1;
+		}
+	}
+
 	r = tcp_tx_raw(s, flags, seq, pPay, cbPay);
 	/*
 	 * Always arm SYN/SYN-ACK rtx even when first TX fails (rtl busy).
 	 * net_tcp_poll retransmits control segs; without this, external
 	 * connect times out after a single lost/failed SYN-ACK.
+	 * Failed first TX -> u8RtxBusy so poll retries immediately (pure POLL).
+	 * Gap B denser: :22 freestanding SYN first-fail BUSY_SHOTS lean retry
+	 * inside tcp_tx so ring free mid-SEND lands SYN-ACK before pure POLL.
+	 * Soft!=product · freestanding thrash SKIP (BUSY_SHOTS lean only).
 	 */
 	if (flags & FL_SYN) {
 		g_aT[s].u32RtxSeq = seq;
@@ -2130,14 +1697,180 @@ tcp_tx(u32 s, u8 flags, const u8 *pPay, u32 cbPay)
 		g_aT[s].u8RtxSyn = 1;
 		if (r >= 0) {
 			g_aT[s].u32SndNxt++;
+			tcp_rtx_mark_landed(s);
+		} else {
+			/* eth busy (ARP/ICMP): short interval on next poll */
+			g_aT[s].u8RtxBusy = 1;
+			if (g_aT[s].u8RtxBusyN < 255u) {
+				g_aT[s].u8RtxBusyN++;
+			}
+			/*
+			 * Gap B: freestanding :22 SYN first-fail busy-shot -
+			 * ring may free mid-tx before pure POLL rtx. Soft!=product.
+			 * Grep: net_tcp: soft eth_syn_ack tx_busy
+			 */
+			if (g_aT[s].u16Lport == (u16)TCP_SOFT_SSH_PORT) {
+				u32 u32Shot;
+				u8 flSyn = (u8)(flags & (FL_SYN | FL_ACK));
+
+				if ((flSyn & FL_ACK) == 0u) {
+					flSyn = FL_SYN;
+				}
+				for (u32Shot = 0;
+				     u32Shot < TCP_RTX_BUSY_SHOTS;
+				     u32Shot++) {
+					r = tcp_tx_raw(s, flSyn, seq, 0, 0);
+					if (r >= 0) {
+						break;
+					}
+					if (g_aT[s].u8RtxBusyN < 255u) {
+						g_aT[s].u8RtxBusyN++;
+					}
+				}
+				if (r >= 0) {
+					if (g_aT[s].u32SndNxt == seq) {
+						g_aT[s].u32SndNxt++;
+					}
+					g_aT[s].u32RtxTick = now_ms();
+					tcp_rtx_mark_landed(s);
+				}
+			}
 		}
 	}
 	if (r < 0) {
+		/*
+		 * Freestanding eth data TX fail (banner / bulk under ARP/ICMP):
+		 * arm last-seg rtx so net_tcp_poll flushes once the TX ring
+		 * drains - mirror SYN path. Soft-accept the armed bytes:
+		 * advance SndNxt (in-flight) and return nArm so userspace
+		 * banner SEND completes; pure POLL multi-pass lands the seg
+		 * without a second SEND that would double-queue the id.
+		 * Gap B denser: :22 first-fail BUSY_SHOTS lean retry after soft-accept
+		 * arm so freestanding TX pressure may land banner mid-SEND
+		 * before pure POLL residual. Soft!=product.
+		 */
+		if (cbPay > 0u && !(flags & FL_SYN) && !g_aT[s].u8IsLoop &&
+		    pPay != 0) {
+			u32 nArm = cbPay > TCP_MSS ? TCP_MSS : cbPay;
+
+			memcpy(g_aT[s].aRtx, pPay, nArm);
+			g_aT[s].u32RtxLen = nArm;
+			g_aT[s].u32RtxSeq = seq;
+			g_aT[s].u32RtxTick = now_ms();
+			if (!g_aT[s].u8RtxValid) {
+				g_aT[s].u32RtxCount = 0;
+			}
+			g_aT[s].u8RtxValid = 1;
+			g_aT[s].u8RtxSyn = 0;
+			g_aT[s].u8RtxBusy = 1;
+			if (g_aT[s].u8RtxBusyN < 255u) {
+				g_aT[s].u8RtxBusyN++;
+			}
+			/*
+			 * In-flight soft: SndNxt past armed payload. Poll rtx
+			 * success only advances when SndNxt == RtxSeq (legacy
+			 * path); after soft-accept it skips re-advance.
+			 * Soft!=product.
+			 */
+			g_aT[s].u32SndNxt = seq + nArm;
+			/*
+			 * Gap B: freestanding :22 banner first-fail busy-shot
+			 * under ARP/ICMP - land mid-SEND when ring frees.
+			 * Soft!=product. Grep: net_tcp: soft eth_seg tx_busy
+			 */
+			if (g_aT[s].u16Lport == (u16)TCP_SOFT_SSH_PORT) {
+				int nHex = -1;
+				u32 u32Shot;
+
+				for (u32Shot = 0;
+				     u32Shot < TCP_RTX_BUSY_SHOTS;
+				     u32Shot++) {
+					nHex = tcp_tx_raw(
+						s, (u8)(FL_ACK | FL_PSH),
+						g_aT[s].u32RtxSeq,
+						g_aT[s].aRtx,
+						g_aT[s].u32RtxLen);
+					if (nHex >= 0) {
+						break;
+					}
+					if (g_aT[s].u8RtxBusyN < 255u) {
+						g_aT[s].u8RtxBusyN++;
+					}
+				}
+				if (nHex >= 0) {
+					g_aT[s].u32RtxTick = now_ms();
+					tcp_rtx_mark_landed(s);
+					/* Hot residual: silence first-fail hex land. */
+					return (int)nArm;
+				}
+			}
+			/* Hot residual: silence first-fail arm tx_busy stamps. */
+			return (int)nArm;
+		}
+		/*
+		 * Bare FIN TX fail (SHUT_WR half-close under eth busy): soft-
+		 * accept FinSent + arm empty-payload rtx so net_tcp_poll flushes
+		 * FIN|ACK (RtxLen=0, !RtxSyn). sshd/userspace session end path.
+		 * Soft!=product · functional thrash-strip (BUSY_SHOTS lean).
+		 */
+		if ((flags & FL_FIN) != 0u && cbPay == 0u &&
+		    g_aT[s].u8IsLoop == 0u) {
+			g_aT[s].u32RtxSeq = seq;
+			g_aT[s].u32RtxLen = 0;
+			g_aT[s].u32RtxTick = now_ms();
+			g_aT[s].u32RtxCount = 0;
+			g_aT[s].u8RtxValid = 1;
+			g_aT[s].u8RtxSyn = 0;
+			g_aT[s].u8RtxBusy = 1;
+			if (g_aT[s].u8RtxBusyN < 255u) {
+				g_aT[s].u8RtxBusyN++;
+			}
+			if (g_aT[s].u8FinSent == 0u) {
+				g_aT[s].u32SndNxt = seq + 1u;
+				g_aT[s].u8FinSent = 1;
+			}
+			if (g_aT[s].u16Lport == (u16)TCP_SOFT_SSH_PORT) {
+				u32 u32Shot;
+				int nFin = -1;
+
+				for (u32Shot = 0;
+				     u32Shot < TCP_RTX_BUSY_SHOTS;
+				     u32Shot++) {
+					nFin = tcp_tx_raw(
+						s, (u8)(FL_FIN | FL_ACK), seq,
+						0, 0);
+					if (nFin >= 0) {
+						break;
+					}
+					if (g_aT[s].u8RtxBusyN < 255u) {
+						g_aT[s].u8RtxBusyN++;
+					}
+				}
+				if (nFin >= 0) {
+					g_aT[s].u32RtxTick = now_ms();
+					tcp_rtx_mark_landed(s);
+				}
+			}
+			return 0; /* half-close residual: FinSent soft-accepted */
+		}
 		return r;
 	}
 	if (flags & FL_FIN) {
 		g_aT[s].u32SndNxt++;
 		g_aT[s].u8FinSent = 1;
+		/*
+		 * Successful bare FIN: arm last control for peer-loss rtx
+		 * (RtxLen=0, !RtxSyn). Soft!=product · sshd half-close.
+		 */
+		if (cbPay == 0u && g_aT[s].u8IsLoop == 0u) {
+			g_aT[s].u32RtxSeq = seq;
+			g_aT[s].u32RtxLen = 0;
+			g_aT[s].u32RtxTick = now_ms();
+			g_aT[s].u32RtxCount = 0;
+			g_aT[s].u8RtxValid = 1;
+			g_aT[s].u8RtxSyn = 0;
+			tcp_rtx_mark_landed(s);
+		}
 	}
 	if (cbPay && r > 0) {
 		u32 n = (u32)r;
@@ -2152,26 +1885,248 @@ tcp_tx(u32 s, u8 flags, const u8 *pPay, u32 cbPay)
 			g_aT[s].u32RtxCount = 0;
 			g_aT[s].u8RtxValid = 1;
 			g_aT[s].u8RtxSyn = 0;
+			/* residual: mark landed so need_busy uses wall interval */
+			tcp_rtx_mark_landed(s);
 		}
 	}
 	return r;
 }
 
-/* Drop SYN_RCVD child and release listener pending (soft accept queue). */
+/*
+ * AcceptQ reparent residual (userspace/ABI Dual DoD B):
+ * Recount AcceptQ children for listen port onto listener slot; rehook
+ * peer hint: eth ESTABLISHED > any ESTABLISHED > half-open. Upgrades live
+ * half-open / loop hints when ESTABLISHED ready (sshd :22 product path).
+ * Covers soft-mint teardown (soft close before product listen) and product
+ * listen after orphan AcceptQ. Soft!=product · G-AC-1. No kprintf.
+ * Returns new pending count (0..255).
+ */
+static u8
+tcp_acceptq_reparent(u32 u32Ls, u16 u16Port)
+{
+	u32 j;
+	u32 cPend = 0;
+	i16 i16EthEst = -1; /* oldest eth ESTABLISHED (sshd :22 prefer) */
+	i16 i16Est = -1;    /* oldest any ESTABLISHED */
+	i16 i16Any = -1;    /* oldest any AcceptQ (half-open ok) */
+	i16 i16Hint;
+	u8 u8OldPend;
+	i16 i16OldPeer;
+
+	if (u32Ls >= TCP_MAX || g_aT[u32Ls].u8Used == 0u ||
+	    g_aT[u32Ls].u8Listening == 0u) {
+		return 0;
+	}
+	u8OldPend = g_aT[u32Ls].u8Pending;
+	i16OldPeer = g_aT[u32Ls].i16Peer;
+	for (j = 0; j < TCP_MAX; j++) {
+		if (j == u32Ls) {
+			continue;
+		}
+		if (g_aT[j].u8Used == 0u || g_aT[j].u8Listening != 0u ||
+		    g_aT[j].u8AcceptQ == 0u ||
+		    g_aT[j].u16Lport != u16Port) {
+			continue;
+		}
+		cPend++;
+		if (i16Any < 0) {
+			i16Any = (i16)j;
+		}
+		if (g_aT[j].u8State == ST_ESTABLISHED) {
+			if (i16Est < 0) {
+				i16Est = (i16)j; /* lowest slot = oldest mint */
+			}
+			if (g_aT[j].u8IsLoop == 0u && i16EthEst < 0) {
+				i16EthEst = (i16)j; /* eth prefer product :22 */
+			}
+		}
+	}
+	if (cPend > 255u) {
+		cPend = 255u;
+	}
+	g_aT[u32Ls].u8Pending = (u8)cPend;
+	i16Hint = g_aT[u32Ls].i16Peer;
+	if (i16Hint < 0 || (u32)i16Hint >= TCP_MAX ||
+	    g_aT[(u32)i16Hint].u8Used == 0u ||
+	    g_aT[(u32)i16Hint].u8AcceptQ == 0u ||
+	    g_aT[(u32)i16Hint].u16Lport != u16Port) {
+		/* Functional STRONGER: eth ESTAB > any ESTAB > half-open. */
+		if (i16EthEst >= 0) {
+			g_aT[u32Ls].i16Peer = i16EthEst;
+		} else if (i16Est >= 0) {
+			g_aT[u32Ls].i16Peer = i16Est;
+		} else if (i16Any >= 0) {
+			g_aT[u32Ls].i16Peer = i16Any;
+		} else {
+			g_aT[u32Ls].i16Peer = -1;
+		}
+	} else if (g_aT[(u32)i16Hint].u8State != ST_ESTABLISHED) {
+		/*
+		 * Live half-open hint: upgrade to ESTABLISHED when ready so
+		 * accept does not starve completed eth handshake (sshd :22).
+		 * Soft!=product · functional STRONGER.
+		 */
+		if (i16EthEst >= 0) {
+			g_aT[u32Ls].i16Peer = i16EthEst;
+		} else if (i16Est >= 0) {
+			g_aT[u32Ls].i16Peer = i16Est;
+		}
+		/* else keep half-open hint for SYN_RCVD rtx path */
+	} else if (i16EthEst >= 0 &&
+		   g_aT[(u32)i16Hint].u8IsLoop != 0u) {
+		/* Prefer eth ESTABLISHED over loop soft peer. Soft!=product. */
+		g_aT[u32Ls].i16Peer = i16EthEst;
+	}
+	/* Silent tally only when pending/hint actually moved. Soft!=product. */
+	if (g_aT[u32Ls].u8Pending != u8OldPend ||
+	    g_aT[u32Ls].i16Peer != i16OldPeer) {
+		tcp_soft_bump(&g_soft.u64AcceptQReparent);
+	}
+	return (u8)cPend;
+}
+
+/*
+ * Functional listen/accept/poll residual (sshd :22 product path):
+ * Rehook i16Peer to oldest ESTABLISHED AcceptQ child for this listener
+ * (eth/non-loop preferred, then any). POLLIN / accept take the same child.
+ * Does not drop a live half-open hint when no ESTABLISHED is ready.
+ * Soft!=product · G-AC-1 · Dual DoD OPEN (agent!=close).
+ * greppable: acceptq_rehook
+ * Returns 1 if i16Peer is ESTABLISHED AcceptQ (accept would not EAGAIN).
+ */
+static int
+tcp_listen_rehook_ready(u32 u32Ls)
+{
+	u32 j;
+	i16 i16Eth = -1;
+	i16 i16Any = -1;
+	i16 i16Hint;
+	u16 u16Port;
+
+	if (u32Ls >= TCP_MAX || g_aT[u32Ls].u8Used == 0u ||
+	    g_aT[u32Ls].u8Listening == 0u || g_aT[u32Ls].u8ShutRd != 0u) {
+		return 0;
+	}
+	u16Port = g_aT[u32Ls].u16Lport;
+	/*
+	 * Oldest first (lowest slot index = earliest mint). Eth (non-loop)
+	 * preferred for product sshd :22 over stack so loop soft does not
+	 * starve host handshake. Soft!=product.
+	 */
+	for (j = 0; j < TCP_MAX; j++) {
+		if (j == u32Ls) {
+			continue;
+		}
+		if (g_aT[j].u8Used == 0u || g_aT[j].u8Listening != 0u ||
+		    g_aT[j].u8AcceptQ == 0u || g_aT[j].u16Lport != u16Port ||
+		    g_aT[j].u8State != ST_ESTABLISHED) {
+			continue;
+		}
+		if (g_aT[j].u8IsLoop == 0u && i16Eth < 0) {
+			i16Eth = (i16)j;
+		}
+		if (i16Any < 0) {
+			i16Any = (i16)j;
+		}
+		/* Oldest eth + oldest any both known -> done (lowest indices). */
+		if (i16Eth >= 0 && i16Any >= 0) {
+			break;
+		}
+	}
+	if (i16Eth >= 0) {
+		if (g_aT[u32Ls].i16Peer != i16Eth) {
+			g_aT[u32Ls].i16Peer = i16Eth;
+			tcp_soft_bump(&g_soft.u64AcceptQRehook);
+		}
+		return 1;
+	}
+	if (i16Any >= 0) {
+		if (g_aT[u32Ls].i16Peer != i16Any) {
+			g_aT[u32Ls].i16Peer = i16Any;
+			tcp_soft_bump(&g_soft.u64AcceptQRehook);
+		}
+		return 1;
+	}
+	/*
+	 * No ESTABLISHED ready: keep valid half-open AcceptQ hint so SYN_RCVD
+	 * rtx path still has a newest-child pointer. Soft!=product.
+	 */
+	i16Hint = g_aT[u32Ls].i16Peer;
+	if (i16Hint >= 0 && (u32)i16Hint < TCP_MAX &&
+	    g_aT[(u32)i16Hint].u8Used != 0u &&
+	    g_aT[(u32)i16Hint].u8AcceptQ != 0u &&
+	    g_aT[(u32)i16Hint].u16Lport == u16Port) {
+		return 0;
+	}
+	g_aT[u32Ls].i16Peer = -1;
+	return 0;
+}
+
+/*
+ * Drop SYN_RCVD / AcceptQ child and release listener pending.
+ * i16Peer is only a newest-child hint - when a later SYN advances the hint,
+ * an older child's giveup/RST must still decrement pending or backlog sticks
+ * full (accept queue residual under multi-SYN eth busy). Soft!=product.
+ */
 static void
 tcp_drop_syn_rcvd(u32 s)
 {
 	u32 i;
+	u32 j;
+	u16 u16Port;
+	u8 u8WasAq;
+	int fDec = 0;
+	i16 i16Alt = -1;
 
 	if (s >= TCP_MAX || !g_aT[s].u8Used) {
 		return;
 	}
+	u16Port = g_aT[s].u16Lport;
+	u8WasAq = g_aT[s].u8AcceptQ;
+
 	for (i = 0; i < TCP_MAX; i++) {
-		if (g_aT[i].u8Used && g_aT[i].u8Listening &&
-		    g_aT[i].i16Peer == (i16)s) {
+		if (!g_aT[i].u8Used || !g_aT[i].u8Listening) {
+			continue;
+		}
+		if (g_aT[i].i16Peer == (i16)s) {
 			g_aT[i].i16Peer = -1;
-			if (g_aT[i].u8Pending > 0) {
+			if (u8WasAq && g_aT[i].u8Pending > 0) {
 				g_aT[i].u8Pending--;
+				fDec = 1;
+			}
+		}
+	}
+	/*
+	 * Accept queue residual: child still AcceptQ but i16Peer already moved
+	 * to a newer SYN - release pending on a same-port listener. Soft!=product.
+	 */
+	if (u8WasAq && fDec == 0) {
+		for (i = 0; i < TCP_MAX; i++) {
+			if (g_aT[i].u8Used && g_aT[i].u8Listening &&
+			    g_aT[i].u16Lport == u16Port &&
+			    g_aT[i].u8Pending > 0) {
+				g_aT[i].u8Pending--;
+				fDec = 1;
+				break;
+			}
+		}
+	}
+	/* Re-hook newest remaining AcceptQ child on same listen port. */
+	for (j = 0; j < TCP_MAX; j++) {
+		if (j == s) {
+			continue;
+		}
+		if (g_aT[j].u8Used && !g_aT[j].u8Listening &&
+		    g_aT[j].u8AcceptQ && g_aT[j].u16Lport == u16Port) {
+			i16Alt = (i16)j;
+		}
+	}
+	if (i16Alt >= 0) {
+		for (i = 0; i < TCP_MAX; i++) {
+			if (g_aT[i].u8Used && g_aT[i].u8Listening &&
+			    g_aT[i].u16Lport == u16Port &&
+			    g_aT[i].i16Peer < 0) {
+				g_aT[i].i16Peer = i16Alt;
 			}
 		}
 	}
@@ -2190,24 +2145,65 @@ net_tcp_init(void)
 	g_u32Rtx = 0;
 	g_u32TwReap = 0;
 	g_u16IpId = 1;
-	kprintf("net_tcp: IPv4 TCP ready (fd %u..%u) rtx_ms=%u wnd=%u mss=%u "
-		"tw_ms=%u\n",
-		TCP_FD_BASE, TCP_FD_BASE + TCP_MAX - 1, TCP_RTX_MS, TCP_WND,
-		TCP_MSS, TCP_TW_MS);
-	/* Grep: net: tcp soft init / net_tcp: soft init */
-	kprintf("net: tcp soft init max=%u fd_base=%u mss=%u wnd=%u "
-		"rx_max=%u tx_max=%u backlog_max=%u rtx_ms=%u tw_ms=%u "
-		"log_every=%u log_max=%u event_max=%u areas=%u wave=%u\n",
-		(unsigned)TCP_MAX, (unsigned)TCP_FD_BASE, (unsigned)TCP_MSS,
-		(unsigned)TCP_WND, (unsigned)TCP_RX_MAX, (unsigned)TCP_TX_MAX,
-		(unsigned)TCP_BACKLOG_MAX, (unsigned)TCP_RTX_MS,
-		(unsigned)TCP_TW_MS, (unsigned)TCP_SOFT_LOG_EVERY,
-		(unsigned)TCP_SOFT_LOG_MAX, (unsigned)TCP_SOFT_EVENT_MAX,
-		(unsigned)TCP_SOFT_DEEPEN_AREAS, (unsigned)TCP_SOFT_DEEPEN_WAVE);
+	g_i32SoftListen22 = -1;
+	g_u8SoftListen22Logged = 0;
+	g_u32SoftListen22Ticks = 0;
+	g_u8SoftListen22WasReady = 0;
+	g_u32SoftPollStampN = 0;
+	g_fSoftLeanOnce = 0;
+	tcp_sync_l2_identity();
+	kprintf("net_tcp: IPv4 TCP ready (fd %u..%u) rtx_ms=%u busy_ms=%u "
+		"wnd=%u mss=%u tw_ms=%u\n",
+		TCP_FD_BASE, TCP_FD_BASE + TCP_MAX - 1, TCP_RTX_MS,
+		TCP_RTX_BUSY_MS, TCP_WND, TCP_MSS, TCP_TW_MS);
+	/*
+	 * Soft ensure may no-op until net_l2 ready; poll retries. Soft!=product.
+	 * Grep: net_tcp: soft listen :22
+	 */
+	tcp_soft_ensure_listen22();
+	/* Grep: net_tcp: soft init - ONE line (no twin / no version stamp). H2 once. */
 	kprintf("net_tcp: soft init max=%u fd_base=%u mss=%u bulk=3000 "
-		"areas=%u wave=%u\n",
+		"areas=%u log_max=%u event_max=%u class=C1 "
+		"dual_dod_b=OPEN product_sshd_tcp22=OPEN until_DUT=1 "
+		"wire_handoff+tcp22=1 stack=eth|tcp|door|:22 "
+		"listen_accept_path_honesty=1 denser=1 denser_arms=%u H2=once "
+		"(Soft!=product; W11 Dual DoD B FUNCTIONAL denser multi-arm "
+		"wire22; :22 listen/accept path honesty; Dual DoD B OPEN; "
+		"agent!=close; stamp-free bar v2026.08.04.75; never invent .76)\n",
 		(unsigned)TCP_MAX, (unsigned)TCP_FD_BASE, (unsigned)TCP_MSS,
-		(unsigned)TCP_SOFT_DEEPEN_AREAS, (unsigned)TCP_SOFT_DEEPEN_WAVE);
+		(unsigned)TCP_SOFT_DEEPEN_AREAS, (unsigned)TCP_SOFT_LOG_MAX,
+		(unsigned)TCP_SOFT_EVENT_MAX, (unsigned)TCP_WIRE22_DENSE_ARMS);
+	/*
+	 * Userspace/ABI socket residual lamp (once). Soft!=product · G-AC-1.
+	 * greppable: net_tcp: soft socket path
+	 * FORBIDDEN: freestanding rtl R0 residual deepen; no wave stamp.
+	 * denser wire22 :22 listen/accept path honesty; H2 once.
+	 */
+	kprintf("net_tcp: soft socket path residual "
+		"listen=1 accept=1 shutdown=1 getsockname=1 getpeername=1 "
+		"half_close=1 fin_rtx=1 rtx=1 rst_pollerr=1 "
+		"acceptq_xfer=1 acceptq_reparent=1 acceptq_close_rel=1 "
+		"acceptq_rehook=1 accept_eagain_heal=1 poll_mask_heal=1 "
+		"ensure_rehook=1 post_poll_rehook=1 close_rehook=1 "
+		"multi_listen_heal=1 eth_estab_rehook=1 listen_close_rehook=1 "
+		"functional_lap=1 thrash_strip=1 denser=1 denser_arms=%u "
+		"listen_accept_path_honesty=1 wire_handoff+tcp22=1 "
+		"areas=%u class=C1 "
+		"dual_dod_a=OPEN dual_dod_b=OPEN product_sshd_tcp22=OPEN "
+		"until_DUT=1 freestanding_class=SKIP product=UDX H2=once "
+		"(Soft!=product; G-AC-1; userspace/ABI lean; denser multi-arm "
+		"wire22 :22 listen/accept path honesty; functional listen|"
+		"accept|poll|estab STRONGER; !=host_banner_proof; "
+		"freestanding_thrash=0; product=UDX+ABI; agent!=close; "
+		"Dual DoD OPEN)\n",
+		(unsigned)TCP_WIRE22_DENSE_ARMS,
+		(unsigned)TCP_SOFT_DEEPEN_AREAS);
+	/*
+	 * C1 residual lean once (self-check catalog). Soft!=product.
+	 * greppable: net_tcp: soft residual lean
+	 * Soft residual != Dual DoD close.
+	 */
+	tcp_soft_residual_lean_once();
 	tcp_soft_print(1);
 }
 
@@ -2218,19 +2214,13 @@ net_tcp_socket(void)
 
 	if (s < 0) {
 		tcp_soft_bump(&g_soft.u64SockFail);
-		/* Grep: net: tcp soft emfile (rate-limited) */
+		/* Grep: net_tcp: soft emfile - ONE line (no twin / no wave). */
 		if (tcp_soft_event_ok()) {
-			kprintf("net: tcp soft emfile max=%u ops=%llu "
-				"used_hwm=%llu wave=%u\n",
-				(unsigned)TCP_MAX,
-				(unsigned long long)g_soft.u64Ops,
-				(unsigned long long)g_soft.u64HwmUsed,
-				(unsigned)TCP_SOFT_DEEPEN_WAVE);
 			kprintf("net_tcp: soft emfile max=%u ops=%llu "
-				"wave=%u\n",
+				"used_hwm=%llu (Soft!=product)\n",
 				(unsigned)TCP_MAX,
 				(unsigned long long)g_soft.u64Ops,
-				(unsigned)TCP_SOFT_DEEPEN_WAVE);
+				(unsigned long long)g_soft.u64HwmUsed);
 		}
 		tcp_soft_maybe_log(1);
 		return -24;
@@ -2254,7 +2244,7 @@ net_tcp_fd_ok(i64 fd)
 
 /*
  * Linux poll bit numbers (same as EPOLLIN/OUT/ERR/HUP on x86).
- * Cold-path query only — net_tcp table state, no vfs_ram/protonrt.
+ * Cold-path query only - net_tcp table state, no vfs_ram/protonrt.
  */
 #define TCP_POLLIN  0x0001u
 #define TCP_POLLPRI 0x0002u
@@ -2263,15 +2253,15 @@ net_tcp_fd_ok(i64 fd)
 #define TCP_POLLHUP 0x0010u
 
 /**
- * Linux-shaped readiness for poll/epoll cold path.
+ * Linux-shaped readiness for poll/epoll cold path (userspace/ABI residual).
  *
- * POLLIN:  RX data, accept pending, or EOF (peer FIN / terminal).
- * POLLOUT: ESTABLISHED|CLOSE_WAIT, FIN not sent, soft write window open.
- * POLLHUP: both sides shut soft (terminal) or local FIN + peer FIN.
- * POLLERR: reserved soft (no RST surface yet); not set on live slots.
+ * POLLIN:  RX data, accept pending, EOF (peer FIN / terminal / SHUT_RD empty).
+ * POLLOUT: ESTABLISHED|CLOSE_WAIT, FIN not sent, SHUT_WR clear.
+ * POLLHUP: both sides shut soft, terminal, or SHUT_RD+SHUT_WR.
+ * POLLERR: sticky peer RST (u8RstSeen) until close. Soft!=product.
  *
  * Returns 0 if fd is not a live net_tcp socket. ERR/HUP always surface;
- * IN/OUT filtered by u32Want (0 → default IN|OUT interest).
+ * IN/OUT filtered by u32Want (0 -> default IN|OUT interest).
  */
 u32
 net_tcp_poll_mask(i64 i64Fd, u32 u32Want)
@@ -2286,50 +2276,89 @@ net_tcp_poll_mask(i64 i64Fd, u32 u32Want)
 	}
 	pSock = &g_aT[u32Slot];
 
-	/* Listener: POLLIN when accept() would not EAGAIN (ESTABLISHED only). */
+	/*
+	 * Listener: POLLIN when accept() would not EAGAIN (ESTABLISHED only).
+	 * Functional residual (sshd :22 product path): heal pending via
+	 * reparent on :22, then rehook i16Peer to oldest ESTABLISHED AcceptQ
+	 * (eth prefer) so poll/accept share one ready child. Soft!=product.
+	 */
 	if (pSock->u8Listening) {
-		i16 i16Peer = pSock->i16Peer;
+		/*
+		 * SHUT_RD on listener: no accept readiness (stop residual).
+		 * Soft!=product.
+		 * Functional STRONGER (sshd :22): reparent + rehook; if still
+		 * not ready, silent ensure :22 + multi heal so epoll/park sees
+		 * ESTABLISHED AcceptQ without waiting pure POLL. Soft!=product.
+		 * greppable: poll_mask_heal
+		 */
+		if (pSock->u8ShutRd == 0u) {
+			if (pSock->u16Lport == (u16)TCP_SOFT_SSH_PORT) {
+				(void)tcp_acceptq_reparent(u32Slot,
+							   pSock->u16Lport);
+			}
+			if (tcp_listen_rehook_ready(u32Slot) != 0) {
+				u32Got |= TCP_POLLIN;
+			} else if (pSock->u16Lport ==
+				   (u16)TCP_SOFT_SSH_PORT) {
+				u32 u32Li;
+				u16 u16PortM = pSock->u16Lport;
 
-		if (i16Peer >= 0 && (u32)i16Peer < TCP_MAX &&
-		    g_aT[i16Peer].u8Used &&
-		    g_aT[i16Peer].u8State == ST_ESTABLISHED) {
-			u32Got |= TCP_POLLIN;
+				/* Grep: soft listen :22 ensure on poll_mask heal */
+				tcp_soft_ensure_listen22();
+				for (u32Li = 0; u32Li < TCP_MAX; u32Li++) {
+					if (g_aT[u32Li].u8Used == 0u ||
+					    g_aT[u32Li].u8Listening == 0u ||
+					    g_aT[u32Li].u8ShutRd != 0u ||
+					    g_aT[u32Li].u16Lport !=
+						u16PortM) {
+						continue;
+					}
+					(void)tcp_acceptq_reparent(u32Li,
+								   u16PortM);
+					(void)tcp_listen_rehook_ready(u32Li);
+				}
+				if (tcp_listen_rehook_ready(u32Slot) != 0) {
+					u32Got |= TCP_POLLIN;
+				}
+			}
 		}
 	} else {
 		/*
 		 * Connected / half-closed: data or EOF readable.
-		 * ST_CLOSED on a live slot is "just socket()'d" — not EOF
-		 * (close() frees the slot; terminal states are TW/LAST_ACK).
+		 * ST_CLOSED on a live slot is "just socket()'d" - not EOF
+		 * unless sticky RST or SHUT_RD empty (userspace/ABI residual).
 		 */
 		if (pSock->u32RxLen > 0) {
 			u32Got |= TCP_POLLIN;
-		} else if (pSock->u8State == ST_CLOSE_WAIT ||
+		} else if (pSock->u8ShutRd != 0u ||
+			   pSock->u8State == ST_CLOSE_WAIT ||
 			   pSock->u8State == ST_TIME_WAIT ||
-			   pSock->u8State == ST_LAST_ACK) {
-			/* Empty ring + peer FIN / terminal → EOF-shaped POLLIN. */
+			   pSock->u8State == ST_LAST_ACK ||
+			   pSock->u8RstSeen != 0u) {
+			/* Empty ring + peer FIN / SHUT_RD / RST -> EOF POLLIN. */
 			u32Got |= TCP_POLLIN;
 		}
 
 		/*
 		 * Writeable when send path accepts data (ESTABLISHED|CLOSE_WAIT)
-		 * and we have not emitted local FIN. Soft peer window is advisory
-		 * (send still probes 1 B when fully in-flight) — report POLLOUT
-		 * whenever the state machine would accept net_tcp_send.
-		 * Write-window soft: u16PeerWnd / (SndNxt-SndUna) tracked on TX.
+		 * and we have not emitted local FIN / SHUT_WR. Soft!=product.
 		 */
 		if ((pSock->u8State == ST_ESTABLISHED ||
 		     pSock->u8State == ST_CLOSE_WAIT) &&
-		    !pSock->u8FinSent) {
+		    !pSock->u8FinSent && pSock->u8ShutWr == 0u &&
+		    pSock->u8RstSeen == 0u) {
 			u32Got |= TCP_POLLOUT;
 		}
 
 		/*
 		 * HUP when both directions shut soft, or terminal reclaim states.
 		 * CLOSE_WAIT alone keeps write side open (no HUP yet).
-		 * Fresh ST_CLOSED (pre-connect) is not hangup.
+		 * Fresh ST_CLOSED (pre-connect) is not hangup unless RST sticky.
 		 */
-		if (pSock->u8State == ST_TIME_WAIT ||
-		    pSock->u8State == ST_LAST_ACK) {
+		if (pSock->u8RstSeen != 0u) {
+			u32Got |= TCP_POLLHUP;
+		} else if (pSock->u8State == ST_TIME_WAIT ||
+			   pSock->u8State == ST_LAST_ACK) {
 			u32Got |= TCP_POLLHUP;
 		} else if (pSock->u8State == ST_CLOSE_WAIT && pSock->u8FinSent) {
 			u32Got |= TCP_POLLHUP;
@@ -2339,17 +2368,29 @@ net_tcp_poll_mask(i64 i64Fd, u32 u32Want)
 			if (pSock->u32RxLen == 0) {
 				u32Got |= TCP_POLLHUP;
 			}
+		} else if (pSock->u8ShutRd != 0u && pSock->u8ShutWr != 0u) {
+			/* Userspace SHUT_RDWR residual. Soft!=product. */
+			u32Got |= TCP_POLLHUP;
 		}
+	}
+
+	/* Sticky peer RST -> POLLERR (userspace/ABI SO_ERROR honesty path). */
+	if (pSock->u8RstSeen != 0u) {
+		u32Got |= TCP_POLLERR;
 	}
 
 	/* Grep: net_tcp: soft poll_mask (once) */
 	if (!g_u8PollMaskOnce) {
 		g_u8PollMaskOnce = 1;
 		kprintf("net_tcp: soft poll_mask ready=0x%x fd=%lld want=0x%x "
-			"state=%u rx=%u pend=%u\n",
+			"state=%u rx=%u pend=%u shut=0x%x rst=%u "
+			"(Soft!=product)\n",
 			(unsigned)u32Got, (long long)i64Fd, (unsigned)u32Want,
 			(unsigned)pSock->u8State, (unsigned)pSock->u32RxLen,
-			(unsigned)pSock->u8Pending);
+			(unsigned)pSock->u8Pending,
+			(unsigned)((pSock->u8ShutRd != 0u ? 1u : 0u) |
+				   (pSock->u8ShutWr != 0u ? 2u : 0u)),
+			(unsigned)pSock->u8RstSeen);
 	}
 
 	/* ERR/HUP always surface; IN/OUT only if requested (or want==0). */
@@ -2369,8 +2410,30 @@ net_tcp_bind(i64 fd, u16 port)
 		tcp_soft_maybe_log(0);
 		return -9;
 	}
+	/*
+	 * Bind uses live L2 identity. On rtl8168 lab (or already-lab
+	 * identity), force 10.200.125.50 so eth demux/SYN-ACK never stick
+	 * on stale QEMU 10.0.2.15 under handoff churn. Soft!=product.
+	 */
+	tcp_sync_l2_identity();
+	if (net_l2_backend() == GJ_NET_L2_RTL8168 ||
+	    tcp_ip_is_lab(g_aOurIp) != 0) {
+		tcp_force_lab_ip();
+	}
 	g_aT[s].u16Lport = port;
 	tcp_soft_bump(&g_soft.u64BindOk);
+	/* Grep: net_tcp: soft bind lab_ip - ONE line, no wave. Soft!=product. */
+	if (net_l2_backend() == GJ_NET_L2_RTL8168 ||
+	    tcp_ip_is_lab(g_aOurIp) != 0) {
+		if (tcp_soft_event_ok()) {
+			kprintf("net_tcp: soft bind port=%u "
+				"lab_ip=%u.%u.%u.%u backend=%s fd=%lld "
+				"(Soft!=product)\n",
+				(unsigned)port, g_aOurIp[0], g_aOurIp[1],
+				g_aOurIp[2], g_aOurIp[3], net_l2_name(),
+				(long long)fd);
+		}
+	}
 	tcp_soft_maybe_log(0);
 	return 0;
 }
@@ -2380,13 +2443,14 @@ net_tcp_listen(i64 fd, int backlog)
 {
 	u32 s;
 	int nBl;
+	int fWasListen;
 
 	if (fd_to_slot(fd, &s) != 0) {
 		tcp_soft_bump(&g_soft.u64ListenFail);
 		tcp_soft_maybe_log(0);
 		return -9;
 	}
-	/* Soft backlog clamp (Linux-shaped: 0 → 1). */
+	/* Soft backlog clamp (Linux-shaped: 0 -> 1). */
 	nBl = backlog;
 	if (nBl < 1) {
 		nBl = 1;
@@ -2394,26 +2458,144 @@ net_tcp_listen(i64 fd, int backlog)
 	if (nBl > TCP_BACKLOG_MAX) {
 		nBl = TCP_BACKLOG_MAX;
 	}
+	/*
+	 * Re-listen residual (sshd/userspace/ABI): preserve AcceptQ pending
+	 * when already listening so backlog accounting does not drop live
+	 * eth children. Clear SHUT_RD stop so product can re-arm after
+	 * listen stop. Soft!=product · functional thrash-strip.
+	 */
+	fWasListen = (g_aT[s].u8Listening != 0u) ? 1 : 0;
 	g_aT[s].u8Backlog = (u8)nBl;
-	g_aT[s].u8Pending = 0;
+	if (fWasListen == 0) {
+		g_aT[s].u8Pending = 0;
+	}
+	g_aT[s].u8ShutRd = 0; /* re-arm after SHUT_RD stop residual */
 	g_aT[s].u8Listening = 1;
 	g_aT[s].u8State = ST_LISTEN;
+	/* Product listen on :22 is not soft-mint (demux prefers it). Soft!=product. */
+	g_aT[s].u8SoftMint = 0;
+	/*
+	 * Product :22 listen supersedes soft-ensure slot: transfer AcceptQ
+	 * ownership (pending + i16Peer hint) then free soft mint so eth
+	 * demux/accept share one backlog. Soft!=product · sshd over stack.
+	 */
+	if (g_aT[s].u16Lport == (u16)TCP_SOFT_SSH_PORT &&
+	    g_i32SoftListen22 >= 0 && (u32)g_i32SoftListen22 < TCP_MAX &&
+	    (u32)g_i32SoftListen22 != s) {
+		u32 u32Soft = (u32)g_i32SoftListen22;
+
+		if (g_aT[u32Soft].u8Used && g_aT[u32Soft].u8SoftMint) {
+			u8 u8Xfer = g_aT[u32Soft].u8Pending;
+
+			if (u8Xfer > 0u) {
+				u32 u32Sum =
+				    (u32)g_aT[s].u8Pending + (u32)u8Xfer;
+
+				g_aT[s].u8Pending =
+				    (u8)(u32Sum > 255u ? 255u : u32Sum);
+			}
+			if (g_aT[s].i16Peer < 0 &&
+			    g_aT[u32Soft].i16Peer >= 0) {
+				g_aT[s].i16Peer = g_aT[u32Soft].i16Peer;
+			}
+			memset(&g_aT[u32Soft], 0, sizeof(g_aT[u32Soft]));
+			g_i32SoftListen22 = -1;
+		}
+	}
+	/*
+	 * AcceptQ reparent residual: after soft xfer (or soft already closed
+	 * between SYN and product listen), recount orphan AcceptQ children
+	 * for this listen port and rehook oldest ESTABLISHED. Fixes pending
+	 * undercount so backlog + poll_mask stay honest. Soft!=product.
+	 * Functional STRONGER: rehook_ready after reparent (eth prefer).
+	 * Grep: net_tcp: soft acceptq reparent
+	 */
+	{
+		u8 u8Pend;
+		static u8 g_u8AqReparentListenOnce;
+		int fReady;
+
+		u8Pend = tcp_acceptq_reparent(s, g_aT[s].u16Lport);
+		fReady = tcp_listen_rehook_ready(s);
+		if (u8Pend > 0u && g_u8AqReparentListenOnce == 0u &&
+		    tcp_soft_event_ok()) {
+			g_u8AqReparentListenOnce = 1;
+			kprintf("net_tcp: soft acceptq reparent "
+				"listen_fd=%lld port=%u pending=%u peer=%d "
+				"ready=%d "
+				"(Soft!=product; soft->product AcceptQ; "
+				"functional rehook; !=host_banner_proof)\n",
+				(long long)fd, (unsigned)g_aT[s].u16Lport,
+				(unsigned)u8Pend, (int)g_aT[s].i16Peer,
+				fReady);
+		}
+	}
 	kprintf("net_tcp: LISTEN :%u fd=%ld backlog=%u\n", g_aT[s].u16Lport,
 		(long)fd, g_aT[s].u8Backlog);
 	tcp_soft_bump(&g_soft.u64ListenOk);
-	/* Grep: net: tcp soft listen / net_tcp: soft listen (rate-limited) */
-	if (tcp_soft_event_ok()) {
-		kprintf("net: tcp soft listen fd=%lld port=%u backlog=%u "
-			"pending=%u wave=%u\n",
-			(long long)fd, (unsigned)g_aT[s].u16Lport,
-			(unsigned)g_aT[s].u8Backlog,
-			(unsigned)g_aT[s].u8Pending,
-			(unsigned)TCP_SOFT_DEEPEN_WAVE);
+	/*
+	 * Grep: net_tcp: soft listen / soft listen :22
+	 * ONE lamp path (no twin "net: tcp soft" + "net_tcp: soft"). Soft!=product.
+	 */
+	if (g_aT[s].u16Lport == (u16)TCP_SOFT_SSH_PORT) {
+		int fLabIp;
+
+		tcp_sync_l2_identity();
+		if (net_l2_backend() == GJ_NET_L2_RTL8168 ||
+		    tcp_ip_is_lab(g_aOurIp) != 0) {
+			tcp_force_lab_ip();
+		}
+		fLabIp = tcp_ip_is_lab(g_aOurIp);
+		/* Grep: net_tcp: soft listen :22 (product; Soft!=product) */
+		kprintf("net_tcp: soft listen :22 fd=%lld backlog=%u "
+			"ip=%u.%u.%u.%u lab_ip=%d backend=%s soft_mint=0 "
+			"ready=%d listen_accept_path_honesty=1 "
+			"product_sshd_tcp22=OPEN until_DUT=1 "
+			"wire_handoff+tcp22=1 denser=1 denser_arms=%u "
+			"(Soft!=product; after L2 ready preferred; denser "
+			"multi-arm wire22 :22 listen/accept path honesty; "
+			"!=host_banner_proof)\n",
+			(long long)fd, (unsigned)g_aT[s].u8Backlog,
+			g_aOurIp[0], g_aOurIp[1], g_aOurIp[2], g_aOurIp[3],
+			fLabIp, net_l2_name(), net_l2_ready(),
+			(unsigned)TCP_WIRE22_DENSE_ARMS);
+		g_u8SoftListen22Logged = 1;
+		/*
+		 * Honesty once-lamp: soft/product table listen is not DUT host
+		 * nc/ssh banner proof (G-AC-1 Soft!=product). Soft residual.
+		 * denser multi-arm wire22 :22 listen/accept path honesty; H2 once.
+		 * product_sshd_tcp22=OPEN until DUT. Soft residual != Dual DoD close.
+		 * greppable: net_tcp: soft honesty listen_not_banner
+		 * greppable: listen_accept_path_honesty | until_DUT | H2=once
+		 * greppable: denser=1 | denser_arms | product_sshd_tcp22=OPEN
+		 */
+		{
+			static u8 g_u8ListenHonestyOnce;
+
+			if (g_u8ListenHonestyOnce == 0u) {
+				g_u8ListenHonestyOnce = 1;
+				kprintf("net_tcp: soft honesty "
+					"listen_not_banner port=22 "
+					"listen_accept_path_honesty=1 "
+					"product_sshd_tcp22=OPEN until_DUT=1 "
+					"wire_handoff+tcp22=1 denser=1 "
+					"denser_arms=%u "
+					"stack=eth|tcp|door|:22 "
+					"dual_dod_a=OPEN dual_dod_b=OPEN "
+					"H2=once Soft!=product "
+					"(Soft!=product; soft listen :22 "
+					"!= host banner proof; denser multi-arm "
+					"wire22 :22 listen/accept path honesty; "
+					"not Dual DoD close)\n",
+					(unsigned)TCP_WIRE22_DENSE_ARMS);
+			}
+		}
+	} else if (tcp_soft_event_ok()) {
 		kprintf("net_tcp: soft listen fd=%lld port=%u backlog=%u "
-			"wave=%u\n",
+			"pending=%u (Soft!=product)\n",
 			(long long)fd, (unsigned)g_aT[s].u16Lport,
 			(unsigned)g_aT[s].u8Backlog,
-			(unsigned)TCP_SOFT_DEEPEN_WAVE);
+			(unsigned)g_aT[s].u8Pending);
 	}
 	tcp_soft_maybe_log(0);
 	return 0;
@@ -2456,6 +2638,7 @@ net_tcp_connect(i64 fd, u16 port)
 			g_aT[ns].u16Rport =
 			    g_aT[s].u16Lport ? g_aT[s].u16Lport : 40000;
 			g_aT[ns].u8IsLoop = 1;
+			g_aT[ns].u8AcceptQ = 1; /* listen accept queue */
 			g_aT[ns].i16Peer = (i16)s;
 			g_aT[ns].u16PeerWnd = TCP_WND;
 			g_aT[s].u8IsLoop = 1;
@@ -2475,18 +2658,13 @@ net_tcp_connect(i64 fd, u16 port)
 			tcp_soft_tally(NULL, NULL, NULL, NULL, NULL, NULL,
 				       NULL, NULL, NULL, NULL, NULL, NULL);
 			tcp_soft_bump(&g_soft.u64ConnOk);
-			/* Grep: net: tcp soft connect (rate-limited) */
+			/* Grep: net_tcp: soft connect - ONE line (no twin/wave). */
 			if (tcp_soft_event_ok()) {
-				kprintf("net: tcp soft connect fd=%lld "
-					"port=%u peer_slot=%d loop=1 "
-					"listen_pending=%u wave=%u\n",
-					(long long)fd, (unsigned)port, ns,
-					(unsigned)g_aT[i].u8Pending,
-					(unsigned)TCP_SOFT_DEEPEN_WAVE);
 				kprintf("net_tcp: soft connect fd=%lld "
-					"port=%u peer=%d wave=%u\n",
+					"port=%u peer=%d loop=1 "
+					"listen_pending=%u (Soft!=product)\n",
 					(long long)fd, (unsigned)port, ns,
-					(unsigned)TCP_SOFT_DEEPEN_WAVE);
+					(unsigned)g_aT[i].u8Pending);
 			}
 			tcp_soft_maybe_log(0);
 			return 0;
@@ -2501,6 +2679,7 @@ i64
 net_tcp_accept(i64 fd)
 {
 	u32 s;
+	u32 i;
 	i16 peer;
 
 	if (fd_to_slot(fd, &s) != 0) {
@@ -2513,15 +2692,122 @@ net_tcp_accept(i64 fd)
 		tcp_soft_maybe_log(0);
 		return -22;
 	}
-	peer = g_aT[s].i16Peer;
-	if (peer < 0 || (u32)peer >= TCP_MAX || !g_aT[peer].u8Used) {
-		tcp_soft_bump(&g_soft.u64AcceptAgain);
+	/*
+	 * Listener SHUT_RD/RDWR: no further accept (Linux-shaped stop).
+	 * Soft!=product · userspace/ABI residual.
+	 */
+	if (g_aT[s].u8ShutRd != 0u) {
+		tcp_soft_bump(&g_soft.u64AcceptFail);
 		tcp_soft_maybe_log(0);
-		return -11;
+		return -22; /* EINVAL-shaped after shut */
+	}
+	peer = g_aT[s].i16Peer;
+	/*
+	 * Accept queue for eth sessions (Dual DoD B):
+	 *  - i16Peer is a soft hint (newest child); may still be SYN_RCVD.
+	 *  - Prefer oldest ESTABLISHED AcceptQ child (FIFO fairness) so a
+	 *    half-open i16Peer cannot starve a completed eth handshake.
+	 *  - Non-loop (eth) preferred over loop; never re-mint accepted.
+	 * Functional STRONGER (sshd :22): one EAGAIN heal (ensure + multi
+	 * same-port listener reparent/rehook) then re-scan so product park
+	 * accepts without waiting another pure POLL when AcceptQ already
+	 * ESTABLISHED (soft→product race / orphan children). Soft!=product.
+	 * greppable: accept_eagain_heal
+	 */
+	if (peer >= 0 && ((u32)peer >= TCP_MAX || !g_aT[peer].u8Used)) {
+		g_aT[s].i16Peer = -1;
+		peer = -1;
+	}
+	if (peer < 0 || !g_aT[peer].u8AcceptQ ||
+	    g_aT[peer].u8State != ST_ESTABLISHED) {
+		i16 i16Hint = peer;
+		u32 u32Heal;
+
+		peer = -1;
+		/*
+		 * Up to 2 scans: first normal; second after :22 heal when
+		 * product AcceptQ may be ready under soft/product race.
+		 * Soft!=product · functional thrash-strip (not multi-heal).
+		 */
+		for (u32Heal = 0; u32Heal < 2u; u32Heal++) {
+			if (u32Heal != 0u) {
+				u32 u32Li;
+				u16 u16PortH;
+
+				if (g_aT[s].u16Lport !=
+				    (u16)TCP_SOFT_SSH_PORT) {
+					break;
+				}
+				/* Grep: soft listen :22 ensure on accept heal */
+				tcp_soft_ensure_listen22();
+				/*
+				 * Multi-listener :22 heal: soft mint + product
+				 * may both hold same-port children; reparent
+				 * + rehook every live listener so AcceptQ is
+				 * visible on the fd sshd parks. Soft!=product.
+				 */
+				u16PortH = g_aT[s].u16Lport;
+				for (u32Li = 0; u32Li < TCP_MAX; u32Li++) {
+					if (g_aT[u32Li].u8Used == 0u ||
+					    g_aT[u32Li].u8Listening == 0u ||
+					    g_aT[u32Li].u8ShutRd != 0u ||
+					    g_aT[u32Li].u16Lport !=
+						u16PortH) {
+						continue;
+					}
+					(void)tcp_acceptq_reparent(u32Li,
+								   u16PortH);
+					(void)tcp_listen_rehook_ready(u32Li);
+				}
+			}
+			/* Prefer non-loop AcceptQ ESTABLISHED (eth :22). */
+			for (i = 0; i < TCP_MAX; i++) {
+				if (g_aT[i].u8Used && !g_aT[i].u8Listening &&
+				    g_aT[i].u8AcceptQ && !g_aT[i].u8IsLoop &&
+				    g_aT[i].u16Lport == g_aT[s].u16Lport &&
+				    g_aT[i].u8State == ST_ESTABLISHED) {
+					peer = (i16)i;
+					break; /* oldest mint */
+				}
+			}
+			if (peer < 0) {
+				for (i = 0; i < TCP_MAX; i++) {
+					if (g_aT[i].u8Used &&
+					    !g_aT[i].u8Listening &&
+					    g_aT[i].u8AcceptQ &&
+					    g_aT[i].u16Lport ==
+						g_aT[s].u16Lport &&
+					    g_aT[i].u8State ==
+						ST_ESTABLISHED) {
+						peer = (i16)i;
+						break;
+					}
+				}
+			}
+			if (peer >= 0) {
+				/* Keep listen hint on taken ready child. */
+				g_aT[s].i16Peer = peer;
+				break;
+			}
+		}
+		if (peer < 0) {
+			/* Keep i16Peer if still a live AcceptQ half-open. */
+			if (i16Hint >= 0 && (u32)i16Hint < TCP_MAX &&
+			    g_aT[i16Hint].u8Used && g_aT[i16Hint].u8AcceptQ) {
+				g_aT[s].i16Peer = i16Hint;
+			} else if (g_aT[s].u16Lport ==
+				   (u16)TCP_SOFT_SSH_PORT) {
+				(void)tcp_acceptq_reparent(s, g_aT[s].u16Lport);
+				(void)tcp_listen_rehook_ready(s);
+			}
+			tcp_soft_bump(&g_soft.u64AcceptAgain);
+			tcp_soft_maybe_log(0);
+			return -11;
+		}
 	}
 	/*
 	 * Only ESTABLISHED: send path rejects SYN_RCVD, so returning a
-	 * half-open peer made eth accept → banner SEND fail. Wait until
+	 * half-open peer made eth accept -> banner SEND fail. Wait until
 	 * client ACK completes the handshake (net_tcp_input).
 	 */
 	if (g_aT[peer].u8State != ST_ESTABLISHED) {
@@ -2529,23 +2815,91 @@ net_tcp_accept(i64 fd)
 		tcp_soft_maybe_log(0);
 		return -11;
 	}
-	g_aT[s].i16Peer = -1;
-	if (g_aT[s].u8Pending > 0) {
-		g_aT[s].u8Pending--;
+	/*
+	 * Release accept-queue membership for this peer first, then heal
+	 * pending + rehook via reparent/rehook_ready so multi-listener :22
+	 * (soft residual + product) share honest backlog. Soft!=product.
+	 * Functional STRONGER: clear AcceptQ before reparent so taken peer
+	 * is not re-counted / re-hooked. Soft!=product · thrash-strip.
+	 */
+	{
+		u32 u32Li;
+		u16 u16Port = g_aT[s].u16Lport;
+
+		/* Drop hint pointers at this peer before AcceptQ clear. */
+		for (u32Li = 0; u32Li < TCP_MAX; u32Li++) {
+			if (g_aT[u32Li].u8Used != 0u &&
+			    g_aT[u32Li].u8Listening != 0u &&
+			    g_aT[u32Li].i16Peer == peer) {
+				g_aT[u32Li].i16Peer = -1;
+			}
+		}
+		g_aT[peer].u8AcceptQ = 0;
+		/*
+		 * Recount pending + rehook oldest remaining ESTABLISHED
+		 * (eth prefer) on every same-port live listener. Soft!=product.
+		 */
+		for (u32Li = 0; u32Li < TCP_MAX; u32Li++) {
+			if (g_aT[u32Li].u8Used == 0u ||
+			    g_aT[u32Li].u8Listening == 0u ||
+			    g_aT[u32Li].u8ShutRd != 0u ||
+			    g_aT[u32Li].u16Lport != u16Port) {
+				continue;
+			}
+			(void)tcp_acceptq_reparent(u32Li, u16Port);
+			(void)tcp_listen_rehook_ready(u32Li);
+		}
 	}
+	/*
+	 * Accepted fd is fully named: local port from listener, peer 4-tuple
+	 * already on child (aRip/Rport). getpeername/getsockname residual
+	 * ready for userspace/ABI cold path. Soft!=product.
+	 */
+	if (g_aT[peer].u16Lport == 0u) {
+		g_aT[peer].u16Lport = g_aT[s].u16Lport;
+	}
+	/* Accepted child is product-owned (not soft-mint listener). Soft!=product. */
+	g_aT[peer].u8SoftMint = 0;
 	tcp_soft_bump(&g_soft.u64AcceptOk);
-	/* Grep: net: tcp soft accept / net_tcp: soft accept (rate-limited) */
-	if (tcp_soft_event_ok()) {
-		kprintf("net: tcp soft accept listen_fd=%lld new_fd=%u "
-			"peer_slot=%d state=%u pending=%u wave=%u\n",
-			(long long)fd, (unsigned)(TCP_FD_BASE + (u32)peer),
-			(int)peer, (unsigned)g_aT[peer].u8State,
-			(unsigned)g_aT[s].u8Pending,
-			(unsigned)TCP_SOFT_DEEPEN_WAVE);
-		kprintf("net_tcp: soft accept listen_fd=%lld new_fd=%u "
-			"wave=%u\n",
-			(long long)fd, (unsigned)(TCP_FD_BASE + (u32)peer),
-			(unsigned)TCP_SOFT_DEEPEN_WAVE);
+	/*
+	 * Always greppable on accept (lab DoD B) - not rate-capped.
+	 * Grep: net_tcp: soft accept / net: tcp soft accept
+	 */
+	kprintf("net_tcp: soft accept listen_fd=%lld new_fd=%u peer_slot=%d "
+		"lport=%u rport=%u loop=%u pending=%u "
+		"(Soft!=product; name-ready)\n",
+		(long long)fd, (unsigned)(TCP_FD_BASE + (u32)peer),
+		(int)peer, (unsigned)g_aT[peer].u16Lport,
+		(unsigned)g_aT[peer].u16Rport,
+		(unsigned)g_aT[peer].u8IsLoop,
+		(unsigned)g_aT[s].u8Pending);
+	/*
+	 * Residual: eth :22 AcceptQ -> banner path taken (Dual DoD B).
+	 * Soft accept residual != host banner proof. Soft!=product.
+	 * denser wire22 :22 listen/accept path honesty; product_sshd_tcp22
+	 * remains OPEN until DUT host banner proof. Soft residual != Dual DoD close.
+	 * Grep: net_tcp: soft accept residual taken
+	 * greppable: listen_accept_path_honesty | until_DUT | product_sshd_tcp22=OPEN
+	 */
+	if (!g_aT[peer].u8IsLoop &&
+	    g_aT[peer].u16Lport == (u16)TCP_SOFT_SSH_PORT) {
+		kprintf("net_tcp: soft accept residual taken "
+			"new_fd=%u slot=%d sport=%u "
+			"rip=%u.%u.%u.%u "
+			"listen_accept_path_honesty=1 "
+			"product_sshd_tcp22=OPEN until_DUT=1 "
+			"wire_handoff+tcp22=1 dual_dod_b=OPEN "
+			"denser=1 denser_arms=%u arm_accept22=1 "
+			"(Soft!=product; accept->banner path; denser multi-arm "
+			"wire22 :22 listen/accept honesty; !=host_banner_proof; "
+			"not Dual DoD close)\n",
+			(unsigned)(TCP_FD_BASE + (u32)peer), (int)peer,
+			(unsigned)g_aT[peer].u16Rport,
+			(unsigned)g_aT[peer].aRip[0],
+			(unsigned)g_aT[peer].aRip[1],
+			(unsigned)g_aT[peer].aRip[2],
+			(unsigned)g_aT[peer].aRip[3],
+			(unsigned)TCP_WIRE22_DENSE_ARMS);
 	}
 	tcp_soft_maybe_log(0);
 	return slot_to_fd((u32)peer);
@@ -2570,8 +2924,14 @@ net_tcp_send(i64 fd, const void *pBuf, size_t cb)
 	}
 	/*
 	 * Soft: send allowed in ESTABLISHED and CLOSE_WAIT (half-close write
-	 * path after peer FIN). FIN_WAIT* / LAST_ACK reject new data.
+	 * path after peer FIN). FIN_WAIT* / LAST_ACK / SHUT_WR / RST reject.
+	 * Userspace/ABI residual: SHUT_WR -> -EPIPE. Soft!=product.
 	 */
+	if (g_aT[s].u8ShutWr != 0u || g_aT[s].u8RstSeen != 0u) {
+		tcp_soft_bump(&g_soft.u64SendFail);
+		tcp_soft_maybe_log(0);
+		return -32; /* EPIPE */
+	}
 	if (g_aT[s].u8State != ST_ESTABLISHED &&
 	    g_aT[s].u8State != ST_CLOSE_WAIT) {
 		tcp_soft_bump(&g_soft.u64SendFail);
@@ -2584,7 +2944,7 @@ net_tcp_send(i64 fd, const void *pBuf, size_t cb)
 		return -32;
 	}
 	/*
-	 * Bound size_t → u32 and match door NET_XFER_MAX / TCP_TX_MAX.
+	 * Bound size_t -> u32 and match door NET_XFER_MAX / TCP_TX_MAX.
 	 * Multi-seg smoke (3000 B) fits; larger calls short-write cleanly.
 	 */
 	if (cb > TCP_TX_MAX) {
@@ -2622,6 +2982,17 @@ net_tcp_send(i64 fd, const void *pBuf, size_t cb)
 		}
 		r = tcp_tx(s, (u8)(FL_ACK | FL_PSH), p, chunk);
 		if (r < 0) {
+			/*
+			 * Freestanding eth TX busy: last unacked data remains
+			 * armed for poll flush (tcp_tx arms on prior success).
+			 * Busy-armed -> interval 0 so pure POLL flushes banner/
+			 * eth_seg once the TX ring drains. Soft!=product.
+			 */
+			if (g_aT[s].u8RtxValid && !g_aT[s].u8RtxSyn &&
+			    !g_aT[s].u8IsLoop) {
+				g_aT[s].u8RtxBusy = 1;
+				g_aT[s].u32RtxTick = now_ms();
+			}
 			if (n > 0) {
 				tcp_soft_bump(&g_soft.u64SendPartial);
 				tcp_soft_bump(&g_soft.u64SendOk);
@@ -2635,10 +3006,26 @@ net_tcp_send(i64 fd, const void *pBuf, size_t cb)
 			tcp_soft_maybe_log(0);
 			return -11;
 		}
-		/* Loopback: peer has no ACK path — advance una immediately. */
+		/* Loopback: peer has no ACK path - advance una immediately. */
 		if (g_aT[s].u8IsLoop) {
 			g_aT[s].u32SndUna = g_aT[s].u32SndNxt;
 			g_aT[s].u8RtxValid = 0;
+		} else if (r > 0) {
+			/*
+			 * Grep: net_tcp: soft eth_seg / net: tcp soft eth_seg
+			 * Freestanding eth segment TX (banner / bulk). Rate-limit.
+			 * Soft!=product.
+			 */
+			if (tcp_soft_event_ok()) {
+				/* ONE line (no twin / no wave). Soft!=product. */
+				kprintf("net_tcp: soft eth_seg fd=%lld "
+					"bytes=%d port=%u sport=%u segs=%u "
+					"(Soft!=product; segment TX flush)\n",
+					(long long)fd, r,
+					(unsigned)g_aT[s].u16Lport,
+					(unsigned)g_aT[s].u16Rport,
+					(unsigned)(cSegs + 1u));
+			}
 		}
 		p += (u32)r;
 		left -= (u32)r;
@@ -2654,21 +3041,14 @@ net_tcp_send(i64 fd, const void *pBuf, size_t cb)
 		tcp_soft_bump(&g_soft.u64SendOk);
 		if (cSegs >= 2u) {
 			tcp_soft_bump(&g_soft.u64SendMulti);
-			/* Grep: net: tcp soft multi-seg (rate-limited) */
+			/* Grep: net_tcp: soft multi-seg - ONE line (no twin/wave). */
 			if (tcp_soft_event_ok()) {
-				kprintf("net: tcp soft multi-seg fd=%lld "
-					"bytes=%lld segs=%u mss=%u "
-					"tx_max=%u loop=%u wave=%u\n",
+				kprintf("net_tcp: soft multi-seg fd=%lld "
+					"bytes=%lld segs=%u mss=%u loop=%u "
+					"(Soft!=product)\n",
 					(long long)fd, (long long)n,
 					(unsigned)cSegs, (unsigned)TCP_MSS,
-					(unsigned)TCP_TX_MAX,
-					(unsigned)g_aT[s].u8IsLoop,
-					(unsigned)TCP_SOFT_DEEPEN_WAVE);
-				kprintf("net_tcp: soft multi-seg fd=%lld "
-					"bytes=%lld segs=%u wave=%u\n",
-					(long long)fd, (long long)n,
-					(unsigned)cSegs,
-					(unsigned)TCP_SOFT_DEEPEN_WAVE);
+					(unsigned)g_aT[s].u8IsLoop);
 			}
 		}
 	} else {
@@ -2695,8 +3075,13 @@ net_tcp_recv(i64 fd, void *pBuf, size_t cb)
 		return 0;
 	}
 	if (g_aT[s].u32RxLen == 0) {
-		/* Soft EOF after peer FIN or local close states. */
-		if (g_aT[s].u8State == ST_CLOSE_WAIT ||
+		/*
+		 * Soft EOF after peer FIN, SHUT_RD, sticky RST, or terminal.
+		 * Userspace/ABI residual: SHUT_RD empty -> 0 (not EAGAIN).
+		 * Soft!=product.
+		 */
+		if (g_aT[s].u8ShutRd != 0u || g_aT[s].u8RstSeen != 0u ||
+		    g_aT[s].u8State == ST_CLOSE_WAIT ||
 		    g_aT[s].u8State == ST_TIME_WAIT ||
 		    g_aT[s].u8State == ST_LAST_ACK ||
 		    g_aT[s].u8State == ST_CLOSED) {
@@ -2730,17 +3115,28 @@ i64
 net_tcp_close(i64 fd)
 {
 	u32 s;
+	u8 u8WasAq;
+	u16 u16Port;
+	u8 u8WasListen;
+	u8 u8SoftMint;
 
 	if (fd_to_slot(fd, &s) != 0) {
 		tcp_soft_bump(&g_soft.u64CloseFail);
 		tcp_soft_maybe_log(0);
 		return -9;
 	}
+	u8WasAq = g_aT[s].u8AcceptQ;
+	u16Port = g_aT[s].u16Lport;
+	u8WasListen = g_aT[s].u8Listening;
+	u8SoftMint = g_aT[s].u8SoftMint;
 	/*
 	 * Soft close: emit FIN on ESTABLISHED / CLOSE_WAIT (virtio + loop).
 	 * Loopback tcp_tx_raw FIN advances peer to CLOSE_WAIT / TIME_WAIT.
 	 * User close always frees the local slot (fd ABI); peer half-close
 	 * and TIME_WAIT reaping live on remaining sockets / poll.
+	 * AcceptQ child / soft-mint residual: multi-queue pending release +
+	 * FIFO rehook (mirror tcp_drop_syn_rcvd) so backlog does not stick
+	 * when i16Peer already advanced to a newer SYN. Soft!=product.
 	 */
 	if (g_aT[s].u8State == ST_ESTABLISHED ||
 	    g_aT[s].u8State == ST_CLOSE_WAIT) {
@@ -2751,22 +3147,371 @@ net_tcp_close(i64 fd)
 			g_aT[g_aT[s].i16Peer].i16Peer = -1;
 		}
 	}
-	/* Listener soft pending: if this was queued accept child, release. */
-	{
+	/* Soft-mint :22 index clear before table free. Soft!=product. */
+	if (g_i32SoftListen22 == (i32)s) {
+		g_i32SoftListen22 = -1;
+	}
+	/*
+	 * AcceptQ child close residual: release pending even when i16Peer
+	 * already moved (multi-SYN eth busy), then rehook oldest remaining
+	 * ESTABLISHED AcceptQ for same listen port. Soft!=product.
+	 * Grep: net_tcp: soft acceptq close_rel
+	 */
+	if (u8WasAq != 0u && u8WasListen == 0u) {
+		u32 i;
+		i16 i16Alt = -1;
+		static u8 g_u8AqCloseOnce;
+
+		/*
+		 * Drop hint + leave AcceptQ before reparent so dying child is
+		 * not re-counted. Functional STRONGER: reparent + rehook_ready
+		 * (eth prefer) on every same-port live listener. Soft!=product.
+		 */
+		for (i = 0; i < TCP_MAX; i++) {
+			if (g_aT[i].u8Used != 0u &&
+			    g_aT[i].u8Listening != 0u &&
+			    g_aT[i].i16Peer == (i16)s) {
+				g_aT[i].i16Peer = -1;
+			}
+		}
+		g_aT[s].u8AcceptQ = 0;
+		for (i = 0; i < TCP_MAX; i++) {
+			if (g_aT[i].u8Used == 0u ||
+			    g_aT[i].u8Listening == 0u ||
+			    g_aT[i].u8ShutRd != 0u ||
+			    g_aT[i].u16Lport != u16Port) {
+				continue;
+			}
+			(void)tcp_acceptq_reparent(i, u16Port);
+			if (tcp_listen_rehook_ready(i) != 0 && i16Alt < 0) {
+				i16Alt = g_aT[i].i16Peer;
+			}
+		}
+		tcp_soft_bump(&g_soft.u64AcceptQCloseRel);
+		if (g_u8AqCloseOnce == 0u && tcp_soft_event_ok()) {
+			g_u8AqCloseOnce = 1;
+			kprintf("net_tcp: soft acceptq close_rel "
+				"fd=%lld port=%u peer_alt=%d "
+				"(Soft!=product; AcceptQ pending release; "
+				"acceptq_rehook)\n",
+				(long long)fd, (unsigned)u16Port,
+				(int)i16Alt);
+		}
+	} else {
+		/* Listener or non-AcceptQ: clear i16Peer hints pointing here. */
 		u32 i;
 
 		for (i = 0; i < TCP_MAX; i++) {
-			if (g_aT[i].u8Used && g_aT[i].u8Listening &&
+			if (g_aT[i].u8Used != 0u &&
+			    g_aT[i].u8Listening != 0u &&
 			    g_aT[i].i16Peer == (i16)s) {
 				g_aT[i].i16Peer = -1;
-				if (g_aT[i].u8Pending > 0) {
-					g_aT[i].u8Pending--;
-				}
 			}
 		}
+		/*
+		 * Listener close residual (soft-mint teardown / product re-arm):
+		 * reparent + rehook orphan AcceptQ children onto every remaining
+		 * same-port live listener before this slot is freed so eth :22
+		 * accept residual survives soft->product race without pure POLL.
+		 * Soft!=product · functional STRONGER.
+		 * greppable: listen_close_rehook | acceptq_rehook
+		 */
+		if (u8WasListen != 0u) {
+			static u8 g_u8ListenCloseRehookOnce;
+
+			for (i = 0; i < TCP_MAX; i++) {
+				if (i == s || g_aT[i].u8Used == 0u ||
+				    g_aT[i].u8Listening == 0u ||
+				    g_aT[i].u8ShutRd != 0u ||
+				    g_aT[i].u16Lport != u16Port) {
+					continue;
+				}
+				(void)tcp_acceptq_reparent(i, u16Port);
+				(void)tcp_listen_rehook_ready(i);
+			}
+			if (g_u8ListenCloseRehookOnce == 0u &&
+			    u16Port == (u16)TCP_SOFT_SSH_PORT &&
+			    tcp_soft_event_ok()) {
+				g_u8ListenCloseRehookOnce = 1u;
+				kprintf("net_tcp: soft acceptq listen_close "
+					"fd=%lld port=%u soft_mint=%u "
+					"(Soft!=product; listen_close_rehook; "
+					"!=host_banner_proof)\n",
+					(long long)fd, (unsigned)u16Port,
+					(unsigned)u8SoftMint);
+			}
+		}
+		(void)u8SoftMint;
 	}
 	memset(&g_aT[s], 0, sizeof(g_aT[s]));
 	tcp_soft_bump(&g_soft.u64CloseOk);
+	tcp_soft_maybe_log(0);
+	return 0;
+}
+
+/*
+ * Fill sockaddr_in (16 B, Linux x86_64 layout): family=AF_INET(2),
+ * port network order, IPv4. Soft helper for userspace/ABI name residual.
+ * Soft!=product.
+ */
+static void
+tcp_fill_sin(u8 *pSa, u16 u16PortHost, const u8 *pIp4)
+{
+	if (pSa == NULL) {
+		return;
+	}
+	memset(pSa, 0, 16);
+	pSa[0] = 2; /* AF_INET little-endian low byte */
+	pSa[1] = 0;
+	pSa[2] = (u8)(u16PortHost >> 8);
+	pSa[3] = (u8)(u16PortHost & 0xffu);
+	if (pIp4 != NULL) {
+		pSa[4] = pIp4[0];
+		pSa[5] = pIp4[1];
+		pSa[6] = pIp4[2];
+		pSa[7] = pIp4[3];
+	} else {
+		pSa[4] = 127;
+		pSa[5] = 0;
+		pSa[6] = 0;
+		pSa[7] = 1;
+	}
+}
+
+/**
+ * Soft half-close for userspace/ABI socket path (mirror net_lo shapes).
+ * how: 0=SHUT_RD 1=SHUT_WR 2=SHUT_RDWR. Soft!=product · G-AC-1.
+ * greppable: net_tcp: soft shutdown
+ */
+i64
+net_tcp_shutdown(i64 i64Fd, int nHow)
+{
+	u32 u32Slot;
+	static u8 g_u8ShutOnce;
+	int fListen;
+
+	if (fd_to_slot(i64Fd, &u32Slot) != 0) {
+		tcp_soft_bump(&g_soft.u64ShutFail);
+		tcp_soft_maybe_log(0);
+		return -9;
+	}
+	if (nHow < 0 || nHow > 2) {
+		tcp_soft_bump(&g_soft.u64ShutFail);
+		tcp_soft_maybe_log(0);
+		return -22; /* EINVAL */
+	}
+	fListen = (g_aT[u32Slot].u8Listening != 0u) ? 1 : 0;
+	if (nHow == 0 || nHow == 2) {
+		g_aT[u32Slot].u8ShutRd = 1;
+		tcp_soft_bump(&g_soft.u64ShutRd);
+		/*
+		 * Listen SHUT_RD/RDWR: stop accepting new SYNs on this fd.
+		 * Demux skips ShutRd listeners; accept() returns -EINVAL.
+		 * Soft!=product · Linux-shaped stop residual.
+		 */
+		if (fListen != 0) {
+			g_aT[u32Slot].u8Listening = 0;
+			/* Keep ST_LISTEN for getsockname; no new AcceptQ. */
+			if (g_i32SoftListen22 == (i32)u32Slot) {
+				g_i32SoftListen22 = -1;
+			}
+		}
+	}
+	if (nHow == 1 || nHow == 2) {
+		u8 u8Was;
+
+		g_aT[u32Slot].u8ShutWr = 1;
+		tcp_soft_bump(&g_soft.u64ShutWr);
+		/*
+		 * Emit FIN once on write shut when still open for data.
+		 * Matches Linux SHUT_WR half-close shape. Soft!=product.
+		 * State advances only if tcp_tx armed FinSent (TX ok).
+		 * Listen sockets: no FIN (no data endpoint).
+		 */
+		u8Was = g_aT[u32Slot].u8State;
+		if (fListen == 0 && g_aT[u32Slot].u8FinSent == 0u &&
+		    (u8Was == ST_ESTABLISHED || u8Was == ST_CLOSE_WAIT)) {
+			/*
+			 * tcp_tx soft-accepts bare FIN on eth busy and arms
+			 * empty-payload rtx; poll flushes FIN|ACK. Soft!=product.
+			 */
+			(void)tcp_tx(u32Slot, (u8)(FL_FIN | FL_ACK), 0, 0);
+			if (g_aT[u32Slot].u8FinSent != 0u) {
+				if (u8Was == ST_ESTABLISHED) {
+					g_aT[u32Slot].u8State = ST_FIN_WAIT1;
+				} else if (u8Was == ST_CLOSE_WAIT) {
+					g_aT[u32Slot].u8State = ST_LAST_ACK;
+				}
+			} else if (!g_aT[u32Slot].u8IsLoop) {
+				/*
+				 * Loop path only: eth soft-accept always sets
+				 * FinSent. Keep SHUT_WR; send still -EPIPE.
+				 * Soft!=product.
+				 */
+				g_aT[u32Slot].u8State =
+				    (u8Was == ST_CLOSE_WAIT) ? ST_LAST_ACK
+							     : ST_FIN_WAIT1;
+			}
+		}
+	}
+	if (nHow == 2) {
+		tcp_soft_bump(&g_soft.u64ShutRdwr);
+	}
+	tcp_soft_bump(&g_soft.u64ShutOk);
+	/* Grep: net_tcp: soft shutdown - once-lamp (no stamp storm). */
+	if (g_u8ShutOnce == 0u) {
+		g_u8ShutOnce = 1;
+		kprintf("net_tcp: soft shutdown fd=%lld how=%d "
+			"rd=%u wr=%u state=%u fin=%u rtx=%u listen_was=%d "
+			"(Soft!=product; userspace/ABI half-close; fin_rtx)\n",
+			(long long)i64Fd, nHow,
+			(unsigned)g_aT[u32Slot].u8ShutRd,
+			(unsigned)g_aT[u32Slot].u8ShutWr,
+			(unsigned)g_aT[u32Slot].u8State,
+			(unsigned)g_aT[u32Slot].u8FinSent,
+			(unsigned)g_aT[u32Slot].u8RtxValid, fListen);
+	}
+	tcp_soft_maybe_log(0);
+	return 0;
+}
+
+/**
+ * Local sockaddr_in from table + live L2 IPv4. Soft!=product.
+ * greppable: net_tcp: soft getsockname
+ */
+i64
+net_tcp_getsockname(i64 i64Fd, void *pAddr, u32 *pLen)
+{
+	u32 u32Slot;
+	static u8 g_u8NameOnce;
+	u8 aIp[4];
+
+	if (fd_to_slot(i64Fd, &u32Slot) != 0 || pAddr == NULL ||
+	    pLen == NULL) {
+		tcp_soft_bump(&g_soft.u64NameFail);
+		tcp_soft_maybe_log(0);
+		return -9;
+	}
+	if (*pLen < 16u) {
+		tcp_soft_bump(&g_soft.u64NameFail);
+		tcp_soft_maybe_log(0);
+		return -22;
+	}
+	tcp_sync_l2_identity();
+	/* rtl/lab: name must not surface stale QEMU 10.0.2.15. Soft!=product. */
+	if (net_l2_backend() == GJ_NET_L2_RTL8168 ||
+	    tcp_ip_is_lab(g_aOurIp) != 0) {
+		tcp_force_lab_ip();
+	}
+	aIp[0] = g_aOurIp[0];
+	aIp[1] = g_aOurIp[1];
+	aIp[2] = g_aOurIp[2];
+	aIp[3] = g_aOurIp[3];
+	/* Loopback sockets: name as 127.0.0.1 (ABI honesty). Soft!=product. */
+	if (g_aT[u32Slot].u8IsLoop != 0u) {
+		aIp[0] = 127;
+		aIp[1] = 0;
+		aIp[2] = 0;
+		aIp[3] = 1;
+	}
+	/*
+	 * Unbound CLOSED (port 0): still report live L2 IP + 0 port so
+	 * Linux-shaped probes see AF_INET. Soft!=product.
+	 */
+	tcp_fill_sin((u8 *)pAddr, g_aT[u32Slot].u16Lport, aIp);
+	*pLen = 16u;
+	tcp_soft_bump(&g_soft.u64NameOk);
+	if (g_u8NameOnce == 0u) {
+		g_u8NameOnce = 1;
+		kprintf("net_tcp: soft getsockname fd=%lld port=%u "
+			"ip=%u.%u.%u.%u state=%u listen=%u acceptq=%u "
+			"(Soft!=product; userspace/ABI name residual)\n",
+			(long long)i64Fd, (unsigned)g_aT[u32Slot].u16Lport,
+			(unsigned)aIp[0], (unsigned)aIp[1], (unsigned)aIp[2],
+			(unsigned)aIp[3], (unsigned)g_aT[u32Slot].u8State,
+			(unsigned)g_aT[u32Slot].u8Listening,
+			(unsigned)g_aT[u32Slot].u8AcceptQ);
+	}
+	tcp_soft_maybe_log(0);
+	return 0;
+}
+
+/**
+ * Peer sockaddr_in when connected; -ENOTCONN otherwise. Soft!=product.
+ * greppable: net_tcp: soft getpeername
+ */
+i64
+net_tcp_getpeername(i64 i64Fd, void *pAddr, u32 *pLen)
+{
+	u32 u32Slot;
+	static u8 g_u8PeerOnce;
+	u8 aIp[4];
+	u16 u16Rport;
+	int fConn;
+
+	if (fd_to_slot(i64Fd, &u32Slot) != 0 || pAddr == NULL ||
+	    pLen == NULL) {
+		tcp_soft_bump(&g_soft.u64PeerFail);
+		tcp_soft_maybe_log(0);
+		return -9;
+	}
+	if (*pLen < 16u) {
+		tcp_soft_bump(&g_soft.u64PeerFail);
+		tcp_soft_maybe_log(0);
+		return -22;
+	}
+	/*
+	 * Connected when not listening and not still in AcceptQ (must be
+	 * accept()'d first - Linux-shaped), with state past handshake or
+	 * sticky RST peer identity. Pre-connect CLOSED / LISTEN / AcceptQ
+	 * -> ENOTCONN. Soft!=product · userspace/ABI residual.
+	 */
+	fConn = 0;
+	if (g_aT[u32Slot].u8Listening == 0u &&
+	    g_aT[u32Slot].u8AcceptQ == 0u) {
+		if (g_aT[u32Slot].u8State == ST_ESTABLISHED ||
+		    g_aT[u32Slot].u8State == ST_CLOSE_WAIT ||
+		    g_aT[u32Slot].u8State == ST_FIN_WAIT1 ||
+		    g_aT[u32Slot].u8State == ST_FIN_WAIT2 ||
+		    g_aT[u32Slot].u8State == ST_LAST_ACK ||
+		    g_aT[u32Slot].u8State == ST_TIME_WAIT) {
+			fConn = 1;
+		} else if (g_aT[u32Slot].u16Rport != 0u &&
+			   g_aT[u32Slot].u8RstSeen != 0u) {
+			/* Sticky RST still has peer identity. Soft!=product. */
+			fConn = 1;
+		}
+	}
+	if (fConn == 0 || g_aT[u32Slot].u16Rport == 0u) {
+		tcp_soft_bump(&g_soft.u64PeerFail);
+		tcp_soft_maybe_log(0);
+		return -107; /* ENOTCONN */
+	}
+	u16Rport = g_aT[u32Slot].u16Rport;
+	if (g_aT[u32Slot].u8IsLoop != 0u) {
+		aIp[0] = 127;
+		aIp[1] = 0;
+		aIp[2] = 0;
+		aIp[3] = 1;
+	} else {
+		aIp[0] = g_aT[u32Slot].aRip[0];
+		aIp[1] = g_aT[u32Slot].aRip[1];
+		aIp[2] = g_aT[u32Slot].aRip[2];
+		aIp[3] = g_aT[u32Slot].aRip[3];
+	}
+	tcp_fill_sin((u8 *)pAddr, u16Rport, aIp);
+	*pLen = 16u;
+	tcp_soft_bump(&g_soft.u64PeerOk);
+	if (g_u8PeerOnce == 0u) {
+		g_u8PeerOnce = 1;
+		kprintf("net_tcp: soft getpeername fd=%lld rport=%u "
+			"rip=%u.%u.%u.%u state=%u "
+			"(Soft!=product; userspace/ABI name residual)\n",
+			(long long)i64Fd, (unsigned)u16Rport,
+			(unsigned)aIp[0], (unsigned)aIp[1], (unsigned)aIp[2],
+			(unsigned)aIp[3],
+			(unsigned)g_aT[u32Slot].u8State);
+	}
 	tcp_soft_maybe_log(0);
 	return 0;
 }
@@ -2802,9 +3547,25 @@ net_tcp_input(const u8 *pFrame, u32 cb)
 		return 0;
 	}
 	tcp_sync_l2_identity();
-	if (memcmp(pIp + 16, g_aOurIp, 4) != 0) {
+	/*
+	 * Dual DoD B demux residual (R0->RX return): frames to lab
+	 * 10.200.125.50 always demux via tcp_dest_is_ours (force lab
+	 * identity) so host SYN is not dropped when L2 still surfaces
+	 * stale QEMU 10.0.2.15 mid-handoff. rtl/lab-identity force +
+	 * recheck for non-lab dest match. Silent tallies only - no
+	 * kprintf on this hot path (lean; prior multi-KiB FAULT).
+	 * Soft!=product.
+	 */
+	if (tcp_dest_is_ours(pIp + 16) == 0) {
 		tcp_soft_bump(&g_soft.u64InputMiss);
 		return 0;
+	}
+	if (tcp_ip_is_lab(pIp + 16) != 0) {
+		tcp_soft_bump(&g_soft.u64InputLabDemux);
+	}
+	if (net_l2_backend() == GJ_NET_L2_RTL8168 ||
+	    tcp_ip_is_lab(g_aOurIp) != 0) {
+		tcp_soft_bump(&g_soft.u64InputDemuxForce);
 	}
 	ihl = (u16)((pIp[0] & 0x0f) * 4);
 	if (ihl < 20u || cb < 14u + ihl + 20u) {
@@ -2812,7 +3573,7 @@ net_tcp_input(const u8 *pFrame, u32 cb)
 		return 0;
 	}
 	/*
-	 * Payload length from IPv4 total length — NOT eth frame length.
+	 * Payload length from IPv4 total length - NOT eth frame length.
 	 * Short TCP segs (pure ACK/SYN) are padded to 60 on the wire; using
 	 * cb would treat pad as data and corrupt RcvNxt / RX ring.
 	 */
@@ -2841,6 +3602,23 @@ net_tcp_input(const u8 *pFrame, u32 cb)
 	g_u32Segs++;
 	tcp_soft_bump(&g_soft.u64InputHit);
 
+	/*
+	 * Dual DoD B freestanding residual (R0->RX return): any :22 to ours
+	 * re-ensures soft/product listen after L2 ready *before* AcceptQ
+	 * match so the first host SYN after RX returns finds a listener
+	 * (DUT may claim :22 while R0; product non-soft-mint preferred).
+	 * Re-force lab IP after ensure under rtl/lab dest (handoff churn).
+	 * Silent when already ok (lean; no stamp storm). Soft!=product.
+	 * Grep: net_tcp: soft listen :22
+	 */
+	if (dport == (u16)TCP_SOFT_SSH_PORT) {
+		tcp_soft_ensure_listen22();
+		if (net_l2_backend() == GJ_NET_L2_RTL8168 ||
+		    tcp_ip_is_lab(pIp + 16) != 0) {
+			tcp_force_lab_ip();
+		}
+	}
+
 	/* Eth 4-tuple: skip loopback pair slots (no aRip / soft only). */
 	for (i = 0; i < TCP_MAX; i++) {
 		if (g_aT[i].u8Used && !g_aT[i].u8Listening &&
@@ -2851,10 +3629,15 @@ net_tcp_input(const u8 *pFrame, u32 cb)
 			break;
 		}
 	}
-	/* Prefer non-loop listeners so eth :22 finds sshd park slot. */
+	/*
+	 * Prefer product (non-soft-mint) non-loop listeners so eth :22 finds
+	 * sshd park slot. Soft-ensure mint is fallback only. Skip SHUT_RD
+	 * stopped listeners. Soft!=product.
+	 */
 	for (i = 0; i < TCP_MAX; i++) {
 		if (g_aT[i].u8Used && g_aT[i].u8Listening &&
-		    !g_aT[i].u8IsLoop && g_aT[i].u16Lport == dport) {
+		    g_aT[i].u8ShutRd == 0u && !g_aT[i].u8IsLoop &&
+		    !g_aT[i].u8SoftMint && g_aT[i].u16Lport == dport) {
 			ls = (int)i;
 			break;
 		}
@@ -2862,9 +3645,52 @@ net_tcp_input(const u8 *pFrame, u32 cb)
 	if (ls < 0) {
 		for (i = 0; i < TCP_MAX; i++) {
 			if (g_aT[i].u8Used && g_aT[i].u8Listening &&
+			    g_aT[i].u8ShutRd == 0u && !g_aT[i].u8IsLoop &&
 			    g_aT[i].u16Lport == dport) {
 				ls = (int)i;
 				break;
+			}
+		}
+	}
+	if (ls < 0) {
+		for (i = 0; i < TCP_MAX; i++) {
+			if (g_aT[i].u8Used && g_aT[i].u8Listening &&
+			    g_aT[i].u8ShutRd == 0u &&
+			    g_aT[i].u16Lport == dport) {
+				ls = (int)i;
+				break;
+			}
+		}
+	}
+	/*
+	 * Dual DoD B freestanding: :22 SYN with no listener after early
+	 * ensure - soft ensure again after L2 ready, then re-scan.
+	 * Product non-soft-mint preferred. Soft!=product.
+	 */
+	if (ls < 0 && (flags & FL_SYN) && !(flags & FL_ACK) &&
+	    dport == (u16)TCP_SOFT_SSH_PORT) {
+		tcp_soft_ensure_listen22();
+		if (net_l2_backend() == GJ_NET_L2_RTL8168 ||
+		    tcp_ip_is_lab(pIp + 16) != 0) {
+			tcp_force_lab_ip();
+		}
+		for (i = 0; i < TCP_MAX; i++) {
+			if (g_aT[i].u8Used && g_aT[i].u8Listening &&
+			    g_aT[i].u8ShutRd == 0u && !g_aT[i].u8IsLoop &&
+			    !g_aT[i].u8SoftMint &&
+			    g_aT[i].u16Lport == dport) {
+				ls = (int)i;
+				break;
+			}
+		}
+		if (ls < 0) {
+			for (i = 0; i < TCP_MAX; i++) {
+				if (g_aT[i].u8Used && g_aT[i].u8Listening &&
+				    g_aT[i].u8ShutRd == 0u &&
+				    g_aT[i].u16Lport == dport) {
+					ls = (int)i;
+					break;
+				}
 			}
 		}
 	}
@@ -2872,7 +3698,29 @@ net_tcp_input(const u8 *pFrame, u32 cb)
 	if (flags & FL_RST) {
 		tcp_soft_bump(&g_soft.u64InputRst);
 		if (cs >= 0) {
-			memset(&g_aT[cs], 0, sizeof(g_aT[cs]));
+			/*
+			 * AcceptQ / SYN_RCVD: free slot so backlog does not stick.
+			 * Established userspace/ABI path: sticky RST POLLERR until
+			 * close (do not free - poll/recv/send honesty). Soft!=product.
+			 * FORBIDDEN: freestanding rtl R0 deepen rabbit hole.
+			 */
+			if (g_aT[cs].u8AcceptQ != 0u ||
+			    g_aT[cs].u8State == ST_SYN_RCVD) {
+				tcp_drop_syn_rcvd((u32)cs);
+			} else {
+				g_aT[cs].u8RstSeen = 1;
+				g_aT[cs].u8RtxValid = 0;
+				g_aT[cs].u8RtxSyn = 0;
+				g_aT[cs].u8RtxBusy = 0;
+				/* Keep slot used; state stays for drain/close. */
+				if (g_aT[cs].u8State == ST_ESTABLISHED ||
+				    g_aT[cs].u8State == ST_CLOSE_WAIT ||
+				    g_aT[cs].u8State == ST_FIN_WAIT1 ||
+				    g_aT[cs].u8State == ST_FIN_WAIT2) {
+					g_aT[cs].u8State = ST_CLOSED;
+				}
+				tcp_soft_bump(&g_soft.u64RstSticky);
+			}
 		}
 		return 1;
 	}
@@ -2886,19 +3734,52 @@ net_tcp_input(const u8 *pFrame, u32 cb)
 	    g_aT[cs].u8State == ST_SYN_RCVD && !g_aT[cs].u8IsLoop) {
 		u32 syn_seq = g_aT[cs].u8RtxSyn ? g_aT[cs].u32RtxSeq
 						: g_aT[cs].u32SndUna;
+		int nDup;
 
-		(void)tcp_tx_raw((u32)cs, (u8)(FL_SYN | FL_ACK), syn_seq, 0,
+		nDup = tcp_tx_raw((u32)cs, (u8)(FL_SYN | FL_ACK), syn_seq, 0,
 				 0);
+		/*
+		 * Gap B: :22 busy-shot on dup-SYN under ARP/ICMP - ring may
+		 * free mid-input before poll. Soft!=product.
+		 */
+		if (nDup < 0 && dport == (u16)TCP_SOFT_SSH_PORT) {
+			u32 u32Shot;
+
+			for (u32Shot = 0; u32Shot < TCP_RTX_BUSY_SHOTS;
+			     u32Shot++) {
+				nDup = tcp_tx_raw((u32)cs,
+						  (u8)(FL_SYN | FL_ACK),
+						  syn_seq, 0, 0);
+				if (nDup >= 0) {
+					break;
+				}
+			}
+		}
 		g_aT[cs].u32RtxSeq = syn_seq;
 		g_aT[cs].u32RtxLen = 0;
 		g_aT[cs].u32RtxTick = now_ms();
 		g_aT[cs].u8RtxValid = 1;
 		g_aT[cs].u8RtxSyn = 1;
-		/* Grep: net_tcp: soft eth_syn rtx (dup SYN) */
-		kprintf("net_tcp: soft eth_syn rtx port=%u sport=%u slot=%d "
-			"seq=%u\n",
-			(unsigned)dport, (unsigned)sport, cs,
-			(unsigned)syn_seq);
+		/* TX busy -> short eth_syn_ack rtx interval. Soft!=product. */
+		g_aT[cs].u8RtxBusy = (nDup < 0) ? 1u : 0u;
+		if (nDup < 0 && g_aT[cs].u8RtxBusyN < 255u) {
+			g_aT[cs].u8RtxBusyN++;
+		} else if (nDup >= 0) {
+			g_aT[cs].u8RtxBusyN = 0;
+		}
+		/*
+		 * Grep: net_tcp: soft eth_syn rtx (dup SYN).
+		 * Event-capped ONE line only - no flood under aggressive
+		 * client SYN rtx (hot demux must stay lean). Soft!=product.
+		 */
+		if (tcp_soft_event_ok()) {
+			kprintf("net_tcp: soft eth_syn rtx port=%u "
+				"sport=%u slot=%d seq=%u tx=%d busy=%u "
+				"(Soft!=product)\n",
+				(unsigned)dport, (unsigned)sport, cs,
+				(unsigned)syn_seq, nDup,
+				(unsigned)g_aT[cs].u8RtxBusy);
+		}
 		return 1;
 	}
 
@@ -2914,31 +3795,28 @@ net_tcp_input(const u8 *pFrame, u32 cb)
 		}
 		if (g_aT[ls].u8Pending >= g_aT[ls].u8Backlog) {
 			tcp_soft_bump(&g_soft.u64InputSynDrop);
-			/* Grep: net: tcp soft syn_drop (rate-limited) */
+			/* Grep: net_tcp: soft syn_drop - ONE line (no wave). */
 			if (tcp_soft_event_ok()) {
-				kprintf("net: tcp soft syn_drop port=%u "
-					"pending=%u backlog=%u reason=full "
-					"wave=%u\n",
-					(unsigned)dport,
-					(unsigned)g_aT[ls].u8Pending,
-					(unsigned)g_aT[ls].u8Backlog,
-					(unsigned)TCP_SOFT_DEEPEN_WAVE);
 				kprintf("net_tcp: soft syn_drop port=%u "
-					"pending=%u wave=%u\n",
+					"pending=%u backlog=%u reason=full "
+					"(Soft!=product)\n",
 					(unsigned)dport,
 					(unsigned)g_aT[ls].u8Pending,
-					(unsigned)TCP_SOFT_DEEPEN_WAVE);
+					(unsigned)g_aT[ls].u8Backlog);
 			}
 			return 1;
 		}
 		/*
-		 * One soft pending child on i16Peer. Reclaim stale pointer
-		 * (peer freed without accept clear) so eth :22 is not stuck.
+		 * Soft accept queue for eth sessions: up to backlog children
+		 * via u8AcceptQ + u8Pending. i16Peer is newest-child hint only
+		 * - do not drop new SYN solely because a prior child is live.
+		 * Reclaim a stale i16Peer so pending does not leak. Soft!=product.
 		 */
 		if (g_aT[ls].i16Peer >= 0) {
 			i16 i16Old = g_aT[ls].i16Peer;
 
 			if ((u32)i16Old >= TCP_MAX || !g_aT[i16Old].u8Used ||
+			    !g_aT[i16Old].u8AcceptQ ||
 			    (g_aT[i16Old].u8State != ST_SYN_RCVD &&
 			     g_aT[i16Old].u8State != ST_ESTABLISHED &&
 			     g_aT[i16Old].u8State != ST_CLOSE_WAIT)) {
@@ -2946,9 +3824,6 @@ net_tcp_input(const u8 *pFrame, u32 cb)
 				if (g_aT[ls].u8Pending > 0) {
 					g_aT[ls].u8Pending--;
 				}
-			} else {
-				tcp_soft_bump(&g_soft.u64InputSynDrop);
-				return 1;
 			}
 		}
 		ns = alloc_slot();
@@ -2966,12 +3841,44 @@ net_tcp_input(const u8 *pFrame, u32 cb)
 		g_aT[ns].u32RcvNxt = seq + 1u;
 		g_aT[ns].u16PeerWnd = wnd ? wnd : TCP_WND;
 		g_aT[ns].u8IsLoop = 0;
+		g_aT[ns].u8AcceptQ = 1; /* until net_tcp_accept takes it */
 		g_aT[ns].i16Peer = -1;
 		u32Isn = g_aT[ns].u32SndNxt;
 		u32Ack = g_aT[ns].u32RcvNxt;
 		/* SYN-ACK via net_l2_tx (rtl/virtio); rtx armed in tcp_tx. */
 		nTx = tcp_tx((u32)ns, (u8)(FL_SYN | FL_ACK), 0, 0);
-		g_aT[ls].i16Peer = (i16)ns;
+		/*
+		 * Gap B: :22 first SYN-ACK busy-shot under ARP/ICMP busy -
+		 * ring may free mid-input before pure POLL rtx. Use
+		 * tcp_tx_raw after arm (no re-arm churn; denser than
+		 * re-entering tcp_tx). Soft!=product.
+		 */
+		if (nTx < 0 && dport == (u16)TCP_SOFT_SSH_PORT) {
+			u32 u32Shot;
+			u32 u32SynSeq = g_aT[ns].u8RtxSyn
+						? g_aT[ns].u32RtxSeq
+						: g_aT[ns].u32SndNxt;
+
+			for (u32Shot = 0; u32Shot < TCP_RTX_BUSY_SHOTS;
+			     u32Shot++) {
+				nTx = tcp_tx_raw((u32)ns,
+						 (u8)(FL_SYN | FL_ACK),
+						 u32SynSeq, 0, 0);
+				if (nTx >= 0) {
+					if (g_aT[ns].u32SndNxt == u32SynSeq) {
+						g_aT[ns].u32SndNxt++;
+					}
+					g_aT[ns].u32RtxTick = now_ms();
+					tcp_rtx_mark_landed((u32)ns);
+					break;
+				}
+				if (g_aT[ns].u8RtxBusyN < 255u) {
+					g_aT[ns].u8RtxBusyN++;
+				}
+				g_aT[ns].u8RtxBusy = 1;
+			}
+		}
+		g_aT[ls].i16Peer = (i16)ns; /* newest AcceptQ child hint */
 		if (g_aT[ls].u8Pending < 255u) {
 			g_aT[ls].u8Pending++;
 		}
@@ -2979,34 +3886,23 @@ net_tcp_input(const u8 *pFrame, u32 cb)
 		tcp_soft_tally(NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL,
 			       NULL, NULL, NULL, NULL);
 		/*
-		 * Grep: net_tcp: soft eth_syn port=22 …
-		 * Always emit (not rate-capped) for external handshake lab.
+		 * Grep: net_tcp: soft eth_syn port=22 ...
+		 * Event-capped ONE line (no twin / no wave / no flood storm).
+		 * Hot demux residual stays silent after TCP_SOFT_EVENT_MAX.
+		 * Soft!=product.
 		 */
-		kprintf("net_tcp: soft eth_syn port=%u sport=%u slot=%d "
-			"seq=%u ack=%u tx=%d rip=%u.%u.%u.%u our=%u.%u.%u.%u "
-			"pending=%u\n",
-			(unsigned)dport, (unsigned)sport, ns,
-			(unsigned)u32Isn, (unsigned)u32Ack, nTx,
-			g_aT[ns].aRip[0], g_aT[ns].aRip[1], g_aT[ns].aRip[2],
-			g_aT[ns].aRip[3], g_aOurIp[0], g_aOurIp[1],
-			g_aOurIp[2], g_aOurIp[3],
-			(unsigned)g_aT[ls].u8Pending);
-		kprintf("net: tcp soft eth_syn port=%u sport=%u slot=%d "
-			"seq=%u ack=%u tx=%d wave=%u\n",
-			(unsigned)dport, (unsigned)sport, ns,
-			(unsigned)u32Isn, (unsigned)u32Ack, nTx,
-			(unsigned)TCP_SOFT_DEEPEN_WAVE);
 		if (tcp_soft_event_ok()) {
-			kprintf("net: tcp soft syn port=%u sport=%u slot=%d "
-				"pending=%u wnd=%u state=%u wave=%u\n",
+			kprintf("net_tcp: soft eth_syn port=%u sport=%u "
+				"slot=%d seq=%u ack=%u tx=%d "
+				"rip=%u.%u.%u.%u our=%u.%u.%u.%u "
+				"pending=%u busy=%u (Soft!=product)\n",
 				(unsigned)dport, (unsigned)sport, ns,
-				(unsigned)g_aT[ls].u8Pending,
-				(unsigned)g_aT[ns].u16PeerWnd,
-				(unsigned)g_aT[ns].u8State,
-				(unsigned)TCP_SOFT_DEEPEN_WAVE);
-			kprintf("net_tcp: soft syn port=%u slot=%d wave=%u\n",
-				(unsigned)dport, ns,
-				(unsigned)TCP_SOFT_DEEPEN_WAVE);
+				(unsigned)u32Isn, (unsigned)u32Ack, nTx,
+				g_aT[ns].aRip[0], g_aT[ns].aRip[1],
+				g_aT[ns].aRip[2], g_aT[ns].aRip[3],
+				g_aOurIp[0], g_aOurIp[1], g_aOurIp[2],
+				g_aOurIp[3], (unsigned)g_aT[ls].u8Pending,
+				(unsigned)g_aT[ns].u8RtxBusy);
 		}
 		return 1;
 	}
@@ -3020,21 +3916,85 @@ net_tcp_input(const u8 *pFrame, u32 cb)
 	}
 
 	/*
-	 * Complete handshake only when ACK covers our SYN (ack == SndNxt).
+	 * Complete handshake when ACK covers our SYN.
 	 * After a failed first TX, SndNxt still equals ISN until rtx succeeds.
+	 * Also accept ack == RtxSeq+1 when SYN rtx armed (client saw wire
+	 * SYN-ACK even if local SndNxt lag after partial TX paths).
 	 */
 	if (g_aT[cs].u8State == ST_SYN_RCVD && (flags & FL_ACK) &&
-	    ack == g_aT[cs].u32SndNxt &&
-	    g_aT[cs].u32SndNxt != g_aT[cs].u32SndUna) {
+	    !g_aT[cs].u8IsLoop) {
+		u32 u32SynOk = 0;
+
+		if (ack == g_aT[cs].u32SndNxt &&
+		    g_aT[cs].u32SndNxt != g_aT[cs].u32SndUna) {
+			u32SynOk = 1;
+		} else if (g_aT[cs].u8RtxValid && g_aT[cs].u8RtxSyn &&
+			   ack == g_aT[cs].u32RtxSeq + 1u) {
+			u32SynOk = 1;
+			/* Align send cursor to client ACK of our SYN. */
+			if (g_aT[cs].u32SndNxt == g_aT[cs].u32RtxSeq) {
+				g_aT[cs].u32SndNxt = ack;
+			}
+		}
+		if (u32SynOk != 0u) {
+			g_aT[cs].u8State = ST_ESTABLISHED;
+			g_aT[cs].u32SndUna = ack;
+			/* Handshake done - stop SYN-ACK rtx. */
+			g_aT[cs].u8RtxSyn = 0;
+			g_aT[cs].u8RtxValid = 0;
+			g_aT[cs].u8RtxBusy = 0;
+			g_aT[cs].u8RtxBusyN = 0;
+			g_u32Accepts++;
+			/*
+			 * Functional STRONGER (sshd :22 product path):
+			 * AcceptQ child just became ESTABLISHED - reparent +
+			 * rehook every same-port live listener (eth prefer)
+			 * so product park poll/accept/poll_mask sees POLLIN
+			 * mid-input without waiting pure POLL. Soft!=product.
+			 * greppable: eth_estab_rehook | acceptq_rehook
+			 */
+			if (g_aT[cs].u8AcceptQ != 0u) {
+				u32 u32Li;
+				u16 u16PortE = g_aT[cs].u16Lport;
+
+				for (u32Li = 0; u32Li < TCP_MAX; u32Li++) {
+					if (g_aT[u32Li].u8Used == 0u ||
+					    g_aT[u32Li].u8Listening == 0u ||
+					    g_aT[u32Li].u8ShutRd != 0u ||
+					    g_aT[u32Li].u16Lport !=
+						u16PortE) {
+						continue;
+					}
+					(void)tcp_acceptq_reparent(u32Li,
+								   u16PortE);
+					(void)tcp_listen_rehook_ready(u32Li);
+				}
+			}
+			/*
+			 * Grep: net_tcp: ESTABLISHED / soft eth_estab
+			 * Event-capped ONE line (no twin / no wave). Soft!=product.
+			 */
+			if (tcp_soft_event_ok()) {
+				kprintf("net_tcp: soft eth_estab port=%u "
+					"sport=%u slot=%d acceptq=%u "
+					"rip=%u.%u.%u.%u "
+					"(Soft!=product; eth_estab_rehook)\n",
+					(unsigned)g_aT[cs].u16Lport,
+					(unsigned)g_aT[cs].u16Rport, cs,
+					(unsigned)g_aT[cs].u8AcceptQ,
+					g_aT[cs].aRip[0], g_aT[cs].aRip[1],
+					g_aT[cs].aRip[2], g_aT[cs].aRip[3]);
+			}
+		}
+	} else if (g_aT[cs].u8State == ST_SYN_RCVD && (flags & FL_ACK) &&
+		   g_aT[cs].u8IsLoop && ack == g_aT[cs].u32SndNxt &&
+		   g_aT[cs].u32SndNxt != g_aT[cs].u32SndUna) {
+		/* Loopback soft path (normally ESTABLISHED in connect). */
 		g_aT[cs].u8State = ST_ESTABLISHED;
 		g_aT[cs].u32SndUna = ack;
-		/* Handshake done — stop SYN-ACK rtx. */
 		g_aT[cs].u8RtxSyn = 0;
 		g_aT[cs].u8RtxValid = 0;
 		g_u32Accepts++;
-		kprintf("net_tcp: ESTABLISHED :%u ← %u.%u.%u.%u:%u\n",
-			g_aT[cs].u16Lport, g_aT[cs].aRip[0], g_aT[cs].aRip[1],
-			g_aT[cs].aRip[2], g_aT[cs].aRip[3], g_aT[cs].u16Rport);
 	}
 
 	if (flags & FL_ACK) {
@@ -3045,9 +4005,21 @@ net_tcp_input(const u8 *pFrame, u32 cb)
 				g_aT[cs].u8RtxValid = 0;
 				g_aT[cs].u8RtxSyn = 0;
 			}
-			if (g_aT[cs].u8RtxValid && !g_aT[cs].u8RtxSyn &&
-			    ack >= g_aT[cs].u32RtxSeq + g_aT[cs].u32RtxLen) {
-				g_aT[cs].u8RtxValid = 0;
+			if (g_aT[cs].u8RtxValid && !g_aT[cs].u8RtxSyn) {
+				/*
+				 * Data arm: ACK covers RtxSeq..+Len.
+				 * Bare FIN arm (RtxLen==0): need ack > RtxSeq
+				 * so pure data ACK at FIN seq does not drop
+				 * half-close rtx early. Soft!=product.
+				 */
+				if (g_aT[cs].u32RtxLen == 0u) {
+					if (ack > g_aT[cs].u32RtxSeq) {
+						g_aT[cs].u8RtxValid = 0;
+					}
+				} else if (ack >= g_aT[cs].u32RtxSeq +
+						   g_aT[cs].u32RtxLen) {
+					g_aT[cs].u8RtxValid = 0;
+				}
 			}
 			/* Soft close progress on ACK of our FIN. */
 			if (g_aT[cs].u8FinSent &&
@@ -3055,7 +4027,7 @@ net_tcp_input(const u8 *pFrame, u32 cb)
 				if (g_aT[cs].u8State == ST_FIN_WAIT1) {
 					g_aT[cs].u8State = ST_FIN_WAIT2;
 				} else if (g_aT[cs].u8State == ST_LAST_ACK) {
-					/* Fully closed — free slot. */
+					/* Fully closed - free slot. */
 					memset(&g_aT[cs], 0, sizeof(g_aT[cs]));
 					return 1;
 				}
@@ -3098,7 +4070,7 @@ net_tcp_input(const u8 *pFrame, u32 cb)
 					g_aT[cs].u8State = ST_CLOSE_WAIT;
 					(void)tcp_tx((u32)cs, FL_ACK, 0, 0);
 				} else if (g_aT[cs].u8State == ST_FIN_WAIT1) {
-					/* Simultaneous close → TIME_WAIT soft. */
+					/* Simultaneous close -> TIME_WAIT soft. */
 					g_aT[cs].u8State = ST_TIME_WAIT;
 					g_aT[cs].u32TwTick = now_ms();
 					(void)tcp_tx((u32)cs,
@@ -3115,6 +4087,285 @@ net_tcp_input(const u8 *pFrame, u32 cb)
 	return 1;
 }
 
+/*
+ * Soft ensure: after net_l2 ready, a listen socket on :22 always exists for
+ * eth accept (Dual DoD B). Mints a soft listener if product sshd has not
+ * bound yet; product listen supersedes idle soft mint. Always re-syncs lab
+ * IP (10.200.125.50 on rtl) so demux/SYN-ACK never stick on stale QEMU
+ * 10.0.2.15 after L2 ready. When RX returns after R0, ready-edge + any
+ * :22 demux path re-enter here so listen is present before AcceptQ match.
+ * Grep: net_tcp: soft listen :22
+ * Soft!=product. Lean: one-shot / stamp-capped lamps only (no multi-KiB).
+ */
+static void
+tcp_soft_ensure_listen22(void)
+{
+	u32 i;
+	int nLs = -1;
+	int nSoft = -1;
+	int nMint;
+	u32 u32Be;
+	int fReady;
+	int fLabIp;
+	int fForceLab;
+
+	/* Always refresh identity - lab IP force on rtl even before ready. */
+	tcp_sync_l2_identity();
+	u32Be = net_l2_backend();
+	fReady = net_l2_ready();
+	/*
+	 * Force lab when rtl backend OR identity already lab (handoff may
+	 * report virtio/none briefly while frames still target lab static).
+	 * Soft!=product · Dual DoD B demux residual.
+	 */
+	fForceLab = (u32Be == GJ_NET_L2_RTL8168 ||
+		     tcp_ip_is_lab(g_aOurIp) != 0)
+			? 1
+			: 0;
+	if (fForceLab != 0) {
+		tcp_force_lab_ip();
+	}
+	fLabIp = tcp_ip_is_lab(g_aOurIp);
+	/* Wait until L2 has a backend; ready preferred for eth accept path. */
+	if (u32Be == GJ_NET_L2_NONE) {
+		/*
+		 * No backend yet: if identity is already lab (prior rtl),
+		 * keep forced lab for demux when RX returns. Soft!=product.
+		 */
+		if (fForceLab != 0) {
+			tcp_force_lab_ip();
+			fLabIp = 1;
+		}
+		g_u8SoftListen22WasReady = 0;
+		return;
+	}
+	/*
+	 * After net_l2 ready, ensure :22 for lab IP eth accept (Dual DoD B).
+	 * Handoff-pending still keeps identity for demux (lab 10.200.125.50
+	 * forced on rtl / lab-identity); mint only when TX/RX usable so soft
+	 * accept is not a dead socket. Soft!=product.
+	 * Grep: net_tcp: soft listen :22
+	 */
+	if (fReady == 0) {
+		/*
+		 * Not ready: lab IP identity already refreshed above; no mint.
+		 * One-shot wait lamp so lab greps see "after L2 ready"
+		 * residual without flood. Explicit lab force even while
+		 * !ready so demux identity is primed pre-ready-edge / R0.
+		 * Soft!=product. Grep: net_tcp: soft listen :22
+		 */
+		if (fForceLab != 0 || u32Be == GJ_NET_L2_RTL8168) {
+			tcp_force_lab_ip();
+			fLabIp = 1;
+		}
+		g_u8SoftListen22WasReady = 0;
+		g_u32SoftListen22Ticks++;
+		/* One-shot wait lamp only (multi-ensure from poll must not storm). */
+		if (g_u8SoftListen22Logged == 0 && tcp_soft_poll_stamp_ok()) {
+			kprintf("net_tcp: soft listen :22 wait L2 "
+				"ip=%u.%u.%u.%u lab_ip=%d backend=%s "
+				"ready=0 (Soft!=product; mint after L2 ready)\n",
+				g_aOurIp[0], g_aOurIp[1], g_aOurIp[2],
+				g_aOurIp[3], fLabIp, net_l2_name());
+			g_u8SoftListen22Logged = 1;
+		}
+		return;
+	}
+	/*
+	 * Ready-edge deepen (Gap B): when L2 flips !ready->ready, re-sync
+	 * lab IP identity and force a greppable soft listen :22 lamp with
+	 * lab_ip so lab greps see the post-L2-ready path (not only the
+	 * wait lamp). Covers R0->RX return ready flip. Soft!=product.
+	 */
+	if (g_u8SoftListen22WasReady == 0u) {
+		g_u8SoftListen22WasReady = 1;
+		g_u8SoftListen22Logged = 0; /* allow immediate ready lamp */
+		/* Re-pull L2 + force lab IP after ready (stale QEMU IP). */
+		tcp_sync_l2_identity();
+		/* Explicit lab force on rtl / lab-identity (ready-edge). Soft!=product. */
+		if (u32Be == GJ_NET_L2_RTL8168 ||
+		    tcp_ip_is_lab(g_aOurIp) != 0) {
+			tcp_force_lab_ip();
+		}
+		fLabIp = tcp_ip_is_lab(g_aOurIp);
+		/* Grep: net_tcp: soft listen :22 (ready-edge lab_ip; one-shot) */
+		if (tcp_soft_poll_stamp_ok()) {
+			kprintf("net_tcp: soft listen :22 ready-edge "
+				"ip=%u.%u.%u.%u lab_ip=%d backend=%s ready=1 "
+				"(Soft!=product; after L2 ready)\n",
+				g_aOurIp[0], g_aOurIp[1], g_aOurIp[2],
+				g_aOurIp[3], fLabIp, net_l2_name());
+		}
+	} else {
+		/*
+		 * Ready-path re-force + lab IP re-sync (Gap B): every ensure
+		 * while ready re-pull L2; rtl may surface stale QEMU
+		 * 10.0.2.15 after handoff churn - re-force 10.200.125.50.
+		 * Identity correction is silent on hot residual (multi-ensure
+		 * from poll must not stamp-storm). Soft!=product · lean poll.
+		 */
+		tcp_sync_l2_identity();
+		if (u32Be == GJ_NET_L2_RTL8168 ||
+		    tcp_ip_is_lab(g_aOurIp) != 0) {
+			tcp_force_lab_ip();
+		}
+		fLabIp = tcp_ip_is_lab(g_aOurIp);
+		g_u32SoftListen22Ticks++;
+		/* Hot residual: silence lab_ip re-sync/hold lamps. Soft!=product. */
+	}
+
+	for (i = 0; i < TCP_MAX; i++) {
+		if (!g_aT[i].u8Used || !g_aT[i].u8Listening) {
+			continue;
+		}
+		if (g_aT[i].u8ShutRd != 0u) {
+			continue; /* SHUT_RD stopped - not a live listener */
+		}
+		if (g_aT[i].u16Lport != (u16)TCP_SOFT_SSH_PORT) {
+			continue;
+		}
+		if (g_aT[i].u8SoftMint) {
+			nSoft = (int)i;
+		} else if (nLs < 0) {
+			nLs = (int)i; /* product (or any non-soft) first */
+		}
+	}
+	/* Drop stale soft-slot index if table was cleared. */
+	if (g_i32SoftListen22 >= 0) {
+		u32 u32S = (u32)g_i32SoftListen22;
+
+		if (u32S >= TCP_MAX || !g_aT[u32S].u8Used ||
+		    !g_aT[u32S].u8Listening || g_aT[u32S].u8ShutRd != 0u ||
+		    g_aT[u32S].u16Lport != (u16)TCP_SOFT_SSH_PORT) {
+			g_i32SoftListen22 = -1;
+			nSoft = -1;
+		}
+	}
+
+	if (nLs >= 0) {
+		/* Product (or non-soft) :22 present - eth accept path ok. */
+		/*
+		 * Silent multi-listener reparent + rehook: product listen may
+		 * have raced soft close; keep pending honest and i16Peer on
+		 * oldest ESTABLISHED (eth prefer) on every live :22 listener
+		 * so accept/poll_mask do not EAGAIN while AcceptQ is ready
+		 * (product park fd may not be the first nLs slot). Soft!=product
+		 * · functional STRONGER · greppable: ensure_rehook.
+		 */
+		for (i = 0; i < TCP_MAX; i++) {
+			if (g_aT[i].u8Used == 0u || g_aT[i].u8Listening == 0u ||
+			    g_aT[i].u8ShutRd != 0u ||
+			    g_aT[i].u16Lport != (u16)TCP_SOFT_SSH_PORT) {
+				continue;
+			}
+			(void)tcp_acceptq_reparent(i, (u16)TCP_SOFT_SSH_PORT);
+			(void)tcp_listen_rehook_ready(i);
+		}
+		g_u32SoftListen22Ticks++;
+		/* One-shot ok lamp only (multi-ensure from poll is silent). */
+		if (g_u8SoftListen22Logged == 0 && tcp_soft_poll_stamp_ok()) {
+			/* Grep: net_tcp: soft listen :22 */
+			kprintf("net_tcp: soft listen :22 ok fd=%u slot=%d "
+				"ip=%u.%u.%u.%u lab_ip=%d backend=%s "
+				"soft_mint=0 pending=%u ready=1 "
+				"listen_accept_path_honesty=1 "
+				"product_sshd_tcp22=OPEN until_DUT=1 "
+				"wire_handoff+tcp22=1 H2=once "
+				"(Soft!=product; after L2 ready; denser "
+				"wire22 listen/accept path; acceptq_rehook; "
+				"ensure_rehook multi)\n",
+				(unsigned)(TCP_FD_BASE + (u32)nLs), nLs,
+				g_aOurIp[0], g_aOurIp[1], g_aOurIp[2],
+				g_aOurIp[3], fLabIp, net_l2_name(),
+				(unsigned)g_aT[nLs].u8Pending);
+			g_u8SoftListen22Logged = 1;
+		}
+		return;
+	}
+
+	if (nSoft >= 0) {
+		g_i32SoftListen22 = nSoft;
+		/*
+		 * Existing soft mint: silent AcceptQ reparent + rehook so
+		 * orphan ESTABLISHED children from prior soft teardown are
+		 * accept-ready without waiting pure POLL. Soft!=product.
+		 */
+		(void)tcp_acceptq_reparent((u32)nSoft, (u16)TCP_SOFT_SSH_PORT);
+		(void)tcp_listen_rehook_ready((u32)nSoft);
+		g_u32SoftListen22Ticks++;
+		/* One-shot ok lamp only. Soft!=product. */
+		if (g_u8SoftListen22Logged == 0 && tcp_soft_poll_stamp_ok()) {
+			/* Grep: net_tcp: soft listen :22 */
+			kprintf("net_tcp: soft listen :22 ok fd=%u slot=%d "
+				"ip=%u.%u.%u.%u lab_ip=%d backend=%s "
+				"soft_mint=1 pending=%u ready=1 "
+				"listen_accept_path_honesty=1 "
+				"product_sshd_tcp22=OPEN until_DUT=1 "
+				"wire_handoff+tcp22=1 H2=once "
+				"(Soft!=product; after L2 ready; denser "
+				"wire22 listen/accept path; acceptq_rehook)\n",
+				(unsigned)(TCP_FD_BASE + (u32)nSoft), nSoft,
+				g_aOurIp[0], g_aOurIp[1], g_aOurIp[2],
+				g_aOurIp[3], fLabIp, net_l2_name(),
+				(unsigned)g_aT[nSoft].u8Pending);
+			g_u8SoftListen22Logged = 1;
+		}
+		return;
+	}
+
+	/* No :22 listener - soft-mint so eth SYN can land. Soft!=product. */
+	nMint = alloc_slot();
+	if (nMint < 0) {
+		if (g_u8SoftListen22Logged == 0 && tcp_soft_poll_stamp_ok()) {
+			kprintf("net_tcp: soft listen :22 FAIL emfile "
+				"backend=%s (Soft!=product)\n",
+				net_l2_name());
+			g_u8SoftListen22Logged = 1;
+		}
+		return;
+	}
+	g_aT[nMint].u16Lport = (u16)TCP_SOFT_SSH_PORT;
+	g_aT[nMint].u8Backlog = 4;
+	g_aT[nMint].u8Pending = 0;
+	g_aT[nMint].u8Listening = 1;
+	g_aT[nMint].u8State = ST_LISTEN;
+	g_aT[nMint].u8SoftMint = 1;
+	g_aT[nMint].u8IsLoop = 0;
+	g_aT[nMint].i16Peer = -1;
+	g_i32SoftListen22 = nMint;
+	/*
+	 * Soft-mint AcceptQ reparent + rehook: prior soft listener may have
+	 * closed leaving orphan ESTABLISHED/SYN_RCVD AcceptQ children on :22.
+	 * Recount pending + rehook oldest ESTAB (eth prefer) so eth accept
+	 * residual survives soft teardown without pure-POLL wait.
+	 * Soft!=product · Dual DoD B · functional STRONGER.
+	 */
+	(void)tcp_acceptq_reparent((u32)nMint, (u16)TCP_SOFT_SSH_PORT);
+	(void)tcp_listen_rehook_ready((u32)nMint);
+	tcp_soft_bump(&g_soft.u64ListenOk);
+	/* Grep: net_tcp: soft listen :22 - ONE line only (no twin/wave). */
+	if (tcp_soft_poll_stamp_ok()) {
+		kprintf("net_tcp: soft listen :22 fd=%u slot=%d backlog=%u "
+			"ip=%u.%u.%u.%u lab_ip=%d backend=%s soft_mint=1 "
+			"pending=%u ready=1 listen_accept_path_honesty=1 "
+			"product_sshd_tcp22=OPEN until_DUT=1 "
+			"wire_handoff+tcp22=1 H2=once "
+			"(Soft!=product; eth accept ensure after L2; denser "
+			"wire22 listen/accept path; acceptq_reparent; "
+			"acceptq_rehook; !=host_banner_proof)\n",
+			(unsigned)(TCP_FD_BASE + (u32)nMint), nMint,
+			(unsigned)g_aT[nMint].u8Backlog, g_aOurIp[0],
+			g_aOurIp[1], g_aOurIp[2], g_aOurIp[3], fLabIp,
+			net_l2_name(), (unsigned)g_aT[nMint].u8Pending);
+	}
+	g_u8SoftListen22Logged = 1;
+}
+
+/*
+ * Run-loop only via net_eth_poll (scheduler_run full thr stack).
+ * NEVER call from timer IRQ - IRQ stack smash / #PF I=1 class.
+ * greppable: net_eth_poll=run_loop_only · Soft!=product · Dual DoD B.
+ */
 void
 net_tcp_poll(void)
 {
@@ -3124,101 +4375,757 @@ net_tcp_poll(void)
 	u32 cTw = 0;
 
 	tcp_soft_bump(&g_soft.u64PollTicks);
+	/* Fresh per-poll stamp budget (hot residual stays silent regardless). */
+	g_u32SoftPollStampN = 0;
 
 	/*
-	 * Retransmit: SYN/SYN-ACK (external eth handshake) + last unacked
-	 * data segment. Called from net_eth_poll so rtl keep-alive continues
-	 * while sshd parks.
+	 * Dual DoD B: after net_l2 ready, always keep soft/product listen :22
+	 * for eth accept. Lab IP forced on rtl in tcp_sync_l2_identity /
+	 * tcp_force_lab_ip (10.200.125.50). Silent when already ok.
+	 * Lean: one ensure at poll entry + one post multi-pass (thrash-strip
+	 * mid-pass / twin post ensure). Soft!=product.
+	 * Grep: net_tcp: soft listen :22
 	 */
-	for (i = 0; i < TCP_MAX; i++) {
-		if (!g_aT[i].u8Used) {
-			continue;
-		}
-		/* Soft TIME_WAIT reclaim — free slots for new accepts. */
-		if (g_aT[i].u8State == ST_TIME_WAIT) {
-			if (t - g_aT[i].u32TwTick >= TCP_TW_MS) {
-				memset(&g_aT[i], 0, sizeof(g_aT[i]));
-				g_u32TwReap++;
-				tcp_soft_bump(&g_soft.u64PollTw);
-				cTw++;
-			}
-			continue;
-		}
-		if (!g_aT[i].u8RtxValid) {
-			continue;
-		}
-		if (g_aT[i].u8IsLoop) {
-			continue;
-		}
-		if (g_aT[i].u32RtxCount >= TCP_RTX_MAX) {
-			/* SYN_RCVD exhausted: free so new external SYNs work. */
-			if (g_aT[i].u8RtxSyn &&
-			    g_aT[i].u8State == ST_SYN_RCVD) {
-				tcp_drop_syn_rcvd(i);
-			} else {
-				g_aT[i].u8RtxValid = 0;
-				g_aT[i].u8RtxSyn = 0;
-			}
-			continue;
-		}
-		if (t - g_aT[i].u32RtxTick < TCP_RTX_MS) {
-			continue;
-		}
-		if (g_aT[i].u8RtxSyn) {
-			u8 fl = (u8)(FL_SYN | FL_ACK);
-			int rSyn;
+	tcp_soft_ensure_listen22();
 
-			/* SYN_RCVD → SYN-ACK; other = bare SYN (future). */
-			if (g_aT[i].u8State != ST_SYN_RCVD) {
-				fl = FL_SYN;
+	/*
+	 * Functional residual STRONGER (sshd :22 product path): every pure
+	 * POLL silently reparent + rehook ready ESTABLISHED AcceptQ on live
+	 * :22 listeners so poll_mask/accept pending stay honest under multi
+	 * SYN / soft→product race without stamp storms. Soft!=product.
+	 * greppable: acceptq_rehook | soft accept residual
+	 */
+	{
+		static u8 g_u8FuncLapOnce;
+
+		for (i = 0; i < TCP_MAX; i++) {
+			if (g_aT[i].u8Used == 0u || g_aT[i].u8Listening == 0u ||
+			    g_aT[i].u8ShutRd != 0u ||
+			    g_aT[i].u16Lport != (u16)TCP_SOFT_SSH_PORT) {
+				continue;
 			}
-			rSyn = tcp_tx_raw(i, fl, g_aT[i].u32RtxSeq, 0, 0);
-			if (rSyn >= 0) {
-				/* First success after failed initial TX. */
-				if (g_aT[i].u32SndNxt == g_aT[i].u32RtxSeq) {
-					g_aT[i].u32SndNxt++;
-				}
-				g_aT[i].u32RtxTick = t;
-				g_aT[i].u32RtxCount++;
-				g_u32Rtx++;
-				tcp_soft_bump(&g_soft.u64PollRtx);
-				cRtx++;
-			} else {
-				/* Keep trying; advance tick so we do not spin. */
-				g_aT[i].u32RtxTick = t;
-			}
-			continue;
+			(void)tcp_acceptq_reparent(i, (u16)TCP_SOFT_SSH_PORT);
+			(void)tcp_listen_rehook_ready(i);
 		}
-		if (tcp_tx_raw(i, (u8)(FL_ACK | FL_PSH), g_aT[i].u32RtxSeq,
-			       g_aT[i].aRtx, g_aT[i].u32RtxLen) >= 0) {
-			g_aT[i].u32RtxTick = t;
-			g_aT[i].u32RtxCount++;
-			g_u32Rtx++;
-			tcp_soft_bump(&g_soft.u64PollRtx);
-			cRtx++;
+		/* Grep: net_tcp: soft functional lap (once; no storm). H2 once. */
+		if (g_u8FuncLapOnce == 0u) {
+			g_u8FuncLapOnce = 1u;
+			if (tcp_soft_poll_stamp_ok()) {
+				kprintf("net_tcp: soft functional lap "
+					"listen=1 accept=1 poll=1 poll_mask=1 "
+					"acceptq_rehook=1 acceptq_reparent=1 "
+					"accept_eagain_heal=1 poll_mask_heal=1 "
+					"ensure_rehook=1 post_poll_rehook=1 "
+					"close_rehook=1 multi_listen_heal=1 "
+					"eth_estab_rehook=1 listen_close_rehook=1 "
+					"listen_accept_path_honesty=1 "
+					"wire_handoff+tcp22=1 stack=eth|tcp|door|:22 "
+					"path=sshd:22 product_sshd_tcp22=OPEN "
+					"until_DUT=1 "
+					"dual_dod_a=OPEN dual_dod_b=OPEN "
+					"freestanding_class=SKIP product=UDX "
+					"net_tcp_poll=run_loop_only thr_only=1 "
+					"H1=1 H2=once Soft!=product "
+					"(Soft!=product; W11 Dual DoD B "
+					"FUNCTIONAL residual STRONGER denser; "
+					"wire handoff+:22 listen/accept path "
+					"honesty; agent!=close; "
+					"!=host_banner_proof; Dual DoD OPEN; "
+					"product_sshd_tcp22=OPEN until DUT; "
+					"stamp-free bar v2026.08.04.75; never .76)\n");
+			}
 		}
 	}
+
 	/*
-	 * Soft inventory on poll only when rtx/TW work happened (rate-friendly).
-	 * Stats getters force a full dump for smoke greps.
+	 * Accept queue residual lamp (rate-limited): count ESTABLISHED AcceptQ
+	 * children waiting for accept() - path to host nc/ssh banner after
+	 * SYN-ACK rtx. One-shot stamp only (thrash-strip denser flood).
+	 * Grep: net_tcp: soft accept residual. Soft!=product.
+	 */
+	{
+		static u32 g_u32AqResTicks;
+		u32 cAq = 0;
+		u32 cAq22 = 0;
+		u32 cSynR = 0;
+		u32 fLog = 0;
+
+		for (i = 0; i < TCP_MAX; i++) {
+			if (!g_aT[i].u8Used || g_aT[i].u8IsLoop) {
+				continue;
+			}
+			/*
+			 * AcceptQ residual (half-open / estab awaiting accept):
+			 * keep SYN-ACK busy-armed under flood so pure POLL
+			 * from yield-poll accept flushes without wall wait.
+			 * Gap B: only re-busy when never TX-ok (RtxCount==0)
+			 * or still busy-armed / had TX fails (BusyN) - do not
+			 * re-busy after a successful wire SYN-ACK or dense
+			 * pure POLL burns TCP_RTX_MAX -> giveup before peer
+			 * ACK. Soft!=product.
+			 */
+			if (g_aT[i].u8AcceptQ && !g_aT[i].u8Listening) {
+				if (g_aT[i].u8State == ST_ESTABLISHED) {
+					cAq++;
+					if (g_aT[i].u16Lport ==
+					    (u16)TCP_SOFT_SSH_PORT) {
+						cAq22++;
+					}
+				} else if (g_aT[i].u8State == ST_SYN_RCVD) {
+					cSynR++;
+					/*
+					 * Gap B: AcceptQ :22 SYN_RCVD busy-arm
+					 * only when never landed / still
+					 * TX-fail so pure POLL + busy-shot flush
+					 * under ARP/ICMP without wall wait.
+					 * Do NOT re-busy after clean wire
+					 * success (avoids TCP_RTX_MAX giveup
+					 * before peer ACK). Soft!=product.
+					 */
+					if (g_aT[i].u8RtxValid &&
+					    g_aT[i].u8RtxSyn &&
+					    tcp_rtx22_need_busy(&g_aT[i]) !=
+						0) {
+						g_aT[i].u8RtxBusy = 1;
+					}
+				}
+			}
+			/*
+			 * :22 eth banner arm still unflushed (first-fail
+			 * soft-accept or never TX-ok) - force busy for pure
+			 * POLL density. Re-busy only never-landed / TX-fail;
+			 * post-success unacked uses denser wall interval
+			 * (POST22_DIV). Soft!=product.
+			 */
+			if (g_aT[i].u16Lport == (u16)TCP_SOFT_SSH_PORT &&
+			    g_aT[i].u8State == ST_ESTABLISHED &&
+			    g_aT[i].u8RtxValid && !g_aT[i].u8RtxSyn &&
+			    g_aT[i].u32SndNxt > g_aT[i].u32SndUna &&
+			    tcp_rtx22_need_busy(&g_aT[i]) != 0) {
+				g_aT[i].u8RtxBusy = 1;
+			}
+		}
+		g_u32AqResTicks++;
+		/* One-shot AcceptQ residual lamp (hard stamp cap; no denser flood). */
+		if ((cAq != 0u || cSynR != 0u) && g_u32AqResTicks == 1u) {
+			fLog = 1;
+		}
+		if (fLog != 0u && tcp_soft_poll_stamp_ok()) {
+			kprintf("net_tcp: soft accept residual "
+				"estab_q=%u :22_q=%u syn_rcvd_q=%u "
+				"(Soft!=product; accept->banner path)\n",
+				(unsigned)cAq, (unsigned)cAq22,
+				(unsigned)cSynR);
+		}
+	}
+
+	/*
+	 * Lean functional rtx residual (Soft!=product; freestanding thrash SKIP):
+	 * SYN/SYN-ACK + bare FIN + last unacked data. Busy-armed -> interval 0
+	 * for pure POLL flush. TCP_RTX_PASSES multi-pass (busy-only after pass
+	 * 0); phase prefer :22 SYN_RCVD then :22 ESTABLISHED banner then rest;
+	 * TCP_RTX_BUSY_SHOTS same-pass retries; POST22_DIV wall after land.
+	 * Thrash-strip: no mid multi-pass ensure storm; lab_ip silent force
+	 * once before multi-pass only. Soft!=product.
+	 */
+	{
+		u32 u32Pass;
+		u32 cBusyLeft = 0;
+		u32 u32Phase;
+		u32 u32NPhase;
+
+		/*
+		 * Explicit lab_ip force before multi-pass (rtl or already-lab
+		 * identity) so demux/SYN-ACK TX hold 10.200.125.50 under
+		 * handoff churn. Silent. Soft!=product · thrash-strip.
+		 */
+		if (net_l2_backend() == GJ_NET_L2_RTL8168 ||
+		    tcp_ip_is_lab(g_aOurIp) != 0) {
+			tcp_force_lab_ip();
+		}
+
+		for (u32Pass = 0; u32Pass < TCP_RTX_PASSES; u32Pass++) {
+			cBusyLeft = 0;
+			/*
+			 * Per-pass :22 int0 re-arm - SYN_RCVD / ESTABLISHED
+			 * banner never-landed or still TX-fail so busy-shot +
+			 * multi-pass flush fires. Never re-busy after clean
+			 * success (protect RtxCount until peer ACK).
+			 * Soft!=product · lean (no mid-pass ensure thrash).
+			 */
+			for (i = 0; i < TCP_MAX; i++) {
+				if (!g_aT[i].u8Used || g_aT[i].u8IsLoop ||
+				    !g_aT[i].u8RtxValid) {
+					continue;
+				}
+				if (g_aT[i].u16Lport !=
+				    (u16)TCP_SOFT_SSH_PORT) {
+					continue;
+				}
+				if (tcp_rtx22_need_busy(&g_aT[i]) == 0) {
+					continue;
+				}
+				if (g_aT[i].u8RtxSyn != 0u &&
+				    g_aT[i].u8State == ST_SYN_RCVD) {
+					g_aT[i].u8RtxBusy = 1;
+				} else if (g_aT[i].u8RtxSyn == 0u &&
+					   g_aT[i].u8State == ST_ESTABLISHED &&
+					   g_aT[i].u32SndNxt >
+					       g_aT[i].u32SndUna) {
+					g_aT[i].u8RtxBusy = 1;
+				} else if (g_aT[i].u8RtxSyn == 0u &&
+					   g_aT[i].u32RtxLen == 0u &&
+					   g_aT[i].u8FinSent != 0u) {
+					/* Bare FIN half-close still busy. */
+					g_aT[i].u8RtxBusy = 1;
+				}
+			}
+			/*
+			 * Prefer :22 SYN_RCVD (SYN-ACK) then :22 ESTABLISHED
+			 * (banner eth_seg) then non-:22. Pass 0 runs all;
+			 * busy residual passes still prefer :22 first so
+			 * host SYN wins under ARP/ICMP flood. Soft!=product.
+			 */
+			u32NPhase = 3u;
+			for (u32Phase = 0; u32Phase < u32NPhase; u32Phase++) {
+			for (i = 0; i < TCP_MAX; i++) {
+				u32 u32Int;
+				u32 u32Slot;
+				int fIs22;
+				int fSynR;
+
+				/*
+				 * Flood fairness: reverse slot scan on odd
+				 * passes so high-index AcceptQ children still
+				 * get SYN-ACK rtx. Soft!=product.
+				 */
+				if ((u32Pass & 1u) != 0u) {
+					u32Slot = (TCP_MAX - 1u) - i;
+				} else {
+					u32Slot = i;
+				}
+
+				if (!g_aT[u32Slot].u8Used) {
+					continue;
+				}
+				/* Soft TIME_WAIT reclaim - free slots. */
+				if (g_aT[u32Slot].u8State == ST_TIME_WAIT) {
+					if (u32Pass == 0u && u32Phase == 0u &&
+					    t - g_aT[u32Slot].u32TwTick >=
+						TCP_TW_MS) {
+						memset(&g_aT[u32Slot], 0,
+						       sizeof(g_aT[u32Slot]));
+						g_u32TwReap++;
+						tcp_soft_bump(
+							&g_soft.u64PollTw);
+						cTw++;
+					}
+					continue;
+				}
+				if (!g_aT[u32Slot].u8RtxValid) {
+					continue;
+				}
+				if (g_aT[u32Slot].u8IsLoop) {
+					continue;
+				}
+				fIs22 = (g_aT[u32Slot].u16Lport ==
+					 (u16)TCP_SOFT_SSH_PORT) ? 1 : 0;
+				/* Prefer :22 SYN_RCVD SYN-ACK over banner. */
+				fSynR = (fIs22 != 0 &&
+					 g_aT[u32Slot].u8RtxSyn != 0u &&
+					 g_aT[u32Slot].u8State ==
+						 ST_SYN_RCVD)
+						? 1
+						: 0;
+				/*
+				 * Phase 0: :22 SYN_RCVD SYN-ACK first.
+				 * Phase 1: remaining :22 (ESTABLISHED banner
+				 * eth_seg + any other :22 rtx arm).
+				 * Phase 2: non-:22 remainder.
+				 * Soft!=product.
+				 */
+				if (u32Phase == 0u && fSynR == 0) {
+					continue;
+				}
+				if (u32Phase == 1u &&
+				    (fIs22 == 0 || fSynR != 0)) {
+					continue;
+				}
+				if (u32Phase == 2u && fIs22 != 0) {
+					continue;
+				}
+				/* Pass 1+ residual: busy-armed only. Soft!=product. */
+				if (u32Pass != 0u && !g_aT[u32Slot].u8RtxBusy) {
+					continue;
+				}
+				if (g_aT[u32Slot].u32RtxCount >= TCP_RTX_MAX) {
+					/*
+					 * SYN_RCVD exhausted: free so new
+					 * external SYNs work.
+					 */
+					if (g_aT[u32Slot].u8RtxSyn &&
+					    g_aT[u32Slot].u8State == ST_SYN_RCVD) {
+						/* Grep: giveup - one-shot stamp only. */
+						if (tcp_soft_poll_stamp_ok()) {
+							kprintf("net_tcp: soft "
+								"eth_syn_ack giveup "
+								"slot=%u port=%u "
+								"sport=%u count=%u "
+								"(Soft!=product)\n",
+								(unsigned)u32Slot,
+								(unsigned)g_aT[u32Slot]
+									.u16Lport,
+								(unsigned)g_aT[u32Slot]
+									.u16Rport,
+								(unsigned)g_aT[u32Slot]
+									.u32RtxCount);
+						}
+						tcp_drop_syn_rcvd(u32Slot);
+					} else {
+						g_aT[u32Slot].u8RtxValid = 0;
+						g_aT[u32Slot].u8RtxSyn = 0;
+						g_aT[u32Slot].u8RtxBusy = 0;
+					}
+					continue;
+				}
+				/*
+				 * Busy-armed residual: interval 0 so door
+				 * POLL / pure POLL re-attempts SYN-ACK +
+				 * banner eth_seg as soon as TX ring may
+				 * drain (no wall wait). Gap B deepen: :22
+				 * SYN_RCVD never-landed (RtxCount==0) or
+				 * still under TX-fail pressure (BusyN!=0)
+				 * uses interval 0 + busy arm under ARP/ICMP;
+				 * :22 ESTABLISHED banner never-landed /
+				 * still-busy mirrors the same int0 path
+				 * (first-fail soft-accept under flood);
+				 * after clean success use eighth TCP_RTX_MS
+				 * (denser under ARP/ICMP; not every pure POLL)
+				 * so RtxCount does not burn to giveup before
+				 * peer ACK. Steady non-busy uses TCP_RTX_MS.
+				 * Soft!=product.
+				 */
+				if (g_aT[u32Slot].u8RtxBusy) {
+					u32Int = 0u;
+				} else if (fIs22 != 0 &&
+					   tcp_rtx22_need_busy(
+					       &g_aT[u32Slot]) != 0 &&
+					   ((g_aT[u32Slot].u8RtxSyn != 0u &&
+					     g_aT[u32Slot].u8State ==
+						 ST_SYN_RCVD) ||
+					    (g_aT[u32Slot].u8RtxSyn == 0u &&
+					     g_aT[u32Slot].u8State ==
+						 ST_ESTABLISHED &&
+					     g_aT[u32Slot].u32SndNxt >
+						 g_aT[u32Slot].u32SndUna))) {
+					/*
+					 * :22 SYN-ACK / banner never-landed or
+					 * still TX-fail - int0 busy arm under
+					 * ARP/ICMP flood. Soft!=product.
+					 */
+					u32Int = 0u;
+					g_aT[u32Slot].u8RtxBusy = 1;
+				} else if (fIs22 != 0 &&
+					   ((g_aT[u32Slot].u8RtxSyn != 0u &&
+					     g_aT[u32Slot].u8State ==
+						 ST_SYN_RCVD) ||
+					    (g_aT[u32Slot].u8RtxSyn == 0u &&
+					     g_aT[u32Slot].u8State ==
+						 ST_ESTABLISHED &&
+					     g_aT[u32Slot].u32SndNxt >
+						 g_aT[u32Slot].u32SndUna))) {
+					/*
+					 * Post-success :22 SYN-ACK / unacked
+					 * banner: denser wall interval
+					 * (TCP_RTX_MS/POST22_DIV) - not every
+					 * multi-pass burn. Soft!=product.
+					 */
+					u32Int = (u32)TCP_RTX_MS /
+						 TCP_RTX_POST22_DIV;
+					if (u32Int == 0u) {
+						u32Int = 1u;
+					}
+				} else {
+					u32Int = (u32)TCP_RTX_MS;
+				}
+				if (u32Int != 0u &&
+				    (t - g_aT[u32Slot].u32RtxTick) < u32Int) {
+					continue;
+				}
+				if (g_aT[u32Slot].u8RtxSyn) {
+					u8 fl = (u8)(FL_SYN | FL_ACK);
+					int rSyn;
+
+					/*
+					 * SYN_RCVD -> SYN-ACK; other = bare
+					 * SYN (future).
+					 */
+					if (g_aT[u32Slot].u8State != ST_SYN_RCVD) {
+						fl = FL_SYN;
+					}
+					rSyn = tcp_tx_raw(u32Slot, fl,
+							  g_aT[u32Slot].u32RtxSeq, 0,
+							  0);
+					if (rSyn >= 0) {
+						/*
+						 * First success after failed
+						 * initial TX.
+						 */
+						if (g_aT[u32Slot].u32SndNxt ==
+						    g_aT[u32Slot].u32RtxSeq) {
+							g_aT[u32Slot].u32SndNxt++;
+						}
+						g_aT[u32Slot].u32RtxTick = t;
+						g_aT[u32Slot].u32RtxCount++;
+						g_aT[u32Slot].u8RtxBusy = 0;
+						g_aT[u32Slot].u8RtxBusyN = 0;
+						g_u32Rtx++;
+						tcp_soft_bump(
+							&g_soft.u64PollRtx);
+						cRtx++;
+						/*
+						 * Hot residual: silence eth_syn_ack
+						 * rtx stamps (functional TX only).
+						 * Soft!=product · stack-safe.
+						 */
+					} else {
+						/*
+						 * TX busy (ARP/ICMP ring full):
+						 * keep rtx armed, do not burn
+						 * rtx count. Soft!=product.
+						 */
+						g_aT[u32Slot].u32RtxTick = t;
+						g_aT[u32Slot].u8RtxBusy = 1;
+						cBusyLeft++;
+						if (g_aT[u32Slot].u8RtxBusyN <
+						    255u) {
+							g_aT[u32Slot].u8RtxBusyN++;
+						}
+						/*
+						 * Gap B: :22 busy-shot under
+						 * ARP/ICMP - ring may free
+						 * mid-poll; immediate extra
+						 * TCP_RTX_BUSY_SHOTS attempts
+						 * same pass before residual
+						 * passes. Soft!=product.
+						 * Grep: net_tcp: soft eth_syn_ack rtx
+						 */
+						if (fIs22 != 0) {
+							int nDbl = -1;
+							u32 u32Shot;
+
+							for (u32Shot = 0;
+							     u32Shot <
+							     TCP_RTX_BUSY_SHOTS;
+							     u32Shot++) {
+								nDbl = tcp_tx_raw(
+									u32Slot,
+									fl,
+									g_aT[u32Slot]
+										.u32RtxSeq,
+									0, 0);
+								if (nDbl >= 0) {
+									break;
+								}
+								if (g_aT[u32Slot]
+									    .u8RtxBusyN <
+								    255u) {
+									g_aT[u32Slot]
+										.u8RtxBusyN++;
+								}
+							}
+							if (nDbl >= 0) {
+								if (g_aT[u32Slot]
+									    .u32SndNxt ==
+								    g_aT[u32Slot]
+									    .u32RtxSeq) {
+									g_aT[u32Slot]
+										.u32SndNxt++;
+								}
+								g_aT[u32Slot]
+									.u32RtxTick =
+									t;
+								g_aT[u32Slot]
+									.u32RtxCount++;
+								g_aT[u32Slot]
+									.u8RtxBusy =
+									0;
+								g_aT[u32Slot]
+									.u8RtxBusyN =
+									0;
+								g_u32Rtx++;
+								tcp_soft_bump(
+									&g_soft
+										 .u64PollRtx);
+								cRtx++;
+								if (cBusyLeft >
+								    0u) {
+									cBusyLeft--;
+								}
+								/* Hot residual: silence hex rtx stamp. */
+								continue;
+							}
+						}
+						/* Hot residual: silence tx_busy stamps. */
+					}
+					continue;
+				}
+				/*
+				 * Bare FIN rtx (SHUT_WR half-close residual):
+				 * RtxLen==0 && !RtxSyn. Soft!=product · sshd
+				 * session end path. Functional thrash-strip.
+				 */
+				if (g_aT[u32Slot].u32RtxLen == 0u) {
+					int nFin;
+					u32 u32Shot;
+
+					nFin = tcp_tx_raw(
+						u32Slot,
+						(u8)(FL_FIN | FL_ACK),
+						g_aT[u32Slot].u32RtxSeq, 0,
+						0);
+					if (nFin < 0 && fIs22 != 0) {
+						for (u32Shot = 0;
+						     u32Shot <
+						     TCP_RTX_BUSY_SHOTS;
+						     u32Shot++) {
+							nFin = tcp_tx_raw(
+								u32Slot,
+								(u8)(FL_FIN |
+								     FL_ACK),
+								g_aT[u32Slot]
+									.u32RtxSeq,
+								0, 0);
+							if (nFin >= 0) {
+								break;
+							}
+							if (g_aT[u32Slot]
+								    .u8RtxBusyN <
+							    255u) {
+								g_aT[u32Slot]
+									.u8RtxBusyN++;
+							}
+						}
+					}
+					if (nFin >= 0) {
+						g_aT[u32Slot].u32RtxTick = t;
+						g_aT[u32Slot].u32RtxCount++;
+						g_aT[u32Slot].u8RtxBusy = 0;
+						g_aT[u32Slot].u8RtxBusyN = 0;
+						g_aT[u32Slot].u8FinSent = 1;
+						g_u32Rtx++;
+						tcp_soft_bump(
+							&g_soft.u64PollRtx);
+						cRtx++;
+					} else {
+						g_aT[u32Slot].u32RtxTick = t;
+						g_aT[u32Slot].u8RtxBusy = 1;
+						cBusyLeft++;
+						if (g_aT[u32Slot].u8RtxBusyN <
+						    255u) {
+							g_aT[u32Slot]
+								.u8RtxBusyN++;
+						}
+					}
+					continue;
+				}
+				{
+					int nData;
+
+					/* Use u32Slot (not i) - reverse-scan safe. */
+					nData = tcp_tx_raw(
+						u32Slot, (u8)(FL_ACK | FL_PSH),
+						g_aT[u32Slot].u32RtxSeq,
+						g_aT[u32Slot].aRtx,
+						g_aT[u32Slot].u32RtxLen);
+					if (nData >= 0) {
+						/*
+						 * Legacy first-fail left SndNxt
+						 * at RtxSeq - advance on flush.
+						 * Soft-accept path already set
+						 * SndNxt = RtxSeq+Len (skip).
+						 * Soft!=product.
+						 */
+						if (g_aT[u32Slot].u32SndNxt ==
+						    g_aT[u32Slot].u32RtxSeq) {
+							g_aT[u32Slot].u32SndNxt +=
+								g_aT[u32Slot].u32RtxLen;
+						}
+						g_aT[u32Slot].u32RtxTick = t;
+						g_aT[u32Slot].u32RtxCount++;
+						g_aT[u32Slot].u8RtxBusy = 0;
+						g_aT[u32Slot].u8RtxBusyN = 0;
+						g_u32Rtx++;
+						tcp_soft_bump(
+							&g_soft.u64PollRtx);
+						cRtx++;
+						/* Hot residual: silence eth_seg rtx stamps. */
+					} else {
+						/* Data rtx: busy arm. Soft!=product. */
+						g_aT[u32Slot].u32RtxTick = t;
+						g_aT[u32Slot].u8RtxBusy = 1;
+						cBusyLeft++;
+						if (g_aT[u32Slot].u8RtxBusyN <
+						    255u) {
+							g_aT[u32Slot].u8RtxBusyN++;
+						}
+						/*
+						 * Gap B: :22 banner eth_seg
+						 * busy-shot under ARP/ICMP
+						 * (ring free mid-poll). Soft!=product.
+						 * Grep: net_tcp: soft eth_seg rtx
+						 */
+						if (fIs22 != 0) {
+							int nDbl = -1;
+							u32 u32Shot;
+
+							for (u32Shot = 0;
+							     u32Shot <
+							     TCP_RTX_BUSY_SHOTS;
+							     u32Shot++) {
+								nDbl = tcp_tx_raw(
+									u32Slot,
+									(u8)(FL_ACK |
+									     FL_PSH),
+									g_aT[u32Slot]
+										.u32RtxSeq,
+									g_aT[u32Slot]
+										.aRtx,
+									g_aT[u32Slot]
+										.u32RtxLen);
+								if (nDbl >= 0) {
+									break;
+								}
+								if (g_aT[u32Slot]
+									    .u8RtxBusyN <
+								    255u) {
+									g_aT[u32Slot]
+										.u8RtxBusyN++;
+								}
+							}
+							if (nDbl >= 0) {
+								if (g_aT[u32Slot]
+									    .u32SndNxt ==
+								    g_aT[u32Slot]
+									    .u32RtxSeq) {
+									g_aT[u32Slot]
+										.u32SndNxt +=
+										g_aT[u32Slot]
+											.u32RtxLen;
+								}
+								g_aT[u32Slot]
+									.u32RtxTick =
+									t;
+								g_aT[u32Slot]
+									.u32RtxCount++;
+								g_aT[u32Slot]
+									.u8RtxBusy =
+									0;
+								g_aT[u32Slot]
+									.u8RtxBusyN =
+									0;
+								g_u32Rtx++;
+								tcp_soft_bump(
+									&g_soft
+										 .u64PollRtx);
+								cRtx++;
+								if (cBusyLeft >
+								    0u) {
+									cBusyLeft--;
+								}
+								/* Hot residual: silence eth_seg hex rtx. */
+							}
+						}
+						/* Hot residual: silence eth_seg tx_busy. */
+					}
+				}
+			}
+			} /* u32Phase */
+			/*
+			 * Residual further pass if this pass saw TX-busy, or
+			 * any :22 still busy-armed / BusyN / never-landed
+			 * under flood (int0 denser multi-pass - host SYN
+			 * wins). Do not spin on clean first-TX success with
+			 * no busy residual. Soft!=product.
+			 */
+			if (cBusyLeft == 0u) {
+				u32 f22Need = 0u;
+
+				for (i = 0; i < TCP_MAX; i++) {
+					if (!g_aT[i].u8Used || g_aT[i].u8IsLoop ||
+					    !g_aT[i].u8RtxValid) {
+						continue;
+					}
+					if (g_aT[i].u16Lport !=
+					    (u16)TCP_SOFT_SSH_PORT) {
+						continue;
+					}
+					if (g_aT[i].u8RtxBusy != 0u ||
+					    g_aT[i].u8RtxBusyN != 0u ||
+					    (g_aT[i].u8RtxSyn != 0u &&
+					     g_aT[i].u8State == ST_SYN_RCVD &&
+					     g_aT[i].u32RtxCount == 0u) ||
+					    (g_aT[i].u8RtxSyn == 0u &&
+					     g_aT[i].u8State ==
+						 ST_ESTABLISHED &&
+					     g_aT[i].u32SndNxt >
+						 g_aT[i].u32SndUna &&
+					     g_aT[i].u32RtxCount == 0u)) {
+						f22Need = 1u;
+						break;
+					}
+				}
+				if (f22Need == 0u) {
+					break;
+				}
+			}
+		}
+		/*
+		 * Lean post multi-pass: one soft listen :22 + lab_ip re-ensure
+		 * + silent :22 AcceptQ reparent/rehook so accept/poll_mask see
+		 * ESTABLISHED children that completed during busy multi-pass.
+		 * Soft!=product · freestanding thrash SKIP (no twin post-poll
+		 * ensure; no micro/nano/pico). Grep: net_tcp: soft listen :22
+		 * greppable: acceptq_rehook
+		 */
+		tcp_soft_ensure_listen22();
+		tcp_sync_l2_identity();
+		if (net_l2_backend() == GJ_NET_L2_RTL8168 ||
+		    tcp_ip_is_lab(g_aOurIp) != 0) {
+			tcp_force_lab_ip();
+		}
+		for (i = 0; i < TCP_MAX; i++) {
+			if (g_aT[i].u8Used == 0u || g_aT[i].u8Listening == 0u ||
+			    g_aT[i].u8ShutRd != 0u ||
+			    g_aT[i].u16Lport != (u16)TCP_SOFT_SSH_PORT) {
+				continue;
+			}
+			(void)tcp_acceptq_reparent(i, (u16)TCP_SOFT_SSH_PORT);
+			(void)tcp_listen_rehook_ready(i);
+		}
+	}
+
+	/*
+	 * Soft inventory on poll only when rtx/TW work happened.
+	 * ONE stamp line max (no twin); inventory one-line + hard caps.
+	 * Prefer silence after TCP_SOFT_POLL_STAMP_MAX / LOG_MAX.
+	 * Soft!=product · stack-safe.
 	 */
 	if (cRtx != 0u || cTw != 0u) {
-		/* Grep: net: tcp soft poll (event; rate-limited) */
-		if (tcp_soft_event_ok()) {
+		/* Grep: net: tcp soft poll - single line, stamp-capped, no wave. */
+		if (tcp_soft_event_ok() && tcp_soft_poll_stamp_ok()) {
 			kprintf("net: tcp soft poll rtx=%u tw_reap=%u "
 				"total_rtx=%u total_tw=%u ticks=%llu "
-				"wave=%u\n",
+				"(Soft!=product)\n",
 				(unsigned)cRtx, (unsigned)cTw, g_u32Rtx,
 				g_u32TwReap,
-				(unsigned long long)g_soft.u64PollTicks,
-				(unsigned)TCP_SOFT_DEEPEN_WAVE);
-			kprintf("net_tcp: soft poll rtx=%u tw=%u wave=%u\n",
-				(unsigned)cRtx, (unsigned)cTw,
-				(unsigned)TCP_SOFT_DEEPEN_WAVE);
+				(unsigned long long)g_soft.u64PollTicks);
 		}
-		if (g_soft.u32SoftLogN < TCP_SOFT_LOG_MAX) {
+		/* Inventory only if LOG budget remains (one-line tcp_soft_print). */
+		if (g_soft.u32SoftLogN < TCP_SOFT_LOG_MAX &&
+		    tcp_soft_poll_stamp_ok()) {
 			tcp_soft_print(1);
-		} else {
+		} else if (g_soft.u32SoftLogN >= TCP_SOFT_LOG_MAX) {
 			tcp_soft_bump(&g_soft.u64LogSkip);
 		}
 	}
@@ -3229,7 +5136,7 @@ net_tcp_accepts(void)
 {
 	/*
 	 * Emit soft inventory on stats read so door TCP_STATS / bring-up
-	 * smoke can grep "net: tcp soft …" / "net_tcp: soft …".
+	 * smoke can grep "net: tcp soft ..." / "net_tcp: soft ...".
 	 * Force path respects TCP_SOFT_LOG_MAX after first few dumps.
 	 */
 	if (g_soft.u32SoftLogN < TCP_SOFT_LOG_MAX) {

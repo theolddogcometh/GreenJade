@@ -24,6 +24,15 @@
  * binary identity (do not invent non-Linux values).
  *
  * See docs/GLIBC_COMPAT.md, docs/LINUX_ABI_HYBRID.md.
+ *
+ * Soft residual (C2 libcgj errno.h; Soft!=product; G-AC-1; Dual DoD A/B OPEN):
+ *   soft     = errno / __errno_location + Linux LP64 errno number catalog
+ *              (classic + socket + extended); error_t for argz/envz
+ *   product  = hybrid ABI negative-errno identity with kernel; not .ko AC
+ *   honesty  = number catalog != product multi-CPU thr-kill; agent PASS != Dual
+ *              DoD close; stamp-free bar honesty (no version stamp)
+ *   law      = dual MIT OR Apache-2.0; no GPL; H2 no stamp storms
+ * greppable: libcgj: errno soft residual Soft!=product
  */
 #pragma once
 

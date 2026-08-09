@@ -2,60 +2,77 @@
  * SPDX-License-Identifier: MIT OR Apache-2.0
  * Copyright (c) 2026 Project GreenJade contributors
  *
- * Validate / copy user pointers for Linux hot paths and native syscalls.
+ * Validate / copy user pointers for Linux hot paths, native syscalls,
+ * and DDI/UDX userspace driver hosts (GJ_SYS_DDI door edges).
  *
  * Pure C11 freestanding. Dual license: MIT OR Apache-2.0.
  * Implementation: kernel/mm/user_copy.c (STAC/CLAC when SMAP on).
+ * Soft!=product. G-AC-1 (no Linux .ko product AC). No version stamp.
  *
  * Scope
  * -----
  * Every path that touches user memory under the *current* address space
  * must go through these helpers (G-PTR-1). Fail closed to GJ_ERR_FAULT /
- * GJ_ERR_INVAL — never panic on bad user addresses (G-PTR-3). Product
+ * GJ_ERR_INVAL - never panic on bad user addresses (G-PTR-3). Product
  * builds must not offer kernel-pointer bypass (G-PTR-2: debug-only).
  *
  * Design anchors
  * --------------
- *   docs/SECURITY_CORE_DESIGN.md   §0.0 / fail closed; SMAP pairing
+ *   docs/SECURITY_CORE_DESIGN.md   fail closed; SMAP pairing
  *   docs/DESIGN_SPEC_COMPLETE.md   G-PTR-1..3, G-MAP-2 user VA band
  *   docs/LINUX_ABI_HYBRID.md       Linux personality copy edges
  *   docs/X86_64_INTEL_PLATFORM.md  P-MEM-6 SMAP; STAC/CLAC
- *   docs/GLIBC_COMPAT.md           8 MiB user floor vs kernel embeds
+ *   docs/GLIBC_COMPAT.md           8 MiB user floor vs kernel embeds
+ *   docs/DDI_SOFT.md              soft DDI door; Soft!=product mint OPEN
+ *   docs/LAPTOP_LINUX_DRIVER_HOST.md  UDX Dual DoD A/B OPEN
  *
  * User VA window (canonical Linux personality)
  * --------------------------------------------
- *   GJ_USER_VA_BASE  0x0000_0000_0080_0000  (8 MiB)
- *   GJ_USER_VA_END   0x0000_0000_8000_0000  (2 GiB exclusive)
+ *   GJ_USER_VA_BASE  0x0000_0000_0080_0000  (8 MiB)
+ *   GJ_USER_VA_END   0x0000_0000_8000_0000  (2 GiB exclusive)
  *
- * Floor is 8 MiB: kernel image+BSS (embeds) grow past classic PE 0x400000.
+ * Floor is 8 MiB: kernel image+BSS (embeds) grow past classic PE 0x400000.
  * Product maps (INTERP/SO/PE) use high bases; low identity stays kernel-only
- * (G-MAP-2 / harden leaves U=0 outside this band — smep.h).
+ * (G-MAP-2 / harden leaves U=0 outside this band - smep.h).
  *
  * Check ladder (copy path)
  * ------------------------
- *   1. user_range_ok          — wholly inside [BASE, END); no present bits
- *   2. user_range_mapped_*    — present + U=1; WRITE ⇒ W or soft COW
- *   3. STAC (if SMAP) → chunked copy → CLAC
+ *   1. user_range_ok          - wholly inside [BASE, END); no present bits
+ *   2. user_range_mapped_*    - present + U=1; WRITE => W or soft COW
+ *   3. STAC (if SMAP) -> chunked copy -> CLAC
  *   4. RO without COW fails at step 2 before STAC (avoid #PF on store)
  *
  * Soft product surface
  * --------------------
- *   USER_RANGE_OK       — window geometry only
- *   USER_RANGE_MAPPED   — present + USER (read intent)
- *   USER_RANGE_ACCESS   — present + USER + optional W|COW
- *   USER_COPY_FROM/TO   — bulk copy with SMAP arming
- *   USER_LOAD/STORE_U32 — scalar helpers
- *   USER_COPY_STATS     — soft counters (never hard-gate boot)
- *   USER_SMAP_NOTIFY    — user_access_smap_enabled from cpu_enable_smap
+ *   USER_RANGE_OK       - window geometry only
+ *   USER_RANGE_MAPPED   - present + USER (read intent)
+ *   USER_RANGE_ACCESS   - present + USER + optional W|COW
+ *   USER_COPY_FROM/TO   - bulk copy with SMAP arming
+ *   USER_LOAD/STORE_U32 - scalar helpers
+ *   USER_COPY_STATS     - soft counters (never hard-gate boot)
+ *   USER_SMAP_NOTIFY    - user_access_smap_enabled from cpu_enable_smap
+ *
+ * DDI residual (G-PTR for GJ_SYS_DDI / UDX hosts; lean Soft!=product)
+ * -------------------------------------------------------------------
+ *   ddi_door ddi_copy_out uses user_range_ok + copy_to_user for:
+ *     - GET  -> struct gj_ddi_dev_info out
+ *     - MAP_BAR arg3 dual-use: user_range_ok(arg3, sizeof(map_note))
+ *       selects map_note* fill vs user VA hint band
+ *   Host processes: ddi_host_gj / rtl8168_udx / xhci_udx (userspace only).
+ *   Soft map_note / soft inventory only - product MMIO_FRAME / IRQ /
+ *   DMA window cap mint remains OPEN (docs/DDI_SOFT.md). Dual DoD A/B OPEN.
+ *   Never freestanding rtl/usb class re-enable from this surface (G-AC-1).
+ *   greppable: user_copy: soft ddi | user_copy: soft residual lean
  *
  * Layering
  * --------
- *   smep.h cpu_enable_smap → user_access_smap_enabled
+ *   smep.h cpu_enable_smap -> user_access_smap_enabled
  *   vmm_read_pte / COW bit for mapped_access WRITE check
- *   linux_hot / native syscall dispatch call copy_* under process CR3
+ *   linux_hot / native / ddi_door call copy_* under process CR3
  *
  * greppable: G-PTR USER_RANGE_OK USER_RANGE_MAPPED USER_COPY_STATS
  * greppable: GJ_USER_VA_BASE GJ_USER_VA_END GJ_USER_COPY_MAX SMAP STAC CLAC
+ * greppable: user_copy: soft residual lean | user_copy: soft ddi
  */
 #pragma once
 
@@ -145,7 +162,7 @@ gj_status_t copy_from_user(void *pKdst, u64 u64Usrc, size_t cb);
  * Copy from kernel to user.
  *
  * Write-intent map check (W|COW) before STAC. Same status codes as
- * copy_from_user. Does not break COW itself — writable COW leaves are
+ * copy_from_user. Does not break COW itself - writable COW leaves are
  * accepted so the store can raise #PF into the COW path if needed, or
  * product may break first; fail closed if RO without COW.
  */

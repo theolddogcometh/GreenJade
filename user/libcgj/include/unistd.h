@@ -24,6 +24,18 @@
  * ENOSYS until the kernel personality wires the path.
  *
  * See docs/GLIBC_COMPAT.md, docs/LINUX_ABI_HYBRID.md.
+ *
+ * Soft residual (C2 libcgj header; Soft!=product; G-AC-1; Dual DoD A/B OPEN):
+ *   soft path  = POSIX process/fd/path + Linux extensions soft wrappers
+ *   product    = UDX/DDI + hot/cold Linux ABI hosts (OPEN; agent!=close)
+ *   catalog    = STDIN_* access SEEK_* _SC_* _PC_* + fork/exec/pipe/dup +
+ *                gettid/clone/pidfd/prctl soft surface (ENOSYS OK)
+ *   honesty    = Soft!=product; freestanding class SKIP; no .ko product AC
+ *   hazard     = H1 N/A; H2 once-lamp spirit; H3 thr_exit before as_destroy
+ *   Bar honesty v2026.08.04.75. NEVER bump GJ_IMAGE_VERSION from this unit.
+ * greppable: libcgj: soft residual unistd
+ * greppable: libcgj: soft residual unistd Soft!=product
+ * Dual MIT OR Apache-2.0. No GPL. G-AC-1. Dual DoD A/B OPEN.
  */
 #pragma once
 

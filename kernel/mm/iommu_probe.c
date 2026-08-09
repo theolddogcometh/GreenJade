@@ -2,44 +2,47 @@
  * SPDX-License-Identifier: MIT OR Apache-2.0
  * Copyright (c) 2026 Project GreenJade contributors
  *
- * Scan RSDP → RSDT/XSDT for DMAR (Intel) or IVRS (AMD) signatures.
+ * Scan RSDP -> RSDT/XSDT for DMAR (Intel) or IVRS (AMD) signatures.
  * Inventory + software enforce windows + hand-off to VT-d table builder.
  * Deep DMAR structure soft inventory (DRHD/RMRR/ATSR/RHSA) for soft-probe.
  *
- * UDX → IOMMU window caps soft product (window side; software BDF table):
+ * UDX -> IOMMU window caps soft product (window side; software BDF table):
  *   create_window-shaped grant path + destroy/revoke soft tallies.
  * Greppable soft product markers (prefix-stable; greppable: iommu: window cap soft):
- *   "iommu: window cap soft inventory …"
- *   "iommu: window cap soft create_window …"  (create_window soft inventory)
- *   "iommu: window cap soft destroy …"       (destroy/revoke soft tallies)
- *   "iommu: window cap soft grant|update|full|reject|revoke …"
- * Honesty: soft software window table only — not full cap-typed window
+ *   "iommu: window cap soft inventory ..."
+ *   "iommu: window cap soft create_window ..."  (create_window soft inventory)
+ *   "iommu: window cap soft destroy ..."       (destroy/revoke soft tallies)
+ *   "iommu: window cap soft grant|update|full|reject|revoke ..."
+ * Honesty: soft software window table only - not full cap-typed window
  * object product (P-DMA-2 remaining: create_window as true window cap).
+ * window_mint=OPEN: DDI DMA_NOTE soft note path only - not CNode mint.
  *
- * Wave 56 exclusive soft deepen (this unit only — greppable "iommu: soft …"):
- *   iommu: soft inventory  — presence/vendor/units/windows/denies rollup
- *   iommu: soft present    — DMAR/IVRS presence lamps
- *   iommu: soft dmar       — DRHD/RMRR/ATSR/RHSA/other structure counts
- *   iommu: soft window     — software BDF window table tallies
- *   iommu: soft enforce    — policy arm + deny counters (soft)
- *   iommu: soft acpi       — RSDP/XSDT/RSDT/DMAR/IVRS scan tallies (W15)
- *   iommu: soft busmaster  — allow/deny path tallies under enforce (W15)
- *   iommu: soft peak       — peak windows / create peaks (W15)
- *   iommu: soft path       — honesty: always-on product IOMMU remains OPEN
- *   iommu: soft lamps      — composite soft lamps
- *   iommu: soft honesty    — explicit non-claims catalog (W15)
- *   iommu: soft stats      — rollup for agent greps (W15)
- *   iommu: soft surfaces   — Wave 19 return-surface catalog
- *   iommu: soft vendor     — Wave 17 vendor/units return lamps
- *   iommu: soft window_cap — Wave 17 window-cap soft return surface
- *   iommu: soft return     — Wave 17 create/destroy return taxonomy
- *   iommu: soft return selftest — Wave 19 terminal return surface
- *   iommu: soft retmap     — Wave 19 return-surface map
- *   iommu: soft deepen     — wave=116 stamp + area count
- *   iommu: soft OPEN       — always-on product IOMMU OPEN honesty
+ * Lean soft residual (greppable "iommu: soft ... Soft!=product"):
+ *   iommu: soft inventory  - presence/vendor/units/windows/denies rollup
+ *   iommu: soft path       - honesty: always-on product IOMMU remains OPEN
  *   iommu: soft PASS | soft inventory PASS
- * Soft deepen ≠ product always-on IOMMU claim; not HW-first close;
- * soft ≠ product.
+ *   iommu: soft scan residual - ACPI RSDP/XSDT/RSDT/DMAR/IVRS walk tallies
+ *   iommu: soft busmaster residual - enforce allow/deny/open + peak windows
+ *   iommu: soft enforce residual - product no-open-busmaster remains OPEN
+ *   iommu: soft ddi residual / soft dma_note residual - DDI DMA_NOTE window
+ *   iommu: soft dual residual - Dual DoD A/B window-side path after handoff
+ *   iommu: soft dma path residual - force32 eng NIC/USB window honesty
+ *   iommu: soft eng path residual - G752 03:00.0 + 0:14.0 software windows
+ *   iommu: soft eng window residual - eng BDF soft PA/cb span honesty
+ *   iommu: soft udx path residual - UDX Dual DoD eng path (window side)
+ *   iommu: soft create_window residual - create_window soft tallies + mint OPEN
+ *   iommu: soft residual deepen - C2 Dual DoD A/B OPEN_UDX rollup (probe)
+ *   window_mint=OPEN Soft!=product G-AC-1
+ * C2 Dual DoD (probe window side; product = userspace UDX, not freestanding):
+ *   dual_dod_a=OPEN_UDX  (xhci_udx; freestanding MSC SKIP)
+ *   dual_dod_b=OPEN_UDX  (rtl8168_udx; freestanding rtl SKIP)
+ *   freestanding_product=SKIP  product_hosts=UDX
+ * Hands off to VT-d Dual DoD residual (bus3/dma/eng/ddi/udx) so freestanding
+ * rtl force32 rings are not broken by TE; identity/map honesty lives in
+ * iommu_vtd.c. Soft deepen != product always-on IOMMU claim.
+ * Soft lamps alone != Dual DoD close / product UDX DMA caps.
+ * Soft!=product. No version stamp. No stamp storms (lean lamps only).
+ * Dual MIT OR Apache-2.0. No GPL.
  *
  * Clean-room; dual-licensed pure C (not a GPL VT-d driver paste).
  */
@@ -64,40 +67,6 @@
 #define IOMMU_DMAR_RHSA  3u
 /* ANDD=4, SATC=5, SIDP=6 treated as "other" for soft inventory */
 
-/* Wave 62 soft inventory stamp (file-local; never product gate). */
-#define IOMMU_SOFT_WAVE 116u
-/* Fixed greppable categories for deepen stamp (inventory…return + W16 axes). */
-#define IOMMU_SOFT_AREAS 213u
-
-/*
- * Wave 19 return-surface bit lamps (surf=0x… on soft surfaces/deepen).
- * greppable: iommu: soft surfaces
- */
-#define IOMMU_SOFT_SURF_INVENTORY  (1u << 0)
-#define IOMMU_SOFT_SURF_PRESENT    (1u << 1)
-#define IOMMU_SOFT_SURF_DMAR       (1u << 2)
-#define IOMMU_SOFT_SURF_WINDOW     (1u << 3)
-#define IOMMU_SOFT_SURF_ENFORCE    (1u << 4)
-#define IOMMU_SOFT_SURF_ACPI       (1u << 5)
-#define IOMMU_SOFT_SURF_BUSMASTER  (1u << 6)
-#define IOMMU_SOFT_SURF_PEAK       (1u << 7)
-#define IOMMU_SOFT_SURF_PATH       (1u << 8)
-#define IOMMU_SOFT_SURF_LAMPS      (1u << 9)
-#define IOMMU_SOFT_SURF_HONESTY    (1u << 10)
-#define IOMMU_SOFT_SURF_STATS      (1u << 11)
-#define IOMMU_SOFT_SURF_OPEN       (1u << 12)
-#define IOMMU_SOFT_SURF_SURFACES   (1u << 13)
-#define IOMMU_SOFT_SURF_VENDOR     (1u << 14)
-#define IOMMU_SOFT_SURF_WINDOW_CAP (1u << 15)
-#define IOMMU_SOFT_SURF_RETURN     (1u << 16)
-#define IOMMU_SOFT_SURF_CATALOG                                                    \
-    (IOMMU_SOFT_SURF_INVENTORY | IOMMU_SOFT_SURF_PRESENT | IOMMU_SOFT_SURF_DMAR |  \
-     IOMMU_SOFT_SURF_WINDOW | IOMMU_SOFT_SURF_ENFORCE | IOMMU_SOFT_SURF_ACPI |     \
-     IOMMU_SOFT_SURF_BUSMASTER | IOMMU_SOFT_SURF_PEAK | IOMMU_SOFT_SURF_PATH |     \
-     IOMMU_SOFT_SURF_LAMPS | IOMMU_SOFT_SURF_HONESTY | IOMMU_SOFT_SURF_STATS |     \
-     IOMMU_SOFT_SURF_OPEN | IOMMU_SOFT_SURF_SURFACES | IOMMU_SOFT_SURF_VENDOR |    \
-     IOMMU_SOFT_SURF_WINDOW_CAP | IOMMU_SOFT_SURF_RETURN)
-
 static struct gj_iommu_info g_Info;
 static int g_fProbed;
 static int g_fEnforce;
@@ -115,8 +84,8 @@ static u64 g_u64RmrrFirstBase;
 static u64 g_u64RmrrFirstLimit;
 
 /*
- * Window cap soft product tallies (UDX→IOMMU window side).
- * Software BDF→PA table only — not cap object mint / HW-first revoke.
+ * Window cap soft product tallies (UDX->IOMMU window side).
+ * Software BDF->PA table only - not cap object mint / HW-first revoke.
  */
 static u32 g_cWinCreateOk;     /* create_window soft: new slot grant */
 static u32 g_cWinCreateUpdate; /* create_window soft: same-BDF update */
@@ -129,10 +98,10 @@ static u32 g_cWinRevokeMiss;   /* revoke with no matching used slot */
 static u32 g_cWinRevokeBad;    /* revoke rejected (bad BDF) */
 static u32 g_cWinSoftInvLogs;  /* times soft inventory printed */
 static int g_fWinSoftInvOnce;  /* first-activity inventory emitted */
-static u32 g_cSoftInvLogs;     /* Wave 15 iommu: soft inventory dumps */
+static u32 g_cSoftInvLogs;     /* lean iommu: soft inventory dumps */
 
 /*
- * Wave 15 soft scan / busmaster / peak tallies (diagnostics only; wrap OK).
+ * Soft scan / busmaster / peak tallies (diagnostics only; wrap OK).
  * Never hard-gates; not product always-on IOMMU.
  */
 static u32 g_cSoftRsdpSkip;    /* probe path: no RSDP */
@@ -155,6 +124,8 @@ static void iommu_window_cap_soft_inventory(void);
 static void iommu_window_cap_soft_maybe_once(void);
 static void iommu_soft_inventory_log(void);
 static void iommu_soft_note_win_peak(u32 cUsed);
+static int iommu_window_get(u8 u8Bus, u8 u8Slot, u8 u8Func, u64 *pPa,
+                            u64 *pCb);
 
 static int
 sig_n(const void *p, const char *sz, u32 cb)
@@ -213,12 +184,13 @@ bdf_ok(u8 u8Bus, u8 u8Slot, u8 u8Func)
 }
 
 /**
- * Greppable UDX→IOMMU window cap soft product inventory.
- *   iommu: window cap soft inventory …
- *   iommu: window cap soft create_window …   (create_window soft inventory)
- *   iommu: window cap soft destroy …        (destroy/revoke soft tallies)
- * Honesty: software window table only — not full cap-typed window object
+ * Greppable UDX->IOMMU window cap soft product inventory.
+ *   iommu: window cap soft inventory ...
+ *   iommu: window cap soft create_window ...   (create_window soft inventory)
+ *   iommu: window cap soft destroy ...        (destroy/revoke soft tallies)
+ * Honesty: software window table only - not full cap-typed window object
  * product; not HW-first Phase A revoke product (P-DMA-2/3 remaining).
+ * window_mint=OPEN: DDI DMA_NOTE soft path - not CNode DMA window cap mint.
  */
 static void
 iommu_window_cap_soft_inventory(void)
@@ -233,22 +205,23 @@ iommu_window_cap_soft_inventory(void)
     /* Grep: iommu: window cap soft inventory */
     kprintf("iommu: window cap soft inventory used=%u max=%u create_ok=%u "
             "update=%u destroy=%u revoke=%u full=%u fail=%u reject=%u "
-            "logs=%u (soft; not full cap-typed window object product)\n",
+            "logs=%u window_mint=OPEN (soft; not full cap-typed window "
+            "object product)\n",
             cUsed, (unsigned)GJ_IOMMU_MAX_WINDOWS, g_cWinCreateOk,
             g_cWinCreateUpdate, g_cWinDestroy, g_cWinRevokeCall, g_cWinFull,
             g_cWinCreateFail, g_cWinReject, g_cWinSoftInvLogs);
 
     /* Grep: iommu: window cap soft create_window / create_window soft inventory */
     kprintf("iommu: window cap soft create_window ok=%u update=%u fail=%u "
-            "full=%u reject=%u max=%u (create_window soft inventory; "
-            "not create_window cap product)\n",
+            "full=%u reject=%u max=%u window_mint=OPEN (create_window soft "
+            "inventory; not create_window cap product)\n",
             g_cWinCreateOk, g_cWinCreateUpdate, g_cWinCreateFail, g_cWinFull,
             g_cWinReject, (unsigned)GJ_IOMMU_MAX_WINDOWS);
 
     /* Grep: iommu: window cap soft destroy (destroy/revoke soft tallies) */
     kprintf("iommu: window cap soft destroy revoke_calls=%u slots_cleared=%u "
-            "miss=%u bad=%u live=%u (soft tallies; not HW-first revoke "
-            "product)\n",
+            "miss=%u bad=%u live=%u window_mint=OPEN (soft tallies; not "
+            "HW-first revoke product)\n",
             g_cWinRevokeCall, g_cWinDestroy, g_cWinRevokeMiss, g_cWinRevokeBad,
             cUsed);
 }
@@ -271,7 +244,7 @@ iommu_window_cap_soft_maybe_once(void)
     iommu_window_cap_soft_inventory();
 }
 
-/** Wave 15: track peak live software window count (diagnostics only). */
+/** Track peak live software window count (diagnostics only). */
 static void
 iommu_soft_note_win_peak(u32 cUsed)
 {
@@ -281,28 +254,52 @@ iommu_soft_note_win_peak(u32 cUsed)
 }
 
 /**
- * Wave 19 greppable soft inventory dump (prefix "iommu: soft …").
- * Diagnostics only — never hard-gates; never claims always-on product IOMMU.
+ * Soft window span lookup by BDF (diagnostics / Dual DoD path residual).
+ * Returns 1 and fills pPa and pCb when a live soft window exists; else 0.
+ * Null out-params are ignored (presence-only query). Soft!=product;
+ * not a product cap lookup.
+ */
+static int
+iommu_window_get(u8 u8Bus, u8 u8Slot, u8 u8Func, u64 *pPa, u64 *pCb)
+{
+    u32 iWin;
+
+    if (!bdf_ok(u8Bus, u8Slot, u8Func)) {
+        return 0;
+    }
+    for (iWin = 0; iWin < GJ_IOMMU_MAX_WINDOWS; iWin++) {
+        if (g_aWin[iWin].u8Used != 0 && g_aWin[iWin].u8Bus == u8Bus &&
+            g_aWin[iWin].u8Slot == u8Slot && g_aWin[iWin].u8Func == u8Func) {
+            if (pPa != NULL) {
+                *pPa = g_aWin[iWin].u64PaBase;
+            }
+            if (pCb != NULL) {
+                *pCb = g_aWin[iWin].u64Cb;
+            }
+            return 1;
+        }
+    }
+    return 0;
+}
+
+/**
+ * Lean greppable soft inventory (prefix "iommu: soft ... Soft!=product").
+ * Diagnostics only - never hard-gates; never claims always-on product IOMMU.
+ * No version stamp. No stamp storms (few lamps only).
+ * C2 Dual DoD DMA path residual: probe-side window honesty after VT-d handoff
+ * (eng NIC 03:00.0 / xHCI 0:14.0 / UDX path). Identity/TE PASS|SKIP|FAIL
+ * lives in iommu_vtd.c; this file surfaces window-side path only + OPEN_UDX.
+ * Soft lamps alone != Dual DoD close / product UDX DMA caps. G-AC-1.
  *
- * greppable: iommu: soft
  * greppable: iommu: soft inventory
- * greppable: iommu: soft present
- * greppable: iommu: soft dmar
- * greppable: iommu: soft window
- * greppable: iommu: soft enforce
- * greppable: iommu: soft acpi
- * greppable: iommu: soft busmaster
- * greppable: iommu: soft peak
  * greppable: iommu: soft path
- * greppable: iommu: soft lamps
- * greppable: iommu: soft honesty
- * greppable: iommu: soft stats
- * greppable: iommu: soft deepen
- * greppable: iommu: soft OPEN
- * greppable: iommu: soft surfaces
- * greppable: iommu: soft vendor
- * greppable: iommu: soft window_cap
- * greppable: iommu: soft return
+ * greppable: iommu: soft scan residual
+ * greppable: iommu: soft busmaster residual | soft enforce residual
+ * greppable: iommu: soft dual residual | soft dma path residual
+ * greppable: iommu: soft eng path residual | soft eng window residual
+ * greppable: iommu: soft udx path residual | soft create_window residual
+ * greppable: iommu: soft residual deepen | dual_dod_a=OPEN_UDX
+ * greppable: freestanding_product=SKIP | product_hosts=UDX
  * greppable: iommu: soft PASS
  */
 static void
@@ -310,13 +307,23 @@ iommu_soft_inventory_log(void)
 {
     u32 cUsed;
     u32 u32Denies;
-    u32 u32Structs;
-    u32 u32Surf;
     int fPresent;
     int fEnforce;
+    int fNicWin;
+    int fUsbWin;
+    int fWinOk;
+    int fBmNicOpen;
+    int fBmUsbOpen;
     u8 u8Vendor;
     u32 u32Units;
+    u64 u64NicPa = 0;
+    u64 u64NicCb = 0;
+    u64 u64UsbPa = 0;
+    u64 u64UsbCb = 0;
     const char *szVendor;
+    const char *szDualVerdict;
+    const char *szDmaVerdict;
+    const char *szUdxVerdict;
 
     if (g_cSoftInvLogs < 0xffffffffu) {
         g_cSoftInvLogs++;
@@ -324,11 +331,32 @@ iommu_soft_inventory_log(void)
     cUsed = iommu_window_count();
     iommu_soft_note_win_peak(cUsed);
     u32Denies = g_u32Denies;
-    u32Structs = g_cDrhd + g_cRmrr + g_cAtsr + g_cRhsa + g_cOther;
     fPresent = (g_Info.u8Present != 0) ? 1 : 0;
     fEnforce = g_fEnforce ? 1 : 0;
     u8Vendor = g_Info.u8Vendor;
     u32Units = g_Info.u32Units;
+    /*
+     * Dual DoD eng BDF soft windows (post soft-probe handoff grants).
+     * G752 NIC 03:00.0 Dual DoD B; PCH xHCI 0:14.0 Dual DoD A.
+     * Soft!=product: software table only - not product UDX DMA close.
+     */
+    fNicWin = iommu_window_get(GJ_IOMMU_G752_NIC_BUS, GJ_IOMMU_G752_NIC_SLOT,
+                               GJ_IOMMU_G752_NIC_FUNC, &u64NicPa, &u64NicCb);
+    fUsbWin = iommu_window_get(GJ_IOMMU_XHCI_BUS_DEFAULT,
+                               GJ_IOMMU_XHCI_SLOT_DEFAULT,
+                               GJ_IOMMU_XHCI_FUNC_DEFAULT, &u64UsbPa,
+                               &u64UsbCb);
+    fWinOk = (fNicWin != 0 && fUsbWin != 0) ? 1 : 0;
+    /*
+     * Busmaster sample for eng BDFs (enforce-off open path expected at probe).
+     * Does not arm enforce; Soft!=product / never hard-gates Dual DoD.
+     */
+    fBmNicOpen = iommu_busmaster_ok(GJ_IOMMU_G752_NIC_BUS,
+                                    GJ_IOMMU_G752_NIC_SLOT,
+                                    GJ_IOMMU_G752_NIC_FUNC);
+    fBmUsbOpen = iommu_busmaster_ok(GJ_IOMMU_XHCI_BUS_DEFAULT,
+                                    GJ_IOMMU_XHCI_SLOT_DEFAULT,
+                                    GJ_IOMMU_XHCI_FUNC_DEFAULT);
     if (u8Vendor == GJ_IOMMU_VENDOR_INTEL) {
         szVendor = "intel";
     } else if (u8Vendor == GJ_IOMMU_VENDOR_AMD) {
@@ -336,1114 +364,172 @@ iommu_soft_inventory_log(void)
     } else {
         szVendor = "none";
     }
-    u32Surf = IOMMU_SOFT_SURF_CATALOG;
+    /*
+     * Probe-side verdict (window honesty only; identity TE in iommu_vtd.c).
+     * Both eng soft windows live -> PASS. No inventory + no windows -> SKIP.
+     * Else partial SKIP (soft; never hard-gates). Soft!=product.
+     */
+    if (fWinOk != 0) {
+        szDualVerdict = "PASS";
+        szDmaVerdict = "PASS";
+        szUdxVerdict = "PASS";
+    } else if (fPresent == 0 && cUsed == 0u && g_cDrhd == 0u) {
+        szDualVerdict = "SKIP";
+        szDmaVerdict = "SKIP";
+        szUdxVerdict = "SKIP";
+    } else {
+        szDualVerdict = "SKIP";
+        szDmaVerdict = "SKIP";
+        szUdxVerdict = "SKIP";
+    }
 
     /* Grep: iommu: soft inventory */
     kprintf("iommu: soft inventory present=%d vendor=%s units=%u "
-            "windows=%u max=%u denies=%u enforce=%d logs=%u wave=%u "
-            "(soft inventory; not always-on product IOMMU)\n",
+            "windows=%u max=%u denies=%u enforce=%d "
+            "drhd=%u peak=%u dmar=%u ivrs=%u window_mint=OPEN Soft!=product\n",
             fPresent, szVendor, u32Units, cUsed,
-            (unsigned)GJ_IOMMU_MAX_WINDOWS, u32Denies, fEnforce,
-            g_cSoftInvLogs, (unsigned)IOMMU_SOFT_WAVE);
-
-    /* Grep: iommu: soft present */
-    kprintf("iommu: soft present lamp=%d vendor=%u vendor_name=%s "
-            "units=%u intel=%u amd=%u none=%u wave=%u\n",
-            fPresent, (unsigned)u8Vendor, szVendor, u32Units,
-            (u8Vendor == GJ_IOMMU_VENDOR_INTEL) ? 1u : 0u,
-            (u8Vendor == GJ_IOMMU_VENDOR_AMD) ? 1u : 0u,
-            (u8Vendor == GJ_IOMMU_VENDOR_NONE) ? 1u : 0u,
-            (unsigned)IOMMU_SOFT_WAVE);
-
-    /* Grep: iommu: soft dmar */
-    kprintf("iommu: soft dmar drhd=%u accepted=%u rmrr=%u atsr=%u "
-            "rhsa=%u other=%u rmrr_first_base=0x%lx rmrr_first_limit=0x%lx "
-            "wave=%u (structure soft inventory)\n",
-            g_cDrhd, g_cDrhdAccepted, g_cRmrr, g_cAtsr, g_cRhsa, g_cOther,
-            (unsigned long)g_u64RmrrFirstBase,
-            (unsigned long)g_u64RmrrFirstLimit, (unsigned)IOMMU_SOFT_WAVE);
-
-    /* Grep: iommu: soft window */
-    kprintf("iommu: soft window used=%u max=%u create_ok=%u update=%u "
-            "fail=%u full=%u reject=%u destroy=%u revoke=%u miss=%u "
-            "bad=%u wave=%u (software BDF table; not cap object product)\n",
-            cUsed, (unsigned)GJ_IOMMU_MAX_WINDOWS, g_cWinCreateOk,
-            g_cWinCreateUpdate, g_cWinCreateFail, g_cWinFull, g_cWinReject,
-            g_cWinDestroy, g_cWinRevokeCall, g_cWinRevokeMiss,
-            g_cWinRevokeBad, (unsigned)IOMMU_SOFT_WAVE);
-
-    /* Grep: iommu: soft enforce */
-    kprintf("iommu: soft enforce armed=%d denies=%u windows=%u "
-            "production_default_open_bus=0 soft "
-            "always_on_product=OPEN wave=%u "
-            "(soft policy lamps; not product always-on IOMMU)\n",
-            fEnforce, u32Denies, cUsed, (unsigned)IOMMU_SOFT_WAVE);
-
-    /* Grep: iommu: soft acpi (Wave 15 scan tallies) */
-    kprintf("iommu: soft acpi rsdp_skip=%u rsdp_bad=%u xsdt=%u rsdt=%u "
-            "dmar=%u ivrs=%u sdt_entries=%u struct_break=%u wave=%u "
-            "(ACPI soft scan; not product DMAR program)\n",
-            g_cSoftRsdpSkip, g_cSoftRsdpBad, g_cSoftXsdtHit, g_cSoftRsdtHit,
-            g_cSoftDmarHit, g_cSoftIvrsHit, g_cSoftSdtEntries,
-            g_cSoftStructBreak, (unsigned)IOMMU_SOFT_WAVE);
-
-    /* Grep: iommu: soft busmaster (Wave 15 path tallies) */
-    kprintf("iommu: soft busmaster allow=%u deny=%u open_path=%u "
-            "denies_total=%u enforce=%d wave=%u "
-            "(soft path tallies; not product always-on deny)\n",
-            g_cSoftBmAllow, g_cSoftBmDeny, g_cSoftBmOpen, u32Denies,
-            fEnforce, (unsigned)IOMMU_SOFT_WAVE);
-
-    /* Grep: iommu: soft peak (Wave 15 peaks) */
-    kprintf("iommu: soft peak windows=%u create_ok=%u update=%u "
-            "destroy=%u max_slots=%u wave=%u "
-            "(peak soft inventory; wrap OK)\n",
-            g_cSoftWinPeak, g_cWinCreateOk, g_cWinCreateUpdate,
-            g_cWinDestroy, (unsigned)GJ_IOMMU_MAX_WINDOWS,
-            (unsigned)IOMMU_SOFT_WAVE);
+            (unsigned)GJ_IOMMU_MAX_WINDOWS, u32Denies, fEnforce, g_cDrhd,
+            g_cSoftWinPeak, g_cSoftDmarHit, g_cSoftIvrsHit);
 
     /*
      * Honesty: always-on product IOMMU remains OPEN.
-     * Soft deepen ≠ product always-on IOMMU claim.
+     * Soft deepen != product always-on IOMMU claim.
+     * C2 Dual DoD A/B remain OPEN_UDX (userspace path; freestanding SKIP).
+     * window_mint=OPEN: DDI DMA_NOTE soft window only - not CNode mint.
      * Grep: iommu: soft path
+     * Grep: window_mint=OPEN | dual_dod_a=OPEN_UDX | freestanding_product=SKIP
      */
     kprintf("iommu: soft path probe=acpi_dmar_ivrs enforce=software_window "
-            "create_window=soft_bdf_table destroy=soft_revoke "
-            "always_on_product=OPEN hw_first_revoke=OPEN "
-            "cap_typed_window=OPEN wave=%u "
-            "(soft inventory; not product always-on IOMMU)\n",
-            (unsigned)IOMMU_SOFT_WAVE);
-
-    /* Grep: iommu: soft lamps */
-    kprintf("iommu: soft lamps present=%d enforce=%d windows_live=%u "
-            "denies=%u dmar_structs=%u probed=%d wave=%u "
-            "(composite soft lamps)\n",
-            fPresent, fEnforce, cUsed, u32Denies, u32Structs,
-            g_fProbed, (unsigned)IOMMU_SOFT_WAVE);
-
-    /* Grep: iommu: soft honesty (Wave 15 non-claims catalog) */
-    kprintf("iommu: soft honesty always_on_product=OPEN "
-            "no_open_bus_master_product=OPEN hw_first_revoke=OPEN "
-            "cap_typed_window=OPEN amd_vi_product=OPEN "
-            "inventory_only=1 soft_neq_product=1 wave=%u "
-            "(explicit non-claims; not product always-on IOMMU)\n",
-            (unsigned)IOMMU_SOFT_WAVE);
-
-    /* Grep: iommu: soft stats (Wave 15 rollup) */
-    kprintf("iommu: soft stats present=%d vendor=%s units=%u windows=%u "
-            "peak=%u denies=%u create_ok=%u destroy=%u "
-            "dmar_structs=%u bm_allow=%u bm_deny=%u logs=%u wave=%u "
-            "(rollup; not product close)\n",
-            fPresent, szVendor, u32Units, cUsed, g_cSoftWinPeak, u32Denies,
-            g_cWinCreateOk, g_cWinDestroy, u32Structs, g_cSoftBmAllow,
-            g_cSoftBmDeny, g_cSoftInvLogs, (unsigned)IOMMU_SOFT_WAVE);
+            "always_on_product=OPEN dual_dod_a=OPEN_UDX dual_dod_b=OPEN_UDX "
+            "freestanding_product=SKIP product_hosts=UDX window_mint=OPEN "
+            "Soft!=product G-AC-1\n");
 
     /*
-     * Wave 19: return-surface catalog (surf bitmask; soft ≠ product).
-     * Grep: iommu: soft surfaces
+     * ACPI scan residual: surface tallies already tracked on probe walk.
+     * Soft!=product; never hard-gates. Grep: iommu: soft scan residual
      */
-    kprintf("iommu: soft surfaces surf=0x%x catalog=%u "
-            "present=1 dmar=1 window=1 enforce=1 acpi=1 busmaster=1 "
-            "vendor=1 window_cap=1 return=1 open=1 wave=%u "
-            "(return surfaces; soft only; not product always-on IOMMU; "
-            ")\n",
-            (unsigned)u32Surf, (unsigned)IOMMU_SOFT_AREAS,
-            (unsigned)IOMMU_SOFT_WAVE);
+    kprintf("iommu: soft scan residual rsdp_skip=%u rsdp_bad=%u xsdt=%u "
+            "rsdt=%u dmar=%u ivrs=%u sdt_entries=%u struct_break=%u "
+            "Soft!=product\n",
+            g_cSoftRsdpSkip, g_cSoftRsdpBad, g_cSoftXsdtHit, g_cSoftRsdtHit,
+            g_cSoftDmarHit, g_cSoftIvrsHit, g_cSoftSdtEntries,
+            g_cSoftStructBreak);
 
     /*
-     * Wave 19: vendor/units return lamps.
-     * Grep: iommu: soft vendor
+     * Bus-master soft residual under enforce policy.
+     * Open path (enforce off) is QEMU/dev default; product no-open-busmaster
+     * remains OPEN. Soft!=product / G-AC-1.
+     * Grep: iommu: soft busmaster residual | soft enforce residual
      */
-    kprintf("iommu: soft vendor name=%s code=%u units=%u "
-            "intel=%u amd=%u none=%u present=%d wave=%u "
-            "(soft vendor; not product always-on IOMMU)\n",
-            szVendor, (unsigned)u8Vendor, u32Units,
-            (u8Vendor == GJ_IOMMU_VENDOR_INTEL) ? 1u : 0u,
-            (u8Vendor == GJ_IOMMU_VENDOR_AMD) ? 1u : 0u,
-            (u8Vendor == GJ_IOMMU_VENDOR_NONE) ? 1u : 0u,
-            fPresent, (unsigned)IOMMU_SOFT_WAVE);
+    kprintf("iommu: soft busmaster residual open=%u allow=%u deny=%u "
+            "denies=%u enforce=%d peak_win=%u eng_nic_ok=%d eng_usb_ok=%d "
+            "Soft!=product G-AC-1\n",
+            g_cSoftBmOpen, g_cSoftBmAllow, g_cSoftBmDeny, u32Denies, fEnforce,
+            g_cSoftWinPeak, fBmNicOpen, fBmUsbOpen);
+    kprintf("iommu: soft enforce residual armed=%d denies=%u "
+            "product_no_open_busmaster=OPEN eng_nic_ok=%d eng_usb_ok=%d "
+            "Soft!=product G-AC-1\n",
+            fEnforce, u32Denies, fBmNicOpen, fBmUsbOpen);
 
     /*
-     * Wave 19: window-cap soft return surface (software BDF table).
-     * Grep: iommu: soft window_cap
+     * Lean DDI DMA_NOTE window residual honesty (probe-side rollup).
+     * VT-d residual detail lives in iommu_vtd_ddi_dma_note_residual().
+     * Soft!=product / G-AC-1. Not product cap mint.
+     * Grep: iommu: soft ddi residual | soft dma_note residual
+     * Grep: iommu: soft create_window residual
      */
-    kprintf("iommu: soft window_cap used=%u max=%u create_ok=%u "
-            "update=%u destroy=%u full=%u reject=%u peak=%u "
-            "cap_typed_window=OPEN wave=%u "
-            "(window cap soft return; not product)\n",
+    kprintf("iommu: soft ddi residual windows=%u create_ok=%u update=%u "
+            "fail=%u reject=%u path=iommu_window_grant op=DMA_NOTE "
+            "window_mint=OPEN Soft!=product G-AC-1\n",
+            cUsed, g_cWinCreateOk, g_cWinCreateUpdate, g_cWinCreateFail,
+            g_cWinReject);
+    kprintf("iommu: soft dma_note residual used=%u max=%u create_ok=%u "
+            "destroy=%u window_mint=OPEN Soft!=product\n",
             cUsed, (unsigned)GJ_IOMMU_MAX_WINDOWS, g_cWinCreateOk,
-            g_cWinCreateUpdate, g_cWinDestroy, g_cWinFull, g_cWinReject,
-            g_cSoftWinPeak, (unsigned)IOMMU_SOFT_WAVE);
+            g_cWinDestroy);
+    kprintf("iommu: soft create_window residual ok=%u update=%u fail=%u "
+            "full=%u reject=%u destroy=%u revoke=%u live=%u max=%u "
+            "window_mint=OPEN Soft!=product G-AC-1\n",
+            g_cWinCreateOk, g_cWinCreateUpdate, g_cWinCreateFail, g_cWinFull,
+            g_cWinReject, g_cWinDestroy, g_cWinRevokeCall, cUsed,
+            (unsigned)GJ_IOMMU_MAX_WINDOWS);
 
     /*
-     * Wave 19: create/destroy return taxonomy.
-     * Grep: iommu: soft return
+     * C2 Dual DoD DMA path residual (probe window side after VT-d handoff).
+     * Observes software windows for eng BDFs granted by soft-probe residuals.
+     * Identity/TE bus3/udx PASS|SKIP|FAIL verdicts stay in iommu_vtd.c
+     * (distinct greps: soft dual/dma/eng/udx *path* residual here).
+     * C2 honesty: dual_dod_a/b=OPEN_UDX freestanding_product=SKIP.
+     * Soft lamps alone != Dual DoD close / product UDX DMA caps.
+     * Soft!=product / G-AC-1. Dual MIT OR Apache-2.0. No GPL.
+     * Grep: iommu: soft dual residual
+     * Grep: iommu: soft dma path residual
+     * Grep: iommu: soft eng path residual | soft eng window residual
+     * Grep: iommu: soft udx path residual
+     * Grep: dual_dod_a=OPEN_UDX | dual_dod_b=OPEN_UDX
+     * Grep: freestanding_product=SKIP | product_hosts=UDX
      */
-    kprintf("iommu: soft return create_ok=%u create_fail=%u update=%u "
-            "full=%u reject=%u destroy=%u revoke_call=%u "
-            "revoke_miss=%u revoke_bad=%u wave=%u "
-            "(soft return taxonomy; not product)\n",
-            g_cWinCreateOk, g_cWinCreateFail, g_cWinCreateUpdate,
-            g_cWinFull, g_cWinReject, g_cWinDestroy, g_cWinRevokeCall,
-            g_cWinRevokeMiss, g_cWinRevokeBad, (unsigned)IOMMU_SOFT_WAVE);
+    kprintf("iommu: soft dual residual nic_win=%d usb_win=%d windows=%u "
+            "peak=%u win_ok=%d path=probe_window handoff=vtd "
+            "dual_dod_a=OPEN_UDX dual_dod_b=OPEN_UDX "
+            "freestanding_product=SKIP product_hosts=UDX "
+            "Soft!=product G-AC-1\n",
+            fNicWin, fUsbWin, cUsed, g_cSoftWinPeak, fWinOk);
+    kprintf("iommu: soft dual residual %s nic_win=%d usb_win=%d "
+            "dual_dod_a=OPEN_UDX dual_dod_b=OPEN_UDX Soft!=product\n",
+            szDualVerdict, fNicWin, fUsbWin);
+    kprintf("iommu: soft dma path residual force32=1 eng_nic=%d eng_usb=%d "
+            "windows=%u win_ok=%d dual_dod_a=OPEN_UDX dual_dod_b=OPEN_UDX "
+            "freestanding_product=SKIP window_mint=OPEN Soft!=product "
+            "G-AC-1\n",
+            fNicWin, fUsbWin, cUsed, fWinOk);
+    kprintf("iommu: soft dma path residual %s force32=1 win_ok=%d "
+            "path=probe_window Soft!=product\n",
+            szDmaVerdict, fWinOk);
+    kprintf("iommu: soft eng path residual nic_bdf=%u:%u.%u usb_bdf=%u:%u.%u "
+            "nic_win=%d usb_win=%d win_ok=%d Soft!=product G-AC-1\n",
+            (unsigned)GJ_IOMMU_G752_NIC_BUS, (unsigned)GJ_IOMMU_G752_NIC_SLOT,
+            (unsigned)GJ_IOMMU_G752_NIC_FUNC,
+            (unsigned)GJ_IOMMU_XHCI_BUS_DEFAULT,
+            (unsigned)GJ_IOMMU_XHCI_SLOT_DEFAULT,
+            (unsigned)GJ_IOMMU_XHCI_FUNC_DEFAULT, fNicWin, fUsbWin, fWinOk);
+    /* Grep: iommu: soft eng window residual (PA/cb span honesty) */
+    kprintf("iommu: soft eng window residual nic_win=%d nic_pa=0x%lx "
+            "nic_cb=0x%lx usb_win=%d usb_pa=0x%lx usb_cb=0x%lx "
+            "force32_span=1 Soft!=product G-AC-1\n",
+            fNicWin, (unsigned long)u64NicPa, (unsigned long)u64NicCb,
+            fUsbWin, (unsigned long)u64UsbPa, (unsigned long)u64UsbCb);
+    kprintf("iommu: soft udx path residual eng_nic=%d eng_usb=%d win_ok=%d "
+            "path=iommu_window_grant dual_dod_a=OPEN_UDX dual_dod_b=OPEN_UDX "
+            "freestanding_product=SKIP product_hosts=UDX window_mint=OPEN "
+            "Soft!=product G-AC-1\n",
+            fNicWin, fUsbWin, fWinOk);
+    kprintf("iommu: soft udx path residual %s eng_nic=%d eng_usb=%d "
+            "path=userspace Soft!=product\n",
+            szUdxVerdict, fNicWin, fUsbWin);
 
     /*
-     * Grep: iommu: soft return rate
-     * Wave 17 return-surface rate lamps (kept) (create/destroy/revoke).
+     * C2 Dual DoD residual deepen rollup (probe exclusive; window side).
+     * Soft residual != product UDX DMA caps / Dual DoD close.
+     * Grep: iommu: soft residual deepen | C2 Dual DoD
      */
-    kprintf("iommu: soft return rate "
-            "create_ok=%u create_fail=%u destroy=%u "
-            "full=%u reject=%u revoke_call=%u revoke_miss=%u "
-            "windows=%u wave=%u "
-            "(return rate; Soft≠product always-on IOMMU; soft≠product; "
-            ")\n",
-            g_cWinCreateOk, g_cWinCreateFail, g_cWinDestroy,
-            g_cWinFull, g_cWinReject, g_cWinRevokeCall, g_cWinRevokeMiss,
-            cUsed, (unsigned)IOMMU_SOFT_WAVE);
-
-    /*
-     * Grep: iommu: soft retcode
-     * Wave 17 retcode catalog for window create/destroy return classes.
-     */
-    kprintf("iommu: soft retcode "
-            "create_ok=1 create_fail=1 update=1 full=1 reject=1 "
-            "destroy=1 revoke_miss=1 revoke_bad=1 "
-            "always_on_product=OPEN wave=%u "
-            "(retcode catalog; Soft≠product always-on IOMMU; soft≠product)\n",
-            (unsigned)IOMMU_SOFT_WAVE);
-
-    /*
-     * ---- Wave 18 complementary surfaces (kept) (never reshape primary).
-     * Return surfaces only — soft inventory; never hard-gates product paths.
-     */
-    /* Grep: iommu: soft return selftest — Wave 19 terminal return surface */
-    kprintf("iommu: soft return selftest inv_ret=1 product_kernel=OPEN "
-            "multi_server=0 rate_limited=0 wave=%u soft PASS\n",
-            (unsigned)IOMMU_SOFT_WAVE);
-
-    /* Grep: iommu: soft retmap — Wave 19 return-surface map */
-    kprintf("iommu: soft retmap soft_inv=1 deepen=1 return_rate=1 retcode=1 "
-            "product=OPEN wave=%u soft PASS\n",
-            (unsigned)IOMMU_SOFT_WAVE);
-
-    /* Grep: iommu: soft deepen wave (Wave 24 stamp) */
-    /*
-     * ---- Wave 19 complementary surfaces (kept) (never reshape primary).
-     * Return surfaces only — soft inventory; never hard-gates product paths.
-     */
-    /* Grep: iommu: soft retclass — Wave 19 return-class taxonomy (kept) */
-    kprintf("iommu: soft retclass ok|fail|inval|nodev|busy|nomem "
-            "soft_only=1 product_gate=0 wave=%u "
-            "(retclass taxonomy; Soft≠product)\n",
-            (unsigned)IOMMU_SOFT_WAVE);
-    /* Grep: iommu: soft retlane — Wave 19 return-lane catalog (kept) */
-    kprintf("iommu: soft retlane inv|selftest|rate|retcode|retmap|class "
-            "product_kernel=OPEN soft_ne_product=1 wave=%u "
-            "(retlane catalog; Soft≠product)\n",
-            (unsigned)IOMMU_SOFT_WAVE);
-    /*
-     * ---- Wave 20 complementary surfaces (kept) (never reshape primary).
-     * Return surfaces only — soft inventory; never hard-gates product paths.
-     */
-    /* Grep: iommu: soft retbound — Wave 20 return-bound honesty (kept) */
-    kprintf("iommu: soft retbound soft_only=1 product_gate=0 hard_gate=0 "
-            "never_blocks_m0=1 wave=%u "
-            "(retbound honesty; Soft≠product)\n",
-            (unsigned)IOMMU_SOFT_WAVE);
-    /* Grep: iommu: soft retseal — Wave 20 seal stamp (kept) */
-    kprintf("iommu: soft retseal exclusive=1 soft_ne_product=1 "
-            "product_kernel=OPEN wave=%u "
-            "(retseal stamp; Soft≠product)\n",
-            (unsigned)IOMMU_SOFT_WAVE);
-            /*
-             * ---- Wave 21 complementary surfaces (kept) (never reshape primary).
-             * Return surfaces only — soft inventory; never hard-gates product paths.
-            */
-            /* Grep: iommu: soft retpulse — Wave 21 return-pulse honesty (kept) */
-            kprintf("iommu: soft retpulse soft_only=1 product_gate=0 soft_ne_product=1 "
-                    "never_blocks_m0=1 wave=%u "
-                    "(retpulse honesty; Soft≠product)\n",
-                    (unsigned)IOMMU_SOFT_WAVE);
-            /* Grep: iommu: soft retmark — Wave 21 mark stamp (kept) */
-            kprintf("iommu: soft retmark exclusive=1 soft_ne_product=1 "
-                    "product_kernel=OPEN wave=%u "
-                    "(retmark stamp; Soft≠product)\n",
-                    (unsigned)IOMMU_SOFT_WAVE);
-            /*
-             * ---- Wave 22 complementary surfaces (kept) (never reshape primary).
-             * Return surfaces only — soft inventory; never hard-gates product paths.
-            */
-            /* Grep: iommu: soft retphase — Wave 22 return-phase honesty (kept) */
-            kprintf("iommu: soft retphase soft_only=1 product_gate=0 soft_ne_product=1 "
-                    "never_blocks_m0=1 wave=%u "
-                    "(retphase honesty; Soft≠product)\n",
-                    (unsigned)IOMMU_SOFT_WAVE);
-            /* Grep: iommu: soft retbadge — Wave 22 badge stamp (kept) */
-            kprintf("iommu: soft retbadge exclusive=1 soft_ne_product=1 "
-                    "product_kernel=OPEN wave=%u "
-                    "(retbadge stamp; Soft≠product)\n",
-                    (unsigned)IOMMU_SOFT_WAVE);
-/*
- * ---- Wave 23 complementary surfaces (kept) (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
-            */
-            /* Grep: iommu: soft rettoken — Wave 23 return-token honesty (kept) */
-            kprintf("iommu: soft rettoken soft_only=1 product_gate=0 soft_ne_product=1 "
-                    "never_blocks_m0=1 wave=%u "
-                    "(rettoken honesty; Soft≠product)\n",
-                    (unsigned)IOMMU_SOFT_WAVE);
-            /* Grep: iommu: soft retcrest — Wave 23 crest stamp (kept) */
-            kprintf("iommu: soft retcrest exclusive=1 soft_ne_product=1 "
-                    "product_kernel=OPEN wave=%u "
-                    "(retcrest stamp; Soft≠product)\n",
-                    (unsigned)IOMMU_SOFT_WAVE);
-            /*
-             * ---- Wave 24 complementary surfaces (kept) (never reshape primary).
-             * Return surfaces only — soft inventory; never hard-gates product paths.
-             */
-            /* Grep: iommu: soft retvault — Wave 24 return-vault honesty (kept) */
-            kprintf("iommu: soft retvault soft_only=1 product_gate=0 soft_ne_product=1 "
-                    "never_blocks_m0=1 wave=%u "
-                    "(retvault honesty; Soft≠product)\n",
-                    (unsigned)IOMMU_SOFT_WAVE);
-            /* Grep: iommu: soft retbanner — Wave 24 banner stamp (kept) */
-            kprintf("iommu: soft retbanner exclusive=1 soft_ne_product=1 "
-                    "product_kernel=OPEN wave=%u "
-                    "(retbanner stamp; Soft≠product)\n",
-                    (unsigned)IOMMU_SOFT_WAVE);
-            /*
-             * ---- Wave 25 complementary surfaces (kept) (never reshape primary).
-             * Return surfaces only — soft inventory; never hard-gates product paths.
-             */
-            /* Grep: iommu: soft retledger — Wave 25 return-ledger honesty (kept) */
-            kprintf("iommu: soft retledger soft_only=1 product_gate=0 soft_ne_product=1 "
-                    "never_blocks_m0=1 wave=%u "
-                    "(retledger honesty; Soft≠product)\n",
-                    (unsigned)IOMMU_SOFT_WAVE);
-            /* Grep: iommu: soft retbeacon — Wave 25 beacon stamp (kept) */
-            kprintf("iommu: soft retbeacon exclusive=1 soft_ne_product=1 "
-                    "product_kernel=OPEN wave=%u "
-                    "(retbeacon stamp; Soft≠product)\n",
-                    (unsigned)IOMMU_SOFT_WAVE);
-            /*
-             * ---- Wave 26 complementary surfaces (kept) (never reshape primary).
-             * Return surfaces only — soft inventory; never hard-gates product paths.
-             */
-            /* Grep: iommu: soft retcipher — Wave 26 return-cipher honesty (kept) */
-            kprintf("iommu: soft retcipher soft_only=1 product_gate=0 soft_ne_product=1 "
-                    "never_blocks_m0=1 wave=%u "
-                    "(retcipher honesty; Soft≠product)\n",
-                    (unsigned)IOMMU_SOFT_WAVE);
-            /* Grep: iommu: soft retflame — Wave 26 flame stamp (kept) */
-            kprintf("iommu: soft retflame exclusive=1 soft_ne_product=1 "
-                    "product_kernel=OPEN wave=%u "
-                    "(retflame stamp; Soft≠product)\n",
-                    (unsigned)IOMMU_SOFT_WAVE);
-                    /*
-                     * ---- Wave 27 complementary surfaces (kept) (never reshape primary).
-                     * Return surfaces only — soft inventory; never hard-gates product paths.
-                     */
-                    /* Grep: iommu: soft retprism — Wave 27 return-prism honesty (kept) */
-                    kprintf("iommu: soft retprism soft_only=1 product_gate=0 soft_ne_product=1 "
-                            "never_blocks_m0=1 wave=%u "
-                            "(retprism honesty; Soft≠product)\n",
-                            (unsigned)IOMMU_SOFT_WAVE);
-                    /* Grep: iommu: soft retforge — Wave 27 forge stamp (kept) */
-                    kprintf("iommu: soft retforge exclusive=1 soft_ne_product=1 "
-                            "product_kernel=OPEN wave=%u "
-                            "(retforge stamp; Soft≠product)\n",
-                            (unsigned)IOMMU_SOFT_WAVE);
-                            /*
-                             * ---- Wave 28 complementary surfaces (kept) (never reshape primary).
-                             * Return surfaces only — soft inventory; never hard-gates product paths.
-                             */
-                            /* Grep: iommu: soft retshard — Wave 28 return-shard honesty (kept) */
-                            kprintf("iommu: soft retshard soft_only=1 product_gate=0 soft_ne_product=1 "
-                                "never_blocks_m0=1 wave=%u "
-                                "(retshard honesty; Soft≠product)\n",
-                                (unsigned)IOMMU_SOFT_WAVE);
-                            /* Grep: iommu: soft retcrown — Wave 28 crown stamp (kept) */
-                            kprintf("iommu: soft retcrown exclusive=1 soft_ne_product=1 "
-                                "product_kernel=OPEN wave=%u "
-                                "(retcrown stamp; Soft≠product)\n",
-                                (unsigned)IOMMU_SOFT_WAVE);
-                                /*
-                             * ---- Wave 29 complementary surfaces (kept) (never reshape primary).
-                             * Return surfaces only — soft inventory; never hard-gates product paths.
-                             */
-                            /* Grep: iommu: soft retglyph — Wave 29 return-glyph honesty (kept) */
-                            kprintf("iommu: soft retglyph soft_only=1 product_gate=0 soft_ne_product=1 "
-                                    "never_blocks_m0=1 wave=%u "
-                                    "(retglyph honesty; Soft≠product)\n",
-                                    (unsigned)IOMMU_SOFT_WAVE);
-                            /* Grep: iommu: soft retscepter — Wave 29 scepter stamp (kept) */
-                            kprintf("iommu: soft retscepter exclusive=1 soft_ne_product=1 "
-                                    "product_kernel=OPEN wave=%u "
-                                    "(retscepter stamp; Soft≠product)\n",
-                                    (unsigned)IOMMU_SOFT_WAVE);
-                                /*
-                             * ---- Wave 30 complementary surfaces (kept) (never reshape primary).
-                             * Return surfaces only — soft inventory; never hard-gates product paths.
-                             */
-                            /* Grep: iommu: soft retsigil — Wave 30 return-sigil honesty (kept) */
-                            kprintf("iommu: soft retsigil soft_only=1 product_gate=0 soft_ne_product=1 "
-                                    "never_blocks_m0=1 wave=%u "
-                                    "(retsigil honesty; Soft≠product)\n",
-                                    (unsigned)IOMMU_SOFT_WAVE);
-                            /* Grep: iommu: soft retemblem — Wave 30 emblem stamp (kept) */
-                            kprintf("iommu: soft retemblem exclusive=1 soft_ne_product=1 "
-                                    "product_kernel=OPEN wave=%u "
-                                    "(retemblem stamp; Soft≠product)\n",
-                                    (unsigned)IOMMU_SOFT_WAVE);
-                            /*
-                             * ---- Wave 31 complementary surfaces (kept) (never reshape primary).
-                             * Return surfaces only — soft inventory; never hard-gates product paths.
-                             */
-                            /* Grep: iommu: soft retaegis — Wave 31 return-aegis honesty (kept) */
-                            kprintf("iommu: soft retaegis soft_only=1 product_gate=0 soft_ne_product=1 "
-                                    "never_blocks_m0=1 wave=%u "
-                                    "(retaegis honesty; Soft≠product)\n",
-                                    (unsigned)IOMMU_SOFT_WAVE);
-                            /* Grep: iommu: soft retsigil — Wave 30 return-sigil honesty (kept) */
-                            kprintf("iommu: soft retsigil soft_only=1 product_gate=0 soft_ne_product=1 "
-                                    "never_blocks_m0=1 wave=%u "
-                                    "(retsigil honesty; Soft≠product)\n",
-                                    (unsigned)IOMMU_SOFT_WAVE);
-                            /* Grep: iommu: soft retmantle — Wave 31 mantle stamp (kept) */
-                            kprintf("iommu: soft retmantle exclusive=1 soft_ne_product=1 "
-                                    "product_kernel=OPEN wave=%u "
-                                    "(retmantle stamp; Soft≠product)\n",
-                                    (unsigned)IOMMU_SOFT_WAVE);
-/*
- * ---- Wave 32 complementary surfaces (kept) (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: iommu: soft retbulwark — Wave 32 return-bulwark honesty (kept) */
-kprintf("iommu: soft retbulwark soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=%u "
-        "(retbulwark honesty; Soft≠product)\n",
-        (unsigned)IOMMU_SOFT_WAVE);
-/* Grep: iommu: soft retpanoply — Wave 32 panoply stamp (kept) */
-kprintf("iommu: soft retpanoply exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=%u "
-        "(retpanoply stamp; Soft≠product)\n",
-        (unsigned)IOMMU_SOFT_WAVE);
-/*
- * ---- Wave 33 complementary surfaces (kept) (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: iommu: soft retbastion — Wave 33 return-bastion honesty (kept) */
-kprintf("iommu: soft retbastion soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=%u "
-        "(retbastion honesty; Soft≠product)\n",
-        (unsigned)IOMMU_SOFT_WAVE);
-/* Grep: iommu: soft retcitadel — Wave 33 citadel stamp (kept) */
-kprintf("iommu: soft retcitadel exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=%u "
-        "(retcitadel stamp; Soft≠product)\n",
-        (unsigned)IOMMU_SOFT_WAVE);
-/*
- * ---- Wave 34 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: iommu: soft retredoubt — Wave 34 return-redoubt honesty */
-kprintf("iommu: soft retredoubt soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=%u "
-        "(retredoubt honesty; Soft≠product)\n",
-        (unsigned)IOMMU_SOFT_WAVE);
-/* Grep: iommu: soft retkeep — Wave 34 exclusive keep stamp */
-kprintf("iommu: soft retkeep exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=%u "
-        "(retkeep stamp; Soft≠product)\n",
-        (unsigned)IOMMU_SOFT_WAVE);
-/*
- * ---- Wave 35 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: iommu: soft retfortress — Wave 35 return-fortress honesty */
-kprintf("iommu: soft retfortress soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=%u "
-        "(retfortress honesty; Soft≠product)\n",
-        (unsigned)IOMMU_SOFT_WAVE);
-/* Grep: iommu: soft retpalace — Wave 35 exclusive palace stamp */
-kprintf("iommu: soft retpalace exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=%u "
-        "(retpalace stamp; Soft≠product)\n",
-        (unsigned)IOMMU_SOFT_WAVE);
-/*
- * ---- Wave 36 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: iommu: soft rethold — Wave 36 return-hold honesty */
-kprintf("iommu: soft rethold soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=%u "
-        "(rethold honesty; Soft≠product)\n",
-        (unsigned)IOMMU_SOFT_WAVE);
-/* Grep: iommu: soft retspire — Wave 36 exclusive spire stamp */
-kprintf("iommu: soft retspire exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=%u "
-        "(retspire stamp; Soft≠product)\n",
-        (unsigned)IOMMU_SOFT_WAVE);
-/*
- * ---- Wave 37 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: iommu: soft retwall — Wave 37 return-wall honesty */
-kprintf("iommu: soft retwall soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=%u "
-        "(retwall honesty; Soft≠product)\n",
-        (unsigned)IOMMU_SOFT_WAVE);
-/* Grep: iommu: soft retgate — Wave 37 exclusive gate stamp */
-kprintf("iommu: soft retgate exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=%u "
-        "(retgate stamp; Soft≠product)\n",
-        (unsigned)IOMMU_SOFT_WAVE);
-/*
- * ---- Wave 38 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: iommu: soft retmoat — Wave 38 return-moat honesty */
-kprintf("iommu: soft retmoat soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=%u "
-        "(retmoat honesty; Soft≠product)\n",
-        (unsigned)IOMMU_SOFT_WAVE);
-/* Grep: iommu: soft retower — Wave 38 exclusive tower stamp */
-kprintf("iommu: soft retower exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=%u "
-        "(retower stamp; Soft≠product)\n",
-        (unsigned)IOMMU_SOFT_WAVE);
-                            
-/*
- * ---- Wave 39 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: iommu: soft retbarbican — Wave 39 return-barbican honesty */
-kprintf("iommu: soft retbarbican soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=%u "
-        "(retbarbican honesty; Soft≠product)\n",
-        (unsigned)IOMMU_SOFT_WAVE);
-/* Grep: iommu: soft retglacis — Wave 39 exclusive glacis stamp */
-kprintf("iommu: soft retglacis exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=%u "
-        "(retglacis stamp; Soft≠product)\n",
-        (unsigned)IOMMU_SOFT_WAVE);
-/*
- * ---- Wave 40 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: iommu: soft retcurtain — Wave 40 return-curtain honesty */
-kprintf("iommu: soft retcurtain soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=%u "
-        "(retcurtain honesty; Soft≠product)\n",
-        (unsigned)IOMMU_SOFT_WAVE);
-/* Grep: iommu: soft retparapet — Wave 40 exclusive parapet stamp */
-kprintf("iommu: soft retparapet exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=%u "
-        "(retparapet stamp; Soft≠product)\n",
-        (unsigned)IOMMU_SOFT_WAVE);
-/*
- * ---- Wave 41 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: iommu: soft retravelin — Wave 41 return-travelin honesty */
-kprintf("iommu: soft retravelin soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=%u "
-        "(retravelin honesty; Soft≠product)\n",
-        (unsigned)IOMMU_SOFT_WAVE);
-/* Grep: iommu: soft retditch — Wave 41 exclusive ditch stamp */
-kprintf("iommu: soft retditch exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=%u "
-        "(retditch stamp; Soft≠product)\n",
-        (unsigned)IOMMU_SOFT_WAVE);
-/*
- * ---- Wave 42 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: iommu: soft retportcullis — Wave 42 return-portcullis honesty */
-kprintf("iommu: soft retportcullis soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=%u "
-        "(retportcullis honesty; Soft≠product)\n",
-        (unsigned)IOMMU_SOFT_WAVE);
-/* Grep: iommu: soft retbattlement — Wave 42 exclusive battlement stamp */
-kprintf("iommu: soft retbattlement exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=%u "
-        "(retbattlement stamp; Soft≠product)\n",
-        (unsigned)IOMMU_SOFT_WAVE);
-/*
- * ---- Wave 43 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: iommu: soft retmachicolation — Wave 43 return-machicolation honesty */
-kprintf("iommu: soft retmachicolation soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=%u "
-        "(retmachicolation honesty; Soft≠product)\n",
-        (unsigned)IOMMU_SOFT_WAVE);
-/* Grep: iommu: soft retarrowslit — Wave 43 exclusive arrowslit stamp */
-kprintf("iommu: soft retarrowslit exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=%u "
-        "(retarrowslit stamp; Soft≠product)\n",
-        (unsigned)IOMMU_SOFT_WAVE);
-
-/*
- * ---- Wave 44 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: iommu: soft retmerlon — Wave 44 return-merlon honesty */
-kprintf("iommu: soft retmerlon soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=%u "
-        "(retmerlon honesty; Soft≠product)\n",
-        (unsigned)IOMMU_SOFT_WAVE);
-/* Grep: iommu: soft retembrasure — Wave 44 exclusive embrasure stamp */
-kprintf("iommu: soft retembrasure exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=%u "
-        "(retembrasure stamp; Soft≠product)\n",
-        (unsigned)IOMMU_SOFT_WAVE);
-
-/*
- * ---- Wave 45 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: iommu: soft retkeepgate — Wave 45 return-keepgate honesty */
-kprintf("iommu: soft retkeepgate soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=%u "
-        "(retkeepgate honesty; Soft≠product)\n",
-        (unsigned)IOMMU_SOFT_WAVE);
-/* Grep: iommu: soft retouterward — Wave 45 exclusive outerward stamp */
-kprintf("iommu: soft retouterward exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=%u "
-        "(retouterward stamp; Soft≠product)\n",
-        (unsigned)IOMMU_SOFT_WAVE);
-
-/*
- * ---- Wave 46 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: iommu: soft retbailey — Wave 46 return-bailey honesty */
-kprintf("iommu: soft retbailey soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=%u "
-        "(retbailey honesty; Soft≠product)\n",
-        (unsigned)IOMMU_SOFT_WAVE);
-/* Grep: iommu: soft retpostern — Wave 46 exclusive postern stamp */
-kprintf("iommu: soft retpostern exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=%u "
-        "(retpostern stamp; Soft≠product)\n",
-        (unsigned)IOMMU_SOFT_WAVE);
-
-/*
- * ---- Wave 47 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: iommu: soft retinnerward — Wave 47 return-innerward honesty */
-kprintf("iommu: soft retinnerward soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retinnerward honesty; Soft≠product)\n");
-/* Grep: iommu: soft retdonjon — Wave 47 exclusive donjon stamp */
-kprintf("iommu: soft retdonjon exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retdonjon stamp; Soft≠product)\n");
-
-/*
- * ---- Wave 48 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: iommu: soft retchevaux — Wave 48 return-chevaux honesty */
-kprintf("iommu: soft retchevaux soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retchevaux honesty; Soft≠product)\n");
-/* Grep: iommu: soft retpalisade — Wave 48 exclusive palisade stamp */
-kprintf("iommu: soft retpalisade exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retpalisade stamp; Soft≠product)\n");
-
-/*
- * ---- Wave 49 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: iommu: soft retglacisgate — Wave 49 return-glacisgate honesty */
-kprintf("iommu: soft retglacisgate soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retglacisgate honesty; Soft≠product)\n");
-/* Grep: iommu: soft retoutwork — Wave 49 exclusive outwork stamp */
-kprintf("iommu: soft retoutwork exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retoutwork stamp; Soft≠product)\n");
-/*
- * ---- Wave 50 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: iommu: soft retsally — Wave 50 return-sally honesty */
-kprintf("iommu: soft retsally soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retsally honesty; Soft≠product)\n");
-/* Grep: iommu: soft retcounterscarp — Wave 50 exclusive counterscarp stamp */
-kprintf("iommu: soft retcounterscarp exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retcounterscarp stamp; Soft≠product)\n");
-/*
- * ---- Wave 51 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: iommu: soft retfosse — Wave 51 return-fosse honesty */
-kprintf("iommu: soft retfosse soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retfosse honesty; Soft≠product)\n");
-/* Grep: iommu: soft retcoveredway — Wave 51 exclusive coveredway stamp */
-kprintf("iommu: soft retcoveredway exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retcoveredway stamp; Soft≠product)\n");
-
-/*
- * ---- Wave 52 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: iommu: soft rettenaille — Wave 52 return-tenaille honesty */
-kprintf("iommu: soft rettenaille soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(rettenaille honesty; Soft≠product)\n");
-/* Grep: iommu: soft retdemilune — Wave 52 exclusive demilune stamp */
-kprintf("iommu: soft retdemilune exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retdemilune stamp; Soft≠product)\n");
-/*
- * ---- Wave 53 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: iommu: soft retravelin — Wave 53 return-travelin honesty */
-kprintf("iommu: soft retravelin soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retravelin honesty; Soft≠product)\n");
-/* Grep: iommu: soft retlunette — Wave 53 exclusive lunette stamp */
-kprintf("iommu: soft retlunette exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retlunette stamp; Soft≠product)\n");
-/*
- * ---- Wave 54 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: iommu: soft retcaponier — Wave 54 return-caponier honesty */
-kprintf("iommu: soft retcaponier soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retcaponier honesty; Soft≠product)\n");
-/* Grep: iommu: soft retredan — Wave 54 exclusive redan stamp */
-kprintf("iommu: soft retredan exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retredan stamp; Soft≠product)\n");
-/*
- * ---- Wave 55 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: iommu: soft retflank — Wave 55 return-flank honesty */
-kprintf("iommu: soft retflank soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retflank honesty; Soft≠product)\n");
-/* Grep: iommu: soft retface — Wave 55 exclusive face stamp */
-kprintf("iommu: soft retface exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retface stamp; Soft≠product)\n");
-/*
- * ---- Wave 56 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: iommu: soft retgorge — Wave 56 return-gorge honesty */
-kprintf("iommu: soft retgorge soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retgorge honesty; Soft≠product)\n");
-/* Grep: iommu: soft retshoulder — Wave 56 exclusive shoulder stamp */
-kprintf("iommu: soft retshoulder exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retshoulder stamp; Soft≠product)\n");
-/*
- * ---- Wave 57 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: iommu: soft retraverse — Wave 57 return-traverse honesty */
-kprintf("iommu: soft retraverse soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retraverse honesty; Soft≠product)\n");
-/* Grep: iommu: soft retcasemate — Wave 57 exclusive casemate stamp */
-kprintf("iommu: soft retcasemate exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retcasemate stamp; Soft≠product)\n");
-
-/*
- * ---- Wave 58 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: iommu: soft retorillon — Wave 58 return-orillon honesty */
-kprintf("iommu: soft retorillon soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retorillon honesty; Soft≠product)\n");
-/* Grep: iommu: soft retbonnette — Wave 58 exclusive bonnette stamp */
-kprintf("iommu: soft retbonnette exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retbonnette stamp; Soft≠product)\n");
-
-/*
- * ---- Wave 59 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: iommu: soft retcrownwork — Wave 59 return-crownwork honesty */
-kprintf("iommu: soft retcrownwork soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retcrownwork honesty; Soft≠product)\n");
-/* Grep: iommu: soft rethornwork — Wave 59 exclusive hornwork stamp */
-kprintf("iommu: soft rethornwork exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(rethornwork stamp; Soft≠product)\n");
-
-/*
- * ---- Wave 60 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: iommu: soft retplace — Wave 60 return-place honesty */
-kprintf("iommu: soft retplace soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retplace honesty; Soft≠product)\n");
-/* Grep: iommu: soft retenvelope — Wave 60 exclusive envelope stamp */
-kprintf("iommu: soft retenvelope exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retenvelope stamp; Soft≠product)\n");
-
-
-
-
-
-
-
-
-
-/*
- * ---- Wave 61 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: iommu: soft retcounterguard — Wave 61 return-counterguard honesty */
-kprintf("iommu: soft retcounterguard soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retcounterguard honesty; Soft≠product)\n");
-/* Grep: iommu: soft retcoveredface — Wave 61 exclusive coveredface stamp */
-kprintf("iommu: soft retcoveredface exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retcoveredface stamp; Soft≠product)\n");
-/*
- * ---- Wave 62 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: iommu: soft retbastionface — Wave 62 return-bastionface honesty */
-kprintf("iommu: soft retbastionface soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retbastionface honesty; Soft≠product)\n");
-/* Grep: iommu: soft retcurtainangle — Wave 62 exclusive curtainangle stamp */
-kprintf("iommu: soft retcurtainangle exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retcurtainangle stamp; Soft≠product)\n");
-/*
- * ---- Wave 63 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: iommu: soft retdoubletenaille — Wave 63 return-doubletenaille honesty */
-kprintf("iommu: soft retdoubletenaille soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retdoubletenaille honesty; Soft≠product)\n");
-/* Grep: iommu: soft retplaceofarms — Wave 63 exclusive placeofarms stamp */
-kprintf("iommu: soft retplaceofarms exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retplaceofarms stamp; Soft≠product)\n");
- /*
-  * ---- Wave 64 exclusive complementary surfaces (never reshape primary).
-  * Return surfaces only — soft inventory; never hard-gates product paths.
-  */
- /* Grep: iommu: soft retreentrant — Wave 64 return-reentrant honesty */
-kprintf("iommu: soft retreentrant soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retreentrant honesty; Soft≠product)\n");
- /* Grep: iommu: soft retsallyport — Wave 64 exclusive sallyport stamp */
-kprintf("iommu: soft retsallyport exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retsallyport stamp; Soft≠product)\n");
- /*
-  * ---- Wave 65 exclusive complementary surfaces (never reshape primary).
-  * Return surfaces only — soft inventory; never hard-gates product paths.
-  */
- /* Grep: iommu: soft retgorgeangle — Wave 65 return-gorgeangle honesty */
-kprintf("iommu: soft retgorgeangle soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retgorgeangle honesty; Soft≠product)\n");
- /* Grep: iommu: soft retshoulderangle — Wave 65 exclusive shoulderangle stamp */
-kprintf("iommu: soft retshoulderangle exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retshoulderangle stamp; Soft≠product)\n");
- /*
-  * ---- Wave 66 exclusive complementary surfaces (never reshape primary).
-  * Return surfaces only — soft inventory; never hard-gates product paths.
-  */
- /* Grep: iommu: soft retflankangle — Wave 66 return-flankangle honesty */
- kprintf("iommu: soft retflankangle soft_only=1 product_gate=0 soft_ne_product=1 "
-         "never_blocks_m0=1 wave=116 "
-         "(retflankangle honesty; Soft≠product)\n");
- /* Grep: iommu: soft retfaceangle — Wave 66 exclusive faceangle stamp */
- kprintf("iommu: soft retfaceangle exclusive=1 soft_ne_product=1 "
-         "product_kernel=OPEN wave=116 "
-         "(retfaceangle stamp; Soft≠product)\n");
-/*
- * ---- Wave 67 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: iommu: soft retcaponierangle — Wave 67 return-caponierangle honesty */
-kprintf("iommu: soft retcaponierangle soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retcaponierangle honesty; Soft≠product)\n");
-/* Grep: iommu: soft retredanangle — Wave 67 exclusive redanangle stamp */
-kprintf("iommu: soft retredanangle exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retredanangle stamp; Soft≠product)\n");
-/*
- * ---- Wave 68 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: iommu: soft retlunetteangle — Wave 68 return-lunetteangle honesty */
-kprintf("iommu: soft retlunetteangle soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retlunetteangle honesty; Soft≠product)\n");
-/* Grep: iommu: soft rettenailleangle — Wave 68 exclusive tenailleangle stamp */
-kprintf("iommu: soft rettenailleangle exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(rettenailleangle stamp; Soft≠product)\n");
-/*
- * ---- Wave 69 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: iommu: soft retdemiluneangle — Wave 69 return-demiluneangle honesty */
-kprintf("iommu: soft retdemiluneangle soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retdemiluneangle honesty; Soft≠product)\n");
-/* Grep: iommu: soft retcoveredwayangle — Wave 69 exclusive coveredwayangle stamp */
-kprintf("iommu: soft retcoveredwayangle exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retcoveredwayangle stamp; Soft≠product)\n");
-/*
- * ---- Wave 70 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: iommu: soft retfosseangle — Wave 70 return-fosseangle honesty */
-kprintf("iommu: soft retfosseangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retfosseangle honesty; Soft≠product)\n");
-/* Grep: iommu: soft retcounterscarple — Wave 70 exclusive counterscarple stamp */
-kprintf("iommu: soft retcounterscarple exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retcounterscarple stamp; Soft≠product)\n");
-/*
- * ---- Wave 71 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: iommu: soft retsallyportangle — Wave 71 return-sallyportangle honesty */
-kprintf("iommu: soft retsallyportangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retsallyportangle honesty; Soft≠product)\n");
-/* Grep: iommu: soft retreentrantangle — Wave 71 exclusive reentrantangle stamp */
-kprintf("iommu: soft retreentrantangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retreentrantangle stamp; Soft≠product)\n");
-/*
- * ---- Wave 72 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: iommu: soft retplaceofarmsangle — Wave 72 return-placeofarmsangle honesty */
-kprintf("iommu: soft retplaceofarmsangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retplaceofarmsangle honesty; Soft≠product)\n");
-/* Grep: iommu: soft retdoubletenailleangle — Wave 72 exclusive doubletenailleangle stamp */
-kprintf("iommu: soft retdoubletenailleangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retdoubletenailleangle stamp; Soft≠product)\n");
-/* Grep: iommu: soft retcurtainface — Wave 73 return-curtainface honesty */
-kprintf("iommu: soft retcurtainface soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retcurtainface honesty; Soft≠product)\n");
-/* Grep: iommu: soft retbastionangle — Wave 73 exclusive bastionangle stamp */
-kprintf("iommu: soft retbastionangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retbastionangle stamp; Soft≠product)\n");
-/* Grep: iommu: soft retglacisangle — Wave 74 return-glacisangle honesty */
-kprintf("iommu: soft retglacisangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retglacisangle honesty; Soft≠product)\n");
-/* Grep: iommu: soft retparapetangle — Wave 74 exclusive parapetangle stamp */
-kprintf("iommu: soft retparapetangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retparapetangle stamp; Soft≠product)\n");
-/* Grep: iommu: soft retmoatangle — Wave 75 return-moatangle honesty */
-kprintf("iommu: soft retmoatangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retmoatangle honesty; Soft≠product)\n");
-/* Grep: iommu: soft retowerangle — Wave 75 exclusive towerangle stamp */
-kprintf("iommu: soft retowerangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retowerangle stamp; Soft≠product)\n");
-/* Grep: iommu: soft retgateangle — Wave 76 return-gateangle honesty */
-kprintf("iommu: soft retgateangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retgateangle honesty; Soft≠product)\n");
-/* Grep: iommu: soft retwallangle — Wave 76 exclusive wallangle stamp */
-kprintf("iommu: soft retwallangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retwallangle stamp; Soft≠product)\n");
-/* Grep: iommu: soft retspireangle — Wave 77 return-spireangle honesty */
-kprintf("iommu: soft retspireangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retspireangle honesty; Soft≠product)\n");
-/* Grep: iommu: soft retholdangle — Wave 77 exclusive holdangle stamp */
-kprintf("iommu: soft retholdangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retholdangle stamp; Soft≠product)\n");
-/* Grep: iommu: soft retpalaceangle — Wave 78 return-palaceangle honesty */
-kprintf("iommu: soft retpalaceangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retpalaceangle honesty; Soft≠product)\n");
-/* Grep: iommu: soft retfortressangle — Wave 78 exclusive fortressangle stamp */
-kprintf("iommu: soft retfortressangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retfortressangle stamp; Soft≠product)\n");
-/* Grep: iommu: soft retkeepangle — Wave 79 return-keepangle honesty */
-kprintf("iommu: soft retkeepangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retkeepangle honesty; Soft≠product)\n");
-/* Grep: iommu: soft retredoubtangle — Wave 79 exclusive redoubtangle stamp */
-kprintf("iommu: soft retredoubtangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retredoubtangle stamp; Soft≠product)\n");
-/* Grep: iommu: soft retcitadelangle — Wave 80 return-citadelangle honesty */
-kprintf("iommu: soft retcitadelangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retcitadelangle honesty; Soft≠product)\n");
-/* Grep: iommu: soft retbastionkeep — Wave 80 exclusive bastionkeep stamp */
-kprintf("iommu: soft retbastionkeep exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retbastionkeep stamp; Soft≠product)\n");
-/* Grep: iommu: soft retpanoplyangle — Wave 81 return-panoplyangle honesty */
-kprintf("iommu: soft retpanoplyangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retpanoplyangle honesty; Soft≠product)\n");
-/* Grep: iommu: soft retbulwarkangle — Wave 81 exclusive bulwarkangle stamp */
-kprintf("iommu: soft retbulwarkangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retbulwarkangle stamp; Soft≠product)\n");
-/* Grep: iommu: soft retmantleangle — Wave 82 return-mantleangle honesty */
-kprintf("iommu: soft retmantleangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retmantleangle honesty; Soft≠product)\n");
-/* Grep: iommu: soft retaegisangle — Wave 82 exclusive aegisangle stamp */
-kprintf("iommu: soft retaegisangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retaegisangle stamp; Soft≠product)\n");
-/* Grep: iommu: soft retemblemangle — Wave 83 return-emblemangle honesty */
-kprintf("iommu: soft retemblemangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retemblemangle honesty; Soft≠product)\n");
-/* Grep: iommu: soft retsigilangle — Wave 83 exclusive sigilangle stamp */
-kprintf("iommu: soft retsigilangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retsigilangle stamp; Soft≠product)\n");
-/* Grep: iommu: soft retscepterangle — Wave 84 return-scepterangle honesty */
-kprintf("iommu: soft retscepterangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retscepterangle honesty; Soft≠product)\n");
-/* Grep: iommu: soft retglyphangle — Wave 84 exclusive glyphangle stamp */
-kprintf("iommu: soft retglyphangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retglyphangle stamp; Soft≠product)\n");
-/* Grep: iommu: soft retcrownangle — Wave 85 return-crownangle honesty */
-kprintf("iommu: soft retcrownangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retcrownangle honesty; Soft≠product)\n");
-/* Grep: iommu: soft retshardangle — Wave 85 exclusive shardangle stamp */
-kprintf("iommu: soft retshardangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retshardangle stamp; Soft≠product)\n");
-/* Grep: iommu: soft retforgeangle — Wave 86 return-forgeangle honesty */
-kprintf("iommu: soft retforgeangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retforgeangle honesty; Soft≠product)\n");
-/* Grep: iommu: soft retprismangle — Wave 86 exclusive prismangle stamp */
-kprintf("iommu: soft retprismangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retprismangle stamp; Soft≠product)\n");
-/* Grep: iommu: soft retflameangle — Wave 87 return-flameangle honesty */
-kprintf("iommu: soft retflameangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retflameangle honesty; Soft≠product)\n");
-/* Grep: iommu: soft retcipherangle — Wave 87 exclusive cipherangle stamp */
-kprintf("iommu: soft retcipherangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retcipherangle stamp; Soft≠product)\n");
-/* Grep: iommu: soft retbeaconangle — Wave 88 return-beaconangle honesty */
-kprintf("iommu: soft retbeaconangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retbeaconangle honesty; Soft≠product)\n");
-/* Grep: iommu: soft retledgerangle — Wave 88 exclusive ledgerangle stamp */
-kprintf("iommu: soft retledgerangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retledgerangle stamp; Soft≠product)\n");
-/* Grep: iommu: soft retbannerangle — Wave 89 return-bannerangle honesty */
-kprintf("iommu: soft retbannerangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retbannerangle honesty; Soft≠product)\n");
-/* Grep: iommu: soft retvaultangle — Wave 89 exclusive vaultangle stamp */
-kprintf("iommu: soft retvaultangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retvaultangle stamp; Soft≠product)\n");
-/* Grep: iommu: soft retcrestangle — Wave 90 return-crestangle honesty */
-kprintf("iommu: soft retcrestangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retcrestangle honesty; Soft≠product)\n");
-/* Grep: iommu: soft rettokenangle — Wave 90 exclusive tokenangle stamp */
-kprintf("iommu: soft rettokenangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (rettokenangle stamp; Soft≠product)\n");
-/* Grep: iommu: soft retbadgeangle — Wave 91 return-badgeangle honesty */
-kprintf("iommu: soft retbadgeangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retbadgeangle honesty; Soft≠product)\n");
-/* Grep: iommu: soft retphaseangle — Wave 91 exclusive phaseangle stamp */
-kprintf("iommu: soft retphaseangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retphaseangle stamp; Soft≠product)\n");
-/* Grep: iommu: soft retmarkangle — Wave 92 return-markangle honesty */
-kprintf("iommu: soft retmarkangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retmarkangle honesty; Soft≠product)\n");
-/* Grep: iommu: soft retpulseangle — Wave 92 exclusive pulseangle stamp */
-kprintf("iommu: soft retpulseangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retpulseangle stamp; Soft≠product)\n");
-
-/* Grep: iommu: soft retsealangle — Wave 93 return-sealangle honesty */
-kprintf("iommu: soft retsealangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retsealangle honesty; Soft≠product)\n");
-/* Grep: iommu: soft retboundangle — Wave 93 exclusive boundangle stamp */
-kprintf("iommu: soft retboundangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retboundangle stamp; Soft≠product)\n");
-/* Grep: iommu: soft retstemangle — Wave 94 return-stemangle honesty */
-kprintf("iommu: soft retstemangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retstemangle honesty; Soft≠product)\n");
-/* Grep: iommu: soft retbladeangle — Wave 94 exclusive bladeangle stamp */
-kprintf("iommu: soft retbladeangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retbladeangle stamp; Soft≠product)\n");
-/* Grep: iommu: soft retchordangle — Wave 95 return-chordangle honesty */
-kprintf("iommu: soft retchordangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retchordangle honesty; Soft≠product)\n");
-/* Grep: iommu: soft retarcangle — Wave 95 exclusive arcangle stamp */
-kprintf("iommu: soft retarcangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retarcangle stamp; Soft≠product)\n");
-/* Grep: iommu: soft retsectorangle — Wave 96 return-sectorangle honesty */
-kprintf("iommu: soft retsectorangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retsectorangle honesty; Soft≠product)\n");
-/* Grep: iommu: soft retwedgeangle — Wave 96 exclusive wedgeangle stamp */
-kprintf("iommu: soft retwedgeangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retwedgeangle stamp; Soft≠product)\n");
-/* Grep: iommu: soft retradiusangle — Wave 97 return-radiusangle honesty */
-kprintf("iommu: soft retradiusangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retradiusangle honesty; Soft≠product)\n");
-/* Grep: iommu: soft retdiameterangle — Wave 97 exclusive diameterangle stamp */
-kprintf("iommu: soft retdiameterangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retdiameterangle stamp; Soft≠product)\n");
-/* Grep: iommu: soft retcircumangle — Wave 98 return-circumangle honesty */
-kprintf("iommu: soft retcircumangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retcircumangle honesty; Soft≠product)\n");
-/* Grep: iommu: soft retellipseangle — Wave 98 exclusive ellipseangle stamp */
-kprintf("iommu: soft retellipseangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retellipseangle stamp; Soft≠product)\n");
-/* Grep: iommu: soft rethyperangle — Wave 99 return-hyperangle honesty */
-kprintf("iommu: soft rethyperangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (rethyperangle honesty; Soft≠product)\n");
-/* Grep: iommu: soft retparabolaangle — Wave 99 exclusive parabolaangle stamp */
-kprintf("iommu: soft retparabolaangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retparabolaangle stamp; Soft≠product)\n");
-/* Grep: iommu: soft retspiralangle — Wave 100 return-spiralangle honesty */
-kprintf("iommu: soft retspiralangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retspiralangle honesty; Soft≠product)\n");
-/* Grep: iommu: soft rethelixangle — Wave 100 exclusive helixangle stamp */
-kprintf("iommu: soft rethelixangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (rethelixangle stamp; Soft≠product)\n");
-/* Grep: iommu: soft rettorusangle — Wave 101 return-torusangle honesty */
-kprintf("iommu: soft rettorusangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (rettorusangle honesty; Soft≠product)\n");
-/* Grep: iommu: soft retknotangle — Wave 101 exclusive knotangle stamp */
-kprintf("iommu: soft retknotangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retknotangle stamp; Soft≠product)\n");
-/* Grep: iommu: soft retmoebiusangle — Wave 102 return-moebiusangle honesty */
-kprintf("iommu: soft retmoebiusangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retmoebiusangle honesty; Soft≠product)\n");
-/* Grep: iommu: soft retkleinangle — Wave 102 exclusive kleinangle stamp */
-kprintf("iommu: soft retkleinangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retkleinangle stamp; Soft≠product)\n");
-/* Grep: iommu: soft retprojectangle — Wave 103 return-projectangle honesty */
-kprintf("iommu: soft retprojectangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retprojectangle honesty; Soft≠product)\n");
-/* Grep: iommu: soft retaffineangle — Wave 103 exclusive affineangle stamp */
-kprintf("iommu: soft retaffineangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retaffineangle stamp; Soft≠product)\n");
-/* Grep: iommu: soft retlinearangle — Wave 104 return-linearangle honesty */
-kprintf("iommu: soft retlinearangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retlinearangle honesty; Soft≠product)\n");
-/* Grep: iommu: soft retbilinearangle — Wave 104 exclusive bilinearangle stamp */
-kprintf("iommu: soft retbilinearangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retbilinearangle stamp; Soft≠product)\n");
-/* Grep: iommu: soft retquadraticangle — Wave 105 return-quadraticangle honesty */
-kprintf("iommu: soft retquadraticangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retquadraticangle honesty; Soft≠product)\n");
-/* Grep: iommu: soft retcubicangle — Wave 105 exclusive cubicangle stamp */
-kprintf("iommu: soft retcubicangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retcubicangle stamp; Soft≠product)\n");
-/* Grep: iommu: soft retquarticangle — Wave 106 return-quarticangle honesty */
-kprintf("iommu: soft retquarticangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retquarticangle honesty; Soft≠product)\n");
-/* Grep: iommu: soft retquinticangle — Wave 106 exclusive quinticangle stamp */
-kprintf("iommu: soft retquinticangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retquinticangle stamp; Soft≠product)\n");
-/* Grep: iommu: soft retsplineangle — Wave 107 return-splineangle honesty */
-kprintf("iommu: soft retsplineangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retsplineangle honesty; Soft≠product)\n");
-/* Grep: iommu: soft retbezierangle — Wave 107 exclusive bezierangle stamp */
-kprintf("iommu: soft retbezierangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retbezierangle stamp; Soft≠product)\n");
-/* Grep: iommu: soft rethurmitangle — Wave 108 return-hermitangle honesty */
-kprintf("iommu: soft rethurmitangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (rethurmitangle honesty; Soft≠product)\n");
-/* Grep: iommu: soft retcatmullangle — Wave 108 exclusive catmullangle stamp */
-kprintf("iommu: soft retcatmullangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retcatmullangle stamp; Soft≠product)\n");
-/* Grep: iommu: soft retnurbsangle — Wave 109 return-nurbsangle honesty */
-kprintf("iommu: soft retnurbsangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retnurbsangle honesty; Soft≠product)\n");
-/* Grep: iommu: soft retbsplineangle — Wave 109 exclusive bsplineangle stamp */
-kprintf("iommu: soft retbsplineangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retbsplineangle stamp; Soft≠product)\n");
-/* Grep: iommu: soft retmeshangle — Wave 110 return-meshangle honesty */
-kprintf("iommu: soft retmeshangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retmeshangle honesty; Soft≠product)\n");
-/* Grep: iommu: soft retgridangle — Wave 110 exclusive gridangle stamp */
-kprintf("iommu: soft retgridangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retgridangle stamp; Soft≠product)\n");
-/* Grep: iommu: soft retvoxelangle — Wave 111 return-voxelangle honesty */
-kprintf("iommu: soft retvoxelangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retvoxelangle honesty; Soft≠product)\n");
-/* Grep: iommu: soft rettexelangle — Wave 111 exclusive texelangle stamp */
-kprintf("iommu: soft rettexelangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (rettexelangle stamp; Soft≠product)\n");
-/* Grep: iommu: soft retfragmentangle — Wave 112 return-fragmentangle honesty */
-kprintf("iommu: soft retfragmentangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retfragmentangle honesty; Soft≠product)\n");
-/* Grep: iommu: soft retvertexangle — Wave 112 exclusive vertexangle stamp */
-kprintf("iommu: soft retvertexangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retvertexangle stamp; Soft≠product)\n");
-/* Grep: iommu: soft retshaderangle — Wave 113 return-shaderangle honesty */
-kprintf("iommu: soft retshaderangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retshaderangle honesty; Soft≠product)\n");
-/* Grep: iommu: soft retpipelineangle — Wave 113 exclusive pipelineangle stamp */
-kprintf("iommu: soft retpipelineangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retpipelineangle stamp; Soft≠product)\n");
-/* Grep: iommu: soft retframebufferangle — Wave 114 return-framebufferangle honesty */
-kprintf("iommu: soft retframebufferangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retframebufferangle honesty; Soft≠product)\n");
-/* Grep: iommu: soft retswapchainangle — Wave 114 exclusive swapchainangle stamp */
-kprintf("iommu: soft retswapchainangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retswapchainangle stamp; Soft≠product)\n");
-/* Grep: iommu: soft retpresentangle — Wave 115 return-presentangle honesty */
-kprintf("iommu: soft retpresentangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retpresentangle honesty; Soft≠product)\n");
-/* Grep: iommu: soft retvsyncangle — Wave 115 exclusive vsyncangle stamp */
-kprintf("iommu: soft retvsyncangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retvsyncangle stamp; Soft≠product)\n");
-/* Grep: iommu: soft retfenceangle — Wave 116 return-fenceangle honesty */
-kprintf("iommu: soft retfenceangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retfenceangle honesty; Soft≠product)\n");
-/* Grep: iommu: soft retsemaphoreangle — Wave 116 exclusive semaphoreangle stamp */
-kprintf("iommu: soft retsemaphoreangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retsemaphoreangle stamp; Soft≠product)\n");
-                            kprintf("iommu: soft deepen wave=%u areas=%u logs=%u surf=0x%x "
-            "(Wave 43 exclusive; soft only; not product always-on IOMMU; "
-            "; soft≠product)\n",
-            (unsigned)IOMMU_SOFT_WAVE, (unsigned)IOMMU_SOFT_AREAS,
-            g_cSoftInvLogs, (unsigned)u32Surf);
-
-    /*
-     * Explicit OPEN honesty for always-on product IOMMU.
-     * Grep: iommu: soft OPEN
-     */
-    kprintf("iommu: soft OPEN always_on_product=OPEN "
-            "no_open_bus_master_product=OPEN hw_te_default=OPEN "
-            "cap_window_object=OPEN inventory_only=1 wave=%u "
-            "(soft deepen ≠ product always-on IOMMU claim; "
-            "soft≠product)\n",
-            (unsigned)IOMMU_SOFT_WAVE);
+    kprintf("iommu: soft residual deepen C2 Dual DoD "
+            "dual_dod_a=OPEN_UDX dual_dod_b=OPEN_UDX "
+            "freestanding_product=SKIP product_hosts=UDX "
+            "win_ok=%d nic_win=%d usb_win=%d windows=%u create_ok=%u "
+            "window_mint=OPEN always_on_product=OPEN "
+            "Soft!=product G-AC-1 dual=MIT|Apache-2.0 "
+            "(soft residual != product UDX DMA caps)\n",
+            fWinOk, fNicWin, fUsbWin, cUsed, g_cWinCreateOk);
 
     /* Grep: iommu: soft inventory PASS | iommu: soft PASS */
-    kprintf("iommu: soft inventory PASS present=%d windows=%u logs=%u "
-            "wave=%u\n",
-            fPresent, cUsed, g_cSoftInvLogs, (unsigned)IOMMU_SOFT_WAVE);
-    kprintf("iommu: soft PASS wave=%u areas=%u always_on_product=OPEN\n",
-            (unsigned)IOMMU_SOFT_WAVE, (unsigned)IOMMU_SOFT_AREAS);
+    kprintf("iommu: soft inventory PASS present=%d windows=%u "
+            "nic_win=%d usb_win=%d win_ok=%d window_mint=OPEN Soft!=product\n",
+            fPresent, cUsed, fNicWin, fUsbWin, fWinOk);
+    kprintf("iommu: soft PASS always_on_product=OPEN "
+            "dual_dod_a=OPEN_UDX dual_dod_b=OPEN_UDX "
+            "freestanding_product=SKIP product_hosts=UDX "
+            "window_mint=OPEN Soft!=product G-AC-1\n");
 }
 
 /** Publish DMAR inventory + run VT-d soft-probe / domain soft smoke. */
@@ -1470,7 +556,7 @@ iommu_soft_probe_handoff(void)
      */
     iommu_window_cap_soft_inventory();
     /*
-     * Wave 17 exclusive soft inventory (greppable "iommu: soft …").
+     * Lean soft inventory (greppable "iommu: soft ... Soft!=product").
      * Soft deepen only; always-on product IOMMU remains OPEN.
      */
     iommu_soft_inventory_log();
@@ -1512,7 +598,7 @@ iommu_probe(void)
     g_cWinSoftInvLogs = 0;
     g_fWinSoftInvOnce = 0;
     g_cSoftInvLogs = 0;
-    /* Wave 15 soft scan / busmaster / peak tallies */
+    /* Soft scan / busmaster / peak tallies */
     g_cSoftRsdpSkip = 0;
     g_cSoftRsdpBad = 0;
     g_cSoftXsdtHit = 0;
@@ -1670,7 +756,7 @@ iommu_scan_sdt_entries(u8 *pSdt, u32 u32Len, u32 u32EntryCb)
  * DMAR header is 48 bytes; structures follow with type/length headers.
  * u32MapMax is the validated DMAR length (already clamped).
  *
- * Types (public ACPI DMAR): 0 DRHD, 1 RMRR, 2 ATSR, 3 RHSA, …
+ * Types (public ACPI DMAR): 0 DRHD, 1 RMRR, 2 ATSR, 3 RHSA, ...
  */
 static void
 iommu_dmar_parse(u8 *pDmar, u32 u32MapMax)
@@ -1789,9 +875,11 @@ iommu_enforce_get(void)
 }
 
 /**
- * create_window soft product path (UDX→IOMMU window side).
- * Software BDF→PA grant; not a cap-typed window object mint.
+ * create_window soft product path (UDX/DDI DMA_NOTE -> IOMMU window side).
+ * Software BDF->PA grant; not a cap-typed window object mint.
+ * DDI door DMA_NOTE (op 6) calls this; window_mint remains OPEN.
  * Grep: iommu: window cap soft grant|update|full|reject
+ * Grep: window_mint=OPEN
  */
 int
 iommu_window_grant(u8 bus, u8 slot, u8 func, u64 pa, u64 cb)
@@ -1804,7 +892,7 @@ iommu_window_grant(u8 bus, u8 slot, u8 func, u64 pa, u64 cb)
         g_cWinCreateFail++;
         /* Grep: iommu: window cap soft reject */
         kprintf("iommu: window cap soft reject %u:%u.%u cb=0x%lx "
-                "(create_window soft; bad bdf/cb)\n",
+                "(create_window soft; bad bdf/cb; window_mint=OPEN)\n",
                 bus, slot, func, (unsigned long)cb);
         iommu_window_cap_soft_maybe_once();
         return -1;
@@ -1815,7 +903,7 @@ iommu_window_grant(u8 bus, u8 slot, u8 func, u64 pa, u64 cb)
         g_cWinCreateFail++;
         /* Grep: iommu: window cap soft reject */
         kprintf("iommu: window cap soft reject %u:%u.%u pa=0x%lx cb=0x%lx "
-                "(create_window soft; overflow)\n",
+                "(create_window soft; overflow; window_mint=OPEN)\n",
                 bus, slot, func, (unsigned long)pa, (unsigned long)cb);
         iommu_window_cap_soft_maybe_once();
         return -1;
@@ -1832,7 +920,8 @@ iommu_window_grant(u8 bus, u8 slot, u8 func, u64 pa, u64 cb)
             iommu_soft_note_win_peak(cUsed);
             /* Grep: iommu: window cap soft update */
             kprintf("iommu: window cap soft update %u:%u.%u pa=0x%lx "
-                    "cb=0x%lx used=%u (create_window soft inventory)\n",
+                    "cb=0x%lx used=%u window_mint=OPEN "
+                    "(create_window soft inventory; DDI DMA_NOTE)\n",
                     bus, slot, func, (unsigned long)pa, (unsigned long)cb,
                     cUsed);
             iommu_window_cap_soft_maybe_once();
@@ -1853,7 +942,8 @@ iommu_window_grant(u8 bus, u8 slot, u8 func, u64 pa, u64 cb)
             iommu_soft_note_win_peak(cUsed);
             /* Grep: iommu: window cap soft grant */
             kprintf("iommu: window cap soft grant %u:%u.%u pa=0x%lx "
-                    "cb=0x%lx used=%u (create_window soft; not cap object)\n",
+                    "cb=0x%lx used=%u window_mint=OPEN "
+                    "(create_window soft; not cap object; DDI DMA_NOTE)\n",
                     bus, slot, func, (unsigned long)pa, (unsigned long)cb,
                     cUsed);
             iommu_window_cap_soft_maybe_once();
@@ -1864,7 +954,7 @@ iommu_window_grant(u8 bus, u8 slot, u8 func, u64 pa, u64 cb)
     g_cWinCreateFail++;
     /* Grep: iommu: window cap soft full */
     kprintf("iommu: window cap soft full %u:%u.%u used=%u max=%u "
-            "(create_window soft inventory FULL)\n",
+            "window_mint=OPEN (create_window soft inventory FULL)\n",
             bus, slot, func, iommu_window_count(),
             (unsigned)GJ_IOMMU_MAX_WINDOWS);
     iommu_window_cap_soft_maybe_once();
@@ -1872,7 +962,7 @@ iommu_window_grant(u8 bus, u8 slot, u8 func, u64 pa, u64 cb)
 }
 
 /**
- * Destroy/revoke soft product path (UDX→IOMMU window side).
+ * Destroy/revoke soft product path (UDX->IOMMU window side).
  * Clears software window slot(s) for BDF; not HW-first remapping disable.
  * Grep: iommu: window cap soft revoke|destroy
  */
@@ -1922,7 +1012,7 @@ iommu_busmaster_ok(u8 bus, u8 slot, u8 func)
     u32 iWin;
 
     if (!g_fEnforce) {
-        /* Wave 15: open path (enforce off) soft tally */
+        /* Open path (enforce off) soft tally */
         if (g_cSoftBmOpen < 0xffffffffu) {
             g_cSoftBmOpen++;
         }

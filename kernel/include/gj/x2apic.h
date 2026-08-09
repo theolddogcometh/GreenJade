@@ -13,11 +13,11 @@
  *   - ICR / EOI / self-IPI via MSRs (no MMIO race with mapped LAPIC page).
  *
  * Product enable order (typical BSP):
- *   apic_init() → x2apic_probe() or x2apic_enable() → IPIs use MSR path.
+ *   apic_init() -> x2apic_probe() or x2apic_enable() -> IPIs use MSR path.
  * APs may re-enable after their own long-mode entry (see smp AP phase X2APIC).
  *
  * Soft helpers below are boot/bring-up telemetry (counters + greppable
- * logs) — not hot-path locks. ICR soft tracks MSR 0x830 / self-IPI writes
+ * logs) - not hot-path locks. ICR soft tracks MSR 0x830 / self-IPI writes
  * so INIT/SIPI/fixed paths are visible without MMIO decode.
  *
  * Soft never hard-gates IPI delivery. Counters wrap OK.
@@ -83,10 +83,10 @@ void x2apic_send_ipi_raw(u64 u64Icr);
 void x2apic_eoi(void);
 
 /* ------------------------------------------------------------------ */
-/* Soft ICR observability (boot telemetry — not hot-path locks)         */
+/* Soft ICR observability (boot telemetry - not hot-path locks)         */
 /* ------------------------------------------------------------------ */
 
-/** Delivery-mode field (ICR bits 10:8) — soft decode aids. */
+/** Delivery-mode field (ICR bits 10:8) - soft decode aids. */
 #define GJ_X2APIC_ICR_MODE_FIXED   0u
 #define GJ_X2APIC_ICR_MODE_LOWPRI  1u
 #define GJ_X2APIC_ICR_MODE_SMI     2u
@@ -99,9 +99,9 @@ void x2apic_eoi(void);
 u64  x2apic_icr_soft_writes(void);
 /** Fixed-delivery ICR writes (mode 0). */
 u64  x2apic_icr_soft_fixed(void);
-/** INIT delivery ICR writes (mode 5) — AP bring-up. */
+/** INIT delivery ICR writes (mode 5) - AP bring-up. */
 u64  x2apic_icr_soft_init(void);
-/** STARTUP/SIPI delivery ICR writes (mode 6) — AP bring-up. */
+/** STARTUP/SIPI delivery ICR writes (mode 6) - AP bring-up. */
 u64  x2apic_icr_soft_sipi(void);
 /** Self-IPI MSR (0x83F) writes. */
 u64  x2apic_icr_soft_self(void);
@@ -119,8 +119,8 @@ u8   x2apic_icr_soft_last_vector(void);
 
 /**
  * Greppable ICR soft summary:
- *   x2apic: icr soft writes=… fixed=… init=… sipi=… self=… other=…
- *   x2apic: icr soft last dest=… mode=… vec=… val=0x…
+ *   x2apic: icr soft writes=... fixed=... init=... sipi=... self=... other=...
+ *   x2apic: icr soft last dest=... mode=... vec=... val=0x...
  * Safe anytime; no-op-ish if no writes yet (still prints zeros).
  * greppable: x2apic: icr soft
  */

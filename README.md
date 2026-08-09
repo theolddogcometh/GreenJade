@@ -6,9 +6,9 @@
 
 **A pure-C microkernel desktop OS** — dual-licensed **MIT OR Apache-2.0**, no GPL in the tree.
 
-GreenJade is a from-scratch, capability-based kernel and userspace personality aimed at a **general-purpose desktop / workstation**. Small trusted core, doors and caps for isolation, and a clean-room Linux ABI path so desktop software (and eventually Steam via Proton) can run without pasting copyleft kernel code.
+GreenJade is a from-scratch OS kernel and userspace personality aimed at a **general-purpose desktop / workstation**. The kernel stays small on purpose: programs only get the access they are given, talk through the OS on purpose, and drivers live in **userspace** over a Linux-shaped ABI (so a flaky NIC driver need not take down the whole machine). Clean-room path toward desktop software and eventually **Steam via Proton** — without pasting a GPL kernel into the product core.
 
-If you just cloned the repo: a normal host toolchain and QEMU are enough to build and smoke.
+If you just cloned the repo: a normal host toolchain and QEMU are enough to build and smoke. Optional support: **[Patreon — TheOldDog](https://www.patreon.com/cw/TheOldDog)**.
 
 ---
 
@@ -20,11 +20,38 @@ If you just cloned the repo: a normal host toolchain and QEMU are enough to buil
 | **What it is not** | A Linux distro, SteamOS port, or GPL-derived kernel |
 | **Priorities** | **1. Security → 2. Performance → 3. Portability → 4. Readability** |
 | **License** | **MIT OR Apache-2.0** (dual) — **no GPL/copyleft source** |
+| **Lawful use** | **You** are responsible for not using this project where illegal — [docs/LEGAL_DISCLAIMER.md](docs/LEGAL_DISCLAIMER.md) |
 | **Language** | Pure C only in-tree (no C++, Rust, …) |
 | **Firmware** | **UEFI** product path; Multiboot2 bring-up for QEMU |
 | **Adoption bar** | **Steam Deck Top 50** via Proton on real hardware — **target**, not claimed done |
 | **Hardware bar** | **≥ 1 TiB RAM**, SMP, SAS/SCSI (product goals; bring-up runs on modest QEMU) |
 | **Style** | Hungarian notation — [STYLE.md](STYLE.md) |
+| **Assurance** | [docs/ASSURANCE_LITE.md](docs/ASSURANCE_LITE.md) — Soft≠product · G-AC-1 · Dual DoD L3 = host probes on stamped image · `make assurance-check` |
+| **Support** | [Patreon — TheOldDog](https://www.patreon.com/cw/TheOldDog) — optional funding for hardware digs and late-night boots |
+
+---
+
+## Support the project (Patreon)
+
+GreenJade is built in the open under dual **MIT OR Apache-2.0** licenses. If you want to help keep the work going, the author runs a Patreon:
+
+**→ [patreon.com/cw/TheOldDog](https://www.patreon.com/cw/TheOldDog)** · creator **TheOldDog**
+
+**Tagline from the page:** *Help fund a pure-C microkernel that aims for Steam — built in the open, dual-licensed free, and rude to complexity.*
+
+Most OSes are skyscrapers built by a thousand crews over thirty years—amazing, huge, and hard for anyone to fully understand. GreenJade is the opposite bet: a **small, pure-C microkernel** aimed at a **real laptop**, **real hardware**, and eventually **Steam-style game compatibility**, without rebranding Linux or pasting a GPL kernel into the product core.
+
+Patrons help fund unglamorous work: silicon time, STATUS-panel digs, Ethernet that actually answers ping, USB that isn’t vaporware, and the long push toward real desktop software. Membership options start at a few dollars a month; free follow is available on the page. Support is **optional** and does **not** change the open-source licenses—the code stays free to use under MIT OR Apache-2.0.
+
+| Tier (examples) | Name | Flavor |
+|-----------------|------|--------|
+| $3 | **kprintf** | I’m here for the serial spam. |
+| $5 | **Own=1** | You believe the ring will clear. Someday. |
+| $10 | **C you C me, C us together** | Pure C, pure chaos—just braces and belief. |
+| $25 | **Bar3 scout** | Deck Top 50 or bust (eventually). |
+| $50 | **Ring-0 benefactor** | Another boot, another dig—optional glory in a release note. |
+
+Live tiers and posts: **[TheOldDog on Patreon](https://www.patreon.com/cw/TheOldDog)** · [membership](https://www.patreon.com/cw/TheOldDog/membership) · latest post *Building a pure-C microkernel that can run Steam*.
 
 ---
 
@@ -88,25 +115,33 @@ USB / lab helpers (`install-usb`, `steam-fetch`, …) need root or lab host setu
 
 ## ABI-first + laptop Linux drivers (G752VT)
 
-Product direction is **ABI-first**, not freestanding class-driver thrash:
+Product direction is **ABI-first** (Linux-shaped **userspace** drivers over hot+cold ABI + **DDI/UDX**). In-kernel freestanding class drivers are **SKIP by default** — not Dual DoD close.
 
 | Layer | Role | Claim |
 |-------|------|--------|
 | **Linux-shaped userspace** | Option C ABI, libcgj, servers | Product path for apps |
-| **DDI / UDX hosts** | Cap-gated PCI / IRQ / DMA (soft → product) | Dual MIT/Apache drivers out of TCB |
-| **Soft module path** | Load host-collected `.ko` (e.g. embedded `r8169`) via ksym + soft PCI/netdev | **Soft ≠ product**; **G-AC-1** no `.ko` product AC |
-| **Freestanding lab** | `rtl8168` / `xhci_msc` stages, GOP STATUS pane | Lab inventory only |
-| **T0 product net** | **virtio-net** (QEMU / virt) | Remains product NIC |
+| **DDI / UDX hosts** | `rtl8168_udx` · `xhci_udx` · `ddi_host_gj` | Dual DoD **B** (NIC) / **A** (USB) product direction |
+| **Soft module path** | Host-collected `.ko` via ksym (eng) | **Soft ≠ product**; **G-AC-1** no `.ko` product AC |
+| **Freestanding class** | `rtl8168` / `xhci_msc` | **SKIP** default (`GJ_RTL8168_PROBE=0` · `GJ_XHCI_MSC_PROBE=0`) |
+| **T0 product net (QEMU)** | **virtio-net** | Until UDX owns laptop wire |
+| **Fly bar** | `GJ_IMAGE_VERSION` | Fly what you flash — e.g. **STATUS (static) v2026.08.04.93** |
 
 **First DUT:** ASUS ROG **G752VT** — NIC `10ec:8168`, xHCI `8086:a12f`, lab static **10.200.125.50**.
 
-**Lab status (honest):** freestanding **ICMP ping** on that NIC is proven (hybrid SOFT + L2 bridge; freestanding owns the wire). **sshd TCP :22** and **USB stick / Linux USB** paths remain **OPEN** until DUT verify. Soft ≠ product; **G-AC-1**. Live backlog: [docs/TODO.md](docs/TODO.md) dual DoD · [docs/LINUX_MODULE_PATH.md](docs/LINUX_MODULE_PATH.md) · [docs/LAPTOP_LINUX_DRIVER_HOST.md](docs/LAPTOP_LINUX_DRIVER_HOST.md).
+### Dual DoD (honest — both OPEN)
+
+| # | Goal | Path | Status |
+|---|------|------|--------|
+| **A** | Linux-shaped USB | `xhci_udx` + DDI | **OPEN** — soft residual + program_gate honesty; freestanding MSC SKIP |
+| **B** | Linux-shaped NIC + stack + sshd | `rtl8168_udx` → netstackd → sshd | **OPEN** — product residual *writes* TE\|RE / Own on real DDI; glass dig FOVW/RER / Own stuck; inject/arping L3 not closed |
+
+**Lab status (honest):** Product residual on glass programs TNPDS/RDSAR/TE\|RE, Own handoff, thr-poll L2 bridge, lab IP pin under UDX ready (`LAB_MAC_UDX=02:00:00:47:4a:50`). Historical freestanding ICMP is **not** the product track (freestanding rtl **SKIP**). Soft listen **:22** ≠ product host banner on the wire. Soft ≠ product; **G-AC-1**. Backlog: [docs/TODO.md](docs/TODO.md) · [docs/ASSURANCE_LITE.md](docs/ASSURANCE_LITE.md) · [docs/PURE_C_CONCURRENCY_AND_OPS.md](docs/PURE_C_CONCURRENCY_AND_OPS.md) · [docs/MEM_PLACE_CHANNEL.md](docs/MEM_PLACE_CHANNEL.md).
 
 ```sh
 make collect-linux-drivers   # host .ko → build/linux-drivers/ (+ NEEDED-DRIVERS)
 make hwtest-img              # → build/greenjade-hwtest.img (ESP + GJ-PERSIST)
 sudo ./scripts/install-hwtest-usb.sh /dev/sdX
-# after boot (lab): ping 10.200.125.50 ; nc -v -w 3 10.200.125.50 22
+# after boot (lab): panel STATUS (static) v… ; arping / ping 10.200.125.50 ; nc -v -w 3 10.200.125.50 22
 ```
 
 On boot, GOP **STATUS (STATIC)** holds track module path (soft):
@@ -153,8 +188,19 @@ Gate0 hybrid skips real `r8169` probe on the live BAR (EMU soft netdev + freesta
 | [Implementation](docs/IMPLEMENTATION.md) / [TODO](docs/TODO.md) | Coding phases |
 | [Deck Top 50 matrix](matrix/deck-top50-TEMPLATE.md) | Adoption tracking |
 | [STYLE](STYLE.md) · [LICENSE](LICENSE) | Style · dual MIT/Apache |
+| [**Legal disclaimer**](docs/LEGAL_DISCLAIMER.md) | Lawful use · U.S. Constitution / speech notice · author fee schedule claim |
 
 Driver hosts use **UDX** (`user/udx/`) and soft DDI (`user/drivers/`) — Linux-shaped `probe` / `irq` / `dma` / `mmio` with caps hidden; see the UDX guide.
+
+---
+
+## Legal disclaimer (lawful use · speech · rights)
+
+**Users:** You are solely responsible for ensuring that obtaining, building, running, redistributing, or productizing GreenJade is **legal** where you operate. **Do not use** this software where that use is illegal or prohibited. Age/ID and platform rules (including **California** and other governments) are **your** compliance problem if you ship a product—not a warranty from this tree.
+
+**Principal author (rights notice):** The lead author is a **U.S. citizen**, governed under the **U.S. Constitution**, and asserts that this **code and project writing are protected speech**. Dual open-source licensing is a **copyright license**, not a waiver of constitutional rights against government actors. The author asserts a **claimed liability schedule** (see full doc) against **oath-sworn officers / government bodies** for **color-of-law** violations of those rights related to this Software—including **4×** financial penalties attempted and **USD $1,000,000 per hour** of incarceration. That schedule is the author’s **public claim/notice**, not a court award.
+
+Full text: **[docs/LEGAL_DISCLAIMER.md](docs/LEGAL_DISCLAIMER.md)** (§0 rights · §1+ user duties) · **[LICENSE](LICENSE)** (MIT OR Apache-2.0, AS IS). **Not legal advice.**
 
 ---
 

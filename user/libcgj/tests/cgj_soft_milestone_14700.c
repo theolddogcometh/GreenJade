@@ -70,6 +70,17 @@
  *   - Soft gates; bar3 still open (gj_bar3_ready_14700 == 0).
  *   - Companion libgj-so soft batches (graph_so_batch1/2) stay unwired;
  *     product SO is still libgj_so.c only (see NOTES_milestone_14700.txt).
+ *
+ * Soft residual (C0 libcgj soft test; Soft!=product; G-AC-1; Dual DoD A/B OPEN):
+ *   soft path  = skip-if-missing dyn/direct continuum KATs; SOFT-SKIP if no SO
+ *   product    = UDX/DDI Dual DoD A/B (OPEN; agent PASS != close Dual DoD)
+ *   honesty    = Soft!=product; bar3/product_score remain 0; stamp-free bar
+ *   catalog    = shell/libcgj green + continuum + batch markers for m14700
+ *   hazard     = H1 N/A; H2 once-lamp spirit; H3 thr_exit residual OPEN
+ *   Bar honesty v2026.08.04.75. NEVER bump GJ_IMAGE_VERSION from this unit.
+ * greppable: libcgj: soft residual m14700
+ * greppable: libcgj: soft residual m14700 Soft!=product
+ * Dual MIT OR Apache-2.0. No GPL. G-AC-1. Dual DoD A/B OPEN.
  */
 
 #define _GNU_SOURCE

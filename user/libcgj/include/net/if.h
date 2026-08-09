@@ -21,6 +21,15 @@
  * ---------
  * Full POSIX/Linux completeness; stubs and soft fills may return ENOSYS
  * until the hybrid ABI path is wired. See docs/GLIBC_COMPAT.md.
+ *
+ * Soft residual (C2 libcgj net/if.h; Soft!=product; G-AC-1; Dual DoD A/B OPEN):
+ *   soft     = ifreq/ifconf + if_nametoindex/if_indextoname/if_nameindex subset
+ *   product  = Dual DoD B wire = rtl8168_udx + DDI (OPEN); freestanding rtl SKIP
+ *   honesty  = if_* soft != product NIC ownership; agent PASS != Dual DoD close;
+ *              stamp-free bar honesty (no version stamp); G-AC-1 no .ko AC
+ *   law      = dual MIT OR Apache-2.0; no GPL; H1 no net_eth_poll from IRQ;
+ *              H2 no stamp storms
+ * greppable: libcgj: net/if soft residual Soft!=product
  */
 #pragma once
 

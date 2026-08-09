@@ -2,33 +2,42 @@
  * SPDX-License-Identifier: MIT OR Apache-2.0
  * Copyright (c) 2026 Project GreenJade contributors
  *
- * Clean-room virtio-input event queue (keyboard/tablet/relative) — session
+ * Clean-room virtio-input event queue (keyboard/tablet/relative) - session
  * input T0. Soft event ring + soft abs/rel axis state (device-side multi-slot
  * drain). Pure C11 freestanding. Dual MIT OR Apache-2.0 only.
  * No Linux virtio source. EV_* / REL_* / ABS_* codes below are public Linux
  * input ABI numbers (userspace protocol), not GPL source.
+ * Soft!=product residual: eng soft lamps != product bar / DoD close.
  *
  * Geometry:
- *   q0 event   — N device-write slots (parallel HW fills; repost on drain)
- *   soft ring  — drop-oldest delivery buffer for poll consumers
- *   soft axes  — last ABS_X/Y + accumulated REL_X/Y/WHEEL
- *   caps       — CFG_EV_BITS at probe and/or observed event types
+ *   q0 event   - N device-write slots (parallel HW fills; repost on drain)
+ *   soft ring  - drop-oldest delivery buffer for poll consumers
+ *   soft axes  - last ABS_X/Y + accumulated REL_X/Y/WHEEL
+ *   caps       - CFG_EV_BITS at probe and/or observed event types
  *
  * Config selects (OASIS virtio-input; driver-local):
- *   ID_NAME, EV_BITS, ABS_INFO — soft defaults when host omits fields.
+ *   ID_NAME, EV_BITS, ABS_INFO - soft defaults when host omits fields.
  *
  * Consumers: session input hub / compositor / keyboard smoke paths.
  *
  * Bring-up lifecycle:
- *   scan → first KIND_INPUT → setup → negotiate → event q0 multi-slot post
- *   → driver_ok → ready PASS + event ring soft PASS + abs/rel soft PASS
+ *   scan -> first KIND_INPUT -> setup -> negotiate -> event q0 multi-slot post
+ *   -> driver_ok -> ready PASS + event ring soft PASS + abs/rel soft PASS
+ *
+ * Lean residual (driver .c only; Soft!=product; never stamp-storm kprintf):
+ *   one-shot one-line soft inventory on probe/fail path only.
+ *   No wave=/version stamp. No ret*angle. Hot poll/API paths stay silent.
  *
  * Greppable product markers (prefix-stable):
  *   virtio-input: ready PASS
  *   virtio-input: event ring soft PASS
  *   virtio-input: abs/rel axes soft PASS
  *
+ * Soft residual (Soft!=product; not DoD close):
+ *   virtio-input: soft inventory ... soft_ne_product=1 Soft!=product
+ *
  * greppable: GJ_EV_ GJ_VIRTIO_INPUT_CAP_ virtio_input_poll
+ * greppable: Soft!=product virtio-input: soft inventory
  */
 #pragma once
 

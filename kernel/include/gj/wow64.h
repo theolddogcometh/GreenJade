@@ -3,7 +3,8 @@
  * Copyright (c) 2026 Project GreenJade contributors
  *
  * WoW64 / 32-bit Linux personality soft-thunk (kernel long mode only).
- * Pure C; dual MIT OR Apache-2.0 — clean-room NR map, no Wine/GPL paste.
+ * Pure C; dual MIT OR Apache-2.0 - clean-room NR map, no Wine/GPL paste.
+ * Soft!=product; G-AC-1 (no .ko product AC). ASCII Soft!=product only.
  *
  * -------------------------------------------------------------------------
  * Role
@@ -21,32 +22,48 @@
  *
  * Soft thunk steps (wow64_thunk_soft)
  * ----------------------------------
- *   1) Map i386 NR → x86_64 NR (identity if unmapped; cold ENOSYS later)
+ *   1) Map i386 NR -> x86_64 NR (identity if unmapped; cold ENOSYS later)
  *   2) Zero-extend six arg slots to low 32 bits
- *   3) Special fixups: mmap2 pgoff pages→bytes; socketcall demux
+ *   3) Special fixups: mmap2 pgoff pages->bytes; socketcall demux;
+ *      ipc demux; _llseek compose; old_mmap note
+ *
+ * Lean soft residual (soft inventory; no stamp storms)
+ * ----------------------------------------------------
+ * greppable: wow64: soft residual lean
+ * greppable: wow64: soft inventory
+ * greppable: wow64: soft path
+ * greppable: wow64: soft honesty
+ * greppable: wow64: soft PASS
+ * greppable: WOW64_LEAN_RESIDUAL
+ * Soft inventory never hard-gates path PASS. Does not touch H3 process
+ * death order or freestanding net. Soft residual != product AC (G-AC-1).
  *
  * greppable: GJ_WOW64_THUNK_ wow64_thunk_soft wow64_translate_nr
  * Related: gj/pe32.h, gj/linux_abi.h, gj/linux_dispatch.h,
- *          docs/PROTON_PERSONALITY.md · docs/LINUX_ABI_HYBRID.md
+ *          docs/PROTON_PERSONALITY.md, docs/LINUX_ABI_HYBRID.md
  */
 #pragma once
 
 #include <gj/types.h>
 
-/* i386 mmap2 page size for pgoff (pages → bytes). Matches GJ_PAGE_SIZE. */
+/* i386 mmap2 page size for pgoff (pages -> bytes). Matches GJ_PAGE_SIZE. */
 #define GJ_WOW64_PAGE_SHIFT  12u
 #define GJ_WOW64_PAGE_SIZE   (1u << GJ_WOW64_PAGE_SHIFT)
 
 /*
  * Soft-thunk flag bits (wow64_thunk_soft / wow64_adjust_args).
  * Combined mask describes what the soft path did for diagnostics / smoke.
+ * Soft!=product; dual MIT OR Apache-2.0; G-AC-1.
  */
-#define GJ_WOW64_THUNK_NR_MAPPED     (1u << 0) /* NR remapped (not identity) */
-#define GJ_WOW64_THUNK_ARGS_ZX       (1u << 1) /* args zero-extended to 32 */
-#define GJ_WOW64_THUNK_MMAP2_PGOFF   (1u << 2) /* mmap2 pgoff pages→bytes */
-#define GJ_WOW64_THUNK_SOCKETCALL    (1u << 3) /* socketcall demux applied */
+#define GJ_WOW64_THUNK_NR_MAPPED        (1u << 0) /* NR remapped (not identity) */
+#define GJ_WOW64_THUNK_ARGS_ZX          (1u << 1) /* args zero-extended to 32 */
+#define GJ_WOW64_THUNK_MMAP2_PGOFF      (1u << 2) /* mmap2 pgoff pages->bytes */
+#define GJ_WOW64_THUNK_SOCKETCALL       (1u << 3) /* socketcall demux applied */
 #define GJ_WOW64_THUNK_SOCKET_NEED_PULL (1u << 4) /* args live in user ptr */
-#define GJ_WOW64_THUNK_IDENTITY      (1u << 5) /* NR identity pass-through */
+#define GJ_WOW64_THUNK_IDENTITY         (1u << 5) /* NR identity pass-through */
+#define GJ_WOW64_THUNK_IPC              (1u << 6) /* ipc(117) SysV demux */
+#define GJ_WOW64_THUNK_LLSEEK           (1u << 7) /* _llseek(140) offset compose */
+#define GJ_WOW64_THUNK_OLD_MMAP         (1u << 8) /* old_mmap(90) soft note */
 
 /*
  * i386 socketcall subcall ids (public man socketcall; clean-room).
@@ -82,7 +99,7 @@ struct gj_wow64_thunk {
     u32 u32Nr32;       /* original i386 NR */
     u32 u32Nr64;       /* mapped x86_64 NR */
     u32 u32Flags;      /* GJ_WOW64_THUNK_* */
-    u32 u32SocketCall; /* socketcall subcall if demuxed; else 0 */
+    u32 u32SocketCall; /* socketcall/ipc subcall if demuxed; else 0 */
     u64 aArgs[6];      /* hybrid arg slots (rdi..r9 shaped) */
 };
 
@@ -94,11 +111,11 @@ int  wow64_enabled(void);
 void wow64_set(int fOn);
 
 /**
- * Map i386 Linux syscall NR → x86_64 NR for hybrid dispatch.
+ * Map i386 Linux syscall NR -> x86_64 NR for hybrid dispatch.
  * Returns 0 and writes *pOutNr; -1 if pOutNr is NULL (defensive).
  * Unmapped NRs pass through (identity) so cold path can ENOSYS cleanly.
- * Notable: i386 mmap2 (192) → mmap (9); path NRs (open/openat/stat family);
- * socketcall (102) → socket (41) coarse — prefer wow64_thunk_soft demux.
+ * Notable: i386 mmap2 (192) -> mmap (9); path NRs (open/openat/stat family);
+ * socketcall (102) -> socket (41) coarse - prefer wow64_thunk_soft demux.
  * mmap2 page-offset conversion is done by wow64_adjust_args / thunk_soft.
  */
 int  wow64_translate_nr(u32 u32Nr32, u32 *pOutNr);
@@ -115,24 +132,30 @@ u32  wow64_args_zero_extend(u64 *pArgs, u32 cArgs);
 
 /**
  * Soft arg fixups after NR map, given original i386 NR.
- * - mmap2 (192): aArgs[5] pgoff pages → byte offset (<< 12)
- * - socketcall (102): demux aArgs[0] → *pOutNr64 + SOCKETCALL flags
+ * - mmap2 (192): aArgs[5] pgoff pages -> byte offset (<< 12)
+ * - socketcall (102): demux aArgs[0] -> *pOutNr64 + SOCKETCALL flags
  *   (user arg block pull is dispatcher / trap responsibility)
+ * - ipc (117): demux SysV subcall -> x86_64 NR; soft reshape first..fifth
+ * - old_mmap (90): note NR map to mmap; struct unpack is trap/dispatch
+ * - _llseek (140): soft-compose 64-bit offset for lseek-shaped hot path
  * pOutNr64 may be NULL if caller already holds mapped NR.
  * Returns GJ_WOW64_THUNK_* flag mask applied (0 if nothing / NULL args).
+ * Soft!=product; dual MIT OR Apache-2.0; G-AC-1; never hard-gates product.
  */
 u32  wow64_adjust_args(u32 u32Nr32, u32 *pOutNr64, u64 *pArgs, u32 cArgs);
 
 /**
- * Full soft thunk: translate NR, zero-extend args, apply mmap2/socketcall.
+ * Full soft thunk: translate NR, zero-extend args, apply mmap2/socketcall/
+ * ipc/llseek residual fixups. Soft residual lean self-smoke uses this path.
  * pThunk->aArgs must be pre-loaded with raw 32-bit-in-64 entry values (or 0).
  * On success returns 0; -1 if pThunk is NULL.
- * Soft counters: wow64_thunk_hits / mmap2_hits / socketcall_hits.
+ * Soft counters: wow64_thunk_hits / mmap2_hits / socketcall_hits / ipc_hits.
+ * Soft!=product; greppable WOW64_LEAN_RESIDUAL / wow64: soft residual lean.
  */
 int  wow64_thunk_soft(struct gj_wow64_thunk *pThunk);
 
 /**
- * Map i386 socketcall subcall → x86_64 NR.
+ * Map i386 socketcall subcall -> x86_64 NR.
  * Returns 0 and writes *pOutNr; -1 if unknown call or pOutNr NULL.
  */
 int  wow64_socketcall_nr(u32 u32Call, u32 *pOutNr);
@@ -151,7 +174,7 @@ u64  wow64_ptr32(u64 u64Val);
 
 /**
  * Counters for smoke / GJ_SYS_PLATFORM_INFO visibility.
- * Wrap OK; diagnostics only.
+ * Wrap OK; diagnostics only. Soft!=product; not product AC.
  */
 u32  wow64_calls(void);           /* total translate / thunk entries */
 u32  wow64_map_hits(void);        /* explicit NR map (not identity) */
@@ -159,3 +182,4 @@ u32  wow64_identity_hits(void);   /* pass-through NR */
 u32  wow64_thunk_hits(void);      /* wow64_thunk_soft success */
 u32  wow64_mmap2_hits(void);      /* mmap2 pgoff fixups */
 u32  wow64_socketcall_hits(void); /* socketcall demux */
+u32  wow64_ipc_hits(void);        /* ipc(117) demux */

@@ -2,48 +2,62 @@
  * SPDX-License-Identifier: MIT OR Apache-2.0
  * Copyright (c) 2026 Project GreenJade contributors
  *
- * aarch64 PMM — thin wrap over shared freelist core (kernel/shared/pmm_freelist.c).
+ * aarch64 PMM - thin wrap over shared freelist core (kernel/shared/pmm_freelist.c).
  *
  * -------------------------------------------------------------------------
- * Soft inventory (Wave 40 exclusive deepen; this unit only — greppable
- * "aarch64: pmm soft …")
+ * Soft residual inventory (C0 exclusive residual; this unit only - greppable
+ * "aarch64: pmm soft ...")
  * -------------------------------------------------------------------------
  * Soft pool geometry: base/end/page counts after init (order-0 identity
  * pool only; no hierarchical PMM, no NEON, no buddy paste).
- * Soft multi exercise: alloc N pages, dual-pattern paint/verify, free
- * reverse; free_count restored.
+ * Soft multi exercise: alloc N pages, dual-pattern paint/verify, distinct
+ * PAs, free reverse; free_count restored.
  * Soft LIFO reuse: free B then next alloc returns B (freelist head).
  * Soft free-step: single alloc drops free by 1; free restores.
  * Soft null free: free(NULL) is no-op (count unchanged).
- * Soft invariant: free ≤ total, non-zero total, pool geometry coherent.
- * Soft stats: gate sum + free ratio + log tally (Wave 19).
- * Soft deepen: area catalog stamp wave=118.
- * Soft return: selftest/inventory return surfaces (Wave 19).
- * Soft path honesty: order-0 shared core only; not ≥1 TiB hierarchical.
+ * Soft invariant: free <= total, non-zero total, pool geometry coherent.
+ * Soft geom residual: span == pages * page_size; base/end page-aligned.
+ * Soft residual lean (STRONGER C0 residual; Soft!=product; stamp-free):
+ *   reject   - null + unaligned + OOB free leave free/total unchanged
+ *   scrub    - alloc scrubs freelist node header (first u64 == 0)
+ *   payload  - paint at +64; free + LIFO realloc; payload survives
+ *   double   - free C then A; next two allocs = A then former-B
+ *   restore  - free_count restored; total immutable across residual
+ * Soft stats: gate sum + free ratio + log tally.
+ * Soft deepen: lean area catalog (no stamp storm).
+ * Soft return: selftest/inventory return surfaces.
+ * Soft path honesty: order-0 shared core only; not >=1 TiB hierarchical.
  * Soft honesty: aarch64 product kernel remains OPEN (soft scaffold only).
  *
  * Greppable soft inventory (prefix-stable):
- *   aarch64: pmm soft pool base=… end=… pages=… page_size=… span=…
- *   aarch64: pmm soft multi n=… free0=… free1=… total=… ok=…
- *   aarch64: pmm soft lifo pa_a=… pa_b=… pa_c=… reuse=… free0=… free1=…
- *   aarch64: pmm soft step free0=… free1=… free2=… drop=… restore=…
- *   aarch64: pmm soft inv free=… total=… pool_pages=… self=… multi=…
- *             lifo=… step=… null=… inv=…
- *   aarch64: pmm soft stats gates=… free=… total=… ratio=… logs=… wave=118
- *   aarch64: pmm soft inventory wave=118 …
- *   aarch64: pmm soft deepen wave=126 areas=…
- *   aarch64: pmm soft return inv_ret=… product_kernel=OPEN wave=118
+ *   aarch64: pmm soft pool base=... end=... pages=... page_size=... span=...
+ *   aarch64: pmm soft multi n=... free0=... free1=... total=... ok=...
+ *   aarch64: pmm soft lifo pa_a=... pa_b=... pa_c=... reuse=... free0=... free1=...
+ *   aarch64: pmm soft step free0=... free1=... free2=... drop=... restore=...
+ *   aarch64: pmm soft inv free=... total=... pool_pages=... self=... multi=...
+ *             lifo=... step=... null=... inv=... geom=... residual=...
+ *   aarch64: pmm soft geom span=... expect=... align_base=... align_end=... ok=...
+ *   aarch64: pmm soft residual lean ... (stamp-free Soft!=product dual license)
+ *   aarch64: pmm soft residual reject|scrub|payload|double ...
+ *   aarch64: pmm soft stats gates=... free=... total=... ratio=... logs=...
+ *   aarch64: pmm soft inventory ...
+ *   aarch64: pmm soft deepen areas=... catalog=...
+ *   aarch64: pmm soft return inv_ret=... product_kernel=OPEN
  *   aarch64: pmm soft path order0=1 hier=0 neon=0 tib_bar=0 core=1
- *             product_kernel=OPEN wave=118
+ *             product_kernel=OPEN
  *   aarch64: pmm soft honesty product_kernel=OPEN soft_only=1
+ *   aarch64: pmm soft exclusive ... residual=1
+ *   aarch64: pmm soft open ... product_kernel=OPEN
  *   aarch64: pmm soft PASS | FAIL
  *
  * Legacy / product smoke markers (kept greppable):
- *   aarch64: pmm PASS (shared core free=… total=…)
- *   aarch64: pmm pool soft base=… end=… pages=…
- *   aarch64: pmm multi soft n=… free0=… free1=…
+ *   aarch64: pmm PASS (shared core free=... total=...)
+ *   aarch64: pmm pool soft base=... end=... pages=...
+ *   aarch64: pmm multi soft n=... free0=... free1=...
  *   aarch64: pmm multi soft PASS | FAIL
  *
+ * Soft residual != product hierarchical PMM / Dual DoD / 1 TiB bar.
+ * Soft!=product. G-AC-1. Dual MIT OR Apache-2.0. No GPL. No version stamp.
  * Freestanding pure C; no GPL Linux buddy paste; no NEON.
  */
 #include <gj/klog.h>
@@ -61,20 +75,38 @@ extern char __kernel_end[];
 /* Soft poison patterns for allocated page first words (pure C stores). */
 #define PMM_SOFT_PAT_A 0xa5a5a5a5a5a5a5a5ull
 #define PMM_SOFT_PAT_B 0x5a5a5a5a5a5a5a5aull
+/* Residual payload past freelist node header (core scrubs sizeof(node) only). */
+#define PMM_SOFT_PAYLOAD_OFF 64ul
+#define PMM_SOFT_PAYLOAD_MARK 0xC0FFEE64u
+#define PMM_SOFT_PAYLOAD_MARK2 0xA11CE128u
+#define PMM_SOFT_RESID_PAT 0xC0ull
 
-/* Wave 45 soft inventory stamp (greppable wave=121). */
-#define PMM_SOFT_WAVE 126u
+/*
+ * Soft deepen area catalog count (honest; not stamp-storm inflated).
+ * pool,multi,lifo,step,inv,geom,residual,stats,inventory,deepen,surf,path,
+ * honesty,exclusive,open,return = 16.
+ * Residual sub-lamps (reject/scrub/payload/double) fold under residual.
+ */
+#define PMM_SOFT_AREAS 16u
 
-/* Soft deepen areas: pool,multi,lifo,step,inv,stats,path,surf,return,honesty,deepen. */
-#define PMM_SOFT_AREAS 215u
+/* Soft residual gate count (self,multi,lifo,step,null,inv,geom,residual). */
+#define PMM_SOFT_GATE_N 8u
+
+/* Residual sub-surface bits (stamp-free; Soft!=product observability). */
+#define PMM_RESID_SURF_REJECT  (1u << 0)
+#define PMM_RESID_SURF_SCRUB   (1u << 1)
+#define PMM_RESID_SURF_PAYLOAD (1u << 2)
+#define PMM_RESID_SURF_DOUBLE  (1u << 3)
+#define PMM_RESID_SURF_RESTORE (1u << 4)
+#define PMM_RESID_SURF_TOTAL   (1u << 5)
 
 static u64 g_u64PoolBase;
 static u64 g_u64PoolEnd;
 static unsigned g_cPoolPages;
-static unsigned g_cPmmSoftLogs; /* Wave 19 inventory emit count */
+static unsigned g_cPmmSoftLogs; /* inventory emit count */
 
 /*
- * Soft inventory snapshot (Wave 19; file-local; never hard-gates boot).
+ * Soft inventory snapshot (file-local; never hard-gates boot).
  * greppable: aarch64: pmm soft
  */
 struct pmm_soft_snap {
@@ -89,18 +121,31 @@ struct pmm_soft_snap {
     unsigned cStepFree0;
     unsigned cStepFree1;
     unsigned cStepFree2;
+    unsigned cResidFree0;
+    unsigned cResidFree1;
+    unsigned cResidTotal0;
+    unsigned cResidTotal1;
+    unsigned u32ResidSurf;
     u64      u64LifoPaA;
     u64      u64LifoPaB;
     u64      u64LifoPaC;
+    u64      u64ResidPa;
+    u64      u64ResidPaB;
     u64      u64PoolSpan;
+    u64      u64SpanExpect;
     u8       u8SelfOk;
     u8       u8MultiOk;
     u8       u8LifoOk;
     u8       u8StepOk;
     u8       u8NullOk;
     u8       u8InvOk;
-    u8       u8Pad0;
-    u8       u8Pad1;
+    u8       u8GeomOk;
+    u8       u8ResidOk;
+    u8       u8ResidRejectOk;
+    u8       u8ResidScrubOk;
+    u8       u8ResidPayloadOk;
+    u8       u8ResidDoubleOk;
+    u8       u8MultiDistinctOk;
 };
 
 static unsigned long
@@ -135,24 +180,29 @@ aarch64_pmm_free_count(void)
 /*
  * Soft multi-page alloc/paint/verify/free. Returns 1 if free_count restored
  * and all pattern checks held. Safe when pool is small (partial alloc OK
- * only if cGot == 0 → FAIL; else verify the pages we got).
+ * only if cGot == 0 -> FAIL; else verify the pages we got).
+ * STRONGER: distinct PA set among got pages; total immutable across multi.
  */
 static int
 pmm_multi_soft_exercise(unsigned *pOutGot, unsigned *pOutFree0,
-                        unsigned *pOutFree1)
+                        unsigned *pOutFree1, int *pOutDistinctOk)
 {
     void *aPages[PMM_SOFT_MULTI_N];
     unsigned iPage;
+    unsigned jPage;
     unsigned cGot;
     unsigned cFree0;
     unsigned cFree1;
-    unsigned cTotal;
+    unsigned cTotal0;
+    unsigned cTotal1;
     int fOk;
+    int fDistinct;
 
     cFree0 = gj_pmm_core_free_count();
-    cTotal = gj_pmm_core_total_count();
+    cTotal0 = gj_pmm_core_total_count();
     cGot = 0u;
     fOk = 1;
+    fDistinct = 1;
 
     for (iPage = 0u; iPage < PMM_SOFT_MULTI_N; iPage++) {
         aPages[iPage] = aarch64_pmm_alloc();
@@ -164,6 +214,19 @@ pmm_multi_soft_exercise(unsigned *pOutGot, unsigned *pOutFree0,
 
     if (cGot == 0u) {
         fOk = 0;
+        fDistinct = 0;
+    }
+
+    /* Soft distinct: every got page PA unique. */
+    for (iPage = 0u; iPage < cGot; iPage++) {
+        u64 paI = (u64)(gj_vaddr_t)aPages[iPage];
+
+        for (jPage = iPage + 1u; jPage < cGot; jPage++) {
+            if (paI == (u64)(gj_vaddr_t)aPages[jPage]) {
+                fDistinct = 0;
+                fOk = 0;
+            }
+        }
     }
 
     /* Soft paint pass A. */
@@ -183,7 +246,7 @@ pmm_multi_soft_exercise(unsigned *pOutGot, unsigned *pOutFree0,
         }
     }
 
-    /* Soft paint pass B (overwrite) + verify. */
+    /* Soft paint pass B (overwrite) + verify + bounds. */
     for (iPage = 0u; iPage < cGot; iPage++) {
         volatile u64 *pWord = (volatile u64 *)aPages[iPage];
 
@@ -192,21 +255,19 @@ pmm_multi_soft_exercise(unsigned *pOutGot, unsigned *pOutFree0,
     }
     for (iPage = 0u; iPage < cGot; iPage++) {
         volatile u64 *pWord = (volatile u64 *)aPages[iPage];
+        u64 pa;
 
         if (pWord[0] != (PMM_SOFT_PAT_B ^ ((u64)iPage << 8)) ||
             pWord[1] != (PMM_SOFT_PAT_A ^ ((u64)iPage << 8))) {
             fOk = 0;
         }
         /* Soft pool bounds: page PA must lie in [base, end). */
-        {
-            u64 pa = (u64)(gj_vaddr_t)aPages[iPage];
-
-            if (pa < g_u64PoolBase || pa >= g_u64PoolEnd) {
-                fOk = 0;
-            }
-            if ((pa & (GJ_PMM_CORE_PAGE_SIZE - 1ul)) != 0ul) {
-                fOk = 0;
-            }
+        pa = (u64)(gj_vaddr_t)aPages[iPage];
+        if (pa < g_u64PoolBase || pa >= g_u64PoolEnd) {
+            fOk = 0;
+        }
+        if ((pa & (GJ_PMM_CORE_PAGE_SIZE - 1ul)) != 0ul) {
+            fOk = 0;
         }
     }
 
@@ -217,10 +278,14 @@ pmm_multi_soft_exercise(unsigned *pOutGot, unsigned *pOutFree0,
     }
 
     cFree1 = gj_pmm_core_free_count();
+    cTotal1 = gj_pmm_core_total_count();
     if (cFree1 != cFree0) {
         fOk = 0;
     }
-    if (cFree1 > cTotal) {
+    if (cFree1 > cTotal1) {
+        fOk = 0;
+    }
+    if (cTotal1 != cTotal0) {
         fOk = 0;
     }
 
@@ -232,6 +297,9 @@ pmm_multi_soft_exercise(unsigned *pOutGot, unsigned *pOutFree0,
     }
     if (pOutFree1 != 0) {
         *pOutFree1 = cFree1;
+    }
+    if (pOutDistinctOk != 0) {
+        *pOutDistinctOk = fDistinct;
     }
     return fOk;
 }
@@ -296,7 +364,7 @@ pmm_lifo_soft_exercise(u64 *pOutPaA, u64 *pOutPaB, u64 *pOutPaC,
         goto out;
     }
 
-    /* Free B first → freelist head; next alloc must return B. */
+    /* Free B first -> freelist head; next alloc must return B. */
     aarch64_pmm_free(pB);
     pC = aarch64_pmm_alloc();
     if (pC == 0) {
@@ -400,6 +468,379 @@ out:
 }
 
 /*
+ * Soft geometry residual: span == pages * page_size; base/end aligned.
+ * Soft!=product; never invents frames.
+ */
+static int
+pmm_geom_soft_exercise(u64 *pOutSpan, u64 *pOutExpect, int *pOutAlignBase,
+                       int *pOutAlignEnd)
+{
+    u64 u64Span;
+    u64 u64Expect;
+    int fAlignBase;
+    int fAlignEnd;
+    int fOk;
+
+    fOk = 1;
+    u64Span = 0ull;
+    u64Expect = 0ull;
+    fAlignBase = 0;
+    fAlignEnd = 0;
+
+    if (g_u64PoolEnd <= g_u64PoolBase) {
+        fOk = 0;
+        goto out;
+    }
+    if (g_cPoolPages == 0u) {
+        fOk = 0;
+        goto out;
+    }
+
+    u64Span = g_u64PoolEnd - g_u64PoolBase;
+    u64Expect = (u64)g_cPoolPages * (u64)GJ_PMM_CORE_PAGE_SIZE;
+    if (u64Span != u64Expect) {
+        fOk = 0;
+    }
+
+    if ((g_u64PoolBase & (GJ_PMM_CORE_PAGE_SIZE - 1ul)) == 0ul) {
+        fAlignBase = 1;
+    } else {
+        fOk = 0;
+    }
+    if ((g_u64PoolEnd & (GJ_PMM_CORE_PAGE_SIZE - 1ul)) == 0ul) {
+        fAlignEnd = 1;
+    } else {
+        fOk = 0;
+    }
+
+    /* Total frames must match pool page count after init. */
+    if (gj_pmm_core_total_count() != g_cPoolPages) {
+        fOk = 0;
+    }
+
+out:
+    if (pOutSpan != 0) {
+        *pOutSpan = u64Span;
+    }
+    if (pOutExpect != 0) {
+        *pOutExpect = u64Expect;
+    }
+    if (pOutAlignBase != 0) {
+        *pOutAlignBase = fAlignBase;
+    }
+    if (pOutAlignEnd != 0) {
+        *pOutAlignEnd = fAlignEnd;
+    }
+    return fOk;
+}
+
+/*
+ * Soft residual lean exercise (C0 residual; Soft!=product; stamp-free).
+ * STRONGER residual deepen over order-0 wrap only:
+ *   reject  - null + unaligned + OOB free leave free/total unchanged
+ *   scrub   - alloc scrubs freelist node header (first u64 == 0)
+ *   payload - paint at +64; free + LIFO realloc; payload survives; header scrub
+ *   double  - free B then A; next two allocs = A then former-B
+ *   restore - free_count restored; total immutable
+ * Never invents frames; never claims hierarchical / Dual DoD / 1 TiB product.
+ * G-AC-1: soft residual != product AC. Dual MIT OR Apache-2.0. No GPL.
+ */
+static int
+pmm_residual_soft_exercise(u64 *pOutPa, u64 *pOutPaB, unsigned *pOutFree0,
+                           unsigned *pOutFree1, unsigned *pOutTotal0,
+                           unsigned *pOutTotal1, unsigned *pOutSurf,
+                           int *pOutRejectOk, int *pOutScrubOk,
+                           int *pOutPayloadOk, int *pOutDoubleOk)
+{
+    void *pA;
+    void *pB;
+    void *pC;
+    void *pD;
+    void *pE;
+    unsigned cFree0;
+    unsigned cFree1;
+    unsigned cTotal0;
+    unsigned cTotal1;
+    unsigned cAfter;
+    unsigned u32Surf;
+    u64 u64PaA;
+    u64 u64PaB;
+    u64 u64WasA;
+    u64 u64WasB;
+    volatile u64 *pHdr;
+    volatile u32 *pMark;
+    volatile u32 *pMark2;
+    int fOk;
+    int fReject;
+    int fScrub;
+    int fPayload;
+    int fDouble;
+
+    cFree0 = gj_pmm_core_free_count();
+    cTotal0 = gj_pmm_core_total_count();
+    cFree1 = cFree0;
+    cTotal1 = cTotal0;
+    u64PaA = 0ull;
+    u64PaB = 0ull;
+    u32Surf = 0u;
+    fOk = 1;
+    fReject = 1;
+    fScrub = 0;
+    fPayload = 0;
+    fDouble = 0;
+    pA = 0;
+    pB = 0;
+    pC = 0;
+    pD = 0;
+    pE = 0;
+
+    /*
+     * --- reject residual: null + unaligned + OOB free are no-ops ---
+     * Wrap free routes to core; free/total must stay stable.
+     */
+    aarch64_pmm_free(0);
+    aarch64_pmm_free(0);
+    aarch64_pmm_free((void *)(gj_vaddr_t)1ul); /* unaligned */
+    aarch64_pmm_free((void *)(gj_vaddr_t)(GJ_PMM_CORE_PAGE_SIZE / 2ul));
+    if (g_u64PoolEnd > g_u64PoolBase) {
+        aarch64_pmm_free((void *)(gj_vaddr_t)g_u64PoolEnd); /* OOB high */
+        aarch64_pmm_free((void *)(gj_vaddr_t)(g_u64PoolEnd - 1ul));
+        aarch64_pmm_free((void *)(gj_vaddr_t)(g_u64PoolBase + 1ul));
+    }
+    if (g_u64PoolBase >= GJ_PMM_CORE_PAGE_SIZE) {
+        aarch64_pmm_free(
+            (void *)(gj_vaddr_t)(g_u64PoolBase - GJ_PMM_CORE_PAGE_SIZE));
+    }
+    cAfter = gj_pmm_core_free_count();
+    if (cAfter != cFree0 || gj_pmm_core_total_count() != cTotal0) {
+        fReject = 0;
+        fOk = 0;
+        goto out;
+    }
+    u32Surf |= PMM_RESID_SURF_REJECT;
+
+    if (cFree0 < 2u || cTotal0 == 0u) {
+        fOk = 0;
+        goto out;
+    }
+
+    /* --- alloc A: range + align + free drop + total immutable + scrub --- */
+    pA = aarch64_pmm_alloc();
+    if (pA == 0) {
+        fOk = 0;
+        goto out;
+    }
+    u64PaA = (u64)(gj_vaddr_t)pA;
+    if (u64PaA < g_u64PoolBase || u64PaA >= g_u64PoolEnd ||
+        (u64PaA & (GJ_PMM_CORE_PAGE_SIZE - 1ul)) != 0ul) {
+        fOk = 0;
+        goto out;
+    }
+    if (gj_pmm_core_free_count() != (cFree0 - 1u) ||
+        gj_pmm_core_total_count() != cTotal0) {
+        fOk = 0;
+        goto out;
+    }
+    pHdr = (volatile u64 *)pA;
+    if (pHdr[0] != 0ull) {
+        fScrub = 0;
+        fOk = 0;
+        goto out;
+    }
+    fScrub = 1;
+    u32Surf |= PMM_RESID_SURF_SCRUB;
+
+    /* --- alloc B (need two pages for double LIFO) --- */
+    pB = aarch64_pmm_alloc();
+    if (pB == 0) {
+        fOk = 0;
+        goto out;
+    }
+    u64PaB = (u64)(gj_vaddr_t)pB;
+    if (u64PaB < g_u64PoolBase || u64PaB >= g_u64PoolEnd ||
+        (u64PaB & (GJ_PMM_CORE_PAGE_SIZE - 1ul)) != 0ul ||
+        u64PaB == u64PaA) {
+        fOk = 0;
+        goto out;
+    }
+    if (gj_pmm_core_free_count() != (cFree0 - 2u) ||
+        gj_pmm_core_total_count() != cTotal0) {
+        fOk = 0;
+        goto out;
+    }
+    if (*(volatile u64 *)pB != 0ull) {
+        fScrub = 0;
+        fOk = 0;
+        goto out;
+    }
+
+    /*
+     * --- payload residual: mark past node header; free B; LIFO realloc ---
+     * Core scrub is sizeof(node) only; payload at +64 must survive free+alloc.
+     */
+    pMark = (volatile u32 *)(void *)((gj_vaddr_t)pB + PMM_SOFT_PAYLOAD_OFF);
+    *pMark = PMM_SOFT_PAYLOAD_MARK;
+    /* Also paint first words (will be scrubbed on re-alloc). */
+    ((volatile u64 *)pB)[0] = PMM_SOFT_PAT_A ^ PMM_SOFT_RESID_PAT;
+    ((volatile u64 *)pB)[1] = PMM_SOFT_PAT_B ^ PMM_SOFT_RESID_PAT;
+
+    u64WasB = u64PaB;
+    aarch64_pmm_free(pB);
+    pB = 0;
+    if (gj_pmm_core_free_count() != (cFree0 - 1u) ||
+        gj_pmm_core_total_count() != cTotal0) {
+        fOk = 0;
+        goto out;
+    }
+
+    pC = aarch64_pmm_alloc();
+    if (pC == 0 || (u64)(gj_vaddr_t)pC != u64WasB) {
+        fPayload = 0;
+        fOk = 0;
+        goto out;
+    }
+    /* Header scrubbed again after re-alloc of same page. */
+    if (*(volatile u64 *)pC != 0ull) {
+        fScrub = 0;
+        fOk = 0;
+        goto out;
+    }
+    if (*pMark != PMM_SOFT_PAYLOAD_MARK) {
+        fPayload = 0;
+        fOk = 0;
+        goto out;
+    }
+    fPayload = 1;
+    u32Surf |= PMM_RESID_SURF_PAYLOAD;
+
+    /*
+     * --- double LIFO residual: free C (was B) then A; next = A then B ---
+     */
+    pMark2 = (volatile u32 *)(void *)((gj_vaddr_t)pA + PMM_SOFT_PAYLOAD_OFF);
+    *pMark2 = PMM_SOFT_PAYLOAD_MARK2;
+    u64WasA = u64PaA;
+    u64WasB = (u64)(gj_vaddr_t)pC;
+
+    aarch64_pmm_free(pC);
+    pC = 0;
+    aarch64_pmm_free(pA);
+    pA = 0;
+    if (gj_pmm_core_free_count() != cFree0 ||
+        gj_pmm_core_total_count() != cTotal0) {
+        fOk = 0;
+        goto out;
+    }
+
+    pD = aarch64_pmm_alloc();
+    pE = aarch64_pmm_alloc();
+    if (pD == 0 || pE == 0) {
+        fDouble = 0;
+        fOk = 0;
+        goto out;
+    }
+    if ((u64)(gj_vaddr_t)pD != u64WasA || (u64)(gj_vaddr_t)pE != u64WasB) {
+        fDouble = 0;
+        fOk = 0;
+        goto out;
+    }
+    /* Payloads past node headers still intact. */
+    if (*pMark2 != PMM_SOFT_PAYLOAD_MARK2 || *pMark != PMM_SOFT_PAYLOAD_MARK) {
+        fPayload = 0;
+        fOk = 0;
+        goto out;
+    }
+    if (gj_pmm_core_free_count() != (cFree0 - 2u) ||
+        gj_pmm_core_total_count() != cTotal0) {
+        fOk = 0;
+        goto out;
+    }
+    fDouble = 1;
+    u32Surf |= PMM_RESID_SURF_DOUBLE;
+
+    /* --- restore both pages --- */
+    aarch64_pmm_free(pD);
+    aarch64_pmm_free(pE);
+    pD = 0;
+    pE = 0;
+    cFree1 = gj_pmm_core_free_count();
+    cTotal1 = gj_pmm_core_total_count();
+    if (cFree1 != cFree0 || cTotal1 != cTotal0) {
+        fOk = 0;
+        goto out;
+    }
+    u32Surf |= PMM_RESID_SURF_RESTORE;
+    u32Surf |= PMM_RESID_SURF_TOTAL;
+
+out:
+    /* Best-effort restore if a path left pages outstanding. */
+    if (pA != 0) {
+        aarch64_pmm_free(pA);
+        pA = 0;
+    }
+    if (pB != 0) {
+        aarch64_pmm_free(pB);
+        pB = 0;
+    }
+    if (pC != 0) {
+        aarch64_pmm_free(pC);
+        pC = 0;
+    }
+    if (pD != 0) {
+        aarch64_pmm_free(pD);
+        pD = 0;
+    }
+    if (pE != 0) {
+        aarch64_pmm_free(pE);
+        pE = 0;
+    }
+
+    cFree1 = gj_pmm_core_free_count();
+    cTotal1 = gj_pmm_core_total_count();
+    /* Residual ok requires restore + all sub-surfaces that ran. */
+    if (cFree1 != cFree0 || cTotal1 != cTotal0) {
+        fOk = 0;
+    }
+    if (fReject == 0 || fScrub == 0 || fPayload == 0 || fDouble == 0) {
+        fOk = 0;
+    }
+
+    if (pOutPa != 0) {
+        *pOutPa = u64PaA;
+    }
+    if (pOutPaB != 0) {
+        *pOutPaB = u64PaB;
+    }
+    if (pOutFree0 != 0) {
+        *pOutFree0 = cFree0;
+    }
+    if (pOutFree1 != 0) {
+        *pOutFree1 = cFree1;
+    }
+    if (pOutTotal0 != 0) {
+        *pOutTotal0 = cTotal0;
+    }
+    if (pOutTotal1 != 0) {
+        *pOutTotal1 = cTotal1;
+    }
+    if (pOutSurf != 0) {
+        *pOutSurf = u32Surf;
+    }
+    if (pOutRejectOk != 0) {
+        *pOutRejectOk = fReject;
+    }
+    if (pOutScrubOk != 0) {
+        *pOutScrubOk = fScrub;
+    }
+    if (pOutPayloadOk != 0) {
+        *pOutPayloadOk = fPayload;
+    }
+    if (pOutDoubleOk != 0) {
+        *pOutDoubleOk = fDouble;
+    }
+    return fOk;
+}
+
+/*
  * Soft invariant snapshot after core selftest + multi exercise.
  * Returns 1 if free/total look coherent for identity-mapped pool.
  */
@@ -424,12 +865,22 @@ pmm_invariants_soft(void)
     if (g_u64PoolEnd <= g_u64PoolBase) {
         return 0;
     }
+    /* Geometry residual folded into inv: span must match pool pages. */
+    if ((g_u64PoolEnd - g_u64PoolBase) !=
+        ((u64)g_cPoolPages * (u64)GJ_PMM_CORE_PAGE_SIZE)) {
+        return 0;
+    }
+    if ((g_u64PoolBase & (GJ_PMM_CORE_PAGE_SIZE - 1ul)) != 0ul) {
+        return 0;
+    }
     return 1;
 }
 
 /*
- * Wave 19 soft inventory emission — greppable "aarch64: pmm soft …".
- * Returns 1 if all soft gates held (self/multi/lifo/step/null/inv).
+ * Soft residual inventory emission - greppable "aarch64: pmm soft ...".
+ * Returns 1 if all soft gates held
+ * (self/multi/lifo/step/null/inv/geom/residual).
+ * Soft!=product; dual MIT OR Apache-2.0; G-AC-1; no stamp storm.
  */
 static int
 pmm_soft_inventory(const struct pmm_soft_snap *pSnap)
@@ -439,7 +890,10 @@ pmm_soft_inventory(const struct pmm_soft_snap *pSnap)
     unsigned uStepRestore;
     unsigned cGates;
     unsigned uRatio;
+    unsigned u32Bits;
     int fOk;
+    int fAlignBase;
+    int fAlignEnd;
 
     if (pSnap == 0) {
         kprintf("aarch64: pmm soft FAIL\n");
@@ -467,14 +921,33 @@ pmm_soft_inventory(const struct pmm_soft_snap *pSnap)
         uStepRestore = 1u;
     }
 
+    fAlignBase = 0;
+    fAlignEnd = 0;
+    if ((g_u64PoolBase & (GJ_PMM_CORE_PAGE_SIZE - 1ul)) == 0ul) {
+        fAlignBase = 1;
+    }
+    if ((g_u64PoolEnd & (GJ_PMM_CORE_PAGE_SIZE - 1ul)) == 0ul) {
+        fAlignEnd = 1;
+    }
+
     /* Soft gate sum + free/total ratio (percent; pure integer). */
     cGates = (unsigned)pSnap->u8SelfOk + (unsigned)pSnap->u8MultiOk +
              (unsigned)pSnap->u8LifoOk + (unsigned)pSnap->u8StepOk +
-             (unsigned)pSnap->u8NullOk + (unsigned)pSnap->u8InvOk;
+             (unsigned)pSnap->u8NullOk + (unsigned)pSnap->u8InvOk +
+             (unsigned)pSnap->u8GeomOk + (unsigned)pSnap->u8ResidOk;
     uRatio = 0u;
     if (pSnap->cTotal != 0u) {
         uRatio = (pSnap->cFree * 100u) / pSnap->cTotal;
     }
+
+    u32Bits = (unsigned)pSnap->u8SelfOk |
+              ((unsigned)pSnap->u8MultiOk << 1) |
+              ((unsigned)pSnap->u8LifoOk << 2) |
+              ((unsigned)pSnap->u8StepOk << 3) |
+              ((unsigned)pSnap->u8NullOk << 4) |
+              ((unsigned)pSnap->u8InvOk << 5) |
+              ((unsigned)pSnap->u8GeomOk << 6) |
+              ((unsigned)pSnap->u8ResidOk << 7);
 
     /* Grep: aarch64: pmm soft pool */
     kprintf("aarch64: pmm soft pool base=0x%lx end=0x%lx pages=%u "
@@ -484,9 +957,11 @@ pmm_soft_inventory(const struct pmm_soft_snap *pSnap)
             (unsigned long)pSnap->u64PoolSpan);
 
     /* Grep: aarch64: pmm soft multi */
-    kprintf("aarch64: pmm soft multi n=%u free0=%u free1=%u total=%u ok=%u\n",
+    kprintf("aarch64: pmm soft multi n=%u free0=%u free1=%u total=%u "
+            "distinct=%u ok=%u\n",
             pSnap->cMultiGot, pSnap->cMultiFree0, pSnap->cMultiFree1,
-            pSnap->cTotal, (unsigned)pSnap->u8MultiOk);
+            pSnap->cTotal, (unsigned)pSnap->u8MultiDistinctOk,
+            (unsigned)pSnap->u8MultiOk);
 
     /* Grep: aarch64: pmm soft lifo */
     kprintf("aarch64: pmm soft lifo pa_a=0x%lx pa_b=0x%lx pa_c=0x%lx "
@@ -506,1029 +981,160 @@ pmm_soft_inventory(const struct pmm_soft_snap *pSnap)
 
     /* Grep: aarch64: pmm soft inv */
     kprintf("aarch64: pmm soft inv free=%u total=%u pool_pages=%u "
-            "self=%u multi=%u lifo=%u step=%u null=%u inv=%u\n",
+            "self=%u multi=%u lifo=%u step=%u null=%u inv=%u "
+            "geom=%u residual=%u\n",
             pSnap->cFree, pSnap->cTotal, pSnap->cPoolPages,
             (unsigned)pSnap->u8SelfOk, (unsigned)pSnap->u8MultiOk,
             (unsigned)pSnap->u8LifoOk, (unsigned)pSnap->u8StepOk,
-            (unsigned)pSnap->u8NullOk, (unsigned)pSnap->u8InvOk);
+            (unsigned)pSnap->u8NullOk, (unsigned)pSnap->u8InvOk,
+            (unsigned)pSnap->u8GeomOk, (unsigned)pSnap->u8ResidOk);
 
-    /* Grep: aarch64: pmm soft stats — Wave 19 rollup. */
+    /* Grep: aarch64: pmm soft geom */
+    kprintf("aarch64: pmm soft geom span=0x%lx expect=0x%lx "
+            "align_base=%u align_end=%u pages=%u page_size=%lu ok=%u\n",
+            (unsigned long)pSnap->u64PoolSpan,
+            (unsigned long)pSnap->u64SpanExpect,
+            (unsigned)fAlignBase, (unsigned)fAlignEnd,
+            pSnap->cPoolPages, (unsigned long)GJ_PMM_CORE_PAGE_SIZE,
+            (unsigned)pSnap->u8GeomOk);
+
+    /*
+     * Grep: aarch64: pmm soft residual lean
+     * C0 STRONGER residual lean - Soft!=product dual MIT OR Apache-2.0.
+     * Stamp-free residual lamp; order-0 wrap only; not hierarchical product.
+     * Sub-surfaces: reject/scrub/payload/double/restore/total (resid_surf).
+     * G-AC-1: soft residual != product AC. Dual DoD remains OPEN.
+     */
+    kprintf("aarch64: pmm soft residual lean %s "
+            "order0=1 hier=0 neon=0 hhdm=0 zones=0 "
+            "free=%u total=%u pool_pages=%u "
+            "resid_free0=%u resid_free1=%u "
+            "resid_total0=%u resid_total1=%u "
+            "resid_pa=0x%lx resid_pa_b=0x%lx "
+            "reject=%u scrub=%u payload=%u double=%u "
+            "resid_surf=0x%x "
+            "gates=%u/%u bits=0x%x areas=%u "
+            "soft_ne_product=1 dual=MIT_OR_Apache-2.0 storm=0 "
+            "product_kernel=OPEN product_tib=0 multi_server=0 confine=0 "
+            "(Soft!=product; G-AC-1; dual MIT OR Apache-2.0; "
+            "no version stamp; order-0 shared core wrap only; "
+            "not hierarchical product PMM; not Dual DoD close)\n",
+            (pSnap->u8ResidOk != 0u && cGates == PMM_SOFT_GATE_N) ?
+                "PASS" :
+                "FAIL",
+            pSnap->cFree, pSnap->cTotal, pSnap->cPoolPages,
+            pSnap->cResidFree0, pSnap->cResidFree1,
+            pSnap->cResidTotal0, pSnap->cResidTotal1,
+            (unsigned long)pSnap->u64ResidPa,
+            (unsigned long)pSnap->u64ResidPaB,
+            (unsigned)pSnap->u8ResidRejectOk,
+            (unsigned)pSnap->u8ResidScrubOk,
+            (unsigned)pSnap->u8ResidPayloadOk,
+            (unsigned)pSnap->u8ResidDoubleOk,
+            pSnap->u32ResidSurf,
+            cGates, (unsigned)PMM_SOFT_GATE_N, u32Bits,
+            (unsigned)PMM_SOFT_AREAS);
+
+    /* Grep: aarch64: pmm soft residual reject|scrub|payload|double */
+    kprintf("aarch64: pmm soft residual reject ok=%u free0=%u free1=%u "
+            "total0=%u total1=%u\n",
+            (unsigned)pSnap->u8ResidRejectOk, pSnap->cResidFree0,
+            pSnap->cResidFree1, pSnap->cResidTotal0, pSnap->cResidTotal1);
+    kprintf("aarch64: pmm soft residual scrub ok=%u pa=0x%lx\n",
+            (unsigned)pSnap->u8ResidScrubOk,
+            (unsigned long)pSnap->u64ResidPa);
+    kprintf("aarch64: pmm soft residual payload ok=%u off=%lu mark=0x%x\n",
+            (unsigned)pSnap->u8ResidPayloadOk,
+            (unsigned long)PMM_SOFT_PAYLOAD_OFF,
+            (unsigned)PMM_SOFT_PAYLOAD_MARK);
+    kprintf("aarch64: pmm soft residual double ok=%u pa_a=0x%lx pa_b=0x%lx "
+            "surf=0x%x\n",
+            (unsigned)pSnap->u8ResidDoubleOk,
+            (unsigned long)pSnap->u64ResidPa,
+            (unsigned long)pSnap->u64ResidPaB, pSnap->u32ResidSurf);
+
+    /* Grep: aarch64: pmm soft stats */
     kprintf("aarch64: pmm soft stats gates=%u free=%u total=%u ratio=%u "
-            "multi_n=%u logs=%u wave=%u\n",
+            "multi_n=%u logs=%u areas=%u\n",
             cGates, pSnap->cFree, pSnap->cTotal, uRatio,
             (unsigned)PMM_SOFT_MULTI_N, g_cPmmSoftLogs,
-            (unsigned)PMM_SOFT_WAVE);
+            (unsigned)PMM_SOFT_AREAS);
 
-    /* Grep: aarch64: pmm soft inventory — Wave 20 stamp. */
-    kprintf("aarch64: pmm soft inventory wave=%u gates=%u free=%u total=%u "
-            "pool_pages=%u logs=%u ok_sum=%u\n",
-            (unsigned)PMM_SOFT_WAVE, cGates, pSnap->cFree, pSnap->cTotal,
-            pSnap->cPoolPages, g_cPmmSoftLogs, cGates);
+    /* Grep: aarch64: pmm soft inventory */
+    kprintf("aarch64: pmm soft inventory gates=%u free=%u total=%u "
+            "pool_pages=%u logs=%u ok_sum=%u areas=%u soft_only=1\n",
+            cGates, pSnap->cFree, pSnap->cTotal,
+            pSnap->cPoolPages, g_cPmmSoftLogs, cGates,
+            (unsigned)PMM_SOFT_AREAS);
 
     /*
      * Grep: aarch64: pmm soft deepen
-     * Wave 19 area catalog — order-0 soft scaffold only.
+     * Lean area catalog - order-0 soft scaffold only; no stamp storm.
      */
-    /*
-     * ---- Wave 19 complementary surfaces (kept) (never reshape primary).
-     * Return surfaces only — soft inventory; never hard-gates product paths.
-     */
-    /* Grep: aarch64: pmm: soft retclass — Wave 19 return-class taxonomy (kept) */
-    kprintf("aarch64: pmm: soft retclass ok|fail|inval|nodev|busy|nomem "
-            "soft_only=1 product_gate=0 wave=%u "
-            "(retclass taxonomy; Soft≠product)\n",
-            (unsigned)PMM_SOFT_WAVE);
-    /* Grep: aarch64: pmm: soft retlane — Wave 19 return-lane catalog (kept) */
-    kprintf("aarch64: pmm: soft retlane inv|selftest|rate|retcode|retmap|class "
-            "product_kernel=OPEN soft_ne_product=1 wave=%u "
-            "(retlane catalog; Soft≠product)\n",
-            (unsigned)PMM_SOFT_WAVE);
-    /*
-     * ---- Wave 20 complementary surfaces (kept) (never reshape primary).
-     * Return surfaces only — soft inventory; never hard-gates product paths.
-     */
-    /* Grep: aarch64: pmm: soft retbound — Wave 20 return-bound honesty (kept) */
-    kprintf("aarch64: pmm: soft retbound soft_only=1 product_gate=0 hard_gate=0 "
-            "never_blocks_m0=1 wave=%u "
-            "(retbound honesty; Soft≠product)\n",
-            (unsigned)PMM_SOFT_WAVE);
-    /* Grep: aarch64: pmm: soft retseal — Wave 20 seal stamp (kept) */
-    kprintf("aarch64: pmm: soft retseal exclusive=1 soft_ne_product=1 "
-            "product_kernel=OPEN wave=%u "
-            "(retseal stamp; Soft≠product)\n",
-            (unsigned)PMM_SOFT_WAVE);
-            /*
-             * ---- Wave 21 complementary surfaces (kept) (never reshape primary).
-             * Return surfaces only — soft inventory; never hard-gates product paths.
-            */
-            /* Grep: aarch64: pmm: soft retpulse — Wave 21 return-pulse honesty (kept) */
-            kprintf("aarch64: pmm: soft retpulse soft_only=1 product_gate=0 soft_ne_product=1 "
-                    "never_blocks_m0=1 wave=%u "
-                    "(retpulse honesty; Soft≠product)\n",
-                    (unsigned)PMM_SOFT_WAVE);
-            /* Grep: aarch64: pmm: soft retmark — Wave 21 mark stamp (kept) */
-            kprintf("aarch64: pmm: soft retmark exclusive=1 soft_ne_product=1 "
-                    "product_kernel=OPEN wave=%u "
-                    "(retmark stamp; Soft≠product)\n",
-                    (unsigned)PMM_SOFT_WAVE);
-            /*
-             * ---- Wave 22 complementary surfaces (kept) (never reshape primary).
-             * Return surfaces only — soft inventory; never hard-gates product paths.
-            */
-            /* Grep: aarch64: pmm: soft retphase — Wave 22 return-phase honesty (kept) */
-            kprintf("aarch64: pmm: soft retphase soft_only=1 product_gate=0 soft_ne_product=1 "
-                    "never_blocks_m0=1 wave=%u "
-                    "(retphase honesty; Soft≠product)\n",
-                    (unsigned)PMM_SOFT_WAVE);
-            /* Grep: aarch64: pmm: soft retbadge — Wave 22 badge stamp (kept) */
-            kprintf("aarch64: pmm: soft retbadge exclusive=1 soft_ne_product=1 "
-                    "product_kernel=OPEN wave=%u "
-                    "(retbadge stamp; Soft≠product)\n",
-                    (unsigned)PMM_SOFT_WAVE);
-/*
- * ---- Wave 23 complementary surfaces (kept) (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
-            */
-            /* Grep: aarch64: pmm: soft rettoken — Wave 23 return-token honesty (kept) */
-            kprintf("aarch64: pmm: soft rettoken soft_only=1 product_gate=0 soft_ne_product=1 "
-                    "never_blocks_m0=1 wave=%u "
-                    "(rettoken honesty; Soft≠product)\n",
-                    (unsigned)PMM_SOFT_WAVE);
-            /* Grep: aarch64: pmm: soft retcrest — Wave 23 crest stamp (kept) */
-            kprintf("aarch64: pmm: soft retcrest exclusive=1 soft_ne_product=1 "
-                    "product_kernel=OPEN wave=%u "
-                    "(retcrest stamp; Soft≠product)\n",
-                    (unsigned)PMM_SOFT_WAVE);
-            /*
-             * ---- Wave 24 complementary surfaces (kept) (never reshape primary).
-             * Return surfaces only — soft inventory; never hard-gates product paths.
-             */
-            /* Grep: aarch64: pmm: soft retvault — Wave 24 return-vault honesty (kept) */
-            kprintf("aarch64: pmm: soft retvault soft_only=1 product_gate=0 soft_ne_product=1 "
-                    "never_blocks_m0=1 wave=%u "
-                    "(retvault honesty; Soft≠product)\n",
-                    (unsigned)PMM_SOFT_WAVE);
-            /* Grep: aarch64: pmm: soft retbanner — Wave 24 banner stamp (kept) */
-            kprintf("aarch64: pmm: soft retbanner exclusive=1 soft_ne_product=1 "
-                    "product_kernel=OPEN wave=%u "
-                    "(retbanner stamp; Soft≠product)\n",
-                    (unsigned)PMM_SOFT_WAVE);
-            /*
-             * ---- Wave 25 complementary surfaces (kept) (never reshape primary).
-             * Return surfaces only — soft inventory; never hard-gates product paths.
-             */
-            /* Grep: aarch64: pmm: soft retledger — Wave 25 return-ledger honesty (kept) */
-            kprintf("aarch64: pmm: soft retledger soft_only=1 product_gate=0 soft_ne_product=1 "
-                    "never_blocks_m0=1 wave=%u "
-                    "(retledger honesty; Soft≠product)\n",
-                    (unsigned)PMM_SOFT_WAVE);
-            /* Grep: aarch64: pmm: soft retbeacon — Wave 25 beacon stamp (kept) */
-            kprintf("aarch64: pmm: soft retbeacon exclusive=1 soft_ne_product=1 "
-                    "product_kernel=OPEN wave=%u "
-                    "(retbeacon stamp; Soft≠product)\n",
-                    (unsigned)PMM_SOFT_WAVE);
-            /*
-             * ---- Wave 26 complementary surfaces (kept) (never reshape primary).
-             * Return surfaces only — soft inventory; never hard-gates product paths.
-             */
-            /* Grep: aarch64: pmm: soft retcipher — Wave 26 return-cipher honesty (kept) */
-            kprintf("aarch64: pmm: soft retcipher soft_only=1 product_gate=0 soft_ne_product=1 "
-                    "never_blocks_m0=1 wave=%u "
-                    "(retcipher honesty; Soft≠product)\n",
-                    (unsigned)PMM_SOFT_WAVE);
-            /* Grep: aarch64: pmm: soft retflame — Wave 26 flame stamp (kept) */
-            kprintf("aarch64: pmm: soft retflame exclusive=1 soft_ne_product=1 "
-                    "product_kernel=OPEN wave=%u "
-                    "(retflame stamp; Soft≠product)\n",
-                    (unsigned)PMM_SOFT_WAVE);
-                    /*
-                     * ---- Wave 27 complementary surfaces (kept) (never reshape primary).
-                     * Return surfaces only — soft inventory; never hard-gates product paths.
-                     */
-                    /* Grep: aarch64: pmm: soft retprism — Wave 27 return-prism honesty (kept) */
-                    kprintf("aarch64: pmm: soft retprism soft_only=1 product_gate=0 soft_ne_product=1 "
-                            "never_blocks_m0=1 wave=%u "
-                            "(retprism honesty; Soft≠product)\n",
-                            (unsigned)PMM_SOFT_WAVE);
-                    /* Grep: aarch64: pmm: soft retforge — Wave 27 forge stamp (kept) */
-                    kprintf("aarch64: pmm: soft retforge exclusive=1 soft_ne_product=1 "
-                            "product_kernel=OPEN wave=%u "
-                            "(retforge stamp; Soft≠product)\n",
-                            (unsigned)PMM_SOFT_WAVE);
-                            /*
-                             * ---- Wave 28 complementary surfaces (kept) (never reshape primary).
-                             * Return surfaces only — soft inventory; never hard-gates product paths.
-                             */
-                            /* Grep: aarch64: pmm: soft retshard — Wave 28 return-shard honesty (kept) */
-                            kprintf("aarch64: pmm: soft retshard soft_only=1 product_gate=0 soft_ne_product=1 "
-                                "never_blocks_m0=1 wave=%u "
-                                "(retshard honesty; Soft≠product)\n",
-                                (unsigned)PMM_SOFT_WAVE);
-                            /* Grep: aarch64: pmm: soft retcrown — Wave 28 crown stamp (kept) */
-                            kprintf("aarch64: pmm: soft retcrown exclusive=1 soft_ne_product=1 "
-                                "product_kernel=OPEN wave=%u "
-                                "(retcrown stamp; Soft≠product)\n",
-                                (unsigned)PMM_SOFT_WAVE);
-                                /*
-                             * ---- Wave 29 complementary surfaces (kept) (never reshape primary).
-                             * Return surfaces only — soft inventory; never hard-gates product paths.
-                             */
-                            /* Grep: aarch64: pmm: soft retglyph — Wave 29 return-glyph honesty (kept) */
-                            kprintf("aarch64: pmm: soft retglyph soft_only=1 product_gate=0 soft_ne_product=1 "
-                                    "never_blocks_m0=1 wave=%u "
-                                    "(retglyph honesty; Soft≠product)\n",
-                                    (unsigned)PMM_SOFT_WAVE);
-                            /* Grep: aarch64: pmm: soft retscepter — Wave 29 scepter stamp (kept) */
-                            kprintf("aarch64: pmm: soft retscepter exclusive=1 soft_ne_product=1 "
-                                    "product_kernel=OPEN wave=%u "
-                                    "(retscepter stamp; Soft≠product)\n",
-                                    (unsigned)PMM_SOFT_WAVE);
-                                /*
-                             * ---- Wave 30 complementary surfaces (kept) (never reshape primary).
-                             * Return surfaces only — soft inventory; never hard-gates product paths.
-                             */
-                            /* Grep: aarch64: pmm: soft retsigil — Wave 30 return-sigil honesty (kept) */
-                            kprintf("aarch64: pmm: soft retsigil soft_only=1 product_gate=0 soft_ne_product=1 "
-                                    "never_blocks_m0=1 wave=%u "
-                                    "(retsigil honesty; Soft≠product)\n",
-                                    (unsigned)PMM_SOFT_WAVE);
-                            /* Grep: aarch64: pmm: soft retemblem — Wave 30 emblem stamp (kept) */
-                            kprintf("aarch64: pmm: soft retemblem exclusive=1 soft_ne_product=1 "
-                                    "product_kernel=OPEN wave=%u "
-                                    "(retemblem stamp; Soft≠product)\n",
-                                    (unsigned)PMM_SOFT_WAVE);
-                            /*
-                             * ---- Wave 31 complementary surfaces (kept) (never reshape primary).
-                             * Return surfaces only — soft inventory; never hard-gates product paths.
-                             */
-                            /* Grep: aarch64: pmm: soft retaegis — Wave 31 return-aegis honesty (kept) */
-                            kprintf("aarch64: pmm: soft retaegis soft_only=1 product_gate=0 soft_ne_product=1 "
-                                    "never_blocks_m0=1 wave=%u "
-                                    "(retaegis honesty; Soft≠product)\n",
-                                    (unsigned)PMM_SOFT_WAVE);
-                            /* Grep: aarch64: pmm: soft retsigil — Wave 30 return-sigil honesty (kept) */
-                            kprintf("aarch64: pmm: soft retsigil soft_only=1 product_gate=0 soft_ne_product=1 "
-                                    "never_blocks_m0=1 wave=%u "
-                                    "(retsigil honesty; Soft≠product)\n",
-                                    (unsigned)PMM_SOFT_WAVE);
-                            /* Grep: aarch64: pmm: soft retmantle — Wave 31 mantle stamp (kept) */
-                            kprintf("aarch64: pmm: soft retmantle exclusive=1 soft_ne_product=1 "
-                                    "product_kernel=OPEN wave=%u "
-                                    "(retmantle stamp; Soft≠product)\n",
-                                    (unsigned)PMM_SOFT_WAVE);
-/*
- * ---- Wave 32 complementary surfaces (kept) (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: aarch64: pmm: soft retbulwark — Wave 32 return-bulwark honesty (kept) */
-kprintf("aarch64: pmm: soft retbulwark soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=%u "
-        "(retbulwark honesty; Soft≠product)\n",
-        (unsigned)PMM_SOFT_WAVE);
-/* Grep: aarch64: pmm: soft retpanoply — Wave 32 panoply stamp (kept) */
-kprintf("aarch64: pmm: soft retpanoply exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=%u "
-        "(retpanoply stamp; Soft≠product)\n",
-        (unsigned)PMM_SOFT_WAVE);
-/*
- * ---- Wave 33 complementary surfaces (kept) (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: aarch64: pmm: soft retbastion — Wave 33 return-bastion honesty (kept) */
-kprintf("aarch64: pmm: soft retbastion soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=%u "
-        "(retbastion honesty; Soft≠product)\n",
-        (unsigned)PMM_SOFT_WAVE);
-/* Grep: aarch64: pmm: soft retcitadel — Wave 33 citadel stamp (kept) */
-kprintf("aarch64: pmm: soft retcitadel exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=%u "
-        "(retcitadel stamp; Soft≠product)\n",
-        (unsigned)PMM_SOFT_WAVE);
-/*
- * ---- Wave 34 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: aarch64: pmm: soft retredoubt — Wave 34 return-redoubt honesty */
-kprintf("aarch64: pmm: soft retredoubt soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=%u "
-        "(retredoubt honesty; Soft≠product)\n",
-        (unsigned)PMM_SOFT_WAVE);
-/* Grep: aarch64: pmm: soft retkeep — Wave 34 exclusive keep stamp */
-kprintf("aarch64: pmm: soft retkeep exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=%u "
-        "(retkeep stamp; Soft≠product)\n",
-        (unsigned)PMM_SOFT_WAVE);
-/*
- * ---- Wave 35 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: aarch64: pmm: soft retfortress — Wave 35 return-fortress honesty */
-kprintf("aarch64: pmm: soft retfortress soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=%u "
-        "(retfortress honesty; Soft≠product)\n",
-        (unsigned)PMM_SOFT_WAVE);
-/* Grep: aarch64: pmm: soft retpalace — Wave 35 exclusive palace stamp */
-kprintf("aarch64: pmm: soft retpalace exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=%u "
-        "(retpalace stamp; Soft≠product)\n",
-        (unsigned)PMM_SOFT_WAVE);
-/*
- * ---- Wave 36 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: aarch64: pmm: soft rethold — Wave 36 return-hold honesty */
-kprintf("aarch64: pmm: soft rethold soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=%u "
-        "(rethold honesty; Soft≠product)\n",
-        (unsigned)PMM_SOFT_WAVE);
-/* Grep: aarch64: pmm: soft retspire — Wave 36 exclusive spire stamp */
-kprintf("aarch64: pmm: soft retspire exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=%u "
-        "(retspire stamp; Soft≠product)\n",
-        (unsigned)PMM_SOFT_WAVE);
-/*
- * ---- Wave 37 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: aarch64: pmm: soft retwall — Wave 37 return-wall honesty */
-kprintf("aarch64: pmm: soft retwall soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=%u "
-        "(retwall honesty; Soft≠product)\n",
-        (unsigned)PMM_SOFT_WAVE);
-/* Grep: aarch64: pmm: soft retgate — Wave 37 exclusive gate stamp */
-kprintf("aarch64: pmm: soft retgate exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=%u "
-        "(retgate stamp; Soft≠product)\n",
-        (unsigned)PMM_SOFT_WAVE);
-/*
- * ---- Wave 38 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: aarch64: pmm: soft retmoat — Wave 38 return-moat honesty */
-kprintf("aarch64: pmm: soft retmoat soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=%u "
-        "(retmoat honesty; Soft≠product)\n",
-        (unsigned)PMM_SOFT_WAVE);
-/* Grep: aarch64: pmm: soft retower — Wave 38 exclusive tower stamp */
-kprintf("aarch64: pmm: soft retower exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=%u "
-        "(retower stamp; Soft≠product)\n",
-        (unsigned)PMM_SOFT_WAVE);
-                            
-/*
- * ---- Wave 39 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: aarch64: pmm: soft retbarbican — Wave 39 return-barbican honesty */
-kprintf("aarch64: pmm: soft retbarbican soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=%u "
-        "(retbarbican honesty; Soft≠product)\n",
-        (unsigned)PMM_SOFT_WAVE);
-/* Grep: aarch64: pmm: soft retglacis — Wave 39 exclusive glacis stamp */
-kprintf("aarch64: pmm: soft retglacis exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=%u "
-        "(retglacis stamp; Soft≠product)\n",
-        (unsigned)PMM_SOFT_WAVE);
-/*
- * ---- Wave 40 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: aarch64: pmm: soft retcurtain — Wave 40 return-curtain honesty */
-kprintf("aarch64: pmm: soft retcurtain soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=%u "
-        "(retcurtain honesty; Soft≠product)\n",
-        (unsigned)PMM_SOFT_WAVE);
-/* Grep: aarch64: pmm: soft retparapet — Wave 40 exclusive parapet stamp */
-kprintf("aarch64: pmm: soft retparapet exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=%u "
-        "(retparapet stamp; Soft≠product)\n",
-        (unsigned)PMM_SOFT_WAVE);
-/*
- * ---- Wave 41 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: aarch64: pmm: soft retravelin — Wave 41 return-travelin honesty */
-kprintf("aarch64: pmm: soft retravelin soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=%u "
-        "(retravelin honesty; Soft≠product)\n",
-        (unsigned)PMM_SOFT_WAVE);
-/* Grep: aarch64: pmm: soft retditch — Wave 41 exclusive ditch stamp */
-kprintf("aarch64: pmm: soft retditch exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=%u "
-        "(retditch stamp; Soft≠product)\n",
-        (unsigned)PMM_SOFT_WAVE);
-/*
- * ---- Wave 42 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: aarch64: pmm: soft retportcullis — Wave 42 return-portcullis honesty */
-kprintf("aarch64: pmm: soft retportcullis soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=%u "
-        "(retportcullis honesty; Soft≠product)\n",
-        (unsigned)PMM_SOFT_WAVE);
-/* Grep: aarch64: pmm: soft retbattlement — Wave 42 exclusive battlement stamp */
-kprintf("aarch64: pmm: soft retbattlement exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=%u "
-        "(retbattlement stamp; Soft≠product)\n",
-        (unsigned)PMM_SOFT_WAVE);
-/*
- * ---- Wave 43 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: aarch64: pmm: soft retmachicolation — Wave 43 return-machicolation honesty */
-kprintf("aarch64: pmm: soft retmachicolation soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=%u "
-        "(retmachicolation honesty; Soft≠product)\n",
-        (unsigned)PMM_SOFT_WAVE);
-/* Grep: aarch64: pmm: soft retarrowslit — Wave 43 exclusive arrowslit stamp */
-kprintf("aarch64: pmm: soft retarrowslit exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=%u "
-        "(retarrowslit stamp; Soft≠product)\n",
-        (unsigned)PMM_SOFT_WAVE);
+    kprintf("aarch64: pmm soft deepen areas=%u "
+            "catalog=pool,multi,lifo,step,inv,geom,residual,stats,"
+            "inventory,deepen,surf,path,honesty,exclusive,open,return "
+            "logs=%u soft_only=1 storm=0\n",
+            (unsigned)PMM_SOFT_AREAS, g_cPmmSoftLogs);
 
-/*
- * ---- Wave 44 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: aarch64: pmm: soft retmerlon — Wave 44 return-merlon honesty */
-kprintf("aarch64: pmm: soft retmerlon soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=%u "
-        "(retmerlon honesty; Soft≠product)\n",
-        (unsigned)PMM_SOFT_WAVE);
-/* Grep: aarch64: pmm: soft retembrasure — Wave 44 exclusive embrasure stamp */
-kprintf("aarch64: pmm: soft retembrasure exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=%u "
-        "(retembrasure stamp; Soft≠product)\n",
-        (unsigned)PMM_SOFT_WAVE);
-
-/*
- * ---- Wave 45 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: aarch64: pmm: soft retkeepgate — Wave 45 return-keepgate honesty */
-kprintf("aarch64: pmm: soft retkeepgate soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=%u "
-        "(retkeepgate honesty; Soft≠product)\n",
-        (unsigned)PMM_SOFT_WAVE);
-/* Grep: aarch64: pmm: soft retouterward — Wave 45 exclusive outerward stamp */
-kprintf("aarch64: pmm: soft retouterward exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=%u "
-        "(retouterward stamp; Soft≠product)\n",
-        (unsigned)PMM_SOFT_WAVE);
-
-/*
- * ---- Wave 46 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: aarch64: pmm: soft retbailey — Wave 46 return-bailey honesty */
-kprintf("aarch64: pmm: soft retbailey soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=%u "
-        "(retbailey honesty; Soft≠product)\n",
-        (unsigned)PMM_SOFT_WAVE);
-/* Grep: aarch64: pmm: soft retpostern — Wave 46 exclusive postern stamp */
-kprintf("aarch64: pmm: soft retpostern exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=%u "
-        "(retpostern stamp; Soft≠product)\n",
-        (unsigned)PMM_SOFT_WAVE);
-
-/*
- * ---- Wave 47 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: aarch64: pmm: soft retinnerward — Wave 47 return-innerward honesty */
-kprintf("aarch64: pmm: soft retinnerward soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=118 "
-        "(retinnerward honesty; Soft≠product)\n");
-/* Grep: aarch64: pmm: soft retdonjon — Wave 47 exclusive donjon stamp */
-kprintf("aarch64: pmm: soft retdonjon exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=118 "
-        "(retdonjon stamp; Soft≠product)\n");
-
-/*
- * ---- Wave 48 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: aarch64: pmm: soft retchevaux — Wave 48 return-chevaux honesty */
-kprintf("aarch64: pmm: soft retchevaux soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=118 "
-        "(retchevaux honesty; Soft≠product)\n");
-/* Grep: aarch64: pmm: soft retpalisade — Wave 48 exclusive palisade stamp */
-kprintf("aarch64: pmm: soft retpalisade exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=118 "
-        "(retpalisade stamp; Soft≠product)\n");
-
-/*
- * ---- Wave 49 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: aarch64: pmm: soft retglacisgate — Wave 49 return-glacisgate honesty */
-kprintf("aarch64: pmm: soft retglacisgate soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=118 "
-        "(retglacisgate honesty; Soft≠product)\n");
-/* Grep: aarch64: pmm: soft retoutwork — Wave 49 exclusive outwork stamp */
-kprintf("aarch64: pmm: soft retoutwork exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=118 "
-        "(retoutwork stamp; Soft≠product)\n");
-/*
- * ---- Wave 50 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: aarch64: pmm: soft retsally — Wave 50 return-sally honesty */
-kprintf("aarch64: pmm: soft retsally soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=118 "
-        "(retsally honesty; Soft≠product)\n");
-/* Grep: aarch64: pmm: soft retcounterscarp — Wave 50 exclusive counterscarp stamp */
-kprintf("aarch64: pmm: soft retcounterscarp exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=118 "
-        "(retcounterscarp stamp; Soft≠product)\n");
-/*
- * ---- Wave 51 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: aarch64: pmm: soft retfosse — Wave 51 return-fosse honesty */
-kprintf("aarch64: pmm: soft retfosse soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=118 "
-        "(retfosse honesty; Soft≠product)\n");
-/* Grep: aarch64: pmm: soft retcoveredway — Wave 51 exclusive coveredway stamp */
-kprintf("aarch64: pmm: soft retcoveredway exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=118 "
-        "(retcoveredway stamp; Soft≠product)\n");
-
-/*
- * ---- Wave 52 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: aarch64: pmm: soft rettenaille — Wave 52 return-tenaille honesty */
-kprintf("aarch64: pmm: soft rettenaille soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=118 "
-        "(rettenaille honesty; Soft≠product)\n");
-/* Grep: aarch64: pmm: soft retdemilune — Wave 52 exclusive demilune stamp */
-kprintf("aarch64: pmm: soft retdemilune exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=118 "
-        "(retdemilune stamp; Soft≠product)\n");
-/*
- * ---- Wave 53 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: aarch64: pmm: soft retravelin — Wave 53 return-travelin honesty */
-kprintf("aarch64: pmm: soft retravelin soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=118 "
-        "(retravelin honesty; Soft≠product)\n");
-/* Grep: aarch64: pmm: soft retlunette — Wave 53 exclusive lunette stamp */
-kprintf("aarch64: pmm: soft retlunette exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=118 "
-        "(retlunette stamp; Soft≠product)\n");
-/*
- * ---- Wave 54 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: aarch64: pmm: soft retcaponier — Wave 54 return-caponier honesty */
-kprintf("aarch64: pmm: soft retcaponier soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=118 "
-        "(retcaponier honesty; Soft≠product)\n");
-/* Grep: aarch64: pmm: soft retredan — Wave 54 exclusive redan stamp */
-kprintf("aarch64: pmm: soft retredan exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=118 "
-        "(retredan stamp; Soft≠product)\n");
-/*
- * ---- Wave 55 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: aarch64: pmm: soft retflank — Wave 55 return-flank honesty */
-kprintf("aarch64: pmm: soft retflank soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=118 "
-        "(retflank honesty; Soft≠product)\n");
-/* Grep: aarch64: pmm: soft retface — Wave 55 exclusive face stamp */
-kprintf("aarch64: pmm: soft retface exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=118 "
-        "(retface stamp; Soft≠product)\n");
-/*
- * ---- Wave 56 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: aarch64: pmm: soft retgorge — Wave 56 return-gorge honesty */
-kprintf("aarch64: pmm: soft retgorge soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=118 "
-        "(retgorge honesty; Soft≠product)\n");
-/* Grep: aarch64: pmm: soft retshoulder — Wave 56 exclusive shoulder stamp */
-kprintf("aarch64: pmm: soft retshoulder exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=118 "
-        "(retshoulder stamp; Soft≠product)\n");
-/*
- * ---- Wave 57 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: aarch64: pmm: soft retraverse — Wave 57 return-traverse honesty */
-kprintf("aarch64: pmm: soft retraverse soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=118 "
-        "(retraverse honesty; Soft≠product)\n");
-/* Grep: aarch64: pmm: soft retcasemate — Wave 57 exclusive casemate stamp */
-kprintf("aarch64: pmm: soft retcasemate exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=118 "
-        "(retcasemate stamp; Soft≠product)\n");
-
-/*
- * ---- Wave 58 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: aarch64: pmm: soft retorillon — Wave 58 return-orillon honesty */
-kprintf("aarch64: pmm: soft retorillon soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=118 "
-        "(retorillon honesty; Soft≠product)\n");
-/* Grep: aarch64: pmm: soft retbonnette — Wave 58 exclusive bonnette stamp */
-kprintf("aarch64: pmm: soft retbonnette exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=118 "
-        "(retbonnette stamp; Soft≠product)\n");
-
-/*
- * ---- Wave 59 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: aarch64: pmm: soft retcrownwork — Wave 59 return-crownwork honesty */
-kprintf("aarch64: pmm: soft retcrownwork soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=118 "
-        "(retcrownwork honesty; Soft≠product)\n");
-/* Grep: aarch64: pmm: soft rethornwork — Wave 59 exclusive hornwork stamp */
-kprintf("aarch64: pmm: soft rethornwork exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=118 "
-        "(rethornwork stamp; Soft≠product)\n");
-
-/*
- * ---- Wave 60 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: aarch64: pmm: soft retplace — Wave 60 return-place honesty */
-kprintf("aarch64: pmm: soft retplace soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=118 "
-        "(retplace honesty; Soft≠product)\n");
-/* Grep: aarch64: pmm: soft retenvelope — Wave 60 exclusive envelope stamp */
-kprintf("aarch64: pmm: soft retenvelope exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=118 "
-        "(retenvelope stamp; Soft≠product)\n");
-
-
-
-
-
-
-
-
-
-/*
- * ---- Wave 61 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: aarch64: pmm: soft retcounterguard — Wave 61 return-counterguard honesty */
-kprintf("aarch64: pmm: soft retcounterguard soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=118 "
-        "(retcounterguard honesty; Soft≠product)\n");
-/* Grep: aarch64: pmm: soft retcoveredface — Wave 61 exclusive coveredface stamp */
-kprintf("aarch64: pmm: soft retcoveredface exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=118 "
-        "(retcoveredface stamp; Soft≠product)\n");
-/*
- * ---- Wave 62 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: aarch64: pmm: soft retbastionface — Wave 62 return-bastionface honesty */
-kprintf("aarch64: pmm: soft retbastionface soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=118 "
-        "(retbastionface honesty; Soft≠product)\n");
-/* Grep: aarch64: pmm: soft retcurtainangle — Wave 62 exclusive curtainangle stamp */
-kprintf("aarch64: pmm: soft retcurtainangle exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=118 "
-        "(retcurtainangle stamp; Soft≠product)\n");
-/*
- * ---- Wave 63 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: aarch64: pmm: soft retdoubletenaille — Wave 63 return-doubletenaille honesty */
-kprintf("aarch64: pmm: soft retdoubletenaille soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=118 "
-        "(retdoubletenaille honesty; Soft≠product)\n");
-/* Grep: aarch64: pmm: soft retplaceofarms — Wave 63 exclusive placeofarms stamp */
-kprintf("aarch64: pmm: soft retplaceofarms exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=118 "
-        "(retplaceofarms stamp; Soft≠product)\n");
- /*
-  * ---- Wave 64 exclusive complementary surfaces (never reshape primary).
-  * Return surfaces only — soft inventory; never hard-gates product paths.
-  */
- /* Grep: aarch64: pmm: soft retreentrant — Wave 64 return-reentrant honesty */
-kprintf("aarch64: pmm: soft retreentrant soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=118 "
-        "(retreentrant honesty; Soft≠product)\n");
- /* Grep: aarch64: pmm: soft retsallyport — Wave 64 exclusive sallyport stamp */
-kprintf("aarch64: pmm: soft retsallyport exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=118 "
-        "(retsallyport stamp; Soft≠product)\n");
- /*
-  * ---- Wave 65 exclusive complementary surfaces (never reshape primary).
-  * Return surfaces only — soft inventory; never hard-gates product paths.
-  */
- /* Grep: aarch64: pmm: soft retgorgeangle — Wave 65 return-gorgeangle honesty */
-kprintf("aarch64: pmm: soft retgorgeangle soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=118 "
-        "(retgorgeangle honesty; Soft≠product)\n");
- /* Grep: aarch64: pmm: soft retshoulderangle — Wave 65 exclusive shoulderangle stamp */
-kprintf("aarch64: pmm: soft retshoulderangle exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=118 "
-        "(retshoulderangle stamp; Soft≠product)\n");
- /*
-  * ---- Wave 66 exclusive complementary surfaces (never reshape primary).
-  * Return surfaces only — soft inventory; never hard-gates product paths.
-  */
- /* Grep: aarch64: pmm: soft retflankangle — Wave 66 return-flankangle honesty */
- kprintf("aarch64: pmm: soft retflankangle soft_only=1 product_gate=0 soft_ne_product=1 "
-         "never_blocks_m0=1 wave=118 "
-         "(retflankangle honesty; Soft≠product)\n");
- /* Grep: aarch64: pmm: soft retfaceangle — Wave 66 exclusive faceangle stamp */
- kprintf("aarch64: pmm: soft retfaceangle exclusive=1 soft_ne_product=1 "
-         "product_kernel=OPEN wave=118 "
-         "(retfaceangle stamp; Soft≠product)\n");
-/*
- * ---- Wave 67 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: aarch64: pmm: soft retcaponierangle — Wave 67 return-caponierangle honesty */
-kprintf("aarch64: pmm: soft retcaponierangle soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=118 "
-        "(retcaponierangle honesty; Soft≠product)\n");
-/* Grep: aarch64: pmm: soft retredanangle — Wave 67 exclusive redanangle stamp */
-kprintf("aarch64: pmm: soft retredanangle exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=118 "
-        "(retredanangle stamp; Soft≠product)\n");
-/*
- * ---- Wave 68 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: aarch64: pmm: soft retlunetteangle — Wave 68 return-lunetteangle honesty */
-kprintf("aarch64: pmm: soft retlunetteangle soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=118 "
-        "(retlunetteangle honesty; Soft≠product)\n");
-/* Grep: aarch64: pmm: soft rettenailleangle — Wave 68 exclusive tenailleangle stamp */
-kprintf("aarch64: pmm: soft rettenailleangle exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=118 "
-        "(rettenailleangle stamp; Soft≠product)\n");
-/*
- * ---- Wave 69 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: aarch64: pmm: soft retdemiluneangle — Wave 69 return-demiluneangle honesty */
-kprintf("aarch64: pmm: soft retdemiluneangle soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=118 "
-        "(retdemiluneangle honesty; Soft≠product)\n");
-/* Grep: aarch64: pmm: soft retcoveredwayangle — Wave 69 exclusive coveredwayangle stamp */
-kprintf("aarch64: pmm: soft retcoveredwayangle exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=118 "
-        "(retcoveredwayangle stamp; Soft≠product)\n");
-/*
- * ---- Wave 70 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: aarch64: pmm: soft retfosseangle — Wave 70 return-fosseangle honesty */
-kprintf("aarch64: pmm: soft retfosseangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=118 (retfosseangle honesty; Soft≠product)\n");
-/* Grep: aarch64: pmm: soft retcounterscarple — Wave 70 exclusive counterscarple stamp */
-kprintf("aarch64: pmm: soft retcounterscarple exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=118 (retcounterscarple stamp; Soft≠product)\n");
-/*
- * ---- Wave 71 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: aarch64: pmm: soft retsallyportangle — Wave 71 return-sallyportangle honesty */
-kprintf("aarch64: pmm: soft retsallyportangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=118 (retsallyportangle honesty; Soft≠product)\n");
-/* Grep: aarch64: pmm: soft retreentrantangle — Wave 71 exclusive reentrantangle stamp */
-kprintf("aarch64: pmm: soft retreentrantangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=118 (retreentrantangle stamp; Soft≠product)\n");
-/*
- * ---- Wave 72 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: aarch64: pmm: soft retplaceofarmsangle — Wave 72 return-placeofarmsangle honesty */
-kprintf("aarch64: pmm: soft retplaceofarmsangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=118 (retplaceofarmsangle honesty; Soft≠product)\n");
-/* Grep: aarch64: pmm: soft retdoubletenailleangle — Wave 72 exclusive doubletenailleangle stamp */
-kprintf("aarch64: pmm: soft retdoubletenailleangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=118 (retdoubletenailleangle stamp; Soft≠product)\n");
-/* Grep: aarch64: pmm: soft retcurtainface — Wave 73 return-curtainface honesty */
-kprintf("aarch64: pmm: soft retcurtainface soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=118 (retcurtainface honesty; Soft≠product)\n");
-/* Grep: aarch64: pmm: soft retbastionangle — Wave 73 exclusive bastionangle stamp */
-kprintf("aarch64: pmm: soft retbastionangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=118 (retbastionangle stamp; Soft≠product)\n");
-/* Grep: aarch64: pmm: soft retglacisangle — Wave 74 return-glacisangle honesty */
-kprintf("aarch64: pmm: soft retglacisangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=118 (retglacisangle honesty; Soft≠product)\n");
-/* Grep: aarch64: pmm: soft retparapetangle — Wave 74 exclusive parapetangle stamp */
-kprintf("aarch64: pmm: soft retparapetangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=118 (retparapetangle stamp; Soft≠product)\n");
-/* Grep: aarch64: pmm: soft retmoatangle — Wave 75 return-moatangle honesty */
-kprintf("aarch64: pmm: soft retmoatangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=118 (retmoatangle honesty; Soft≠product)\n");
-/* Grep: aarch64: pmm: soft retowerangle — Wave 75 exclusive towerangle stamp */
-kprintf("aarch64: pmm: soft retowerangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=118 (retowerangle stamp; Soft≠product)\n");
-/* Grep: aarch64: pmm: soft retgateangle — Wave 76 return-gateangle honesty */
-kprintf("aarch64: pmm: soft retgateangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=118 (retgateangle honesty; Soft≠product)\n");
-/* Grep: aarch64: pmm: soft retwallangle — Wave 76 exclusive wallangle stamp */
-kprintf("aarch64: pmm: soft retwallangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=118 (retwallangle stamp; Soft≠product)\n");
-/* Grep: aarch64: pmm: soft retspireangle — Wave 77 return-spireangle honesty */
-kprintf("aarch64: pmm: soft retspireangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=118 (retspireangle honesty; Soft≠product)\n");
-/* Grep: aarch64: pmm: soft retholdangle — Wave 77 exclusive holdangle stamp */
-kprintf("aarch64: pmm: soft retholdangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=118 (retholdangle stamp; Soft≠product)\n");
-/* Grep: aarch64: pmm: soft retpalaceangle — Wave 78 return-palaceangle honesty */
-kprintf("aarch64: pmm: soft retpalaceangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=118 (retpalaceangle honesty; Soft≠product)\n");
-/* Grep: aarch64: pmm: soft retfortressangle — Wave 78 exclusive fortressangle stamp */
-kprintf("aarch64: pmm: soft retfortressangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=118 (retfortressangle stamp; Soft≠product)\n");
-/* Grep: aarch64: pmm: soft retkeepangle — Wave 79 return-keepangle honesty */
-kprintf("aarch64: pmm: soft retkeepangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=118 (retkeepangle honesty; Soft≠product)\n");
-/* Grep: aarch64: pmm: soft retredoubtangle — Wave 79 exclusive redoubtangle stamp */
-kprintf("aarch64: pmm: soft retredoubtangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=118 (retredoubtangle stamp; Soft≠product)\n");
-/* Grep: aarch64: pmm: soft retcitadelangle — Wave 80 return-citadelangle honesty */
-kprintf("aarch64: pmm: soft retcitadelangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=118 (retcitadelangle honesty; Soft≠product)\n");
-/* Grep: aarch64: pmm: soft retbastionkeep — Wave 80 exclusive bastionkeep stamp */
-kprintf("aarch64: pmm: soft retbastionkeep exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=118 (retbastionkeep stamp; Soft≠product)\n");
-/* Grep: aarch64: pmm: soft retpanoplyangle — Wave 81 return-panoplyangle honesty */
-kprintf("aarch64: pmm: soft retpanoplyangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=118 (retpanoplyangle honesty; Soft≠product)\n");
-/* Grep: aarch64: pmm: soft retbulwarkangle — Wave 81 exclusive bulwarkangle stamp */
-kprintf("aarch64: pmm: soft retbulwarkangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=118 (retbulwarkangle stamp; Soft≠product)\n");
-/* Grep: aarch64: pmm: soft retmantleangle — Wave 82 return-mantleangle honesty */
-kprintf("aarch64: pmm: soft retmantleangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=118 (retmantleangle honesty; Soft≠product)\n");
-/* Grep: aarch64: pmm: soft retaegisangle — Wave 82 exclusive aegisangle stamp */
-kprintf("aarch64: pmm: soft retaegisangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=118 (retaegisangle stamp; Soft≠product)\n");
-/* Grep: aarch64: pmm: soft retemblemangle — Wave 83 return-emblemangle honesty */
-kprintf("aarch64: pmm: soft retemblemangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=118 (retemblemangle honesty; Soft≠product)\n");
-/* Grep: aarch64: pmm: soft retsigilangle — Wave 83 exclusive sigilangle stamp */
-kprintf("aarch64: pmm: soft retsigilangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=118 (retsigilangle stamp; Soft≠product)\n");
-/* Grep: aarch64: pmm: soft retscepterangle — Wave 84 return-scepterangle honesty */
-kprintf("aarch64: pmm: soft retscepterangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=118 (retscepterangle honesty; Soft≠product)\n");
-/* Grep: aarch64: pmm: soft retglyphangle — Wave 84 exclusive glyphangle stamp */
-kprintf("aarch64: pmm: soft retglyphangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=118 (retglyphangle stamp; Soft≠product)\n");
-/* Grep: aarch64: pmm: soft retcrownangle — Wave 85 return-crownangle honesty */
-kprintf("aarch64: pmm: soft retcrownangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=118 (retcrownangle honesty; Soft≠product)\n");
-/* Grep: aarch64: pmm: soft retshardangle — Wave 85 exclusive shardangle stamp */
-kprintf("aarch64: pmm: soft retshardangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=118 (retshardangle stamp; Soft≠product)\n");
-/* Grep: aarch64: pmm: soft retforgeangle — Wave 86 return-forgeangle honesty */
-kprintf("aarch64: pmm: soft retforgeangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=118 (retforgeangle honesty; Soft≠product)\n");
-/* Grep: aarch64: pmm: soft retprismangle — Wave 86 exclusive prismangle stamp */
-kprintf("aarch64: pmm: soft retprismangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=118 (retprismangle stamp; Soft≠product)\n");
-/* Grep: aarch64: pmm: soft retflameangle — Wave 87 return-flameangle honesty */
-kprintf("aarch64: pmm: soft retflameangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=118 (retflameangle honesty; Soft≠product)\n");
-/* Grep: aarch64: pmm: soft retcipherangle — Wave 87 exclusive cipherangle stamp */
-kprintf("aarch64: pmm: soft retcipherangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=118 (retcipherangle stamp; Soft≠product)\n");
-/* Grep: aarch64: pmm: soft retbeaconangle — Wave 88 return-beaconangle honesty */
-kprintf("aarch64: pmm: soft retbeaconangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=118 (retbeaconangle honesty; Soft≠product)\n");
-/* Grep: aarch64: pmm: soft retledgerangle — Wave 88 exclusive ledgerangle stamp */
-kprintf("aarch64: pmm: soft retledgerangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=118 (retledgerangle stamp; Soft≠product)\n");
-/* Grep: aarch64: pmm: soft retbannerangle — Wave 89 return-bannerangle honesty */
-kprintf("aarch64: pmm: soft retbannerangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=118 (retbannerangle honesty; Soft≠product)\n");
-/* Grep: aarch64: pmm: soft retvaultangle — Wave 89 exclusive vaultangle stamp */
-kprintf("aarch64: pmm: soft retvaultangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=118 (retvaultangle stamp; Soft≠product)\n");
-/* Grep: aarch64: pmm: soft retcrestangle — Wave 90 return-crestangle honesty */
-kprintf("aarch64: pmm: soft retcrestangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=118 (retcrestangle honesty; Soft≠product)\n");
-/* Grep: aarch64: pmm: soft rettokenangle — Wave 90 exclusive tokenangle stamp */
-kprintf("aarch64: pmm: soft rettokenangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=118 (rettokenangle stamp; Soft≠product)\n");
-/* Grep: aarch64: pmm: soft retbadgeangle — Wave 91 return-badgeangle honesty */
-kprintf("aarch64: pmm: soft retbadgeangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=118 (retbadgeangle honesty; Soft≠product)\n");
-/* Grep: aarch64: pmm: soft retphaseangle — Wave 91 exclusive phaseangle stamp */
-kprintf("aarch64: pmm: soft retphaseangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=118 (retphaseangle stamp; Soft≠product)\n");
-/* Grep: aarch64: pmm: soft retmarkangle — Wave 92 return-markangle honesty */
-kprintf("aarch64: pmm: soft retmarkangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=118 (retmarkangle honesty; Soft≠product)\n");
-/* Grep: aarch64: pmm: soft retpulseangle — Wave 92 exclusive pulseangle stamp */
-kprintf("aarch64: pmm: soft retpulseangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=118 (retpulseangle stamp; Soft≠product)\n");
-
-/* Grep: aarch64: pmm: soft retsealangle — Wave 93 return-sealangle honesty */
-kprintf("aarch64: pmm: soft retsealangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=118 (retsealangle honesty; Soft≠product)\n");
-/* Grep: aarch64: pmm: soft retboundangle — Wave 93 exclusive boundangle stamp */
-kprintf("aarch64: pmm: soft retboundangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=118 (retboundangle stamp; Soft≠product)\n");
-/* Grep: aarch64: pmm: soft retstemangle — Wave 94 return-stemangle honesty */
-kprintf("aarch64: pmm: soft retstemangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=118 (retstemangle honesty; Soft≠product)\n");
-/* Grep: aarch64: pmm: soft retbladeangle — Wave 94 exclusive bladeangle stamp */
-kprintf("aarch64: pmm: soft retbladeangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=118 (retbladeangle stamp; Soft≠product)\n");
-/* Grep: aarch64: pmm: soft retchordangle — Wave 95 return-chordangle honesty */
-kprintf("aarch64: pmm: soft retchordangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=118 (retchordangle honesty; Soft≠product)\n");
-/* Grep: aarch64: pmm: soft retarcangle — Wave 95 exclusive arcangle stamp */
-kprintf("aarch64: pmm: soft retarcangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=118 (retarcangle stamp; Soft≠product)\n");
-/* Grep: aarch64: pmm: soft retsectorangle — Wave 96 return-sectorangle honesty */
-kprintf("aarch64: pmm: soft retsectorangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=118 (retsectorangle honesty; Soft≠product)\n");
-/* Grep: aarch64: pmm: soft retwedgeangle — Wave 96 exclusive wedgeangle stamp */
-kprintf("aarch64: pmm: soft retwedgeangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=118 (retwedgeangle stamp; Soft≠product)\n");
-/* Grep: aarch64: pmm: soft retradiusangle — Wave 97 return-radiusangle honesty */
-kprintf("aarch64: pmm: soft retradiusangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=118 (retradiusangle honesty; Soft≠product)\n");
-/* Grep: aarch64: pmm: soft retdiameterangle — Wave 97 exclusive diameterangle stamp */
-kprintf("aarch64: pmm: soft retdiameterangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=118 (retdiameterangle stamp; Soft≠product)\n");
-/* Grep: aarch64: pmm: soft retcircumangle — Wave 98 return-circumangle honesty */
-kprintf("aarch64: pmm: soft retcircumangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=118 (retcircumangle honesty; Soft≠product)\n");
-/* Grep: aarch64: pmm: soft retellipseangle — Wave 98 exclusive ellipseangle stamp */
-kprintf("aarch64: pmm: soft retellipseangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=118 (retellipseangle stamp; Soft≠product)\n");
-/* Grep: aarch64: pmm: soft rethyperangle — Wave 99 return-hyperangle honesty */
-kprintf("aarch64: pmm: soft rethyperangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=118 (rethyperangle honesty; Soft≠product)\n");
-/* Grep: aarch64: pmm: soft retparabolaangle — Wave 99 exclusive parabolaangle stamp */
-kprintf("aarch64: pmm: soft retparabolaangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=118 (retparabolaangle stamp; Soft≠product)\n");
-/* Grep: aarch64: pmm: soft retspiralangle — Wave 100 return-spiralangle honesty */
-kprintf("aarch64: pmm: soft retspiralangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=118 (retspiralangle honesty; Soft≠product)\n");
-/* Grep: aarch64: pmm: soft rethelixangle — Wave 100 exclusive helixangle stamp */
-kprintf("aarch64: pmm: soft rethelixangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=118 (rethelixangle stamp; Soft≠product)\n");
-/* Grep: aarch64: pmm: soft rettorusangle — Wave 101 return-torusangle honesty */
-kprintf("aarch64: pmm: soft rettorusangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=118 (rettorusangle honesty; Soft≠product)\n");
-/* Grep: aarch64: pmm: soft retknotangle — Wave 101 exclusive knotangle stamp */
-kprintf("aarch64: pmm: soft retknotangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=118 (retknotangle stamp; Soft≠product)\n");
-/* Grep: aarch64: pmm: soft retmoebiusangle — Wave 102 return-moebiusangle honesty */
-kprintf("aarch64: pmm: soft retmoebiusangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=118 (retmoebiusangle honesty; Soft≠product)\n");
-/* Grep: aarch64: pmm: soft retkleinangle — Wave 102 exclusive kleinangle stamp */
-kprintf("aarch64: pmm: soft retkleinangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=118 (retkleinangle stamp; Soft≠product)\n");
-/* Grep: aarch64: pmm: soft retprojectangle — Wave 103 return-projectangle honesty */
-kprintf("aarch64: pmm: soft retprojectangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=118 (retprojectangle honesty; Soft≠product)\n");
-/* Grep: aarch64: pmm: soft retaffineangle — Wave 103 exclusive affineangle stamp */
-kprintf("aarch64: pmm: soft retaffineangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=118 (retaffineangle stamp; Soft≠product)\n");
-/* Grep: aarch64: pmm: soft retlinearangle — Wave 104 return-linearangle honesty */
-kprintf("aarch64: pmm: soft retlinearangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=118 (retlinearangle honesty; Soft≠product)\n");
-/* Grep: aarch64: pmm: soft retbilinearangle — Wave 104 exclusive bilinearangle stamp */
-kprintf("aarch64: pmm: soft retbilinearangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=118 (retbilinearangle stamp; Soft≠product)\n");
-/* Grep: aarch64: pmm: soft retquadraticangle — Wave 105 return-quadraticangle honesty */
-kprintf("aarch64: pmm: soft retquadraticangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=118 (retquadraticangle honesty; Soft≠product)\n");
-/* Grep: aarch64: pmm: soft retcubicangle — Wave 105 exclusive cubicangle stamp */
-kprintf("aarch64: pmm: soft retcubicangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=118 (retcubicangle stamp; Soft≠product)\n");
-/* Grep: aarch64: pmm: soft retquarticangle — Wave 106 return-quarticangle honesty */
-kprintf("aarch64: pmm: soft retquarticangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=118 (retquarticangle honesty; Soft≠product)\n");
-/* Grep: aarch64: pmm: soft retquinticangle — Wave 106 exclusive quinticangle stamp */
-kprintf("aarch64: pmm: soft retquinticangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=118 (retquinticangle stamp; Soft≠product)\n");
-/* Grep: aarch64: pmm: soft retsplineangle — Wave 107 return-splineangle honesty */
-kprintf("aarch64: pmm: soft retsplineangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=118 (retsplineangle honesty; Soft≠product)\n");
-/* Grep: aarch64: pmm: soft retbezierangle — Wave 107 exclusive bezierangle stamp */
-kprintf("aarch64: pmm: soft retbezierangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=118 (retbezierangle stamp; Soft≠product)\n");
-/* Grep: aarch64: pmm: soft rethurmitangle — Wave 108 return-hermitangle honesty */
-kprintf("aarch64: pmm: soft rethurmitangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=118 (rethurmitangle honesty; Soft≠product)\n");
-/* Grep: aarch64: pmm: soft retcatmullangle — Wave 108 exclusive catmullangle stamp */
-kprintf("aarch64: pmm: soft retcatmullangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=118 (retcatmullangle stamp; Soft≠product)\n");
-/* Grep: aarch64: pmm: soft retnurbsangle — Wave 109 return-nurbsangle honesty */
-kprintf("aarch64: pmm: soft retnurbsangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=118 (retnurbsangle honesty; Soft≠product)\n");
-/* Grep: aarch64: pmm: soft retbsplineangle — Wave 109 exclusive bsplineangle stamp */
-kprintf("aarch64: pmm: soft retbsplineangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=118 (retbsplineangle stamp; Soft≠product)\n");
-/* Grep: aarch64: pmm: soft retmeshangle — Wave 110 return-meshangle honesty */
-kprintf("aarch64: pmm: soft retmeshangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=118 (retmeshangle honesty; Soft≠product)\n");
-/* Grep: aarch64: pmm: soft retgridangle — Wave 110 exclusive gridangle stamp */
-kprintf("aarch64: pmm: soft retgridangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=118 (retgridangle stamp; Soft≠product)\n");
-/* Grep: aarch64: pmm: soft retvoxelangle — Wave 111 return-voxelangle honesty */
-kprintf("aarch64: pmm: soft retvoxelangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=118 (retvoxelangle honesty; Soft≠product)\n");
-/* Grep: aarch64: pmm: soft rettexelangle — Wave 111 exclusive texelangle stamp */
-kprintf("aarch64: pmm: soft rettexelangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=118 (rettexelangle stamp; Soft≠product)\n");
-/* Grep: aarch64: pmm: soft retfragmentangle — Wave 112 return-fragmentangle honesty */
-kprintf("aarch64: pmm: soft retfragmentangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=118 (retfragmentangle honesty; Soft≠product)\n");
-/* Grep: aarch64: pmm: soft retvertexangle — Wave 112 exclusive vertexangle stamp */
-kprintf("aarch64: pmm: soft retvertexangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=118 (retvertexangle stamp; Soft≠product)\n");
-/* Grep: aarch64: pmm: soft retshaderangle — Wave 113 return-shaderangle honesty */
-kprintf("aarch64: pmm: soft retshaderangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=118 (retshaderangle honesty; Soft≠product)\n");
-/* Grep: aarch64: pmm: soft retpipelineangle — Wave 113 exclusive pipelineangle stamp */
-kprintf("aarch64: pmm: soft retpipelineangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=118 (retpipelineangle stamp; Soft≠product)\n");
-/* Grep: aarch64: pmm: soft retframebufferangle — Wave 114 return-framebufferangle honesty */
-kprintf("aarch64: pmm: soft retframebufferangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=118 (retframebufferangle honesty; Soft≠product)\n");
-/* Grep: aarch64: pmm: soft retswapchainangle — Wave 114 exclusive swapchainangle stamp */
-kprintf("aarch64: pmm: soft retswapchainangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=118 (retswapchainangle stamp; Soft≠product)\n");
-/* Grep: aarch64: pmm: soft retpresentangle — Wave 115 return-presentangle honesty */
-kprintf("aarch64: pmm: soft retpresentangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=118 (retpresentangle honesty; Soft≠product)\n");
-/* Grep: aarch64: pmm: soft retvsyncangle — Wave 115 exclusive vsyncangle stamp */
-kprintf("aarch64: pmm: soft retvsyncangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=118 (retvsyncangle stamp; Soft≠product)\n");
-/* Grep: aarch64: pmm: soft retfenceangle — Wave 116 return-fenceangle honesty */
-kprintf("aarch64: pmm: soft retfenceangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=118 (retfenceangle honesty; Soft≠product)\n");
-/* Grep: aarch64: pmm: soft retsemaphoreangle — Wave 116 exclusive semaphoreangle stamp */
-kprintf("aarch64: pmm: soft retsemaphoreangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=118 (retsemaphoreangle stamp; Soft≠product)\n");
-/* Grep: aarch64: pmm: soft retmutexangle — Wave 117 return-mutexangle honesty */
-kprintf("aarch64: pmm: soft retmutexangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=118 (retmutexangle honesty; Soft≠product)\n");
-/* Grep: aarch64: pmm: soft retcondangle — Wave 117 exclusive condangle stamp */
-kprintf("aarch64: pmm: soft retcondangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=118 (retcondangle stamp; Soft≠product)\n");
-/* Grep: aarch64: pmm: soft retbarrierangle — Wave 118 return-barrierangle honesty */
-kprintf("aarch64: pmm: soft retbarrierangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=118 (retbarrierangle honesty; Soft≠product)\n");
-/* Grep: aarch64: pmm: soft retatomicangle — Wave 118 exclusive atomicangle stamp */
-kprintf("aarch64: pmm: soft retatomicangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=118 (retatomicangle stamp; Soft≠product)\n");
-/* Grep: aarch64: pmm: soft retqueueangle — Wave 119 return-queueangle honesty */
-kprintf("aarch64: pmm: soft retqueueangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=119 (retqueueangle honesty; Soft≠product)\n");
-/* Grep: aarch64: pmm: soft reteventangle — Wave 119 exclusive eventangle stamp */
-kprintf("aarch64: pmm: soft reteventangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=119 (reteventangle stamp; Soft≠product)\n");
-/* Grep: aarch64: pmm: soft retchannelangle — Wave 120 return-channelangle honesty */
-kprintf("aarch64: pmm: soft retchannelangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=120 (retchannelangle honesty; Soft≠product)\n");
-/* Grep: aarch64: pmm: soft retmailboxangle — Wave 120 exclusive mailboxangle stamp */
-kprintf("aarch64: pmm: soft retmailboxangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=120 (retmailboxangle stamp; Soft≠product)\n");
-/* Grep: aarch64: pmm: soft retstreamangle — Wave 121 return-streamangle honesty */
-kprintf("aarch64: pmm: soft retstreamangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=121 (retstreamangle honesty; Soft≠product)\n");
-/* Grep: aarch64: pmm: soft retpacketangle — Wave 121 exclusive packetangle stamp */
-kprintf("aarch64: pmm: soft retpacketangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=121 (retpacketangle stamp; Soft≠product)\n");
-/* Grep: aarch64: pmm: soft retframeangle — Wave 122 return-frameangle honesty */
-kprintf("aarch64: pmm: soft retframeangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=122 (retframeangle honesty; Soft≠product)\n");
-/* Grep: aarch64: pmm: soft retwindowangle — Wave 122 exclusive windowangle stamp */
-kprintf("aarch64: pmm: soft retwindowangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=122 (retwindowangle stamp; Soft≠product)\n");
-/* Grep: aarch64: pmm: soft retlayerangle — Wave 123 return-layerangle honesty */
-kprintf("aarch64: pmm: soft retlayerangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=123 (retlayerangle honesty; Soft≠product)\n");
-/* Grep: aarch64: pmm: soft retcanvasangle — Wave 123 exclusive canvasangle stamp */
-kprintf("aarch64: pmm: soft retcanvasangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=123 (retcanvasangle stamp; Soft≠product)\n");
-/* Grep: aarch64: pmm: soft retbrushangle — Wave 124 return-brushangle honesty */
-kprintf("aarch64: pmm: soft retbrushangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=124 (retbrushangle honesty; Soft≠product)\n");
-/* Grep: aarch64: pmm: soft retinkangle — Wave 124 exclusive inkangle stamp */
-kprintf("aarch64: pmm: soft retinkangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=124 (retinkangle stamp; Soft≠product)\n");
-/* Grep: aarch64: pmm: soft retpaletteangle — Wave 125 return-paletteangle honesty */
-kprintf("aarch64: pmm: soft retpaletteangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=125 (retpaletteangle honesty; Soft≠product)\n");
-/* Grep: aarch64: pmm: soft retstrokeangle — Wave 125 exclusive strokeangle stamp */
-kprintf("aarch64: pmm: soft retstrokeangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=125 (retstrokeangle stamp; Soft≠product)\n");
-/* Grep: aarch64: pmm: soft retgradientangle — Wave 126 return-gradientangle honesty */
-kprintf("aarch64: pmm: soft retgradientangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=126 (retgradientangle honesty; Soft≠product)\n");
-/* Grep: aarch64: pmm: soft retblendangle — Wave 126 exclusive blendangle stamp */
-kprintf("aarch64: pmm: soft retblendangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=126 (retblendangle stamp; Soft≠product)\n");
-                            kprintf("aarch64: pmm soft deepen wave=%u areas=%u "
-            "catalog=pool,multi,lifo,step,inv,stats,path,surf,return,honesty,deepen "
-            "logs=%u soft_only=1\n",
-            (unsigned)PMM_SOFT_WAVE, (unsigned)PMM_SOFT_AREAS,
-            g_cPmmSoftLogs);
-
-    /* Grep: aarch64: pmm soft surf — Wave 19 gate bit lamps */
+    /* Grep: aarch64: pmm soft surf - gate bit lamps */
     kprintf("aarch64: pmm soft surf self=%u multi=%u lifo=%u step=%u "
-            "null=%u inv=%u gates=%u bits=0x%x wave=%u\n",
+            "null=%u inv=%u geom=%u residual=%u gates=%u bits=0x%x\n",
             (unsigned)pSnap->u8SelfOk, (unsigned)pSnap->u8MultiOk,
             (unsigned)pSnap->u8LifoOk, (unsigned)pSnap->u8StepOk,
-            (unsigned)pSnap->u8NullOk, (unsigned)pSnap->u8InvOk, cGates,
-            (unsigned)((unsigned)pSnap->u8SelfOk |
-                       ((unsigned)pSnap->u8MultiOk << 1) |
-                       ((unsigned)pSnap->u8LifoOk << 2) |
-                       ((unsigned)pSnap->u8StepOk << 3) |
-                       ((unsigned)pSnap->u8NullOk << 4) |
-                       ((unsigned)pSnap->u8InvOk << 5)),
-            (unsigned)PMM_SOFT_WAVE);
+            (unsigned)pSnap->u8NullOk, (unsigned)pSnap->u8InvOk,
+            (unsigned)pSnap->u8GeomOk, (unsigned)pSnap->u8ResidOk, cGates,
+            u32Bits);
 
     /*
      * Grep: aarch64: pmm soft path
-     * Honesty: order-0 shared core only — not hierarchical / TiB product bar.
+     * Honesty: order-0 shared core only - not hierarchical / TiB product bar.
      * product_kernel=OPEN: aarch64 product kernel remains OPEN.
      */
     kprintf("aarch64: pmm soft path order0=1 hier=0 neon=0 tib_bar=0 "
-            "core=1 multi_n=%u product_kernel=OPEN hard_gate=0 wave=%u\n",
-            (unsigned)PMM_SOFT_MULTI_N, (unsigned)PMM_SOFT_WAVE);
+            "core=1 multi_n=%u product_kernel=OPEN hard_gate=0\n",
+            (unsigned)PMM_SOFT_MULTI_N);
 
     /* Grep: aarch64: pmm soft honesty */
     kprintf("aarch64: pmm soft honesty product_kernel=OPEN soft_only=1 "
-            "no_hier=1 no_tib=1 wave=%u\n",
-            (unsigned)PMM_SOFT_WAVE);
+            "no_hier=1 no_tib=1 soft_ne_product=1 "
+            "dual=MIT_OR_Apache-2.0\n");
 
-    /* Grep: aarch64: pmm soft exclusive — Wave 35 exclusive deepen */
+    /* Grep: aarch64: pmm soft exclusive - C0 exclusive residual deepen */
     kprintf("aarch64: pmm soft exclusive multi_server=0 confine=0 "
-            "product_kernel=OPEN soft_only=1 wave=%u\n",
-            (unsigned)PMM_SOFT_WAVE);
+            "product_kernel=OPEN soft_only=1 residual=1 "
+            "resid_surf=0x%x stronger=1 stamp_free=1\n",
+            pSnap->u32ResidSurf);
 
-    /* Grep: aarch64: pmm soft open — Wave 19 open-lamp rollup */
+    /* Grep: aarch64: pmm soft open - Dual DoD remains OPEN */
     kprintf("aarch64: pmm soft open multi_server=0 confine=0 "
-            "product_kernel=OPEN soft_only=1 wave=%u\n",
-            (unsigned)PMM_SOFT_WAVE);
+            "product_kernel=OPEN soft_only=1 dual_dod=OPEN "
+            "product_tib=0 hier=0\n");
 
     fOk = 0;
     if (pSnap->u8SelfOk != 0u && pSnap->u8MultiOk != 0u &&
         pSnap->u8LifoOk != 0u && pSnap->u8StepOk != 0u &&
-        pSnap->u8NullOk != 0u && pSnap->u8InvOk != 0u) {
+        pSnap->u8NullOk != 0u && pSnap->u8InvOk != 0u &&
+        pSnap->u8GeomOk != 0u && pSnap->u8ResidOk != 0u) {
         fOk = 1;
     }
 
-    /* Grep: aarch64: pmm soft return — Wave 19 return surfaces */
+    /* Grep: aarch64: pmm soft return */
     kprintf("aarch64: pmm soft return inv_ret=%u self=%u multi=%u lifo=%u "
-            "step=%u null=%u inv=%u product_kernel=OPEN wave=%u\n",
+            "step=%u null=%u inv=%u geom=%u residual=%u "
+            "product_kernel=OPEN\n",
             (fOk != 0) ? 1u : 0u,
             (unsigned)pSnap->u8SelfOk, (unsigned)pSnap->u8MultiOk,
             (unsigned)pSnap->u8LifoOk, (unsigned)pSnap->u8StepOk,
             (unsigned)pSnap->u8NullOk, (unsigned)pSnap->u8InvOk,
-            (unsigned)PMM_SOFT_WAVE);
+            (unsigned)pSnap->u8GeomOk, (unsigned)pSnap->u8ResidOk);
 
     if (fOk != 0) {
-        kprintf("aarch64: pmm soft PASS wave=%u\n",
-                (unsigned)PMM_SOFT_WAVE);
+        kprintf("aarch64: pmm soft PASS areas=%u gates=%u\n",
+                (unsigned)PMM_SOFT_AREAS, cGates);
     } else {
-        kprintf("aarch64: pmm soft FAIL wave=%u\n",
-                (unsigned)PMM_SOFT_WAVE);
+        kprintf("aarch64: pmm soft FAIL areas=%u gates=%u\n",
+                (unsigned)PMM_SOFT_AREAS, cGates);
     }
     return fOk;
 }
@@ -1550,7 +1156,16 @@ aarch64_pmm_init(void)
     int fStep;
     int fNull;
     int fInv;
+    int fGeom;
+    int fResid;
     int fSoft;
+    int fAlignBase;
+    int fAlignEnd;
+    int fDistinct;
+    int fResidReject;
+    int fResidScrub;
+    int fResidPayload;
+    int fResidDouble;
     struct pmm_soft_snap snap;
 
     u64Start = align_up((unsigned long)(void *)__bss_end, GJ_PMM_CORE_PAGE_SIZE);
@@ -1578,21 +1193,35 @@ aarch64_pmm_init(void)
     snap.cStepFree0 = 0u;
     snap.cStepFree1 = 0u;
     snap.cStepFree2 = 0u;
+    snap.cResidFree0 = 0u;
+    snap.cResidFree1 = 0u;
+    snap.cResidTotal0 = 0u;
+    snap.cResidTotal1 = 0u;
+    snap.u32ResidSurf = 0u;
     snap.u64LifoPaA = 0ull;
     snap.u64LifoPaB = 0ull;
     snap.u64LifoPaC = 0ull;
+    snap.u64ResidPa = 0ull;
+    snap.u64ResidPaB = 0ull;
     snap.u64PoolSpan = g_u64PoolEnd - g_u64PoolBase;
+    snap.u64SpanExpect =
+        (u64)g_cPoolPages * (u64)GJ_PMM_CORE_PAGE_SIZE;
     snap.u8SelfOk = 0u;
     snap.u8MultiOk = 0u;
     snap.u8LifoOk = 0u;
     snap.u8StepOk = 0u;
     snap.u8NullOk = 0u;
     snap.u8InvOk = 0u;
-    snap.u8Pad0 = 0u;
-    snap.u8Pad1 = 0u;
+    snap.u8GeomOk = 0u;
+    snap.u8ResidOk = 0u;
+    snap.u8ResidRejectOk = 0u;
+    snap.u8ResidScrubOk = 0u;
+    snap.u8ResidPayloadOk = 0u;
+    snap.u8ResidDoubleOk = 0u;
+    snap.u8MultiDistinctOk = 0u;
 
     /*
-     * Legacy pool soft line (kept for existing greps) + Wave 19 soft pool
+     * Legacy pool soft line (kept for existing greps) + soft pool
      * line emitted later via pmm_soft_inventory.
      */
     kprintf("aarch64: pmm pool soft base=0x%lx end=0x%lx pages=%u "
@@ -1621,11 +1250,13 @@ aarch64_pmm_init(void)
     cGot = 0u;
     cFree0 = 0u;
     cFree1 = 0u;
-    fMulti = pmm_multi_soft_exercise(&cGot, &cFree0, &cFree1);
+    fDistinct = 0;
+    fMulti = pmm_multi_soft_exercise(&cGot, &cFree0, &cFree1, &fDistinct);
     snap.cMultiGot = cGot;
     snap.cMultiFree0 = cFree0;
     snap.cMultiFree1 = cFree1;
     snap.u8MultiOk = (fMulti != 0) ? 1u : 0u;
+    snap.u8MultiDistinctOk = (fDistinct != 0) ? 1u : 0u;
 
     fLifo = pmm_lifo_soft_exercise(&snap.u64LifoPaA, &snap.u64LifoPaB,
                                    &snap.u64LifoPaC, &snap.cLifoFree0,
@@ -1641,12 +1272,35 @@ aarch64_pmm_init(void)
     fInv = pmm_invariants_soft();
     snap.u8InvOk = (fInv != 0) ? 1u : 0u;
 
+    fAlignBase = 0;
+    fAlignEnd = 0;
+    fGeom = pmm_geom_soft_exercise(&snap.u64PoolSpan, &snap.u64SpanExpect,
+                                   &fAlignBase, &fAlignEnd);
+    snap.u8GeomOk = (fGeom != 0) ? 1u : 0u;
+    (void)fAlignBase;
+    (void)fAlignEnd;
+
+    fResidReject = 0;
+    fResidScrub = 0;
+    fResidPayload = 0;
+    fResidDouble = 0;
+    fResid = pmm_residual_soft_exercise(
+        &snap.u64ResidPa, &snap.u64ResidPaB, &snap.cResidFree0,
+        &snap.cResidFree1, &snap.cResidTotal0, &snap.cResidTotal1,
+        &snap.u32ResidSurf, &fResidReject, &fResidScrub, &fResidPayload,
+        &fResidDouble);
+    snap.u8ResidOk = (fResid != 0) ? 1u : 0u;
+    snap.u8ResidRejectOk = (fResidReject != 0) ? 1u : 0u;
+    snap.u8ResidScrubOk = (fResidScrub != 0) ? 1u : 0u;
+    snap.u8ResidPayloadOk = (fResidPayload != 0) ? 1u : 0u;
+    snap.u8ResidDoubleOk = (fResidDouble != 0) ? 1u : 0u;
+
     cFree = gj_pmm_core_free_count();
     cTotal = gj_pmm_core_total_count();
     snap.cFree = cFree;
     snap.cTotal = cTotal;
 
-    /* Legacy multi soft summary (smoke: "aarch64: pmm multi soft …"). */
+    /* Legacy multi soft summary (smoke: "aarch64: pmm multi soft ..."). */
     kprintf("aarch64: pmm multi soft n=%u free0=%u free1=%u total=%u\n",
             cGot, cFree0, cFree1, cTotal);
 
@@ -1660,9 +1314,10 @@ aarch64_pmm_init(void)
     }
 
     /*
-     * Wave 19 combined soft inventory under "aarch64: pmm soft …".
+     * Combined soft residual inventory under "aarch64: pmm soft ...".
      * Emits multi-field lamps + final soft PASS|FAIL (smoke greps PASS).
-     * Honesty: soft PASS ≠ hierarchical PMM / product kernel complete.
+     * Honesty: soft PASS != hierarchical PMM / product kernel complete.
+     * Soft!=product; G-AC-1; dual MIT OR Apache-2.0; Dual DoD OPEN.
      */
     fSoft = pmm_soft_inventory(&snap);
     (void)fSoft;

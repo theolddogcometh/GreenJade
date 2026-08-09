@@ -20,6 +20,15 @@
  * ---------
  * Full advisory lock fairness across all filesystems; soft fills may ENOSYS.
  * See docs/GLIBC_COMPAT.md.
+ *
+ * Soft residual (C2 libcgj fcntl.h; Soft!=product; G-AC-1; Dual DoD A/B OPEN):
+ *   soft     = open/openat/openat2/fcntl/creat/flock/lockf/fallocate/posix_fadvise
+ *              + splice/tee/vmsplice; O_*/F_*/AT_*/RESOLVE_* Linux numbers
+ *   product  = hybrid ABI open path via doors/VFS; not freestanding class
+ *   honesty  = flag catalog != product FS completeness; agent PASS != Dual DoD
+ *              close; stamp-free bar honesty (no version stamp); G-AC-1 no .ko AC
+ *   law      = dual MIT OR Apache-2.0; no GPL; H2 no stamp storms
+ * greppable: libcgj: fcntl soft residual Soft!=product
  */
 #pragma once
 

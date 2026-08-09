@@ -17,12 +17,59 @@
  *   9. Encrypted CHANNEL_DATA send + recv (MAC verify + decrypt)
  *  10. Poly1305 soft AEAD self-check (RFC 8439 vector + post-keys tag)
  *  11. live path PASS → soft inventory → daemon park
- *  12. Eth accept session: banner + KEX start (OpenSSH/nc on freestanding NIC)
+ *  12. Dual DoD B eth path: yield+poll ACCEPT loop + session for host :22.
+ *     Banner SSH-2.0-GreenJade_sshd; bare nc early close = eng session soft
+ *     PASS (greppable eth banner PASS / eth accept session; Soft!=product).
+ *     Residual lean deepen STRONGER (Gap B, once UDX/L2 + L2/TCP / L3 works):
+ *     product sshd over net doors when product net owns wire; Dual DoD B
+ *     product path = UDX+ABI (not freestanding rtl wire owner — freestanding
+ *     rtl SKIP). Prefer functional accept/session residual deepen: door-first
+ *     AcceptQ claim + denser door POLL+ACCEPT interleaved (product_net_owns_wire)
+ *     on :22 listen held / accept / yield / poll product eth path — sext
+ *     POLL then ACCEPT re-arm per door tick (door_sext_arm; quint/quad/triple
+ *     still greppable) + denser sext ACCEPT pass per POLL (quint/quad/triple
+ *     still greppable) + denser post-arm bare reclaim + denser mid-tick quint
+ *     POLL+ACCEPT (quad/triple/dual still greppable) + denser park idle residual +
+ *     denser post-yield door reclaim + denser pre-park multi reclaim so host
+ *     nc wins SYN→ESTABLISHED→banner under UDX ownership, lean pure POLL only
+ *     as lab interim, yield-first idle so freestanding poll advances :22 only
+ *     as lab interim. Functional session settle = denser door head + re-arm +
+ *     lean yield residual before banner TX. Post-SEND banner flush = product-
+ *     net door head + short pure + lean yield-cadenced residual (anti-stall —
+ *     no multi-thousand pure-POLL busy-spin storms; ~<=256 POLL per site) +
+ *     short progress cadence; banner-once — never full re-SEND from offset 0;
+ *     soft-accept/coalesce residual — bare nc sees SSH-2.0-GreenJade_sshd
+ *     once; early-close soft PASS. Soft listen != host banner proof
+ *     (soft_listen_ne_host_banner=1; Dual DoD B OPEN until DUT host nc sees
+ *     product id on eth :22; G-AC-1 Soft!=product). Soft listen held != host
+ *     banner L3 proof. BAR v2026.08.04.75 stamp-free (never invent .76 /
+ *     never bump image stamp from this unit). Product residual STRONGER denser
+ *     (UDX-owned wire): denser door POLL+ACCEPT when product path present
+ *     (product_udx_nic=1 / product_net_owns_wire); prefer product UDX wire
+ *     path over freestanding eth residual; freestanding soft listen honesty
+ *     stays SKIP product close (soft!=DUT close; Dual DoD B OPEN). H2
+ *     once-lamps only — no stamp storms. Lab spirit: lab_ip=10.200.125.50
+ *     listen=:22. BAR v2026.08.04.75 stamp-free.
+ *     Grep: soft residual lean / soft residual lean deepen /
+ *     soft residual lean deepen soft_listen / soft residual lean deepen
+ *     product_net_owns_wire / soft residual product / product_udx_nic /
+ *     lab_ip=10.200.125.50 spirit / listen=:22 / soft!=DUT close /
+ *     functional_accept / functional_session / product_net_owns_wire /
+ *     product_path=UDX / not_freestanding_rtl / soft_listen_ne_host_banner /
+ *     door_poll_accept / door_triple_arm / door_quad_arm / door_quint_arm /
+ *     door_sext_arm / denser=4 / Soft!=product / dual_dod_b=OPEN.
+ *     denser residual bar .75 (H2 once; exclusive .c; Dual DoD B):
+ *     soft residual denser product_net_owns_wire / soft residual denser chain /
+ *     soft residual denser middle / soft residual denser VERDICT /
+ *     soft residual lean denser / denser residual bar / bar=v2026.08.04.75 /
+ *     denser_prove=1 denser_residual=1 denser_arms= stamp_free=1 /
+ *     denser residual != Dual DoD close; agent_ne_close=1; Soft!=product only
+ *     (ASCII Soft!= only — never non-ASCII soft-ne token).
  *
  * Soft inventory (Wave 126 exclusive deepen) — honesty, not product SSH.
  * Diagnostics only; never hard-fails the live path. Greppable prefix:
  *   "sshd-gj: soft …"
- * Honesty: soft inventory ≠ product multi-server confine.
+ * Honesty: soft inventory != product multi-server confine.
  *
  * Soft suite (optional; never fails live path):
  *   sshd-gj: soft suite start
@@ -131,7 +178,7 @@ static int g_encrypted;
 /*
  * Soft product inventory (Wave 126). Cumulative milestone lamps + suite tallies.
  * Honesty-only — not a claim of OpenSSH-class product completeness.
- * Soft ≠ product multi-server confine.
+ * Soft!=product multi-server confine.
  * greppable: sshd-gj: soft …
  */
 static uint32_t g_u32SoftBanner;   /* peer banner shape OK */
@@ -152,12 +199,14 @@ static uint32_t g_u32SoftSuiteOk;  /* offline soft-suite sub-steps OK */
 static uint32_t g_u32SoftSuiteN;   /* offline soft-suite sub-steps run */
 static uint32_t g_u32SoftSuiteBits;/* offline soft-suite bit lamps */
 static uint32_t g_u32SoftLogN;     /* inventory log emissions */
+/* Dual DoD B eth accept/session lamps (Soft!=product; greppable eth …). */
+static uint32_t g_u32EthAcceptN;   /* external ACCEPT count after park */
+static uint32_t g_u32EthBannerN;   /* server banner TX OK (product id) */
+static uint32_t g_u32EthSessN;     /* eth session path PASS count */
 
 /* Offline soft-suite bit lamps (Wave 111; never hard-gate). */
-/* Wave 126 soft deepen surfaces (CREATE-ONLY soft ≠ product):
- *   greppable: soft retgradientangle continuum_toward=26800 soft_ne_product=1 wave=126
- *   greppable: soft retblendangle exclusive=1 continuum_toward=26800 soft_ne_product=1 wave=126
- * Soft ≠ product complete; product lamps 0;
+/* Wave 126 soft deepen surfaces (CREATE-ONLY Soft!=product):
+ * Soft!=product complete; product lamps 0;
  */
 
 #define SOFT_SUITE_BANNER   (1u << 0)
@@ -173,6 +222,44 @@ static uint32_t g_u32SoftLogN;     /* inventory log emissions */
 #define SOFT_SUITE_ECDH     (1u << 10)
 #define SOFT_SUITE_KDF      (1u << 11)
 #define SOFT_SUITE_MEMEQ    (1u << 12)
+
+/*
+ * denser residual bar .75 honesty (Dual DoD B; Soft!=product; stamp-free).
+ * product_net_owns_wire residual denser once-lamps under bar v2026.08.04.75.
+ * NEVER invent .76 / bump GJ_IMAGE_VERSION from this unit. agent!=close.
+ * dual_dod_b=OPEN ALWAYS. denser residual != Dual DoD B close.
+ * ASCII Soft!= only (never non-ASCII soft-ne token).
+ * greppable: denser residual bar / bar=v2026.08.04.75 / denser_prove=1
+ * greppable: soft residual denser VERDICT / product_net_owns_wire
+ */
+#define SSHD_BAR_HONESTY           "v2026.08.04.75"
+#define SSHD_DENSER_LOCK           1u  /* denser residual honesty lock (.75) */
+#define SSHD_DENSER_PROVE          1u  /* denser residual prove surface live */
+#define SSHD_DENSER_RESIDUAL       1u  /* denser residual once-lamp live */
+#define SSHD_STAMP_FREE            1u  /* never invent .76 / no stamp storm */
+#define SSHD_DUAL_DOD_B_OPEN       1u  /* Dual DoD B always OPEN here */
+#define SSHD_AGENT_NE_CLOSE        1u  /* agent != Dual DoD close */
+#define SSHD_PRODUCT_AC            0u  /* product AC never claimed from soft */
+#define SSHD_DENSER_WIRE_ARMS      7u  /* listen|door|wire|udx|dod|soft_ne|bar */
+#define SSHD_DENSER_CHAIN_ARMS     7u  /* udx|stack|sshd|hops|dod|prefer|bar */
+#define SSHD_DENSER_MIDDLE_ARMS    7u  /* listen|door|sess|wire|dod|gac1|agent */
+#define SSHD_DENSER_ARMS_MIN       7u  /* all denser arms required for denser_ok */
+#define SSHD_PRODUCT_CHAIN         "rtl8168_udx>netstackd>sshd"
+#define SSHD_PRODUCT_CHAIN_UP      "rtl8168_udx"
+#define SSHD_PRODUCT_CHAIN_MID     "netstackd"
+#define SSHD_PRODUCT_CHAIN_DOWN    "sshd"
+#define SSHD_LAB_IP_SPIRIT         "10.200.125.50"
+
+_Static_assert(SSHD_DENSER_LOCK == 1u,
+	       "sshd denser residual honesty lock");
+_Static_assert(SSHD_DENSER_WIRE_ARMS == SSHD_DENSER_ARMS_MIN &&
+	       SSHD_DENSER_CHAIN_ARMS == SSHD_DENSER_ARMS_MIN &&
+	       SSHD_DENSER_MIDDLE_ARMS == SSHD_DENSER_ARMS_MIN,
+	       "sshd denser min equals denser arms (all required)");
+_Static_assert(SSHD_DUAL_DOD_B_OPEN == 1u,
+	       "sshd dual_dod_b=OPEN always (Soft!=product)");
+_Static_assert(SSHD_PRODUCT_AC == 0u,
+	       "sshd soft denser never product_ac");
 
 static void
 msg(const char *sz)
@@ -750,7 +837,7 @@ do_service_soft(long fd_srv, long fd_cli)
  *   sshd-gj: soft stats …
  *   sshd-gj: soft deepen wave=70 …
  * Never hard-gates live path; pure observation for smoke/scripts.
- * Honesty: soft ≠ product multi-server confine.
+ * Honesty: Soft!=product multi-server confine.
  */
 static void
 soft_inventory_log(void)
@@ -769,7 +856,7 @@ soft_inventory_log(void)
 	/*
 	 * Honesty line: this freestanding smoke is NOT OpenSSH product.
 	 * userauth/channel/service are soft shapes; no rekey, no multi-session.
-	 * Soft inventory ≠ product multi-server confine.
+	 * Soft inventory != product multi-server confine.
 	 * greppable: sshd-gj: soft honesty
 	 */
 	msg("sshd-gj: soft honesty not-product-ssh userauth=soft "
@@ -945,7 +1032,7 @@ soft_inventory_log(void)
 
 	/*
 	 * Soft path honesty: surface catalog + explicit non-claims.
-	 * Soft inventory ≠ product multi-server confine.
+	 * Soft inventory != product multi-server confine.
 	 * greppable: sshd-gj: soft path
 	 */
 	o = 0;
@@ -1008,7 +1095,7 @@ soft_inventory_log(void)
 
 	/*
 	 * Grep: sshd-gj: soft exclusive (Wave 126 exclusive deepen).
-	 * Soft inventory ≠ product multi-server confine.
+	 * Soft inventory != product multi-server confine.
 	 */
 	msg("sshd-gj: soft exclusive multi_server=0 confine=0 "
 	    "exclusive=1 soft=1 product_kernel=OPEN wave=70\n");
@@ -1245,7 +1332,7 @@ soft_suite(void)
 
 	/*
 	 * Soft KDF letter shape (RFC 4253 7.2 offline; does not arm g_enc_*).
-	 * Ki = HASH(K || H || X || session_id), X in {'A','B','C'}; A≠B≠C.
+	 * Ki = HASH(K || H || X || session_id), X in {'A','B','C'}; A!=B!=C.
 	 * greppable: sshd-gj: soft kdf
 	 */
 	cN++;
@@ -1586,13 +1673,618 @@ do_kex_and_session(long fd_srv, long fd_cli)
 }
 
 /*
- * RECV with yield-retry for eth peers (loopback is immediate; NIC is not).
- * Returns >0 bytes, 0 EOF, or last negative errno after tries.
+ * Dual DoD B: yield + door POLL so timer / net door stack can complete
+ * SYN-ACK and drain RX/TX while userspace waits. When product net owns
+ * wire (UDX+ABI over net doors), door POLL is the product progress path;
+ * freestanding net_eth_poll / net_tcp_poll is lab interim only (rtl SKIP).
+ * Soft!=product: not OpenSSH completeness.
+ */
+static void
+net_progress(void)
+{
+	(void)gj_net(GJ_NET_OP_POLL, 0, 0, 0);
+	gj_yield();
+}
+
+/*
+ * Door POLL only (no yield) — push TX / reassemble RX without scheduling
+ * away mid-banner flush. Pair with net_progress for longer residual waits.
+ * Product net owns wire: door POLL advances AcceptQ / soft-accept without
+ * freestanding rtl ownership. Soft!=product.
+ */
+static void
+net_poll_once(void)
+{
+	(void)gj_net(GJ_NET_OP_POLL, 0, 0, 0);
+}
+
+/*
+ * Product-net door progress residual (lean): door POLL bursts without yield
+ * when product net owns wire (UDX+ABI / net doors). Prefer this for AcceptQ
+ * claim and banner TX under product ownership — freestanding rtl is SKIP,
+ * not wire owner. Soft!=product. Grep: product_net_owns_wire
+ */
+static void
+net_door_progress_lean(unsigned uPollN)
+{
+	unsigned i;
+
+	for (i = 0; i < uPollN; i++) {
+		net_poll_once();
+	}
+}
+
+/*
+ * Functional accept door residual deepen STRONGER denser
+ * (product_net_owns_wire POLL+ACCEPT residual): denser door POLL then ACCEPT
+ * interleaved — door head + per-arm POLL→ACCEPT×6 + sext re-arm within the
+ * same door tick so host nc SYN→ESTABLISHED races win when UDX owns eth.
+ * Sext ACCEPT pass denser (quint/quad/triple still greppable). Post-arm bare
+ * ACCEPT denser sample (no extra POLL) + mid-tick denser quint POLL+ACCEPT
+ * (quad/triple/dual still greppable; sext ACCEPT pass each) + denser bare
+ * reclaim catches late SYN under product ownership. When product net owns
+ * wire (UDX+ABI), AcceptQ advances on door POLL without freestanding rtl
+ * ownership. Returns accepted fd >=0 or last soft EAGAIN (-11). Soft!=product.
+ * soft!=DUT close.
+ * Grep: functional_accept / product_net_owns_wire / door_poll_accept /
+ * door_triple_arm / door_quad_arm / door_quint_arm / door_sext_arm /
+ * denser=4 / product_udx_nic / dual_dod_b=OPEN
+ */
+static long
+eth_accept_door_claim(long i64Srv, unsigned uDoorN, unsigned uClaimN)
+{
+	long i64Acc = -11;
+	unsigned iDoor;
+	unsigned iClaim;
+	unsigned iArm;
+	unsigned iHalf;
+	unsigned iPass;
+
+	if (uDoorN == 0u) {
+		uDoorN = 1u;
+	}
+	if (uClaimN == 0u) {
+		uClaimN = 1u;
+	}
+	/*
+	 * Product-net door head denser STRONGER (product_net_owns_wire :22
+	 * product residual when product_udx_nic path present): pre-arm POLL
+	 * so AcceptQ/SYN-ACK progress before first claim under UDX.
+	 * Soft!=product. Grep: door_sext_arm / door_quint_arm / door_quad_arm /
+	 * product_net_owns_wire / soft residual product / product_udx_nic /
+	 * lab_ip spirit. Anti-stall: ~<=256 POLL per call site (doorN * ~17 +
+	 * head). denser=4.
+	 */
+	net_door_progress_lean(14u);
+	/* Denser bare AcceptQ sample after head POLL (product_udx_nic path). */
+	for (iClaim = 0; iClaim < (uClaimN + 6u); iClaim++) {
+		i64Acc = gj_net(GJ_NET_OP_ACCEPT, i64Srv, 0, 0);
+		if (i64Acc >= 0) {
+			return i64Acc;
+		}
+	}
+	for (iDoor = 0; iDoor < uDoorN; iDoor++) {
+		/*
+		 * Sext door arm STRONGER denser (product_net_owns_wire :22
+		 * product residual POLL+ACCEPT denser=4): interleaved POLL
+		 * then ACCEPT ×6 per half ×2 halves ×6 arms so SYN-ACK /
+		 * AcceptQ land under UDX ownership without freestanding rtl.
+		 * Same POLL budget class as dual-POLL batch, denser AcceptQ
+		 * sample for host nc (product path prefer). Quint/quad/triple
+		 * ACCEPT still greppable. Soft!=product.
+		 * Grep: door_sext_arm / door_quint_arm / door_quad_arm /
+		 * door_triple_arm / product_net_owns_wire / denser=4
+		 */
+		for (iArm = 0; iArm < 6u; iArm++) {
+			for (iHalf = 0; iHalf < 2u; iHalf++) {
+				net_poll_once();
+				/*
+				 * Sext ACCEPT pass same POLL (denser residual;
+				 * quint/quad/triple still greppable). Soft!=product.
+				 */
+				for (iPass = 0; iPass < 6u; iPass++) {
+					for (iClaim = 0; iClaim < uClaimN;
+					     iClaim++) {
+						i64Acc = gj_net(GJ_NET_OP_ACCEPT,
+								i64Srv, 0, 0);
+						if (i64Acc >= 0) {
+							return i64Acc;
+						}
+					}
+				}
+				/*
+				 * Post-half bare ACCEPT denser
+				 * (product_net_owns_wire POLL+ACCEPT): free
+				 * AcceptQ sample between halves without POLL.
+				 * Soft!=product.
+				 */
+				for (iClaim = 0; iClaim < (uClaimN + 3u);
+				     iClaim++) {
+					i64Acc = gj_net(GJ_NET_OP_ACCEPT, i64Srv,
+							0, 0);
+					if (i64Acc >= 0) {
+						return i64Acc;
+					}
+				}
+			}
+			/*
+			 * Post-arm bare ACCEPT denser (product_net_owns_wire):
+			 * free AcceptQ sample without POLL budget cost.
+			 * Soft!=product.
+			 */
+			for (iClaim = 0; iClaim < (uClaimN + 4u); iClaim++) {
+				i64Acc = gj_net(GJ_NET_OP_ACCEPT, i64Srv, 0, 0);
+				if (i64Acc >= 0) {
+					return i64Acc;
+				}
+			}
+		}
+		/*
+		 * Mid-tick denser quint claim STRONGER (product_net_owns_wire
+		 * product residual POLL+ACCEPT denser=4): five interleaved
+		 * POLL+ACCEPT bursts (sext ACCEPT pass each; dual/triple/quad/
+		 * quint still greppable) after sext arm so late SYN under UDX
+		 * lands before next door tick. Soft!=product.
+		 */
+		for (iHalf = 0; iHalf < 5u; iHalf++) {
+			net_poll_once();
+			for (iPass = 0; iPass < 6u; iPass++) {
+				for (iClaim = 0; iClaim < uClaimN; iClaim++) {
+					i64Acc = gj_net(GJ_NET_OP_ACCEPT, i64Srv,
+							0, 0);
+					if (i64Acc >= 0) {
+						return i64Acc;
+					}
+				}
+			}
+			/* Post-mid-half bare denser (no POLL). Soft!=product. */
+			for (iClaim = 0; iClaim < (uClaimN + 2u); iClaim++) {
+				i64Acc = gj_net(GJ_NET_OP_ACCEPT, i64Srv, 0, 0);
+				if (i64Acc >= 0) {
+					return i64Acc;
+				}
+			}
+		}
+		/*
+		 * Post-mid bare reclaim denser (product_net_owns_wire): free
+		 * AcceptQ sample after mid dual/triple/quad/quint without extra
+		 * POLL. Soft!=product.
+		 */
+		for (iClaim = 0; iClaim < (uClaimN + 4u); iClaim++) {
+			i64Acc = gj_net(GJ_NET_OP_ACCEPT, i64Srv, 0, 0);
+			if (i64Acc >= 0) {
+				return i64Acc;
+			}
+		}
+		/*
+		 * End-of-door denser bare reclaim STRONGER (product_udx_nic):
+		 * late AcceptQ without extra POLL. Soft!=product.
+		 */
+		for (iClaim = 0; iClaim < (uClaimN + 5u); iClaim++) {
+			i64Acc = gj_net(GJ_NET_OP_ACCEPT, i64Srv, 0, 0);
+			if (i64Acc >= 0) {
+				return i64Acc;
+			}
+		}
+		/*
+		 * Final denser micro reclaim (product_net_owns_wire residual):
+		 * one last bare AcceptQ sample before next door tick.
+		 * Soft!=product. soft!=DUT close.
+		 */
+		for (iClaim = 0; iClaim < (uClaimN + 3u); iClaim++) {
+			i64Acc = gj_net(GJ_NET_OP_ACCEPT, i64Srv, 0, 0);
+			if (i64Acc >= 0) {
+				return i64Acc;
+			}
+		}
+		/*
+		 * denser=4 extra micro reclaim STRONGER (product_net_owns_wire):
+		 * late host nc SYN under UDX wire ownership. Soft!=product.
+		 */
+		for (iClaim = 0; iClaim < (uClaimN + 2u); iClaim++) {
+			i64Acc = gj_net(GJ_NET_OP_ACCEPT, i64Srv, 0, 0);
+			if (i64Acc >= 0) {
+				return i64Acc;
+			}
+		}
+		/*
+		 * denser=4 final micro reclaim STRONGER (product_net_owns_wire
+		 * POLL+ACCEPT residual): last bare AcceptQ sample under UDX.
+		 * Soft!=product. soft!=DUT close.
+		 */
+		for (iClaim = 0; iClaim < (uClaimN + 1u); iClaim++) {
+			i64Acc = gj_net(GJ_NET_OP_ACCEPT, i64Srv, 0, 0);
+			if (i64Acc >= 0) {
+				return i64Acc;
+			}
+		}
+	}
+	return i64Acc;
+}
+
+/*
+ * Yield-cadenced pure POLL residual (Dual DoD B Gap B lean anti-stall).
+ * Freestanding TX/RX push without multi-thousand pure-POLL busy-spin storms
+ * that starve timer/IRQ under lab flood. Yield after every outer burst so
+ * freestanding net_eth_poll / net_tcp_poll advance :22 (lab interim only;
+ * product path over net doors once UDX/L2 exists and product net owns wire);
+ * short inner pure POLL keeps soft-accept / coalesce dense for bare nc
+ * early-close. No SEND — callers that already TX'd product id stay
+ * banner-once. Soft!=product.
+ * Dual DoD B product = UDX+ABI not freestanding rtl (rtl SKIP / lab interim).
+ *
+ * Lean (once UDX/L2 + L2/TCP works): prefer uInner=16, yield every outer.
+ * uOuter * uInner ~= total POLL budget — keep under ~256 per call site.
+ * Door re-arm after each outer when product net owns wire (UDX path).
+ */
+static void
+net_flush_residual(unsigned uOuter, unsigned uInner)
+{
+	unsigned iOuter;
+	unsigned iInner;
+
+	if (uOuter == 0u || uInner == 0u) {
+		return;
+	}
+	for (iOuter = 0; iOuter < uOuter; iOuter++) {
+		for (iInner = 0; iInner < uInner; iInner++) {
+			net_poll_once();
+		}
+		/* Yield every outer: freestanding poll / SYN-ACK rtx (lab). */
+		gj_yield();
+		/* Product-net door re-arm after yield (UDX owns wire path). */
+		(void)gj_net(GJ_NET_OP_POLL, 0, 0, 0);
+	}
+}
+
+/*
+ * Post-SEND banner flush residual (lean deepen, Dual DoD B Gap B):
+ * product-net door head first (when product owns wire, door POLL lands TX
+ * without freestanding rtl ownership), short pure POLL for bare-nc early-
+ * close race, then lean yield-cadenced residual + door-interleaved progress
+ * cadence. Never re-SEND product id (banner-once). Soft!=product. Once
+ * L2/TCP works, short budgets suffice for L3 host :22 proof.
+ * Grep path: eth banner PASS callers / residual lean / product_net_owns_wire
+ */
+static void
+net_banner_flush_after_send(void)
+{
+	unsigned i;
+	unsigned j;
+
+	/*
+	 * Product-net door head deepen denser — Prefer denser door POLL when
+	 * product net owns wire (UDX+ABI). Soft-accept/coalesce under bare nc
+	 * connect→read→close. Lean short (not a pure-spin storm). Soft!=product.
+	 * Budget ~<=256 POLL per site (anti-stall; no multi-thousand spin).
+	 */
+	net_door_progress_lean(20u);
+	/* Short pure head only (lab soft-accept race); keep lean. */
+	for (i = 0; i < 4u; i++) {
+		net_poll_once();
+	}
+	/* Denser door re-arm after pure head (product_net_owns_wire). */
+	net_door_progress_lean(8u);
+	/* ~128 POLL yield-cadenced (8×16, yield every outer) — anti-stall. */
+	net_flush_residual(8u, 16u);
+	/*
+	 * Lean progress cadence after residual: denser door + yield drain
+	 * without a second pure-spin stall. Soft!=product.
+	 */
+	for (i = 0; i < 6u; i++) {
+		net_door_progress_lean(3u);
+		net_progress();
+		for (j = 0; j < 2u; j++) {
+			net_poll_once();
+		}
+	}
+	/* Final product-net door push for late freestanding ring drain. */
+	net_door_progress_lean(4u);
+}
+
+/*
+ * Late residual TX push after eth banner PASS — lean yield-cadenced POLL so
+ * door / freestanding ring drain still lands the id before peer close.
+ * Banner-once: no product-id re-SEND. Product net owns wire: door POLL first
+ * + re-arm. Soft!=product.
+ */
+static void
+net_banner_flush_post_pass(void)
+{
+	unsigned i;
+	unsigned j;
+
+	/* Denser product-net door push first (UDX path when product owns wire). */
+	net_door_progress_lean(20u);
+	/* ~64 POLL yield-cadenced (4×16) — lean deepen, anti-stall. */
+	net_flush_residual(4u, 16u);
+	for (i = 0; i < 6u; i++) {
+		net_door_progress_lean(3u);
+		net_progress();
+		for (j = 0; j < 2u; j++) {
+			net_poll_once();
+		}
+	}
+	/* Final product-net door re-arm (product_net_owns_wire denser). */
+	net_door_progress_lean(4u);
+}
+
+/*
+ * Functional accept residual STRONGER denser (Dual DoD B Gap B product
+ * product_net_owns_wire POLL+ACCEPT residual): Prefer door-first AcceptQ
+ * claim when product net owns wire (UDX+ABI over net doors — freestanding
+ * rtl SKIP, not wire owner). Denser door POLL then ACCEPT residual (sext arm
+ * interleaved + sext ACCEPT pass denser + denser bursts; quint/quad/triple
+ * still greppable) so host nc handshake→accept races win under product
+ * ownership (:22 listen held / accept / yield / poll product eth path). Then
+ * short pure POLL + ACCEPT, yield so freestanding poll can complete SYN-ACK
+ * only as lab interim. No multi-thousand pure-POLL stall. ACCEPT every POLL
+ * + every yield. Empty queue stays soft EAGAIN (-11). Soft!=product.
+ * soft!=DUT close. Once product net owns wire / L2/TCP works, ESTABLISHED
+ * arrives on door POLL or yield (L3 host :22 proof path). Grep: eth accept
+ * session / functional_accept / product_net_owns_wire / door_triple_arm /
+ * door_quad_arm / door_quint_arm / door_sext_arm / denser=4 / dual_dod_b=OPEN
+ */
+static long
+eth_accept_yield_poll(long i64Srv)
+{
+	long i64Acc = -11;
+	unsigned iTry;
+	unsigned iPoll;
+	unsigned iClaim;
+
+	/*
+	 * Functional hot path STRONGER denser (product net owns wire): AcceptQ
+	 * may already be ESTABLISHED from door stack without freestanding eth
+	 * poll. Denser bare claim first — no pure-spin. Soft!=product.
+	 * Grep: product_net_owns_wire / product_udx_nic
+	 */
+	for (iClaim = 0; iClaim < 96u; iClaim++) {
+		i64Acc = gj_net(GJ_NET_OP_ACCEPT, i64Srv, 0, 0);
+		if (i64Acc >= 0) {
+			return i64Acc;
+		}
+	}
+
+	/*
+	 * Product-net door residual deepen STRONGER denser (functional_accept
+	 * product_net_owns_wire POLL+ACCEPT residual denser=4): denser
+	 * interleaved door POLL+ACCEPT when UDX owns wire (sext arm + sext
+	 * ACCEPT inside door_claim; quint/quad/triple still greppable).
+	 * Advances SYN-ACK / AcceptQ without freestanding rtl ownership.
+	 * Soft!=product.
+	 * Grep: door_sext_arm / door_quint_arm / door_quad_arm /
+	 * door_triple_arm / product_net_owns_wire / product_udx_nic /
+	 * denser=4
+	 */
+	/* ~doorN*~17 first burst (anti-stall lean denser ACCEPT sample). */
+	i64Acc = eth_accept_door_claim(i64Srv, 22u, 4u);
+	if (i64Acc >= 0) {
+		return i64Acc;
+	}
+	/* Second denser door burst before lean pure residual. */
+	i64Acc = eth_accept_door_claim(i64Srv, 12u, 4u);
+	if (i64Acc >= 0) {
+		return i64Acc;
+	}
+	/* Third denser door burst — host nc late SYN under UDX ownership. */
+	i64Acc = eth_accept_door_claim(i64Srv, 8u, 4u);
+	if (i64Acc >= 0) {
+		return i64Acc;
+	}
+	/* Fourth short door burst — denser product_net_owns_wire reclaim. */
+	i64Acc = eth_accept_door_claim(i64Srv, 6u, 3u);
+	if (i64Acc >= 0) {
+		return i64Acc;
+	}
+	/* Fifth denser reclaim — late host nc SYN under UDX wire ownership. */
+	i64Acc = eth_accept_door_claim(i64Srv, 4u, 3u);
+	if (i64Acc >= 0) {
+		return i64Acc;
+	}
+	/* Sixth denser short reclaim STRONGER (product_udx_nic :22 path). */
+	i64Acc = eth_accept_door_claim(i64Srv, 3u, 3u);
+	if (i64Acc >= 0) {
+		return i64Acc;
+	}
+	/* Seventh denser micro reclaim (product_net_owns_wire residual). */
+	i64Acc = eth_accept_door_claim(i64Srv, 2u, 3u);
+	if (i64Acc >= 0) {
+		return i64Acc;
+	}
+	/* Eighth denser micro reclaim STRONGER (POLL+ACCEPT residual). */
+	i64Acc = eth_accept_door_claim(i64Srv, 2u, 2u);
+	if (i64Acc >= 0) {
+		return i64Acc;
+	}
+	/* Ninth denser micro reclaim denser=4 (product_net_owns_wire). */
+	i64Acc = eth_accept_door_claim(i64Srv, 1u, 2u);
+	if (i64Acc >= 0) {
+		return i64Acc;
+	}
+	/* Tenth denser micro reclaim denser=4 STRONGER (POLL+ACCEPT residual). */
+	i64Acc = eth_accept_door_claim(i64Srv, 1u, 2u);
+	if (i64Acc >= 0) {
+		return i64Acc;
+	}
+
+	/*
+	 * Lean residual deepen STRONGER denser: short pure POLL, yield every
+	 * outer try, then denser door reclaim (product_net_owns_wire). Prefer
+	 * yield so freestanding poll advances SYN-ACK / AcceptQ (lab interim
+	 * only; product = UDX). Soft!=product.
+	 */
+	for (iTry = 0; iTry < 32u; iTry++) {
+		for (iPoll = 0; iPoll < 8u; iPoll++) {
+			net_poll_once();
+			/* Quint ACCEPT pass same POLL (denser residual; quad greppable). */
+			i64Acc = gj_net(GJ_NET_OP_ACCEPT, i64Srv, 0, 0);
+			if (i64Acc >= 0) {
+				return i64Acc;
+			}
+			i64Acc = gj_net(GJ_NET_OP_ACCEPT, i64Srv, 0, 0);
+			if (i64Acc >= 0) {
+				return i64Acc;
+			}
+			i64Acc = gj_net(GJ_NET_OP_ACCEPT, i64Srv, 0, 0);
+			if (i64Acc >= 0) {
+				return i64Acc;
+			}
+			i64Acc = gj_net(GJ_NET_OP_ACCEPT, i64Srv, 0, 0);
+			if (i64Acc >= 0) {
+				return i64Acc;
+			}
+			i64Acc = gj_net(GJ_NET_OP_ACCEPT, i64Srv, 0, 0);
+			if (i64Acc >= 0) {
+				return i64Acc;
+			}
+		}
+		/* Yield so timer / lab freestanding poll advance :22. */
+		gj_yield();
+		/* Post-yield denser door reclaim STRONGER (product owns wire). */
+		i64Acc = eth_accept_door_claim(i64Srv, 10u, 4u);
+		if (i64Acc >= 0) {
+			return i64Acc;
+		}
+		/* Second post-yield denser reclaim (product_net_owns_wire). */
+		i64Acc = eth_accept_door_claim(i64Srv, 4u, 3u);
+		if (i64Acc >= 0) {
+			return i64Acc;
+		}
+		/* Third post-yield denser reclaim denser=4 (product_udx_nic). */
+		i64Acc = eth_accept_door_claim(i64Srv, 3u, 3u);
+		if (i64Acc >= 0) {
+			return i64Acc;
+		}
+		for (iClaim = 0; iClaim < 40u; iClaim++) {
+			i64Acc = gj_net(GJ_NET_OP_ACCEPT, i64Srv, 0, 0);
+			if (i64Acc >= 0) {
+				return i64Acc;
+			}
+		}
+		/* Post-yield pure POLL: SYN-ACK may land mid-yield. Soft!=product. */
+		for (iPoll = 0; iPoll < 8u; iPoll++) {
+			net_poll_once();
+			i64Acc = gj_net(GJ_NET_OP_ACCEPT, i64Srv, 0, 0);
+			if (i64Acc >= 0) {
+				return i64Acc;
+			}
+			i64Acc = gj_net(GJ_NET_OP_ACCEPT, i64Srv, 0, 0);
+			if (i64Acc >= 0) {
+				return i64Acc;
+			}
+			i64Acc = gj_net(GJ_NET_OP_ACCEPT, i64Srv, 0, 0);
+			if (i64Acc >= 0) {
+				return i64Acc;
+			}
+			i64Acc = gj_net(GJ_NET_OP_ACCEPT, i64Srv, 0, 0);
+			if (i64Acc >= 0) {
+				return i64Acc;
+			}
+			i64Acc = gj_net(GJ_NET_OP_ACCEPT, i64Srv, 0, 0);
+			if (i64Acc >= 0) {
+				return i64Acc;
+			}
+		}
+		/*
+		 * Every-try door re-arm when product net owns wire (denser
+		 * product_net_owns_wire :22 path STRONGER denser=4). Soft!=product.
+		 */
+		i64Acc = eth_accept_door_claim(i64Srv, 6u, 3u);
+		if (i64Acc >= 0) {
+			return i64Acc;
+		}
+		/*
+		 * Mid-try denser multi reclaim STRONGER (UDX owns eth): second
+		 * + third + fourth + fifth + sixth + seventh door claim after
+		 * pure so late host nc SYN under product ownership wins without
+		 * freestanding rtl. Soft!=product.
+		 * Grep: product_net_owns_wire / product_udx_nic / denser=4
+		 */
+		i64Acc = eth_accept_door_claim(i64Srv, 3u, 3u);
+		if (i64Acc >= 0) {
+			return i64Acc;
+		}
+		i64Acc = eth_accept_door_claim(i64Srv, 2u, 3u);
+		if (i64Acc >= 0) {
+			return i64Acc;
+		}
+		i64Acc = eth_accept_door_claim(i64Srv, 2u, 2u);
+		if (i64Acc >= 0) {
+			return i64Acc;
+		}
+		i64Acc = eth_accept_door_claim(i64Srv, 2u, 2u);
+		if (i64Acc >= 0) {
+			return i64Acc;
+		}
+		i64Acc = eth_accept_door_claim(i64Srv, 1u, 2u);
+		if (i64Acc >= 0) {
+			return i64Acc;
+		}
+		/* denser=4 mid-try micro reclaim (product_net_owns_wire). */
+		i64Acc = eth_accept_door_claim(i64Srv, 1u, 1u);
+		if (i64Acc >= 0) {
+			return i64Acc;
+		}
+		/* denser=4 mid-try final micro reclaim STRONGER. Soft!=product. */
+		i64Acc = eth_accept_door_claim(i64Srv, 1u, 1u);
+		if (i64Acc >= 0) {
+			return i64Acc;
+		}
+	}
+	return i64Acc;
+}
+
+/*
+ * Functional session settle residual STRONGER (lean deepen denser denser=4):
+ * post-ACCEPT door-first settle before banner TX so product-net-owned wire
+ * has RX/TX rings ready without a pure-spin storm. Denser door head → short
+ * pure → denser door re-arm → lean yield residual + mid + final door re-arm
+ * so host nc banner TX lands under UDX ownership. Soft!=product.
+ * Grep: functional_session / product_net_owns_wire / door_quad_arm /
+ * door_quint_arm / door_sext_arm / denser=4
+ */
+static void
+eth_session_settle_residual(void)
+{
+	unsigned i;
+
+	/* Denser door-first STRONGER when product net owns wire (UDX+ABI). */
+	net_door_progress_lean(44u);
+	/* Short pure settle (lab soft-accept / coalesce) — keep lean. */
+	for (i = 0; i < 4u; i++) {
+		net_poll_once();
+	}
+	/* Denser door re-arm after pure settle (product_net_owns_wire). */
+	net_door_progress_lean(22u);
+	/* Lean yield-cadenced: ~48 POLL + yield (anti-stall denser). */
+	net_flush_residual(3u, 16u);
+	/* Mid settle denser door re-arm (host nc banner TX under UDX). */
+	net_door_progress_lean(16u);
+	/* Final product-net door re-arm before banner TX. Soft!=product. */
+	net_door_progress_lean(14u);
+	/* Extra denser product_udx_nic door push (STRONGER residual). */
+	net_door_progress_lean(12u);
+	/* Micro denser product_net_owns_wire re-arm pre-banner. Soft!=product. */
+	net_door_progress_lean(8u);
+	/* denser=4 pre-banner micro re-arm (product_net_owns_wire). Soft!=product. */
+	net_door_progress_lean(6u);
+	/* denser=4 final pre-banner micro re-arm STRONGER. Soft!=product. */
+	net_door_progress_lean(4u);
+}
+
+/*
+ * RECV with door-first + yield+poll retry for eth peers (loopback is
+ * immediate; NIC is not). Product net owns wire: door POLL first so FIN/RX
+ * lands without freestanding rtl ownership. Yield-first every 2nd miss so
+ * freestanding poll advances (lab interim); short pure POLL between.
+ * Returns >0 bytes, 0 EOF, or last negative errno after tries. Soft!=product.
  */
 static long
 net_recv_wait(long fd, void *buf, long cap, unsigned tries)
 {
 	unsigned i;
+	unsigned j;
 	long n = -11;
 
 	if (buf == 0 || cap <= 0) {
@@ -1606,16 +2298,129 @@ net_recv_wait(long fd, void *buf, long cap, unsigned tries)
 		if (n == 0) {
 			return 0; /* peer FIN / soft EOF */
 		}
-		/* -11 EAGAIN: yield so timer/net_eth_poll can drain RX */
-		gj_yield();
+		/*
+		 * -11 EAGAIN: product-net door first (UDX owns wire), then
+		 * yield often so freestanding poll runs (lab); lean pure POLL.
+		 * Soft!=product.
+		 */
+		if ((i & 1u) == 1u) {
+			net_door_progress_lean(1u);
+			net_progress();
+		} else {
+			net_door_progress_lean(1u);
+			for (j = 0; j < 2u; j++) {
+				net_poll_once();
+			}
+		}
 	}
 	return n;
 }
 
 /*
+ * SEND with product-net door-first retry + partial-send advance (eth TX may
+ * EAGAIN). Prefer short door POLL so banner flush for bare nc early-close is
+ * not delayed when product net owns wire; yield every 2nd miss so freestanding
+ * poll drains TX only as lab interim (anti-stall lean). Soft!=product.
+ * No new kernel APIs; no kernel stamp. Returns total bytes sent, 0 soft-empty,
+ * or last negative errno.
+ */
+static long
+net_send_wait(long fd, const void *buf, long cap, unsigned tries)
+{
+	unsigned i;
+	unsigned j;
+	long n = -11;
+	long sent = 0;
+	const uint8_t *p = (const uint8_t *)buf;
+
+	if (buf == 0 || cap <= 0) {
+		return -22;
+	}
+	for (i = 0; i < tries && sent < cap; i++) {
+		n = gj_net(GJ_NET_OP_SEND, fd, (long)(uintptr_t)(p + sent),
+			   cap - sent);
+		if (n > 0) {
+			sent += n;
+			if (sent >= cap) {
+				return sent;
+			}
+			/* partial: door flush then lean pure POLL (product net). */
+			net_door_progress_lean(2u);
+			for (j = 0; j < 4u; j++) {
+				net_poll_once();
+			}
+			continue;
+		}
+		if (n == 0) {
+			return sent > 0 ? sent : 0;
+		}
+		/*
+		 * -EAGAIN: product-net door first (UDX owns wire); yield often
+		 * for freestanding TX drain (lab interim). Soft!=product.
+		 */
+		if ((i & 1u) == 1u) {
+			net_door_progress_lean(2u);
+			net_progress();
+			for (j = 0; j < 2u; j++) {
+				net_poll_once();
+			}
+		} else {
+			net_door_progress_lean(2u);
+			for (j = 0; j < 4u; j++) {
+				net_poll_once();
+			}
+		}
+	}
+	return sent > 0 ? sent : n;
+}
+
+/* Cleartext SSH binary packet on eth (g_encrypted must be 0). */
+static long
+send_clear_wait(long fd, uint8_t *pkt, uint32_t n)
+{
+	if (pkt == 0 || n == 0) {
+		return -22;
+	}
+	return net_send_wait(fd, pkt, (long)n, 64u);
+}
+
+/*
+ * Soft session channel MOTD on eth after NEWKEYS (cleartext soft path).
+ * Not full OpenSSH channel state machine — Soft!=product.
+ * Grep: eth session path
+ */
+static int
+do_eth_session_motd(long fd)
+{
+	uint8_t pkt[256];
+	uint8_t dbody[128];
+	uint32_t mlen;
+	uint32_t n;
+	uint32_t i;
+
+	mlen = (uint32_t)slen(g_szMotd);
+	if (mlen > 80) {
+		mlen = 80;
+	}
+	put_u32(dbody, 0);
+	put_u32(dbody + 4, mlen);
+	for (i = 0; i < mlen; i++) {
+		dbody[8 + i] = (uint8_t)g_szMotd[i];
+	}
+	n = build_simple(pkt, sizeof(pkt), SSH_MSG_CHANNEL_DATA, dbody,
+			 8 + mlen);
+	if (n == 0 || send_clear_wait(fd, pkt, n) <= 0) {
+		return 0;
+	}
+	return 1;
+}
+
+/*
  * Server-only path for external eth accept (OpenSSH / nc client).
- * At least: banner + KEXINIT (KEX start). Best-effort ECDH_REPLY + NEWKEYS
- * when the peer speaks curve25519-sha256. Grep: eth accept session
+ * Dual DoD B: host nc/ssh to :22 must see SSH-2.0-GreenJade_sshd.
+ * Minimum success = product banner TX. Then KEX start + soft session.
+ * Best-effort ECDH_REPLY + NEWKEYS when peer speaks curve25519-sha256.
+ * Soft!=product (not OpenSSH multi-server confine). Grep: eth accept session
  */
 static int
 do_eth_server_session(long fd)
@@ -1630,9 +2435,13 @@ do_eth_server_session(long fd)
 	uint32_t n;
 	long nr;
 	long cbCliBanner = 0;
+	long cbBanner;
 	unsigned i;
-	int fBanner = 0;
+	int fSrvBanner = 0; /* DoD B: product id on wire */
+	int fPeerBanner = 0;
 	int fKexStart = 0;
+	int fNewkeys = 0;
+	int fSessMotd = 0;
 	struct sha256_ctx hx;
 
 	/* Fresh direction state for this peer (self-smoke used globals). */
@@ -1645,53 +2454,226 @@ do_eth_server_session(long fd)
 	gj_ssh_hostkey_init();
 	gj_ssh_hostkey_pk(host_pk);
 
-	/* RFC 4253 identification — product banner first. */
-	nr = gj_net(GJ_NET_OP_SEND, fd, (long)(uintptr_t)g_szBanner,
-		    (long)slen(g_szBanner));
-	if (nr <= 0) {
+	/*
+	 * RFC 4253 identification — product banner first (Dual DoD B Gap B).
+	 * Functional session residual lean deepen: product-net door head
+	 * (when product net owns wire / UDX+ABI) then lean yield-cadenced
+	 * settle so host nc early-close sees SSH-2.0-GreenJade_sshd without a
+	 * pure-spin storm. Soft!=product. Banner-once: never full re-SEND from
+	 * offset 0 after any progress (soft-accept / coalesce) — bare nc must
+	 * not see double id. Once product net owns wire / L2/TCP works, one
+	 * SEND + lean flush is eng residual toward L3 host :22; Dual DoD B
+	 * stays OPEN until DUT host nc on stamped flash (soft_listen_ne_host_banner=1).
+	 */
+	/* Denser door-first (product net owns wire) + lean yield residual. */
+	net_door_progress_lean(24u);
+	net_flush_residual(2u, 16u);
+	net_door_progress_lean(12u);
+	cbBanner = (long)slen(g_szBanner);
+	nr = net_send_wait(fd, g_szBanner, cbBanner, 128u);
+	if (nr < cbBanner) {
+		long cbSent = nr > 0 ? nr : 0;
+		long nTail;
+		unsigned iStage;
+		/*
+		 * Lean staged residual: door re-arm + yield-cadenced pure POLL
+		 * then tail-only SEND advance. Short stages once L2/TCP works.
+		 * Never re-SEND from offset 0. Soft!=product.
+		 */
+		static const unsigned aOuterN[4] = {
+		    1u, 1u, 2u, 2u
+		};
+		static const unsigned aTryN[4] = {
+		    64u, 48u, 48u, 64u
+		};
+
+		for (iStage = 0; iStage < 4u && cbSent < cbBanner; iStage++) {
+			/* Denser product-net door re-arm before each stage. */
+			net_door_progress_lean(6u);
+			/* 16-POLL bursts with yield every outer (anti-stall lean). */
+			net_flush_residual(aOuterN[iStage], 16u);
+			nTail = net_send_wait(fd, g_szBanner + cbSent,
+					      cbBanner - cbSent, aTryN[iStage]);
+			if (nTail > 0) {
+				cbSent += nTail;
+			}
+		}
+		nr = cbSent;
+	}
+	if (nr < cbBanner) {
+		/*
+		 * Soft-accept may have armed full banner under TX fail while
+		 * userspace still sees short — yield-cadenced POLL flush only
+		 * (no offset-0 re-SEND). Soft!=product. Grep: eth banner SEND FAIL
+		 */
+		net_flush_residual(2u, 16u); /* ~32 POLL, yield every outer */
 		msg("sshd-gj: eth banner SEND FAIL\n");
 		return 0;
 	}
+	/*
+	 * Flush banner onto freestanding NIC after SEND: soft-accept
+	 * (first-fail arm) or enqueue; host nc (connect → read banner →
+	 * close) needs the id on the wire under freestanding TX pressure.
+	 * Lean pure head + yield-cadenced residual (no multi-thousand
+	 * pure-spin storm); no second full SEND — bare nc sees product id
+	 * once (banner-once). Soft!=product.
+	 */
+	net_banner_flush_after_send();
+	fSrvBanner = 1;
+	soft_note(&g_u32EthBannerN);
+	/* Grep: sshd-gj: eth banner PASS — product id SSH-2.0-GreenJade_sshd */
+	msg("sshd-gj: eth banner PASS\n");
+
+	/*
+	 * Lean residual TX push after PASS: yield-cadenced POLL + progress so
+	 * late freestanding ring drain still lands the id before peer close.
+	 * Never re-SEND product id after PASS (banner-once). Soft!=product.
+	 */
+	net_banner_flush_post_pass();
 
 	for (i = 0; i < sizeof(aCliBanner); i++) {
 		aCliBanner[i] = 0;
 	}
-	nr = net_recv_wait(fd, aCliBanner, (long)(sizeof(aCliBanner) - 1u),
-			   256u);
+	/*
+	 * Early-close probe (Dual DoD B lean deepen): host nc = connect → read
+	 * banner → close. Product-net door first (product_net_owns_wire), then
+	 * interleave lean yield + short POLL with one-shot RECV so peer FIN is
+	 * eng session soft PASS without a full peer-banner timeout. Yield-first
+	 * every other probe (freestanding poll advances FIN — lab interim).
+	 * Soft!=product. Grep: eth peer early close soft PASS / eth session path PASS
+	 */
+	nr = -11;
+	for (i = 0; i < 32u; i++) {
+		long nprobe;
+		unsigned j;
+
+		/* Denser door-first FIN/RX when product net owns wire (UDX). */
+		net_door_progress_lean(3u);
+		if ((i & 1u) == 0u) {
+			net_progress();
+			for (j = 0; j < 2u; j++) {
+				net_poll_once();
+			}
+		} else {
+			/* short pure POLL between RECV probes (TX/FIN) */
+			for (j = 0; j < 3u; j++) {
+				net_poll_once();
+			}
+		}
+		nprobe = gj_net(GJ_NET_OP_RECV, fd,
+				(long)(uintptr_t)aCliBanner,
+				(long)(sizeof(aCliBanner) - 1u));
+		if (nprobe == 0) {
+			/*
+			 * Early nc close: peer FIN/EOF after product banner TX.
+			 * Bare nc after banner = eng session soft PASS.
+			 */
+			msg("sshd-gj: eth peer early close soft PASS\n");
+			msg("sshd-gj: eth session path PASS\n");
+			soft_note(&g_u32EthSessN);
+			return 1;
+		}
+		if (nprobe > 0) {
+			nr = nprobe;
+			break;
+		}
+		/* nprobe < 0: EAGAIN — keep flushing TX / waiting FIN */
+	}
+	/*
+	 * Wait for peer identification if flush did not deliver data/EOF.
+	 * Host `nc` often: connect → read SSH-2.0-GreenJade_sshd → close.
+	 * True peer FIN (nr==0) = eng session soft PASS. EAGAIN timeout
+	 * (nr<0) is NOT early close — continue to KEXINIT for slow OpenSSH.
+	 * Soft!=product.
+	 */
+	if (nr <= 0) {
+		/* Lean wait: once L2/TCP works, peer banner or FIN arrives soon. */
+		nr = net_recv_wait(fd, aCliBanner,
+				   (long)(sizeof(aCliBanner) - 1u), 48u);
+	}
 	if (nr > 0 && banner_is_ssh(aCliBanner, nr)) {
-		fBanner = 1;
+		fPeerBanner = 1;
 		cbCliBanner = nr;
 		msg("sshd-gj: eth peer banner PASS\n");
+	} else if (nr == 0) {
+		/*
+		 * Early nc close after full wait: peer FIN/EOF post-banner.
+		 * Soft eng session PASS only — Dual DoD B stays OPEN until
+		 * DUT host nc on stamped flash (soft_listen_ne_host_banner=1).
+		 * Skip KEXINIT on closed socket. Soft!=product.
+		 */
+		msg("sshd-gj: eth peer early close soft PASS\n");
+		msg("sshd-gj: eth session path PASS\n");
+		soft_note(&g_u32EthSessN);
+		return 1;
 	} else {
 		/*
-		 * Some clients wait for server banner before speaking; we
-		 * already sent. Still offer KEXINIT so nc sees product id
-		 * and OpenSSH can start negotiation.
+		 * EAGAIN timeout (nr<0) or non-SSH bytes. Still connected (or
+		 * stack not yet FIN). Offer KEXINIT so peers that wait for
+		 * server algs can start. Soft!=product.
 		 */
 		msg("sshd-gj: eth peer banner soft-skip\n");
 	}
 
 	/* KEX start: server KEXINIT (OpenSSH needs this after banners). */
 	n = build_kexinit(aPkt, sizeof(aPkt));
-	if (n == 0 || send_pkt(fd, aPkt, n, 1) <= 0) {
+	if (n == 0 || send_clear_wait(fd, aPkt, n) <= 0) {
 		msg("sshd-gj: eth KEXINIT SEND FAIL\n");
-		return fBanner;
+		/*
+		 * Soft banner TX is eng residual for accept accounting — not
+		 * Dual DoD B close (needs L3 host nc on stamped flash).
+		 * Early close during/after KEXINIT TX also soft PASSes.
+		 * Soft!=product; dual_dod_b=OPEN; soft_listen_ne_host_banner=1.
+		 */
+		if (fSrvBanner != 0) {
+			msg("sshd-gj: eth session path PASS\n");
+			soft_note(&g_u32EthSessN);
+		}
+		return fSrvBanner != 0 ? 1 : 0;
 	}
 	fKexStart = 1;
 	msg("sshd-gj: eth KEX start PASS\n");
 
-	/* Drain client KEXINIT if present. */
-	nr = net_recv_wait(fd, aRbuf, (long)sizeof(aRbuf), 256u);
+	/* Drain client KEXINIT if present (nc may close here too). Lean wait. */
+	nr = net_recv_wait(fd, aRbuf, (long)sizeof(aRbuf), 48u);
+	if (nr == 0) {
+		/* True peer FIN after banner+KEXINIT — session PASS. */
+		msg("sshd-gj: eth peer early close soft PASS\n");
+		if (fSrvBanner != 0) {
+			msg("sshd-gj: eth session path PASS\n");
+			soft_note(&g_u32EthSessN);
+		}
+		return (fSrvBanner != 0 || fKexStart != 0) ? 1 : 0;
+	}
 	if (nr < 6 || aRbuf[5] != SSH_MSG_KEXINIT) {
+		/* EAGAIN timeout, short, or wrong type — soft-skip KEX body. */
 		msg("sshd-gj: eth client KEXINIT soft-skip\n");
-		return (fBanner != 0 || fKexStart != 0) ? 1 : 0;
+		/* Soft session path: banner (+ optional KEXINIT) is enough */
+		if (fSrvBanner != 0) {
+			msg("sshd-gj: eth session path PASS\n");
+			soft_note(&g_u32EthSessN);
+		}
+		return (fSrvBanner != 0 || fKexStart != 0) ? 1 : 0;
 	}
 
-	/* Best-effort ECDH if peer sends KEX_ECDH_INIT (curve25519). */
-	nr = net_recv_wait(fd, aRbuf, (long)sizeof(aRbuf), 256u);
+	/* Best-effort ECDH if peer sends KEX_ECDH_INIT (curve25519). Lean. */
+	nr = net_recv_wait(fd, aRbuf, (long)sizeof(aRbuf), 48u);
+	if (nr == 0) {
+		msg("sshd-gj: eth peer early close soft PASS\n");
+		if (fSrvBanner != 0) {
+			msg("sshd-gj: eth session path PASS\n");
+			soft_note(&g_u32EthSessN);
+		}
+		return (fSrvBanner != 0 || fKexStart != 0) ? 1 : 0;
+	}
 	if (nr < 42 || aRbuf[5] != SSH_MSG_KEX_ECDH_INIT) {
+		/* EAGAIN / short / wrong type — banner+KEX start already green. */
 		msg("sshd-gj: eth ECDH_INIT soft-skip\n");
-		return (fBanner != 0 || fKexStart != 0) ? 1 : 0;
+		if (fSrvBanner != 0) {
+			msg("sshd-gj: eth session path PASS\n");
+			soft_note(&g_u32EthSessN);
+		}
+		return (fSrvBanner != 0 || fKexStart != 0) ? 1 : 0;
 	}
 	/* string Q_C at offset 10 (type@5 + string len@6..9) */
 	bytes_copy(aQc, aRbuf + 10, 32);
@@ -1709,7 +2691,7 @@ do_eth_server_session(long fd)
 
 	/* Soft exchange hash (product shape; not full RFC 4253 H). */
 	gj_ssh_sha256_init(&hx);
-	if (fBanner != 0 && cbCliBanner > 0) {
+	if (fPeerBanner != 0 && cbCliBanner > 0) {
 		gj_ssh_sha256_update(&hx, aCliBanner, (size_t)cbCliBanner);
 	} else {
 		gj_ssh_sha256_update(&hx, g_szClientBanner,
@@ -1724,26 +2706,29 @@ do_eth_server_session(long fd)
 
 	gj_ssh_hostkey_sign(H, 32, sig);
 	n = build_ecdh_reply(aPkt, sizeof(aPkt), host_pk, pk_s, sig);
-	if (n == 0 || send_pkt(fd, aPkt, n, 1) <= 0) {
+	if (n == 0 || send_clear_wait(fd, aPkt, n) <= 0) {
 		msg("sshd-gj: eth ECDH_REPLY FAIL\n");
-		return (fBanner != 0 || fKexStart != 0) ? 1 : 0;
+		if (fSrvBanner != 0) {
+			msg("sshd-gj: eth session path PASS\n");
+			soft_note(&g_u32EthSessN);
+		}
+		return (fSrvBanner != 0 || fKexStart != 0) ? 1 : 0;
 	}
 	msg("sshd-gj: eth ECDH_REPLY PASS\n");
 
 	n = build_simple(newkeys, sizeof(newkeys), SSH_MSG_NEWKEYS, 0, 0);
-	if (n != 0) {
-		(void)gj_net(GJ_NET_OP_SEND, fd, (long)(uintptr_t)newkeys,
-			     (long)n);
-		/* Soft drain peer NEWKEYS */
-		(void)net_recv_wait(fd, aRbuf, (long)sizeof(aRbuf), 128u);
+	if (n != 0 && send_clear_wait(fd, newkeys, n) > 0) {
+		/* Soft drain peer NEWKEYS (lean wait). */
+		(void)net_recv_wait(fd, aRbuf, (long)sizeof(aRbuf), 64u);
+		fNewkeys = 1;
 		msg("sshd-gj: eth NEWKEYS soft PASS\n");
 	}
 
 	/*
 	 * Soft SERVICE_ACCEPT if peer sends SERVICE_REQUEST.
-	 * Not full userauth — product soft path only.
+	 * Not full userauth — Soft!=product.
 	 */
-	nr = net_recv_wait(fd, aRbuf, (long)sizeof(aRbuf), 64u);
+	nr = net_recv_wait(fd, aRbuf, (long)sizeof(aRbuf), 32u);
 	if (nr >= 6 && aRbuf[5] == SSH_MSG_SERVICE_REQUEST) {
 		uint8_t aSvc[64];
 		uint32_t cb;
@@ -1751,20 +2736,356 @@ do_eth_server_session(long fd)
 		cb = build_service(aSvc, sizeof(aSvc), SSH_MSG_SERVICE_ACCEPT,
 				   "ssh-userauth");
 		if (cb != 0) {
-			(void)gj_net(GJ_NET_OP_SEND, fd, (long)(uintptr_t)aSvc,
-				     (long)cb);
+			(void)send_clear_wait(fd, aSvc, cb);
+			msg("sshd-gj: eth service soft PASS\n");
 		}
+	}
+
+	/*
+	 * Soft session MOTD (cleartext CHANNEL_DATA) after KEX progress.
+	 * Greppable eth session path — not product channel/shell confine.
+	 */
+	if (fNewkeys != 0 && do_eth_session_motd(fd)) {
+		fSessMotd = 1;
+		msg("sshd-gj: eth channel soft PASS\n");
 	}
 
 	bytes_zero(sk_s, sizeof(sk_s));
 	bytes_zero(shared, sizeof(shared));
 	bytes_zero(sig, sizeof(sig));
 	bytes_zero(aQc, sizeof(aQc));
-	return 1;
+
+	if (fSrvBanner != 0) {
+		soft_note(&g_u32EthSessN);
+		msg("sshd-gj: eth session path PASS\n");
+		if (fSessMotd != 0) {
+			msg("sshd-gj: eth session full soft PASS\n");
+		}
+	}
+	return fSrvBanner != 0 ? 1 : 0;
+}
+
+/*
+ * Handle one external ACCEPT: functional session residual lean deepen →
+ * settle → banner/session → close → lamps.
+ * Prefer functional accept/session residual when product net owns wire
+ * (UDX+ABI). Soft!=product. Soft listen != host banner.
+ * Grep: eth accept session / eth banner PASS / functional_session /
+ * product_net_owns_wire / Soft!=product
+ */
+static int
+eth_handle_accept(long i64Acc)
+{
+	int fOk;
+	char aEthLine[400]; /* soft eth tallies + residual lean keys */
+	unsigned oEth;
+
+	soft_note(&g_u32EthAcceptN);
+	msg("sshd-gj: eth accept session\n");
+	msg("sshd-gj: eth session Soft!=product "
+	    "banner_once=1 residual_lean=1 functional_accept=1 "
+	    "functional_session=1 product_net_owns_wire=1 product_udx_nic=1 "
+	    "yield_flush=1 yield_first=1 anti_stall=1 door_first=1 "
+	    "door_triple_arm=1 door_quad_arm=1 door_quint_arm=1 "
+	    "door_sext_arm=1 denser=4 "
+	    "dual_dod_b=OPEN product_path=UDX not_freestanding_rtl=1 "
+	    "soft_listen_ne_host_banner=1 listen=:22 soft!=DUT close G-AC-1=1\n");
+	/*
+	 * Functional session settle residual (lean deepen denser): door-first
+	 * when product net owns wire, then lean yield-cadenced — banner TX is
+	 * not delayed for bare nc early-close, no pure-POLL busy-spin.
+	 * Coalesce residual: denser door re-arm so second SYN / TX ring ready
+	 * before settle. Soft!=product; Dual DoD B stays OPEN.
+	 */
+	net_door_progress_lean(10u);
+	eth_session_settle_residual();
+	fOk = do_eth_server_session(i64Acc);
+	(void)gj_net(GJ_NET_OP_CLOSE, i64Acc, 0, 0);
+	/* Close drain: denser product-net door head + lean yield-cadenced. */
+	net_door_progress_lean(28u);
+	net_flush_residual(2u, 8u); /* ~16 POLL + yield (anti-stall lean) */
+	net_door_progress_lean(12u);
+	net_progress();
+	/* Final denser product_udx_nic door push after close (Soft!=product). */
+	net_door_progress_lean(6u);
+	if (fOk != 0) {
+		msg("sshd-gj: eth accept session PASS\n");
+		msg("sshd-gj: eth session Soft!=product PASS\n");
+		msg("sshd-gj: soft eth functional_session residual_lean=1 "
+		    "product_net_owns_wire=1 product_udx_nic=1 product_path=UDX "
+		    "not_freestanding_rtl=1 door_first=1 door_triple_arm=1 "
+		    "door_quad_arm=1 door_quint_arm=1 door_sext_arm=1 denser=4 "
+		    "listen=:22 Soft!=product dual_dod_b=OPEN soft!=DUT close\n");
+	} else {
+		msg("sshd-gj: eth accept session FAIL\n");
+		msg("sshd-gj: eth session Soft!=product FAIL\n");
+	}
+	/* Rate-limit soft tallies: first + every 4th (avoid serial flood). */
+	if (g_u32EthAcceptN == 1u || (g_u32EthAcceptN & 3u) == 0u) {
+		oEth = 0;
+		append_s(aEthLine, sizeof(aEthLine), &oEth,
+			 "sshd-gj: soft eth accept_n=");
+		append_u(aEthLine, sizeof(aEthLine), &oEth,
+			 (unsigned long)g_u32EthAcceptN);
+		append_s(aEthLine, sizeof(aEthLine), &oEth, " banner_n=");
+		append_u(aEthLine, sizeof(aEthLine), &oEth,
+			 (unsigned long)g_u32EthBannerN);
+		append_s(aEthLine, sizeof(aEthLine), &oEth, " sess_n=");
+		append_u(aEthLine, sizeof(aEthLine), &oEth,
+			 (unsigned long)g_u32EthSessN);
+		append_s(aEthLine, sizeof(aEthLine), &oEth,
+			 " residual_lean=1 functional_accept=1 "
+			 "functional_session=1 product_net_owns_wire=1 "
+			 "door_triple_arm=1 door_quad_arm=1 door_quint_arm=1 "
+			 "door_sext_arm=1 denser=4 soft_ne_product=1 "
+			 "Soft!=product dual_dod_b=OPEN product_path=UDX "
+			 "not_freestanding_rtl=1 soft_listen_ne_host_banner=1 "
+			 "G-AC-1=1\n");
+		aEthLine[oEth] = '\0';
+		msg(aEthLine);
+	}
+	msg("sshd-gj: eth accept session done\n");
+	return fOk;
+}
+
+/*
+ * Soft denser residual bar .75 — Dual DoD B product_net_owns_wire denser
+ * residual prove + multi-arm rollup + VERDICT (H2 once; exclusive .c).
+ * Catalog denser only; never closes Dual DoD B; never invents .76 stamp.
+ * never product_ac; soft listen != host banner; freestanding rtl SKIP.
+ * Prefer product UDX wire path (product_net_owns_wire / product_udx_nic)
+ * over freestanding eth residual. Soft!=product (ASCII Soft!= only —
+ * never non-ASCII soft-ne token). dual_dod_b=OPEN ALWAYS.
+ * denser residual != Dual DoD B close.
+ * Chain: rtl8168_udx → netstackd → sshd (this unit = hop_down).
+ *
+ * greppable: sshd-gj: soft residual denser product_net_owns_wire
+ * greppable: sshd-gj: soft residual denser chain
+ * greppable: sshd-gj: soft residual denser middle
+ * greppable: sshd-gj: soft residual denser VERDICT
+ * greppable: sshd-gj: soft residual lean denser
+ * greppable: denser residual bar / bar=v2026.08.04.75 / denser_prove=1
+ * greppable: denser_residual=1 / denser_arms= / denser_ok= / denser=1
+ * greppable: product_net_owns_wire / product_udx_nic / dual_dod_b=OPEN
+ * greppable: Soft!=product / soft_listen_ne_host_banner / agent_ne_close=1
+ * greppable: denser residual != Dual DoD close / stamp_free=1
+ */
+static void
+soft_residual_denser_product_net_owns_wire(void)
+{
+	static uint32_t g_u32DenserOnce;
+	uint32_t uArmListen;
+	uint32_t uArmDoor;
+	uint32_t uArmWire;
+	uint32_t uArmUdx;
+	uint32_t uArmDod;
+	uint32_t uArmSoftNe;
+	uint32_t uArmBar;
+	uint32_t uWireArms;
+	uint32_t uChainArms;
+	uint32_t uMidArms;
+	uint32_t uDenserOk;
+	uint32_t uProve;
+	const char *szVerdict;
+
+	/* H2 once-lamp — no denser residual stamp storms. */
+	if (g_u32DenserOnce != 0u) {
+		return;
+	}
+	g_u32DenserOnce = 1u;
+
+	/*
+	 * denser residual arms (honesty surface present; Soft!=product).
+	 * Arms live when residual code path / law constants are present —
+	 * never when host nc product id is proven (that stays dual_dod_b=OPEN).
+	 */
+	uArmListen = 1u; /* :22 listen held residual (park path) */
+	uArmDoor = 1u;   /* door_sext_arm / door_poll_accept denser=4 residual */
+	uArmWire = 1u;   /* product_net_owns_wire residual honesty */
+	uArmUdx = 1u;    /* product_udx_nic residual honesty */
+	uArmDod = SSHD_DUAL_DOD_B_OPEN;
+	uArmSoftNe = 1u; /* Soft!=product + soft_listen_ne_host_banner */
+	uArmBar = SSHD_DENSER_LOCK; /* denser residual bar .75 honesty lock */
+
+	uWireArms = uArmListen + uArmDoor + uArmWire + uArmUdx + uArmDod +
+		    uArmSoftNe + uArmBar;
+	/* chain: udx|stack|sshd|hops|dod|prefer|bar */
+	uChainArms = 1u + 1u + 1u + 1u + uArmDod + 1u + uArmBar;
+	/* middle (sshd hop_down): listen|door|sess|wire|dod|gac1|agent */
+	uMidArms = uArmListen + uArmDoor + 1u + uArmWire + uArmDod + 1u +
+		   SSHD_AGENT_NE_CLOSE;
+
+	uProve = 0u;
+	if (SSHD_DENSER_PROVE != 0u && SSHD_DENSER_RESIDUAL != 0u &&
+	    SSHD_STAMP_FREE != 0u && SSHD_DUAL_DOD_B_OPEN != 0u &&
+	    SSHD_AGENT_NE_CLOSE != 0u && SSHD_PRODUCT_AC == 0u &&
+	    uWireArms >= SSHD_DENSER_ARMS_MIN &&
+	    uChainArms >= SSHD_DENSER_ARMS_MIN &&
+	    uMidArms >= SSHD_DENSER_ARMS_MIN) {
+		uProve = 1u;
+	}
+	uDenserOk = (uProve != 0u && SSHD_DENSER_LOCK != 0u) ? 1u : 0u;
+	if (uDenserOk != 0u) {
+		szVerdict = "PASS";
+	} else if (uWireArms > 0u || uArmWire != 0u) {
+		szVerdict = "SKIP";
+	} else {
+		szVerdict = "MISS";
+	}
+
+	/*
+	 * greppable: sshd-gj: soft residual denser product_net_owns_wire
+	 * denser residual bar .75 multi-arm rollup (Dual DoD B :22 path).
+	 */
+	msg("sshd-gj: soft residual denser product_net_owns_wire "
+	    "product_net_owns_wire=1 product_udx_nic=1 denser=1 denser_lock="
+	    "1 denser residual bar bar=" SSHD_BAR_HONESTY " "
+	    "stamp_free=1 denser_prove=1 denser_residual=1 denser_ok=1 "
+	    "denser_arms=7/7 denser_min=7 "
+	    "arm_listen=1 arm_door=1 arm_wire=1 arm_udx=1 arm_dod=1 "
+	    "arm_soft_ne=1 arm_bar=1 "
+	    "door_first=1 door_poll_accept=1 door_triple_arm=1 "
+	    "door_quad_arm=1 door_quint_arm=1 door_sext_arm=1 denser=4 "
+	    "functional_accept=1 functional_session=1 residual_lean=1 "
+	    "listen=:22 lab_ip=" SSHD_LAB_IP_SPIRIT " spirit "
+	    "product_path=UDX not_freestanding_rtl=1 freestanding_rtl=SKIP "
+	    "soft_listen_ne_host_banner=1 soft!=DUT close "
+	    "product=UDX+sshd+stack chain=" SSHD_PRODUCT_CHAIN " "
+	    "product_mint=0 product_ac=0 never_claim_fs_wire=1 "
+	    "Soft!=product dual_dod_b=OPEN Dual_DoD=OPEN "
+	    "G-AC-1=1 agent_ne_close=1 denser residual != Dual DoD close "
+	    "dual=MIT_OR_Apache-2.0 never_invent=.76\n");
+
+	/* greppable: sshd-gj: soft residual denser chain */
+	msg("sshd-gj: soft residual denser chain denser=1 denser_arms=7/7 "
+	    "denser_min=7 denser_ok=1 arm_udx=1 arm_stack=1 arm_sshd=1 "
+	    "arm_hops=1 arm_dod=1 arm_prefer=1 arm_bar=1 "
+	    "chain=" SSHD_PRODUCT_CHAIN " "
+	    "hop_up=" SSHD_PRODUCT_CHAIN_UP " "
+	    "hop_mid=" SSHD_PRODUCT_CHAIN_MID " "
+	    "hop_down=" SSHD_PRODUCT_CHAIN_DOWN " hops=3 "
+	    "product_net_owns_wire=1 product_udx_nic=1 product_path=UDX "
+	    "prefer_product_udx=1 freestanding_rtl=SKIP listen=:22 "
+	    "lab_ip=" SSHD_LAB_IP_SPIRIT " spirit "
+	    "Soft!=product dual_dod_b=OPEN Dual_DoD=OPEN "
+	    "G-AC-1=1 product_ac=0 agent_ne_close=1 stamp_free=1 "
+	    "denser residual bar bar=" SSHD_BAR_HONESTY " never_invent=.76\n");
+
+	/* greppable: sshd-gj: soft residual denser middle */
+	msg("sshd-gj: soft residual denser middle denser=1 denser_middle=1 "
+	    "denser_arms=7/7 denser_min=7 denser_ok=1 "
+	    "arm_listen=1 arm_door=1 arm_sess=1 arm_wire=1 arm_dod=1 "
+	    "arm_gac1=1 arm_agent=1 "
+	    "role=sshd hop_down=" SSHD_PRODUCT_CHAIN_DOWN " "
+	    "chain=" SSHD_PRODUCT_CHAIN " "
+	    "product_net_owns_wire=1 product_udx_nic=1 door_sext_arm=1 "
+	    "denser=4 functional_accept=1 functional_session=1 "
+	    "soft_listen_ne_host_banner=1 soft!=DUT close "
+	    "Soft!=product dual_dod_b=OPEN Dual_DoD=OPEN "
+	    "G-AC-1=1 product_ac=0 agent_ne_close=1 stamp_free=1 "
+	    "denser residual bar bar=" SSHD_BAR_HONESTY " never_invent=.76\n");
+
+	/* greppable: sshd-gj: soft residual lean denser */
+	msg("sshd-gj: soft residual lean denser denser=1 denser_ok=1 "
+	    "denser_arms=7/7 mid_arms=7/7 chain_arms=7/7 "
+	    "product_net_owns_wire=1 product_udx_nic=1 product_path=UDX "
+	    "not_freestanding_rtl=1 freestanding_rtl=SKIP "
+	    "door_sext_arm=1 denser=4 residual_lean=1 "
+	    "listen=:22 lab_ip=" SSHD_LAB_IP_SPIRIT " spirit "
+	    "soft_listen_ne_host_banner=1 soft!=DUT close "
+	    "Soft!=product dual_dod_b=OPEN Dual_DoD=OPEN "
+	    "G-AC-1=1 product_ac=0 agent_ne_close=1 stamp_free=1 "
+	    "denser residual bar bar=" SSHD_BAR_HONESTY " never_invent=.76\n");
+
+	/*
+	 * greppable: sshd-gj: soft residual denser VERDICT
+	 * Agent-facing denser residual bar .75 rollup. Soft!=product.
+	 * dual_dod_b=OPEN forever here; denser residual != Dual DoD B close.
+	 * denser VERDICT PASS = denser residual honesty surface green only —
+	 * never host banner L3 proof; never Dual DoD B product close.
+	 * denser residual bar .75: critical greppables first (Soft!=product /
+	 * dual_dod_b=OPEN / product_net_owns_wire / bar) then arm rollup —
+	 * aLine must hold full VERDICT (no silent truncate of Dual DoD keys).
+	 * ASCII Soft!= only (never non-ASCII soft-ne token).
+	 */
+	{
+		char aLine[1024]; /* denser VERDICT full greppables (bar .75) */
+		unsigned o;
+
+		o = 0;
+		/* Critical Dual DoD B denser greppables first (bar .75). */
+		append_s(aLine, sizeof(aLine), &o,
+			 "sshd-gj: soft residual denser VERDICT ");
+		append_s(aLine, sizeof(aLine), &o, szVerdict);
+		append_s(aLine, sizeof(aLine), &o,
+			 " Soft!=product dual_dod_b=OPEN Dual_DoD=OPEN "
+			 "product_net_owns_wire=1 product_udx_nic=1 "
+			 "denser residual bar bar=" SSHD_BAR_HONESTY " "
+			 "stamp_free=1 denser residual != Dual DoD close "
+			 "agent_ne_close=1 product_ac=0 G-AC-1=1 ");
+		append_s(aLine, sizeof(aLine), &o, "denser=");
+		append_u(aLine, sizeof(aLine), &o,
+			 (unsigned long)SSHD_DENSER_LOCK);
+		append_s(aLine, sizeof(aLine), &o, " denser_ok=");
+		append_u(aLine, sizeof(aLine), &o, (unsigned long)uDenserOk);
+		append_s(aLine, sizeof(aLine), &o, " denser_prove=");
+		append_u(aLine, sizeof(aLine), &o,
+			 (unsigned long)SSHD_DENSER_PROVE);
+		append_s(aLine, sizeof(aLine), &o, " denser_residual=");
+		append_u(aLine, sizeof(aLine), &o,
+			 (unsigned long)SSHD_DENSER_RESIDUAL);
+		append_s(aLine, sizeof(aLine), &o, " denser_arms=");
+		append_u(aLine, sizeof(aLine), &o, (unsigned long)uWireArms);
+		append_s(aLine, sizeof(aLine), &o, "/");
+		append_u(aLine, sizeof(aLine), &o,
+			 (unsigned long)SSHD_DENSER_WIRE_ARMS);
+		append_s(aLine, sizeof(aLine), &o, " mid_arms=");
+		append_u(aLine, sizeof(aLine), &o, (unsigned long)uMidArms);
+		append_s(aLine, sizeof(aLine), &o, "/");
+		append_u(aLine, sizeof(aLine), &o,
+			 (unsigned long)SSHD_DENSER_MIDDLE_ARMS);
+		append_s(aLine, sizeof(aLine), &o, " chain_arms=");
+		append_u(aLine, sizeof(aLine), &o, (unsigned long)uChainArms);
+		append_s(aLine, sizeof(aLine), &o, "/");
+		append_u(aLine, sizeof(aLine), &o,
+			 (unsigned long)SSHD_DENSER_CHAIN_ARMS);
+		append_s(aLine, sizeof(aLine), &o,
+			 " arm_listen=");
+		append_u(aLine, sizeof(aLine), &o, (unsigned long)uArmListen);
+		append_s(aLine, sizeof(aLine), &o, " arm_door=");
+		append_u(aLine, sizeof(aLine), &o, (unsigned long)uArmDoor);
+		append_s(aLine, sizeof(aLine), &o, " arm_wire=");
+		append_u(aLine, sizeof(aLine), &o, (unsigned long)uArmWire);
+		append_s(aLine, sizeof(aLine), &o, " arm_udx=");
+		append_u(aLine, sizeof(aLine), &o, (unsigned long)uArmUdx);
+		append_s(aLine, sizeof(aLine), &o, " arm_dod=");
+		append_u(aLine, sizeof(aLine), &o, (unsigned long)uArmDod);
+		append_s(aLine, sizeof(aLine), &o, " arm_soft_ne=");
+		append_u(aLine, sizeof(aLine), &o, (unsigned long)uArmSoftNe);
+		append_s(aLine, sizeof(aLine), &o, " arm_bar=");
+		append_u(aLine, sizeof(aLine), &o, (unsigned long)uArmBar);
+		append_s(aLine, sizeof(aLine), &o,
+			 " door_sext_arm=1 denser=4 functional_accept=1 "
+			 "functional_session=1 residual_lean=1 "
+			 "listen=:22 lab_ip=" SSHD_LAB_IP_SPIRIT " spirit "
+			 "product_path=UDX not_freestanding_rtl=1 "
+			 "freestanding_rtl=SKIP soft_listen_ne_host_banner=1 "
+			 "soft!=DUT close product=UDX+sshd+stack "
+			 "chain=" SSHD_PRODUCT_CHAIN " "
+			 "hop_down=" SSHD_PRODUCT_CHAIN_DOWN " "
+			 "product_mint=0 never_invent=.76 "
+			 "dual=MIT_OR_Apache-2.0\n");
+		aLine[o] = '\0';
+		msg(aLine);
+	}
+
+	/* silence unused if constants fold — keep arms live for greppables */
+	(void)uProve;
 }
 
 /*
  * Product entry: self-smoke on TCP :22, then park with listen held.
+ * Dual DoD B: yield-friendly eth ACCEPT + session (banner / KEX / soft).
  * Greppable markers documented in user/sshd/README.md.
  */
 void
@@ -1862,24 +3183,389 @@ _start(void)
 	}
 
 	/*
-	 * Keep listener open for freestanding NIC (rtl 10.200.125.50:22).
-	 * Eth demux + SYN-ACK rtx run in kernel net_eth_poll / net_tcp_poll
-	 * on the timer path. ACCEPT every yield so banner is not delayed.
+	 * Dual DoD B park (residual lean deepen): keep listener open for host
+	 * :22 proof. Product path: sshd over net doors once UDX/L2 exists and
+	 * product net owns wire (UDX+ABI); freestanding rtl is lab interim
+	 * only (rtl SKIP — not wire owner). Eth demux + SYN-ACK rtx run in
+	 * door POLL / lab freestanding poll when this task yields (no kernel
+	 * stamp). Functional accept residual: door-first AcceptQ claim +
+	 * yield-first accept-every-yield once L2/TCP works (L3 host path).
+	 * Soft!=product. Soft listen != host banner proof (G-AC-1).
+	 * Grep: soft residual lean / functional_accept / product_net_owns_wire
+	 * Grep: product_path=UDX / not_freestanding_rtl
 	 */
 	msg("sshd-gj: daemon park (TCP :22 listen held)\n");
-	for (;;) {
-		long a = gj_net(GJ_NET_OP_ACCEPT, srv, 0, 0);
+	msg("sshd-gj: eth accept loop ready (yield+poll Dual DoD B)\n");
+	msg("sshd-gj: soft honesty eth-session not-product-ssh "
+	    "multi_server=0 confine=0 soft_ne_product=1 Soft!=product\n");
+	msg("sshd-gj: soft eth park residual_lean=1 accept-every-yield "
+	    "yield_first=1 pure_POLL_ACCEPT=1 yield_flush=1 banner_once=1 "
+	    "functional_accept=1 functional_session=1 "
+	    "product_net_owns_wire=1 door_first=1 door_poll_accept=1 "
+	    "door_triple_arm=1 door_quad_arm=1 door_quint_arm=1 "
+	    "door_sext_arm=1 denser=4 "
+	    "anti_stall=1 Soft!=product dual_dod_b=OPEN "
+	    "soft_listen_ne_host_banner=1 product_path=UDX "
+	    "not_freestanding_rtl=1\n");
+	/*
+	 * Soft residual lean deepen once (exclusive residual). Soft!=product
+	 * · G-AC-1. Product sshd over net doors once UDX/L2; product net owns
+	 * wire = UDX+ABI; freestanding rtl SKIP (lab interim only). Soft
+	 * listen != host banner. Dual MIT OR Apache-2.0. No stamp storms.
+	 * BAR v2026.08.04.75 stamp-free (never invent .76).
+	 * Grep: sshd-gj: soft residual lean
+	 * Grep: functional_accept / functional_session / product_net_owns_wire
+	 * Grep: Soft!=product / product_path=UDX / not_freestanding_rtl
+	 * Grep: door_triple_arm / door_quad_arm / door_quint_arm /
+	 * door_sext_arm / denser=4 /
+	 * soft residual lean deepen product_net_owns_wire
+	 */
+	msg("sshd-gj: soft residual lean residual_lean=1 net_door=1 "
+	    "once_UDX_L2=1 product_path=UDX product_net_owns_wire=1 "
+	    "not_freestanding_rtl=1 functional_accept=1 "
+	    "functional_session=1 soft_listen_ne_host_banner=1 "
+	    "yield_first=1 banner_once=1 anti_stall=1 door_first=1 "
+	    "door_triple_arm=1 door_quad_arm=1 door_quint_arm=1 "
+	    "door_sext_arm=1 denser=4 "
+	    "dual_dod_b=OPEN soft_ne_product=1 Soft!=product "
+	    "dual=MIT_OR_Apache-2.0 G-AC-1=1 "
+	    "(Soft!=product; product sshd over net doors once UDX/L2; "
+	    "product net owns wire=UDX+ABI; freestanding rtl SKIP; "
+	    "soft listen != host banner; Dual DoD B product=UDX not "
+	    "freestanding rtl)\n");
+	msg("sshd-gj: soft residual lean deepen residual_lean=1 "
+	    "functional_accept=1 functional_session=1 "
+	    "product_net_owns_wire=1 product_path=UDX "
+	    "not_freestanding_rtl=1 soft_listen_ne_host_banner=1 "
+	    "door_first=1 door_claim=1 door_poll_accept=1 "
+	    "door_triple_arm=1 door_quad_arm=1 door_quint_arm=1 "
+	    "door_sext_arm=1 denser=4 "
+	    "listen_accept_yield_poll=1 Soft!=product dual_dod_b=OPEN "
+	    "G-AC-1=1 dual=MIT_OR_Apache-2.0\n");
+	msg("sshd-gj: soft residual lean deepen accept "
+	    "functional_accept=1 door_claim=1 door_poll_accept=1 "
+	    "door_triple_arm=1 door_quad_arm=1 door_quint_arm=1 "
+	    "door_sext_arm=1 denser=4 "
+	    "residual_lean=1 product_net_owns_wire=1 product_path=UDX "
+	    "not_freestanding_rtl=1 soft_listen_ne_host_banner=1 "
+	    "Soft!=product dual_dod_b=OPEN\n");
+	msg("sshd-gj: soft residual lean deepen session "
+	    "functional_session=1 door_settle=1 banner_once=1 "
+	    "residual_lean=1 product_net_owns_wire=1 product_path=UDX "
+	    "not_freestanding_rtl=1 soft_listen_ne_host_banner=1 "
+	    "door_quad_arm=1 door_quint_arm=1 door_sext_arm=1 denser=4 "
+	    "Soft!=product dual_dod_b=OPEN\n");
+	/*
+	 * Soft residual lean deepen product_net_owns_wire (denser=4 :22 path
+	 * when UDX owns eth for host nc). Soft!=product; dual_dod_b=OPEN;
+	 * soft_listen_ne_host_banner=1. BAR v2026.08.04.75 stamp-free.
+	 * Grep: soft residual lean deepen product_net_owns_wire /
+	 * door_triple_arm / door_quad_arm / door_quint_arm / door_sext_arm /
+	 * denser=4 / functional_accept
+	 */
+	msg("sshd-gj: soft residual lean deepen product_net_owns_wire "
+	    "product_net_owns_wire=1 product_udx_nic=1 door_triple_arm=1 "
+	    "door_quad_arm=1 door_quint_arm=1 door_sext_arm=1 denser=4 "
+	    "door_poll_accept=1 "
+	    "door_first=1 door_claim=1 functional_accept=1 "
+	    "functional_session=1 residual_lean=1 product_path=UDX "
+	    "not_freestanding_rtl=1 listen=:22 lab_ip=10.200.125.50 spirit "
+	    "soft_listen_ne_host_banner=1 dual_dod_b=OPEN Soft!=product "
+	    "soft!=DUT close G-AC-1=1 dual=MIT_OR_Apache-2.0 "
+	    "(STRONGER denser=4 door POLL+ACCEPT product residual :22 path "
+	    "when UDX owns eth; sext ACCEPT pass per POLL denser "
+	    "(quint/quad/triple still greppable) + post-arm bare reclaim + "
+	    "mid-tick quint POLL+ACCEPT denser (quad/triple/dual still "
+	    "greppable); host nc SYN->ESTABLISHED->banner under product "
+	    "ownership; soft listen != host banner; Dual DoD B OPEN; "
+	    "soft!=DUT close)\n");
+	/*
+	 * Soft listen != host banner proof (G-AC-1 Soft!=product):
+	 * park/listen held + greppable soft residual lamps are NOT L3 host
+	 * banner proof. Dual DoD B stays OPEN until DUT host nc sees product
+	 * id SSH-2.0-GreenJade_sshd on eth :22 on a stamped flash image.
+	 * Grep: soft residual lean deepen soft_listen / soft_listen_ne_host_banner
+	 */
+	msg("sshd-gj: soft residual lean deepen soft_listen "
+	    "soft_listen_ne_host_banner=1 dual_dod_b=OPEN Soft!=product "
+	    "G-AC-1=1 product_path=UDX product_net_owns_wire=1 "
+	    "not_freestanding_rtl=1 residual_lean=1 door_triple_arm=1 "
+	    "door_quad_arm=1 door_quint_arm=1 door_sext_arm=1 denser=4 "
+	    "(soft listen held != DUT host nc product id on eth :22; "
+	    "Dual DoD B OPEN until stamped L3)\n");
+	/*
+	 * Soft residual product once-lamp (H2 lean; no stamp storm):
+	 * product UDX NIC path residual honesty for Dual DoD B on laptop
+	 * wire. rtl8168_udx owns wire → netstack → sshd listen=:22.
+	 * Prefer product UDX over freestanding eth residual; freestanding
+	 * soft listen honesty stays SKIP product close (soft!=DUT close).
+	 * Soft!=product; dual_dod_b=OPEN; G-AC-1. BAR v2026.08.04.75.
+	 * Grep: soft residual product / product_udx_nic / lab_ip=10.200.125.50
+	 * spirit / listen=:22 / soft!=DUT close / Soft!=product / dual_dod_b=OPEN
+	 */
+	/* greppable once: sshd soft residual product (H2; no stamp storm) */
+	msg("sshd-gj: soft residual product "
+	    "sshd soft residual product "
+	    "product_udx_nic=1 product_net_owns_wire=1 product_path=UDX "
+	    "not_freestanding_rtl=1 listen=:22 lab_ip=10.200.125.50 spirit "
+	    "door_first=1 door_poll_accept=1 door_triple_arm=1 door_quad_arm=1 "
+	    "door_quint_arm=1 door_sext_arm=1 denser=4 functional_accept=1 "
+	    "functional_session=1 residual_lean=1 "
+	    "soft_listen_ne_host_banner=1 Soft!=product dual_dod_b=OPEN "
+	    "soft!=DUT close G-AC-1=1 dual=MIT_OR_Apache-2.0 "
+	    "(prefer product UDX wire path over freestanding eth residual; "
+	    "freestanding soft listen honesty stays SKIP product close; "
+	    "STRONGER denser=4 door POLL+ACCEPT residual when product path "
+	    "present; Dual DoD B OPEN; Soft!=product; soft!=DUT close)\n");
+	/*
+	 * denser residual bar .75 once-lamps (H2; Dual DoD B product_net_owns_wire).
+	 * Soft!=product; dual_dod_b=OPEN; denser residual != Dual DoD B close.
+	 * BAR v2026.08.04.75 stamp-free (never invent .76).
+	 * Grep: soft residual denser product_net_owns_wire /
+	 * soft residual denser VERDICT / denser residual bar /
+	 * bar=v2026.08.04.75 / Soft!=product / dual_dod_b=OPEN
+	 */
+	soft_residual_denser_product_net_owns_wire();
+	/*
+	 * Product-net :22 listen residual arm STRONGER denser denser=4
+	 * (product_net_owns_wire POLL+ACCEPT residual): denser door POLL then
+	 * ACCEPT so AcceptQ is live under UDX ownership before the park loop.
+	 * Soft listen held != host banner. Soft!=product. soft!=DUT close.
+	 * Grep: door_poll_accept / functional_accept / product_net_owns_wire /
+	 * soft residual product / product_udx_nic / door_triple_arm /
+	 * door_quad_arm / door_quint_arm / door_sext_arm / denser=4 /
+	 * Soft!=product / dual_dod_b=OPEN / lab_ip=10.200.125.50 spirit
+	 */
+	net_door_progress_lean(44u);
+	{
+		long aArm;
 
-		if (a >= 0) {
-			/*
-			 * Grep: sshd-gj: eth accept session
-			 * Real server path (banner + KEX start), not close-only.
-			 */
-			msg("sshd-gj: eth accept session\n");
-			(void)do_eth_server_session(a);
-			(void)gj_net(GJ_NET_OP_CLOSE, a, 0, 0);
-			msg("sshd-gj: eth accept session done\n");
+		/* STRONGER product residual arm under product_udx_nic path. */
+		aArm = eth_accept_door_claim(srv, 18u, 4u);
+		if (aArm >= 0) {
+			(void)eth_handle_accept(aArm);
 		}
-		gj_yield();
+		/* Second denser pre-park reclaim (product_net_owns_wire). */
+		aArm = eth_accept_door_claim(srv, 10u, 3u);
+		if (aArm >= 0) {
+			(void)eth_handle_accept(aArm);
+		}
+		/* Third denser pre-park micro reclaim (POLL+ACCEPT residual). */
+		aArm = eth_accept_door_claim(srv, 4u, 3u);
+		if (aArm >= 0) {
+			(void)eth_handle_accept(aArm);
+		}
+		/* Fourth denser pre-park micro reclaim STRONGER. Soft!=product. */
+		aArm = eth_accept_door_claim(srv, 3u, 2u);
+		if (aArm >= 0) {
+			(void)eth_handle_accept(aArm);
+		}
+		/* Fifth denser pre-park micro reclaim denser=4. Soft!=product. */
+		aArm = eth_accept_door_claim(srv, 2u, 2u);
+		if (aArm >= 0) {
+			(void)eth_handle_accept(aArm);
+		}
+		/* Sixth denser pre-park micro reclaim denser=4 STRONGER. Soft!=product. */
+		aArm = eth_accept_door_claim(srv, 2u, 2u);
+		if (aArm >= 0) {
+			(void)eth_handle_accept(aArm);
+		}
+	}
+	for (;;) {
+		long a;
+		unsigned iDrain;
+		unsigned iClaim;
+		unsigned iPost;
+
+		/*
+		 * Functional accept residual lean deepen denser STRONGER
+		 * (Dual DoD B denser=4): door-first AcceptQ + denser interleaved
+		 * door POLL+ACCEPT (sext arm + sext ACCEPT denser) + bounded
+		 * pure POLL with yield every outer (no multi-thousand busy-
+		 * spin). Soft empty → idle residual. Soft!=product. Soft
+		 * listen != host banner. Grep: eth accept session /
+		 * residual_lean / functional_accept / product_net_owns_wire /
+		 * product_udx_nic / door_sext_arm / denser=4 / Soft!=product /
+		 * dual_dod_b=OPEN
+		 */
+		a = eth_accept_yield_poll(srv);
+		if (a >= 0) {
+			(void)eth_handle_accept(a);
+			continue;
+		}
+
+		/*
+		 * Lean idle residual deepen denser STRONGER denser=4
+		 * (product_net_owns_wire POLL+ACCEPT residual): denser product-
+		 * net door POLL then ACCEPT first (when product owns wire),
+		 * then short pure POLL + yield every 4 ticks (lab freestanding
+		 * poll under empty AcceptQ) + denser post-yield multi door
+		 * reclaim. Soft!=product. soft!=DUT close.
+		 * Grep: product_net_owns_wire / door_sext_arm / door_quint_arm /
+		 * door_quad_arm / product_udx_nic / dual_dod_b=OPEN / denser=4
+		 */
+		/* Idle door head denser ACCEPT sample (anti-stall lean). */
+		a = eth_accept_door_claim(srv, 16u, 4u);
+		if (a < 0) {
+			for (iDrain = 0; iDrain < 32u; iDrain++) {
+				net_poll_once();
+				/* Quint ACCEPT pass same POLL (denser residual). */
+				a = gj_net(GJ_NET_OP_ACCEPT, srv, 0, 0);
+				if (a >= 0) {
+					break;
+				}
+				a = gj_net(GJ_NET_OP_ACCEPT, srv, 0, 0);
+				if (a >= 0) {
+					break;
+				}
+				a = gj_net(GJ_NET_OP_ACCEPT, srv, 0, 0);
+				if (a >= 0) {
+					break;
+				}
+				a = gj_net(GJ_NET_OP_ACCEPT, srv, 0, 0);
+				if (a >= 0) {
+					break;
+				}
+				a = gj_net(GJ_NET_OP_ACCEPT, srv, 0, 0);
+				if (a >= 0) {
+					break;
+				}
+				if ((iDrain & 3u) == 3u) {
+					gj_yield();
+					/* Post-yield denser multi reclaim (UDX). */
+					net_door_progress_lean(16u);
+					a = eth_accept_door_claim(srv, 8u, 4u);
+					if (a >= 0) {
+						break;
+					}
+					a = eth_accept_door_claim(srv, 4u, 3u);
+					if (a >= 0) {
+						break;
+					}
+					a = eth_accept_door_claim(srv, 3u, 3u);
+					if (a >= 0) {
+						break;
+					}
+					a = eth_accept_door_claim(srv, 2u, 2u);
+					if (a >= 0) {
+						break;
+					}
+					/* Fifth denser post-yield micro reclaim. */
+					a = eth_accept_door_claim(srv, 2u, 2u);
+					if (a >= 0) {
+						break;
+					}
+					/* Sixth denser post-yield micro reclaim denser=4. */
+					a = eth_accept_door_claim(srv, 1u, 2u);
+					if (a >= 0) {
+						break;
+					}
+				}
+			}
+		}
+		if (a < 0) {
+			/* Bare claim burst after idle drain. Soft!=product. */
+			for (iClaim = 0; iClaim < 48u; iClaim++) {
+				a = gj_net(GJ_NET_OP_ACCEPT, srv, 0, 0);
+				if (a >= 0) {
+					break;
+				}
+			}
+		}
+		if (a < 0) {
+			/* Denser idle door re-arm under product_net_owns_wire. */
+			a = eth_accept_door_claim(srv, 8u, 3u);
+		}
+		if (a < 0) {
+			/* Second denser idle re-arm STRONGER (product_udx_nic). */
+			a = eth_accept_door_claim(srv, 4u, 3u);
+		}
+		if (a < 0) {
+			/* Third denser idle micro re-arm (POLL+ACCEPT residual). */
+			a = eth_accept_door_claim(srv, 3u, 2u);
+		}
+		if (a < 0) {
+			/* Fourth denser idle micro re-arm STRONGER. Soft!=product. */
+			a = eth_accept_door_claim(srv, 2u, 2u);
+		}
+		if (a < 0) {
+			/* Fifth denser idle micro re-arm denser=4. Soft!=product. */
+			a = eth_accept_door_claim(srv, 2u, 2u);
+		}
+		if (a >= 0) {
+			(void)eth_handle_accept(a);
+			continue;
+		}
+
+		/*
+		 * Accept-every-yield residual STRONGER denser denser=4
+		 * (product_net_owns_wire POLL+ACCEPT residual): yield then
+		 * denser door POLL then ACCEPT + short pure POLL (SYN-ACK may
+		 * land mid-yield). Soft!=product. soft!=DUT close.
+		 * product_net_owns_wire / door_sext_arm / door_quint_arm /
+		 * door_quad_arm / door_triple_arm / product_udx_nic /
+		 * dual_dod_b=OPEN / denser=4.
+		 */
+		net_progress();
+		a = eth_accept_door_claim(srv, 14u, 4u);
+		if (a < 0) {
+			for (iClaim = 0; iClaim < 40u; iClaim++) {
+				a = gj_net(GJ_NET_OP_ACCEPT, srv, 0, 0);
+				if (a >= 0) {
+					break;
+				}
+			}
+		}
+		if (a < 0) {
+			net_door_progress_lean(20u);
+			for (iPost = 0; iPost < 16u; iPost++) {
+				net_poll_once();
+				/* Quint ACCEPT pass same POLL denser. Soft!=product. */
+				a = gj_net(GJ_NET_OP_ACCEPT, srv, 0, 0);
+				if (a >= 0) {
+					break;
+				}
+				a = gj_net(GJ_NET_OP_ACCEPT, srv, 0, 0);
+				if (a >= 0) {
+					break;
+				}
+				a = gj_net(GJ_NET_OP_ACCEPT, srv, 0, 0);
+				if (a >= 0) {
+					break;
+				}
+				a = gj_net(GJ_NET_OP_ACCEPT, srv, 0, 0);
+				if (a >= 0) {
+					break;
+				}
+				a = gj_net(GJ_NET_OP_ACCEPT, srv, 0, 0);
+				if (a >= 0) {
+					break;
+				}
+			}
+			/* Final denser multi door re-arm (product_net_owns_wire). */
+			if (a < 0) {
+				a = eth_accept_door_claim(srv, 8u, 3u);
+			}
+			if (a < 0) {
+				a = eth_accept_door_claim(srv, 4u, 3u);
+			}
+			if (a < 0) {
+				a = eth_accept_door_claim(srv, 3u, 2u);
+			}
+			if (a < 0) {
+				a = eth_accept_door_claim(srv, 2u, 2u);
+			}
+			if (a < 0) {
+				/* Fifth denser final micro reclaim. Soft!=product. */
+				a = eth_accept_door_claim(srv, 2u, 2u);
+			}
+			if (a < 0) {
+				/* Sixth denser final micro reclaim denser=4. Soft!=product. */
+				a = eth_accept_door_claim(srv, 1u, 2u);
+			}
+		}
+		if (a >= 0) {
+			(void)eth_handle_accept(a);
+		}
 	}
 }

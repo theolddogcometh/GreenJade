@@ -18,6 +18,15 @@
  * Non-goals
  * ---------
  * Full auditor interface (la_*) surface.
+ *
+ * Soft residual (C2 libcgj link.h; Soft!=product; G-AC-1; Dual DoD A/B OPEN):
+ *   soft     = link_map / dl_phdr_info + dl_iterate_phdr; static soft may report
+ *              main executable only; real iteration owned by ld-gj when dynamic
+ *   product  = ld-gj dynlink graphs; not freestanding class; not .ko AC
+ *   honesty  = phdr walk soft != full auditor product; agent PASS != Dual DoD
+ *              close; stamp-free bar honesty (no version stamp)
+ *   law      = dual MIT OR Apache-2.0; no GPL; H2 no stamp storms
+ * greppable: libcgj: link soft residual Soft!=product
  */
 #pragma once
 

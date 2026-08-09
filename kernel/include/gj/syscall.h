@@ -8,19 +8,19 @@
  * -------------------------------------------------------------------------
  * Role
  * -------------------------------------------------------------------------
- * Top-level SYSCALL surface for ring-3 → kernel. Two personalities share one
+ * Top-level SYSCALL surface for ring-3 -> kernel. Two personalities share one
  * LSTAR/SVC entry; routing is decided from the bound process PCB (or the
  * kernel default personality when no process is bound):
  *
- *   Native  — rax/x0 is GJ_SYS_* (this table); gj_native_syscall_dispatch
- *   Linux   — rax/x0 is a Linux NR; Option C hot/cold hybrid path
- *             (gj_linux_syscall_dispatch → linux_hot / cold_ipc)
+ *   Native  - rax/x0 is GJ_SYS_* (this table); gj_native_syscall_dispatch
+ *   Linux   - rax/x0 is a Linux NR; Option C hot/cold hybrid path
+ *             (gj_linux_syscall_dispatch -> linux_hot / cold_ipc)
  *
  * Product contract
  * ----------------
  *   - Native mode: GJ_SYS_* numbers are frozen after first userland.
  *     Do not renumber; append in sparse subsystem blocks only
- *     (docs/APPLE_CHANNEL_REMAINING.md §5 number stability).
+ *     (docs/APPLE_CHANNEL_REMAINING.md section 5 number stability).
  *   - Linux mode: numbers are the public Linux ABI (gj/linux_abi.h).
  *   - Top-level entry is gj_syscall_dispatch(); personality comes from the
  *     current process PCB (default LINUX until a native app sets 0).
@@ -29,24 +29,36 @@
  *
  * Code map (implementation elsewhere; this header is the contract)
  * ----------------------------------------------------------------
- *   kernel/syscall/entry_bridge.c  — LSTAR bridge soft note
- *   kernel/syscall/dispatch.c      — personality route + entry stats
- *   kernel/syscall/native.c        — GJ_SYS_* switch + native stats
- *   kernel/syscall/linux_*.c       — hybrid Option C (see linux_dispatch.h)
- *   kernel/arch/x86_64/syscall_entry.S — LSTAR → C bridge
+ *   kernel/syscall/entry_bridge.c  - LSTAR bridge soft note
+ *   kernel/syscall/dispatch.c      - personality route + entry stats
+ *   kernel/syscall/native.c        - GJ_SYS_* switch + native stats
+ *   kernel/syscall/linux_*.c       - hybrid Option C (see linux_dispatch.h)
+ *   kernel/arch/x86_64/syscall_entry.S - LSTAR -> C bridge
  *
  * Soft product surfaces (greppable)
  * ---------------------------------
  *   greppable: SYSCALL_ENTRY_SOFT_STATS
  *   greppable: "syscall: soft stats"
  *   greppable: "native: soft stats"
+ *   greppable: "native: soft residual lean"
+ *   greppable: "native: soft residual"
  *   greppable: GJ_SYS_
+ *
+ * Native doors/net residual lean (Soft!=product; G-AC-1; dual MIT OR Apache-2.0)
+ * -----------------------------------------------------------------------------
+ * Frozen NRs used by freestanding embeds / UDX class hosts (do not renumber):
+ *   GJ_SYS_NET (96)          - netstackd + sshd door path (net_door)
+ *   GJ_SYS_SESSION/STORE/VFS - freestanding server facades
+ *   GJ_SYS_DDI (103)         - UDX hosts (rtl8168_udx / xhci_udx / ddi_host_gj)
+ *   GJ_SYS_PLATFORM_INFO     - IOMMU / MSI-X inventory (UDX soft bind helpers)
+ *   GJ_SYS_NOTIFY_WAIT       - MSI-X badge wait (UDX irq soft path)
+ * Soft residual lean is diagnostics only - never product gate; not Linux .ko.
  *
  * Related headers
  * ---------------
  *   gj/linux_abi.h, gj/linux_dispatch.h, gj/cold_ipc.h, gj/process.h,
  *   gj/error.h (native returns gj_status_t-shaped i64Ret on many ops)
- * docs/LINUX_ABI_HYBRID.md · docs/PROTON_PERSONALITY.md
+ * docs/LINUX_ABI_HYBRID.md / docs/PROTON_PERSONALITY.md
  */
 #pragma once
 
@@ -62,7 +74,7 @@
  */
 
 /* Diagnostics / scheduling */
-#define GJ_SYS_DEBUG_LOG   0  /* arg0=user buf, arg1=len → bytes written */
+#define GJ_SYS_DEBUG_LOG   0  /* arg0=user buf, arg1=len -> bytes written */
 #define GJ_SYS_YIELD       1  /* voluntary reschedule */
 #define GJ_SYS_EXIT        2  /* terminate current thread/process */
 
@@ -87,7 +99,7 @@
 
 /* Process control */
 #define GJ_SYS_PROCESS_SET_PAGER 50
-#define GJ_SYS_PROCESS_SPAWN     51  /* arg0=entry arg1=arg arg2=flags → slot|gen */
+#define GJ_SYS_PROCESS_SPAWN     51  /* arg0=entry arg1=arg arg2=flags -> slot|gen */
 #define GJ_SYS_PROCESS_KILL      52
 
 /* Wait / futex (stubs reserved where not yet wired on native path) */
@@ -119,8 +131,8 @@
  * HDA software stream:
  *   arg0 = op (0=open 1=write 2=start 3=tick 4=close 5=stats)
  *   open:  arg1=ch arg2=rate arg3=bits
- *   write: arg1=user ptr arg2=bytes → ret bytes
- *   tick:  arg1=frames → ret bytes consumed
+ *   write: arg1=user ptr arg2=bytes -> ret bytes
+ *   tick:  arg1=frames -> ret bytes consumed
  *   stats: arg1=user ptr to u32[3] {queued,played,underruns}
  */
 #define GJ_SYS_HDA_STREAM        94
@@ -138,19 +150,19 @@
 
 /**
  * Platform info:
- *   arg0=0 → IOMMU: arg1=user ptr to gj_iommu_info; ret=present
- *   arg0=1 → MSI-X inventory: ret=count, optional arg1=info array
- *   arg0=2 → WoW64: arg1=0 query, arg1=1 enable, arg1=2 disable → calls|enabled
- *   arg0=3 → MSI-X IRQ notify: soft inject badge=arg1; ret=irq count
- *   arg0=4 → IOMMU enforce: arg1=0/1 set; ret=enforce
- *   arg0=5 → IOMMU window grant: arg1=BDF (bus<<16|slot<<8|func) arg2=pa arg3=cb
+ *   arg0=0 -> IOMMU: arg1=user ptr to gj_iommu_info; ret=present
+ *   arg0=1 -> MSI-X inventory: ret=count, optional arg1=info array
+ *   arg0=2 -> WoW64: arg1=0 query, arg1=1 enable, arg1=2 disable -> calls|enabled
+ *   arg0=3 -> MSI-X IRQ notify: soft inject badge=arg1; ret=irq count
+ *   arg0=4 -> IOMMU enforce: arg1=0/1 set; ret=enforce
+ *   arg0=5 -> IOMMU window grant: arg1=BDF (bus<<16|slot<<8|func) arg2=pa arg3=cb
  */
 #define GJ_SYS_PLATFORM_INFO     98
 
 /**
  * Notification wait (native):
  *   arg0=which (0=MSI-X global) arg1=mask arg2=block(0/1)
- *   → pending badges cleared and returned
+ *   -> pending badges cleared and returned
  */
 #define GJ_SYS_NOTIFY_WAIT       99
 
@@ -163,14 +175,14 @@
 
 /**
  * Console (serial COM1 bring-up):
- *   arg0=0 poll → 0/1 available
- *   arg0=1 getc → byte 0..255 (blocks)
- *   arg0=2 read → arg1=user buf arg2=max; non-blocking drain, ret=bytes
+ *   arg0=0 poll -> 0/1 available
+ *   arg0=1 getc -> byte 0..255 (blocks)
+ *   arg0=2 read -> arg1=user buf arg2=max; non-blocking drain, ret=bytes
  */
 #define GJ_SYS_CONSOLE           101
 
 /**
- * SCSI door (userspace scsi_mid → kernel virtio-scsi / HBA):
+ * SCSI door (userspace scsi_mid -> kernel virtio-scsi / HBA):
  *   arg0 = op: 0=inquiry 1=read_cap 2=read10 3=write10 5=ready 6=stats
  *   inquiry: arg1=user buf arg2=cb
  *   read_cap: arg1=user u32[2] {last_lba, block_len}
@@ -185,9 +197,20 @@
  *   arg0 = DDI_OP_* (see gj/ddi_door.h)
  *   SCAN=1 GET=2 OPEN=3 MAP_BAR=4 CFG_READ=5 DMA_NOTE=6 INVENTORY=7
  *   CFG_WRITE=16 (careful soft)
- * Soft ≠ product grant mint (docs/DDI_SOFT.md).
+ * Soft != product grant mint (docs/DDI_SOFT.md).
  */
 #define GJ_SYS_DDI               103
+
+/**
+ * Memobj placement Option A (docs/MEM_PLACE_CHANNEL.md; Soft!=product L0):
+ *   CREATE_PLACED: arg0=user gj_mem_place_req* arg1=cPages logical
+ *                  arg2=user gj_mem_place_out* -> 0 or GJ_ERR_*
+ *   MAP_REPLICA:   arg0=name ptr arg1=replica arg2=hint arg3=prot -> VA or 0
+ * Never exposes PA (MEM_PLACE_NO_PA_LEAK). L2 product channel map OPEN.
+ * greppable: MEM_PLACE_L0 GJ_SYS_MEMOBJ_CREATE_PLACED Soft!=product
+ */
+#define GJ_SYS_MEMOBJ_CREATE_PLACED 104
+#define GJ_SYS_MEMOBJ_MAP_REPLICA   105
 
 /*
  * Personality mode for a task (PCB field when tasks exist).
@@ -221,7 +244,7 @@ struct gj_syscall_regs {
     u64 u64Arg3;
     u64 u64Arg4;
     u64 u64Arg5;
-    i64 i64Ret;   /* out: success ≥0 or negative status / -errno */
+    i64 i64Ret;   /* out: success >=0 or negative status / -errno */
 };
 
 /**
@@ -243,13 +266,13 @@ enum gj_personality gj_syscall_get_default_personality(void);
  * Routes by current task personality (default LINUX until native apps exist).
  * NULL pRegs is a no-op (defensive). Soft counters: SYSCALL_ENTRY_SOFT_STATS.
  *
- * Order: soft-count enter → resolve PCB personality → native or linux path →
+ * Order: soft-count enter -> resolve PCB personality -> native or linux path ->
  * outcome soft (ret sign buckets + last nr/ret snapshot).
  */
 void gj_syscall_dispatch(struct gj_syscall_regs *pRegs);
 
 /**
- * Asm LSTAR edge (syscall_entry.S → C). Soft-notes bridge then dispatches.
+ * Asm LSTAR edge (syscall_entry.S -> C). Soft-notes bridge then dispatches.
  * NULL pRegs is a soft-counted no-op (defensive).
  * Smoke tests that call gj_syscall_dispatch directly skip bridge counters.
  */
@@ -278,47 +301,51 @@ void gj_native_syscall_dispatch(struct gj_syscall_regs *pRegs);
 /**
  * Soft counters for native GJ_SYS_* dispatch (wrap OK; diagnostics only).
  * Never hard-gate product paths. greppable: native: soft stats
+ * Lean residual (doors/net ops): greppable: native: soft residual lean
+ * Soft!=product; G-AC-1; dual MIT OR Apache-2.0; no version stamp.
  *
  * Entries / outcomes:
- *   u64Entries     — non-NULL dispatch calls
- *   u64NullGuard   — NULL pRegs early return
- *   u64Handled     — switch hit a known case (not default)
- *   u64Nosupport   — default / reserved NR → GJ_ERR_NOSUPPORT
- *   u64Ok          — i64Ret >= 0 after handler (ret_zero + ret_pos)
- *   u64Err         — i64Ret < 0 after handler
- *   u64RetZero     — i64Ret == 0
- *   u64RetPos      — i64Ret > 0
- *   u64Inval/Fault/Nodev/Again/Io/Nomem/Noent/Perm/Busy — GJ_ERR_* buckets
+ *   u64Entries     - non-NULL dispatch calls
+ *   u64NullGuard   - NULL pRegs early return
+ *   u64Handled     - switch hit a known case (not default)
+ *   u64Nosupport   - default / reserved NR -> GJ_ERR_NOSUPPORT
+ *   u64Ok          - i64Ret >= 0 after handler (ret_zero + ret_pos)
+ *   u64Err         - i64Ret < 0 after handler
+ *   u64RetZero     - i64Ret == 0
+ *   u64RetPos      - i64Ret > 0
+ *   u64Inval/Fault/Nodev/Again/Io/Nomem/Noent/Perm/Busy - GJ_ERR_* buckets
  *
  * Subsystem buckets (sparse GJ_SYS_* blocks; only counted when handled):
- *   u64Diag        — DEBUG_LOG / YIELD / EXIT
- *   u64Ipc         — IPC_CALL / RECV / REPLY
- *   u64Cap         — CAP_MINT / MOVE / COPY / REVOKE / IDENT
- *   u64Process     — PROCESS_SPAWN (handled); SET_PAGER/KILL also when default
- *   u64Thread      — THREAD_SET_QOS / CPU
- *   u64Cold        — COLD_DEQUEUE / COLD_REPLY / PERSONALITY_SERVE
- *   u64Gpu         — GPU_PRESENT / GPU_DISPLAY_INFO
- *   u64Memobj      — MEMOBJ_CREATE_NAMED / MAP_NAMED
- *   u64Hda         — HDA_STREAM
- *   u64DoorFacade  — SESSION / NET / STORE / VFS (sum of door soft split)
- *   u64Session/Net/Store/Vfs — per-door façade soft split
- *   u64Platform    — PLATFORM_INFO
- *   u64Notify      — NOTIFY_WAIT
- *   u64Console     — CONSOLE
- *   u64Scsi        — SCSI
+ *   u64Diag        - DEBUG_LOG / YIELD / EXIT
+ *   u64Ipc         - IPC_CALL / RECV / REPLY
+ *   u64Cap         - CAP_MINT / MOVE / COPY / REVOKE / IDENT
+ *   u64Process     - PROCESS_SPAWN (handled); SET_PAGER/KILL also when default
+ *   u64Thread      - THREAD_SET_QOS / CPU
+ *   u64Cold        - COLD_DEQUEUE / COLD_REPLY / PERSONALITY_SERVE
+ *   u64Gpu         - GPU_PRESENT / GPU_DISPLAY_INFO
+ *   u64Memobj      - MEMOBJ_CREATE_NAMED / MAP_NAMED
+ *   u64Hda         - HDA_STREAM
+ *   u64DoorFacade  - SESSION / NET / STORE / VFS (sum of door soft split)
+ *   u64Session/Net/Store/Vfs - per-door facade soft split
+ *                    (NET: sshd/netstackd; residual lean reports split)
+ *   u64Platform    - PLATFORM_INFO (UDX soft bind helpers)
+ *   u64Notify      - NOTIFY_WAIT (UDX MSI-X badge wait)
+ *   u64Console     - CONSOLE
+ *   u64Scsi        - SCSI
+ *   (DDI: file-local deepen tally in native.c; public struct has no u64Ddi)
  *
  * Reserved / unwired NR soft class (default path only; never product gate):
- *   u64Vm          — VM_MAP / UNMAP / PROTECT / MAP_OBJ
- *   u64Futex       — FUTEX_WAIT / FUTEX_WAKE
- *   u64Wait        — WAIT_TIMEOUT
- *   u64Untyped     — UNTYPED_RETYPE
- *   u64UnknownNr   — default NR outside known reserved blocks
+ *   u64Vm          - VM_MAP / UNMAP / PROTECT / MAP_OBJ
+ *   u64Futex       - FUTEX_WAIT / FUTEX_WAKE
+ *   u64Wait        - WAIT_TIMEOUT
+ *   u64Untyped     - UNTYPED_RETYPE
+ *   u64UnknownNr   - default NR outside known reserved blocks
  *
  * Copy helpers used by the native path (soft deepen):
  *   u64CopyInOk/Fail, u64CopyOutOk/Fail, u64CopyNameOk/Fail
  *   u64BytesCopyIn / u64BytesCopyOut
- *   u64CopyUser    — copy_{in,out} via user_range_ok path
- *   u64CopyKsmoke  — copy via trusted HHDM/static kernel-smoke path
+ *   u64CopyUser    - copy_{in,out} via user_range_ok path
+ *   u64CopyKsmoke  - copy via trusted HHDM/static kernel-smoke path
  *
  * Snapshot: u64LastNr / u64LastRet (bit pattern of last i64Ret).
  */
@@ -377,14 +404,16 @@ struct gj_native_dispatch_stats {
     u64 u64LastRet;
 };
 
-/** Snapshot soft counters into *pOut (NULL → no-op). Never hard-gates. */
+/** Snapshot soft counters into *pOut (NULL -> no-op). Never hard-gates. */
 void gj_native_dispatch_stats_get(struct gj_native_dispatch_stats *pOut);
 /** Clear soft counters (lifetime restarts). Safe to call anytime. */
 void gj_native_dispatch_stats_reset(void);
 /**
- * Greppable soft line: "native: soft stats ...".
- * Diagnostics only; wrap OK; never hard-gates product paths.
+ * Greppable soft inventory: "native: soft stats ..." plus multi-line dump
+ * including "native: soft residual lean" (doors/net ops for sshd/netstackd
+ * + UDX hosts). Diagnostics only; wrap OK; never hard-gates product paths.
  * Snapshots counters before printing (soft race hygiene).
+ * Multi-line dumps capped (NATIVE_SOFT_LOG_CAP in native.c). Soft!=product.
  * Returns u64Entries (handy for smoke assert chains).
  */
 u64 gj_native_dispatch_stats_soft(void);
@@ -407,7 +436,7 @@ void gj_linux_dispatch_stats_reset(void);
  * Soft deepen: top-level SYSCALL entry / personality-route counters.
  * Distinct from gj_native_dispatch_stats / gj_linux_dispatch_stats (those
  * cover handler interiors). This surface is LSTAR bridge + route only.
- * Wrap OK; diagnostics / smoke — never hard-gate product paths.
+ * Wrap OK; diagnostics / smoke - never hard-gate product paths.
  * greppable: SYSCALL_ENTRY_SOFT_STATS
  * greppable: "syscall: soft stats"
  *

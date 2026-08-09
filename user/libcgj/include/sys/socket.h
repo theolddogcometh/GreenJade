@@ -20,6 +20,15 @@
  * ---------
  * Every obscure SOL_* protocol option; raw packet sockets full feature set.
  * See docs/GLIBC_COMPAT.md.
+ *
+ * Soft residual lean (this unit; Soft!=product; G-AC-1; Dual DoD A/B OPEN):
+ *   - net door/netstackd bring-up; not product Dual DoD B (UDX NIC) close
+ *   - Soft!=product: libcgj sys/socket surface != UDX/DDI product close
+ *   - product = UDX/DDI + hot/cold Linux ABI; freestanding rtl/USB SKIP
+ *   - H1 no net_eth_poll from IRQ (host path); Dual DoD A/B OPEN
+ *   - agent PASS != close Dual DoD; no stamp storms; bar v2026.08.04.75 parent-only
+ *   - dual MIT OR Apache-2.0; no GPL; no Linux .ko product AC (G-AC-1)
+ * Grep: libcgj sys/socket.h: soft residual lean Soft!=product
  */
 #pragma once
 

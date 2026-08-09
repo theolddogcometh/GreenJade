@@ -233,3 +233,7 @@ Source of truth for freestanding code under this tree: `sessiond_gj.c` only.
 Host smoke: `sessiond.c`. Compositor pointer: `compositor_stub.c`.
 
 See also: [ABI-first pivot](../../docs/ABI_FIRST_PIVOT.md) (product direction).
+
+---
+
+**Project:** GreenJade pure-C microkernel · dual **MIT OR Apache-2.0** · Soft≠product · Dual DoD A/B **OPEN**. See [root README](../../README.md). Support: [Patreon — TheOldDog](https://www.patreon.com/cw/TheOldDog).

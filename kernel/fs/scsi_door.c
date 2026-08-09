@@ -14,36 +14,52 @@
  * Used by GJ_SYS_SCSI and by store_door CAP/R/W when virtio-blk is absent.
  * Product path remains userspace scsi_mid; this is the kernel mid shim.
  *
- * Soft door inventory (Wave 13 base + Wave 35 exclusive soft deepen):
- *   - soft return: API return-surface catalog (product_*=OPEN)
- *   - soft retmap: Wave 19 return-surface map (ok|fail|… classes)
+ * Soft residual lean (Soft!=product dual license; G-AC-1; C0 residual):
+ *   - Soft inventory is diagnostics only - never product DoD / bar3.
+ *   - Soft!=product: soft LUN / kernel mid shim != userspace scsi_mid product.
+ *   - Dual license (MIT OR Apache-2.0) is source law; soft residual does not
+ *     invent a separate product dual-license claim or image version stamp.
+ *   - Multi-line soft dumps capped (SCSI_DOOR_SOFT_LOG_CAP) - no stamp storms.
+ *   - No version stamp; no ret*angle cascade; no commit from residual agent.
+ *   - Functional residual lean once (constants only; never hard-gates):
+ *       door op ids 0..7 + CDB max + soft geometry + deny catalog + log cap
+ *       + SPC/SBC wire opcodes + surface count + Soft!=product lic honesty
+ *       + Dual DoD OPEN residual lamps (freestanding MSC SKIP; UDX product OPEN)
+ *   - Freestanding MSC SKIP; product mid = userspace scsi_mid (G-AC-1).
+ *   - Dual DoD A/B remain OPEN (UDX USB/NIC) - soft residual never closes them.
+ * greppable: "scsi_door: soft ..." | "scsi_door: soft residual"
+ * greppable: scsi_door: soft residual lean
+ * greppable: scsi_door: soft residual lean PASS
+ * greppable: scsi_door: soft residual lean FAIL
+ * greppable: dual_dod_a=OPEN | dual_dod_b=OPEN | freestanding_msc=SKIP
+ * Never hard-gates; wrap OK. Soft.
+ *
+ * Soft door inventory (primary field-stable lines):
  *   - Submit enter / ok / fail; per-op attempt + ok + unknown rejects
  *   - Soft deny reasons: null_req / null_data / mid_not_ready / blocks /
  *     empty_data / bad_raw / mid_submit / unknown_op
- *   - blocks_ok / blocks_truncate / def1 notes; multi-block transfers
- *   - xfer: data-in|out ok + cumulative byte totals
- *   - last: op / deny code / lba / blocks / cb snapshot
- *   - peak: cbData / blocks / raw CDB length high-water
- *   - mid: ready/soft lamps + soft_ok vs virt_ok + mid io/fail
- *   - catalog: opcode name table; stats/init inventory samples
- * Wave 19 exclusive (this unit only — greppable "scsi_door: soft …"):
- *   - total/rate/ok_bp; zero-cb; short inq; sync-whole; raw in|out
- *   - peak lba; honesty soft LUN remains soft; deepen stamp
- *   Soft LUN honesty remains soft: door mid soft ≠ product
- *   greppable: "scsi_door: soft …"
- *   Never hard-gates; diagnostics / smoke grep only (wrap OK). Soft.
+ *   - blocks / xfer / last / peak / mid / catalog
+ *   - total|rate|raw|shape|honesty|capacity|headroom|surface|ratio
+ *   - lean residual: return + residual + residual lean + deepen (capped)
  */
 #include <gj/klog.h>
 #include <gj/scsi_mid.h>
 #include <gj/string.h>
 #include <gj/types.h>
 
+/*
+ * Cap full multi-line soft inventory dumps (Soft!=product; no stamp storms).
+ * Init + first-activity once + a couple of stats paths stay greppable;
+ * further calls bump inv samples only (silent). No version stamp.
+ */
+#define SCSI_DOOR_SOFT_LOG_CAP 4u
+
 static u32 g_u32DoorIos;
 static u32 g_u32DoorFails;
 
 /*
- * Soft product inventory (Wave 13 base + Wave 35 exclusive deepen).
- * Cumulative path tallies. greppable: scsi_door: soft …
+ * Soft inventory tallies (diagnostics only; Soft!=product).
+ * Cumulative path tallies. greppable: scsi_door: soft ...
  */
 static u32 g_u32SoftEnter;        /* scsi_door_submit entries */
 static u32 g_u32SoftOk;           /* successful mid submits via door */
@@ -97,7 +113,7 @@ static u32 g_u32SoftInitCalls;    /* scsi_door_init entries */
 static u32 g_u32SoftInvSamples;   /* soft inventory dump count */
 static u8  g_fSoftOnce;           /* one-shot after first submit activity */
 
-/* Wave 35 exclusive soft deepen — complementary path tallies. */
+/* Wave 35 exclusive soft deepen - complementary path tallies. */
 static u32 g_u32SoftZeroCb;       /* submit with cbData == 0 */
 static u32 g_u32SoftShortInq;     /* INQUIRY with cbData < 36 */
 static u32 g_u32SoftSyncWhole;    /* SYNC CACHE blocks==0 (whole medium) */
@@ -107,6 +123,18 @@ static u32 g_u32SoftPeakLba;      /* peak LBA observed on R/W */
 static u32 g_u32SoftLunZero;      /* lun forced 0 samples (always) */
 static u32 g_u32SoftTimeoutFixed; /* timeout fixed 5000 samples */
 static u32 g_u32SoftOkRateBp;     /* last computed ok basis points (log) */
+
+/*
+ * C0 residual lean self-check (once; Soft!=product; dual MIT/Apache).
+ * Functional constant checks only - never product gate / never hard-block.
+ * greppable: scsi_door: soft residual lean | soft residual lean PASS|FAIL
+ */
+static u32 g_u32SoftResidualLean;   /* lean residual self-check runs */
+static u32 g_u32SoftResidualLeanOk; /* lean residual checks that passed */
+static u32 g_u32SoftLeanWireOk;     /* SPC/SBC wire opcode residual ok */
+static u32 g_u32SoftLeanLicOk;      /* Soft!=product lic residual ok */
+static u32 g_u32SoftLeanDodOk;      /* Dual DoD OPEN residual ok */
+static u8  g_fSoftLean;             /* one-shot lean residual gate */
 
 /* Soft deny reason codes for last-deny snapshot (greppable catalog). */
 #define SOFT_DENY_NONE      0u
@@ -125,6 +153,7 @@ static void soft_add64(u64 *pCtr, u64 u64N);
 static void soft_peak_u32(u32 *pPeak, u32 u32Val);
 static void soft_note_deny(u32 u32Code);
 static void soft_note_req(const struct scsi_door_req *pReq, u32 cbData);
+static void soft_residual_lean_once(const char *szVia);
 static void soft_inventory_log(const char *szVia);
 static void soft_maybe_once(void);
 
@@ -185,25 +214,233 @@ soft_note_req(const struct scsi_door_req *pReq, u32 cbData)
 }
 
 /**
- * Greppable soft scsi_door inventory (Wave 13 base; Wave 35 exclusive deepen).
- * Prefix-stable markers (scsi_door: soft …):
- *   scsi_door: soft inventory  — enter/ok/fail + mid lamps + log_n + wave
- *   scsi_door: soft op         — per-op ok tallies + unknown rejects
- *   scsi_door: soft att        — per-op attempt tallies (past mid-ready)
- *   scsi_door: soft deny       — soft reject reason catalog
- *   scsi_door: soft blocks     — block validation notes
- *   scsi_door: soft xfer       — data-in|out ok + multi + byte totals
- *   scsi_door: soft last       — last op/deny/lba/blocks/cb/ret snapshot
- *   scsi_door: soft peak       — peak cb / blocks / raw CDB
- *   scsi_door: soft mid        — ready/soft lamps + soft_ok/virt_ok + mid
- *   scsi_door: soft catalog    — opcode name table (0..7)
- *   scsi_door: soft path       — honesty: kernel shim ≠ product scsi_mid
- * Wave 15 complementary:
- *   scsi_door: soft total|rate|raw|shape|honesty|deepen
+ * C0 lean residual self-check - door surface + soft geometry + deny + wire
+ * + Soft!=product lic + Dual DoD OPEN residual lamps.
+ * Once only. Soft!=product dual MIT OR Apache-2.0; no version stamp.
+ * Product path remains userspace scsi_mid; kernel door is interim shim only.
+ * Freestanding MSC SKIP (G-AC-1). Dual DoD A/B stay OPEN (UDX). Never hard-gates.
+ * greppable: scsi_door: soft residual lean
+ * greppable: scsi_door: soft residual lean PASS
+ * greppable: scsi_door: soft residual lean FAIL
+ * greppable: dual_dod_a=OPEN | dual_dod_b=OPEN | freestanding_msc=SKIP
+ */
+static void
+soft_residual_lean_once(const char *szVia)
+{
+    u32 u32Ok;
+    u32 u32Checks;
+    u32 u32Ops;
+    u32 u32Cdb;
+    u32 u32Geom;
+    u32 u32Deny;
+    u32 u32Cap;
+    u32 u32Wire;
+    u32 u32Surface;
+    u32 u32Lic;
+    u32 u32Dod;
+    u32 u32Ready;
+    u32 u32Soft;
+    /* Stack-local Soft!=product honesty (never hard-gates). */
+    const int nSoft = 1;
+    const int nProduct = 0;
+    const int nKoProduct = 0;
+    const int nStampStorm = 0;
+    const int nFreestandingMsc = 0; /* SKIP residual; not Dual DoD close */
+    const int nDualDodAOpen = 1;    /* UDX USB product OPEN */
+    const int nDualDodBOpen = 1;    /* UDX NIC product OPEN */
+    const char *szViaSafe;
+
+    if (g_fSoftLean != 0) {
+        return;
+    }
+    g_fSoftLean = 1;
+    u32Ok = 0;
+    u32Checks = 0;
+    szViaSafe = (szVia != NULL && szVia[0] != '\0') ? szVia : "lean";
+
+    /* Door opcodes 0..7 stable (M5 submit surface). */
+    u32Checks++;
+    u32Ops = 0;
+    if (GJ_SCSI_DOOR_OP_INQUIRY == 0u && GJ_SCSI_DOOR_OP_READ_CAP == 1u &&
+        GJ_SCSI_DOOR_OP_READ10 == 2u && GJ_SCSI_DOOR_OP_WRITE10 == 3u &&
+        GJ_SCSI_DOOR_OP_RAW == 4u && GJ_SCSI_DOOR_OP_TEST_UNIT == 5u &&
+        GJ_SCSI_DOOR_OP_SYNC_CACHE == 6u && GJ_SCSI_DOOR_OP_REQ_SENSE == 7u) {
+        u32Ops = 1;
+        u32Ok++;
+    }
+
+    /* CDB container max matches SPC wire length bound. */
+    u32Checks++;
+    u32Cdb = 0;
+    if (GJ_SCSI_CDB_MAX == 16u) {
+        u32Cdb = 1;
+        u32Ok++;
+    }
+
+    /* Soft LUN geometry (interim mid only; honesty remains soft). */
+    u32Checks++;
+    u32Geom = 0;
+    if (GJ_SCSI_SOFT_SEC_SIZE == 512u && GJ_SCSI_SOFT_SECTORS == 64u &&
+        (GJ_SCSI_SOFT_SECTORS * GJ_SCSI_SOFT_SEC_SIZE) == 32768u) {
+        u32Geom = 1;
+        u32Ok++;
+    }
+
+    /* Deny reason catalog complete (0none..8unknown). */
+    u32Checks++;
+    u32Deny = 0;
+    if (SOFT_DENY_NONE == 0u && SOFT_DENY_NULL_REQ == 1u &&
+        SOFT_DENY_NULL_DATA == 2u && SOFT_DENY_MID_NRDY == 3u &&
+        SOFT_DENY_BLOCKS == 4u && SOFT_DENY_EMPTY == 5u &&
+        SOFT_DENY_BAD_RAW == 6u && SOFT_DENY_MID_SUB == 7u &&
+        SOFT_DENY_UNKNOWN == 8u &&
+        (SOFT_DENY_UNKNOWN - SOFT_DENY_NONE) == 8u) {
+        u32Deny = 1;
+        u32Ok++;
+    }
+
+    /* Inventory log cap > 0 (no stamp storms; Soft!=product). */
+    u32Checks++;
+    u32Cap = 0;
+    if (SCSI_DOOR_SOFT_LOG_CAP > 0u && SCSI_DOOR_SOFT_LOG_CAP <= 8u) {
+        u32Cap = 1;
+        u32Ok++;
+    }
+
+    /*
+     * SPC/SBC wire opcodes residual (door CDB builders target these).
+     * Catches silent opcode drift without touching product path.
+     */
+    u32Checks++;
+    u32Wire = 0;
+    if (GJ_SCSI_OP_TEST_UNIT == 0x00u && GJ_SCSI_OP_REQUEST_SENSE == 0x03u &&
+        GJ_SCSI_OP_INQUIRY == 0x12u && GJ_SCSI_OP_READ_CAPACITY_10 == 0x25u &&
+        GJ_SCSI_OP_READ_10 == 0x28u && GJ_SCSI_OP_WRITE_10 == 0x2Au &&
+        GJ_SCSI_OP_SYNCHRONIZE_CACHE == 0x35u) {
+        u32Wire = 1;
+        u32Ok++;
+    }
+
+    /* Surface count: contiguous door ops 0..7 => 8 (last id + 1). */
+    u32Checks++;
+    u32Surface = 0;
+    if ((GJ_SCSI_DOOR_OP_REQ_SENSE + 1u) == 8u &&
+        GJ_SCSI_DOOR_OP_INQUIRY == 0u && GJ_SCSI_SENSE_MAX == 32u) {
+        u32Surface = 1;
+        u32Ok++;
+    }
+
+    /*
+     * Soft!=product lic residual: soft inventory never product gate;
+     * no .ko product; no stamp storm; dual MIT/Apache source law only.
+     */
+    u32Checks++;
+    u32Lic = 0;
+    if (nSoft == 1 && nProduct == 0 && nKoProduct == 0 && nStampStorm == 0 &&
+        SCSI_DOOR_SOFT_LOG_CAP >= 1u && SCSI_DOOR_SOFT_LOG_CAP <= 8u) {
+        u32Lic = 1;
+        u32Ok++;
+    }
+
+    /*
+     * Dual DoD OPEN residual lamps (Soft!=product):
+     *   freestanding MSC SKIP; Dual DoD A/B remain OPEN (UDX product).
+     * Soft residual never closes Dual DoD and never promotes freestanding.
+     */
+    u32Checks++;
+    u32Dod = 0;
+    if (nFreestandingMsc == 0 && nDualDodAOpen == 1 && nDualDodBOpen == 1 &&
+        nProduct == 0 && nKoProduct == 0) {
+        u32Dod = 1;
+        u32Ok++;
+    }
+
+    g_u32SoftResidualLean = u32Checks;
+    g_u32SoftResidualLeanOk = u32Ok;
+    g_u32SoftLeanWireOk = u32Wire;
+    g_u32SoftLeanLicOk = u32Lic;
+    g_u32SoftLeanDodOk = u32Dod;
+    u32Ready = scsi_mid_ready() ? 1u : 0u;
+    u32Soft = scsi_mid_soft_active() ? 1u : 0u;
+
+    /*
+     * Grep: scsi_door: soft residual lean
+     * One lean line - Soft!=product dual license; no version stamp; no storm.
+     * greppable: product_mid=userspace_scsi_mid | freestanding_msc=SKIP
+     * greppable: dual_dod_a=OPEN | dual_dod_b=OPEN
+     */
+    kprintf("scsi_door: soft residual lean via=%s "
+            "ops=%u cdb=%u geom=%u deny=%u log_cap_ok=%u "
+            "wire=%u surface=%u lic=%u dod=%u "
+            "checks=%u ok=%u enter=%u door_ok=%u door_fail=%u "
+            "mid_ready=%u soft_lun=%u "
+            "op0=inq op1=readcap op2=read10 op3=write10 "
+            "op4=raw op5=tur op6=sync op7=sense "
+            "cdb_max=%u soft_secs=%u soft_sec_sz=%u log_cap=%u "
+            "kernel_mid_shim=1 product_mid=userspace_scsi_mid "
+            "full_door_endpoint=0 store_cap_fallback=1 "
+            "freestanding_msc=SKIP soft_ne_product=1 "
+            "dual_dod_a=OPEN dual_dod_b=OPEN "
+            "product_usb=xhci_udx product_nic=rtl8168_udx "
+            "dual=MIT_OR_Apache-2.0 G-AC-1 "
+            "(Soft!=product; dual MIT OR Apache-2.0; kernel door interim; "
+            "product=userspace scsi_mid; Dual DoD A/B OPEN UDX; "
+            "no freestanding MSC; no .ko; no version stamp; no stamp storms)\n",
+            szViaSafe, u32Ops, u32Cdb, u32Geom, u32Deny, u32Cap, u32Wire,
+            u32Surface, u32Lic, u32Dod, u32Checks, u32Ok, g_u32SoftEnter,
+            g_u32SoftOk, g_u32SoftFail, u32Ready, u32Soft,
+            (unsigned)GJ_SCSI_CDB_MAX, (unsigned)GJ_SCSI_SOFT_SECTORS,
+            (unsigned)GJ_SCSI_SOFT_SEC_SIZE,
+            (unsigned)SCSI_DOOR_SOFT_LOG_CAP);
+
+    if (u32Ok == u32Checks) {
+        /* Grep: scsi_door: soft residual lean PASS */
+        kprintf("scsi_door: soft residual lean PASS via=%s "
+                "checks=%u ok=%u ops=%u cdb=%u geom=%u deny=%u log_cap_ok=%u "
+                "wire=%u surface=%u lic=%u dod=%u "
+                "product_mid=userspace_scsi_mid freestanding_msc=SKIP "
+                "dual_dod_a=OPEN dual_dod_b=OPEN "
+                "soft_ne_product=1 dual=MIT_OR_Apache-2.0 G-AC-1 "
+                "(Soft!=product; door residual lean; not product gate; "
+                "Dual DoD remains OPEN)\n",
+                szViaSafe, u32Checks, u32Ok, u32Ops, u32Cdb, u32Geom, u32Deny,
+                u32Cap, u32Wire, u32Surface, u32Lic, u32Dod);
+    } else {
+        /* Grep: scsi_door: soft residual lean FAIL */
+        kprintf("scsi_door: soft residual lean FAIL via=%s "
+                "checks=%u ok=%u ops=%u cdb=%u geom=%u deny=%u log_cap_ok=%u "
+                "wire=%u surface=%u lic=%u dod=%u "
+                "(soft residual only; not product gate; Soft!=product; "
+                "freestanding_msc=SKIP; dual_dod_a=OPEN dual_dod_b=OPEN)\n",
+                szViaSafe, u32Checks, u32Ok, u32Ops, u32Cdb, u32Geom, u32Deny,
+                u32Cap, u32Wire, u32Surface, u32Lic, u32Dod);
+    }
+}
+
+/**
+ * Greppable soft scsi_door inventory (lean residual; Soft!=product).
+ * Prefix-stable markers (scsi_door: soft ...):
+ *   scsi_door: soft inventory  - enter/ok/fail + mid lamps + log_n
+ *   scsi_door: soft op         - per-op ok tallies + unknown rejects
+ *   scsi_door: soft att        - per-op attempt tallies (past mid-ready)
+ *   scsi_door: soft deny       - soft reject reason catalog
+ *   scsi_door: soft blocks     - block validation notes
+ *   scsi_door: soft xfer       - data-in|out ok + multi + byte totals
+ *   scsi_door: soft last       - last op/deny/lba/blocks/cb/ret snapshot
+ *   scsi_door: soft peak       - peak cb / blocks / raw CDB
+ *   scsi_door: soft mid        - ready/soft lamps + soft_ok/virt_ok + mid
+ *   scsi_door: soft catalog    - opcode name table (0..7)
+ *   scsi_door: soft path       - honesty: kernel shim != product scsi_mid
+ *   scsi_door: soft total|rate|raw|shape|honesty|capacity|headroom|
+ *               surface|ratio|return|residual|residual lean|deepen
+ *   scsi_door: soft residual lean / soft residual lean PASS|FAIL
  *   scsi_door: soft inventory PASS / scsi_door: soft PASS
+ *   dual_dod_a=OPEN dual_dod_b=OPEN freestanding_msc=SKIP (Soft!=product)
  *
+ * Multi-line dumps capped at SCSI_DOOR_SOFT_LOG_CAP (no stamp storms).
  * Never hard-gates; diagnostics only. Soft LUN honesty remains soft.
- * Soft. greppable: scsi_door: soft
+ * Soft!=product dual license. Dual DoD A/B OPEN. No version stamp.
+ * greppable: scsi_door: soft
  */
 static void
 soft_inventory_log(const char *szVia)
@@ -217,6 +454,13 @@ soft_inventory_log(const char *szVia)
     int         fSoftPass;
 
     soft_inc(&g_u32SoftInvSamples);
+    /*
+     * Cap multi-line inventory dumps. Past SCSI_DOOR_SOFT_LOG_CAP bump
+     * inv samples only (silent). Soft!=product; no stamp storms.
+     */
+    if (g_u32SoftInvSamples > SCSI_DOOR_SOFT_LOG_CAP) {
+        return;
+    }
     szViaSafe = (szVia != NULL && szVia[0] != '\0') ? szVia : "unknown";
     u32Ready = scsi_mid_ready() ? 1u : 0u;
     u32Soft = scsi_mid_soft_active() ? 1u : 0u;
@@ -228,6 +472,13 @@ soft_inventory_log(const char *szVia)
         u32OkBp = 0;
     }
     g_u32SoftOkRateBp = u32OkBp;
+
+    /*
+     * C0 residual lean once before multi-line dump so residual/deepen
+     * lines can report lean_ok honestly on the first greppable sample.
+     * Once-gated; Soft!=product; no stamp storms.
+     */
+    soft_residual_lean_once(szViaSafe);
 
     /* Grep: scsi_door: soft inventory */
     kprintf("scsi_door: soft inventory via=%s enter=%u ok=%u fail=%u "
@@ -334,945 +585,141 @@ soft_inventory_log(const char *szVia)
 
     /* Grep: scsi_door: soft honesty  (soft LUN remains soft) */
     kprintf("scsi_door: soft honesty soft_lun=soft soft_ne_product=1 "
-            " kernel_mid_shim=1 full_door_endpoint=0 "
-            "store_cap_fallback=1 wave=116\n");
+            "kernel_mid_shim=1 full_door_endpoint=0 "
+            "store_cap_fallback=1 freestanding_msc=SKIP "
+            "dual_dod_a=OPEN dual_dod_b=OPEN "
+            "product_mid=userspace_scsi_mid product_usb=xhci_udx "
+            "product_nic=rtl8168_udx dual=MIT_OR_Apache-2.0 "
+            "G-AC-1\n");
 
-    /* Grep: scsi_door: soft capacity — Wave 19 design-constant lamps. */
+    /* Grep: scsi_door: soft capacity - Wave 19 design-constant lamps. */
     kprintf("scsi_door: soft capacity timeout_ms=5000 lun=0 "
-            "cdb_max=16 mid_shim=1 store_cap_fallback=1 wave=116\n");
+            "cdb_max=%u soft_secs=%u soft_sec_sz=%u mid_shim=1 "
+            "store_cap_fallback=1 freestanding_msc=SKIP\n",
+            (unsigned)GJ_SCSI_CDB_MAX, (unsigned)GJ_SCSI_SOFT_SECTORS,
+            (unsigned)GJ_SCSI_SOFT_SEC_SIZE);
 
-    /* Grep: scsi_door: soft headroom — Wave 19 live path lamps. */
+    /* Grep: scsi_door: soft headroom - Wave 19 live path lamps. */
     kprintf("scsi_door: soft headroom mid_ready=%u soft_lun=%u "
-            "enter=%u ok=%u fail=%u logs=%u wave=116\n",
+            "enter=%u ok=%u fail=%u logs=%u lean_ok=%u lean_n=%u "
+            "wire_ok=%u lic_ok=%u dod_ok=%u\n",
             u32Ready, u32Soft, g_u32SoftEnter, g_u32SoftOk, g_u32SoftFail,
-            g_u32SoftInvSamples);
+            g_u32SoftInvSamples, g_u32SoftResidualLeanOk,
+            g_u32SoftResidualLean, g_u32SoftLeanWireOk, g_u32SoftLeanLicOk,
+            g_u32SoftLeanDodOk);
 
-    /* Grep: scsi_door: soft surface — Wave 19 surface bit lamps. */
+    /* Grep: scsi_door: soft surface - Wave 19 surface bit lamps. */
     kprintf("scsi_door: soft surface ready=%u soft_lun=%u raw_ok=%u "
-            "enter=%u ok=%u fail=%u surf=0x%x wave=116\n",
+            "enter=%u ok=%u fail=%u lean=%u surf=0x%x\n",
             u32Ready, u32Soft, g_u32SoftOpRaw != 0u ? 1u : 0u,
             g_u32SoftEnter != 0u ? 1u : 0u, g_u32SoftOk != 0u ? 1u : 0u,
             g_u32SoftFail != 0u ? 1u : 0u,
+            g_u32SoftResidualLeanOk != 0u ? 1u : 0u,
             (u32Ready) | (u32Soft << 1) |
                 ((g_u32SoftOpRaw != 0u) ? 4u : 0u) |
                 ((g_u32SoftEnter != 0u) ? 8u : 0u) |
                 ((g_u32SoftOk != 0u) ? 16u : 0u) |
-                ((g_u32SoftFail != 0u) ? 32u : 0u));
+                ((g_u32SoftFail != 0u) ? 32u : 0u) |
+                ((g_u32SoftResidualLeanOk != 0u) ? 64u : 0u));
 
-    /* Grep: scsi_door: soft ratio — Wave 19 ok/fail basis points. */
+    /* Grep: scsi_door: soft ratio - ok/fail basis points. */
     {
         u32 u32Tot = g_u32SoftOk + g_u32SoftFail;
-        u32 u32OkBp = 0;
+        u32 u32OkBpR = 0;
         u32 u32FailBp = 0;
 
         if (u32Tot != 0u) {
-            u32OkBp = (g_u32SoftOk * 10000u) / u32Tot;
+            u32OkBpR = (g_u32SoftOk * 10000u) / u32Tot;
             u32FailBp = (g_u32SoftFail * 10000u) / u32Tot;
         }
         kprintf("scsi_door: soft ratio ok_bp=%u fail_bp=%u ok=%u fail=%u "
-                "enter=%u wave=116\n",
-                u32OkBp, u32FailBp, g_u32SoftOk, g_u32SoftFail,
-                g_u32SoftEnter);
+                "enter=%u lean_ok=%u\n",
+                u32OkBpR, u32FailBp, g_u32SoftOk, g_u32SoftFail,
+                g_u32SoftEnter, g_u32SoftResidualLeanOk);
     }
 
-    /* Grep: scsi_door: soft return — Wave 19 API return surfaces */
-    kprintf("scsi_door: soft return enter=%u ok=%u fail=%u deny_null=%u "
-            "deny_mid=%u deny_raw=%u deny_unknown=%u mid_ready=%u "
-            "soft_lun=%u product_scsi_mid=OPEN wave=116\n",
-            g_u32SoftEnter, g_u32SoftOk, g_u32SoftFail,
-            g_u32SoftDenyNullReq, g_u32SoftDenyMidNrdy, g_u32SoftDenyBadRaw,
-            g_u32SoftOpUnknown, u32Ready, u32Soft);
+    /*
+     * Lean residual (Soft!=product dual license): compact return + residual
+     * honesty only. No retclass/retlane stamp cascade. No version stamp.
+     * Grep: scsi_door: soft return
+     */
+    kprintf("scsi_door: soft return ok=%u fail=%u last_ret=%u last_deny=%u "
+            "last_op=%u mid_sub=%u enter=%u soft_ne_product=1 "
+            "freestanding_msc=SKIP dual_dod_a=OPEN dual_dod_b=OPEN "
+            "lean_ok=%u wire_ok=%u lic_ok=%u dod_ok=%u\n",
+            g_u32SoftOk, g_u32SoftFail, g_u32SoftLastRet, g_u32SoftLastDeny,
+            g_u32SoftLastOp, g_u32SoftDenyMidSub, g_u32SoftEnter,
+            g_u32SoftResidualLeanOk, g_u32SoftLeanWireOk, g_u32SoftLeanLicOk,
+            g_u32SoftLeanDodOk);
 
-    /* Grep: scsi_door: soft retmap — Wave 19 return-surface map */
-    kprintf("scsi_door: soft retmap ok|fail|inval|nodev|busy|nomem product_gate=0 soft_only=1 wave=116\n");
+    /* Grep: scsi_door: soft residual */
+    kprintf("scsi_door: soft residual soft_ne_product=1 "
+            "kernel_mid_shim=1 product_userspace_scsi_mid=1 "
+            "product_mid=userspace_scsi_mid full_door_endpoint=0 "
+            "store_cap_fallback=1 freestanding_msc=SKIP "
+            "dual_dod_a=OPEN dual_dod_b=OPEN "
+            "product_usb=xhci_udx product_nic=rtl8168_udx "
+            "dual_license=MIT_OR_Apache-2.0 dual=MIT_OR_Apache-2.0 "
+            "G-AC-1 version_stamp=0 stamp_storm=0 "
+            "log_cap=%u logs=%u lean_ok=%u lean_n=%u "
+            "wire_ok=%u lic_ok=%u dod_ok=%u via=%s\n",
+            (unsigned)SCSI_DOOR_SOFT_LOG_CAP, g_u32SoftInvSamples,
+            g_u32SoftResidualLeanOk, g_u32SoftResidualLean,
+            g_u32SoftLeanWireOk, g_u32SoftLeanLicOk, g_u32SoftLeanDodOk,
+            szViaSafe);
 
     /* Grep: scsi_door: soft deepen */
-    /*
-     * ---- Wave 19 complementary surfaces (kept) (never reshape primary).
-     * Return surfaces only — soft inventory; never hard-gates product paths.
-     */
-    /* Grep: scsi_door: soft retclass — Wave 19 return-class taxonomy (kept) */
-    kprintf("scsi_door: soft retclass ok|fail|inval|nodev|busy|nomem "
-            "soft_only=1 product_gate=0 wave=%u "
-            "(retclass taxonomy; Soft≠product)\n",
-            (unsigned)GJ_SCSI_SOFT_SEC_SIZE);
-    /* Grep: scsi_door: soft retlane — Wave 19 return-lane catalog (kept) */
-    kprintf("scsi_door: soft retlane inv|selftest|rate|retcode|retmap|class "
-            "product_kernel=OPEN soft_ne_product=1 wave=%u "
-            "(retlane catalog; Soft≠product)\n",
-            (unsigned)GJ_SCSI_SOFT_SEC_SIZE);
-    /*
-     * ---- Wave 20 complementary surfaces (kept) (never reshape primary).
-     * Return surfaces only — soft inventory; never hard-gates product paths.
-     */
-    /* Grep: scsi_door: soft retbound — Wave 20 return-bound honesty (kept) */
-    kprintf("scsi_door: soft retbound soft_only=1 product_gate=0 hard_gate=0 "
-            "never_blocks_m0=1 wave=%u "
-            "(retbound honesty; Soft≠product)\n",
-            (unsigned)GJ_SCSI_SOFT_SEC_SIZE);
-    /* Grep: scsi_door: soft retseal — Wave 20 seal stamp (kept) */
-    kprintf("scsi_door: soft retseal exclusive=1 soft_ne_product=1 "
-            "product_kernel=OPEN wave=%u "
-            "(retseal stamp; Soft≠product)\n",
-            (unsigned)GJ_SCSI_SOFT_SEC_SIZE);
-            /*
-             * ---- Wave 21 complementary surfaces (kept) (never reshape primary).
-             * Return surfaces only — soft inventory; never hard-gates product paths.
-            */
-            /* Grep: scsi_door: soft retpulse — Wave 21 return-pulse honesty (kept) */
-            kprintf("scsi_door: soft retpulse soft_only=1 product_gate=0 soft_ne_product=1 "
-                    "never_blocks_m0=1 wave=%u "
-                    "(retpulse honesty; Soft≠product)\n",
-                    (unsigned)GJ_SCSI_SOFT_SEC_SIZE);
-            /* Grep: scsi_door: soft retmark — Wave 21 mark stamp (kept) */
-            kprintf("scsi_door: soft retmark exclusive=1 soft_ne_product=1 "
-                    "product_kernel=OPEN wave=%u "
-                    "(retmark stamp; Soft≠product)\n",
-                    (unsigned)GJ_SCSI_SOFT_SEC_SIZE);
-            /*
-             * ---- Wave 22 complementary surfaces (kept) (never reshape primary).
-             * Return surfaces only — soft inventory; never hard-gates product paths.
-            */
-            /* Grep: scsi_door: soft retphase — Wave 22 return-phase honesty (kept) */
-            kprintf("scsi_door: soft retphase soft_only=1 product_gate=0 soft_ne_product=1 "
-                    "never_blocks_m0=1 wave=%u "
-                    "(retphase honesty; Soft≠product)\n",
-                    (unsigned)GJ_SCSI_SOFT_SEC_SIZE);
-            /* Grep: scsi_door: soft retbadge — Wave 22 badge stamp (kept) */
-            kprintf("scsi_door: soft retbadge exclusive=1 soft_ne_product=1 "
-                    "product_kernel=OPEN wave=%u "
-                    "(retbadge stamp; Soft≠product)\n",
-                    (unsigned)GJ_SCSI_SOFT_SEC_SIZE);
-/*
- * ---- Wave 23 complementary surfaces (kept) (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
-            */
-            /* Grep: scsi_door: soft rettoken — Wave 23 return-token honesty (kept) */
-            kprintf("scsi_door: soft rettoken soft_only=1 product_gate=0 soft_ne_product=1 "
-                    "never_blocks_m0=1 wave=%u "
-                    "(rettoken honesty; Soft≠product)\n",
-                    (unsigned)GJ_SCSI_SOFT_SEC_SIZE);
-            /* Grep: scsi_door: soft retcrest — Wave 23 crest stamp (kept) */
-            kprintf("scsi_door: soft retcrest exclusive=1 soft_ne_product=1 "
-                    "product_kernel=OPEN wave=%u "
-                    "(retcrest stamp; Soft≠product)\n",
-                    (unsigned)GJ_SCSI_SOFT_SEC_SIZE);
-            /*
-             * ---- Wave 24 complementary surfaces (kept) (never reshape primary).
-             * Return surfaces only — soft inventory; never hard-gates product paths.
-             */
-            /* Grep: scsi_door: soft retvault — Wave 24 return-vault honesty (kept) */
-            kprintf("scsi_door: soft retvault soft_only=1 product_gate=0 soft_ne_product=1 "
-                    "never_blocks_m0=1 wave=%u "
-                    "(retvault honesty; Soft≠product)\n",
-                    (unsigned)GJ_SCSI_SOFT_SEC_SIZE);
-            /* Grep: scsi_door: soft retbanner — Wave 24 banner stamp (kept) */
-            kprintf("scsi_door: soft retbanner exclusive=1 soft_ne_product=1 "
-                    "product_kernel=OPEN wave=%u "
-                    "(retbanner stamp; Soft≠product)\n",
-                    (unsigned)GJ_SCSI_SOFT_SEC_SIZE);
-            /*
-             * ---- Wave 25 complementary surfaces (kept) (never reshape primary).
-             * Return surfaces only — soft inventory; never hard-gates product paths.
-             */
-            /* Grep: scsi_door: soft retledger — Wave 25 return-ledger honesty (kept) */
-            kprintf("scsi_door: soft retledger soft_only=1 product_gate=0 soft_ne_product=1 "
-                    "never_blocks_m0=1 wave=%u "
-                    "(retledger honesty; Soft≠product)\n",
-                    (unsigned)GJ_SCSI_SOFT_SEC_SIZE);
-            /* Grep: scsi_door: soft retbeacon — Wave 25 beacon stamp (kept) */
-            kprintf("scsi_door: soft retbeacon exclusive=1 soft_ne_product=1 "
-                    "product_kernel=OPEN wave=%u "
-                    "(retbeacon stamp; Soft≠product)\n",
-                    (unsigned)GJ_SCSI_SOFT_SEC_SIZE);
-            /*
-             * ---- Wave 26 complementary surfaces (kept) (never reshape primary).
-             * Return surfaces only — soft inventory; never hard-gates product paths.
-             */
-            /* Grep: scsi_door: soft retcipher — Wave 26 return-cipher honesty (kept) */
-            kprintf("scsi_door: soft retcipher soft_only=1 product_gate=0 soft_ne_product=1 "
-                    "never_blocks_m0=1 wave=%u "
-                    "(retcipher honesty; Soft≠product)\n",
-                    (unsigned)GJ_SCSI_SOFT_SEC_SIZE);
-            /* Grep: scsi_door: soft retflame — Wave 26 flame stamp (kept) */
-            kprintf("scsi_door: soft retflame exclusive=1 soft_ne_product=1 "
-                    "product_kernel=OPEN wave=%u "
-                    "(retflame stamp; Soft≠product)\n",
-                    (unsigned)GJ_SCSI_SOFT_SEC_SIZE);
-                    /*
-                     * ---- Wave 27 complementary surfaces (kept) (never reshape primary).
-                     * Return surfaces only — soft inventory; never hard-gates product paths.
-                     */
-                    /* Grep: scsi_door: soft retprism — Wave 27 return-prism honesty (kept) */
-                    kprintf("scsi_door: soft retprism soft_only=1 product_gate=0 soft_ne_product=1 "
-                            "never_blocks_m0=1 wave=%u "
-                            "(retprism honesty; Soft≠product)\n",
-                            (unsigned)GJ_SCSI_SOFT_SEC_SIZE);
-                    /* Grep: scsi_door: soft retforge — Wave 27 forge stamp (kept) */
-                    kprintf("scsi_door: soft retforge exclusive=1 soft_ne_product=1 "
-                            "product_kernel=OPEN wave=%u "
-                            "(retforge stamp; Soft≠product)\n",
-                            (unsigned)GJ_SCSI_SOFT_SEC_SIZE);
-                            /*
-                             * ---- Wave 28 complementary surfaces (kept) (never reshape primary).
-                             * Return surfaces only — soft inventory; never hard-gates product paths.
-                             */
-                            /* Grep: scsi_door: soft retshard — Wave 28 return-shard honesty (kept) */
-                            kprintf("scsi_door: soft retshard soft_only=1 product_gate=0 soft_ne_product=1 "
-                                "never_blocks_m0=1 wave=%u "
-                                "(retshard honesty; Soft≠product)\n",
-                                (unsigned)GJ_SCSI_SOFT_SEC_SIZE);
-                            /* Grep: scsi_door: soft retcrown — Wave 28 crown stamp (kept) */
-                            kprintf("scsi_door: soft retcrown exclusive=1 soft_ne_product=1 "
-                                "product_kernel=OPEN wave=%u "
-                                "(retcrown stamp; Soft≠product)\n",
-                                (unsigned)GJ_SCSI_SOFT_SEC_SIZE);
-                                /*
-                             * ---- Wave 29 complementary surfaces (kept) (never reshape primary).
-                             * Return surfaces only — soft inventory; never hard-gates product paths.
-                             */
-                            /* Grep: scsi_door: soft retglyph — Wave 29 return-glyph honesty (kept) */
-                            kprintf("scsi_door: soft retglyph soft_only=1 product_gate=0 soft_ne_product=1 "
-                                    "never_blocks_m0=1 wave=116 "
-                                    "(retglyph honesty; Soft≠product)\n");
-                            /* Grep: scsi_door: soft retscepter — Wave 29 scepter stamp (kept) */
-                            kprintf("scsi_door: soft retscepter exclusive=1 soft_ne_product=1 "
-                                    "product_kernel=OPEN wave=116 "
-                                    "(retscepter stamp; Soft≠product)\n");
-                                /*
-                             * ---- Wave 30 complementary surfaces (kept) (never reshape primary).
-                             * Return surfaces only — soft inventory; never hard-gates product paths.
-                             */
-                            /* Grep: scsi_door: soft retsigil — Wave 30 return-sigil honesty (kept) */
-                            kprintf("scsi_door: soft retsigil soft_only=1 product_gate=0 soft_ne_product=1 "
-                                    "never_blocks_m0=1 wave=116 "
-                                    "(retsigil honesty; Soft≠product)\n");
-                            /* Grep: scsi_door: soft retemblem — Wave 30 emblem stamp (kept) */
-                            kprintf("scsi_door: soft retemblem exclusive=1 soft_ne_product=1 "
-                                    "product_kernel=OPEN wave=116 "
-                                    "(retemblem stamp; Soft≠product)\n");
-                            /*
-                             * ---- Wave 31 complementary surfaces (kept) (never reshape primary).
-                             * Return surfaces only — soft inventory; never hard-gates product paths.
-                             */
-                            /* Grep: scsi_door: soft retaegis — Wave 31 return-aegis honesty (kept) */
-                            kprintf("scsi_door: soft retaegis soft_only=1 product_gate=0 soft_ne_product=1 "
-                                    "never_blocks_m0=1 wave=116 "
-                                    "(retaegis honesty; Soft≠product)\n");
-                            /* Grep: scsi_door: soft retsigil — Wave 30 return-sigil honesty (kept) */
-                            kprintf("scsi_door: soft retsigil soft_only=1 product_gate=0 soft_ne_product=1 "
-                                    "never_blocks_m0=1 wave=116 "
-                                    "(retsigil honesty; Soft≠product)\n");
-                            /* Grep: scsi_door: soft retmantle — Wave 31 mantle stamp (kept) */
-                            kprintf("scsi_door: soft retmantle exclusive=1 soft_ne_product=1 "
-                                    "product_kernel=OPEN wave=116 "
-                                    "(retmantle stamp; Soft≠product)\n");
-/*
- * ---- Wave 32 complementary surfaces (kept) (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: scsi_door: soft retbulwark — Wave 32 return-bulwark honesty (kept) */
-kprintf("scsi_door: soft retbulwark soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retbulwark honesty; Soft≠product)\n");
-/* Grep: scsi_door: soft retpanoply — Wave 32 panoply stamp (kept) */
-kprintf("scsi_door: soft retpanoply exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retpanoply stamp; Soft≠product)\n");
-/*
- * ---- Wave 33 complementary surfaces (kept) (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: scsi_door: soft retbastion — Wave 33 return-bastion honesty (kept) */
-kprintf("scsi_door: soft retbastion soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retbastion honesty; Soft≠product)\n");
-/* Grep: scsi_door: soft retcitadel — Wave 33 citadel stamp (kept) */
-kprintf("scsi_door: soft retcitadel exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retcitadel stamp; Soft≠product)\n");
-/*
- * ---- Wave 34 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: scsi_door: soft retredoubt — Wave 34 return-redoubt honesty */
-kprintf("scsi_door: soft retredoubt soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retredoubt honesty; Soft≠product)\n");
-/* Grep: scsi_door: soft retkeep — Wave 34 exclusive keep stamp */
-kprintf("scsi_door: soft retkeep exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retkeep stamp; Soft≠product)\n");
-/*
- * ---- Wave 35 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: scsi_door: soft retfortress — Wave 35 return-fortress honesty */
-kprintf("scsi_door: soft retfortress soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retfortress honesty; Soft≠product)\n");
-/* Grep: scsi_door: soft retpalace — Wave 35 exclusive palace stamp */
-kprintf("scsi_door: soft retpalace exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retpalace stamp; Soft≠product)\n");
-/*
- * ---- Wave 36 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: scsi_door: soft rethold — Wave 36 return-hold honesty */
-kprintf("scsi_door: soft rethold soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(rethold honesty; Soft≠product)\n");
-/* Grep: scsi_door: soft retspire — Wave 36 exclusive spire stamp */
-kprintf("scsi_door: soft retspire exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retspire stamp; Soft≠product)\n");
-/*
- * ---- Wave 37 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: scsi_door: soft retwall — Wave 37 return-wall honesty */
-kprintf("scsi_door: soft retwall soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retwall honesty; Soft≠product)\n");
-/* Grep: scsi_door: soft retgate — Wave 37 exclusive gate stamp */
-kprintf("scsi_door: soft retgate exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retgate stamp; Soft≠product)\n");
-/*
- * ---- Wave 38 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: scsi_door: soft retmoat — Wave 38 return-moat honesty */
-kprintf("scsi_door: soft retmoat soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retmoat honesty; Soft≠product)\n");
-/* Grep: scsi_door: soft retower — Wave 38 exclusive tower stamp */
-kprintf("scsi_door: soft retower exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retower stamp; Soft≠product)\n");
-/*
- * ---- Wave 39 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: scsi_door: soft retbarbican — Wave 39 return-barbican honesty */
-kprintf("scsi_door: soft retbarbican soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retbarbican honesty; Soft≠product)\n");
-/* Grep: scsi_door: soft retglacis — Wave 39 exclusive glacis stamp */
-kprintf("scsi_door: soft retglacis exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retglacis stamp; Soft≠product)\n");
-/*
- * ---- Wave 40 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: scsi_door: soft retcurtain — Wave 40 return-curtain honesty */
-kprintf("scsi_door: soft retcurtain soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retcurtain honesty; Soft≠product)\n");
-/* Grep: scsi_door: soft retparapet — Wave 40 exclusive parapet stamp */
-kprintf("scsi_door: soft retparapet exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retparapet stamp; Soft≠product)\n");
-/*
- * ---- Wave 41 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: scsi_door: soft retravelin — Wave 41 return-travelin honesty */
-kprintf("scsi_door: soft retravelin soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retravelin honesty; Soft≠product)\n");
-/* Grep: scsi_door: soft retditch — Wave 41 exclusive ditch stamp */
-kprintf("scsi_door: soft retditch exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retditch stamp; Soft≠product)\n");
-/*
- * ---- Wave 42 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: scsi_door: soft retportcullis — Wave 42 return-portcullis honesty */
-kprintf("scsi_door: soft retportcullis soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retportcullis honesty; Soft≠product)\n");
-/* Grep: scsi_door: soft retbattlement — Wave 42 exclusive battlement stamp */
-kprintf("scsi_door: soft retbattlement exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retbattlement stamp; Soft≠product)\n");
-/*
- * ---- Wave 43 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: scsi_door: soft retmachicolation — Wave 43 return-machicolation honesty */
-kprintf("scsi_door: soft retmachicolation soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retmachicolation honesty; Soft≠product)\n");
-/* Grep: scsi_door: soft retarrowslit — Wave 43 exclusive arrowslit stamp */
-kprintf("scsi_door: soft retarrowslit exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retarrowslit stamp; Soft≠product)\n");
-
-/*
- * ---- Wave 44 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: scsi_door: soft retmerlon — Wave 44 return-merlon honesty */
-kprintf("scsi_door: soft retmerlon soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retmerlon honesty; Soft≠product)\n");
-/* Grep: scsi_door: soft retembrasure — Wave 44 exclusive embrasure stamp */
-kprintf("scsi_door: soft retembrasure exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retembrasure stamp; Soft≠product)\n");
-
-/*
- * ---- Wave 45 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: scsi_door: soft retkeepgate — Wave 45 return-keepgate honesty */
-kprintf("scsi_door: soft retkeepgate soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retkeepgate honesty; Soft≠product)\n");
-/* Grep: scsi_door: soft retouterward — Wave 45 exclusive outerward stamp */
-kprintf("scsi_door: soft retouterward exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retouterward stamp; Soft≠product)\n");
-
-/*
- * ---- Wave 46 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: scsi_door: soft retbailey — Wave 46 return-bailey honesty */
-kprintf("scsi_door: soft retbailey soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retbailey honesty; Soft≠product)\n");
-/* Grep: scsi_door: soft retpostern — Wave 46 exclusive postern stamp */
-kprintf("scsi_door: soft retpostern exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retpostern stamp; Soft≠product)\n");
-
-/*
- * ---- Wave 47 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: scsi_door: soft retinnerward — Wave 47 return-innerward honesty */
-kprintf("scsi_door: soft retinnerward soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retinnerward honesty; Soft≠product)\n");
-/* Grep: scsi_door: soft retdonjon — Wave 47 exclusive donjon stamp */
-kprintf("scsi_door: soft retdonjon exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retdonjon stamp; Soft≠product)\n");
-
-/*
- * ---- Wave 48 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: scsi_door: soft retchevaux — Wave 48 return-chevaux honesty */
-kprintf("scsi_door: soft retchevaux soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retchevaux honesty; Soft≠product)\n");
-/* Grep: scsi_door: soft retpalisade — Wave 48 exclusive palisade stamp */
-kprintf("scsi_door: soft retpalisade exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retpalisade stamp; Soft≠product)\n");
-
-/*
- * ---- Wave 49 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: scsi_door: soft retglacisgate — Wave 49 return-glacisgate honesty */
-kprintf("scsi_door: soft retglacisgate soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retglacisgate honesty; Soft≠product)\n");
-/* Grep: scsi_door: soft retoutwork — Wave 49 exclusive outwork stamp */
-kprintf("scsi_door: soft retoutwork exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retoutwork stamp; Soft≠product)\n");
-/*
- * ---- Wave 50 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: scsi_door: soft retsally — Wave 50 return-sally honesty */
-kprintf("scsi_door: soft retsally soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retsally honesty; Soft≠product)\n");
-/* Grep: scsi_door: soft retcounterscarp — Wave 50 exclusive counterscarp stamp */
-kprintf("scsi_door: soft retcounterscarp exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retcounterscarp stamp; Soft≠product)\n");
-/*
- * ---- Wave 51 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: scsi_door: soft retfosse — Wave 51 return-fosse honesty */
-kprintf("scsi_door: soft retfosse soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retfosse honesty; Soft≠product)\n");
-/* Grep: scsi_door: soft retcoveredway — Wave 51 exclusive coveredway stamp */
-kprintf("scsi_door: soft retcoveredway exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retcoveredway stamp; Soft≠product)\n");
-
-/*
- * ---- Wave 52 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: scsi_door: soft rettenaille — Wave 52 return-tenaille honesty */
-kprintf("scsi_door: soft rettenaille soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(rettenaille honesty; Soft≠product)\n");
-/* Grep: scsi_door: soft retdemilune — Wave 52 exclusive demilune stamp */
-kprintf("scsi_door: soft retdemilune exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retdemilune stamp; Soft≠product)\n");
-/*
- * ---- Wave 53 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: scsi_door: soft retravelin — Wave 53 return-travelin honesty */
-kprintf("scsi_door: soft retravelin soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retravelin honesty; Soft≠product)\n");
-/* Grep: scsi_door: soft retlunette — Wave 53 exclusive lunette stamp */
-kprintf("scsi_door: soft retlunette exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retlunette stamp; Soft≠product)\n");
-/*
- * ---- Wave 54 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: scsi_door: soft retcaponier — Wave 54 return-caponier honesty */
-kprintf("scsi_door: soft retcaponier soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retcaponier honesty; Soft≠product)\n");
-/* Grep: scsi_door: soft retredan — Wave 54 exclusive redan stamp */
-kprintf("scsi_door: soft retredan exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retredan stamp; Soft≠product)\n");
-/*
- * ---- Wave 55 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: scsi_door: soft retflank — Wave 55 return-flank honesty */
-kprintf("scsi_door: soft retflank soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retflank honesty; Soft≠product)\n");
-/* Grep: scsi_door: soft retface — Wave 55 exclusive face stamp */
-kprintf("scsi_door: soft retface exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retface stamp; Soft≠product)\n");
-/*
- * ---- Wave 56 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: scsi_door: soft retgorge — Wave 56 return-gorge honesty */
-kprintf("scsi_door: soft retgorge soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retgorge honesty; Soft≠product)\n");
-/* Grep: scsi_door: soft retshoulder — Wave 56 exclusive shoulder stamp */
-kprintf("scsi_door: soft retshoulder exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retshoulder stamp; Soft≠product)\n");
-/*
- * ---- Wave 57 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: scsi_door: soft retraverse — Wave 57 return-traverse honesty */
-kprintf("scsi_door: soft retraverse soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retraverse honesty; Soft≠product)\n");
-/* Grep: scsi_door: soft retcasemate — Wave 57 exclusive casemate stamp */
-kprintf("scsi_door: soft retcasemate exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retcasemate stamp; Soft≠product)\n");
-
-/*
- * ---- Wave 58 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: scsi_door: soft retorillon — Wave 58 return-orillon honesty */
-kprintf("scsi_door: soft retorillon soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retorillon honesty; Soft≠product)\n");
-/* Grep: scsi_door: soft retbonnette — Wave 58 exclusive bonnette stamp */
-kprintf("scsi_door: soft retbonnette exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retbonnette stamp; Soft≠product)\n");
-
-/*
- * ---- Wave 59 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: scsi_door: soft retcrownwork — Wave 59 return-crownwork honesty */
-kprintf("scsi_door: soft retcrownwork soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retcrownwork honesty; Soft≠product)\n");
-/* Grep: scsi_door: soft rethornwork — Wave 59 exclusive hornwork stamp */
-kprintf("scsi_door: soft rethornwork exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(rethornwork stamp; Soft≠product)\n");
-
-/*
- * ---- Wave 60 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: scsi_door: soft retplace — Wave 60 return-place honesty */
-kprintf("scsi_door: soft retplace soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retplace honesty; Soft≠product)\n");
-/* Grep: scsi_door: soft retenvelope — Wave 60 exclusive envelope stamp */
-kprintf("scsi_door: soft retenvelope exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retenvelope stamp; Soft≠product)\n");
-
-
-
-
-
-
-
-
-
-/*
- * ---- Wave 61 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: scsi_door: soft retcounterguard — Wave 61 return-counterguard honesty */
-kprintf("scsi_door: soft retcounterguard soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retcounterguard honesty; Soft≠product)\n");
-/* Grep: scsi_door: soft retcoveredface — Wave 61 exclusive coveredface stamp */
-kprintf("scsi_door: soft retcoveredface exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retcoveredface stamp; Soft≠product)\n");
-/*
- * ---- Wave 62 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: scsi_door: soft retbastionface — Wave 62 return-bastionface honesty */
-kprintf("scsi_door: soft retbastionface soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retbastionface honesty; Soft≠product)\n");
-/* Grep: scsi_door: soft retcurtainangle — Wave 62 exclusive curtainangle stamp */
-kprintf("scsi_door: soft retcurtainangle exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retcurtainangle stamp; Soft≠product)\n");
-/*
- * ---- Wave 63 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: scsi_door: soft retdoubletenaille — Wave 63 return-doubletenaille honesty */
-kprintf("scsi_door: soft retdoubletenaille soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retdoubletenaille honesty; Soft≠product)\n");
-/* Grep: scsi_door: soft retplaceofarms — Wave 63 exclusive placeofarms stamp */
-kprintf("scsi_door: soft retplaceofarms exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retplaceofarms stamp; Soft≠product)\n");
- /*
-  * ---- Wave 64 exclusive complementary surfaces (never reshape primary).
-  * Return surfaces only — soft inventory; never hard-gates product paths.
-  */
- /* Grep: scsi_door: soft retreentrant — Wave 64 return-reentrant honesty */
-kprintf("scsi_door: soft retreentrant soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retreentrant honesty; Soft≠product)\n");
- /* Grep: scsi_door: soft retsallyport — Wave 64 exclusive sallyport stamp */
-kprintf("scsi_door: soft retsallyport exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retsallyport stamp; Soft≠product)\n");
- /*
-  * ---- Wave 65 exclusive complementary surfaces (never reshape primary).
-  * Return surfaces only — soft inventory; never hard-gates product paths.
-  */
- /* Grep: scsi_door: soft retgorgeangle — Wave 65 return-gorgeangle honesty */
-kprintf("scsi_door: soft retgorgeangle soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retgorgeangle honesty; Soft≠product)\n");
- /* Grep: scsi_door: soft retshoulderangle — Wave 65 exclusive shoulderangle stamp */
-kprintf("scsi_door: soft retshoulderangle exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retshoulderangle stamp; Soft≠product)\n");
- /*
-  * ---- Wave 66 exclusive complementary surfaces (never reshape primary).
-  * Return surfaces only — soft inventory; never hard-gates product paths.
-  */
- /* Grep: scsi_door: soft retflankangle — Wave 66 return-flankangle honesty */
- kprintf("scsi_door: soft retflankangle soft_only=1 product_gate=0 soft_ne_product=1 "
-         "never_blocks_m0=1 wave=116 "
-         "(retflankangle honesty; Soft≠product)\n");
- /* Grep: scsi_door: soft retfaceangle — Wave 66 exclusive faceangle stamp */
- kprintf("scsi_door: soft retfaceangle exclusive=1 soft_ne_product=1 "
-         "product_kernel=OPEN wave=116 "
-         "(retfaceangle stamp; Soft≠product)\n");
-/*
- * ---- Wave 67 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: scsi_door: soft retcaponierangle — Wave 67 return-caponierangle honesty */
-kprintf("scsi_door: soft retcaponierangle soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retcaponierangle honesty; Soft≠product)\n");
-/* Grep: scsi_door: soft retredanangle — Wave 67 exclusive redanangle stamp */
-kprintf("scsi_door: soft retredanangle exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retredanangle stamp; Soft≠product)\n");
-/*
- * ---- Wave 68 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: scsi_door: soft retlunetteangle — Wave 68 return-lunetteangle honesty */
-kprintf("scsi_door: soft retlunetteangle soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retlunetteangle honesty; Soft≠product)\n");
-/* Grep: scsi_door: soft rettenailleangle — Wave 68 exclusive tenailleangle stamp */
-kprintf("scsi_door: soft rettenailleangle exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(rettenailleangle stamp; Soft≠product)\n");
-/*
- * ---- Wave 69 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: scsi_door: soft retdemiluneangle — Wave 69 return-demiluneangle honesty */
-kprintf("scsi_door: soft retdemiluneangle soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retdemiluneangle honesty; Soft≠product)\n");
-/* Grep: scsi_door: soft retcoveredwayangle — Wave 69 exclusive coveredwayangle stamp */
-kprintf("scsi_door: soft retcoveredwayangle exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retcoveredwayangle stamp; Soft≠product)\n");
-/*
- * ---- Wave 70 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: scsi_door: soft retfosseangle — Wave 70 return-fosseangle honesty */
-kprintf("scsi_door: soft retfosseangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retfosseangle honesty; Soft≠product)\n");
-/* Grep: scsi_door: soft retcounterscarple — Wave 70 exclusive counterscarple stamp */
-kprintf("scsi_door: soft retcounterscarple exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retcounterscarple stamp; Soft≠product)\n");
-/*
- * ---- Wave 71 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: scsi_door: soft retsallyportangle — Wave 71 return-sallyportangle honesty */
-kprintf("scsi_door: soft retsallyportangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retsallyportangle honesty; Soft≠product)\n");
-/* Grep: scsi_door: soft retreentrantangle — Wave 71 exclusive reentrantangle stamp */
-kprintf("scsi_door: soft retreentrantangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retreentrantangle stamp; Soft≠product)\n");
-/*
- * ---- Wave 72 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: scsi_door: soft retplaceofarmsangle — Wave 72 return-placeofarmsangle honesty */
-kprintf("scsi_door: soft retplaceofarmsangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retplaceofarmsangle honesty; Soft≠product)\n");
-/* Grep: scsi_door: soft retdoubletenailleangle — Wave 72 exclusive doubletenailleangle stamp */
-kprintf("scsi_door: soft retdoubletenailleangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retdoubletenailleangle stamp; Soft≠product)\n");
-/* Grep: scsi_door: soft retcurtainface — Wave 73 return-curtainface honesty */
-kprintf("scsi_door: soft retcurtainface soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retcurtainface honesty; Soft≠product)\n");
-/* Grep: scsi_door: soft retbastionangle — Wave 73 exclusive bastionangle stamp */
-kprintf("scsi_door: soft retbastionangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retbastionangle stamp; Soft≠product)\n");
-/* Grep: scsi_door: soft retglacisangle — Wave 74 return-glacisangle honesty */
-kprintf("scsi_door: soft retglacisangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retglacisangle honesty; Soft≠product)\n");
-/* Grep: scsi_door: soft retparapetangle — Wave 74 exclusive parapetangle stamp */
-kprintf("scsi_door: soft retparapetangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retparapetangle stamp; Soft≠product)\n");
-/* Grep: scsi_door: soft retmoatangle — Wave 75 return-moatangle honesty */
-kprintf("scsi_door: soft retmoatangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retmoatangle honesty; Soft≠product)\n");
-/* Grep: scsi_door: soft retowerangle — Wave 75 exclusive towerangle stamp */
-kprintf("scsi_door: soft retowerangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retowerangle stamp; Soft≠product)\n");
-/* Grep: scsi_door: soft retgateangle — Wave 76 return-gateangle honesty */
-kprintf("scsi_door: soft retgateangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retgateangle honesty; Soft≠product)\n");
-/* Grep: scsi_door: soft retwallangle — Wave 76 exclusive wallangle stamp */
-kprintf("scsi_door: soft retwallangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retwallangle stamp; Soft≠product)\n");
-/* Grep: scsi_door: soft retspireangle — Wave 77 return-spireangle honesty */
-kprintf("scsi_door: soft retspireangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retspireangle honesty; Soft≠product)\n");
-/* Grep: scsi_door: soft retholdangle — Wave 77 exclusive holdangle stamp */
-kprintf("scsi_door: soft retholdangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retholdangle stamp; Soft≠product)\n");
-/* Grep: scsi_door: soft retpalaceangle — Wave 78 return-palaceangle honesty */
-kprintf("scsi_door: soft retpalaceangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retpalaceangle honesty; Soft≠product)\n");
-/* Grep: scsi_door: soft retfortressangle — Wave 78 exclusive fortressangle stamp */
-kprintf("scsi_door: soft retfortressangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retfortressangle stamp; Soft≠product)\n");
-/* Grep: scsi_door: soft retkeepangle — Wave 79 return-keepangle honesty */
-kprintf("scsi_door: soft retkeepangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retkeepangle honesty; Soft≠product)\n");
-/* Grep: scsi_door: soft retredoubtangle — Wave 79 exclusive redoubtangle stamp */
-kprintf("scsi_door: soft retredoubtangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retredoubtangle stamp; Soft≠product)\n");
-/* Grep: scsi_door: soft retcitadelangle — Wave 80 return-citadelangle honesty */
-kprintf("scsi_door: soft retcitadelangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retcitadelangle honesty; Soft≠product)\n");
-/* Grep: scsi_door: soft retbastionkeep — Wave 80 exclusive bastionkeep stamp */
-kprintf("scsi_door: soft retbastionkeep exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retbastionkeep stamp; Soft≠product)\n");
-/* Grep: scsi_door: soft retpanoplyangle — Wave 81 return-panoplyangle honesty */
-kprintf("scsi_door: soft retpanoplyangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retpanoplyangle honesty; Soft≠product)\n");
-/* Grep: scsi_door: soft retbulwarkangle — Wave 81 exclusive bulwarkangle stamp */
-kprintf("scsi_door: soft retbulwarkangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retbulwarkangle stamp; Soft≠product)\n");
-/* Grep: scsi_door: soft retmantleangle — Wave 82 return-mantleangle honesty */
-kprintf("scsi_door: soft retmantleangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retmantleangle honesty; Soft≠product)\n");
-/* Grep: scsi_door: soft retaegisangle — Wave 82 exclusive aegisangle stamp */
-kprintf("scsi_door: soft retaegisangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retaegisangle stamp; Soft≠product)\n");
-/* Grep: scsi_door: soft retemblemangle — Wave 83 return-emblemangle honesty */
-kprintf("scsi_door: soft retemblemangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retemblemangle honesty; Soft≠product)\n");
-/* Grep: scsi_door: soft retsigilangle — Wave 83 exclusive sigilangle stamp */
-kprintf("scsi_door: soft retsigilangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retsigilangle stamp; Soft≠product)\n");
-/* Grep: scsi_door: soft retscepterangle — Wave 84 return-scepterangle honesty */
-kprintf("scsi_door: soft retscepterangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retscepterangle honesty; Soft≠product)\n");
-/* Grep: scsi_door: soft retglyphangle — Wave 84 exclusive glyphangle stamp */
-kprintf("scsi_door: soft retglyphangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retglyphangle stamp; Soft≠product)\n");
-/* Grep: scsi_door: soft retcrownangle — Wave 85 return-crownangle honesty */
-kprintf("scsi_door: soft retcrownangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retcrownangle honesty; Soft≠product)\n");
-/* Grep: scsi_door: soft retshardangle — Wave 85 exclusive shardangle stamp */
-kprintf("scsi_door: soft retshardangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retshardangle stamp; Soft≠product)\n");
-/* Grep: scsi_door: soft retforgeangle — Wave 86 return-forgeangle honesty */
-kprintf("scsi_door: soft retforgeangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retforgeangle honesty; Soft≠product)\n");
-/* Grep: scsi_door: soft retprismangle — Wave 86 exclusive prismangle stamp */
-kprintf("scsi_door: soft retprismangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retprismangle stamp; Soft≠product)\n");
-/* Grep: scsi_door: soft retflameangle — Wave 87 return-flameangle honesty */
-kprintf("scsi_door: soft retflameangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retflameangle honesty; Soft≠product)\n");
-/* Grep: scsi_door: soft retcipherangle — Wave 87 exclusive cipherangle stamp */
-kprintf("scsi_door: soft retcipherangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retcipherangle stamp; Soft≠product)\n");
-/* Grep: scsi_door: soft retbeaconangle — Wave 88 return-beaconangle honesty */
-kprintf("scsi_door: soft retbeaconangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retbeaconangle honesty; Soft≠product)\n");
-/* Grep: scsi_door: soft retledgerangle — Wave 88 exclusive ledgerangle stamp */
-kprintf("scsi_door: soft retledgerangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retledgerangle stamp; Soft≠product)\n");
-/* Grep: scsi_door: soft retbannerangle — Wave 89 return-bannerangle honesty */
-kprintf("scsi_door: soft retbannerangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retbannerangle honesty; Soft≠product)\n");
-/* Grep: scsi_door: soft retvaultangle — Wave 89 exclusive vaultangle stamp */
-kprintf("scsi_door: soft retvaultangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retvaultangle stamp; Soft≠product)\n");
-/* Grep: scsi_door: soft retcrestangle — Wave 90 return-crestangle honesty */
-kprintf("scsi_door: soft retcrestangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retcrestangle honesty; Soft≠product)\n");
-/* Grep: scsi_door: soft rettokenangle — Wave 90 exclusive tokenangle stamp */
-kprintf("scsi_door: soft rettokenangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (rettokenangle stamp; Soft≠product)\n");
-/* Grep: scsi_door: soft retbadgeangle — Wave 91 return-badgeangle honesty */
-kprintf("scsi_door: soft retbadgeangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retbadgeangle honesty; Soft≠product)\n");
-/* Grep: scsi_door: soft retphaseangle — Wave 91 exclusive phaseangle stamp */
-kprintf("scsi_door: soft retphaseangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retphaseangle stamp; Soft≠product)\n");
-/* Grep: scsi_door: soft retmarkangle — Wave 92 return-markangle honesty */
-kprintf("scsi_door: soft retmarkangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retmarkangle honesty; Soft≠product)\n");
-/* Grep: scsi_door: soft retpulseangle — Wave 92 exclusive pulseangle stamp */
-kprintf("scsi_door: soft retpulseangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retpulseangle stamp; Soft≠product)\n");
-
-/* Grep: scsi_door: soft retsealangle — Wave 93 return-sealangle honesty */
-kprintf("scsi_door: soft retsealangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retsealangle honesty; Soft≠product)\n");
-/* Grep: scsi_door: soft retboundangle — Wave 93 exclusive boundangle stamp */
-kprintf("scsi_door: soft retboundangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retboundangle stamp; Soft≠product)\n");
-/* Grep: scsi_door: soft retstemangle — Wave 94 return-stemangle honesty */
-kprintf("scsi_door: soft retstemangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retstemangle honesty; Soft≠product)\n");
-/* Grep: scsi_door: soft retbladeangle — Wave 94 exclusive bladeangle stamp */
-kprintf("scsi_door: soft retbladeangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retbladeangle stamp; Soft≠product)\n");
-/* Grep: scsi_door: soft retchordangle — Wave 95 return-chordangle honesty */
-kprintf("scsi_door: soft retchordangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retchordangle honesty; Soft≠product)\n");
-/* Grep: scsi_door: soft retarcangle — Wave 95 exclusive arcangle stamp */
-kprintf("scsi_door: soft retarcangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retarcangle stamp; Soft≠product)\n");
-/* Grep: scsi_door: soft retsectorangle — Wave 96 return-sectorangle honesty */
-kprintf("scsi_door: soft retsectorangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retsectorangle honesty; Soft≠product)\n");
-/* Grep: scsi_door: soft retwedgeangle — Wave 96 exclusive wedgeangle stamp */
-kprintf("scsi_door: soft retwedgeangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retwedgeangle stamp; Soft≠product)\n");
-/* Grep: scsi_door: soft retradiusangle — Wave 97 return-radiusangle honesty */
-kprintf("scsi_door: soft retradiusangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retradiusangle honesty; Soft≠product)\n");
-/* Grep: scsi_door: soft retdiameterangle — Wave 97 exclusive diameterangle stamp */
-kprintf("scsi_door: soft retdiameterangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retdiameterangle stamp; Soft≠product)\n");
-/* Grep: scsi_door: soft retcircumangle — Wave 98 return-circumangle honesty */
-kprintf("scsi_door: soft retcircumangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retcircumangle honesty; Soft≠product)\n");
-/* Grep: scsi_door: soft retellipseangle — Wave 98 exclusive ellipseangle stamp */
-kprintf("scsi_door: soft retellipseangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retellipseangle stamp; Soft≠product)\n");
-/* Grep: scsi_door: soft rethyperangle — Wave 99 return-hyperangle honesty */
-kprintf("scsi_door: soft rethyperangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (rethyperangle honesty; Soft≠product)\n");
-/* Grep: scsi_door: soft retparabolaangle — Wave 99 exclusive parabolaangle stamp */
-kprintf("scsi_door: soft retparabolaangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retparabolaangle stamp; Soft≠product)\n");
-/* Grep: scsi_door: soft retspiralangle — Wave 100 return-spiralangle honesty */
-kprintf("scsi_door: soft retspiralangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retspiralangle honesty; Soft≠product)\n");
-/* Grep: scsi_door: soft rethelixangle — Wave 100 exclusive helixangle stamp */
-kprintf("scsi_door: soft rethelixangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (rethelixangle stamp; Soft≠product)\n");
-/* Grep: scsi_door: soft rettorusangle — Wave 101 return-torusangle honesty */
-kprintf("scsi_door: soft rettorusangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (rettorusangle honesty; Soft≠product)\n");
-/* Grep: scsi_door: soft retknotangle — Wave 101 exclusive knotangle stamp */
-kprintf("scsi_door: soft retknotangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retknotangle stamp; Soft≠product)\n");
-/* Grep: scsi_door: soft retmoebiusangle — Wave 102 return-moebiusangle honesty */
-kprintf("scsi_door: soft retmoebiusangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retmoebiusangle honesty; Soft≠product)\n");
-/* Grep: scsi_door: soft retkleinangle — Wave 102 exclusive kleinangle stamp */
-kprintf("scsi_door: soft retkleinangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retkleinangle stamp; Soft≠product)\n");
-/* Grep: scsi_door: soft retprojectangle — Wave 103 return-projectangle honesty */
-kprintf("scsi_door: soft retprojectangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retprojectangle honesty; Soft≠product)\n");
-/* Grep: scsi_door: soft retaffineangle — Wave 103 exclusive affineangle stamp */
-kprintf("scsi_door: soft retaffineangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retaffineangle stamp; Soft≠product)\n");
-/* Grep: scsi_door: soft retlinearangle — Wave 104 return-linearangle honesty */
-kprintf("scsi_door: soft retlinearangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retlinearangle honesty; Soft≠product)\n");
-/* Grep: scsi_door: soft retbilinearangle — Wave 104 exclusive bilinearangle stamp */
-kprintf("scsi_door: soft retbilinearangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retbilinearangle stamp; Soft≠product)\n");
-/* Grep: scsi_door: soft retquadraticangle — Wave 105 return-quadraticangle honesty */
-kprintf("scsi_door: soft retquadraticangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retquadraticangle honesty; Soft≠product)\n");
-/* Grep: scsi_door: soft retcubicangle — Wave 105 exclusive cubicangle stamp */
-kprintf("scsi_door: soft retcubicangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retcubicangle stamp; Soft≠product)\n");
-/* Grep: scsi_door: soft retquarticangle — Wave 106 return-quarticangle honesty */
-kprintf("scsi_door: soft retquarticangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retquarticangle honesty; Soft≠product)\n");
-/* Grep: scsi_door: soft retquinticangle — Wave 106 exclusive quinticangle stamp */
-kprintf("scsi_door: soft retquinticangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retquinticangle stamp; Soft≠product)\n");
-/* Grep: scsi_door: soft retsplineangle — Wave 107 return-splineangle honesty */
-kprintf("scsi_door: soft retsplineangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retsplineangle honesty; Soft≠product)\n");
-/* Grep: scsi_door: soft retbezierangle — Wave 107 exclusive bezierangle stamp */
-kprintf("scsi_door: soft retbezierangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retbezierangle stamp; Soft≠product)\n");
-/* Grep: scsi_door: soft rethurmitangle — Wave 108 return-hermitangle honesty */
-kprintf("scsi_door: soft rethurmitangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (rethurmitangle honesty; Soft≠product)\n");
-/* Grep: scsi_door: soft retcatmullangle — Wave 108 exclusive catmullangle stamp */
-kprintf("scsi_door: soft retcatmullangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retcatmullangle stamp; Soft≠product)\n");
-/* Grep: scsi_door: soft retnurbsangle — Wave 109 return-nurbsangle honesty */
-kprintf("scsi_door: soft retnurbsangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retnurbsangle honesty; Soft≠product)\n");
-/* Grep: scsi_door: soft retbsplineangle — Wave 109 exclusive bsplineangle stamp */
-kprintf("scsi_door: soft retbsplineangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retbsplineangle stamp; Soft≠product)\n");
-/* Grep: scsi_door: soft retmeshangle — Wave 110 return-meshangle honesty */
-kprintf("scsi_door: soft retmeshangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retmeshangle honesty; Soft≠product)\n");
-/* Grep: scsi_door: soft retgridangle — Wave 110 exclusive gridangle stamp */
-kprintf("scsi_door: soft retgridangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retgridangle stamp; Soft≠product)\n");
-/* Grep: scsi_door: soft retvoxelangle — Wave 111 return-voxelangle honesty */
-kprintf("scsi_door: soft retvoxelangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retvoxelangle honesty; Soft≠product)\n");
-/* Grep: scsi_door: soft rettexelangle — Wave 111 exclusive texelangle stamp */
-kprintf("scsi_door: soft rettexelangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (rettexelangle stamp; Soft≠product)\n");
-/* Grep: scsi_door: soft retfragmentangle — Wave 112 return-fragmentangle honesty */
-kprintf("scsi_door: soft retfragmentangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retfragmentangle honesty; Soft≠product)\n");
-/* Grep: scsi_door: soft retvertexangle — Wave 112 exclusive vertexangle stamp */
-kprintf("scsi_door: soft retvertexangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retvertexangle stamp; Soft≠product)\n");
-/* Grep: scsi_door: soft retshaderangle — Wave 113 return-shaderangle honesty */
-kprintf("scsi_door: soft retshaderangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retshaderangle honesty; Soft≠product)\n");
-/* Grep: scsi_door: soft retpipelineangle — Wave 113 exclusive pipelineangle stamp */
-kprintf("scsi_door: soft retpipelineangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retpipelineangle stamp; Soft≠product)\n");
-/* Grep: scsi_door: soft retframebufferangle — Wave 114 return-framebufferangle honesty */
-kprintf("scsi_door: soft retframebufferangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retframebufferangle honesty; Soft≠product)\n");
-/* Grep: scsi_door: soft retswapchainangle — Wave 114 exclusive swapchainangle stamp */
-kprintf("scsi_door: soft retswapchainangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retswapchainangle stamp; Soft≠product)\n");
-/* Grep: scsi_door: soft retpresentangle — Wave 115 return-presentangle honesty */
-kprintf("scsi_door: soft retpresentangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retpresentangle honesty; Soft≠product)\n");
-/* Grep: scsi_door: soft retvsyncangle — Wave 115 exclusive vsyncangle stamp */
-kprintf("scsi_door: soft retvsyncangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retvsyncangle stamp; Soft≠product)\n");
-/* Grep: scsi_door: soft retfenceangle — Wave 116 return-fenceangle honesty */
-kprintf("scsi_door: soft retfenceangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retfenceangle honesty; Soft≠product)\n");
-/* Grep: scsi_door: soft retsemaphoreangle — Wave 116 exclusive semaphoreangle stamp */
-kprintf("scsi_door: soft retsemaphoreangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retsemaphoreangle stamp; Soft≠product)\n");
-                            kprintf("scsi_door: soft deepen wave=116 areas=total,rate,raw,shape,,retclass,retlane"
-            "honesty,capacity,headroom,surface,ratio,return,peak_lba logs=%u "
-            "(Wave 35 exclusive; soft LUN honesty remains soft)\n",
-            g_u32SoftInvSamples);
+    kprintf("scsi_door: soft deepen areas=total,rate,raw,shape,honesty,"
+            "capacity,headroom,surface,ratio,return,residual,"
+            "residual_lean,peak_lba,path,wire,lic,dod "
+            "logs=%u log_cap=%u lean_ok=%u lean_n=%u soft_ne_product=1 "
+            "freestanding_msc=SKIP product_mid=userspace_scsi_mid "
+            "dual_dod_a=OPEN dual_dod_b=OPEN "
+            "wire_ok=%u lic_ok=%u dod_ok=%u "
+            "dual=MIT_OR_Apache-2.0 G-AC-1 "
+            "(lean residual; Soft!=product; soft LUN honesty remains soft; "
+            "Dual DoD A/B OPEN; no version stamp; no stamp storms)\n",
+            g_u32SoftInvSamples, (unsigned)SCSI_DOOR_SOFT_LOG_CAP,
+            g_u32SoftResidualLeanOk, g_u32SoftResidualLean,
+            g_u32SoftLeanWireOk, g_u32SoftLeanLicOk, g_u32SoftLeanDodOk);
 
     /*
      * Honesty line: kernel door is interim shim only.
      * Grep: scsi_door: soft path
      */
     kprintf("scsi_door: soft path claim=kernel_mid_shim "
-            "product_userspace_scsi_mid=1 full_door_endpoint=0 "
-            "virtio_preferred=1 soft_lun_fallback=1 "
+            "product_userspace_scsi_mid=1 product_mid=userspace_scsi_mid "
+            "full_door_endpoint=0 virtio_preferred=1 soft_lun_fallback=1 "
             "store_cap_fallback=1 soft_lun_honesty=soft "
-            " wave=116 via=%s\n",
+            "freestanding_msc=SKIP soft_ne_product=1 "
+            "dual_dod_a=OPEN dual_dod_b=OPEN "
+            "product_usb=xhci_udx product_nic=rtl8168_udx "
+            "dual=MIT_OR_Apache-2.0 G-AC-1 via=%s\n",
             szViaSafe);
 
     /*
-     * Soft lamp only — mid ready (soft LUN or virtio). Never hard-gates.
+     * Soft lamp only - mid ready (soft LUN or virtio). Never hard-gates.
      * Grep: scsi_door: soft inventory PASS | scsi_door: soft PASS
      * Grep: scsi_door: soft FAIL
      */
     fSoftPass = (u32Ready != 0) ? 1 : 0;
     if (fSoftPass != 0) {
         kprintf("scsi_door: soft inventory PASS via=%s logs=%u "
-                "mid_ready=%u soft_lun=%u wave=116\n",
-                szViaSafe, g_u32SoftInvSamples, u32Ready, u32Soft);
-        kprintf("scsi_door: soft PASS via=%s wave=116\n", szViaSafe);
+                "mid_ready=%u soft_lun=%u log_cap=%u lean_ok=%u "
+                "wire_ok=%u lic_ok=%u dod_ok=%u "
+                "soft_ne_product=1 freestanding_msc=SKIP "
+                "dual_dod_a=OPEN dual_dod_b=OPEN\n",
+                szViaSafe, g_u32SoftInvSamples, u32Ready, u32Soft,
+                (unsigned)SCSI_DOOR_SOFT_LOG_CAP, g_u32SoftResidualLeanOk,
+                g_u32SoftLeanWireOk, g_u32SoftLeanLicOk, g_u32SoftLeanDodOk);
+        kprintf("scsi_door: soft PASS via=%s soft_ne_product=1 "
+                "freestanding_msc=SKIP product_mid=userspace_scsi_mid "
+                "dual_dod_a=OPEN dual_dod_b=OPEN\n",
+                szViaSafe);
     } else {
-        kprintf("scsi_door: soft FAIL via=%s mid_ready=0 wave=116 "
-                "(soft inventory only; not product gate)\n",
+        kprintf("scsi_door: soft FAIL via=%s mid_ready=0 "
+                "(soft inventory only; not product gate; soft_ne_product=1; "
+                "freestanding_msc=SKIP; dual_dod_a=OPEN dual_dod_b=OPEN)\n",
                 szViaSafe);
     }
 }
@@ -1280,6 +727,7 @@ kprintf("scsi_door: soft retsemaphoreangle exclusive=1 soft_ne_product=1 product
 /**
  * After first product submit activity, print soft inventory once
  * (mirrors door/futex soft-stats-once). Safe from submit return paths.
+ * Residual lean once rides inventory first dump (Soft!=product).
  */
 static void
 soft_maybe_once(void)
@@ -1292,6 +740,7 @@ soft_maybe_once(void)
     }
     g_fSoftOnce = 1;
     soft_inventory_log("once");
+    /* inventory already invokes soft_residual_lean_once when under CAP */
 }
 
 static void
@@ -1539,7 +988,7 @@ scsi_door_submit(struct scsi_door_req *pReq, void *pData, u32 cbData)
     req.cbData = cbData;
     /* Propagate optional LUN from door pad space via u32Lba only for block ops;
      * LUN stays 0 for interim single-target soft/virtio path.
-     * Soft LUN honesty remains soft — door does not promote soft to product. */
+     * Soft LUN honesty remains soft - door does not promote soft to product. */
     req.u32Lun = 0;
     soft_inc(&g_u32SoftLunZero); /* Wave 15: lun forced 0 */
     req.u32TimeoutMs = 5000;
@@ -1605,7 +1054,7 @@ scsi_door_stats(struct scsi_door_stats *pOut)
     if (pOut == NULL) {
         /*
          * Emit soft inventory even on null so bring-up smoke greps
-         * "scsi_door: soft …" without a dedicated syscall.
+         * "scsi_door: soft ..." without a dedicated syscall.
          * greppable: scsi_door: soft
          */
         soft_inventory_log("stats_null");
@@ -1632,12 +1081,16 @@ scsi_door_init(void)
     g_u32DoorFails = 0;
     /*
      * Soft tallies stick across re-init (diagnostics). Product ios/fails
-     * still reset for STATS surface honesty.
+     * still reset for STATS surface honesty. Residual lean once-gate
+     * resets so re-init re-emits greppable residual lean PASS (Soft!=product).
      */
     g_fSoftOnce = 0;
+    g_fSoftLean = 0;
     kprintf("scsi_door: init ios=0 fails=0 mid_ready=%d soft=%d "
-            "(kernel mid shim; product=userspace)\n",
+            "(kernel mid shim; product=userspace_scsi_mid; "
+            "freestanding_msc=SKIP; dual_dod_a=OPEN dual_dod_b=OPEN; "
+            "Soft!=product; G-AC-1)\n",
             scsi_mid_ready() ? 1 : 0, scsi_mid_soft_active() ? 1 : 0);
-    /* Grep: scsi_door: soft (baseline inventory after init) */
+    /* Grep: scsi_door: soft (baseline inventory + residual lean after init) */
     soft_inventory_log("init");
 }

@@ -21,6 +21,15 @@
  * ---------
  * Full POSIX/Linux completeness; stubs and soft fills may return ENOSYS
  * until the hybrid ABI path is wired. See docs/GLIBC_COMPAT.md.
+ *
+ * Soft residual (C2 libcgj libaio.h; Soft!=product; G-AC-1; Dual DoD A/B OPEN):
+ *   soft     = io_context/iocb + io_setup/submit/getevents/destroy/cancel wrappers;
+ *              freestanding may soft-fill ENOSYS without kernel AIO rings
+ *   product  = UDX/DDI + hot/cold ABI hosts; not freestanding class; not .ko AC
+ *   honesty  = libaio decls != product async I/O completeness; agent PASS != Dual
+ *              DoD close; stamp-free bar honesty (no version stamp); no GPL libaio
+ *   law      = dual MIT OR Apache-2.0; no GPL; H2 no stamp storms
+ * greppable: libcgj: libaio soft residual Soft!=product
  */
 #pragma once
 

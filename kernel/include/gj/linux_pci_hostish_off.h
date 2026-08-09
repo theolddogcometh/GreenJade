@@ -4,7 +4,7 @@
  *
  * Host-oracle offsets for RHEL-class Linux struct pci_dev / device / resource.
  * Used only for soft module-path experiments (r8169.ko probe-shaped blob).
- * Soft ≠ ABI-stable product. Soft ≠ product AC (G-AC-1).
+ * Soft != ABI-stable product. Soft != product AC (G-AC-1).
  * Do not claim layout matches any other kver / CONFIG / RH_KABI rebuild.
  *
  * Regenerated on a lab host with kernel-devel via:
@@ -15,7 +15,7 @@
  * Date (UTC): 2026-08-03
  * kbuild: /lib/modules/5.14.0-687.15.1.el9_8.x86_64/build
  *
- * No Linux GPL source is in this header — only dual-license offset #defines
+ * No Linux GPL source is in this header - only dual-license offset #defines
  * extracted via offsetof/sizeof from system headers on the build host.
  * See docs/PCI_DEV_SOFT_LAYOUT.md (Strategy A hostish blob).
  */
@@ -83,7 +83,7 @@
 #define LINUX_PCI_HOSTISH_IORESOURCE_MEM  0x00000200ul
 
 /*
- * Usage (freestanding hostish fill — not implemented here):
+ * Usage (freestanding hostish fill - not implemented here):
  *
  *   u8 *p = hostish_blob;
  *   memset(p, 0, LINUX_PCI_HOSTISH_BLOB_BYTES);

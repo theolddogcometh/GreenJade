@@ -18,6 +18,15 @@
  * Non-goals
  * ---------
  * Full NFS readdir cookie persistence quirks.
+ *
+ * Soft residual (C2 libcgj dirent.h; Soft!=product; G-AC-1; Dual DoD A/B OPEN):
+ *   soft     = DIR + opendir/fdopendir/readdir*/closedir/scandir*/seekdir/telldir
+ *              over getdents64 personality; d_type may be DT_UNKNOWN
+ *   product  = UDX/DDI + hot/cold ABI hosts; VFS via doors not this header alone
+ *   honesty  = dir stream decls != product FS completeness; agent PASS != Dual
+ *              DoD close; stamp-free bar honesty (no version stamp)
+ *   law      = dual MIT OR Apache-2.0; no GPL; H2 no stamp storms
+ * greppable: libcgj: dirent soft residual Soft!=product
  */
 #pragma once
 

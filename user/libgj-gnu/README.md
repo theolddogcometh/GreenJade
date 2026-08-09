@@ -131,3 +131,7 @@ cc -c -std=c11 -ffreestanding -fno-builtin -fno-stack-protector \
 | `kernel/fs/vfs_ram.c` | Placeholder seed paths until real ELF is staged |
 
 See also: [ABI-first pivot](../../docs/ABI_FIRST_PIVOT.md) (product direction).
+
+---
+
+**Project:** GreenJade pure-C microkernel · dual **MIT OR Apache-2.0** · Soft≠product · Dual DoD A/B **OPEN**. See [root README](../../README.md). Support: [Patreon — TheOldDog](https://www.patreon.com/cw/TheOldDog).

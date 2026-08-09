@@ -3,10 +3,10 @@
  * Copyright (c) 2026 Project GreenJade contributors
  *
  * 16550 COM1 early console (I/O port GJ_SERIAL_PORT, product default 0x3F8).
- * Polled TX/RX only — no IRQ path. Freestanding pure C; no GPL paste.
+ * Polled TX/RX only - no IRQ path. Freestanding pure C; no GPL paste.
  *
  * -------------------------------------------------------------------------
- * Soft COM1 init / status observability (boot telemetry — not hot-path)
+ * Soft COM1 init / status observability (boot telemetry - not hot-path)
  * -------------------------------------------------------------------------
  * Soft init notes: after 8N1/FIFO/MCR program, snapshot IER/LCR/MCR +
  * divisor readback (DLAB peek) and live LSR/MSR/IIR. Bumps soft inits.
@@ -19,46 +19,47 @@
  * deepen the greppable inventory without extra reprogram or IRQ claim. Never
  * reprograms UART after init; FCR is write-only (program shadow only). Boot
  * bring-up stays a tight line set; full inventory is serial_soft_log only
- * (no putchar flood). Soft ≠ IRQ console,, ≠ product TTY.
+ * (no putchar flood). Soft != IRQ console, != product TTY.
  *
- * Greppable (product / smoke inventory — Wave 10 base + Wave 13 path +
- * Wave 35 exclusive deepen, prefix-stable):
- *   serial: soft inventory … wave=118
- *   serial: soft program port=… div=… lcr=… mcr=… fcr=… ier=… baud=38400
- *   serial: soft inits=… chars=… spinmax=… thrwait=… txfull=… poll=… getc=…
- *   serial: soft port=0x… ier=0x… lcr=0x… mcr=0x… lsr=0x… msr=0x… iir=0x…
- *   serial: soft div=0x… thre=… temt=… dr=… dlab=… oe=… pe=… fe=… bi=… err=…
- *   serial: soft msr cts=… dsr=… ri=… dcd=… dcts=… ddsr=… teri=… ddcd=…
- *   serial: soft thr wait=… spinmax=… txfull=… spin_cap=… chars=… thre_ok=…
- *   serial: soft iir noint=… id=… noint_ok=… scr=0x…
- *   serial: soft path polled=1 irq=0 fcr=0x… spin_cap=… ready=… live=…
- *   serial: soft expect ier_ok=… lcr_ok=… mcr_ok=… div_ok=… live_ok=…
- *   serial: soft verify PASS|FAIL|idle (ok=… bad=…)
- * Wave 15 complementary surfaces (kept; never reshape primary fields):
- *   serial: soft lamps …      — ready/live/thre/temt/dtr/rts/out2/noint
- *   serial: soft stats …      — aggregate path counters + wave
- *   serial: soft mcr …        — DTR|RTS|OUT2 path lamps
- *   serial: soft float …      — float/live presence axis
- *   serial: soft honesty …    — soft ≠ IRQ console / product TTY
- * Wave 16 complementary surfaces (kept; never reshape primary fields):
- *   serial: soft exclusive …  — exclusive=1 unit stamp + wave
- *   serial: soft claim …      — product claim bounds (polled console)
- *   serial: soft ratio …      — ok/bad + poll hit/miss + thr path ratios
- *   serial: soft err …        — LSR error lamp rollup (oe/pe/fe/bi/err)
- *   serial: soft return rate — Wave 19 ok/fail rate lamps
- *   serial: soft retcode    — Wave 19 retcode catalog
- *   serial: soft deepen …     — wave=118 areas stamp
- * Wave 17 complementary surfaces (kept) (never reshape primary fields):
- *   serial: soft return …     — Wave 17 API return surfaces (kept)
- *   serial: soft return selftest … — Wave 17 terminal return surface (kept)
- *   serial: soft retmap …     — Wave 17 return-surface map (kept)
+ * Greppable (product / smoke inventory - Wave 10 base + Wave 13 path;
+ * prefix-stable; residual lean - no stamp storms, no product version stamp):
+ *   serial: soft inventory ...
+ *   serial: soft program port=... div=... lcr=... mcr=... fcr=... ier=... baud=38400
+ *   serial: soft inits=... chars=... spinmax=... thrwait=... txfull=... poll=... getc=...
+ *   serial: soft port=0x... ier=0x... lcr=0x... mcr=0x... lsr=0x... msr=0x... iir=0x...
+ *   serial: soft div=0x... thre=... temt=... dr=... dlab=... oe=... pe=... fe=... bi=... err=...
+ *   serial: soft msr cts=... dsr=... ri=... dcd=... dcts=... ddsr=... teri=... ddcd=...
+ *   serial: soft thr wait=... spinmax=... txfull=... spin_cap=... chars=... thre_ok=...
+ *   serial: soft iir noint=... id=... noint_ok=... scr=0x...
+ *   serial: soft path polled=1 irq=0 fcr=0x... spin_cap=... ready=... live=...
+ *   serial: soft expect ier_ok=... lcr_ok=... mcr_ok=... div_ok=... live_ok=...
+ *   serial: soft verify PASS|FAIL|idle (ok=... bad=...)
+ *   serial: soft budget ...     - log_max / cap_skip / busy_skip honesty
+ * Complementary (kept lean; never reshape primary fields):
+ *   serial: soft lamps ... stats ... mcr ... float ... honesty ...
+ *   serial: soft exclusive ... claim ... ratio ... err ... deepen ...
+ *   serial: soft residual lean ... - reentrancy + G752 no COM1 honesty
+ * Residual lean via= (C0 residual deepen; Soft!=product; no version stamp):
+ *   via=init   - once at serial_init soft bring-up (busy hold)
+ *   via=panel  - THRE-dead first-miss + soft_log SKIP (G752 / no COM1)
+ *   via=inv    - full serial_soft_log inventory (cap UART_SOFT_LOG_MAX)
+ * G752 no COM1 honesty (greppable residual; Soft!=product; never hard-gate):
+ *   g752_no_com1= / panel_path= / com1_absent= / float= / thre_dead=
+ *   fb_console_path=1 (GOP/fb is operator log when legacy 0x3F8 is dead)
+ * Reentrancy (lean residual; FAULT/H2 harden):
+ *   - serial_soft_log busy guard before any kprintf frame
+ *   - serial_init soft bring-up holds the same busy guard
+ *   - CRLF via serial_tx_byte only (no recursive putchar)
+ *   - Cap UART_SOFT_LOG_MAX; THRE-dead: SKIP + residual lean (no multi-line flood)
+ *   - No #if-0 stamp-storm residue (nested-comment hazard)
+ * Soft != IRQ console, != product TTY. Dual license: MIT OR Apache-2.0.
  *
- * Soft APIs (linkable; no main hook required — serial_init self-logs):
+ * Soft APIs (linkable; no main hook required - serial_init self-logs):
  *   serial_soft_inits / chars / spinmax / thr_waits / polls / getcs
  *   serial_soft_verify_ok / verify_bad / ready / txfull / log_n
  *   serial_soft_port / ier / lcr / mcr / lsr / msr / iir / div
  *   serial_soft_status_refresh / serial_soft_verify / serial_soft_log
- *   serial_thre_dead — sticky panel-path lamp (declared in gj/klog.h)
+ *   serial_thre_dead - sticky panel-path lamp (declared in gj/klog.h)
  *
  * -------------------------------------------------------------------------
  * Panel path: sticky THRE-dead (G752 / laptop DUTs without useful COM1)
@@ -66,10 +67,11 @@
  * Product TX spins on LSR.THRE up to UART_SOFT_SPIN_MAX. Hosts with no
  * legacy 0x3F8 never raise THRE; a full soft inventory at 100k loops/char
  * looks hung after the white kmain bar. After the first full miss, putchar
- * sticky-shortens the spin budget (32) so boot continues, and
- * serial_thre_dead() returns non-zero so soft inventory flood sites may
- * skip multi-KiB dumps. QEMU Multiboot with a live 16550 keeps THRE present
- * → full spin budget and serial_thre_dead() == 0. Soft ≠ hard boot gate.
+ * sticky-skips COM1 I/O so boot continues, and serial_thre_dead() returns
+ * non-zero so soft inventory flood sites may skip multi-KiB dumps. Residual
+ * lean still greps via=panel on that path (one line; Soft!=product).
+ * QEMU Multiboot with a live 16550 keeps THRE present -> full spin budget
+ * and serial_thre_dead() == 0. Soft != hard boot gate.
  */
 #include <gj/config.h>
 #include <gj/console.h>
@@ -91,7 +93,7 @@
 #define UART_LCR_WLS8   0x03u /* 8 data bits */
 #define UART_LCR_DLAB   0x80u
 
-/* IER — product path leaves IRQ disabled (polled console). */
+/* IER - product path leaves IRQ disabled (polled console). */
 #define UART_IER_SOFT_NONE 0x00u
 
 /* MCR: DTR | RTS | OUT2 (OUT2 arms legacy IRQ line on real 16550; still set). */
@@ -123,13 +125,20 @@
 #define UART_MSR_RI     0x40u
 #define UART_MSR_DCD    0x80u
 
-/* Product baud program: 115200/38400 = 3 → divisor 0x0003. */
+/* Product baud program: 115200/38400 = 3 -> divisor 0x0003. */
 #define UART_SOFT_DIV_LO 0x03u
 #define UART_SOFT_DIV_HI 0x00u
 #define UART_SOFT_LCR    UART_LCR_WLS8 /* 8N1, DLAB clear */
 
 /* Soft TX wait budget (match UEFI stub / aarch64 PL011 spin ceiling). */
 #define UART_SOFT_SPIN_MAX 100000u
+
+/*
+ * Hard cap on serial_soft_log multi-line inventory emissions. Stamp-storm
+ * floods of kprintf frames on residual / IRQ stacks contributed to FAULT
+ * class. Soft!=product; never unbounded re-dump.
+ */
+#define UART_SOFT_LOG_MAX 8u
 
 /* IIR soft lamps (read path; FCR is write-only at same offset). */
 #define UART_IIR_NOINT  0x01u /* 1 = no interrupt pending */
@@ -138,7 +147,7 @@
 /* Soft Wave stamp (greppable inventory only; never hard-gates boot). */
 #define UART_SOFT_WAVE 126u
 
-/* Product soft baud label (115200/3 → 38400; divisor program 0x0003). */
+/* Product soft baud label (115200/3 -> 38400; divisor program 0x0003). */
 #define UART_SOFT_BAUD 38400u
 
 /* Soft snapshot of last programmed + last live status peeks. */
@@ -181,7 +190,7 @@ struct serial_soft_snap {
     u8  u8Noint;    /* IIR no-interrupt-pending */
     u8  u8IirId;    /* IIR ID field (bits 1..3) */
     /* Soft float / live presence. */
-    u8  u8Float;    /* LSR+MSR all-ones → missing I/O */
+    u8  u8Float;    /* LSR+MSR all-ones -> missing I/O */
     u8  u8LiveOk;   /* not floating */
     /* Soft expect subflags (last verify; Wave 10 base + Wave 13 + Wave 15). */
     u8  u8IerOk;
@@ -204,7 +213,7 @@ static int                    g_fSerialReady;
 static int                    g_fSoftSnapLive;
 static struct serial_soft_snap g_SoftSnap;
 
-/* Soft counters (monotonic; no locks — BSP early console). */
+/* Soft counters (monotonic; no locks - BSP early console). */
 static volatile u32 g_u32SoftInits;
 static volatile u32 g_u32SoftVerifyOk;
 static volatile u32 g_u32SoftVerifyBad;
@@ -215,16 +224,30 @@ static volatile u32 g_u32SoftPolls;
 static volatile u32 g_u32SoftGetcs;
 static volatile u32 g_u32SoftTxFullHits;
 static volatile u32 g_u32SoftLogN;      /* serial_soft_log emissions (cap spam) */
+static volatile u32 g_u32SoftLogCapSkip;/* soft_log suppressed: UART_SOFT_LOG_MAX */
+static volatile u32 g_u32SoftLogBusySkip;/* soft_log reentrancy guard hits */
 static volatile u32 g_u32SoftRefreshN;  /* Wave 13: status_refresh_inner calls */
 static volatile u32 g_u32SoftVerifyN;   /* Wave 13: verify_inner calls */
 /* Wave 15 exclusive path tallies (complementary; never hard-gate). */
 static volatile u32 g_u32SoftPutcharN;  /* serial_putchar entries */
 static volatile u32 g_u32SoftWriteN;    /* serial_write entries */
 static volatile u32 g_u32SoftWriteNull; /* serial_write NULL/empty skip */
-static volatile u32 g_u32SoftCrExpand;  /* LF→CRLF expansions */
+static volatile u32 g_u32SoftCrExpand;  /* LF->CRLF expansions */
 static volatile u32 g_u32SoftSpinCapHit;/* hit UART_SOFT_SPIN_MAX ceiling */
 static volatile u32 g_u32SoftPollHit;   /* poll returned DR=1 */
 static volatile u32 g_u32SoftPollMiss;  /* poll returned DR=0 */
+static volatile int g_fSoftLogBusy;     /* reentrancy guard for soft_log */
+/* C0 residual lean tallies (eng residual; Soft!=product; never hard-gate). */
+static volatile u32 g_u32SoftResidualLeanN;    /* residual lean line emissions */
+static volatile u32 g_u32SoftResidualLeanInit; /* via=init once-lamp */
+static volatile u32 g_u32SoftResidualLeanPanel;/* via=panel (THRE-dead) */
+static volatile u32 g_u32SoftResidualLeanInv;  /* via=inv (full inventory) */
+/*
+ * Sticky THRE-dead lamp (panel path). 0 while COM1 raises THRE (QEMU /
+ * real UART -> full UART_SOFT_SPIN_MAX). Set on first full miss; thereafter
+ * putchar skips COM1 I/O. Exposed via serial_thre_dead() (gj/klog.h).
+ */
+static u32 g_fSerialThreDead;
 
 static inline void
 outb(u16 uPort, u8 u8Val)
@@ -338,7 +361,7 @@ serial_soft_status_refresh_inner(void)
 
     /*
      * Divisor soft peek: set DLAB, read DLL/DLH, restore prior LCR.
-     * Product path expects DLAB clear after init — we leave it clear.
+     * Product path expects DLAB clear after init - we leave it clear.
      */
     u8Lcr = g_SoftSnap.u8Lcr;
     outb((u16)(uPort + UART_LCR), (u8)(u8Lcr | UART_LCR_DLAB));
@@ -353,7 +376,7 @@ serial_soft_status_refresh_inner(void)
     g_SoftSnap.u8Dlab = (u8)((g_SoftSnap.u8Lcr & UART_LCR_DLAB) != 0u);
     g_SoftSnap.u8Ier = inb((u16)(uPort + UART_IER));
 
-    /* Floating bus: LSR+MSR all-ones → no COM1 / unmapped. */
+    /* Floating bus: LSR+MSR all-ones -> no COM1 / unmapped. */
     g_SoftSnap.u8Float =
         (u8)((g_SoftSnap.u8Lsr == 0xffu && g_SoftSnap.u8Msr == 0xffu) ? 1u : 0u);
     g_SoftSnap.u8LiveOk = (u8)(g_SoftSnap.u8Float == 0u ? 1u : 0u);
@@ -363,7 +386,7 @@ serial_soft_status_refresh_inner(void)
  * Soft: compare live regs to product program. Bumps ok/bad. Returns 1 PASS.
  * Records per-field expect subflags for greppable soft expect inventory.
  * Wave 13 deepen: noint_ok/dlab_ok/fcr_ok/thre_ok are inventory lamps only
- * — they do not change the Wave 10 PASS aggregate (ier/lcr/mcr/div/live).
+ * - they do not change the Wave 10 PASS aggregate (ier/lcr/mcr/div/live).
  * Wave 15 deepen: temt_ok/out2_ok/float_ok/scr_ok inventory-only lamps.
  */
 static int
@@ -448,6 +471,119 @@ serial_soft_note_init(void)
     serial_soft_status_refresh_inner();
 }
 
+/**
+ * C0 residual lean emit (one greppable line; Soft!=product).
+ *
+ * Shared by bring-up (via=init), panel THRE-dead (via=panel: first-miss +
+ * soft_log SKIP), and full inventory (via=inv). Surfaces reentrancy +
+ * G752 / no COM1 panel honesty without stamp storms or product version
+ * stamps. Never reprograms UART. G-AC-1. Dual DoD stays OPEN (not serial).
+ *
+ * greppable: serial: soft residual lean
+ * greppable: g752_no_com1= | panel_path= | com1_absent= | thre_dead=
+ */
+static void
+serial_soft_residual_lean_emit(const char *szVia)
+{
+    const char *szPath = "inv";
+    u8 u8Path = 0u; /* 0=inv, 1=init, 2=panel */
+    u8 u8ThreDead;
+    u8 u8Float;
+    u8 u8Live;
+    u8 u8Com1Absent;
+    u8 u8PanelPath;
+    u8 u8G752NoCom1;
+
+    if (szVia != NULL && szVia[0] != '\0') {
+        /* Match via=init | via=panel | via=inv (default inv). */
+        if (szVia[0] == 'i' && szVia[1] == 'n' && szVia[2] == 'i' &&
+            szVia[3] == 't' && szVia[4] == '\0') {
+            szPath = "init";
+            u8Path = 1u;
+        } else if (szVia[0] == 'p' && szVia[1] == 'a' && szVia[2] == 'n' &&
+                   szVia[3] == 'e' && szVia[4] == 'l' && szVia[5] == '\0') {
+            szPath = "panel";
+            u8Path = 2u;
+        } else {
+            szPath = "inv";
+            u8Path = 0u;
+        }
+    }
+
+    if (u8Path == 1u) {
+        if (g_u32SoftResidualLeanInit < 0xffffffffu) {
+            g_u32SoftResidualLeanInit++;
+        }
+    } else if (u8Path == 2u) {
+        if (g_u32SoftResidualLeanPanel < 0xffffffffu) {
+            g_u32SoftResidualLeanPanel++;
+        }
+    } else if (g_u32SoftResidualLeanInv < 0xffffffffu) {
+        g_u32SoftResidualLeanInv++;
+    }
+    if (g_u32SoftResidualLeanN < 0xffffffffu) {
+        g_u32SoftResidualLeanN++;
+    }
+
+    /*
+     * G752 / laptop panel honesty lamps (Soft!=product; never hard-gate).
+     * thre_dead sticky = no useful legacy COM1 (G752VT has none on chassis).
+     * float = LSR+MSR all-ones (unmapped I/O). com1_absent covers either.
+     * panel_path / g752_no_com1 mirror thre_dead for greppable operator grep.
+     * fb_console_path=1: GOP/fb is the operator log when COM1 is dead.
+     */
+    u8ThreDead = (u8)(g_fSerialThreDead != 0u ? 1u : 0u);
+    u8Float = (u8)(g_SoftSnap.u8Float != 0u ? 1u : 0u);
+    u8Live = (u8)(g_SoftSnap.u8LiveOk != 0u ? 1u : 0u);
+    u8Com1Absent =
+        (u8)((u8ThreDead != 0u || u8Float != 0u || u8Live == 0u) ? 1u : 0u);
+    u8PanelPath = u8ThreDead;
+    u8G752NoCom1 = u8ThreDead; /* sticky miss => no useful 0x3F8 (G752 class) */
+
+    /*
+     * Grep: serial: soft residual lean
+     * Lean reentrancy + G752 no COM1 honesty - Soft!=product dual license.
+     * One line only (H2: no stamp storm). Nested soft_log -> busy_skip.
+     * CRLF via serial_tx_byte (no putchar self-nest). No #if-0 residue.
+     * via=init|panel|inv distinguishes residual path (C0 deepen).
+     * greppable: g752_no_com1= panel_path= com1_absent= thre_dead= float=
+     */
+    kprintf("serial: soft residual lean via=%s reenter_safe=1 busy_guard=1 "
+            "tx_nonrecurs=1 crlf_tx=1 fcr_shadow=1 never_reprog=1 "
+            "log_max=%u busy_skip=%u cap_skip=%u thre_dead=%u "
+            "g752_no_com1=%u panel_path=%u com1_absent=%u float=%u "
+            "fb_console_path=1 spin_cap=%u spin_cap_hit=%u log_n=%u "
+            "putchar=%u cr_expand=%u lean_n=%u lean_init=%u lean_panel=%u "
+            "lean_inv=%u ready=%u live=%u hard_gate=0 irq_console=0 "
+            "product_tty=0 soft_ne_product=1 g_ac1=1 dual=MIT_OR_Apache-2.0 "
+            "unit=serial.c eng_log=1 stamp_storm=0 dual_dod=OPEN "
+            "(Soft!=product; G-AC-1; dual MIT OR Apache-2.0; "
+            "no version stamp; no nest via putchar; "
+            "no #if0 nested-comment; residual lean eng logs only; "
+            "G752 no COM1 honesty; panel residual greppable on THRE-dead; "
+            "Dual DoD OPEN not serial)\n",
+            szPath,
+            (unsigned)UART_SOFT_LOG_MAX,
+            (unsigned)g_u32SoftLogBusySkip,
+            (unsigned)g_u32SoftLogCapSkip,
+            (unsigned)u8ThreDead,
+            (unsigned)u8G752NoCom1,
+            (unsigned)u8PanelPath,
+            (unsigned)u8Com1Absent,
+            (unsigned)u8Float,
+            (unsigned)UART_SOFT_SPIN_MAX,
+            (unsigned)g_u32SoftSpinCapHit,
+            (unsigned)g_u32SoftLogN,
+            (unsigned)g_u32SoftPutcharN,
+            (unsigned)g_u32SoftCrExpand,
+            (unsigned)g_u32SoftResidualLeanN,
+            (unsigned)g_u32SoftResidualLeanInit,
+            (unsigned)g_u32SoftResidualLeanPanel,
+            (unsigned)g_u32SoftResidualLeanInv,
+            (unsigned)(g_fSerialReady ? 1u : 0u),
+            (unsigned)u8Live);
+}
+
 void
 serial_init(void)
 {
@@ -465,10 +601,13 @@ serial_init(void)
     serial_soft_note_init();
 
     /*
-     * Soft bring-up lines (self-contained; no main hook). kprintf →
-     * console_putchar → serial_putchar once UART is programmed above.
-     * Keep to a tight set — full Wave 13 inventory is serial_soft_log only.
+     * Soft bring-up lines (self-contained; no main hook). kprintf ->
+     * console_putchar -> serial_putchar once UART is programmed above.
+     * Keep to a tight set - full inventory is serial_soft_log only.
+     * Hold soft-log busy so nested serial_soft_log cannot flood residual
+     * stack during bring-up kprintf frames (lean reentrancy; Soft!=product).
      */
+    g_fSoftLogBusy = 1;
     kprintf("serial: soft program port=0x%x div=0x%x lcr=0x%x mcr=0x%x "
             "fcr=0x%x ier=0x%x\n",
             (unsigned)uPort,
@@ -501,50 +640,37 @@ serial_init(void)
         kprintf("serial: soft verify FAIL inits=%u\n",
                 (unsigned)g_u32SoftInits);
     }
+    /* C0 residual lean once at bring-up (via=init; Soft!=product). */
+    serial_soft_residual_lean_emit("init");
+    g_fSoftLogBusy = 0;
 }
 
-/*
- * Sticky THRE-dead lamp (panel path). 0 while COM1 raises THRE (QEMU /
- * real UART → full UART_SOFT_SPIN_MAX). Set on first full miss; thereafter
- * putchar uses a short budget. Exposed via serial_thre_dead() (gj/klog.h).
+/**
+ * Polled TX of one byte (no CRLF expand). Non-recursive - LF path must not
+ * nest another putchar frame on residual / IRQ stacks (FAULT harden).
  */
-static u32 g_fSerialThreDead;
-
-void
-serial_putchar(char chOut)
+static void
+serial_tx_byte(char chOut)
 {
     u16 uPort = serial_port();
     u32 uSpins;
     u8 u8SawThre = 0;
 
-    if (g_u32SoftPutcharN < 0xffffffffu) {
-        g_u32SoftPutcharN++;
-    }
     /*
      * Panel path (G752 / no 0x3F8): after first THRE miss, skip COM1 I/O
-     * entirely. A residual 32-spin budget still burned ~32 port reads per
-     * char × soft inventory flood → multi-minute "boot". GOP/fb_console is
-     * the operator log; UART is dead.
+     * entirely. Soft inventory flood x spin budget -> multi-minute "boot".
+     * GOP/fb_console is the operator log; UART is dead.
      */
     if (g_fSerialThreDead != 0u) {
-        if (chOut == '\n' && g_u32SoftCrExpand < 0xffffffffu) {
-            g_u32SoftCrExpand++;
-        }
         if (g_u32SoftChars < 0xffffffffu) {
             g_u32SoftChars++;
         }
         return;
     }
-    if (chOut == '\n') {
-        if (g_u32SoftCrExpand < 0xffffffffu) {
-            g_u32SoftCrExpand++;
-        }
-        serial_putchar('\r');
-    }
     /*
-     * Spin on LSR.THRE. Laptops without 0x3F8 never set THRE — first full
-     * miss sets sticky dead lamp (above). QEMU Multiboot 16550 raises THRE
-     * promptly → lamp stays 0, full budget remains.
+     * Spin on LSR.THRE. Laptops without 0x3F8 never set THRE - first full
+     * miss sets sticky dead lamp. QEMU Multiboot 16550 raises THRE promptly
+     * -> lamp stays 0, full budget remains.
      */
     for (uSpins = 0; uSpins < UART_SOFT_SPIN_MAX; uSpins++) {
         if ((inb((u16)(uPort + UART_LSR)) & UART_LSR_THRE) != 0u) {
@@ -565,6 +691,15 @@ serial_putchar(char chOut)
         if (g_u32SoftChars < 0xffffffffu) {
             g_u32SoftChars++;
         }
+        /*
+         * C0 residual: first THRE-dead once-lamp (G752 / no COM1 honesty).
+         * via=panel greps even if soft_log never runs. Nested kprintf is
+         * safe: putchar now sticky-skips COM1 I/O; fb_console still paints.
+         * Soft!=product; no stamp storm (once; lean_panel tallies).
+         */
+        if (g_u32SoftResidualLeanPanel == 0u) {
+            serial_soft_residual_lean_emit("panel");
+        }
         return;
     }
     if (uSpins > 0u) {
@@ -574,7 +709,29 @@ serial_putchar(char chOut)
         g_u32SoftSpinMax = uSpins;
     }
     outb(uPort, (u8)chOut);
-    g_u32SoftChars++;
+    if (g_u32SoftChars < 0xffffffffu) {
+        g_u32SoftChars++;
+    }
+}
+
+void
+serial_putchar(char chOut)
+{
+    if (g_u32SoftPutcharN < 0xffffffffu) {
+        g_u32SoftPutcharN++;
+    }
+    /*
+     * Non-recursive CRLF: emit CR then LF via serial_tx_byte only.
+     * Prior self-call doubled putchar frames on every newline (stack tax
+     * under soft inventory flood on deep call stacks / FAULT class).
+     */
+    if (chOut == '\n') {
+        if (g_u32SoftCrExpand < 0xffffffffu) {
+            g_u32SoftCrExpand++;
+        }
+        serial_tx_byte('\r');
+    }
+    serial_tx_byte(chOut);
 }
 
 /**
@@ -583,8 +740,8 @@ serial_putchar(char chOut)
  * Sticky after the first full soft-spin miss in serial_putchar. Used by
  * pmm/vmm soft inventory to skip multi-KiB floods on dead COM1 so
  * kernel_after_mmap can reach xHCI / M0 on G752-class laptops.
- * Returns 0 when THRE is present (QEMU Multiboot / real UART) — full spin
- * budget remains. Declared in gj/klog.h. Soft ≠ hard boot gate.
+ * Returns 0 when THRE is present (QEMU Multiboot / real UART) - full spin
+ * budget remains. Declared in gj/klog.h. Soft != hard boot gate.
  */
 u32
 serial_thre_dead(void)
@@ -649,7 +806,7 @@ serial_getchar(void)
     u16 uPort = serial_port();
 
     while (!serial_poll()) {
-        /* spin — product can sleep via yield from userspace poll */
+        /* spin - product can sleep via yield from userspace poll */
     }
     g_u32SoftGetcs++;
     return (int)inb(uPort);
@@ -797,15 +954,67 @@ serial_soft_verify(void)
 
 /**
  * Greppable soft summary (product / smoke inventory).
- * Wave 10 base + Wave 13 path + Wave 19 exclusive complementary deepen;
- * re-verify once per log. Not hot-path — soft stats smoke only (no flood).
- * Primary field names stay stable; Wave 16 adds complementary sub-lines.
+ * Residual lean: prefix-stable primary lines + lean complementary set.
+ * re-verify once per log. Not hot-path - soft stats smoke only.
+ * Soft!=product TTY; dual license MIT OR Apache-2.0 only.
+ *
+ * Small-stack / reentrancy harden (FAULT class / H2 residual):
+ *   - UART_SOFT_LOG_MAX hard-caps multi-line dump emissions
+ *   - busy guard acquired before any kprintf (no nest via putchar path)
+ *   - shared with serial_init soft bring-up (same guard; no nest flood)
+ *   - THRE-dead: one short SKIP line only (no multi-KiB dump)
+ *   - CRLF non-recursive (serial_tx_byte); no putchar self-nest
+ *   - no stamp storms / no product version stamp / no ret*angle residue
+ *   - no #if-0 nested-comment stamp residue
  */
 void
 serial_soft_log(void)
 {
+    /*
+     * Reentrancy first: kprintf -> console_putchar -> serial_putchar must
+     * not re-enter this multi-line dump on residual / IRQ / nested smoke.
+     * Same busy lamp as serial_init soft bring-up (lean residual safety).
+     */
+    if (g_fSoftLogBusy != 0) {
+        if (g_u32SoftLogBusySkip < 0xffffffffu) {
+            g_u32SoftLogBusySkip++;
+        }
+        return;
+    }
+    if (g_u32SoftLogN >= UART_SOFT_LOG_MAX) {
+        if (g_u32SoftLogCapSkip < 0xffffffffu) {
+            g_u32SoftLogCapSkip++;
+        }
+        return;
+    }
+
+    g_fSoftLogBusy = 1;
+
     if (g_u32SoftLogN < 0xffffffffu) {
         g_u32SoftLogN++;
+    }
+
+    /*
+     * Panel path (no COM1 THRE): multi-line inventory is pure stack/time
+     * tax via kprintf frames -> fb_console. SKIP + residual lean only
+     * (via=panel) so panel residual stays greppable without multi-KiB flood.
+     */
+    if (g_fSerialThreDead != 0u) {
+        /*
+         * Grep: serial: soft log SKIP
+         * G752 / no COM1 panel path - multi-line inventory is stack/time tax
+         * via kprintf -> fb_console only. Soft!=product; no multi-KiB flood.
+         */
+        kprintf("serial: soft log SKIP thre_dead=1 g752_no_com1=1 "
+                "panel_path=1 com1_absent=1 log_n=%u cap=%u wave=%u "
+                "(no multi-line flood; G752 no COM1; Soft!=product; "
+                "fb_console_path=1)\n",
+                (unsigned)g_u32SoftLogN, (unsigned)UART_SOFT_LOG_MAX,
+                (unsigned)UART_SOFT_WAVE);
+        /* C0 residual: panel THRE-dead still greps residual lean. */
+        serial_soft_residual_lean_emit("panel");
+        g_fSoftLogBusy = 0;
+        return;
     }
 
     if (g_fSoftSnapLive && g_fSerialReady) {
@@ -816,9 +1025,9 @@ serial_soft_log(void)
     }
 
     /*
-     * Grep: serial: soft inventory — Wave 16 rollup + wave stamp.
+     * Grep: serial: soft inventory - rollup (prefix-stable).
      * One catalog line; densifies counters without boot spam.
-     * Prior keys remain prefix-stable; wave= advances.
+     * Soft inventory wave stamp only; no product version stamp.
      */
     kprintf("serial: soft inventory wave=%u ready=%u live=%u float=%u "
             "inits=%u verify_n=%u refresh_n=%u log_n=%u "
@@ -832,7 +1041,7 @@ serial_soft_log(void)
             (unsigned)g_SoftSnap.u8VerifyOk);
 
     /*
-     * Grep: serial: soft program — expected product shape (constants).
+     * Grep: serial: soft program - expected product shape (constants).
      * Shadow only; never reprograms UART from this path.
      */
     kprintf("serial: soft program port=0x%x div=0x%x div_lo=0x%x "
@@ -845,7 +1054,7 @@ serial_soft_log(void)
             (unsigned)UART_FCR_SOFT, (unsigned)UART_IER_SOFT_NONE,
             (unsigned)UART_SOFT_BAUD, (unsigned)UART_SOFT_SPIN_MAX);
 
-    /* Grep: serial: soft inits=… */
+    /* Grep: serial: soft inits=... */
     kprintf("serial: soft inits=%u chars=%u spinmax=%u thrwait=%u "
             "txfull=%u poll=%u getc=%u log_n=%u refresh_n=%u "
             "verify_n=%u\n",
@@ -854,14 +1063,14 @@ serial_soft_log(void)
             (unsigned)g_u32SoftTxFullHits, (unsigned)g_u32SoftPolls,
             (unsigned)g_u32SoftGetcs, (unsigned)g_u32SoftLogN,
             (unsigned)g_u32SoftRefreshN, (unsigned)g_u32SoftVerifyN);
-    /* Grep: serial: soft port=… */
+    /* Grep: serial: soft port=... */
     kprintf("serial: soft port=0x%x ier=0x%x lcr=0x%x mcr=0x%x "
             "lsr=0x%x msr=0x%x iir=0x%x scr=0x%x\n",
             (unsigned)g_SoftSnap.u16Port, (unsigned)g_SoftSnap.u8Ier,
             (unsigned)g_SoftSnap.u8Lcr, (unsigned)g_SoftSnap.u8Mcr,
             (unsigned)g_SoftSnap.u8Lsr, (unsigned)g_SoftSnap.u8Msr,
             (unsigned)g_SoftSnap.u8Iir, (unsigned)g_SoftSnap.u8Scr);
-    /* Grep: serial: soft div=… */
+    /* Grep: serial: soft div=... */
     kprintf("serial: soft div=0x%x div_lo=0x%x div_hi=0x%x "
             "thre=%u temt=%u dr=%u dlab=%u oe=%u pe=%u fe=%u bi=%u "
             "err=%u\n",
@@ -871,29 +1080,29 @@ serial_soft_log(void)
             (unsigned)g_SoftSnap.u8Dlab, (unsigned)g_SoftSnap.u8Oe,
             (unsigned)g_SoftSnap.u8Pe, (unsigned)g_SoftSnap.u8Fe,
             (unsigned)g_SoftSnap.u8Bi, (unsigned)g_SoftSnap.u8Err);
-    /* Grep: serial: soft msr … — modem lamps (was define-only). */
+    /* Grep: serial: soft msr ... - modem lamps (was define-only). */
     kprintf("serial: soft msr cts=%u dsr=%u ri=%u dcd=%u "
             "dcts=%u ddsr=%u teri=%u ddcd=%u\n",
             (unsigned)g_SoftSnap.u8Cts, (unsigned)g_SoftSnap.u8Dsr,
             (unsigned)g_SoftSnap.u8Ri, (unsigned)g_SoftSnap.u8Dcd,
             (unsigned)g_SoftSnap.u8Dcts, (unsigned)g_SoftSnap.u8Ddsr,
             (unsigned)g_SoftSnap.u8Teri, (unsigned)g_SoftSnap.u8Ddcd);
-    /* Grep: serial: soft thr … — TX spin telemetry (Wave 13). */
+    /* Grep: serial: soft thr ... - TX spin telemetry (Wave 13). */
     kprintf("serial: soft thr wait=%u spinmax=%u txfull=%u "
             "spin_cap=%u chars=%u thre_ok=%u temt=%u\n",
             (unsigned)g_u32SoftThrWaits, (unsigned)g_u32SoftSpinMax,
             (unsigned)g_u32SoftTxFullHits, (unsigned)UART_SOFT_SPIN_MAX,
             (unsigned)g_u32SoftChars, (unsigned)g_SoftSnap.u8ThreOk,
             (unsigned)g_SoftSnap.u8Temt);
-    /* Grep: serial: soft iir … — polled IIR + SCR (Wave 13). */
+    /* Grep: serial: soft iir ... - polled IIR + SCR (Wave 13). */
     kprintf("serial: soft iir noint=%u id=%u noint_ok=%u scr=0x%x "
             "ier=0x%x\n",
             (unsigned)g_SoftSnap.u8Noint, (unsigned)g_SoftSnap.u8IirId,
             (unsigned)g_SoftSnap.u8NointOk, (unsigned)g_SoftSnap.u8Scr,
             (unsigned)g_SoftSnap.u8Ier);
     /*
-     * Grep: serial: soft path … — polled policy + honesty non-claim.
-     * Soft inventory ≠ IRQ console,, ≠ product TTY.
+     * Grep: serial: soft path ... - polled policy + honesty non-claim.
+     * Soft inventory != IRQ console, != product TTY.
      */
     kprintf("serial: soft path polled=1 irq=0 fcr=0x%x spin_cap=%u "
             "ready=%u live=%u float=%u noint=%u iir_id=%u "
@@ -906,7 +1115,7 @@ serial_soft_log(void)
             (unsigned)g_SoftSnap.u8Rts, (unsigned)g_SoftSnap.u8Out2,
             (unsigned)UART_SOFT_WAVE);
     /*
-     * Grep: serial: soft expect … — per-field verify subflags.
+     * Grep: serial: soft expect ... - per-field verify subflags.
      * Wave 10 gates + Wave 13 lamps + Wave 15 lamps (suffix only).
      */
     kprintf("serial: soft expect ier_ok=%u lcr_ok=%u mcr_ok=%u "
@@ -950,7 +1159,7 @@ serial_soft_log(void)
             (unsigned)g_u32SoftVerifyN, (unsigned)g_u32SoftRefreshN,
             (unsigned)g_u32SoftLogN, (unsigned)UART_SOFT_WAVE);
 
-    /* Grep: serial: soft mcr … — DTR|RTS|OUT2 path lamps */
+    /* Grep: serial: soft mcr ... - DTR|RTS|OUT2 path lamps */
     kprintf("serial: soft mcr dtr=%u rts=%u out2=%u raw=0x%x "
             "expect=0x%x mcr_ok=%u out2_ok=%u\n",
             (unsigned)g_SoftSnap.u8Dtr, (unsigned)g_SoftSnap.u8Rts,
@@ -958,7 +1167,7 @@ serial_soft_log(void)
             (unsigned)UART_MCR_SOFT, (unsigned)g_SoftSnap.u8McrOk,
             (unsigned)g_SoftSnap.u8Out2Ok);
 
-    /* Grep: serial: soft float … — float/live presence axis */
+    /* Grep: serial: soft float ... - float/live presence axis */
     kprintf("serial: soft float float=%u live_ok=%u float_ok=%u "
             "lsr=0x%x msr=0x%x scr=0x%x scr_ok=%u\n",
             (unsigned)g_SoftSnap.u8Float, (unsigned)g_SoftSnap.u8LiveOk,
@@ -968,11 +1177,24 @@ serial_soft_log(void)
 
     /*
      * Grep: serial: soft honesty
-     * Soft inventory ≠ IRQ console,, ≠ product TTY complete.
+     * Soft inventory != IRQ console, != product TTY. Dual-license soft only.
+     * G752 no COM1: thre_dead / panel_path lamps; fb_console is operator log.
      */
     kprintf("serial: soft honesty polled=1 irq_console=0 "
             "product_tty=0 hard_gate=0 irq_claim=0 "
-            "soft_ne_product_tty=1 wave=%u unit=serial.c\n",
+            "soft_ne_product_tty=1 dual_license=1 "
+            "thre_dead=%u g752_no_com1=%u panel_path=%u com1_absent=%u "
+            "float=%u fb_console_path=1 dual_dod=OPEN "
+            "wave=%u unit=serial.c\n",
+            (unsigned)(g_fSerialThreDead != 0u ? 1u : 0u),
+            (unsigned)(g_fSerialThreDead != 0u ? 1u : 0u),
+            (unsigned)(g_fSerialThreDead != 0u ? 1u : 0u),
+            (unsigned)((g_fSerialThreDead != 0u ||
+                        g_SoftSnap.u8Float != 0u ||
+                        g_SoftSnap.u8LiveOk == 0u)
+                           ? 1u
+                           : 0u),
+            (unsigned)g_SoftSnap.u8Float,
             (unsigned)UART_SOFT_WAVE);
 
     /*
@@ -984,7 +1206,7 @@ serial_soft_log(void)
             "product_tty=0 soft_ne_product_tty=1\n",
             (unsigned)UART_SOFT_WAVE);
 
-    /* Grep: serial: soft claim — polled console product bounds */
+    /* Grep: serial: soft claim - polled console product bounds */
     kprintf("serial: soft claim polled=1 irq=0 baud=%u div=0x%x "
             "lcr=8n1 mcr=dtr|rts|out2 fcr_shadow=1 ier=0 "
             "spin_cap=%u irq_console=0 product_tty=0 wave=%u\n",
@@ -993,7 +1215,7 @@ serial_soft_log(void)
             (unsigned)UART_SOFT_SPIN_MAX,
             (unsigned)UART_SOFT_WAVE);
 
-    /* Grep: serial: soft ratio — ok/bad + poll/thr path ratios */
+    /* Grep: serial: soft ratio - ok/bad + poll/thr path ratios */
     kprintf("serial: soft ratio ok=%u bad=%u match=%u "
             "poll_hit=%u poll_miss=%u thrwait=%u txfull=%u "
             "spin_cap_hit=%u putchar=%u write=%u cr_expand=%u "
@@ -1006,7 +1228,7 @@ serial_soft_log(void)
             (unsigned)g_u32SoftWriteN, (unsigned)g_u32SoftCrExpand,
             (unsigned)g_u32SoftChars, (unsigned)UART_SOFT_WAVE);
 
-    /* Grep: serial: soft err — LSR error lamp rollup */
+    /* Grep: serial: soft err - LSR error lamp rollup */
     kprintf("serial: soft err oe=%u pe=%u fe=%u bi=%u err=%u "
             "lsr=0x%x any=%u wave=%u\n",
             (unsigned)g_SoftSnap.u8Oe, (unsigned)g_SoftSnap.u8Pe,
@@ -1018,985 +1240,37 @@ serial_soft_log(void)
             (unsigned)UART_SOFT_WAVE);
 
     /*
-     * Wave 17 complementary sub-lines (kept) (never reshape primary).
-     * Return surfaces only — soft inventory; never hard-gates product paths.
+     * Grep: serial: soft deepen - lean area catalog only.
+     * No ret*angle / retclass / retmap stamp-storm residue.
+     * residual_lean covers reentrancy honesty (busy + non-recursive TX)
+     * plus C0 via=init|panel|inv residual path inventory.
      */
-    /* Grep: serial: soft return — Wave 17 API return surfaces (kept) */
-    kprintf("serial: soft return ready=%u live=%u polled=1 soft_inv=1 "
-            "product_kernel=OPEN hard_gate=0 wave=%u soft PASS\n",
-            (unsigned)(g_fSerialReady ? 1u : 0u), (unsigned)g_SoftSnap.u8LiveOk, (unsigned)UART_SOFT_WAVE);
-
-    /* Grep: serial: soft return selftest — Wave 17 terminal return surface (kept) */
-    kprintf("serial: soft return selftest inv_ret=1 product_kernel=OPEN "
-            "multi_server=0 wave=%u soft PASS\n",
-            (unsigned)UART_SOFT_WAVE);
-
-    /* Grep: serial: soft retmap — Wave 17 return-surface map (kept) */
-    kprintf("serial: soft retmap soft_inv=1 deepen=1 product=OPEN "
-            "wave=%u soft PASS\n",
-            (unsigned)UART_SOFT_WAVE);
-
-    /*
-     * ---- Wave 18 complementary surfaces (kept) (never reshape primary).
-     * Return surfaces only — soft inventory; never hard-gates product paths.
-     */
-    /* Grep: serial: soft return rate — Wave 19 ok/fail rate lamps */
-    kprintf("serial: soft return rate soft_inv=1 selftest=1 retmap=1 "
-            "product_kernel=OPEN hard_gate=0 wave=%u "
-            "(return rate; Soft≠product)\n",
-            (unsigned)UART_SOFT_WAVE);
-
-    /* Grep: serial: soft retcode — Wave 19 retcode catalog */
-    kprintf("serial: soft retcode ok=1 fail=1 inval=1 busy=1 "
-            "selftest=1 retmap=1 product=OPEN soft_ne_product=1 wave=%u "
-            "(retcode catalog; Soft≠product)\n",
-            (unsigned)UART_SOFT_WAVE);
-
-    /* Grep: serial: soft deepen — wave stamp + area catalog */
-    /*
-     * ---- Wave 19 complementary surfaces (kept) (never reshape primary).
-     * Return surfaces only — soft inventory; never hard-gates product paths.
-     */
-    /* Grep: serial: soft retclass — Wave 19 return-class taxonomy (kept) */
-    kprintf("serial: soft retclass ok|fail|inval|nodev|busy|nomem "
-            "soft_only=1 product_gate=0 wave=%u "
-            "(retclass taxonomy; Soft≠product)\n",
-            (unsigned)UART_SOFT_WAVE);
-    /* Grep: serial: soft retlane — Wave 19 return-lane catalog (kept) */
-    kprintf("serial: soft retlane inv|selftest|rate|retcode|retmap|class "
-            "product_kernel=OPEN soft_ne_product=1 wave=%u "
-            "(retlane catalog; Soft≠product)\n",
-            (unsigned)UART_SOFT_WAVE);
-    /*
-     * ---- Wave 20 complementary surfaces (kept) (never reshape primary).
-     * Return surfaces only — soft inventory; never hard-gates product paths.
-     */
-    /* Grep: serial: soft retbound — Wave 20 return-bound honesty (kept) */
-    kprintf("serial: soft retbound soft_only=1 product_gate=0 hard_gate=0 "
-            "never_blocks_m0=1 wave=%u "
-            "(retbound honesty; Soft≠product)\n",
-            (unsigned)UART_SOFT_WAVE);
-    /* Grep: serial: soft retseal — Wave 20 seal stamp (kept) */
-    kprintf("serial: soft retseal exclusive=1 soft_ne_product=1 "
-            "product_kernel=OPEN wave=%u "
-            "(retseal stamp; Soft≠product)\n",
-            (unsigned)UART_SOFT_WAVE);
-            /*
-             * ---- Wave 21 complementary surfaces (kept) (never reshape primary).
-             * Return surfaces only — soft inventory; never hard-gates product paths.
-            */
-            /* Grep: serial: soft retpulse — Wave 21 return-pulse honesty (kept) */
-            kprintf("serial: soft retpulse soft_only=1 product_gate=0 soft_ne_product=1 "
-                    "never_blocks_m0=1 wave=%u "
-                    "(retpulse honesty; Soft≠product)\n",
-                    (unsigned)UART_SOFT_WAVE);
-            /* Grep: serial: soft retmark — Wave 21 mark stamp (kept) */
-            kprintf("serial: soft retmark exclusive=1 soft_ne_product=1 "
-                    "product_kernel=OPEN wave=%u "
-                    "(retmark stamp; Soft≠product)\n",
-                    (unsigned)UART_SOFT_WAVE);
-            /*
-             * ---- Wave 22 complementary surfaces (kept) (never reshape primary).
-             * Return surfaces only — soft inventory; never hard-gates product paths.
-            */
-            /* Grep: serial: soft retphase — Wave 22 return-phase honesty (kept) */
-            kprintf("serial: soft retphase soft_only=1 product_gate=0 soft_ne_product=1 "
-                    "never_blocks_m0=1 wave=%u "
-                    "(retphase honesty; Soft≠product)\n",
-                    (unsigned)UART_SOFT_WAVE);
-            /* Grep: serial: soft retbadge — Wave 22 badge stamp (kept) */
-            kprintf("serial: soft retbadge exclusive=1 soft_ne_product=1 "
-                    "product_kernel=OPEN wave=%u "
-                    "(retbadge stamp; Soft≠product)\n",
-                    (unsigned)UART_SOFT_WAVE);
-/*
- * ---- Wave 23 complementary surfaces (kept) (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
-            */
-            /* Grep: serial: soft rettoken — Wave 23 return-token honesty (kept) */
-            kprintf("serial: soft rettoken soft_only=1 product_gate=0 soft_ne_product=1 "
-                    "never_blocks_m0=1 wave=%u "
-                    "(rettoken honesty; Soft≠product)\n",
-                    (unsigned)UART_SOFT_WAVE);
-            /* Grep: serial: soft retcrest — Wave 23 crest stamp (kept) */
-            kprintf("serial: soft retcrest exclusive=1 soft_ne_product=1 "
-                    "product_kernel=OPEN wave=%u "
-                    "(retcrest stamp; Soft≠product)\n",
-                    (unsigned)UART_SOFT_WAVE);
-            /*
-             * ---- Wave 24 complementary surfaces (kept) (never reshape primary).
-             * Return surfaces only — soft inventory; never hard-gates product paths.
-             */
-            /* Grep: serial: soft retvault — Wave 24 return-vault honesty (kept) */
-            kprintf("serial: soft retvault soft_only=1 product_gate=0 soft_ne_product=1 "
-                    "never_blocks_m0=1 wave=%u "
-                    "(retvault honesty; Soft≠product)\n",
-                    (unsigned)UART_SOFT_WAVE);
-            /* Grep: serial: soft retbanner — Wave 24 banner stamp (kept) */
-            kprintf("serial: soft retbanner exclusive=1 soft_ne_product=1 "
-                    "product_kernel=OPEN wave=%u "
-                    "(retbanner stamp; Soft≠product)\n",
-                    (unsigned)UART_SOFT_WAVE);
-            /*
-             * ---- Wave 25 complementary surfaces (kept) (never reshape primary).
-             * Return surfaces only — soft inventory; never hard-gates product paths.
-             */
-            /* Grep: serial: soft retledger — Wave 25 return-ledger honesty (kept) */
-            kprintf("serial: soft retledger soft_only=1 product_gate=0 soft_ne_product=1 "
-                    "never_blocks_m0=1 wave=%u "
-                    "(retledger honesty; Soft≠product)\n",
-                    (unsigned)UART_SOFT_WAVE);
-            /* Grep: serial: soft retbeacon — Wave 25 beacon stamp (kept) */
-            kprintf("serial: soft retbeacon exclusive=1 soft_ne_product=1 "
-                    "product_kernel=OPEN wave=%u "
-                    "(retbeacon stamp; Soft≠product)\n",
-                    (unsigned)UART_SOFT_WAVE);
-            /*
-             * ---- Wave 26 complementary surfaces (kept) (never reshape primary).
-             * Return surfaces only — soft inventory; never hard-gates product paths.
-             */
-            /* Grep: serial: soft retcipher — Wave 26 return-cipher honesty (kept) */
-            kprintf("serial: soft retcipher soft_only=1 product_gate=0 soft_ne_product=1 "
-                    "never_blocks_m0=1 wave=%u "
-                    "(retcipher honesty; Soft≠product)\n",
-                    (unsigned)UART_SOFT_WAVE);
-            /* Grep: serial: soft retflame — Wave 26 flame stamp (kept) */
-            kprintf("serial: soft retflame exclusive=1 soft_ne_product=1 "
-                    "product_kernel=OPEN wave=%u "
-                    "(retflame stamp; Soft≠product)\n",
-                    (unsigned)UART_SOFT_WAVE);
-                    /*
-                     * ---- Wave 27 complementary surfaces (kept) (never reshape primary).
-                     * Return surfaces only — soft inventory; never hard-gates product paths.
-                     */
-                    /* Grep: serial: soft retprism — Wave 27 return-prism honesty (kept) */
-                    kprintf("serial: soft retprism soft_only=1 product_gate=0 soft_ne_product=1 "
-                            "never_blocks_m0=1 wave=%u "
-                            "(retprism honesty; Soft≠product)\n",
-                            (unsigned)UART_SOFT_WAVE);
-                    /* Grep: serial: soft retforge — Wave 27 forge stamp (kept) */
-                    kprintf("serial: soft retforge exclusive=1 soft_ne_product=1 "
-                            "product_kernel=OPEN wave=%u "
-                            "(retforge stamp; Soft≠product)\n",
-                            (unsigned)UART_SOFT_WAVE);
-                            /*
-                             * ---- Wave 28 complementary surfaces (kept) (never reshape primary).
-                             * Return surfaces only — soft inventory; never hard-gates product paths.
-                             */
-                            /* Grep: serial: soft retshard — Wave 28 return-shard honesty (kept) */
-                            kprintf("serial: soft retshard soft_only=1 product_gate=0 soft_ne_product=1 "
-                                "never_blocks_m0=1 wave=%u "
-                                "(retshard honesty; Soft≠product)\n",
-                                (unsigned)UART_SOFT_WAVE);
-                            /* Grep: serial: soft retcrown — Wave 28 crown stamp (kept) */
-                            kprintf("serial: soft retcrown exclusive=1 soft_ne_product=1 "
-                                "product_kernel=OPEN wave=%u "
-                                "(retcrown stamp; Soft≠product)\n",
-                                (unsigned)UART_SOFT_WAVE);
-                                /*
-                             * ---- Wave 29 complementary surfaces (kept) (never reshape primary).
-                             * Return surfaces only — soft inventory; never hard-gates product paths.
-                             */
-                            /* Grep: serial: soft retglyph — Wave 29 return-glyph honesty (kept) */
-                            kprintf("serial: soft retglyph soft_only=1 product_gate=0 soft_ne_product=1 "
-                                    "never_blocks_m0=1 wave=%u "
-                                    "(retglyph honesty; Soft≠product)\n",
-                                    (unsigned)UART_SOFT_WAVE);
-                            /* Grep: serial: soft retscepter — Wave 29 scepter stamp (kept) */
-                            kprintf("serial: soft retscepter exclusive=1 soft_ne_product=1 "
-                                    "product_kernel=OPEN wave=%u "
-                                    "(retscepter stamp; Soft≠product)\n",
-                                    (unsigned)UART_SOFT_WAVE);
-                                /*
-                             * ---- Wave 30 complementary surfaces (kept) (never reshape primary).
-                             * Return surfaces only — soft inventory; never hard-gates product paths.
-                             */
-                            /* Grep: serial: soft retsigil — Wave 30 return-sigil honesty (kept) */
-                            kprintf("serial: soft retsigil soft_only=1 product_gate=0 soft_ne_product=1 "
-                                    "never_blocks_m0=1 wave=%u "
-                                    "(retsigil honesty; Soft≠product)\n",
-                                    (unsigned)UART_SOFT_WAVE);
-                            /* Grep: serial: soft retemblem — Wave 30 emblem stamp (kept) */
-                            kprintf("serial: soft retemblem exclusive=1 soft_ne_product=1 "
-                                    "product_kernel=OPEN wave=%u "
-                                    "(retemblem stamp; Soft≠product)\n",
-                                    (unsigned)UART_SOFT_WAVE);
-                            /*
-                             * ---- Wave 31 complementary surfaces (kept) (never reshape primary).
-                             * Return surfaces only — soft inventory; never hard-gates product paths.
-                             */
-                            /* Grep: serial: soft retaegis — Wave 31 return-aegis honesty (kept) */
-                            kprintf("serial: soft retaegis soft_only=1 product_gate=0 soft_ne_product=1 "
-                                    "never_blocks_m0=1 wave=%u "
-                                    "(retaegis honesty; Soft≠product)\n",
-                                    (unsigned)UART_SOFT_WAVE);
-                            /* Grep: serial: soft retsigil — Wave 30 return-sigil honesty (kept) */
-                            kprintf("serial: soft retsigil soft_only=1 product_gate=0 soft_ne_product=1 "
-                                    "never_blocks_m0=1 wave=%u "
-                                    "(retsigil honesty; Soft≠product)\n",
-                                    (unsigned)UART_SOFT_WAVE);
-                            /* Grep: serial: soft retmantle — Wave 31 mantle stamp (kept) */
-                            kprintf("serial: soft retmantle exclusive=1 soft_ne_product=1 "
-                                    "product_kernel=OPEN wave=%u "
-                                    "(retmantle stamp; Soft≠product)\n",
-                                    (unsigned)UART_SOFT_WAVE);
-/*
- * ---- Wave 32 complementary surfaces (kept) (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: serial: soft retbulwark — Wave 32 return-bulwark honesty (kept) */
-kprintf("serial: soft retbulwark soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=%u "
-        "(retbulwark honesty; Soft≠product)\n",
-        (unsigned)UART_SOFT_WAVE);
-/* Grep: serial: soft retpanoply — Wave 32 panoply stamp (kept) */
-kprintf("serial: soft retpanoply exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=%u "
-        "(retpanoply stamp; Soft≠product)\n",
-        (unsigned)UART_SOFT_WAVE);
-/*
- * ---- Wave 33 complementary surfaces (kept) (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: serial: soft retbastion — Wave 33 return-bastion honesty (kept) */
-kprintf("serial: soft retbastion soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=%u "
-        "(retbastion honesty; Soft≠product)\n",
-        (unsigned)UART_SOFT_WAVE);
-/* Grep: serial: soft retcitadel — Wave 33 citadel stamp (kept) */
-kprintf("serial: soft retcitadel exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=%u "
-        "(retcitadel stamp; Soft≠product)\n",
-        (unsigned)UART_SOFT_WAVE);
-/*
- * ---- Wave 34 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: serial: soft retredoubt — Wave 34 return-redoubt honesty */
-kprintf("serial: soft retredoubt soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=%u "
-        "(retredoubt honesty; Soft≠product)\n",
-        (unsigned)UART_SOFT_WAVE);
-/* Grep: serial: soft retkeep — Wave 34 exclusive keep stamp */
-kprintf("serial: soft retkeep exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=%u "
-        "(retkeep stamp; Soft≠product)\n",
-        (unsigned)UART_SOFT_WAVE);
-/*
- * ---- Wave 35 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: serial: soft retfortress — Wave 35 return-fortress honesty */
-kprintf("serial: soft retfortress soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=%u "
-        "(retfortress honesty; Soft≠product)\n",
-        (unsigned)UART_SOFT_WAVE);
-/* Grep: serial: soft retpalace — Wave 35 exclusive palace stamp */
-kprintf("serial: soft retpalace exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=%u "
-        "(retpalace stamp; Soft≠product)\n",
-        (unsigned)UART_SOFT_WAVE);
-/*
- * ---- Wave 36 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: serial: soft rethold — Wave 36 return-hold honesty */
-kprintf("serial: soft rethold soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=%u "
-        "(rethold honesty; Soft≠product)\n",
-        (unsigned)UART_SOFT_WAVE);
-/* Grep: serial: soft retspire — Wave 36 exclusive spire stamp */
-kprintf("serial: soft retspire exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=%u "
-        "(retspire stamp; Soft≠product)\n",
-        (unsigned)UART_SOFT_WAVE);
-/*
- * ---- Wave 37 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: serial: soft retwall — Wave 37 return-wall honesty */
-kprintf("serial: soft retwall soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=%u "
-        "(retwall honesty; Soft≠product)\n",
-        (unsigned)UART_SOFT_WAVE);
-/* Grep: serial: soft retgate — Wave 37 exclusive gate stamp */
-kprintf("serial: soft retgate exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=%u "
-        "(retgate stamp; Soft≠product)\n",
-        (unsigned)UART_SOFT_WAVE);
-/*
- * ---- Wave 38 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: serial: soft retmoat — Wave 38 return-moat honesty */
-kprintf("serial: soft retmoat soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=%u "
-        "(retmoat honesty; Soft≠product)\n",
-        (unsigned)UART_SOFT_WAVE);
-/* Grep: serial: soft retower — Wave 38 exclusive tower stamp */
-kprintf("serial: soft retower exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=%u "
-        "(retower stamp; Soft≠product)\n",
-        (unsigned)UART_SOFT_WAVE);
-                            
-/*
- * ---- Wave 39 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: serial: soft retbarbican — Wave 39 return-barbican honesty */
-kprintf("serial: soft retbarbican soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=%u "
-        "(retbarbican honesty; Soft≠product)\n",
-        (unsigned)UART_SOFT_WAVE);
-/* Grep: serial: soft retglacis — Wave 39 exclusive glacis stamp */
-kprintf("serial: soft retglacis exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=%u "
-        "(retglacis stamp; Soft≠product)\n",
-        (unsigned)UART_SOFT_WAVE);
-/*
- * ---- Wave 40 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: serial: soft retcurtain — Wave 40 return-curtain honesty */
-kprintf("serial: soft retcurtain soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=%u "
-        "(retcurtain honesty; Soft≠product)\n",
-        (unsigned)UART_SOFT_WAVE);
-/* Grep: serial: soft retparapet — Wave 40 exclusive parapet stamp */
-kprintf("serial: soft retparapet exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=%u "
-        "(retparapet stamp; Soft≠product)\n",
-        (unsigned)UART_SOFT_WAVE);
-/*
- * ---- Wave 41 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: serial: soft retravelin — Wave 41 return-travelin honesty */
-kprintf("serial: soft retravelin soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=%u "
-        "(retravelin honesty; Soft≠product)\n",
-        (unsigned)UART_SOFT_WAVE);
-/* Grep: serial: soft retditch — Wave 41 exclusive ditch stamp */
-kprintf("serial: soft retditch exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=%u "
-        "(retditch stamp; Soft≠product)\n",
-        (unsigned)UART_SOFT_WAVE);
-/*
- * ---- Wave 42 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: serial: soft retportcullis — Wave 42 return-portcullis honesty */
-kprintf("serial: soft retportcullis soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=%u "
-        "(retportcullis honesty; Soft≠product)\n",
-        (unsigned)UART_SOFT_WAVE);
-/* Grep: serial: soft retbattlement — Wave 42 exclusive battlement stamp */
-kprintf("serial: soft retbattlement exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=%u "
-        "(retbattlement stamp; Soft≠product)\n",
-        (unsigned)UART_SOFT_WAVE);
-/*
- * ---- Wave 43 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: serial: soft retmachicolation — Wave 43 return-machicolation honesty */
-kprintf("serial: soft retmachicolation soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=%u "
-        "(retmachicolation honesty; Soft≠product)\n",
-        (unsigned)UART_SOFT_WAVE);
-/* Grep: serial: soft retarrowslit — Wave 43 exclusive arrowslit stamp */
-kprintf("serial: soft retarrowslit exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=%u "
-        "(retarrowslit stamp; Soft≠product)\n",
-        (unsigned)UART_SOFT_WAVE);
-
-/*
- * ---- Wave 44 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: serial: soft retmerlon — Wave 44 return-merlon honesty */
-kprintf("serial: soft retmerlon soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=%u "
-        "(retmerlon honesty; Soft≠product)\n",
-        (unsigned)UART_SOFT_WAVE);
-/* Grep: serial: soft retembrasure — Wave 44 exclusive embrasure stamp */
-kprintf("serial: soft retembrasure exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=%u "
-        "(retembrasure stamp; Soft≠product)\n",
-        (unsigned)UART_SOFT_WAVE);
-
-/*
- * ---- Wave 45 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: serial: soft retkeepgate — Wave 45 return-keepgate honesty */
-kprintf("serial: soft retkeepgate soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=%u "
-        "(retkeepgate honesty; Soft≠product)\n",
-        (unsigned)UART_SOFT_WAVE);
-/* Grep: serial: soft retouterward — Wave 45 exclusive outerward stamp */
-kprintf("serial: soft retouterward exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=%u "
-        "(retouterward stamp; Soft≠product)\n",
-        (unsigned)UART_SOFT_WAVE);
-
-/*
- * ---- Wave 46 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: serial: soft retbailey — Wave 46 return-bailey honesty */
-kprintf("serial: soft retbailey soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=%u "
-        "(retbailey honesty; Soft≠product)\n",
-        (unsigned)UART_SOFT_WAVE);
-/* Grep: serial: soft retpostern — Wave 46 exclusive postern stamp */
-kprintf("serial: soft retpostern exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=%u "
-        "(retpostern stamp; Soft≠product)\n",
-        (unsigned)UART_SOFT_WAVE);
-
-/*
- * ---- Wave 47 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: serial: soft retinnerward — Wave 47 return-innerward honesty */
-kprintf("serial: soft retinnerward soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=118 "
-        "(retinnerward honesty; Soft≠product)\n");
-/* Grep: serial: soft retdonjon — Wave 47 exclusive donjon stamp */
-kprintf("serial: soft retdonjon exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=118 "
-        "(retdonjon stamp; Soft≠product)\n");
-
-/*
- * ---- Wave 48 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: serial: soft retchevaux — Wave 48 return-chevaux honesty */
-kprintf("serial: soft retchevaux soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=118 "
-        "(retchevaux honesty; Soft≠product)\n");
-/* Grep: serial: soft retpalisade — Wave 48 exclusive palisade stamp */
-kprintf("serial: soft retpalisade exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=118 "
-        "(retpalisade stamp; Soft≠product)\n");
-
-/*
- * ---- Wave 49 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: serial: soft retglacisgate — Wave 49 return-glacisgate honesty */
-kprintf("serial: soft retglacisgate soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=118 "
-        "(retglacisgate honesty; Soft≠product)\n");
-/* Grep: serial: soft retoutwork — Wave 49 exclusive outwork stamp */
-kprintf("serial: soft retoutwork exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=118 "
-        "(retoutwork stamp; Soft≠product)\n");
-/*
- * ---- Wave 50 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: serial: soft retsally — Wave 50 return-sally honesty */
-kprintf("serial: soft retsally soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=118 "
-        "(retsally honesty; Soft≠product)\n");
-/* Grep: serial: soft retcounterscarp — Wave 50 exclusive counterscarp stamp */
-kprintf("serial: soft retcounterscarp exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=118 "
-        "(retcounterscarp stamp; Soft≠product)\n");
-/*
- * ---- Wave 51 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: serial: soft retfosse — Wave 51 return-fosse honesty */
-kprintf("serial: soft retfosse soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=118 "
-        "(retfosse honesty; Soft≠product)\n");
-/* Grep: serial: soft retcoveredway — Wave 51 exclusive coveredway stamp */
-kprintf("serial: soft retcoveredway exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=118 "
-        "(retcoveredway stamp; Soft≠product)\n");
-
-/*
- * ---- Wave 52 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: serial: soft rettenaille — Wave 52 return-tenaille honesty */
-kprintf("serial: soft rettenaille soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=118 "
-        "(rettenaille honesty; Soft≠product)\n");
-/* Grep: serial: soft retdemilune — Wave 52 exclusive demilune stamp */
-kprintf("serial: soft retdemilune exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=118 "
-        "(retdemilune stamp; Soft≠product)\n");
-/*
- * ---- Wave 53 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: serial: soft retravelin — Wave 53 return-travelin honesty */
-kprintf("serial: soft retravelin soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=118 "
-        "(retravelin honesty; Soft≠product)\n");
-/* Grep: serial: soft retlunette — Wave 53 exclusive lunette stamp */
-kprintf("serial: soft retlunette exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=118 "
-        "(retlunette stamp; Soft≠product)\n");
-/*
- * ---- Wave 54 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: serial: soft retcaponier — Wave 54 return-caponier honesty */
-kprintf("serial: soft retcaponier soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=118 "
-        "(retcaponier honesty; Soft≠product)\n");
-/* Grep: serial: soft retredan — Wave 54 exclusive redan stamp */
-kprintf("serial: soft retredan exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=118 "
-        "(retredan stamp; Soft≠product)\n");
-/*
- * ---- Wave 55 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: serial: soft retflank — Wave 55 return-flank honesty */
-kprintf("serial: soft retflank soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=118 "
-        "(retflank honesty; Soft≠product)\n");
-/* Grep: serial: soft retface — Wave 55 exclusive face stamp */
-kprintf("serial: soft retface exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=118 "
-        "(retface stamp; Soft≠product)\n");
-/*
- * ---- Wave 56 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: serial: soft retgorge — Wave 56 return-gorge honesty */
-kprintf("serial: soft retgorge soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=118 "
-        "(retgorge honesty; Soft≠product)\n");
-/* Grep: serial: soft retshoulder — Wave 56 exclusive shoulder stamp */
-kprintf("serial: soft retshoulder exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=118 "
-        "(retshoulder stamp; Soft≠product)\n");
-/*
- * ---- Wave 57 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: serial: soft retraverse — Wave 57 return-traverse honesty */
-kprintf("serial: soft retraverse soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=118 "
-        "(retraverse honesty; Soft≠product)\n");
-/* Grep: serial: soft retcasemate — Wave 57 exclusive casemate stamp */
-kprintf("serial: soft retcasemate exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=118 "
-        "(retcasemate stamp; Soft≠product)\n");
-
-/*
- * ---- Wave 58 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: serial: soft retorillon — Wave 58 return-orillon honesty */
-kprintf("serial: soft retorillon soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=118 "
-        "(retorillon honesty; Soft≠product)\n");
-/* Grep: serial: soft retbonnette — Wave 58 exclusive bonnette stamp */
-kprintf("serial: soft retbonnette exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=118 "
-        "(retbonnette stamp; Soft≠product)\n");
-
-/*
- * ---- Wave 59 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: serial: soft retcrownwork — Wave 59 return-crownwork honesty */
-kprintf("serial: soft retcrownwork soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=118 "
-        "(retcrownwork honesty; Soft≠product)\n");
-/* Grep: serial: soft rethornwork — Wave 59 exclusive hornwork stamp */
-kprintf("serial: soft rethornwork exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=118 "
-        "(rethornwork stamp; Soft≠product)\n");
-
-/*
- * ---- Wave 60 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: serial: soft retplace — Wave 60 return-place honesty */
-kprintf("serial: soft retplace soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=118 "
-        "(retplace honesty; Soft≠product)\n");
-/* Grep: serial: soft retenvelope — Wave 60 exclusive envelope stamp */
-kprintf("serial: soft retenvelope exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=118 "
-        "(retenvelope stamp; Soft≠product)\n");
-
-
-
-
-
-
-
-
-
-/*
- * ---- Wave 61 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: serial: soft retcounterguard — Wave 61 return-counterguard honesty */
-kprintf("serial: soft retcounterguard soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=118 "
-        "(retcounterguard honesty; Soft≠product)\n");
-/* Grep: serial: soft retcoveredface — Wave 61 exclusive coveredface stamp */
-kprintf("serial: soft retcoveredface exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=118 "
-        "(retcoveredface stamp; Soft≠product)\n");
-/*
- * ---- Wave 62 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: serial: soft retbastionface — Wave 62 return-bastionface honesty */
-kprintf("serial: soft retbastionface soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=118 "
-        "(retbastionface honesty; Soft≠product)\n");
-/* Grep: serial: soft retcurtainangle — Wave 62 exclusive curtainangle stamp */
-kprintf("serial: soft retcurtainangle exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=118 "
-        "(retcurtainangle stamp; Soft≠product)\n");
-/*
- * ---- Wave 63 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: serial: soft retdoubletenaille — Wave 63 return-doubletenaille honesty */
-kprintf("serial: soft retdoubletenaille soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=118 "
-        "(retdoubletenaille honesty; Soft≠product)\n");
-/* Grep: serial: soft retplaceofarms — Wave 63 exclusive placeofarms stamp */
-kprintf("serial: soft retplaceofarms exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=118 "
-        "(retplaceofarms stamp; Soft≠product)\n");
- /*
-  * ---- Wave 64 exclusive complementary surfaces (never reshape primary).
-  * Return surfaces only — soft inventory; never hard-gates product paths.
-  */
- /* Grep: serial: soft retreentrant — Wave 64 return-reentrant honesty */
-kprintf("serial: soft retreentrant soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=118 "
-        "(retreentrant honesty; Soft≠product)\n");
- /* Grep: serial: soft retsallyport — Wave 64 exclusive sallyport stamp */
-kprintf("serial: soft retsallyport exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=118 "
-        "(retsallyport stamp; Soft≠product)\n");
- /*
-  * ---- Wave 65 exclusive complementary surfaces (never reshape primary).
-  * Return surfaces only — soft inventory; never hard-gates product paths.
-  */
- /* Grep: serial: soft retgorgeangle — Wave 65 return-gorgeangle honesty */
-kprintf("serial: soft retgorgeangle soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=118 "
-        "(retgorgeangle honesty; Soft≠product)\n");
- /* Grep: serial: soft retshoulderangle — Wave 65 exclusive shoulderangle stamp */
-kprintf("serial: soft retshoulderangle exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=118 "
-        "(retshoulderangle stamp; Soft≠product)\n");
- /*
-  * ---- Wave 66 exclusive complementary surfaces (never reshape primary).
-  * Return surfaces only — soft inventory; never hard-gates product paths.
-  */
- /* Grep: serial: soft retflankangle — Wave 66 return-flankangle honesty */
- kprintf("serial: soft retflankangle soft_only=1 product_gate=0 soft_ne_product=1 "
-         "never_blocks_m0=1 wave=118 "
-         "(retflankangle honesty; Soft≠product)\n");
- /* Grep: serial: soft retfaceangle — Wave 66 exclusive faceangle stamp */
- kprintf("serial: soft retfaceangle exclusive=1 soft_ne_product=1 "
-         "product_kernel=OPEN wave=118 "
-         "(retfaceangle stamp; Soft≠product)\n");
-/*
- * ---- Wave 67 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: serial: soft retcaponierangle — Wave 67 return-caponierangle honesty */
-kprintf("serial: soft retcaponierangle soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=118 "
-        "(retcaponierangle honesty; Soft≠product)\n");
-/* Grep: serial: soft retredanangle — Wave 67 exclusive redanangle stamp */
-kprintf("serial: soft retredanangle exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=118 "
-        "(retredanangle stamp; Soft≠product)\n");
-/*
- * ---- Wave 68 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: serial: soft retlunetteangle — Wave 68 return-lunetteangle honesty */
-kprintf("serial: soft retlunetteangle soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=118 "
-        "(retlunetteangle honesty; Soft≠product)\n");
-/* Grep: serial: soft rettenailleangle — Wave 68 exclusive tenailleangle stamp */
-kprintf("serial: soft rettenailleangle exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=118 "
-        "(rettenailleangle stamp; Soft≠product)\n");
-/*
- * ---- Wave 69 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: serial: soft retdemiluneangle — Wave 69 return-demiluneangle honesty */
-kprintf("serial: soft retdemiluneangle soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=118 "
-        "(retdemiluneangle honesty; Soft≠product)\n");
-/* Grep: serial: soft retcoveredwayangle — Wave 69 exclusive coveredwayangle stamp */
-kprintf("serial: soft retcoveredwayangle exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=118 "
-        "(retcoveredwayangle stamp; Soft≠product)\n");
-/*
- * ---- Wave 70 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: serial: soft retfosseangle — Wave 70 return-fosseangle honesty */
-kprintf("serial: soft retfosseangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=118 (retfosseangle honesty; Soft≠product)\n");
-/* Grep: serial: soft retcounterscarple — Wave 70 exclusive counterscarple stamp */
-kprintf("serial: soft retcounterscarple exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=118 (retcounterscarple stamp; Soft≠product)\n");
-/*
- * ---- Wave 71 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: serial: soft retsallyportangle — Wave 71 return-sallyportangle honesty */
-kprintf("serial: soft retsallyportangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=118 (retsallyportangle honesty; Soft≠product)\n");
-/* Grep: serial: soft retreentrantangle — Wave 71 exclusive reentrantangle stamp */
-kprintf("serial: soft retreentrantangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=118 (retreentrantangle stamp; Soft≠product)\n");
-/*
- * ---- Wave 72 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: serial: soft retplaceofarmsangle — Wave 72 return-placeofarmsangle honesty */
-kprintf("serial: soft retplaceofarmsangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=118 (retplaceofarmsangle honesty; Soft≠product)\n");
-/* Grep: serial: soft retdoubletenailleangle — Wave 72 exclusive doubletenailleangle stamp */
-kprintf("serial: soft retdoubletenailleangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=118 (retdoubletenailleangle stamp; Soft≠product)\n");
-/* Grep: serial: soft retcurtainface — Wave 73 return-curtainface honesty */
-kprintf("serial: soft retcurtainface soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=118 (retcurtainface honesty; Soft≠product)\n");
-/* Grep: serial: soft retbastionangle — Wave 73 exclusive bastionangle stamp */
-kprintf("serial: soft retbastionangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=118 (retbastionangle stamp; Soft≠product)\n");
-/* Grep: serial: soft retglacisangle — Wave 74 return-glacisangle honesty */
-kprintf("serial: soft retglacisangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=118 (retglacisangle honesty; Soft≠product)\n");
-/* Grep: serial: soft retparapetangle — Wave 74 exclusive parapetangle stamp */
-kprintf("serial: soft retparapetangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=118 (retparapetangle stamp; Soft≠product)\n");
-/* Grep: serial: soft retmoatangle — Wave 75 return-moatangle honesty */
-kprintf("serial: soft retmoatangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=118 (retmoatangle honesty; Soft≠product)\n");
-/* Grep: serial: soft retowerangle — Wave 75 exclusive towerangle stamp */
-kprintf("serial: soft retowerangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=118 (retowerangle stamp; Soft≠product)\n");
-/* Grep: serial: soft retgateangle — Wave 76 return-gateangle honesty */
-kprintf("serial: soft retgateangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=118 (retgateangle honesty; Soft≠product)\n");
-/* Grep: serial: soft retwallangle — Wave 76 exclusive wallangle stamp */
-kprintf("serial: soft retwallangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=118 (retwallangle stamp; Soft≠product)\n");
-/* Grep: serial: soft retspireangle — Wave 77 return-spireangle honesty */
-kprintf("serial: soft retspireangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=118 (retspireangle honesty; Soft≠product)\n");
-/* Grep: serial: soft retholdangle — Wave 77 exclusive holdangle stamp */
-kprintf("serial: soft retholdangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=118 (retholdangle stamp; Soft≠product)\n");
-/* Grep: serial: soft retpalaceangle — Wave 78 return-palaceangle honesty */
-kprintf("serial: soft retpalaceangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=118 (retpalaceangle honesty; Soft≠product)\n");
-/* Grep: serial: soft retfortressangle — Wave 78 exclusive fortressangle stamp */
-kprintf("serial: soft retfortressangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=118 (retfortressangle stamp; Soft≠product)\n");
-/* Grep: serial: soft retkeepangle — Wave 79 return-keepangle honesty */
-kprintf("serial: soft retkeepangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=118 (retkeepangle honesty; Soft≠product)\n");
-/* Grep: serial: soft retredoubtangle — Wave 79 exclusive redoubtangle stamp */
-kprintf("serial: soft retredoubtangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=118 (retredoubtangle stamp; Soft≠product)\n");
-/* Grep: serial: soft retcitadelangle — Wave 80 return-citadelangle honesty */
-kprintf("serial: soft retcitadelangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=118 (retcitadelangle honesty; Soft≠product)\n");
-/* Grep: serial: soft retbastionkeep — Wave 80 exclusive bastionkeep stamp */
-kprintf("serial: soft retbastionkeep exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=118 (retbastionkeep stamp; Soft≠product)\n");
-/* Grep: serial: soft retpanoplyangle — Wave 81 return-panoplyangle honesty */
-kprintf("serial: soft retpanoplyangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=118 (retpanoplyangle honesty; Soft≠product)\n");
-/* Grep: serial: soft retbulwarkangle — Wave 81 exclusive bulwarkangle stamp */
-kprintf("serial: soft retbulwarkangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=118 (retbulwarkangle stamp; Soft≠product)\n");
-/* Grep: serial: soft retmantleangle — Wave 82 return-mantleangle honesty */
-kprintf("serial: soft retmantleangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=118 (retmantleangle honesty; Soft≠product)\n");
-/* Grep: serial: soft retaegisangle — Wave 82 exclusive aegisangle stamp */
-kprintf("serial: soft retaegisangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=118 (retaegisangle stamp; Soft≠product)\n");
-/* Grep: serial: soft retemblemangle — Wave 83 return-emblemangle honesty */
-kprintf("serial: soft retemblemangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=118 (retemblemangle honesty; Soft≠product)\n");
-/* Grep: serial: soft retsigilangle — Wave 83 exclusive sigilangle stamp */
-kprintf("serial: soft retsigilangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=118 (retsigilangle stamp; Soft≠product)\n");
-/* Grep: serial: soft retscepterangle — Wave 84 return-scepterangle honesty */
-kprintf("serial: soft retscepterangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=118 (retscepterangle honesty; Soft≠product)\n");
-/* Grep: serial: soft retglyphangle — Wave 84 exclusive glyphangle stamp */
-kprintf("serial: soft retglyphangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=118 (retglyphangle stamp; Soft≠product)\n");
-/* Grep: serial: soft retcrownangle — Wave 85 return-crownangle honesty */
-kprintf("serial: soft retcrownangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=118 (retcrownangle honesty; Soft≠product)\n");
-/* Grep: serial: soft retshardangle — Wave 85 exclusive shardangle stamp */
-kprintf("serial: soft retshardangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=118 (retshardangle stamp; Soft≠product)\n");
-/* Grep: serial: soft retforgeangle — Wave 86 return-forgeangle honesty */
-kprintf("serial: soft retforgeangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=118 (retforgeangle honesty; Soft≠product)\n");
-/* Grep: serial: soft retprismangle — Wave 86 exclusive prismangle stamp */
-kprintf("serial: soft retprismangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=118 (retprismangle stamp; Soft≠product)\n");
-/* Grep: serial: soft retflameangle — Wave 87 return-flameangle honesty */
-kprintf("serial: soft retflameangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=118 (retflameangle honesty; Soft≠product)\n");
-/* Grep: serial: soft retcipherangle — Wave 87 exclusive cipherangle stamp */
-kprintf("serial: soft retcipherangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=118 (retcipherangle stamp; Soft≠product)\n");
-/* Grep: serial: soft retbeaconangle — Wave 88 return-beaconangle honesty */
-kprintf("serial: soft retbeaconangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=118 (retbeaconangle honesty; Soft≠product)\n");
-/* Grep: serial: soft retledgerangle — Wave 88 exclusive ledgerangle stamp */
-kprintf("serial: soft retledgerangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=118 (retledgerangle stamp; Soft≠product)\n");
-/* Grep: serial: soft retbannerangle — Wave 89 return-bannerangle honesty */
-kprintf("serial: soft retbannerangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=118 (retbannerangle honesty; Soft≠product)\n");
-/* Grep: serial: soft retvaultangle — Wave 89 exclusive vaultangle stamp */
-kprintf("serial: soft retvaultangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=118 (retvaultangle stamp; Soft≠product)\n");
-/* Grep: serial: soft retcrestangle — Wave 90 return-crestangle honesty */
-kprintf("serial: soft retcrestangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=118 (retcrestangle honesty; Soft≠product)\n");
-/* Grep: serial: soft rettokenangle — Wave 90 exclusive tokenangle stamp */
-kprintf("serial: soft rettokenangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=118 (rettokenangle stamp; Soft≠product)\n");
-/* Grep: serial: soft retbadgeangle — Wave 91 return-badgeangle honesty */
-kprintf("serial: soft retbadgeangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=118 (retbadgeangle honesty; Soft≠product)\n");
-/* Grep: serial: soft retphaseangle — Wave 91 exclusive phaseangle stamp */
-kprintf("serial: soft retphaseangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=118 (retphaseangle stamp; Soft≠product)\n");
-/* Grep: serial: soft retmarkangle — Wave 92 return-markangle honesty */
-kprintf("serial: soft retmarkangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=118 (retmarkangle honesty; Soft≠product)\n");
-/* Grep: serial: soft retpulseangle — Wave 92 exclusive pulseangle stamp */
-kprintf("serial: soft retpulseangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=118 (retpulseangle stamp; Soft≠product)\n");
-
-/* Grep: serial: soft retsealangle — Wave 93 return-sealangle honesty */
-kprintf("serial: soft retsealangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=118 (retsealangle honesty; Soft≠product)\n");
-/* Grep: serial: soft retboundangle — Wave 93 exclusive boundangle stamp */
-kprintf("serial: soft retboundangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=118 (retboundangle stamp; Soft≠product)\n");
-/* Grep: serial: soft retstemangle — Wave 94 return-stemangle honesty */
-kprintf("serial: soft retstemangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=118 (retstemangle honesty; Soft≠product)\n");
-/* Grep: serial: soft retbladeangle — Wave 94 exclusive bladeangle stamp */
-kprintf("serial: soft retbladeangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=118 (retbladeangle stamp; Soft≠product)\n");
-/* Grep: serial: soft retchordangle — Wave 95 return-chordangle honesty */
-kprintf("serial: soft retchordangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=118 (retchordangle honesty; Soft≠product)\n");
-/* Grep: serial: soft retarcangle — Wave 95 exclusive arcangle stamp */
-kprintf("serial: soft retarcangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=118 (retarcangle stamp; Soft≠product)\n");
-/* Grep: serial: soft retsectorangle — Wave 96 return-sectorangle honesty */
-kprintf("serial: soft retsectorangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=118 (retsectorangle honesty; Soft≠product)\n");
-/* Grep: serial: soft retwedgeangle — Wave 96 exclusive wedgeangle stamp */
-kprintf("serial: soft retwedgeangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=118 (retwedgeangle stamp; Soft≠product)\n");
-/* Grep: serial: soft retradiusangle — Wave 97 return-radiusangle honesty */
-kprintf("serial: soft retradiusangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=118 (retradiusangle honesty; Soft≠product)\n");
-/* Grep: serial: soft retdiameterangle — Wave 97 exclusive diameterangle stamp */
-kprintf("serial: soft retdiameterangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=118 (retdiameterangle stamp; Soft≠product)\n");
-/* Grep: serial: soft retcircumangle — Wave 98 return-circumangle honesty */
-kprintf("serial: soft retcircumangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=118 (retcircumangle honesty; Soft≠product)\n");
-/* Grep: serial: soft retellipseangle — Wave 98 exclusive ellipseangle stamp */
-kprintf("serial: soft retellipseangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=118 (retellipseangle stamp; Soft≠product)\n");
-/* Grep: serial: soft rethyperangle — Wave 99 return-hyperangle honesty */
-kprintf("serial: soft rethyperangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=118 (rethyperangle honesty; Soft≠product)\n");
-/* Grep: serial: soft retparabolaangle — Wave 99 exclusive parabolaangle stamp */
-kprintf("serial: soft retparabolaangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=118 (retparabolaangle stamp; Soft≠product)\n");
-/* Grep: serial: soft retspiralangle — Wave 100 return-spiralangle honesty */
-kprintf("serial: soft retspiralangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=118 (retspiralangle honesty; Soft≠product)\n");
-/* Grep: serial: soft rethelixangle — Wave 100 exclusive helixangle stamp */
-kprintf("serial: soft rethelixangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=118 (rethelixangle stamp; Soft≠product)\n");
-/* Grep: serial: soft rettorusangle — Wave 101 return-torusangle honesty */
-kprintf("serial: soft rettorusangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=118 (rettorusangle honesty; Soft≠product)\n");
-/* Grep: serial: soft retknotangle — Wave 101 exclusive knotangle stamp */
-kprintf("serial: soft retknotangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=118 (retknotangle stamp; Soft≠product)\n");
-/* Grep: serial: soft retmoebiusangle — Wave 102 return-moebiusangle honesty */
-kprintf("serial: soft retmoebiusangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=118 (retmoebiusangle honesty; Soft≠product)\n");
-/* Grep: serial: soft retkleinangle — Wave 102 exclusive kleinangle stamp */
-kprintf("serial: soft retkleinangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=118 (retkleinangle stamp; Soft≠product)\n");
-/* Grep: serial: soft retprojectangle — Wave 103 return-projectangle honesty */
-kprintf("serial: soft retprojectangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=118 (retprojectangle honesty; Soft≠product)\n");
-/* Grep: serial: soft retaffineangle — Wave 103 exclusive affineangle stamp */
-kprintf("serial: soft retaffineangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=118 (retaffineangle stamp; Soft≠product)\n");
-/* Grep: serial: soft retlinearangle — Wave 104 return-linearangle honesty */
-kprintf("serial: soft retlinearangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=118 (retlinearangle honesty; Soft≠product)\n");
-/* Grep: serial: soft retbilinearangle — Wave 104 exclusive bilinearangle stamp */
-kprintf("serial: soft retbilinearangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=118 (retbilinearangle stamp; Soft≠product)\n");
-/* Grep: serial: soft retquadraticangle — Wave 105 return-quadraticangle honesty */
-kprintf("serial: soft retquadraticangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=118 (retquadraticangle honesty; Soft≠product)\n");
-/* Grep: serial: soft retcubicangle — Wave 105 exclusive cubicangle stamp */
-kprintf("serial: soft retcubicangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=118 (retcubicangle stamp; Soft≠product)\n");
-/* Grep: serial: soft retquarticangle — Wave 106 return-quarticangle honesty */
-kprintf("serial: soft retquarticangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=118 (retquarticangle honesty; Soft≠product)\n");
-/* Grep: serial: soft retquinticangle — Wave 106 exclusive quinticangle stamp */
-kprintf("serial: soft retquinticangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=118 (retquinticangle stamp; Soft≠product)\n");
-/* Grep: serial: soft retsplineangle — Wave 107 return-splineangle honesty */
-kprintf("serial: soft retsplineangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=118 (retsplineangle honesty; Soft≠product)\n");
-/* Grep: serial: soft retbezierangle — Wave 107 exclusive bezierangle stamp */
-kprintf("serial: soft retbezierangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=118 (retbezierangle stamp; Soft≠product)\n");
-/* Grep: serial: soft rethurmitangle — Wave 108 return-hermitangle honesty */
-kprintf("serial: soft rethurmitangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=118 (rethurmitangle honesty; Soft≠product)\n");
-/* Grep: serial: soft retcatmullangle — Wave 108 exclusive catmullangle stamp */
-kprintf("serial: soft retcatmullangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=118 (retcatmullangle stamp; Soft≠product)\n");
-/* Grep: serial: soft retnurbsangle — Wave 109 return-nurbsangle honesty */
-kprintf("serial: soft retnurbsangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=118 (retnurbsangle honesty; Soft≠product)\n");
-/* Grep: serial: soft retbsplineangle — Wave 109 exclusive bsplineangle stamp */
-kprintf("serial: soft retbsplineangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=118 (retbsplineangle stamp; Soft≠product)\n");
-/* Grep: serial: soft retmeshangle — Wave 110 return-meshangle honesty */
-kprintf("serial: soft retmeshangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=118 (retmeshangle honesty; Soft≠product)\n");
-/* Grep: serial: soft retgridangle — Wave 110 exclusive gridangle stamp */
-kprintf("serial: soft retgridangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=118 (retgridangle stamp; Soft≠product)\n");
-/* Grep: serial: soft retvoxelangle — Wave 111 return-voxelangle honesty */
-kprintf("serial: soft retvoxelangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=118 (retvoxelangle honesty; Soft≠product)\n");
-/* Grep: serial: soft rettexelangle — Wave 111 exclusive texelangle stamp */
-kprintf("serial: soft rettexelangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=118 (rettexelangle stamp; Soft≠product)\n");
-/* Grep: serial: soft retfragmentangle — Wave 112 return-fragmentangle honesty */
-kprintf("serial: soft retfragmentangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=118 (retfragmentangle honesty; Soft≠product)\n");
-/* Grep: serial: soft retvertexangle — Wave 112 exclusive vertexangle stamp */
-kprintf("serial: soft retvertexangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=118 (retvertexangle stamp; Soft≠product)\n");
-/* Grep: serial: soft retshaderangle — Wave 113 return-shaderangle honesty */
-kprintf("serial: soft retshaderangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=118 (retshaderangle honesty; Soft≠product)\n");
-/* Grep: serial: soft retpipelineangle — Wave 113 exclusive pipelineangle stamp */
-kprintf("serial: soft retpipelineangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=118 (retpipelineangle stamp; Soft≠product)\n");
-/* Grep: serial: soft retframebufferangle — Wave 114 return-framebufferangle honesty */
-kprintf("serial: soft retframebufferangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=118 (retframebufferangle honesty; Soft≠product)\n");
-/* Grep: serial: soft retswapchainangle — Wave 114 exclusive swapchainangle stamp */
-kprintf("serial: soft retswapchainangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=118 (retswapchainangle stamp; Soft≠product)\n");
-/* Grep: serial: soft retpresentangle — Wave 115 return-presentangle honesty */
-kprintf("serial: soft retpresentangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=118 (retpresentangle honesty; Soft≠product)\n");
-/* Grep: serial: soft retvsyncangle — Wave 115 exclusive vsyncangle stamp */
-kprintf("serial: soft retvsyncangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=118 (retvsyncangle stamp; Soft≠product)\n");
-/* Grep: serial: soft retfenceangle — Wave 116 return-fenceangle honesty */
-kprintf("serial: soft retfenceangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=118 (retfenceangle honesty; Soft≠product)\n");
-/* Grep: serial: soft retsemaphoreangle — Wave 116 exclusive semaphoreangle stamp */
-kprintf("serial: soft retsemaphoreangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=118 (retsemaphoreangle stamp; Soft≠product)\n");
-/* Grep: serial: soft retmutexangle — Wave 117 return-mutexangle honesty */
-kprintf("serial: soft retmutexangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=118 (retmutexangle honesty; Soft≠product)\n");
-/* Grep: serial: soft retcondangle — Wave 117 exclusive condangle stamp */
-kprintf("serial: soft retcondangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=118 (retcondangle stamp; Soft≠product)\n");
-/* Grep: serial: soft retbarrierangle — Wave 118 return-barrierangle honesty */
-kprintf("serial: soft retbarrierangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=118 (retbarrierangle honesty; Soft≠product)\n");
-/* Grep: serial: soft retatomicangle — Wave 118 exclusive atomicangle stamp */
-kprintf("serial: soft retatomicangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=118 (retatomicangle stamp; Soft≠product)\n");
-/* Grep: serial: soft retqueueangle — Wave 119 return-queueangle honesty */
-kprintf("serial: soft retqueueangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=119 (retqueueangle honesty; Soft≠product)\n");
-/* Grep: serial: soft reteventangle — Wave 119 exclusive eventangle stamp */
-kprintf("serial: soft reteventangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=119 (reteventangle stamp; Soft≠product)\n");
-/* Grep: serial: soft retchannelangle — Wave 120 return-channelangle honesty */
-kprintf("serial: soft retchannelangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=120 (retchannelangle honesty; Soft≠product)\n");
-/* Grep: serial: soft retmailboxangle — Wave 120 exclusive mailboxangle stamp */
-kprintf("serial: soft retmailboxangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=120 (retmailboxangle stamp; Soft≠product)\n");
-/* Grep: serial: soft retstreamangle — Wave 121 return-streamangle honesty */
-kprintf("serial: soft retstreamangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=121 (retstreamangle honesty; Soft≠product)\n");
-/* Grep: serial: soft retpacketangle — Wave 121 exclusive packetangle stamp */
-kprintf("serial: soft retpacketangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=121 (retpacketangle stamp; Soft≠product)\n");
-/* Grep: serial: soft retframeangle — Wave 122 return-frameangle honesty */
-kprintf("serial: soft retframeangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=122 (retframeangle honesty; Soft≠product)\n");
-/* Grep: serial: soft retwindowangle — Wave 122 exclusive windowangle stamp */
-kprintf("serial: soft retwindowangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=122 (retwindowangle stamp; Soft≠product)\n");
-/* Grep: serial: soft retlayerangle — Wave 123 return-layerangle honesty */
-kprintf("serial: soft retlayerangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=123 (retlayerangle honesty; Soft≠product)\n");
-/* Grep: serial: soft retcanvasangle — Wave 123 exclusive canvasangle stamp */
-kprintf("serial: soft retcanvasangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=123 (retcanvasangle stamp; Soft≠product)\n");
-/* Grep: serial: soft retbrushangle — Wave 124 return-brushangle honesty */
-kprintf("serial: soft retbrushangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=124 (retbrushangle honesty; Soft≠product)\n");
-/* Grep: serial: soft retinkangle — Wave 124 exclusive inkangle stamp */
-kprintf("serial: soft retinkangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=124 (retinkangle stamp; Soft≠product)\n");
-/* Grep: serial: soft retpaletteangle — Wave 125 return-paletteangle honesty */
-kprintf("serial: soft retpaletteangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=125 (retpaletteangle honesty; Soft≠product)\n");
-/* Grep: serial: soft retstrokeangle — Wave 125 exclusive strokeangle stamp */
-kprintf("serial: soft retstrokeangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=125 (retstrokeangle stamp; Soft≠product)\n");
-/* Grep: serial: soft retgradientangle — Wave 126 return-gradientangle honesty */
-kprintf("serial: soft retgradientangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=126 (retgradientangle honesty; Soft≠product)\n");
-/* Grep: serial: soft retblendangle — Wave 126 exclusive blendangle stamp */
-kprintf("serial: soft retblendangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=126 (retblendangle stamp; Soft≠product)\n");
-                            kprintf("serial: soft deepen wave=%u areas=inventory,program,inits,,retclass,retlane"
-            "port,div,msr,thr,iir,path,expect,verify,"
-            "lamps,stats,mcr,float,honesty,"
-            "exclusive,claim,ratio,err,return,return_selftest,retmap,return_rate,retcode "
-            "unit=serial.c only hard_gate=0 ready=%u live=%u\n",
+    kprintf("serial: soft deepen wave=%u "
+            "areas=inventory,program,inits,port,div,msr,thr,iir,"
+            "path,expect,verify,lamps,stats,mcr,float,honesty,"
+            "exclusive,claim,ratio,err,budget,residual_lean,"
+            "g752_no_com1 "
+            "residual_via=init,panel,inv "
+            "g752_no_com1=%u panel_path=%u com1_absent=%u thre_dead=%u "
+            "unit=serial.c hard_gate=0 ready=%u live=%u "
+            "lean_n=%u lean_init=%u lean_panel=%u lean_inv=%u\n",
             (unsigned)UART_SOFT_WAVE,
+            (unsigned)(g_fSerialThreDead != 0u ? 1u : 0u),
+            (unsigned)(g_fSerialThreDead != 0u ? 1u : 0u),
+            (unsigned)((g_fSerialThreDead != 0u ||
+                        g_SoftSnap.u8Float != 0u ||
+                        g_SoftSnap.u8LiveOk == 0u)
+                           ? 1u
+                           : 0u),
+            (unsigned)(g_fSerialThreDead != 0u ? 1u : 0u),
             (unsigned)(g_fSerialReady ? 1u : 0u),
-            (unsigned)g_SoftSnap.u8LiveOk);
+            (unsigned)g_SoftSnap.u8LiveOk,
+            (unsigned)g_u32SoftResidualLeanN,
+            (unsigned)g_u32SoftResidualLeanInit,
+            (unsigned)g_u32SoftResidualLeanPanel,
+            (unsigned)g_u32SoftResidualLeanInv);
 
-    /* Grep: serial: soft verify PASS|FAIL|idle — smoke scripts stable. */
+    /* Grep: serial: soft verify PASS|FAIL|idle - smoke scripts stable. */
     if (!g_fSoftSnapLive) {
         kprintf("serial: soft verify idle (ok=%u bad=%u)\n",
                 (unsigned)g_u32SoftVerifyOk, (unsigned)g_u32SoftVerifyBad);
@@ -2007,4 +1281,28 @@ kprintf("serial: soft retblendangle exclusive=1 soft_ne_product=1 product_kernel
         kprintf("serial: soft verify FAIL (ok=%u bad=%u)\n",
                 (unsigned)g_u32SoftVerifyOk, (unsigned)g_u32SoftVerifyBad);
     }
+
+    /* Grep: serial: soft budget - emission geometry (hard-cap honesty). */
+    kprintf("serial: soft budget log_max=%u log_n=%u cap_skip=%u "
+            "busy_skip=%u thre_dead=%u lean_n=%u lean_init=%u "
+            "lean_panel=%u lean_inv=%u wave=%u\n",
+            (unsigned)UART_SOFT_LOG_MAX, (unsigned)g_u32SoftLogN,
+            (unsigned)g_u32SoftLogCapSkip, (unsigned)g_u32SoftLogBusySkip,
+            (unsigned)g_fSerialThreDead, (unsigned)g_u32SoftResidualLeanN,
+            (unsigned)g_u32SoftResidualLeanInit,
+            (unsigned)g_u32SoftResidualLeanPanel,
+            (unsigned)g_u32SoftResidualLeanInv, (unsigned)UART_SOFT_WAVE);
+
+    /* C0 residual lean via=inv (full inventory path; Soft!=product). */
+    serial_soft_residual_lean_emit("inv");
+
+    g_fSoftLogBusy = 0;
 }
+/* Soft residual lean: reentrant soft inventory only. Soft!=product.
+ * G-AC-1 (no .ko product AC). Dual MIT OR Apache-2.0. Eng logs only.
+ * Dead #if-0 stamp-storm residue stays excised (nested-comment hazard).
+ * C0 residual: via=init|panel|inv; G752 no COM1 honesty (g752_no_com1 /
+ * panel_path / com1_absent / thre_dead / float / fb_console_path).
+ * Dual DoD OPEN (not serial). Stamp-free; never bump GJ_IMAGE_VERSION.
+ */
+

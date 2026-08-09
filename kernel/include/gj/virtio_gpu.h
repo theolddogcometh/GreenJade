@@ -4,29 +4,37 @@
  *
  * Clean-room virtio-gpu control queue + 2D present (OASIS; Proton A1 T0).
  * Pure C11 freestanding. Dual MIT OR Apache-2.0 only. No Linux virtio source.
+ * Soft!=product residual (eng lamps in virtio_gpu.c != product DoD close).
  *
- * Soft path (control q0 only — no cursor / 3D / EDID product depth yet):
- *   display  — GET_DISPLAY_INFO, first enabled scanout (default 1024x768)
- *   resource — CREATE_2D / ATTACH_BACKING (page-walk+coalesce) / DETACH / UNREF
- *   scanout  — SET_SCANOUT (enable) / resource_id 0 (disable)
- *   flush    — TRANSFER_TO_HOST_2D + RESOURCE_FLUSH (full or dirty rect)
+ * Soft path (control q0 only - no cursor / 3D / EDID product depth yet):
+ *   display  - GET_DISPLAY_INFO, first enabled scanout (default 1024x768)
+ *   resource - CREATE_2D / ATTACH_BACKING (page-walk+coalesce) / DETACH / UNREF
+ *   scanout  - SET_SCANOUT (enable) / resource_id 0 (disable)
+ *   flush    - TRANSFER_TO_HOST_2D + RESOURCE_FLUSH (full or dirty rect)
  *
  * Control command IDs (OASIS public; driver-local, not re-exported):
- *   0x0100 GET_DISPLAY_INFO … 0x0107 RESOURCE_DETACH_BACKING
+ *   0x0100 GET_DISPLAY_INFO ... 0x0107 RESOURCE_DETACH_BACKING
  *   resp OK_NODATA 0x1100, OK_DISPLAY_INFO 0x1101
  * Format soft: B8G8R8X8_UNORM (2) for product present.
  *
  * Consumers: session door / compositor / ICD smoke / present_stub test pattern.
  *
  * Bring-up lifecycle:
- *   scan → first KIND_GPU → setup → negotiate VERSION_1 → control q0
- *   → driver_ok → ready PASS → present (create/attach/scanout/xfer/flush)
+ *   scan -> first KIND_GPU -> setup -> negotiate VERSION_1 -> control q0
+ *   -> driver_ok -> ready PASS -> present (create/attach/scanout/xfer/flush)
+ *
+ * Lean residual (Soft!=product; dual MIT OR Apache-2.0; bar3 OPEN):
+ *   one-shot one-line soft inventory on probe path only; silent cmd_ok/fail;
+ *   never multi-line stamp storms / wave=/version / ret*angle / bar3 spam.
  *
  * Greppable product markers (prefix-stable):
  *   virtio-gpu: ready PASS
  *   virtio-gpu: present PASS
+ * Soft residual (driver .c only; Soft!=product):
+ *   virtio-gpu: soft inventory ... soft_ne_product=1 Soft!=product
  *
  * greppable: virtio_gpu_probe virtio_gpu_present virtio_gpu_flush
+ * greppable: virtio-gpu: soft inventory Soft!=product
  */
 #pragma once
 
@@ -90,7 +98,7 @@ int virtio_gpu_get_display(u32 *pOutW, u32 *pOutH);
 /**
  * Extended display query: scanout id + enabled flag from last refresh.
  * Any of pOut* may be NULL. Returns 0 on success, -1 if not ready / cmd fail.
- * Does not invent a default enabled=1 when host reports none — use
+ * Does not invent a default enabled=1 when host reports none - use
  * get_display for soft default geometry.
  */
 int virtio_gpu_get_display_ex(u32 *pOutScanoutId, u32 *pOutW, u32 *pOutH,

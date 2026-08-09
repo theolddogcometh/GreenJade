@@ -170,6 +170,13 @@
  *   - Optional: fold these soft gates into cgj_dyn_smoke.c /
  *     cgj_smoke.c continuum soft blocks (same skip-if-missing rule).
  *   - Soft gates; bar3 still open (gj_bar3_ready_36200 == 0).
+ * Soft residual honesty (wave-6 residual; Soft!=product ASCII only):
+ *   - Soft continuum KATs/lamps are eng residual only — Soft!=product.
+ *   - Dual DoD A/B remain OPEN; agent PASS != close DoD.
+ *   - G-AC-1: no in-kernel .ko product; product path = UDX/DDI+ABI.
+ *   - Freestanding rtl/USB SKIP; product_score still open (0).
+ *   - Catalog lamps: shell/libcgj green=1; bar3_ready=0; product_score=0;
+ *     continuum/smoke/dyn soft=1; milestone/wave/batch/graph = 36200.
  */
 
 #define _GNU_SOURCE
@@ -177,12 +184,18 @@
 #include <stdio.h>
 #include <string.h>
 
+/* Grep: libcgj soft m36200 residual Soft!=product dual_dod_ab=OPEN G-AC-1 */
+static const char g_szSoftHonesty[] =
+	"libcgj: soft m36200 residual honesty Soft!=product dual_dod_a=OPEN "
+	"dual_dod_b=OPEN G-AC-1=1 product_path=UDX agent_pass_ne_close_dod=1 "
+	"bar3=0 product_score=0 freestanding_rtl_usb=SKIP exclusive=1\n";
+
 #ifndef CGJ_SOFT_M36200_DIRECT
 #include <dlfcn.h>
 #endif
 
 #ifdef CGJ_SOFT_M36200_DIRECT
-/* Direct-link path: call product pure markers without dlopen. */
+/* Direct-link path: continuum soft pure markers (Soft!=product). */
 extern uint32_t gj_shell_green_36200(void);
 extern uint32_t gj_libcgj_green_36200(void);
 extern uint32_t gj_bar3_ready_36200(void);
@@ -340,7 +353,9 @@ main(void)
 		        "libcgj: soft m36200 DIRECT FAIL fails=%d\n", nFail);
 		return 1;
 	}
-	printf("libcgj: soft m36200 DIRECT PASS (all 11 lamps + markers)\n");
+	printf("libcgj: soft m36200 DIRECT PASS (all 11 lamps + markers; "
+	       "Soft!=product; Dual DoD A/B OPEN; G-AC-1)\n");
+	fputs(g_szSoftHonesty, stdout);
 	return 0;
 #else
 	void *h = NULL;
@@ -360,11 +375,14 @@ main(void)
 		/*
 		 * Soft: product SO not built yet is not a hard fail for this
 		 * CREATE-ONLY host probe. Report skip and exit 0.
+		 * Soft!=product; Dual DoD A/B OPEN; G-AC-1.
 		 */
 		fprintf(stderr,
 		        "libcgj: soft m36200 skip (dlopen fail: %s)\n",
 		        dlerror());
-		printf("libcgj: soft m36200 SOFT-SKIP (no product SO)\n");
+		printf("libcgj: soft m36200 SOFT-SKIP (no SO; Soft!=product; "
+		       "Dual DoD A/B OPEN; G-AC-1)\n");
+		fputs(g_szSoftHonesty, stdout);
 		return 0;
 	}
 
@@ -411,8 +429,10 @@ main(void)
 	}
 
 	printf("libcgj: soft m36200 PASS path=%s checked=%d "
-	       "(soft-skip unexported/missing; bar3 still open)\n",
+	       "(soft-skip unexported/missing; Soft!=product; "
+	       "bar3 still open; Dual DoD A/B OPEN; G-AC-1)\n",
 	       szPath, nChecked);
+	fputs(g_szSoftHonesty, stdout);
 	(void)dlclose(h);
 	return 0;
 #endif

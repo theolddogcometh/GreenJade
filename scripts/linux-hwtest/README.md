@@ -8,7 +8,8 @@ A **complete automatic loop** for DUT bring-up (e.g. ASUS G752VT):
 4. **Power off** the machine  
 
 This is a **Linux inventory helper**, not GreenJade freestanding product firmware.  
-It does **not** claim bar3 / Deck Top 50 / freestanding xHCI MSC.
+It does **not** claim bar3 / Deck Top 50 / Dual DoD A/B / freestanding xHCI MSC.  
+GreenJade product DUT path: root [README](../../README.md) · `make hwtest-img` · fly `GJ_IMAGE_VERSION`. Soft≠product. Support: [Patreon — TheOldDog](https://www.patreon.com/cw/TheOldDog).
 
 ## Layout
 

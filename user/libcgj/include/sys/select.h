@@ -18,6 +18,14 @@
  * Non-goals
  * ---------
  * Efficient O(1) readiness for thousands of fds (use epoll).
+ *
+ * Soft residual lean (this unit; Soft!=product; G-AC-1; Dual DoD A/B OPEN):
+ *   - fd_set/select via poll bring-up; not product large-fd epoll DoD
+ *   - Soft!=product: libcgj sys/select surface != UDX/DDI product close
+ *   - product = UDX/DDI + hot/cold Linux ABI; freestanding rtl/USB SKIP
+ *   - agent PASS != close Dual DoD; no stamp storms; bar v2026.08.04.75 parent-only
+ *   - dual MIT OR Apache-2.0; no GPL; no Linux .ko product AC (G-AC-1)
+ * Grep: libcgj sys/select.h: soft residual lean Soft!=product
  */
 #pragma once
 

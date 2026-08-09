@@ -38,6 +38,42 @@ Normative freezes: [docs/DESIGN_SPEC_COMPLETE.md](../../docs/DESIGN_SPEC_COMPLET
 ([docs/ABI_FIRST_PIVOT.md](../../docs/ABI_FIRST_PIVOT.md)). Soft module load of
 host `.ko` is a separate kernel lab surface — not this door server.
 
+### Linux-shaped residual (Option C + UDX hosts + apps)
+
+This tree’s **soft residual lean** documents the product *direction* for
+Linux-shaped userspace — it does **not** attach the door or ship drivers.
+**Residual deepen** adds G-PERS/G-COLD honesty, Dual DoD A/B UDX direction,
+and concrete host/app tokens — still Soft!=product.
+
+```text
+  Linux-shaped apps (sshd / netstackd / shell / vfsd / storaged / Proton …)
+       │  hot SYSCALL + cold door (Option C; G-PERS-1..3 / G-COLD-1..3)
+       ▼
+  personality (this ELF) — cold serve  [scaffold today; product OPEN]
+       │
+       │  (same host world; separate processes; personality TCB: no IOMMU/IRQ)
+       ▼
+  UDX driver hosts (rtl8168_udx / xhci_udx / ddi_host_gj)  [userspace; not .ko]
+       │  Linux-shaped probe/remove/quiesce/ioremap/dma/irq
+       │  freestanding bind walk: SCAN → GET → OPEN → MAP_BAR (GJ_SYS_DDI)
+       ▼
+  DDI / devmgr caps (MMIO / IRQ Notification / DMA windows)
+```
+
+| Surface | Soft residual (this tree) | Product |
+|---------|---------------------------|---------|
+| **Option C hybrid** | `personality: soft option_c` (deepen: G-PERS/G-COLD) | Hot + cold door as default cold owner |
+| **Apps** | `personality: soft apps` (deepen: sshd/netstackd/…/virtio T0) | Linux-shaped apps over hot+cold ABI |
+| **UDX hosts** | `personality: soft udx_host` (deepen: rtl/xhci/ddi + Dual DoD A/B) | Clean-room / dual-license userspace drivers |
+| **Dual DoD A/B** | residual says **OPEN** (`dual_dod_a` / `dual_dod_b`) | UDX USB + UDX NIC datapath evidence |
+| **Freestanding class** | residual says **not product** / **SKIP** | SKIP; product = UDX/DDI |
+| **Linux `.ko` in-kernel** | **Forbidden (G-AC-1)** | Never product AC |
+
+Companions (outside this tree): [docs/UDX_LINUX_PORTER.md](../../docs/UDX_LINUX_PORTER.md) ·
+[docs/DDI_SOFT.md](../../docs/DDI_SOFT.md) ·
+[docs/LAPTOP_LINUX_DRIVER_HOST.md](../../docs/LAPTOP_LINUX_DRIVER_HOST.md) ·
+[docs/ABI_FIRST_PIVOT.md](../../docs/ABI_FIRST_PIVOT.md).
+
 ### How it replaces `cold_personality_server`
 
 1. **Boot** maps/spawns this NATIVE process (or embeds ELF like vfsd/storaged)
@@ -66,6 +102,7 @@ interact, and when it is safe to enable `PERSONALITY_DOOR_LOOP`.
 | **Bring-up server** | `user/protonrt-server` blob **or** kthread `cold_personality_server` | Mapped/scheduled by kernel (`user_personality_map` / fallback) |
 | **Product server (G-PERS)** | This ELF (`personality.elf`) | Only after coordinator wires embed + spawn **and** transfers door ownership |
 | **Clients** | Linux hybrid tasks via `door_call` / `GJ_SYS_IPC_CALL` | Wire ABI unchanged; do not set server badge |
+| **UDX hosts** | Separate userspace processes (`user/udx` + drivers) | Not this door server; share Linux-shaped host *world*, not TCB |
 
 ### Badge (server-authoritative)
 
@@ -111,7 +148,7 @@ interact, and when it is safe to enable `PERSONALITY_DOOR_LOOP`.
 -DPERSONALITY_DOOR_LOOP=1 -DPERSONALITY_WOULD_RECV_CAP=64
 ```
 
-Soft ≠ product: enabling the loop without attach will soft-miss-yield (or
+Soft!= product: enabling the loop without attach will soft-miss-yield (or
 block in `IPC_RECV` if the kernel parks the waiter) and is **not** a product
 claim.
 
@@ -119,8 +156,8 @@ claim.
 
 | Path | Role |
 |------|------|
-| `personality_gj.c` | Freestanding scaffold (`_start` → `main`); soft PASS + soft serve ready |
-| `README.md` | This file — product story, attach contract, Makefile lines for coordinator |
+| `personality_gj.c` | Freestanding scaffold (`_start` → `main`); soft PASS + soft serve ready + residual lean |
+| `README.md` | This file — product story, attach contract, residual deepen, Makefile lines for coordinator |
 | *(no local `.ld`)* | **Reuses** [`user/init/user.ld`](../init/user.ld) like other `*-gj` daemons |
 
 Source of truth under this tree: `personality_gj.c` only. Parent Makefile /
@@ -130,12 +167,15 @@ kernel embed / boot spawn live **outside** this tree (coordinator merges).
 
 Current binary is a **soft userspace scaffold**, not a live door server:
 
-1. Enter `_start` → call `main`
+1. Enter `_start` -> call `main`
 2. Soft phase 1: greppable scaffold PASS via native `GJ_SYS_DEBUG_LOG`
 3. Soft phase 2: soft once `personality-gj: soft serve ready` (scaffold complete)
-4. Exit 0
+4. Soft phase 3: lean residual (honesty / path / inventory / option_c /
+   udx_host / apps / residual lean PASS)
+5. Exit 0
 
-Default: `PERSONALITY_DOOR_LOOP=0` — **never** enters blocking `gj_ipc_recv`.
+Default: `PERSONALITY_DOOR_LOOP=0` -- **never** enters blocking `gj_ipc_recv`.
+Phase 3 residual lamps emit only on the scaffold path (`DOOR_LOOP=0`).
 
 ### Planned door loop (compiled in only when `PERSONALITY_DOOR_LOOP=1`)
 
@@ -161,20 +201,83 @@ recv loop until `PERSONALITY_DOOR_LOOP=1` after attach (else smoke would hang).
 
 ## Smoke markers
 
-Soft (scaffold; default build — greppable, optional for smoke-all):
+Soft (scaffold; default build -- greppable, optional for smoke-all):
 
 ```text
 personality: soft userspace scaffold PASS
 personality-gj: soft serve ready
+personality: soft honesty
+personality: soft path
+personality: soft inventory
+personality: soft option_c
+personality: soft udx_host
+personality: soft apps
+personality: soft residual lean
+personality: soft residual lean PASS
 ```
 
 | Marker | When | Meaning |
 |--------|------|---------|
 | `personality: soft userspace scaffold PASS` | Always (phase 1) | ELF ran; `gj_debug_log` works |
 | `personality-gj: soft serve ready` | Soft once (phase 2) | Scaffold complete **or** first full door flight when loop=1 |
+| `personality: soft honesty` | Soft once (phase 3; DOOR_LOOP=0) | Door/personality honesty; Soft!=product; dual DoD A/B + bar3 OPEN |
+| `personality: soft path` | Soft once (phase 3; DOOR_LOOP=0) | ABI-first host path; Option C + UDX + apps; G-PERS/G-COLD; G-AC-1 |
+| `personality: soft inventory` | Soft once (phase 3; DOOR_LOOP=0) | Lean residual inventory + deepen tokens (hosts/apps OPEN) |
+| `personality: soft option_c` | Soft once (phase 3; DOOR_LOOP=0) | Hybrid hot+cold residual deepen; G-PERS/G-COLD honesty; attach OPEN |
+| `personality: soft udx_host` | Soft once (phase 3; DOOR_LOOP=0) | UDX host residual deepen (rtl/xhci/ddi + Dual DoD A/B); not `.ko` |
+| `personality: soft apps` | Soft once (phase 3; DOOR_LOOP=0) | Apps residual deepen (sshd/netstackd/…/virtio T0); no bar3 claim |
+| `personality: soft residual lean` | Soft once (phase 3; DOOR_LOOP=0) | Residual lean honesty (not live G-PERS); ok=10/10 self-check |
+| `personality: soft residual lean PASS` | Soft once (phase 3; DOOR_LOOP=0) | Residual lean + deepen complete; Soft!=product |
 
-Do **not** rename the PASS / soft serve ready substrings once smoke-all greps
-depend on them.
+Do **not** rename the PASS / soft serve ready / residual lean substrings once
+smoke-all greps depend on them. Deepen tokens on `option_c` / `udx_host` /
+`apps` lines are additive fixed strings only (no new prefix-stable markers).
+
+### Lean soft residual (exclusive; this tree only)
+
+Soft residual lean is **scaffold honesty** only -- never hard-gates product
+G-PERS attach, never claims freestanding class drivers, never waives **G-AC-1**,
+never closes dual DoD / bar3 / Deck Top 50.
+
+| Claim | Soft residual | Product |
+|-------|---------------|---------|
+| Userspace cold door ELF scaffold | **Yes** (this tree) | G-PERS attach OPEN (coordinator) |
+| Door loop park | Default **0** (soft) | `PERSONALITY_DOOR_LOOP=1` after attach |
+| Live path PASS | **Not claimed** | Future hard marker |
+| Option C hybrid (hot + cold) | `soft option_c` deepen (G-PERS/G-COLD) | Userspace cold owner default |
+| ABI-first Linux-shaped host path | Residual lean + path lamps | Apps/drivers over cold door + UDX |
+| UDX driver hosts (userspace) | `soft udx_host` deepen (rtl/xhci/ddi) | Clean-room / dual-license class hosts |
+| Linux-shaped apps | `soft apps` deepen (named apps + virtio T0) | Apps on hot+cold ABI |
+| Dual DoD A/B (USB/NIC UDX) | `dual_dod_a=OPEN` / `dual_dod_b=OPEN` | DUT evidence only |
+| Freestanding class drivers (rtl/xhci) | Residual says **not product** / SKIP | Product = userspace UDX/DDI |
+| Linux `.ko` in-kernel product AC | **Forbidden (G-AC-1)** | Never |
+| Soft != product | Explicit on residual lines | Dual MIT OR Apache-2.0 |
+
+#### Residual deepen tokens (fixed strings; freestanding)
+
+| Token | On markers | Meaning |
+|-------|------------|---------|
+| `product_dir=UDX+ABI` | honesty / path / inventory / lean / PASS | Product direction (not freestanding wire) |
+| `option_c=1` | honesty / path / inventory / lean / PASS / option_c | Hybrid hot+cold residual documented |
+| `udx_host=1` | honesty / path / inventory / lean / PASS / udx_host | Userspace UDX hosts residual |
+| `apps=1` / `apps_linux_shaped=1` | honesty / path / inventory / lean / PASS / apps | Linux-shaped apps residual |
+| `residual_deepen=1` | inventory / option_c / udx_host / apps / lean / PASS | Option C + UDX host/apps deepen wave |
+| `g_pers1=1` / `g_pers2=1` / `g_pers3=OPEN` | path / option_c / lean | G-PERS freezes honesty (attach still OPEN) |
+| `g_cold1=1` / `g_cold2=deprecated_scaffold` / `g_cold3=1` | option_c / lean | G-COLD freezes honesty |
+| `hot_dispatch=1` / `cold_door_call=1` | option_c | Hybrid dispatch residual (not live path) |
+| `rtl8168_udx=1` / `xhci_udx=1` / `ddi_host_gj=1` | udx_host / inventory / lean | Host trees residual (outside this TU) |
+| `g752_nic=10ec:8168` / `g752_xhci=8086:a12f` | udx_host | G752 target IDs residual only |
+| `bind_walk=SCAN_GET_OPEN_MAP_BAR` | udx_host | Soft DDI bind walk residual |
+| `dual_dod_a=OPEN` / `dual_dod_b=OPEN` | honesty / path / inventory / udx_host / lean / PASS | Dual DoD A=USB UDX · B=NIC UDX |
+| `app_sshd=soft` / `app_netstackd=soft` / … | apps | Named app residual surface (not product PASS) |
+| `virtio_t0=1` / `udx_owns_wire=OPEN` | apps | T0 net until UDX owns wire |
+| `freestanding_class_product=0` / `freestanding_class_skip=1` | honesty / inventory / lean / PASS / udx_host | No freestanding class product claim |
+| `ko_product=0` / `g_ac1=1` | all residual | G-AC-1 held |
+| `g_pers_attach=OPEN` | honesty / inventory / option_c / PASS | Product door attach still coordinator |
+| `dual_dod=OPEN` | honesty / inventory / udx_host | Dual laptop DoD not closed by residual |
+| `bar3=OPEN` / `deck_top50=NOT_CLAIMED` | honesty / apps | No Steam product claim from residual |
+| `ok=10/10` | residual lean | Stack-local self-check (compile-time 10 under default) |
+| `Soft!=product` | all residual | Soft residual != product complete |
 
 When `PERSONALITY_DOOR_LOOP=1` (product attach / capped smoke):
 
@@ -293,14 +396,33 @@ make personality-gj    → build/user/personality.elf
 | Topic | Status |
 |-------|--------|
 | Soft scaffold ELF + greppable PASS + soft serve ready | **This tree** |
+| Lean soft residual (honesty / path / inventory / residual lean PASS) | **This tree** (DOOR_LOOP=0 only) |
+| Residual deepen: option_c / udx_host / apps once-lamps | **This tree** (DOOR_LOOP=0 only) |
+| Option C deepen (G-PERS/G-COLD / hot_dispatch / cold_door_call) | **This tree** (soft residual only) |
+| UDX host deepen (rtl/xhci/ddi IDs + Dual DoD A/B OPEN) | **This tree** (soft residual only) |
+| Apps deepen (sshd/netstackd/shell/vfsd/storaged/proton + virtio T0) | **This tree** (soft residual only) |
 | Door loop in freestanding C | **Scaffold only** (`DOOR_LOOP=0` default; API in libgj) |
 | Door attach contract (badge, cold_ipc, owner) | **Documented** above; wire-up is coordinator |
 | Optional soft would_recv cap | **Compile-time** when `DOOR_LOOP=1` |
 | Replace kthread as default | **Coordinator** (kernel/main + embed) |
-| Cold policy fully in userspace | **OPEN** — interim `PERSONALITY_SERVE` / libprotonrt |
+| Cold policy fully in userspace | **OPEN** -- interim `PERSONALITY_SERVE` / libprotonrt |
 | Cap TCB (G-PERS-2) | Design freeze; enforce at product attach |
+| ABI-first Linux-shaped host (apps/drivers) | Residual deepen lamps; product via cold door + UDX |
+| UDX driver hosts product datapath | **OPEN** (residual only; hosts outside this tree) |
+| Freestanding class drivers as product | **No** (residual honesty; freestanding SKIP) |
+| Linux `.ko` in-kernel product AC | **Forbidden (G-AC-1)** |
+| Dual DoD A (USB UDX) / B (NIC UDX) | **OPEN** (residual never closes) |
+| bar3 / Deck Top 50 | **OPEN / NOT_CLAIMED** (residual never closes) |
 
-Honesty: soft scaffold PASS / soft serve ready ≠ product cold path; bar3 /
-Deck Top 50 unchanged. Soft ≠ product.
+Honesty: soft scaffold PASS / soft serve ready / residual lean PASS != product
+cold path; bar3 / Deck Top 50 / Dual DoD A/B unchanged. Soft!=product. Dual
+MIT OR Apache-2.0. **G-AC-1:** no Linux `.ko` product AC. Product direction =
+**UDX + ABI** (userspace hosts + Option C apps), not freestanding class thrash.
 
-See [docs/PROTON_PERSONALITY.md](../../docs/PROTON_PERSONALITY.md).
+See [docs/PROTON_PERSONALITY.md](../../docs/PROTON_PERSONALITY.md) ·
+[docs/ABI_FIRST_PIVOT.md](../../docs/ABI_FIRST_PIVOT.md) ·
+[docs/LINUX_ABI_HYBRID.md](../../docs/LINUX_ABI_HYBRID.md).
+
+---
+
+**Project:** GreenJade pure-C microkernel · dual **MIT OR Apache-2.0** · Soft≠product · Dual DoD A/B **OPEN**. See [root README](../../README.md). Support: [Patreon — TheOldDog](https://www.patreon.com/cw/TheOldDog).

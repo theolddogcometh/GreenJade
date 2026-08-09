@@ -3,7 +3,7 @@
  * Copyright (c) 2026 Project GreenJade contributors
  *
  * Kernel interim session compositor (A1 / Proton T0).
- * Pure C11 freestanding, dual MIT OR Apache-2.0.
+ * Pure C11 freestanding, dual MIT OR Apache-2.0. Soft!=product.
  *
  * Owns one BGRA scanout tile backed by PMM + HHDM, presented through
  * virtio-gpu. Policy ownership lives on the session door (CLAIM); this
@@ -18,8 +18,12 @@
  *     call (capped by GJ_COMP_MULTI_MAX) for multi-frame bring-up without
  *     a second alloc. Stops the soft batch on first backend reject.
  *
+ * Lean soft residual (compositor.c; Soft!=product · G-AC-1):
+ *   once-lamp residual lean after present activity; never hard-gates;
+ *   never closes desktop product or bar3 (bar3 OPEN). No stamp storms.
+ *
  * Geometry (compositor.c):
- *   clamp ≤ GJ_COMP_MAX_DIM (256); fallback 64×64; min 32×32
+ *   clamp <= GJ_COMP_MAX_DIM (256); fallback 64x64; min 32x32
  *   stride = width * 4 (BGRA); prefer session_compositor_stride() for
  *   MAP_SCANOUT consistency over recomputing from size
  *
@@ -29,9 +33,13 @@
  *   - never returns a dangling FB pointer after a failed init
  *
  * Greppable:
- *   compositor: scanout … ready (multi-frame soft)
+ *   compositor: scanout ... ready (multi-frame soft)
  *   compositor: multi-frame soft
  *   compositor multi-frame soft
+ *   compositor: soft residual lean
+ *   compositor: soft residual lean PASS | soft residual lean SKIP
+ *   Soft!=product
+ *   bar3 OPEN
  */
 #pragma once
 
@@ -74,7 +82,7 @@ u32  session_compositor_multi_count(void);
 /** Soft frame generation (bumps on each ok present; wrap OK). */
 u32  session_compositor_frame_gen(void);
 
-/** Soft double-buffer index (0/1), metadata only — one physical scanout. */
+/** Soft double-buffer index (0/1), metadata only - one physical scanout. */
 u32  session_compositor_soft_index(void);
 
 /** Non-zero when scanout is allocated and presentable. */

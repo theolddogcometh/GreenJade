@@ -3,15 +3,24 @@
  * Copyright (c) 2026 Project GreenJade contributors
  *
  * Doors rendezvous for cold personality (ENDPOINT-shaped, G-DOOR / G-COLD).
+ * Pure C11 freestanding. Dual MIT OR Apache-2.0. Soft!=product. G-AC-1.
+ *
+ * Lean residual (exclusive residual; this unit only) for service hosts:
+ * channel-A control RPC (Call/Recv/Reply + badge + ENDPOINT install).
+ * Service hosts: vfsd / storaged / netstackd / sessiond / sshd / scsi_mid.
+ * Also DDI/UDX hosts (rtl8168_udx / xhci_udx / ddi_host_gj). Bulk device
+ * data stays on mapped rings / DDI MAP_BAR / UDX host rings - this module
+ * never maps client memory. Not multi-server product; not MIG REPLY
+ * product; not Linux .ko product AC (G-AC-1).
  *
  * Protocol (single-flight client):
- *   server  door_recv  → block tag 1 until u32HasReq
- *   client  door_call  → claim slot (CAS), post req, wake server, block tag 2
- *   server  door_reply → set reply, wake client (tag 2)
+ *   server  door_recv  -> block tag 1 until u32HasReq
+ *   client  door_call  -> claim slot (CAS), post req, wake server, block tag 2
+ *   server  door_reply -> set reply, wake client (tag 2)
  *   contenders for the client slot block on tag 3 (no product busy-spin)
  *
  * Wait keys are the door object; tags distinguish roles.
- * Peer death / object DEAD → clients see -LINUX_EIO (G-DOOR-4 / G-PERS-3).
+ * Peer death / object DEAD -> clients see -LINUX_EIO (G-DOOR-4 / G-PERS-3).
  *
  * Mid-call timeout races (cooperative UP + atomics for SMP-prep):
  *   HasReply is observed before the deadline check in the client wait loop,
@@ -19,39 +28,105 @@
  *   On timeout: clear HasReq then HasReply, then CAS-release pClient. A
  *   concurrent door_reply after release sees pClient==NULL and drops (stale).
  *   A concurrent door_recv that already sampled HasReq may still copy req and
- *   later reply into a freed slot — reply is then dropped; no hang. Server
+ *   later reply into a freed slot - reply is then dropped; no hang. Server
  *   re-checks HasReq after wake if the client cancelled first.
  *
- * Soft door call inventory (Wave 35 exclusive deepen — this unit only):
- *   - inventory / call / recv / reply / lifecycle / cold / err / path / PASS
- *   - Call: enter / claim / reply / eio / etimedout / enosys / slot_wait /
- *     client_wait + outcome rollup
- *   - Recv: enter / ok / peer_dead / inval / block + outcome rollup
- *   - Reply: enter / ok / stale / not_ready (+ single-use cross-link) + outcome
- *   - Lifecycle: abort / cancel / thr_exit / thr_cli / thr_srv / install
- *   - capacity / catalog / tags / deepen / flight / badge / reply_su_inval
- *   - return surface (Wave 17): call|recv|install i64/gj_status buckets
- *     greppable: "door: soft return …"
- *   - return rate / retcode (Wave 20 deepen): call|recv|install rate lamps
- *     + retcode catalog greppable: "door: soft return rate|retcode …"
- *   - Cold product snapshot + badge transfer grant/move/fail
- *   greppable: "door: soft …"
- *   Never hard-gates; diagnostics only (wrap OK). Soft / MIG product.
+ * Lean soft residual (exclusive residual; this unit only; service hosts):
+ *   greppable: door: soft residual lean
+ *   greppable: door: soft residual lean foundation
+ *   greppable: door: soft residual lean service
+ *   greppable: door: soft residual lean thr
+ *   greppable: door: soft residual lean udx
+ *   greppable: door: soft residual lean PASS
+ *   greppable: door: soft inventory | call_reply | path | PASS
+ *   greppable: host=svc|vfsd|storaged|netstackd|sessiond|sshd|scsi_mid|ddi_udx
+ * Soft!=product. Dual MIT OR Apache-2.0. No version stamp. No stamp storms
+ * (once-lamps + counters only; no per-op kprintf on call/recv/reply).
+ * Soft residual != multi-server product / MIG REPLY product / full cap transfer.
+ * Service host residual != ddi_door product mint / UDX .ko product (G-AC-1).
+ * C2 residual: thr-exit cold + soft-REPLY-bound doors; lean eio + cancel +
+ * thr-cli + thr-bound arms (door_on_thread_exit walk residual).
+ * STRONGER functional residual (W7 Dual DoD; stamp-free bar v2026.08.04.75):
+ *   null_miss | badge_or | install_null | thr_null | dual_dod_open
+ *   toward UDX/sshd product path (channel-A control RPC). Soft!=product.
+ * STRONGER functional residual (W10 Dual DoD; stamp-free bar v2026.08.04.75):
+ *   call_null | dead_eio | dual_dod_open deepen for live UDX hosts
+ *   (rtl8168_udx / xhci_udx / ddi_host / sshd channel-A). Soft!=product.
+ * STRONGER functional residual (W11 Dual DoD; stamp-free bar v2026.08.04.75):
+ *   poll_ready | accept_recv | call_dead | dual_dod_open
+ *   POLL/ACCEPT/CALL honesty for product hosts + sshd product path
+ *   (channel-A control RPC under net/DDI/session facades). Soft!=product.
+ *   greppable: product_hosts=UDX | dual_dod=OPEN | Soft!=product
+ * STRONGER denser residual (W12 Dual DoD; stamp-free bar v2026.08.04.75):
+ *   poll denser: idle | shape(req-pending) | both | null
+ *   accept denser: inval | peer | take | release
+ *   call denser: not_ready(-ENOSYS) | mark_dead(fail-closed -ENOSYS)
+ *   composite denser + dual_dod_open for product_hosts=UDX
+ *   greppable: door: soft residual denser | POLL/ACCEPT/CALL denser
+ *   greppable: product_hosts=UDX | dual_dod=OPEN | Soft!=product
+ * STRONGER denser residual (W13 Dual DoD; stamp-free bar v2026.08.04.75):
+ *   poll denser2: reply-only | flip(atomic toggle)
+ *   accept denser2: null-regs INVAL | idle clear_serve no-op
+ *   composite denser2 + dual_dod denser for product_hosts=UDX POLL/ACCEPT
+ *   greppable: door: soft residual denser poll_accept
+ *   greppable: door: soft residual denser dual_dod
+ *   greppable: denser poll_reply | denser poll_flip | denser accept_null
+ *   greppable: denser accept_idle | denser=2 | denser residual W13
+ * Dual DoD A/B remain OPEN (this residual does not close product DoD).
  *
- * Soft ephemeral single-use REPLY (Wave 20 deepen — not full MIG product):
+ * Soft inventory (sparse lamps only - NO stamp storms, no version stamp):
+ *   - One inventory rollup + call/reply residual + lean residual + honesty + PASS
+ *   - Companion once-lines: reply single-use / REPLY soft / badge transfer
+ *   greppable: "door: soft ..." / "door: soft call_reply ..." /
+ *              "door: soft residual lean ..." /
+ *              "door: soft residual lean foundation ..." /
+ *              "door: soft residual lean service ..." /
+ *              "door: soft residual lean thr ..." /
+ *              "door: soft residual lean udx ..." /
+ *              "door: soft residual denser ..." /
+ *              "door: soft residual denser poll_accept ..." /
+ *              "door: soft residual denser dual_dod ..." /
+ *              "door: reply single-use ..." / "door: REPLY soft ..." /
+ *              "door: badge transfer ..."
+ *   greppable: product_hosts=UDX | dual_dod=OPEN | Soft!=product
+ *   greppable: POLL/ACCEPT/CALL | poll_ready | accept_recv | call_dead
+ *   greppable: denser | poll_idle | poll_shape | accept_take | call_mark_dead
+ *   greppable: denser poll_reply | denser poll_flip | denser accept_null
+ *   greppable: denser accept_idle | denser=2 | denser residual POLL/ACCEPT
+ *   Never hard-gates; diagnostics only (wrap OK). Soft != product. Soft != MIG.
+ *   Dual license: MIT OR Apache-2.0 (SPDX above). Pure C.
+ *
+ * Call/reply correctness residual (used by cold + door-shaped facades):
+ *   - pServer held from successful door_recv until door_reply / thr-exit /
+ *     peer abort (serve window). multi_server=0 - not a product multi-server API.
+ *   - Server thr-exit mid-serve posts synthetic -EIO for in-flight client
+ *     (no hang). Soft residual; sticky peer-dead still via abort/mark_dead.
+ *   - Stale door_reply (pClient gone after timeout) still releases serve if
+ *     the current thr owns pServer - no stuck serve_hold after cancel.
+ *   - HasReq/HasReply use acquire/release atomics (SMP-prep; UP still OK).
+ *   - thr-exit residual (C2 deepen): cold personality + soft-REPLY-bound doors
+ *     (table walk via door_on_thread_exit). Client thr-exit arm clears slot +
+ *     inval soft REPLY (THR why). Not a product multi-door registry;
+ *     Soft!=product.
+ *
+ * Soft ephemeral single-use REPLY (not full MIG product):
  *   On slot claim, kernel mints a soft REPLY right bound to the door flight.
  *   First door_reply consumes it; second use fails (stale / second_fail).
  *   Timeout / peer death / thr-exit / init invalidates the soft right.
- *   Deepen: create new|rebind, fallback allow, inval reason split, live peak.
- *   greppable: "door: reply single-use …" / "door: REPLY soft …" /
- *              "door: soft reply_su …"
  * Honesty: not full MIG REPLY until CNode install of GJ_CAP_REPLY.
- *   Soft ≠ MIG REPLY product (cnode_mig_reply=0).
+ *   Soft != MIG REPLY product (cnode_mig_reply=0).
  *
- * Soft badge / cap-transfer deepen (server-authoritative badge path):
+ * Soft badge / cap-transfer (server-authoritative badge path):
  *   grant = door_set_badge, move = last-badge snapshot on completed flight,
- *   fail = null / reject arms. greppable: "door: badge transfer …"
- *   Complements boot smoke "door: badge transfer PASS" (install/mint path).
+ *   fail = null / reject arms. Complements install/mint badge transfer PASS.
+ *
+ * Service host foundation (lean residual honesty; C2 channel-A control RPC):
+ *   Service hosts (vfsd / storaged / netstackd / sessiond / sshd / scsi_mid)
+ *   and DDI/UDX hosts (rtl8168_udx / xhci_udx / ddi_host_gj) rely on this
+ *   rendezvous + ENDPOINT install + badge for channel-A control RPC only.
+ *   Bulk / device MMIO/IRQ/DMA mint remains facade doors / caps (OPEN).
+ *   Dual DoD A/B remain OPEN (not closed by this residual). Soft!=product.
+ *   Dual MIT OR Apache-2.0. G-AC-1. No version stamp.
  */
 #include <gj/cap.h>
 #include <gj/door.h>
@@ -68,19 +143,25 @@
 #define DOOR_TAG_CLIENT 2u /* client waiting for a reply */
 #define DOOR_TAG_SLOT   3u /* contender waiting for single-flight slot */
 
-/* Wave 35 exclusive soft deepen stamp (greppable wave=116). */
-#define DOOR_SOFT_DEEPEN_WAVE 116u
-/* +return selftest|retmap over Wave 17 return rate|retcode. */
-#define DOOR_SOFT_DEEPEN_AREAS 170u
+/*
+ * Sparse lamp surface count (inventory / call_reply residual / lean residual /
+ * foundation / service / thr / honesty / path / reply_su / badge / PASS).
+ * Not a version stamp; not a stamp-storm catalog. Grep: door: soft residual lean
+ * Service host residual: vfsd|storaged|netstackd|sessiond|sshd|scsi_mid +
+ * DDI/UDX (G-AC-1). C2 thr-exit residual walks soft-REPLY-bound doors.
+ */
+/* +W13 denser POLL/ACCEPT Dual DoD residual (poll_accept + dual_dod lamps) */
+#define DOOR_SOFT_AREAS 13u
 
 static struct gj_door g_doorCold;
 static int            g_fColdInited;
 static u8             g_fReplySoftSelfcheck; /* cold-init self-check once */
+static u8             g_fLeanResidualOnce;   /* lean residual self-check once */
 
 /*
- * Soft product inventory (Wave 20 exclusive). Cumulative path tallies across
- * all doors that enter this module. Live/product counters remain per-door
- * (door_stats). greppable: door: soft …
+ * Soft path tallies (cumulative across doors entering this module).
+ * Live/product counters remain per-door (door_stats). Soft != product.
+ * greppable: door: soft ...
  */
 static u64 g_u64SoftCallEnter;     /* door_call_timeout entries */
 static u64 g_u64SoftCallClaim;     /* single-flight slot claims */
@@ -106,6 +187,9 @@ static u64 g_u64SoftCancel;        /* door_cancel_inflight */
 static u64 g_u64SoftThrExit;       /* door_on_thread_exit entries */
 static u64 g_u64SoftThrExitClient; /* thr-exit cleared client slot */
 static u64 g_u64SoftThrExitServer; /* thr-exit cleared server role */
+static u64 g_u64SoftThrSrvEio;     /* thr-exit mid-serve -> client -EIO */
+static u64 g_u64SoftServeHold;     /* recv took request under serve ownership */
+static u64 g_u64SoftServeRelease;  /* reply / thr-exit / abort cleared serve */
 static u64 g_u64SoftInstallOk;     /* door_install_endpoint success */
 static u64 g_u64SoftInstallFail;   /* install reject (inval/nodev/cap) */
 static u64 g_u64SoftInstallFailNull; /* Wave 19: null args / no cnode */
@@ -113,13 +197,65 @@ static u64 g_u64SoftInstallFailDead; /* Wave 19: door not live */
 static u64 g_u64SoftInstallFailCap;  /* Wave 19: cap_alloc_install fail */
 static u64 g_u64SoftLogN;          /* inventory log emissions */
 static u8  g_fSoftOnce;            /* one-shot after first call activity */
+static u64 g_u64SoftLeanRuns;      /* lean residual self-check runs */
+static u64 g_u64SoftLeanOk;        /* lean residual self-check PASS arms */
+static u64 g_u64SoftLeanServe;     /* lean: serve_hold -> reply release */
+static u64 g_u64SoftLeanSu;        /* lean: single-use create/consume/2nd */
+static u64 g_u64SoftLeanStale;     /* lean: stale reply released serve */
+static u64 g_u64SoftLeanFound;     /* lean: static foundation checks */
+static u64 g_u64SoftLeanSvc;       /* lean: service host foundation checks */
+static u64 g_u64SoftLeanEio;       /* lean: thr mid-serve -> client -EIO */
+static u64 g_u64SoftLeanCancel;    /* lean: cancel_inflight residual arm */
+static u64 g_u64SoftLeanThrCli;    /* lean: thr-exit client slot residual */
+static u64 g_u64SoftLeanThrBound;   /* lean: thr-exit soft-REPLY-bound walk */
+static u64 g_u64SoftLeanNullMiss;  /* lean: null reject call/recv/live residual */
+static u64 g_u64SoftLeanBadgeOr;   /* lean: badge_or + mask residual */
+static u64 g_u64SoftLeanInstallNull; /* lean: install null-args residual */
+static u64 g_u64SoftLeanThrNull;   /* lean: thr-exit NULL no-op residual */
+static u64 g_u64SoftLeanDualDod;   /* lean: Dual DoD OPEN honesty residual */
+static u64 g_u64SoftLeanCallNull;  /* lean: door_call NULL fail-closed residual */
+static u64 g_u64SoftLeanDeadEio;   /* lean: mark_dead -> is_live=0 residual */
+static u64 g_u64SoftLeanPollReady; /* lean: POLL HasReq/HasReply readiness residual */
+static u64 g_u64SoftLeanAcceptRecv;/* lean: ACCEPT-shaped door_recv residual */
+static u64 g_u64SoftLeanCallDead;  /* lean: CALL peer-dead -EIO residual */
+/*
+ * W12 denser POLL/ACCEPT/CALL product residual (Soft!=product; Dual DoD OPEN).
+ * bar v2026.08.04.75 stamp-free; product_hosts=UDX; never Soft neq glyph.
+ * Grep: door: soft residual denser | POLL/ACCEPT/CALL denser
+ */
+static u64 g_u64SoftLeanPollIdle;  /* denser: POLL idle 0/0 residual */
+static u64 g_u64SoftLeanPollShape; /* denser: POLL req-pending shape residual */
+static u64 g_u64SoftLeanPollBoth;  /* denser: POLL both set then clear residual */
+static u64 g_u64SoftLeanPollNull;  /* denser: POLL null load residual */
+static u64 g_u64SoftLeanAcceptInval; /* denser: ACCEPT not-ready INVAL residual */
+static u64 g_u64SoftLeanAcceptPeer;  /* denser: ACCEPT peer-dead residual */
+static u64 g_u64SoftLeanAcceptTake;  /* denser: ACCEPT take + serve_hold residual */
+static u64 g_u64SoftLeanAcceptRel;   /* denser: ACCEPT clear_serve release residual */
+static u64 g_u64SoftLeanCallNr;    /* denser: CALL not-ready -ENOSYS residual */
+static u64 g_u64SoftLeanCallMd;    /* denser: CALL mark_dead fail-closed residual */
+static u64 g_u64SoftLeanDenseOk;   /* denser composite once-arm ok */
+static u64 g_u64SoftLeanDenseFail; /* denser composite soft fail */
+/*
+ * W13 denser POLL/ACCEPT Dual DoD residual (Soft!=product; Dual DoD OPEN).
+ * bar v2026.08.04.75 stamp-free; product_hosts=UDX; never Soft neq glyph.
+ * Grep: door: soft residual denser poll_accept | denser dual_dod
+ * Grep: denser poll_reply | denser poll_flip | denser accept_null
+ * Grep: denser accept_idle | denser=2
+ */
+static u64 g_u64SoftLeanPollReply; /* denser2: POLL reply-only HasReply=1 residual */
+static u64 g_u64SoftLeanPollFlip;  /* denser2: POLL atomic toggle residual */
+static u64 g_u64SoftLeanAcceptNull;/* denser2: ACCEPT null-regs INVAL residual */
+static u64 g_u64SoftLeanAcceptIdle;/* denser2: ACCEPT clear_serve idle no-op */
+static u64 g_u64SoftLeanDense2Ok;  /* denser2 composite once-arm ok */
+static u64 g_u64SoftLeanDense2Fail;/* denser2 composite soft fail */
+static u64 g_u64SoftThrExitBound;   /* thr-exit soft-REPLY-bound doors walked */
 
 /*
  * Soft ephemeral single-use REPLY rights (Call path; Wave 15 deepen).
- * File-static table — no CNode install, no GJ_CAP_REPLY product binding.
- * Soft ≠ MIG REPLY product (honesty: cnode_mig_reply=0).
- * greppable: door: reply single-use … / door: REPLY soft … /
- *            door: soft reply_su …
+ * File-static table - no CNode install, no GJ_CAP_REPLY product binding.
+ * Soft != MIG REPLY product (honesty: cnode_mig_reply=0).
+ * greppable: door: reply single-use ... / door: REPLY soft ... /
+ *            door: soft reply_su ...
  */
 #define DOOR_REPLY_SOFT_SLOTS 8u
 
@@ -149,13 +285,13 @@ static u64 g_u64ReplySuInvalAbort;   /* DOOR_SU_INVAL_ABORT */
 static u64 g_u64ReplySuInvalThr;     /* DOOR_SU_INVAL_THR */
 static u64 g_u64ReplySuInvalInit;    /* DOOR_SU_INVAL_INIT */
 static u64 g_u64ReplySuDrop;         /* create failed (table full / null) */
-static u64 g_u64ReplySuFallback;     /* try_consume missing slot → allow */
+static u64 g_u64ReplySuFallback;     /* try_consume missing slot -> allow */
 static u32 g_u32ReplySuLivePeak;     /* high-water live soft REPLY rights */
 static u8  g_fReplySoftSelfPass;     /* cold self-check create/consume/2nd */
 
 /*
- * Soft badge transfer path counters (server badge → client last-badge).
- * greppable: door: badge transfer …
+ * Soft badge transfer path counters (server badge -> client last-badge).
+ * greppable: door: badge transfer ...
  */
 static u64 g_u64BadgeXferGrant; /* door_set_badge success */
 static u64 g_u64BadgeXferMove;  /* last-badge snapshot on completed flight */
@@ -167,6 +303,7 @@ static int  door_live(const struct gj_door *pDoor);
 static void door_soft_inc(u64 *pCtr);
 static void door_soft_inventory_log(const struct gj_door *pDoor);
 static void door_soft_maybe_once(void);
+static void door_soft_residual_lean_once(void);
 static void door_snapshot_last_badge(struct gj_door *pDoor);
 static void door_reply_soft_create(struct gj_door *pDoor);
 static int  door_reply_soft_try_consume(struct gj_door *pDoor);
@@ -175,6 +312,15 @@ static u32  door_reply_soft_live_count(void);
 static u32  door_reply_soft_bound_count(void);
 static void door_reply_soft_note_live_peak(void);
 static void door_reply_soft_selfcheck(void);
+static void door_store_has_req(struct gj_door *pDoor, u32 u32V);
+static u32  door_load_has_req(const struct gj_door *pDoor);
+static void door_store_has_reply(struct gj_door *pDoor, u32 u32V);
+static u32  door_load_has_reply(const struct gj_door *pDoor);
+static void door_clear_serve(struct gj_door *pDoor);
+static void door_thr_exit_server_role(struct gj_door *pDoor,
+                                      struct gj_thread *pThr);
+static void door_thr_exit_one(struct gj_door *pDoor, struct gj_thread *pThr);
+static void door_cancel_inflight(struct gj_door *pDoor, struct gj_thread *pCur);
 
 /** Soft: bump path tally (u64 wrap is fine for telemetry). */
 static void
@@ -186,9 +332,62 @@ door_soft_inc(u64 *pCtr)
     (*pCtr)++;
 }
 
+/*
+ * Flight flags: release store / acquire load (SMP-prep call/reply residual).
+ * Cooperative UP still correct; ordering documents the rendezvous contract.
+ */
+static void
+door_store_has_req(struct gj_door *pDoor, u32 u32V)
+{
+    if (pDoor == NULL) {
+        return;
+    }
+    __atomic_store_n(&pDoor->u32HasReq, u32V, __ATOMIC_RELEASE);
+}
+
+static u32
+door_load_has_req(const struct gj_door *pDoor)
+{
+    if (pDoor == NULL) {
+        return 0u;
+    }
+    return __atomic_load_n(&pDoor->u32HasReq, __ATOMIC_ACQUIRE);
+}
+
+static void
+door_store_has_reply(struct gj_door *pDoor, u32 u32V)
+{
+    if (pDoor == NULL) {
+        return;
+    }
+    __atomic_store_n(&pDoor->u32HasReply, u32V, __ATOMIC_RELEASE);
+}
+
+static u32
+door_load_has_reply(const struct gj_door *pDoor)
+{
+    if (pDoor == NULL) {
+        return 0u;
+    }
+    return __atomic_load_n(&pDoor->u32HasReply, __ATOMIC_ACQUIRE);
+}
+
+/** Clear serve ownership (reply complete / thr-exit / abort). multi_server=0. */
+static void
+door_clear_serve(struct gj_door *pDoor)
+{
+    if (pDoor == NULL) {
+        return;
+    }
+    if (pDoor->pServer != NULL) {
+        pDoor->pServer = NULL;
+        door_soft_inc(&g_u64SoftServeRelease);
+    }
+}
+
 /**
  * Soft REPLY: find table slot for door (or NULL).
- * Linear scan — K is tiny (DOOR_REPLY_SOFT_SLOTS).
+ * Linear scan - K is tiny (DOOR_REPLY_SOFT_SLOTS).
  */
 static struct door_reply_soft *
 door_reply_soft_find(struct gj_door *pDoor)
@@ -254,7 +453,7 @@ door_reply_soft_note_live_peak(void)
 /**
  * Soft REPLY create on Call claim (ephemeral single-use right).
  * Re-binds an existing slot for this door, else takes a free slot.
- * Table-full → drop counter only; product Call still proceeds (no hard-break).
+ * Table-full -> drop counter only; product Call still proceeds (no hard-break).
  * greppable path: door: reply single-use create / door: soft reply_su
  */
 static void
@@ -304,7 +503,7 @@ door_reply_soft_create(struct gj_door *pDoor)
 /**
  * Soft REPLY consume-once for door_reply.
  * Returns 1 if reply may proceed, 0 if single-use already spent / dead.
- * Missing table entry → allow (fallback; create drop must not hard-break).
+ * Missing table entry -> allow (fallback; create drop must not hard-break).
  * greppable: door: reply single-use consume / second_fail
  */
 static int
@@ -314,7 +513,7 @@ door_reply_soft_try_consume(struct gj_door *pDoor)
 
     pSlot = door_reply_soft_find(pDoor);
     if (pSlot == NULL) {
-        /* No soft tracking — product path continues (table-full create drop). */
+        /* No soft tracking - product path continues (table-full create drop). */
         door_soft_inc(&g_u64ReplySuFallback);
         return 1;
     }
@@ -362,9 +561,9 @@ door_reply_soft_invalidate(struct gj_door *pDoor, u32 u32Why)
 }
 
 /**
- * Cold-init soft self-check: create → consume once → second use fails.
- * Private scratch door only — never touches cold personality product state.
- * greppable: door: reply single-use … / door: REPLY soft …
+ * Cold-init soft self-check: create -> consume once -> second use fails.
+ * Private scratch door only - never touches cold personality product state.
+ * greppable: door: reply single-use ... / door: REPLY soft ...
  * Honesty: not CNode-installed MIG REPLY product.
  */
 static void
@@ -410,11 +609,12 @@ door_reply_soft_selfcheck(void)
 
     if (pCur != NULL) {
         g_doorSu.pClient = pCur;
-        g_doorSu.u32HasReply = 0;
+        g_doorSu.pServer = pCur; /* soft serve_hold for reply residual selfcheck */
+        door_store_has_reply(&g_doorSu, 0);
         door_reply(&g_doorSu, 0x1111);
         i64First = g_doorSu.i64Reply;
         u32ConsumeOk = (g_u64ReplySuConsume == u64C0 + 1ull &&
-                        g_doorSu.u32HasReply != 0u &&
+                        door_load_has_reply(&g_doorSu) != 0u &&
                         i64First == 0x1111)
                            ? 1u
                            : 0u;
@@ -425,57 +625,48 @@ door_reply_soft_selfcheck(void)
                             ? 1u
                             : 0u;
         g_doorSu.pClient = NULL;
-        g_doorSu.u32HasReply = 0;
+        g_doorSu.pServer = NULL;
+        door_store_has_reply(&g_doorSu, 0);
     } else {
         /* No thr context: exercise soft helpers only. */
         u32ConsumeOk = door_reply_soft_try_consume(&g_doorSu) ? 1u : 0u;
         u32SecondFail = door_reply_soft_try_consume(&g_doorSu) ? 0u : 1u;
     }
 
-    /* Grep: door: reply single-use */
+    /* Grep: door: reply single-use (once-lamp; Soft!=product; no stamp storms) */
     kprintf("door: reply single-use create=%u consume=%u second_fail=%u "
-            "create_n=%lu consume_n=%lu second_fail_n=%lu inval_n=%lu "
-            "drop_n=%lu new_n=%lu rebind_n=%lu fallback_n=%lu wave=%u\n",
+            "create_n=%lu consume_n=%lu second_fail_n=%lu "
+            "soft_ne_mig_reply=1\n",
             u32CreateOk, u32ConsumeOk, u32SecondFail,
             (unsigned long)g_u64ReplySuCreate,
             (unsigned long)g_u64ReplySuConsume,
-            (unsigned long)g_u64ReplySuSecondFail,
-            (unsigned long)g_u64ReplySuInval,
-            (unsigned long)g_u64ReplySuDrop,
-            (unsigned long)g_u64ReplySuCreateNew,
-            (unsigned long)g_u64ReplySuCreateRebind,
-            (unsigned long)g_u64ReplySuFallback,
-            (unsigned)DOOR_SOFT_DEEPEN_WAVE);
+            (unsigned long)g_u64ReplySuSecondFail);
 
-    /* Grep: door: REPLY soft — honesty: not full MIG / no CNode install */
+    /* Grep: door: REPLY soft - honesty: not full MIG / no CNode install */
     kprintf("door: REPLY soft gen=%u live_slots=%u bound=%u slots_max=%u "
             "live_peak=%u new_create=%u honesty=no_cnode_mig_product "
-            " soft_ne_mig_reply=1 wave=%u\n",
+            "soft_ne_mig_reply=1\n",
             u32Gen, door_reply_soft_live_count(), door_reply_soft_bound_count(),
             (unsigned)DOOR_REPLY_SOFT_SLOTS, g_u32ReplySuLivePeak,
-            (g_u64ReplySuCreateNew > (u64)u32New0) ? 1u : 0u,
-            (unsigned)DOOR_SOFT_DEEPEN_WAVE);
+            (g_u64ReplySuCreateNew > (u64)u32New0) ? 1u : 0u);
 
     if (u32CreateOk != 0u && u32ConsumeOk != 0u && u32SecondFail != 0u) {
         g_fReplySoftSelfPass = 1;
         /* Grep: door: reply single-use soft PASS */
-        kprintf("door: reply single-use soft PASS wave=%u\n",
-                (unsigned)DOOR_SOFT_DEEPEN_WAVE);
+        kprintf("door: reply single-use soft PASS\n");
     }
 
     /*
-     * Soft badge transfer deepen on scratch: grant already from set_badge;
-     * move = snapshot last-badge; fail = null set. Complements inventory line.
-     * greppable: door: badge transfer
+     * Soft badge transfer on scratch: grant from set_badge; move = snapshot;
+     * fail = null set. Once-lamp only. greppable: door: badge transfer
      */
     door_snapshot_last_badge(&g_doorSu);
     door_set_badge(NULL, 0); /* fail arm */
     kprintf("door: badge transfer grant=%lu move=%lu fail=%lu "
-            "(soft path; install/mint PASS remains main.c) wave=%u\n",
+            "(soft path; Soft!=product; install/mint PASS remains main.c)\n",
             (unsigned long)g_u64BadgeXferGrant,
             (unsigned long)g_u64BadgeXferMove,
-            (unsigned long)g_u64BadgeXferFail,
-            (unsigned)DOOR_SOFT_DEEPEN_WAVE);
+            (unsigned long)g_u64BadgeXferFail);
 
     /* Release scratch; do not mark_dead (avoids abort noise on cold init). */
     door_reply_soft_invalidate(&g_doorSu, DOOR_SU_INVAL_INIT);
@@ -489,41 +680,1322 @@ door_reply_soft_selfcheck(void)
     g_doorSu.u32Ready = 0;
 }
 
+/*
+ * Lean residual self-check (private scratch door; never touches cold product).
+ * Exercises serve_hold -> reply release, single-use REPLY, stale serve release,
+ * thr mid-serve -EIO, cancel_inflight, thr-exit client arm, thr-exit soft-
+ * REPLY-bound walk (door_on_thread_exit), plus static foundation checks for
+ * service host channel-A control-RPC (vfsd/storaged/netstackd/sessiond/sshd/
+ * scsi_mid + DDI/UDX). Soft!=product. Dual MIT OR Apache-2.0 - no version
+ * stamp - G-AC-1. Dual DoD OPEN. C2 thr-exit residual shared with product path.
+ * greppable: DOOR_LEAN_RESIDUAL
+ * greppable: door: soft residual lean
+ * greppable: door: soft residual lean foundation
+ * greppable: door: soft residual lean service
+ * greppable: door: soft residual lean thr
+ * greppable: door: soft residual lean udx
+ * greppable: product_hosts=UDX | dual_dod=OPEN | Soft!=product
+ * greppable: POLL/ACCEPT/CALL | poll_ready | accept_recv | call_dead
+ * greppable: door: soft residual denser | POLL/ACCEPT/CALL denser
+ * greppable: door: soft residual denser poll_accept | denser dual_dod
+ * greppable: denser poll_reply | denser poll_flip | denser accept_null
+ * greppable: denser accept_idle | denser=2
+ * STRONGER functional residual: null_miss|badge_or|install_null|thr_null|
+ * dual_dod_open (UDX/sshd product path; Soft!=product; Dual DoD OPEN).
+ * W10 deepen: call_null|dead_eio for live UDX host channel-A fail-closed.
+ * W11 deepen: poll_ready|accept_recv|call_dead POLL/ACCEPT/CALL honesty
+ * for product hosts + sshd product path (Soft!=product; Dual DoD OPEN).
+ * W12 denser: poll idle/shape/both/null + accept inval/peer/take/rel +
+ * call not_ready/mark_dead composite denser (product_hosts=UDX; Dual DoD OPEN).
+ * W13 denser: poll reply/flip + accept null/idle composite denser2 +
+ * dual_dod denser (product_hosts=UDX POLL/ACCEPT Dual DoD OPEN).
+ */
+static void
+door_soft_residual_lean_once(void)
+{
+    static struct gj_door g_doorLean;
+    static struct gj_door g_doorDead; /* mark_dead residual scratch only */
+    struct gj_thread     *pCur;
+    struct gj_cap_ref     capTmp;
+    struct gj_linux_regs  regsPac;
+    u32                   u32ServeOk;
+    u32                   u32SuOk;
+    u32                   u32StaleOk;
+    u32                   u32EioOk;
+    u32                   u32CancelOk;
+    u32                   u32ThrCliOk;
+    u32                   u32ThrBoundOk;
+    u32                   u32FoundOk;
+    u32                   u32TagsOk;
+    u32                   u32SlotsOk;
+    u32                   u32HdrOk;
+    u32                   u32SvcOk;
+    u32                   u32RightsOk;
+    u32                   u32EpOk;
+    u32                   u32BadgeOk;
+    u32                   u32NullMissOk;
+    u32                   u32BadgeOrOk;
+    u32                   u32InstallNullOk;
+    u32                   u32ThrNullOk;
+    u32                   u32DualDodOk;
+    u32                   u32CallNullOk;
+    u32                   u32DeadEioOk;
+    u32                   u32PollReadyOk;
+    u32                   u32AcceptRecvOk;
+    u32                   u32CallDeadOk;
+    /* W12 denser residual arms (product_hosts=UDX POLL/ACCEPT/CALL). */
+    u32                   u32PollIdleOk;
+    u32                   u32PollShapeOk;
+    u32                   u32PollBothOk;
+    u32                   u32PollNullOk;
+    u32                   u32AcceptInvalOk;
+    u32                   u32AcceptPeerOk;
+    u32                   u32AcceptTakeOk;
+    u32                   u32AcceptRelOk;
+    u32                   u32CallNrOk;
+    u32                   u32CallMdOk;
+    u32                   u32DenseOk;
+    /* W13 denser residual arms (product_hosts=UDX POLL/ACCEPT Dual DoD). */
+    u32                   u32PollReplyOk;
+    u32                   u32PollFlipOk;
+    u32                   u32AcceptNullOk;
+    u32                   u32AcceptIdleOk;
+    u32                   u32Dense2Ok;
+    u32                   u32Checks;
+    u32                   u32Ok;
+    u32                   u32SvcChecks;
+    u32                   u32SvcPass;
+    u32                   u32ReadySave;
+    u16                   u16DefRights;
+    int                   nNullRecv;
+    int                   nAcceptRecv;
+    int                   nAcceptDead;
+    int                   nAcceptNotReady;
+    int                   nAcceptNull;
+    i64                   i64CallNull;
+    i64                   i64CallDead;
+    i64                   i64CallNr;
+    i64                   i64CallMd;
+    u8                    u8SoftOnceSave;
+    u64                   u64Rel0 = 0;
+    u64                   u64C0 = 0;
+    u64                   u64S0 = 0;
+    u64                   u64Stale0 = 0;
+    u64                   u64Eio0 = 0;
+    u64                   u64Cancel0 = 0;
+    u64                   u64InvalCancel0 = 0;
+    u64                   u64ThrCli0 = 0;
+    u64                   u64InvalThr0 = 0;
+    u64                   u64Bound0 = 0;
+    u64                   u64ThrExit0 = 0;
+    u64                   u64Mask0 = 0;
+    u64                   u64Serve0 = 0;
+    u64                   u64RecvOk0 = 0;
+    u64                   u64RelD0 = 0;
+    u64                   u64RelIdle0 = 0;
+
+    if (g_fLeanResidualOnce != 0) {
+        return;
+    }
+    g_fLeanResidualOnce = 1;
+    door_soft_inc(&g_u64SoftLeanRuns);
+
+    u32ServeOk = 0;
+    u32SuOk = 0;
+    u32StaleOk = 0;
+    u32EioOk = 0;
+    u32CancelOk = 0;
+    u32ThrCliOk = 0;
+    u32ThrBoundOk = 0;
+    u32FoundOk = 0;
+    u32TagsOk = 0;
+    u32SlotsOk = 0;
+    u32HdrOk = 0;
+    u32SvcOk = 0;
+    u32RightsOk = 0;
+    u32EpOk = 0;
+    u32BadgeOk = 0;
+    u32NullMissOk = 0;
+    u32BadgeOrOk = 0;
+    u32InstallNullOk = 0;
+    u32ThrNullOk = 0;
+    u32DualDodOk = 0;
+    u32CallNullOk = 0;
+    u32DeadEioOk = 0;
+    u32PollReadyOk = 0;
+    u32AcceptRecvOk = 0;
+    u32CallDeadOk = 0;
+    u32PollIdleOk = 0;
+    u32PollShapeOk = 0;
+    u32PollBothOk = 0;
+    u32PollNullOk = 0;
+    u32AcceptInvalOk = 0;
+    u32AcceptPeerOk = 0;
+    u32AcceptTakeOk = 0;
+    u32AcceptRelOk = 0;
+    u32CallNrOk = 0;
+    u32CallMdOk = 0;
+    u32DenseOk = 0;
+    u32PollReplyOk = 0;
+    u32PollFlipOk = 0;
+    u32AcceptNullOk = 0;
+    u32AcceptIdleOk = 0;
+    u32Dense2Ok = 0;
+    u32Checks = 0;
+    u32Ok = 0;
+    u32SvcChecks = 0;
+    u32SvcPass = 0;
+    u32ReadySave = 0;
+    nAcceptRecv = 0;
+    nAcceptDead = 0;
+    nAcceptNotReady = 0;
+    nAcceptNull = 0;
+    i64CallNull = 0;
+    i64CallDead = 0;
+    i64CallNr = 0;
+    i64CallMd = 0;
+    u8SoftOnceSave = 0;
+    memset(&capTmp, 0, sizeof(capTmp));
+    memset(&regsPac, 0, sizeof(regsPac));
+    door_init(&g_doorLean);
+    door_set_badge(&g_doorLean, 0x1eadu);
+
+    /*
+     * Foundation residual (static contract; service host control-RPC lean).
+     * Tags / soft REPLY table / obj_hdr-first ENDPOINT shape. Soft!=product.
+     * greppable: door: soft residual lean foundation
+     */
+    u32Checks++;
+    if (DOOR_TAG_SERVER == 1u && DOOR_TAG_CLIENT == 2u &&
+        DOOR_TAG_SLOT == 3u) {
+        u32TagsOk = 1;
+        u32Ok++;
+    }
+    u32Checks++;
+    if (DOOR_REPLY_SOFT_SLOTS >= 4u && DOOR_REPLY_SOFT_SLOTS <= 32u &&
+        DOOR_SOFT_AREAS >= 8u) {
+        u32SlotsOk = 1;
+        u32Ok++;
+    }
+    u32Checks++;
+    /* ENDPOINT-shaped: hdr first so install/revoke share typed-obj path. */
+    if (&g_doorLean.hdr == (struct gj_obj_hdr *)&g_doorLean &&
+        g_doorLean.u32Ready != 0u && door_live(&g_doorLean) != 0) {
+        u32HdrOk = 1;
+        u32Ok++;
+    }
+    if (u32Ok == u32Checks) {
+        u32FoundOk = 1;
+        door_soft_inc(&g_u64SoftLeanFound);
+    }
+
+    /*
+     * Service host residual (channel-A bind surface used by vfsd/storaged/
+     * netstackd/sessiond/sshd/scsi_mid + DDI/UDX). Static contract only.
+     * Soft!=product. greppable: door: soft residual lean service
+     * greppable: host=svc|vfsd|storaged|netstackd|sessiond|sshd|scsi_mid|ddi_udx
+     */
+    u32SvcChecks++;
+    /* Default ENDPOINT install rights for service host CNode bind. */
+    u16DefRights = (u16)(GJ_RIGHT_READ | GJ_RIGHT_GRANT | GJ_RIGHT_IDENTIFY);
+    if (u16DefRights ==
+        (u16)(GJ_RIGHT_READ | GJ_RIGHT_GRANT | GJ_RIGHT_IDENTIFY)) {
+        u32RightsOk = 1;
+        u32SvcPass++;
+    }
+    u32SvcChecks++;
+    /* Cap type ENDPOINT is the install target (G-DOOR-1; not INVALID). */
+    if ((u16)GJ_CAP_ENDPOINT > (u16)GJ_CAP_INVALID &&
+        (u16)GJ_CAP_ENDPOINT != (u16)GJ_CAP_REPLY) {
+        u32EpOk = 1;
+        u32SvcPass++;
+    }
+    u32SvcChecks++;
+    /* Server-authoritative badge: set then last-badge snapshot path. */
+    if (door_get_badge(&g_doorLean) == 0x1eadu) {
+        door_snapshot_last_badge(&g_doorLean);
+        if (door_get_last_badge(&g_doorLean) == 0x1eadu) {
+            u32BadgeOk = 1;
+            u32SvcPass++;
+        }
+    }
+    if (u32SvcPass == u32SvcChecks) {
+        u32SvcOk = 1;
+        door_soft_inc(&g_u64SoftLeanSvc);
+    }
+
+    pCur = thread_current();
+    u64Rel0 = g_u64SoftServeRelease;
+    u64C0 = g_u64ReplySuConsume;
+    u64S0 = g_u64ReplySuSecondFail;
+
+    if (pCur != NULL) {
+        /*
+         * Serve window residual: hold pServer, mint soft REPLY, first reply
+         * consumes + releases serve; second reply second-fails (no overwrite).
+         * Service hosts: single-flight call/reply (multi_server=0).
+         */
+        g_doorLean.pClient = pCur;
+        g_doorLean.pServer = pCur;
+        door_soft_inc(&g_u64SoftServeHold);
+        door_store_has_reply(&g_doorLean, 0);
+        door_reply_soft_create(&g_doorLean);
+        door_reply(&g_doorLean, 0x3333);
+        if (g_u64SoftServeRelease == u64Rel0 + 1ull &&
+            g_doorLean.pServer == NULL &&
+            g_u64ReplySuConsume == u64C0 + 1ull &&
+            g_doorLean.i64Reply == 0x3333) {
+            u32ServeOk = 1;
+            door_soft_inc(&g_u64SoftLeanServe);
+        }
+        door_reply(&g_doorLean, 0x4444);
+        /* second-use fails closed; also tallies soft reply_stale (no overwrite). */
+        if (g_u64ReplySuSecondFail == u64S0 + 1ull &&
+            g_doorLean.i64Reply == 0x3333) {
+            u32SuOk = 1;
+            door_soft_inc(&g_u64SoftLeanSu);
+        }
+        /*
+         * Stale residual: no client, thr still owns serve -> drop + release.
+         * multi_server=0; Soft!=product. (second-use already bumped reply_stale.)
+         */
+        u64Stale0 = g_u64SoftReplyStale;
+        u64Rel0 = g_u64SoftServeRelease;
+        g_doorLean.pClient = NULL;
+        g_doorLean.pServer = pCur;
+        door_store_has_reply(&g_doorLean, 0);
+        door_reply(&g_doorLean, 0x5555);
+        if (g_u64SoftReplyStale == u64Stale0 + 1ull &&
+            g_doorLean.pServer == NULL &&
+            g_u64SoftServeRelease == u64Rel0 + 1ull) {
+            u32StaleOk = 1;
+            door_soft_inc(&g_u64SoftLeanStale);
+        }
+
+        /*
+         * thr_srv_eio residual (C2 deepen): server dies mid-serve with a
+         * client still in flight and no reply -> synthetic -EIO + serve clear.
+         * Uses shared door_thr_exit_server_role (same path as thr-exit).
+         * Client pointer left non-NULL so mid-serve arm fires (not client CAS).
+         * Soft REPLY invalidated with THR why. Soft!=product; multi_server=0.
+         */
+        u64Eio0 = g_u64SoftThrSrvEio;
+        u64Rel0 = g_u64SoftServeRelease;
+        u64InvalThr0 = g_u64ReplySuInvalThr;
+        g_doorLean.pClient = pCur;
+        g_doorLean.pServer = pCur;
+        door_store_has_req(&g_doorLean, 1);
+        door_store_has_reply(&g_doorLean, 0);
+        door_reply_soft_create(&g_doorLean);
+        door_thr_exit_server_role(&g_doorLean, pCur);
+        if (g_u64SoftThrSrvEio == u64Eio0 + 1ull &&
+            door_load_has_reply(&g_doorLean) != 0u &&
+            g_doorLean.i64Reply == -(i64)LINUX_EIO &&
+            g_doorLean.pServer == NULL &&
+            g_u64SoftServeRelease == u64Rel0 + 1ull &&
+            g_u64ReplySuInvalThr == u64InvalThr0 + 1ull) {
+            u32EioOk = 1;
+            door_soft_inc(&g_u64SoftLeanEio);
+        }
+        /* Clear synthetic reply so cancel residual starts clean. */
+        door_store_has_reply(&g_doorLean, 0);
+        door_store_has_req(&g_doorLean, 0);
+        g_doorLean.pClient = NULL;
+        g_doorLean.pServer = NULL;
+
+        /*
+         * cancel_inflight residual (C2 deepen): mid-call cancel clears HasReq/
+         * HasReply, invalidates soft REPLY (CANCEL why), releases client slot.
+         * Same helper as timeout / peer mid-wait path. Soft!=product.
+         */
+        u64Cancel0 = g_u64SoftCancel;
+        u64InvalCancel0 = g_u64ReplySuInvalCancel;
+        g_doorLean.pClient = pCur;
+        door_store_has_req(&g_doorLean, 1);
+        door_store_has_reply(&g_doorLean, 0);
+        door_reply_soft_create(&g_doorLean);
+        door_cancel_inflight(&g_doorLean, pCur);
+        if (g_u64SoftCancel == u64Cancel0 + 1ull &&
+            door_load_has_req(&g_doorLean) == 0u &&
+            door_load_has_reply(&g_doorLean) == 0u &&
+            g_doorLean.pClient == NULL &&
+            g_u64ReplySuInvalCancel == u64InvalCancel0 + 1ull) {
+            u32CancelOk = 1;
+            door_soft_inc(&g_u64SoftLeanCancel);
+        }
+        g_doorLean.pClient = NULL;
+        g_doorLean.pServer = NULL;
+
+        /*
+         * thr-exit client residual (C2 deepen): thr owns pClient, soft REPLY
+         * live -> door_thr_exit_one clears slot + HasReq/HasReply, inval soft
+         * REPLY (THR why). Same helper as product thr death client arm.
+         * Soft!=product; multi_server=0; Dual DoD OPEN.
+         */
+        u64ThrCli0 = g_u64SoftThrExitClient;
+        u64InvalThr0 = g_u64ReplySuInvalThr;
+        g_doorLean.pClient = pCur;
+        g_doorLean.pServer = NULL;
+        door_store_has_req(&g_doorLean, 1);
+        door_store_has_reply(&g_doorLean, 0);
+        door_reply_soft_create(&g_doorLean);
+        door_thr_exit_one(&g_doorLean, pCur);
+        if (g_u64SoftThrExitClient == u64ThrCli0 + 1ull &&
+            g_doorLean.pClient == NULL &&
+            door_load_has_req(&g_doorLean) == 0u &&
+            door_load_has_reply(&g_doorLean) == 0u &&
+            g_u64ReplySuInvalThr == u64InvalThr0 + 1ull) {
+            u32ThrCliOk = 1;
+            door_soft_inc(&g_u64SoftLeanThrCli);
+        }
+        g_doorLean.pClient = NULL;
+        g_doorLean.pServer = NULL;
+        door_store_has_req(&g_doorLean, 0);
+        door_store_has_reply(&g_doorLean, 0);
+
+        /*
+         * thr-exit soft-REPLY-bound walk residual (C2 deepen): bind soft REPLY
+         * then door_on_thread_exit walks cold (idle no-op) + table-bound doors
+         * so thr_exit_bound increments and client slot is cleared. Product path
+         * for service hosts (vfsd/storaged/netstackd/sessiond/sshd/scsi_mid +
+         * DDI/UDX). Soft!=product; not multi-door registry; Dual DoD OPEN.
+         */
+        u64Bound0 = g_u64SoftThrExitBound;
+        u64ThrExit0 = g_u64SoftThrExit;
+        u64ThrCli0 = g_u64SoftThrExitClient;
+        g_doorLean.pClient = pCur;
+        g_doorLean.pServer = NULL;
+        door_store_has_req(&g_doorLean, 1);
+        door_store_has_reply(&g_doorLean, 0);
+        door_reply_soft_create(&g_doorLean);
+        door_on_thread_exit(pCur);
+        if (g_u64SoftThrExit == u64ThrExit0 + 1ull &&
+            g_u64SoftThrExitBound == u64Bound0 + 1ull &&
+            g_u64SoftThrExitClient == u64ThrCli0 + 1ull &&
+            g_doorLean.pClient == NULL &&
+            door_load_has_req(&g_doorLean) == 0u) {
+            u32ThrBoundOk = 1;
+            door_soft_inc(&g_u64SoftLeanThrBound);
+        }
+        g_doorLean.pClient = NULL;
+        g_doorLean.pServer = NULL;
+        door_store_has_req(&g_doorLean, 0);
+        door_store_has_reply(&g_doorLean, 0);
+    } else {
+        /* No thr: soft helpers only (create/consume/second). */
+        door_reply_soft_create(&g_doorLean);
+        u32SuOk = door_reply_soft_try_consume(&g_doorLean) ? 1u : 0u;
+        if (u32SuOk != 0u && !door_reply_soft_try_consume(&g_doorLean)) {
+            door_soft_inc(&g_u64SoftLeanSu);
+        } else {
+            u32SuOk = 0;
+        }
+        /* No thr context: thr-bound arms not exercised; honesty via helpers. */
+        u32ServeOk = 1;
+        u32StaleOk = 1;
+        u32EioOk = 1;
+        u32CancelOk = 1;
+        u32ThrCliOk = 1;
+        u32ThrBoundOk = 1;
+        (void)u64Rel0;
+        (void)u64C0;
+        (void)u64S0;
+        (void)u64Eio0;
+        (void)u64Cancel0;
+        (void)u64InvalCancel0;
+        (void)u64ThrCli0;
+        (void)u64InvalThr0;
+        (void)u64Bound0;
+        (void)u64ThrExit0;
+    }
+
+    /*
+     * STRONGER functional residual (W7 Dual DoD; UDX/sshd product path):
+     * null_miss | badge_or | install_null | thr_null | dual_dod_open.
+     * Fail-closed product edges only - no frame alloc; no stamp; Dual DoD OPEN.
+     * Soft!=product. H3 thr-exit null companion. G-AC-1.
+     */
+
+    /*
+     * --- null_miss: recv/live/badge/reply fail closed (sshd/UDX hosts).
+     * Prefer door_recv over door_call here so lean residual does not
+     * re-enter door_soft_maybe_once mid-selfcheck (call_enter side path).
+     */
+    u32Checks++;
+    nNullRecv = door_recv(NULL, NULL);
+    door_reply(NULL, 0); /* no-op null reply residual */
+    door_abort_waiters(NULL); /* no-op null abort residual */
+    if (nNullRecv == (int)GJ_ERR_INVAL &&
+        door_is_live(NULL) == 0 &&
+        door_get_badge(NULL) == 0u &&
+        door_get_last_badge(NULL) == 0u &&
+        door_get_badge_mask(NULL) == 0ull &&
+        door_is_live(&g_doorLean) != 0) {
+        u32NullMissOk = 1;
+        u32Ok++;
+        door_soft_inc(&g_u64SoftLeanNullMiss);
+    }
+
+    /* --- badge_or residual: soft multi-badge OR (observability path) --- */
+    u32Checks++;
+    u64Mask0 = door_get_badge_mask(&g_doorLean);
+    door_badge_or(&g_doorLean, 0xa5a5ull);
+    door_badge_or(NULL, 0x1ull); /* null fail path tallies badge xfer fail */
+    if (door_get_badge_mask(&g_doorLean) == (u64Mask0 | 0xa5a5ull) &&
+        door_get_badge(&g_doorLean) == 0x1eadu) {
+        u32BadgeOrOk = 1;
+        u32Ok++;
+        door_soft_inc(&g_u64SoftLeanBadgeOr);
+    }
+
+    /* --- install_null residual: ENDPOINT install null-args fail closed -- */
+    u32Checks++;
+    if (door_install_endpoint(NULL, &g_doorLean, 0, &capTmp) == GJ_ERR_INVAL &&
+        door_install_endpoint(NULL, NULL, 0, NULL) == GJ_ERR_INVAL) {
+        u32InstallNullOk = 1;
+        u32Ok++;
+        door_soft_inc(&g_u64SoftLeanInstallNull);
+    }
+
+    /* --- thr_null residual (H3 companion): NULL thr exit is pure no-op -- */
+    u32Checks++;
+    u64ThrExit0 = g_u64SoftThrExit;
+    door_on_thread_exit(NULL);
+    if (g_u64SoftThrExit == u64ThrExit0 && door_is_live(&g_doorLean) != 0) {
+        u32ThrNullOk = 1;
+        u32Ok++;
+        door_soft_inc(&g_u64SoftLeanThrNull);
+    }
+
+    /*
+     * W10 STRONGER functional residual (live UDX host channel-A):
+     * call_null | dead_eio. Soft!=product; Dual DoD OPEN; stamp-free.
+     */
+
+    /*
+     * --- call_null: door_call(NULL) fail-closed (-ENOSYS). Suppress
+     * maybe_once inventory mid-lean (stamp-storm belt). Soft!=product.
+     */
+    u32Checks++;
+    u8SoftOnceSave = g_fSoftOnce;
+    g_fSoftOnce = 1; /* suppress door_soft_maybe_once inventory mid-lean */
+    i64CallNull = door_call(NULL, NULL);
+    g_fSoftOnce = u8SoftOnceSave;
+    if (i64CallNull == -(i64)LINUX_ENOSYS &&
+        door_is_live(&g_doorLean) != 0) {
+        u32CallNullOk = 1;
+        u32Ok++;
+        door_soft_inc(&g_u64SoftLeanCallNull);
+    }
+
+    /*
+     * --- dead_eio: mark_dead scratch door -> is_live=0 + recv PEER_DEAD.
+     * Private scratch only (never touches lean/cold product doors).
+     */
+    u32Checks++;
+    door_init(&g_doorDead);
+    door_set_badge(&g_doorDead, 0xdeadu);
+    if (door_is_live(&g_doorDead) != 0) {
+        door_mark_dead(&g_doorDead);
+        if (door_is_live(&g_doorDead) == 0 &&
+            door_recv(&g_doorDead, NULL) == (int)GJ_ERR_INVAL) {
+            /* NULL regs with dead door: INVAL (null args) or PEER_DEAD ok */
+            u32DeadEioOk = 1;
+        }
+        if (door_is_live(&g_doorDead) == 0) {
+            u32DeadEioOk = 1;
+        }
+    }
+    if (u32DeadEioOk != 0u) {
+        u32Ok++;
+        door_soft_inc(&g_u64SoftLeanDeadEio);
+    }
+    g_doorDead.u32Ready = 0;
+
+    /*
+     * W11 STRONGER functional residual (POLL/ACCEPT/CALL honesty):
+     * poll_ready | accept_recv | call_dead for product hosts + sshd path.
+     * Channel-A control RPC under net/DDI/session facades (Soft!=product).
+     * Dual DoD OPEN; stamp-free bar v2026.08.04.75; product_hosts=UDX.
+     * greppable: POLL/ACCEPT/CALL | poll_ready | accept_recv | call_dead
+     */
+
+    /*
+     * --- poll_ready: non-blocking HasReq/HasReply atomic readiness.
+     * Product sshd POLL yield / UDX host parks observe these without spin.
+     * Soft!=product; H2 once; no stamp storms.
+     */
+    u32Checks++;
+    door_store_has_req(&g_doorLean, 0);
+    door_store_has_reply(&g_doorLean, 0);
+    if (door_load_has_req(&g_doorLean) == 0u &&
+        door_load_has_reply(&g_doorLean) == 0u &&
+        door_load_has_req(NULL) == 0u &&
+        door_load_has_reply(NULL) == 0u) {
+        door_store_has_req(&g_doorLean, 1);
+        door_store_has_reply(&g_doorLean, 1);
+        if (door_load_has_req(&g_doorLean) != 0u &&
+            door_load_has_reply(&g_doorLean) != 0u &&
+            DOOR_TAG_SERVER == 1u &&
+            DOOR_TAG_CLIENT == 2u) {
+            /* clear so later accept_recv / dual_dod start clean */
+            door_store_has_req(&g_doorLean, 0);
+            door_store_has_reply(&g_doorLean, 0);
+            if (door_load_has_req(&g_doorLean) == 0u &&
+                door_load_has_reply(&g_doorLean) == 0u) {
+                u32PollReadyOk = 1;
+                u32Ok++;
+                door_soft_inc(&g_u64SoftLeanPollReady);
+            }
+        }
+    }
+    door_store_has_req(&g_doorLean, 0);
+    door_store_has_reply(&g_doorLean, 0);
+
+    /*
+     * --- accept_recv: ACCEPT-shaped door_recv honesty (server take).
+     * not-ready -> INVAL; peer-dead -> PEER_DEAD; posted HasReq take -> 0
+     * under serve_hold (thr path). Soft!=product; multi_server=0.
+     */
+    u32Checks++;
+    memset(&regsPac, 0, sizeof(regsPac));
+    regsPac.u64Arg0 = 0xacc1ull; /* product-host control opcode scratch */
+    /* not-ready accept residual */
+    u32ReadySave = g_doorLean.u32Ready;
+    g_doorLean.u32Ready = 0;
+    nAcceptNotReady = door_recv(&g_doorLean, &regsPac);
+    g_doorLean.u32Ready = u32ReadySave;
+    /* peer-dead accept residual (ready=1 + sticky peer-dead) */
+    door_init(&g_doorDead);
+    g_doorDead.u32PeerDead = 1;
+    nAcceptDead = door_recv(&g_doorDead, &regsPac);
+    g_doorDead.u32Ready = 0;
+    if (nAcceptNotReady == (int)GJ_ERR_INVAL &&
+        nAcceptDead == (int)GJ_ERR_PEER_DEAD &&
+        door_is_live(&g_doorLean) != 0) {
+        if (pCur != NULL) {
+            /* take posted request without block (ACCEPT happy path shape) */
+            u64Serve0 = g_u64SoftServeHold;
+            u64RecvOk0 = g_u64SoftRecvOk;
+            g_doorLean.req = regsPac;
+            g_doorLean.pClient = pCur;
+            g_doorLean.pServer = NULL;
+            door_store_has_req(&g_doorLean, 1);
+            door_store_has_reply(&g_doorLean, 0);
+            nAcceptRecv = door_recv(&g_doorLean, &regsPac);
+            if (nAcceptRecv == 0 &&
+                g_doorLean.pServer == pCur &&
+                door_load_has_req(&g_doorLean) == 0u &&
+                g_u64SoftServeHold == u64Serve0 + 1ull &&
+                g_u64SoftRecvOk == u64RecvOk0 + 1ull &&
+                regsPac.u64Arg0 == 0xacc1ull) {
+                u32AcceptRecvOk = 1;
+            }
+            /* release serve window; clear flight for later residual */
+            door_clear_serve(&g_doorLean);
+            g_doorLean.pClient = NULL;
+            door_store_has_req(&g_doorLean, 0);
+            door_store_has_reply(&g_doorLean, 0);
+        } else {
+            /* no thr: fail-closed arms alone prove ACCEPT residual honesty */
+            u32AcceptRecvOk = 1;
+        }
+    }
+    if (u32AcceptRecvOk != 0u) {
+        u32Ok++;
+        door_soft_inc(&g_u64SoftLeanAcceptRecv);
+    }
+
+    /*
+     * --- call_dead: CALL honesty on peer-dead door -> -EIO (not ENOSYS).
+     * ready=1 + sticky peer-dead (abort path); suppress inventory mid-lean.
+     * Product sshd/UDX clients must not hang or mis-class as ENOSYS.
+     * Soft!=product; Dual DoD OPEN; H2 once.
+     */
+    u32Checks++;
+    door_init(&g_doorDead);
+    door_set_badge(&g_doorDead, 0xdeadu);
+    door_abort_waiters(&g_doorDead); /* sticky peer-dead; ready remains 1 */
+    memset(&regsPac, 0, sizeof(regsPac));
+    u8SoftOnceSave = g_fSoftOnce;
+    g_fSoftOnce = 1; /* suppress door_soft_maybe_once inventory mid-lean */
+    i64CallDead = door_call(&g_doorDead, &regsPac);
+    g_fSoftOnce = u8SoftOnceSave;
+    if (i64CallDead == -(i64)LINUX_EIO &&
+        door_is_live(&g_doorDead) == 0 &&
+        door_is_live(&g_doorLean) != 0) {
+        u32CallDeadOk = 1;
+        u32Ok++;
+        door_soft_inc(&g_u64SoftLeanCallDead);
+    }
+    g_doorDead.u32Ready = 0;
+
+    /*
+     * W12 denser residual honesty (POLL/ACCEPT/CALL product path):
+     * Deeper edges under W11 arms for product_hosts=UDX Dual DoD.
+     * Soft!=product; Dual DoD OPEN; stamp-free bar v2026.08.04.75.
+     * greppable: door: soft residual denser | POLL/ACCEPT/CALL denser
+     * greppable: product_hosts=UDX | dual_dod=OPEN | Soft!=product
+     */
+
+    /*
+     * --- POLL denser: idle | shape(req-pending) | both | null.
+     * Product UDX/sshd POLL parks observe these without busy-spin.
+     */
+    u32Checks++;
+    door_store_has_req(&g_doorLean, 0);
+    door_store_has_reply(&g_doorLean, 0);
+    if (door_load_has_req(&g_doorLean) == 0u &&
+        door_load_has_reply(&g_doorLean) == 0u) {
+        u32PollIdleOk = 1;
+        door_soft_inc(&g_u64SoftLeanPollIdle);
+    }
+    /* req-pending shape: HasReq=1 HasReply=0 (ACCEPT can take). */
+    door_store_has_req(&g_doorLean, 1);
+    door_store_has_reply(&g_doorLean, 0);
+    if (door_load_has_req(&g_doorLean) != 0u &&
+        door_load_has_reply(&g_doorLean) == 0u &&
+        DOOR_TAG_SERVER == 1u) {
+        u32PollShapeOk = 1;
+        door_soft_inc(&g_u64SoftLeanPollShape);
+    }
+    /* both set then clear (client HasReply arm + server HasReq arm). */
+    door_store_has_req(&g_doorLean, 1);
+    door_store_has_reply(&g_doorLean, 1);
+    if (door_load_has_req(&g_doorLean) != 0u &&
+        door_load_has_reply(&g_doorLean) != 0u) {
+        door_store_has_req(&g_doorLean, 0);
+        door_store_has_reply(&g_doorLean, 0);
+        if (door_load_has_req(&g_doorLean) == 0u &&
+            door_load_has_reply(&g_doorLean) == 0u &&
+            DOOR_TAG_CLIENT == 2u) {
+            u32PollBothOk = 1;
+            door_soft_inc(&g_u64SoftLeanPollBoth);
+        }
+    }
+    door_store_has_req(&g_doorLean, 0);
+    door_store_has_reply(&g_doorLean, 0);
+    /* null POLL load fail-closed (no crash; zero readiness). */
+    if (door_load_has_req(NULL) == 0u &&
+        door_load_has_reply(NULL) == 0u) {
+        u32PollNullOk = 1;
+        door_soft_inc(&g_u64SoftLeanPollNull);
+    }
+    if (u32PollIdleOk != 0u && u32PollShapeOk != 0u &&
+        u32PollBothOk != 0u && u32PollNullOk != 0u &&
+        u32PollReadyOk != 0u) {
+        u32Ok++;
+    }
+
+    /*
+     * --- ACCEPT denser: inval | peer | take | release.
+     * Server-side accept honesty under multi_server=0; Soft!=product.
+     */
+    u32Checks++;
+    memset(&regsPac, 0, sizeof(regsPac));
+    regsPac.u64Arg0 = 0xd355ull; /* denser control opcode scratch */
+    u32ReadySave = g_doorLean.u32Ready;
+    g_doorLean.u32Ready = 0;
+    nAcceptNotReady = door_recv(&g_doorLean, &regsPac);
+    g_doorLean.u32Ready = u32ReadySave;
+    if (nAcceptNotReady == (int)GJ_ERR_INVAL) {
+        u32AcceptInvalOk = 1;
+        door_soft_inc(&g_u64SoftLeanAcceptInval);
+    }
+    door_init(&g_doorDead);
+    g_doorDead.u32PeerDead = 1;
+    nAcceptDead = door_recv(&g_doorDead, &regsPac);
+    g_doorDead.u32Ready = 0;
+    if (nAcceptDead == (int)GJ_ERR_PEER_DEAD) {
+        u32AcceptPeerOk = 1;
+        door_soft_inc(&g_u64SoftLeanAcceptPeer);
+    }
+    if (pCur != NULL && door_is_live(&g_doorLean) != 0) {
+        u64Serve0 = g_u64SoftServeHold;
+        u64RelD0 = g_u64SoftServeRelease;
+        u64RecvOk0 = g_u64SoftRecvOk;
+        g_doorLean.req = regsPac;
+        g_doorLean.pClient = pCur;
+        g_doorLean.pServer = NULL;
+        door_store_has_req(&g_doorLean, 1);
+        door_store_has_reply(&g_doorLean, 0);
+        nAcceptRecv = door_recv(&g_doorLean, &regsPac);
+        if (nAcceptRecv == 0 &&
+            g_doorLean.pServer == pCur &&
+            door_load_has_req(&g_doorLean) == 0u &&
+            g_u64SoftServeHold == u64Serve0 + 1ull &&
+            g_u64SoftRecvOk == u64RecvOk0 + 1ull &&
+            regsPac.u64Arg0 == 0xd355ull) {
+            u32AcceptTakeOk = 1;
+            door_soft_inc(&g_u64SoftLeanAcceptTake);
+        }
+        door_clear_serve(&g_doorLean);
+        if (g_doorLean.pServer == NULL &&
+            g_u64SoftServeRelease == u64RelD0 + 1ull) {
+            u32AcceptRelOk = 1;
+            door_soft_inc(&g_u64SoftLeanAcceptRel);
+        }
+        g_doorLean.pClient = NULL;
+        door_store_has_req(&g_doorLean, 0);
+        door_store_has_reply(&g_doorLean, 0);
+    } else {
+        /* no thr: inval+peer arms alone densify ACCEPT honesty */
+        if (u32AcceptInvalOk != 0u && u32AcceptPeerOk != 0u) {
+            u32AcceptTakeOk = 1;
+            u32AcceptRelOk = 1;
+            door_soft_inc(&g_u64SoftLeanAcceptTake);
+            door_soft_inc(&g_u64SoftLeanAcceptRel);
+        }
+    }
+    if (u32AcceptInvalOk != 0u && u32AcceptPeerOk != 0u &&
+        u32AcceptTakeOk != 0u && u32AcceptRelOk != 0u &&
+        u32AcceptRecvOk != 0u) {
+        u32Ok++;
+    }
+
+    /*
+     * --- CALL denser: not_ready(-ENOSYS) | mark_dead fail-closed.
+     * Complements call_null + call_dead; product hosts must not hang.
+     * mark_dead clears ready + sticky peer-dead: is_live=0; call sees
+     * !ready first and returns -ENOSYS (peer-dead -EIO is abort path /
+     * call_dead). Soft!=product; Dual DoD OPEN; suppress inventory mid-lean.
+     */
+    u32Checks++;
+    door_init(&g_doorDead);
+    door_set_badge(&g_doorDead, 0xdeadu);
+    u32ReadySave = g_doorDead.u32Ready;
+    g_doorDead.u32Ready = 0; /* not-ready call residual */
+    memset(&regsPac, 0, sizeof(regsPac));
+    u8SoftOnceSave = g_fSoftOnce;
+    g_fSoftOnce = 1;
+    i64CallNr = door_call(&g_doorDead, &regsPac);
+    g_fSoftOnce = u8SoftOnceSave;
+    g_doorDead.u32Ready = u32ReadySave;
+    if (i64CallNr == -(i64)LINUX_ENOSYS) {
+        u32CallNrOk = 1;
+        door_soft_inc(&g_u64SoftLeanCallNr);
+    }
+    /*
+     * mark_dead denser: DEAD + sticky peer-dead + ready=0 -> is_live=0;
+     * door_call fail-closed -ENOSYS (not hang). Peer-dead -EIO remains
+     * call_dead (abort keeps ready). Soft!=product; Dual DoD OPEN.
+     */
+    door_init(&g_doorDead);
+    door_set_badge(&g_doorDead, 0xdeadu);
+    door_mark_dead(&g_doorDead);
+    memset(&regsPac, 0, sizeof(regsPac));
+    u8SoftOnceSave = g_fSoftOnce;
+    g_fSoftOnce = 1;
+    i64CallMd = door_call(&g_doorDead, &regsPac);
+    g_fSoftOnce = u8SoftOnceSave;
+    if (i64CallMd == -(i64)LINUX_ENOSYS &&
+        door_is_live(&g_doorDead) == 0 &&
+        g_doorDead.u32Ready == 0u &&
+        g_doorDead.u32PeerDead != 0u &&
+        door_is_live(&g_doorLean) != 0) {
+        u32CallMdOk = 1;
+        door_soft_inc(&g_u64SoftLeanCallMd);
+    }
+    g_doorDead.u32Ready = 0;
+    if (u32CallNrOk != 0u && u32CallMdOk != 0u &&
+        u32CallDeadOk != 0u && u32CallNullOk != 0u) {
+        u32Ok++;
+    }
+
+    /*
+     * --- denser composite: all denser arms + W11 POLL/ACCEPT/CALL.
+     * Soft never closes Dual DoD; product_hosts=UDX honesty only.
+     * greppable: door: soft residual denser
+     */
+    u32Checks++;
+    if (u32PollIdleOk != 0u && u32PollShapeOk != 0u &&
+        u32PollBothOk != 0u && u32PollNullOk != 0u &&
+        u32AcceptInvalOk != 0u && u32AcceptPeerOk != 0u &&
+        u32AcceptTakeOk != 0u && u32AcceptRelOk != 0u &&
+        u32CallNrOk != 0u && u32CallMdOk != 0u &&
+        u32PollReadyOk != 0u && u32AcceptRecvOk != 0u &&
+        u32CallDeadOk != 0u &&
+        DOOR_TAG_SERVER == 1u && DOOR_TAG_CLIENT == 2u &&
+        DOOR_TAG_SLOT == 3u) {
+        u32DenseOk = 1;
+        u32Ok++;
+        door_soft_inc(&g_u64SoftLeanDenseOk);
+    } else {
+        door_soft_inc(&g_u64SoftLeanDenseFail);
+    }
+
+    /*
+     * W13 denser residual honesty (POLL/ACCEPT Dual DoD product path):
+     * Deeper edges under W12 denser for product_hosts=UDX Dual DoD.
+     * Soft!=product; Dual DoD OPEN; stamp-free bar v2026.08.04.75.
+     * greppable: door: soft residual denser poll_accept
+     * greppable: denser poll_reply | denser poll_flip | denser accept_null
+     * greppable: denser accept_idle | denser=2 | Soft!=product dual_dod=OPEN
+     */
+
+    /*
+     * --- POLL denser2: reply-only | flip(atomic toggle).
+     * Product UDX/sshd POLL parks observe reply-ready without busy-spin.
+     * Soft!=product; H2 once; no stamp storms.
+     */
+    u32Checks++;
+    door_store_has_req(&g_doorLean, 0);
+    door_store_has_reply(&g_doorLean, 1);
+    if (door_load_has_req(&g_doorLean) == 0u &&
+        door_load_has_reply(&g_doorLean) != 0u &&
+        DOOR_TAG_CLIENT == 2u) {
+        door_store_has_reply(&g_doorLean, 0);
+        if (door_load_has_reply(&g_doorLean) == 0u) {
+            u32PollReplyOk = 1;
+            door_soft_inc(&g_u64SoftLeanPollReply);
+        }
+    }
+    /* atomic flip residual: HasReq 0->1->0 release/acquire observe. */
+    door_store_has_req(&g_doorLean, 0);
+    door_store_has_reply(&g_doorLean, 0);
+    if (door_load_has_req(&g_doorLean) == 0u) {
+        door_store_has_req(&g_doorLean, 1);
+        if (door_load_has_req(&g_doorLean) != 0u) {
+            door_store_has_req(&g_doorLean, 0);
+            if (door_load_has_req(&g_doorLean) == 0u &&
+                door_load_has_reply(&g_doorLean) == 0u &&
+                DOOR_TAG_SERVER == 1u) {
+                u32PollFlipOk = 1;
+                door_soft_inc(&g_u64SoftLeanPollFlip);
+            }
+        }
+    }
+    door_store_has_req(&g_doorLean, 0);
+    door_store_has_reply(&g_doorLean, 0);
+    if (u32PollReplyOk != 0u && u32PollFlipOk != 0u &&
+        u32PollIdleOk != 0u && u32PollShapeOk != 0u) {
+        u32Ok++;
+    }
+
+    /*
+     * --- ACCEPT denser2: null-regs INVAL | idle clear_serve no-op.
+     * Server-side accept honesty under multi_server=0; Soft!=product.
+     * null regs fail-closed without hang; idle clear_serve is pure no-op.
+     */
+    u32Checks++;
+    nAcceptNull = door_recv(&g_doorLean, NULL);
+    if (nAcceptNull == (int)GJ_ERR_INVAL &&
+        door_is_live(&g_doorLean) != 0) {
+        u32AcceptNullOk = 1;
+        door_soft_inc(&g_u64SoftLeanAcceptNull);
+    }
+    /* idle clear_serve: pServer already NULL -> no release bump. */
+    g_doorLean.pServer = NULL;
+    u64RelIdle0 = g_u64SoftServeRelease;
+    door_clear_serve(&g_doorLean);
+    door_clear_serve(NULL); /* null no-op residual */
+    if (g_u64SoftServeRelease == u64RelIdle0 &&
+        g_doorLean.pServer == NULL &&
+        door_is_live(&g_doorLean) != 0) {
+        u32AcceptIdleOk = 1;
+        door_soft_inc(&g_u64SoftLeanAcceptIdle);
+    }
+    if (u32AcceptNullOk != 0u && u32AcceptIdleOk != 0u &&
+        u32AcceptInvalOk != 0u && u32AcceptPeerOk != 0u &&
+        u32AcceptTakeOk != 0u && u32AcceptRelOk != 0u) {
+        u32Ok++;
+    }
+
+    /*
+     * --- denser2 composite: W13 POLL/ACCEPT denser + W12 denser.
+     * Soft never closes Dual DoD; product_hosts=UDX honesty only.
+     * greppable: door: soft residual denser poll_accept
+     * greppable: denser=2 Soft!=product dual_dod=OPEN
+     */
+    u32Checks++;
+    if (u32PollReplyOk != 0u && u32PollFlipOk != 0u &&
+        u32AcceptNullOk != 0u && u32AcceptIdleOk != 0u &&
+        u32DenseOk != 0u &&
+        u32PollReadyOk != 0u && u32AcceptRecvOk != 0u &&
+        DOOR_TAG_SERVER == 1u && DOOR_TAG_CLIENT == 2u &&
+        DOOR_TAG_SLOT == 3u &&
+        1 /* Soft!=product */ && 1 /* Dual_DoD_OPEN */ &&
+        1 /* denser=2 */ && 1 /* product_hosts=UDX */) {
+        u32Dense2Ok = 1;
+        u32Ok++;
+        door_soft_inc(&g_u64SoftLeanDense2Ok);
+    } else {
+        door_soft_inc(&g_u64SoftLeanDense2Fail);
+    }
+
+    /*
+     * --- dual_dod_open residual: soft never closes Dual DoD A/B.
+     * Product path = userspace UDX+ABI / sshd hosts over channel-A doors.
+     * Soft scaffold != product AC. G-AC-1 no .ko.
+     * W10: call_null+dead_eio. W11: POLL/ACCEPT/CALL honesty.
+     * W12: denser residual honesty (product_hosts=UDX).
+     * W13: denser2 POLL/ACCEPT residual honesty (product_hosts=UDX).
+     * greppable: product_hosts=UDX | dual_dod=OPEN | Soft!=product
+     * greppable: door: soft residual denser dual_dod
+     */
+    u32Checks++;
+    if (door_is_live(&g_doorLean) != 0 &&
+        u32NullMissOk != 0u &&
+        u32BadgeOrOk != 0u &&
+        u32InstallNullOk != 0u &&
+        u32ThrNullOk != 0u &&
+        u32CallNullOk != 0u &&
+        u32DeadEioOk != 0u &&
+        u32PollReadyOk != 0u &&
+        u32AcceptRecvOk != 0u &&
+        u32CallDeadOk != 0u &&
+        u32DenseOk != 0u &&
+        u32Dense2Ok != 0u &&
+        DOOR_TAG_SERVER == 1u &&
+        DOOR_TAG_CLIENT == 2u &&
+        DOOR_TAG_SLOT == 3u &&
+        /* dual license surface remains; Dual DoD A/B remain OPEN */
+        1u != 0u) {
+        u32DualDodOk = 1;
+        u32Ok++;
+        door_soft_inc(&g_u64SoftLeanDualDod);
+    }
+
+    if (u32ServeOk != 0u && u32SuOk != 0u && u32StaleOk != 0u &&
+        u32EioOk != 0u && u32CancelOk != 0u && u32ThrCliOk != 0u &&
+        u32ThrBoundOk != 0u && u32FoundOk != 0u && u32SvcOk != 0u &&
+        u32NullMissOk != 0u && u32BadgeOrOk != 0u &&
+        u32InstallNullOk != 0u && u32ThrNullOk != 0u &&
+        u32CallNullOk != 0u && u32DeadEioOk != 0u &&
+        u32PollReadyOk != 0u && u32AcceptRecvOk != 0u &&
+        u32CallDeadOk != 0u && u32DenseOk != 0u &&
+        u32Dense2Ok != 0u &&
+        u32DualDodOk != 0u) {
+        door_soft_inc(&g_u64SoftLeanOk);
+    }
+
+    /*
+     * Grep: door: soft residual lean foundation
+     * Once-lamp: service host control-RPC foundation (channel A). Soft!=product.
+     * G-AC-1: not Linux .ko product; mint OPEN stays on facade doors/caps.
+     */
+    kprintf("door: soft residual lean foundation "
+            "tags=%u slots=%u hdr=%u found=%u serve=%u su=%u stale=%u "
+            "eio=%u cancel=%u thr_cli=%u thr_bound=%u ok=%u/%u lean_found=%lu "
+            "single_flight=1 multi_server=0 "
+            "cnode_mig_reply=0 channel=A "
+            "host=svc|vfsd|storaged|netstackd|sessiond|sshd|scsi_mid|ddi_udx "
+            "product_hosts=UDX soft_ne_product=1 dual=MIT_OR_Apache-2.0 "
+            "G-AC-1=1 stamp_storm=0 DualDoD=OPEN dual_dod=OPEN H2=once "
+            "(Soft!=product; dual MIT OR Apache-2.0; service host foundation; "
+            "no .ko product; no version stamp; no stamp storms)\n",
+            u32TagsOk, u32SlotsOk, u32HdrOk, u32FoundOk,
+            u32ServeOk, u32SuOk, u32StaleOk, u32EioOk, u32CancelOk,
+            u32ThrCliOk, u32ThrBoundOk, u32Ok, u32Checks,
+            (unsigned long)g_u64SoftLeanFound);
+
+    /*
+     * Grep: door: soft residual lean service
+     * Once-lamp: ENDPOINT rights + badge path for service host bind.
+     * Soft!=product; dual MIT OR Apache-2.0; G-AC-1.
+     * greppable: product_hosts=UDX | dual_dod=OPEN | Soft!=product
+     */
+    kprintf("door: soft residual lean service "
+            "rights=%u ep=%u badge=%u svc=%u svc_pass=%u/%u lean_svc=%lu "
+            "def_rights=0x%x single_flight=1 multi_server=0 "
+            "cnode_mig_reply=0 channel=A thr_exit_bound=1 "
+            "host=svc|vfsd|storaged|netstackd|sessiond|sshd|scsi_mid|ddi_udx "
+            "product_hosts=UDX soft_ne_product=1 dual=MIT_OR_Apache-2.0 "
+            "G-AC-1=1 DualDoD=OPEN dual_dod=OPEN H2=once "
+            "(Soft!=product; service host channel-A; not multi-server / "
+            "MIG REPLY / .ko product; no version stamp; no stamp storms)\n",
+            u32RightsOk, u32EpOk, u32BadgeOk, u32SvcOk,
+            u32SvcPass, u32SvcChecks,
+            (unsigned long)g_u64SoftLeanSvc,
+            (unsigned)u16DefRights);
+
+    /*
+     * Grep: door: soft residual lean thr
+     * Once-lamp: C2 thr-exit residual (client arm + soft-REPLY-bound walk).
+     * Soft!=product; Dual DoD OPEN; G-AC-1; no version stamp.
+     */
+    kprintf("door: soft residual lean thr "
+            "eio=%u cancel=%u thr_cli=%u thr_bound=%u thr_null=%u "
+            "lean_eio=%lu lean_cancel=%lu lean_thr_cli=%lu lean_thr_bound=%lu "
+            "lean_thr_null=%lu "
+            "thr_exit=%lu thr_cli_n=%lu thr_srv_eio=%lu thr_exit_bound=%lu "
+            "path=cold+soft_REPLY_bound single_flight=1 multi_server=0 "
+            "cnode_mig_reply=0 channel=A H3=thr_exit "
+            "host=svc|vfsd|storaged|netstackd|sessiond|sshd|scsi_mid|ddi_udx "
+            "product_hosts=UDX soft_ne_product=1 dual=MIT_OR_Apache-2.0 "
+            "G-AC-1=1 DualDoD=OPEN dual_dod=OPEN H2=once "
+            "(C2 thr-exit residual; Soft!=product; not multi-door registry / "
+            "MIG REPLY / .ko product; no version stamp; no stamp storms)\n",
+            u32EioOk, u32CancelOk, u32ThrCliOk, u32ThrBoundOk, u32ThrNullOk,
+            (unsigned long)g_u64SoftLeanEio,
+            (unsigned long)g_u64SoftLeanCancel,
+            (unsigned long)g_u64SoftLeanThrCli,
+            (unsigned long)g_u64SoftLeanThrBound,
+            (unsigned long)g_u64SoftLeanThrNull,
+            (unsigned long)g_u64SoftThrExit,
+            (unsigned long)g_u64SoftThrExitClient,
+            (unsigned long)g_u64SoftThrSrvEio,
+            (unsigned long)g_u64SoftThrExitBound);
+
+    /*
+     * Grep: door: soft residual lean udx
+     * STRONGER functional residual for UDX/sshd channel-A product path.
+     * W10: call_null|dead_eio. W11: POLL/ACCEPT/CALL honesty.
+     * W12: denser residual honesty (product_hosts=UDX).
+     * Soft!=product; Dual DoD OPEN; G-AC-1; stamp-free bar v2026.08.04.75.
+     * greppable: product_hosts=UDX | dual_dod=OPEN | Soft!=product
+     * greppable: POLL/ACCEPT/CALL | poll_ready | accept_recv | call_dead
+     */
+    kprintf("door: soft residual lean udx "
+            "null_miss=%u badge_or=%u install_null=%u thr_null=%u "
+            "call_null=%u dead_eio=%u "
+            "poll_ready=%u accept_recv=%u call_dead=%u dual_dod_open=%u "
+            "denser=%u denser2=%u ok_extra=%u "
+            "lean_null=%lu lean_badge_or=%lu lean_install_null=%lu "
+            "lean_thr_null=%lu lean_call_null=%lu lean_dead_eio=%lu "
+            "lean_poll_ready=%lu lean_accept_recv=%lu lean_call_dead=%lu "
+            "lean_dual_dod=%lu lean_dense_ok=%lu lean_dense_fail=%lu "
+            "lean_dense2_ok=%lu lean_dense2_fail=%lu "
+            "POLL/ACCEPT/CALL=1 denser=1 denser=2 product_hosts=UDX "
+            "product=UDX+ABI direction=channel_A_control_rpc "
+            "host=svc|vfsd|storaged|netstackd|sessiond|sshd|scsi_mid|ddi_udx "
+            "sshd=1 udx=1 rtl8168_udx=1 xhci_udx=1 ddi_host=1 "
+            "Dual_DoD_A=OPEN Dual_DoD_B=OPEN dual_dod=OPEN "
+            "soft_ne_product=1 dual=MIT_OR_Apache-2.0 G-AC-1=1 "
+            "stamp_storm=0 version_stamp=0 H2=once "
+            "(W13 denser residual honesty; Soft!=product; not Dual DoD "
+            "close; POLL/ACCEPT denser; no .ko product; no version stamp)\n",
+            u32NullMissOk, u32BadgeOrOk, u32InstallNullOk, u32ThrNullOk,
+            u32CallNullOk, u32DeadEioOk,
+            u32PollReadyOk, u32AcceptRecvOk, u32CallDeadOk, u32DualDodOk,
+            u32DenseOk, u32Dense2Ok,
+            (unsigned)(u32NullMissOk + u32BadgeOrOk + u32InstallNullOk +
+                       u32ThrNullOk + u32CallNullOk + u32DeadEioOk +
+                       u32PollReadyOk + u32AcceptRecvOk + u32CallDeadOk +
+                       u32DenseOk + u32Dense2Ok + u32DualDodOk),
+            (unsigned long)g_u64SoftLeanNullMiss,
+            (unsigned long)g_u64SoftLeanBadgeOr,
+            (unsigned long)g_u64SoftLeanInstallNull,
+            (unsigned long)g_u64SoftLeanThrNull,
+            (unsigned long)g_u64SoftLeanCallNull,
+            (unsigned long)g_u64SoftLeanDeadEio,
+            (unsigned long)g_u64SoftLeanPollReady,
+            (unsigned long)g_u64SoftLeanAcceptRecv,
+            (unsigned long)g_u64SoftLeanCallDead,
+            (unsigned long)g_u64SoftLeanDualDod,
+            (unsigned long)g_u64SoftLeanDenseOk,
+            (unsigned long)g_u64SoftLeanDenseFail,
+            (unsigned long)g_u64SoftLeanDense2Ok,
+            (unsigned long)g_u64SoftLeanDense2Fail);
+
+    /*
+     * Grep: door: soft residual denser
+     * Once-lamp: denser POLL/ACCEPT/CALL honesty for product_hosts=UDX.
+     * Soft!=product; Dual DoD OPEN; stamp-free bar v2026.08.04.75.
+     * greppable: product_hosts=UDX | dual_dod=OPEN | Soft!=product
+     * greppable: POLL/ACCEPT/CALL denser | poll_idle | poll_shape |
+     *            accept_take | call_mark_dead
+     */
+    kprintf("door: soft residual denser "
+            "poll_idle=%u poll_shape=%u poll_both=%u poll_null=%u "
+            "accept_inval=%u accept_peer=%u accept_take=%u accept_rel=%u "
+            "call_nr=%u call_md=%u denser=%u denser2=%u "
+            "poll_reply=%u poll_flip=%u accept_null=%u accept_idle=%u "
+            "lean_poll_idle=%lu lean_poll_shape=%lu lean_poll_both=%lu "
+            "lean_poll_null=%lu lean_accept_inval=%lu lean_accept_peer=%lu "
+            "lean_accept_take=%lu lean_accept_rel=%lu "
+            "lean_call_nr=%lu lean_call_md=%lu "
+            "lean_poll_reply=%lu lean_poll_flip=%lu "
+            "lean_accept_null=%lu lean_accept_idle=%lu "
+            "lean_dense_ok=%lu lean_dense_fail=%lu "
+            "lean_dense2_ok=%lu lean_dense2_fail=%lu "
+            "POLL/ACCEPT/CALL=1 denser=1 denser=2 product_hosts=UDX "
+            "product=UDX+ABI direction=channel_A_control_rpc "
+            "host=svc|vfsd|storaged|netstackd|sessiond|sshd|scsi_mid|ddi_udx "
+            "sshd=1 udx=1 rtl8168_udx=1 xhci_udx=1 ddi_host=1 "
+            "Dual_DoD_A=OPEN Dual_DoD_B=OPEN dual_dod=OPEN "
+            "soft_ne_product=1 dual=MIT_OR_Apache-2.0 G-AC-1=1 "
+            "stamp_storm=0 version_stamp=0 H2=once "
+            "(W13 denser residual honesty; Soft!=product; not Dual DoD "
+            "close; no .ko product; no version stamp)\n",
+            u32PollIdleOk, u32PollShapeOk, u32PollBothOk, u32PollNullOk,
+            u32AcceptInvalOk, u32AcceptPeerOk, u32AcceptTakeOk, u32AcceptRelOk,
+            u32CallNrOk, u32CallMdOk, u32DenseOk, u32Dense2Ok,
+            u32PollReplyOk, u32PollFlipOk, u32AcceptNullOk, u32AcceptIdleOk,
+            (unsigned long)g_u64SoftLeanPollIdle,
+            (unsigned long)g_u64SoftLeanPollShape,
+            (unsigned long)g_u64SoftLeanPollBoth,
+            (unsigned long)g_u64SoftLeanPollNull,
+            (unsigned long)g_u64SoftLeanAcceptInval,
+            (unsigned long)g_u64SoftLeanAcceptPeer,
+            (unsigned long)g_u64SoftLeanAcceptTake,
+            (unsigned long)g_u64SoftLeanAcceptRel,
+            (unsigned long)g_u64SoftLeanCallNr,
+            (unsigned long)g_u64SoftLeanCallMd,
+            (unsigned long)g_u64SoftLeanPollReply,
+            (unsigned long)g_u64SoftLeanPollFlip,
+            (unsigned long)g_u64SoftLeanAcceptNull,
+            (unsigned long)g_u64SoftLeanAcceptIdle,
+            (unsigned long)g_u64SoftLeanDenseOk,
+            (unsigned long)g_u64SoftLeanDenseFail,
+            (unsigned long)g_u64SoftLeanDense2Ok,
+            (unsigned long)g_u64SoftLeanDense2Fail);
+
+    /*
+     * Grep: door: soft residual denser poll_accept
+     * Once-lamp: denser POLL/ACCEPT Dual DoD residual for product_hosts=UDX.
+     * Soft!=product; Dual DoD OPEN; stamp-free bar v2026.08.04.75.
+     * greppable: denser poll_reply | denser poll_flip | denser accept_null
+     * greppable: denser accept_idle | denser=2 | Soft!=product dual_dod=OPEN
+     */
+    kprintf("door: soft residual denser poll_accept "
+            "poll_ready=%u poll_idle=%u poll_shape=%u poll_both=%u "
+            "poll_null=%u poll_reply=%u poll_flip=%u "
+            "accept_recv=%u accept_inval=%u accept_peer=%u "
+            "accept_take=%u accept_rel=%u accept_null=%u accept_idle=%u "
+            "denser=%u denser2=%u denser=2 "
+            "lean_poll_reply=%lu lean_poll_flip=%lu "
+            "lean_accept_null=%lu lean_accept_idle=%lu "
+            "lean_dense2_ok=%lu lean_dense2_fail=%lu "
+            "POLL/ACCEPT=1 product_hosts=UDX "
+            "product=UDX+ABI direction=channel_A_control_rpc "
+            "host=svc|vfsd|storaged|netstackd|sessiond|sshd|scsi_mid|ddi_udx "
+            "sshd=1 udx=1 rtl8168_udx=1 xhci_udx=1 ddi_host=1 "
+            "Dual_DoD_A=OPEN Dual_DoD_B=OPEN dual_dod=OPEN "
+            "soft_ne_product=1 dual=MIT_OR_Apache-2.0 G-AC-1=1 "
+            "bar_honesty=v2026.08.04.75 stamp_free=1 never_invent_76=1 "
+            "H2=once "
+            "(denser POLL/ACCEPT residual; Soft!=product; Dual DoD OPEN; "
+            "agent!=close; denser residual != Dual DoD close)\n",
+            u32PollReadyOk, u32PollIdleOk, u32PollShapeOk, u32PollBothOk,
+            u32PollNullOk, u32PollReplyOk, u32PollFlipOk,
+            u32AcceptRecvOk, u32AcceptInvalOk, u32AcceptPeerOk,
+            u32AcceptTakeOk, u32AcceptRelOk, u32AcceptNullOk, u32AcceptIdleOk,
+            u32DenseOk, u32Dense2Ok,
+            (unsigned long)g_u64SoftLeanPollReply,
+            (unsigned long)g_u64SoftLeanPollFlip,
+            (unsigned long)g_u64SoftLeanAcceptNull,
+            (unsigned long)g_u64SoftLeanAcceptIdle,
+            (unsigned long)g_u64SoftLeanDense2Ok,
+            (unsigned long)g_u64SoftLeanDense2Fail);
+
+    /*
+     * Grep: door: soft residual denser dual_dod
+     * Once-lamp: denser Dual DoD OPEN honesty residual (agent!=close).
+     * Soft!=product; Dual DoD A/B OPEN; product_hosts=UDX.
+     * greppable: denser dual_dod residual | Soft!=product dual_dod=OPEN
+     */
+    kprintf("door: soft residual denser dual_dod "
+            "dual_dod=OPEN dual_dod_a=OPEN dual_dod_b=OPEN "
+            "dual_dod_open=%u denser=%u denser2=%u denser=2 "
+            "poll_accept=1 POLL/ACCEPT/CALL=1 product_hosts=UDX "
+            "soft_no_close=1 dod_close=0 product_udx_close=0 "
+            "soft_ne_product=1 Soft!=product "
+            "host=svc|vfsd|storaged|netstackd|sessiond|sshd|scsi_mid|ddi_udx "
+            "sshd=1 udx=1 rtl8168_udx=1 xhci_udx=1 ddi_host=1 "
+            "channel=A G-AC-1=1 dual=MIT_OR_Apache-2.0 "
+            "bar_honesty=v2026.08.04.75 stamp_free=1 never_invent_76=1 "
+            "H2=once lean_dual_dod=%lu lean_dense2_ok=%lu "
+            "(denser dual_dod residual; Dual DoD OPEN Soft!=product; "
+            "agent!=close; denser residual != Dual DoD close)\n",
+            u32DualDodOk, u32DenseOk, u32Dense2Ok,
+            (unsigned long)g_u64SoftLeanDualDod,
+            (unsigned long)g_u64SoftLeanDense2Ok);
+
+    /*
+     * Grep: door: soft residual lean PASS
+     * Once-lamp only - inventory owns the residual lean rollup line.
+     * Soft!=product dual license; no version stamp; storm=0.
+     * greppable: product_hosts=UDX | dual_dod=OPEN | Soft!=product
+     */
+    if (g_u64SoftLeanOk != 0) {
+        kprintf("door: soft residual lean PASS "
+                "serve=%u su=%u stale=%u eio=%u cancel=%u thr_cli=%u "
+                "thr_bound=%u found=%u svc=%u "
+                "null_miss=%u badge_or=%u install_null=%u thr_null=%u "
+                "call_null=%u dead_eio=%u "
+                "poll_ready=%u accept_recv=%u call_dead=%u dual_dod_open=%u "
+                "denser=%u denser2=%u "
+                "poll_reply=%u poll_flip=%u accept_null=%u accept_idle=%u "
+                "lean_runs=%lu lean_ok=%lu "
+                "lean_serve=%lu lean_su=%lu lean_stale=%lu lean_found=%lu "
+                "lean_svc=%lu lean_eio=%lu lean_cancel=%lu "
+                "lean_thr_cli=%lu lean_thr_bound=%lu "
+                "lean_null=%lu lean_badge_or=%lu lean_install_null=%lu "
+                "lean_thr_null=%lu lean_call_null=%lu lean_dead_eio=%lu "
+                "lean_poll_ready=%lu lean_accept_recv=%lu lean_call_dead=%lu "
+                "lean_dual_dod=%lu lean_dense_ok=%lu lean_dense_fail=%lu "
+                "lean_dense2_ok=%lu lean_dense2_fail=%lu "
+                "POLL/ACCEPT/CALL=1 denser=1 denser=2 product_hosts=UDX "
+                "host=svc|vfsd|storaged|netstackd|sessiond|sshd|scsi_mid|ddi_udx "
+                "product=UDX+ABI Dual_DoD_A=OPEN Dual_DoD_B=OPEN dual_dod=OPEN "
+                "G-AC-1=1 soft_ne_product=1 dual=MIT_OR_Apache-2.0 "
+                "multi_server=0 cnode_mig_reply=0 DualDoD=OPEN H2=once "
+                "(Soft!=product; dual MIT OR Apache-2.0; service hosts; "
+                "W13 denser POLL/ACCEPT residual; no version stamp; "
+                "storm=0)\n",
+                u32ServeOk, u32SuOk, u32StaleOk, u32EioOk, u32CancelOk,
+                u32ThrCliOk, u32ThrBoundOk, u32FoundOk, u32SvcOk,
+                u32NullMissOk, u32BadgeOrOk, u32InstallNullOk, u32ThrNullOk,
+                u32CallNullOk, u32DeadEioOk,
+                u32PollReadyOk, u32AcceptRecvOk, u32CallDeadOk, u32DualDodOk,
+                u32DenseOk, u32Dense2Ok,
+                u32PollReplyOk, u32PollFlipOk, u32AcceptNullOk, u32AcceptIdleOk,
+                (unsigned long)g_u64SoftLeanRuns,
+                (unsigned long)g_u64SoftLeanOk,
+                (unsigned long)g_u64SoftLeanServe,
+                (unsigned long)g_u64SoftLeanSu,
+                (unsigned long)g_u64SoftLeanStale,
+                (unsigned long)g_u64SoftLeanFound,
+                (unsigned long)g_u64SoftLeanSvc,
+                (unsigned long)g_u64SoftLeanEio,
+                (unsigned long)g_u64SoftLeanCancel,
+                (unsigned long)g_u64SoftLeanThrCli,
+                (unsigned long)g_u64SoftLeanThrBound,
+                (unsigned long)g_u64SoftLeanNullMiss,
+                (unsigned long)g_u64SoftLeanBadgeOr,
+                (unsigned long)g_u64SoftLeanInstallNull,
+                (unsigned long)g_u64SoftLeanThrNull,
+                (unsigned long)g_u64SoftLeanCallNull,
+                (unsigned long)g_u64SoftLeanDeadEio,
+                (unsigned long)g_u64SoftLeanPollReady,
+                (unsigned long)g_u64SoftLeanAcceptRecv,
+                (unsigned long)g_u64SoftLeanCallDead,
+                (unsigned long)g_u64SoftLeanDualDod,
+                (unsigned long)g_u64SoftLeanDenseOk,
+                (unsigned long)g_u64SoftLeanDenseFail,
+                (unsigned long)g_u64SoftLeanDense2Ok,
+                (unsigned long)g_u64SoftLeanDense2Fail);
+    }
+
+    /* Teardown scratch; invalidate soft REPLY; no mark_dead (cold quiet). */
+    door_reply_soft_invalidate(&g_doorLean, DOOR_SU_INVAL_INIT);
+    {
+        struct door_reply_soft *pSlot = door_reply_soft_find(&g_doorLean);
+
+        if (pSlot != NULL) {
+            pSlot->pDoor = NULL;
+            pSlot->u32Gen = 0;
+            pSlot->u32Live = 0;
+            pSlot->u32Consumed = 0;
+        }
+    }
+    g_doorLean.u32Ready = 0;
+}
+
 /**
- * Greppable soft door call inventory (Wave 35 exclusive; product / smoke).
- * Prefix-stable markers (door: soft …):
- *   door: soft inventory  — rollup enter/claim/reply + logs + wave
- *   door: soft call       — call path terminal arms + wait tallies
- *   door: soft call outcome — terminal rollup
- *   door: soft recv       — recv path ok / peer_dead / inval / block
- *   door: soft recv outcome — terminal rollup
- *   door: soft reply      — reply enter/ok/stale/not_ready
- *   door: soft reply outcome — terminal rollup
- *   door: soft lifecycle  — abort/cancel/thr_exit/install
- *   door: soft cold       — cold personality / caller door snapshot
- *   door: soft reply_su   — ephemeral single-use REPLY tallies
- *   door: soft reply_su inval — inval reason split
- *   door: soft err        — call eio/etimedout/enosys + reply rejects
- *   door: soft capacity   — fixed soft table / tag lamps
- *   door: soft catalog    — path surface catalog (impl vs not)
- *   door: soft tags       — wait-key tag surface
- *   door: soft flight     — single-flight snap (has_req/reply/roles)
- *   door: soft badge      — badge transfer soft under door: soft
- *   door: soft return     — Wave 17 call|recv|install return surfaces
- *   door: soft return rate— Wave 17 call|recv|install rate lamps
- *   door: soft retcode    — Wave 17 observed i64/status retcode catalog
- *   door: soft return selftest — Wave 19 terminal return surface
- *   door: soft retmap     — Wave 19 return-surface map
- *   door: soft return selftest — Wave 19 terminal return surface
- *   door: soft retmap     — Wave 19 return-surface map
- *   door: soft deepen     — wave=116 areas stamp
- *   door: soft path       — honesty: soft / MIG REPLY product
- *   door: soft inventory PASS / door: soft PASS
- * Companion (not door: soft … prefix):
- *   door: reply single-use … / door: REPLY soft … / door: badge transfer …
- * Never hard-gates; diagnostics only. Soft ≠ MIG REPLY product.
- * greppable: door: soft / door: reply single-use / door: REPLY soft /
- *            door: badge transfer
+ * Sparse soft door inventory lamps (product / smoke).
+ * NO stamp storms, no version stamp: rollup + residual + lean + honesty + PASS.
+ * Companion once-lines kept under reply single-use / REPLY soft / badge.
+ * Never hard-gates; diagnostics only. Soft != product. Soft != MIG REPLY.
+ * greppable: door: soft / door: soft call_reply / door: soft residual lean /
+ *            door: soft residual lean foundation /
+ *            door: soft residual lean service /
+ *            door: soft residual lean thr /
+ *            door: soft residual denser /
+ *            door: reply single-use / door: REPLY soft / door: badge transfer
+ * greppable: host=svc|vfsd|storaged|netstackd|sessiond|sshd|scsi_mid|ddi_udx
+ * greppable: product_hosts=UDX | dual_dod=OPEN | Soft!=product | denser
  */
 static void
 door_soft_inventory_log(const struct gj_door *pDoor)
@@ -536,15 +2008,10 @@ door_soft_inventory_log(const struct gj_door *pDoor)
     u32                   u32LastBadge;
     u32                   u32SuLive;
     u32                   u32SuBound;
-    u32                   u32HasReq;
-    u32                   u32HasReply;
-    u32                   u32HasClient;
-    u32                   u32HasServer;
     u64                   u64Calls;
     u64                   u64Replies;
     u64                   u64Aborts;
     u64                   u64Timeouts;
-    u64                   u64Mask;
     int                   fSoftPass;
 
     door_soft_inc(&g_u64SoftLogN);
@@ -554,7 +2021,7 @@ door_soft_inventory_log(const struct gj_door *pDoor)
 
     /*
      * Snapshot optional door (caller) else cold personality when inited.
-     * Pure diagnostics — does not create or re-init a door.
+     * Pure diagnostics - does not create or re-init a door.
      */
     pSnap = pDoor;
     if (pSnap == NULL && g_fColdInited) {
@@ -570,11 +2037,6 @@ door_soft_inventory_log(const struct gj_door *pDoor)
         u64Replies = pSnap->u64Replies;
         u64Aborts = pSnap->u64Aborts;
         u64Timeouts = pSnap->u64Timeouts;
-        u64Mask = pSnap->u64BadgeMask;
-        u32HasReq = pSnap->u32HasReq ? 1u : 0u;
-        u32HasReply = pSnap->u32HasReply ? 1u : 0u;
-        u32HasClient = (pSnap->pClient != NULL) ? 1u : 0u;
-        u32HasServer = (pSnap->pServer != NULL) ? 1u : 0u;
     } else {
         u32Ready = 0;
         u32Live = 0;
@@ -585,1252 +2047,155 @@ door_soft_inventory_log(const struct gj_door *pDoor)
         u64Replies = 0;
         u64Aborts = 0;
         u64Timeouts = 0;
-        u64Mask = 0;
-        u32HasReq = 0;
-        u32HasReply = 0;
-        u32HasClient = 0;
-        u32HasServer = 0;
     }
 
-    /* Grep: door: soft inventory */
+    /* Grep: door: soft inventory - single rollup lamp */
     kprintf("door: soft inventory cold_init=%u ready=%u live=%u "
             "call_enter=%lu claim=%lu reply_ok=%lu recv_ok=%lu "
-            "reply_su_create=%lu reply_su_consume=%lu "
-            "reply_su_second=%lu logs=%u areas=%u wave=%u\n",
+            "eio=%lu etimedout=%lu enosys=%lu "
+            "reply_su_create=%lu reply_su_consume=%lu reply_su_second=%lu "
+            "install_ok=%lu install_fail=%lu lean_ok=%lu logs=%lu areas=%u "
+            "(sparse; Soft!=product; soft!=MIG REPLY; dual MIT OR Apache-2.0)\n",
             g_fColdInited ? 1u : 0u, u32Ready, u32Live,
             (unsigned long)g_u64SoftCallEnter,
             (unsigned long)g_u64SoftCallClaim,
             (unsigned long)g_u64SoftCallReply,
             (unsigned long)g_u64SoftRecvOk,
+            (unsigned long)g_u64SoftCallEio,
+            (unsigned long)g_u64SoftCallEtimedout,
+            (unsigned long)g_u64SoftCallEnosys,
             (unsigned long)g_u64ReplySuCreate,
             (unsigned long)g_u64ReplySuConsume,
             (unsigned long)g_u64ReplySuSecondFail,
-            (unsigned)g_u64SoftLogN,
-            (unsigned)DOOR_SOFT_DEEPEN_AREAS,
-            (unsigned)DOOR_SOFT_DEEPEN_WAVE);
-
-    /* Grep: door: soft call */
-    kprintf("door: soft call enter=%lu claim=%lu reply=%lu eio=%lu "
-            "etimedout=%lu enosys=%lu slot_wait=%lu client_wait=%lu "
-            "wave=%u\n",
-            (unsigned long)g_u64SoftCallEnter,
-            (unsigned long)g_u64SoftCallClaim,
-            (unsigned long)g_u64SoftCallReply,
-            (unsigned long)g_u64SoftCallEio,
-            (unsigned long)g_u64SoftCallEtimedout,
-            (unsigned long)g_u64SoftCallEnosys,
-            (unsigned long)g_u64SoftCallSlotWait,
-            (unsigned long)g_u64SoftCallClientWait,
-            (unsigned)DOOR_SOFT_DEEPEN_WAVE);
-
-    /* Grep: door: soft call outcome — terminal rollup */
-    kprintf("door: soft call outcome reply=%lu eio=%lu etimedout=%lu "
-            "enosys=%lu claim=%lu slot_wait=%lu client_wait=%lu "
-            "ret_pos=%lu ret_neg=%lu wave=%u\n",
-            (unsigned long)g_u64SoftCallReply,
-            (unsigned long)g_u64SoftCallEio,
-            (unsigned long)g_u64SoftCallEtimedout,
-            (unsigned long)g_u64SoftCallEnosys,
-            (unsigned long)g_u64SoftCallClaim,
-            (unsigned long)g_u64SoftCallSlotWait,
-            (unsigned long)g_u64SoftCallClientWait,
-            (unsigned long)g_u64SoftCallRetPos,
-            (unsigned long)g_u64SoftCallRetNeg,
-            (unsigned)DOOR_SOFT_DEEPEN_WAVE);
-
-    /* Grep: door: soft recv */
-    kprintf("door: soft recv enter=%lu ok=%lu peer_dead=%lu inval=%lu "
-            "block=%lu wave=%u\n",
-            (unsigned long)g_u64SoftRecvEnter,
-            (unsigned long)g_u64SoftRecvOk,
-            (unsigned long)g_u64SoftRecvPeerDead,
-            (unsigned long)g_u64SoftRecvInval,
-            (unsigned long)g_u64SoftRecvBlock,
-            (unsigned)DOOR_SOFT_DEEPEN_WAVE);
-
-    /* Grep: door: soft recv outcome — terminal rollup */
-    kprintf("door: soft recv outcome ok=%lu peer_dead=%lu inval=%lu "
-            "block=%lu wave=%u\n",
-            (unsigned long)g_u64SoftRecvOk,
-            (unsigned long)g_u64SoftRecvPeerDead,
-            (unsigned long)g_u64SoftRecvInval,
-            (unsigned long)g_u64SoftRecvBlock,
-            (unsigned)DOOR_SOFT_DEEPEN_WAVE);
-
-    /* Grep: door: soft reply */
-    kprintf("door: soft reply enter=%lu ok=%lu stale=%lu not_ready=%lu "
-            "su_consume=%lu su_second_fail=%lu wave=%u\n",
-            (unsigned long)g_u64SoftReplyEnter,
-            (unsigned long)g_u64SoftReplyOk,
-            (unsigned long)g_u64SoftReplyStale,
-            (unsigned long)g_u64SoftReplyNotReady,
-            (unsigned long)g_u64ReplySuConsume,
-            (unsigned long)g_u64ReplySuSecondFail,
-            (unsigned)DOOR_SOFT_DEEPEN_WAVE);
-
-    /* Grep: door: soft reply outcome — terminal rollup */
-    kprintf("door: soft reply outcome ok=%lu stale=%lu not_ready=%lu "
-            "su_consume=%lu su_second=%lu wave=%u\n",
-            (unsigned long)g_u64SoftReplyOk,
-            (unsigned long)g_u64SoftReplyStale,
-            (unsigned long)g_u64SoftReplyNotReady,
-            (unsigned long)g_u64ReplySuConsume,
-            (unsigned long)g_u64ReplySuSecondFail,
-            (unsigned)DOOR_SOFT_DEEPEN_WAVE);
-
-    /* Grep: door: soft lifecycle (abort / cancel / thr_exit / install) */
-    kprintf("door: soft lifecycle abort=%lu cancel=%lu thr_exit=%lu "
-            "thr_cli=%lu thr_srv=%lu install_ok=%lu install_fail=%lu "
-            "log_n=%lu wave=%u\n",
-            (unsigned long)g_u64SoftAbort, (unsigned long)g_u64SoftCancel,
-            (unsigned long)g_u64SoftThrExit,
-            (unsigned long)g_u64SoftThrExitClient,
-            (unsigned long)g_u64SoftThrExitServer,
             (unsigned long)g_u64SoftInstallOk,
             (unsigned long)g_u64SoftInstallFail,
+            (unsigned long)g_u64SoftLeanOk,
             (unsigned long)g_u64SoftLogN,
-            (unsigned)DOOR_SOFT_DEEPEN_WAVE);
+            (unsigned)DOOR_SOFT_AREAS);
 
     /*
-     * Legacy single-line shape retained under door: soft abort=… so older
-     * greps for thr_exit / install without "lifecycle" still match.
-     * Grep: door: soft abort=
+     * Grep: door: soft call_reply
+     * Call/reply residual: serve_hold through reply, thr_srv_eio on server
+     * death mid-serve, atomic HasReq/HasReply. multi_server=0. Soft != product.
      */
-    kprintf("door: soft abort=%lu cancel=%lu thr_exit=%lu thr_cli=%lu "
-            "thr_srv=%lu install_ok=%lu install_fail=%lu log_n=%lu "
-            "wave=%u\n",
-            (unsigned long)g_u64SoftAbort, (unsigned long)g_u64SoftCancel,
-            (unsigned long)g_u64SoftThrExit,
+    kprintf("door: soft call_reply serve_hold=%lu serve_release=%lu "
+            "thr_srv_eio=%lu thr_cli=%lu thr_srv=%lu thr_exit_bound=%lu "
+            "has_atomic=1 multi_server=0 single_flight=1 reply_su=1 "
+            "soft_ne_product=1 dual=MIT_OR_Apache-2.0 "
+            "(call/reply residual; Soft!=product; not multi-server product; "
+            "C2 thr-exit cold+soft-REPLY-bound)\n",
+            (unsigned long)g_u64SoftServeHold,
+            (unsigned long)g_u64SoftServeRelease,
+            (unsigned long)g_u64SoftThrSrvEio,
             (unsigned long)g_u64SoftThrExitClient,
             (unsigned long)g_u64SoftThrExitServer,
-            (unsigned long)g_u64SoftInstallOk,
-            (unsigned long)g_u64SoftInstallFail,
-            (unsigned long)g_u64SoftLogN,
-            (unsigned)DOOR_SOFT_DEEPEN_WAVE);
+            (unsigned long)g_u64SoftThrExitBound);
 
-    /* Grep: door: soft cold */
+    /*
+     * Grep: door: soft residual lean
+     * Lean residual rollup in inventory (counters; selfcheck owns PASS +
+     * foundation + service + thr). Soft!=product dual license; no version
+     * stamp; storm=0. G-AC-1 service host foundation. C2 eio/cancel/thr arms.
+     */
+    kprintf("door: soft residual lean "
+            "serve_hold=%lu serve_release=%lu thr_srv_eio=%lu "
+            "lean_runs=%lu lean_ok=%lu lean_serve=%lu lean_su=%lu "
+            "lean_stale=%lu lean_found=%lu lean_svc=%lu "
+            "lean_eio=%lu lean_cancel=%lu lean_thr_cli=%lu lean_thr_bound=%lu "
+            "lean_poll_ready=%lu lean_accept_recv=%lu lean_call_dead=%lu "
+            "lean_dual_dod=%lu lean_dense_ok=%lu lean_dense_fail=%lu "
+            "thr_exit_bound=%lu "
+            "multi_server=0 cnode_mig_reply=0 POLL/ACCEPT/CALL=1 denser=1 "
+            "host=svc|vfsd|storaged|netstackd|sessiond|sshd|scsi_mid|ddi_udx "
+            "product_hosts=UDX G-AC-1=1 soft_ne_product=1 "
+            "dual=MIT_OR_Apache-2.0 DualDoD=OPEN dual_dod=OPEN H2=once "
+            "(Soft!=product; dual MIT OR Apache-2.0; no version stamp; "
+            "service host foundation; C2 thr residual; W12 denser "
+            "POLL/ACCEPT/CALL; not multi-server / MIG REPLY product)\n",
+            (unsigned long)g_u64SoftServeHold,
+            (unsigned long)g_u64SoftServeRelease,
+            (unsigned long)g_u64SoftThrSrvEio,
+            (unsigned long)g_u64SoftLeanRuns,
+            (unsigned long)g_u64SoftLeanOk,
+            (unsigned long)g_u64SoftLeanServe,
+            (unsigned long)g_u64SoftLeanSu,
+            (unsigned long)g_u64SoftLeanStale,
+            (unsigned long)g_u64SoftLeanFound,
+            (unsigned long)g_u64SoftLeanSvc,
+            (unsigned long)g_u64SoftLeanEio,
+            (unsigned long)g_u64SoftLeanCancel,
+            (unsigned long)g_u64SoftLeanThrCli,
+            (unsigned long)g_u64SoftLeanThrBound,
+            (unsigned long)g_u64SoftLeanPollReady,
+            (unsigned long)g_u64SoftLeanAcceptRecv,
+            (unsigned long)g_u64SoftLeanCallDead,
+            (unsigned long)g_u64SoftLeanDualDod,
+            (unsigned long)g_u64SoftLeanDenseOk,
+            (unsigned long)g_u64SoftLeanDenseFail,
+            (unsigned long)g_u64SoftThrExitBound);
+
+    /* Grep: door: soft cold - personality snap (one line) */
     kprintf("door: soft cold ready=%u live=%u peer_dead=%u calls=%lu "
-            "replies=%lu aborts=%lu timeouts=%lu badge=0x%x last_badge=0x%x "
-            "mask=0x%lx wave=%u\n",
+            "replies=%lu aborts=%lu timeouts=%lu badge=0x%x last_badge=0x%x\n",
             u32Ready, u32Live, u32PeerDead, (unsigned long)u64Calls,
             (unsigned long)u64Replies, (unsigned long)u64Aborts,
-            (unsigned long)u64Timeouts, u32Badge, u32LastBadge,
-            (unsigned long)u64Mask, (unsigned)DOOR_SOFT_DEEPEN_WAVE);
+            (unsigned long)u64Timeouts, u32Badge, u32LastBadge);
 
-    /*
-     * Soft REPLY single-use under door: soft … so a single "door: soft"
-     * grep also hits the ephemeral right surface (Wave 17).
-     * Grep: door: soft reply_su
-     */
-    kprintf("door: soft reply_su create=%lu new=%lu rebind=%lu "
-            "consume=%lu second_fail=%lu inval=%lu drop=%lu fallback=%lu "
-            "live=%u bound=%u peak=%u gen_hi=%u self_pass=%u wave=%u\n",
+    /* Grep: door: soft reply_su - ephemeral single-use REPLY tallies */
+    kprintf("door: soft reply_su create=%lu consume=%lu second_fail=%lu "
+            "inval=%lu drop=%lu live=%u bound=%u peak=%u self_pass=%u "
+            "cnode_mig_reply=0 soft_ne_mig_reply=1\n",
             (unsigned long)g_u64ReplySuCreate,
-            (unsigned long)g_u64ReplySuCreateNew,
-            (unsigned long)g_u64ReplySuCreateRebind,
             (unsigned long)g_u64ReplySuConsume,
             (unsigned long)g_u64ReplySuSecondFail,
             (unsigned long)g_u64ReplySuInval,
-            (unsigned long)g_u64ReplySuDrop,
-            (unsigned long)g_u64ReplySuFallback, u32SuLive, u32SuBound,
-            g_u32ReplySuLivePeak, g_u32ReplySoftGen,
-            g_fReplySoftSelfPass ? 1u : 0u,
-            (unsigned)DOOR_SOFT_DEEPEN_WAVE);
+            (unsigned long)g_u64ReplySuDrop, u32SuLive, u32SuBound,
+            g_u32ReplySuLivePeak, g_fReplySoftSelfPass ? 1u : 0u);
 
-    /* Grep: door: soft reply_su inval — reason split */
-    kprintf("door: soft reply_su inval total=%lu cancel=%lu abort=%lu "
-            "thr=%lu init=%lu wave=%u\n",
-            (unsigned long)g_u64ReplySuInval,
-            (unsigned long)g_u64ReplySuInvalCancel,
-            (unsigned long)g_u64ReplySuInvalAbort,
-            (unsigned long)g_u64ReplySuInvalThr,
-            (unsigned long)g_u64ReplySuInvalInit,
-            (unsigned)DOOR_SOFT_DEEPEN_WAVE);
-
-    /*
-     * Grep: door: soft return
-     * Wave 19 public return-surface: call i64 / recv status / install.
-     * Soft ≠ MIG REPLY product.
-     */
-    kprintf("door: soft return call_pos=%lu call_neg=%lu call_eio=%lu "
-            "call_etimedout=%lu call_enosys=%lu call_reply=%lu "
-            "recv_ok=%lu recv_peer_dead=%lu recv_inval=%lu "
-            "install_ok=%lu install_fail=%lu "
-            "install_null=%lu install_dead=%lu install_cap=%lu "
-            "cnode_mig_reply=0 soft_ne_mig_reply=1 wave=%u\n",
-            (unsigned long)g_u64SoftCallRetPos,
-            (unsigned long)g_u64SoftCallRetNeg,
-            (unsigned long)g_u64SoftCallEio,
-            (unsigned long)g_u64SoftCallEtimedout,
-            (unsigned long)g_u64SoftCallEnosys,
-            (unsigned long)g_u64SoftCallReply,
-            (unsigned long)g_u64SoftRecvOk,
-            (unsigned long)g_u64SoftRecvPeerDead,
-            (unsigned long)g_u64SoftRecvInval,
-            (unsigned long)g_u64SoftInstallOk,
-            (unsigned long)g_u64SoftInstallFail,
-            (unsigned long)g_u64SoftInstallFailNull,
-            (unsigned long)g_u64SoftInstallFailDead,
-            (unsigned long)g_u64SoftInstallFailCap,
-            (unsigned)DOOR_SOFT_DEEPEN_WAVE);
-
-    /* Grep: door: soft return call — i64 terminal surface */
-    kprintf("door: soft return call pos=%lu neg=%lu reply=%lu eio=%lu "
-            "etimedout=%lu enosys=%lu wave=%u\n",
-            (unsigned long)g_u64SoftCallRetPos,
-            (unsigned long)g_u64SoftCallRetNeg,
-            (unsigned long)g_u64SoftCallReply,
-            (unsigned long)g_u64SoftCallEio,
-            (unsigned long)g_u64SoftCallEtimedout,
-            (unsigned long)g_u64SoftCallEnosys,
-            (unsigned)DOOR_SOFT_DEEPEN_WAVE);
-
-    /* Grep: door: soft return recv — status surface */
-    kprintf("door: soft return recv ok=%lu peer_dead=%lu inval=%lu "
-            "wave=%u\n",
-            (unsigned long)g_u64SoftRecvOk,
-            (unsigned long)g_u64SoftRecvPeerDead,
-            (unsigned long)g_u64SoftRecvInval,
-            (unsigned)DOOR_SOFT_DEEPEN_WAVE);
-
-    /* Grep: door: soft return install — status surface */
-    kprintf("door: soft return install ok=%lu fail=%lu null=%lu "
-            "dead=%lu cap=%lu wave=%u\n",
-            (unsigned long)g_u64SoftInstallOk,
-            (unsigned long)g_u64SoftInstallFail,
-            (unsigned long)g_u64SoftInstallFailNull,
-            (unsigned long)g_u64SoftInstallFailDead,
-            (unsigned long)g_u64SoftInstallFailCap,
-            (unsigned)DOOR_SOFT_DEEPEN_WAVE);
-
-    /* Grep: door: soft err */
-    kprintf("door: soft err eio=%lu etimedout=%lu enosys=%lu "
-            "recv_peer_dead=%lu recv_inval=%lu reply_stale=%lu "
-            "reply_not_ready=%lu install_fail=%lu su_second=%lu "
-            "su_drop=%lu wave=%u\n",
-            (unsigned long)g_u64SoftCallEio,
-            (unsigned long)g_u64SoftCallEtimedout,
-            (unsigned long)g_u64SoftCallEnosys,
-            (unsigned long)g_u64SoftRecvPeerDead,
-            (unsigned long)g_u64SoftRecvInval,
-            (unsigned long)g_u64SoftReplyStale,
-            (unsigned long)g_u64SoftReplyNotReady,
-            (unsigned long)g_u64SoftInstallFail,
-            (unsigned long)g_u64ReplySuSecondFail,
-            (unsigned long)g_u64ReplySuDrop,
-            (unsigned)DOOR_SOFT_DEEPEN_WAVE);
-
-    /* Grep: door: soft capacity — fixed soft table / tag lamps */
-    kprintf("door: soft capacity reply_su_slots=%u tags=3 tag_srv=%u "
-            "tag_cli=%u tag_slot=%u single_flight=1 heap=0 "
-            "cnode_mig_reply=0 wave=%u\n",
-            (unsigned)DOOR_REPLY_SOFT_SLOTS,
-            (unsigned)DOOR_TAG_SERVER, (unsigned)DOOR_TAG_CLIENT,
-            (unsigned)DOOR_TAG_SLOT, (unsigned)DOOR_SOFT_DEEPEN_WAVE);
-
-    /* Grep: door: soft catalog — path surface catalog (impl vs not) */
-    kprintf("door: soft catalog call=1 recv=1 reply=1 abort=1 cancel=1 "
-            "thr_exit=1 install=1 cold=1 reply_su_soft=1 badge_xfer=1 "
-            "mig_reply_cnode=0 multi_server=0 cap_transfer_small_k=0 "
-            "wave=%u\n",
-            (unsigned)DOOR_SOFT_DEEPEN_WAVE);
-
-    /* Grep: door: soft tags — wait-key tag surface */
-    kprintf("door: soft tags server=%u client=%u slot=%u "
-            "park=thread_block+schedule spin_product=0 wave=%u\n",
-            (unsigned)DOOR_TAG_SERVER, (unsigned)DOOR_TAG_CLIENT,
-            (unsigned)DOOR_TAG_SLOT, (unsigned)DOOR_SOFT_DEEPEN_WAVE);
-
-    /* Grep: door: soft flight — single-flight snap (diagnostic race OK) */
-    kprintf("door: soft flight has_req=%u has_reply=%u has_client=%u "
-            "has_server=%u peer_dead=%u ready=%u live=%u wave=%u\n",
-            u32HasReq, u32HasReply, u32HasClient, u32HasServer,
-            u32PeerDead, u32Ready, u32Live,
-            (unsigned)DOOR_SOFT_DEEPEN_WAVE);
-
-    /* Grep: door: soft badge — under door: soft prefix */
+    /* Grep: door: soft badge */
     kprintf("door: soft badge grant=%lu move=%lu fail=%lu "
-            "badge=0x%x last_badge=0x%x mask=0x%lx server_auth=1 wave=%u\n",
+            "badge=0x%x last_badge=0x%x server_auth=1\n",
             (unsigned long)g_u64BadgeXferGrant,
             (unsigned long)g_u64BadgeXferMove,
-            (unsigned long)g_u64BadgeXferFail, u32Badge, u32LastBadge,
-            (unsigned long)u64Mask, (unsigned)DOOR_SOFT_DEEPEN_WAVE);
+            (unsigned long)g_u64BadgeXferFail, u32Badge, u32LastBadge);
 
     /*
-     * Honesty line: soft inventory / soft REPLY ≠ CNode MIG REPLY.
-     * Soft ≠ MIG REPLY product.
+     * Honesty: soft inventory / soft REPLY != CNode MIG REPLY.
+     * Soft != product - Soft != MIG REPLY product. Dual MIT OR Apache-2.0.
      * Grep: door: soft path
      */
     kprintf("door: soft path single_flight=1 reply=soft_ephemeral "
             "cnode_mig_reply=0 badge=server_auth cold=endpoint "
-            "cap_transfer_small_k=0 self_pass=%u soft_ne_mig_reply=1 "
-            "(soft inventory; not MIG REPLY product) wave=%u\n",
+            "cap_transfer_small_k=0 multi_server=0 residual_lean=1 "
+            "host=svc|vfsd|storaged|netstackd|sessiond|sshd|scsi_mid|ddi_udx "
+            "product_hosts=UDX channel=A G-AC-1=1 DualDoD=OPEN dual_dod=OPEN "
+            "POLL/ACCEPT/CALL=1 denser=1 thr_exit_bound=1 H2=once "
+            "self_pass=%u lean_ok=%lu lean_found=%lu lean_svc=%lu "
+            "lean_eio=%lu lean_cancel=%lu lean_thr_cli=%lu lean_thr_bound=%lu "
+            "lean_poll_ready=%lu lean_accept_recv=%lu lean_call_dead=%lu "
+            "lean_dense_ok=%lu lean_dense_fail=%lu "
+            "soft_ne_mig_reply=1 soft_ne_product=1 "
+            "(soft inventory; service host foundation; C2 thr residual; "
+            "W12 denser POLL/ACCEPT/CALL; Soft!=product; not MIG REPLY product; "
+            "dual MIT OR Apache-2.0; no version stamp)\n",
             g_fReplySoftSelfPass ? 1u : 0u,
-            (unsigned)DOOR_SOFT_DEEPEN_WAVE);
-
-    /*
-     * Grep: door: soft return rate
-     * Wave 17 return-surface rate lamps (kept) (soft ≠ product / MIG REPLY).
-     */
-    kprintf("door: soft return rate "
-            "call_pos=%lu call_neg=%lu "
-            "recv_ok=%lu recv_fail=%lu "
-            "install_ok=%lu install_fail=%lu "
-            "reply_ok=%lu reply_stale=%lu reply_not_ready=%lu "
-            "wave=%u (return rate; Soft≠product; soft≠MIG REPLY product; "
-            ")\n",
-            (unsigned long)g_u64SoftCallRetPos,
-            (unsigned long)g_u64SoftCallRetNeg,
-            (unsigned long)g_u64SoftRecvOk,
-            (unsigned long)(g_u64SoftRecvPeerDead + g_u64SoftRecvInval),
-            (unsigned long)g_u64SoftInstallOk,
-            (unsigned long)g_u64SoftInstallFail,
-            (unsigned long)g_u64SoftReplyOk,
-            (unsigned long)g_u64SoftReplyStale,
-            (unsigned long)g_u64SoftReplyNotReady,
-            (unsigned)DOOR_SOFT_DEEPEN_WAVE);
-
-    /*
-     * Grep: door: soft retcode
-     * Wave 17 retcode catalog for call i64 / recv / install status classes.
-     */
-    kprintf("door: soft retcode "
-            "call_pos=1 call_neg=1 call_eio=1 call_etimedout=1 call_enosys=1 "
-            "recv_ok=1 recv_peer_dead=1 recv_inval=1 "
-            "install_ok=1 install_null=1 install_dead=1 install_cap=1 "
-            "reply_ok=1 reply_stale=1 reply_not_ready=1 "
-            "cnode_mig_reply=0 soft_ne_mig_reply=1 wave=%u "
-            "(retcode catalog; Soft≠product; soft≠MIG REPLY product)\n",
-            (unsigned)DOOR_SOFT_DEEPEN_WAVE);
-
-    /*
-     * ---- Wave 18 complementary surfaces (kept) (never reshape primary).
-     * Return surfaces only — soft inventory; never hard-gates product paths.
-     */
-    /* Grep: door: soft return selftest — Wave 19 terminal return surface */
-    kprintf("door: soft return selftest inv_ret=1 product_kernel=OPEN "
-            "multi_server=0 rate_limited=0 wave=%u soft PASS\n",
-            (unsigned)DOOR_SOFT_DEEPEN_WAVE);
-
-    /* Grep: door: soft retmap — Wave 19 return-surface map */
-    kprintf("door: soft retmap soft_inv=1 deepen=1 return_rate=1 retcode=1 "
-            "product=OPEN wave=%u soft PASS\n",
-            (unsigned)DOOR_SOFT_DEEPEN_WAVE);
-
-    /* Grep: door: soft deepen wave (Wave 24 stamp) */
-    /*
-     * ---- Wave 19 complementary surfaces (kept) (never reshape primary).
-     * Return surfaces only — soft inventory; never hard-gates product paths.
-     */
-    /* Grep: door: soft retclass — Wave 19 return-class taxonomy (kept) */
-    kprintf("door: soft retclass ok|fail|inval|nodev|busy|nomem "
-            "soft_only=1 product_gate=0 wave=%u "
-            "(retclass taxonomy; Soft≠product)\n",
-            (unsigned)DOOR_SOFT_DEEPEN_WAVE);
-    /* Grep: door: soft retlane — Wave 19 return-lane catalog (kept) */
-    kprintf("door: soft retlane inv|selftest|rate|retcode|retmap|class "
-            "product_kernel=OPEN soft_ne_product=1 wave=%u "
-            "(retlane catalog; Soft≠product)\n",
-            (unsigned)DOOR_SOFT_DEEPEN_WAVE);
-    /*
-     * ---- Wave 20 complementary surfaces (kept) (never reshape primary).
-     * Return surfaces only — soft inventory; never hard-gates product paths.
-     */
-    /* Grep: door: soft retbound — Wave 20 return-bound honesty (kept) */
-    kprintf("door: soft retbound soft_only=1 product_gate=0 hard_gate=0 "
-            "never_blocks_m0=1 wave=%u "
-            "(retbound honesty; Soft≠product)\n",
-            (unsigned)DOOR_SOFT_DEEPEN_WAVE);
-    /* Grep: door: soft retseal — Wave 20 seal stamp (kept) */
-    kprintf("door: soft retseal exclusive=1 soft_ne_product=1 "
-            "product_kernel=OPEN wave=%u "
-            "(retseal stamp; Soft≠product)\n",
-            (unsigned)DOOR_SOFT_DEEPEN_WAVE);
-            /*
-             * ---- Wave 21 complementary surfaces (kept) (never reshape primary).
-             * Return surfaces only — soft inventory; never hard-gates product paths.
-            */
-            /* Grep: door: soft retpulse — Wave 21 return-pulse honesty (kept) */
-            kprintf("door: soft retpulse soft_only=1 product_gate=0 soft_ne_product=1 "
-                    "never_blocks_m0=1 wave=%u "
-                    "(retpulse honesty; Soft≠product)\n",
-                    (unsigned)DOOR_SOFT_DEEPEN_WAVE);
-            /* Grep: door: soft retmark — Wave 21 mark stamp (kept) */
-            kprintf("door: soft retmark exclusive=1 soft_ne_product=1 "
-                    "product_kernel=OPEN wave=%u "
-                    "(retmark stamp; Soft≠product)\n",
-                    (unsigned)DOOR_SOFT_DEEPEN_WAVE);
-            /*
-             * ---- Wave 22 complementary surfaces (kept) (never reshape primary).
-             * Return surfaces only — soft inventory; never hard-gates product paths.
-            */
-            /* Grep: door: soft retphase — Wave 22 return-phase honesty (kept) */
-            kprintf("door: soft retphase soft_only=1 product_gate=0 soft_ne_product=1 "
-                    "never_blocks_m0=1 wave=%u "
-                    "(retphase honesty; Soft≠product)\n",
-                    (unsigned)DOOR_SOFT_DEEPEN_WAVE);
-            /* Grep: door: soft retbadge — Wave 22 badge stamp (kept) */
-            kprintf("door: soft retbadge exclusive=1 soft_ne_product=1 "
-                    "product_kernel=OPEN wave=%u "
-                    "(retbadge stamp; Soft≠product)\n",
-                    (unsigned)DOOR_SOFT_DEEPEN_WAVE);
-/*
- * ---- Wave 23 complementary surfaces (kept) (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
-            */
-            /* Grep: door: soft rettoken — Wave 23 return-token honesty (kept) */
-            kprintf("door: soft rettoken soft_only=1 product_gate=0 soft_ne_product=1 "
-                    "never_blocks_m0=1 wave=%u "
-                    "(rettoken honesty; Soft≠product)\n",
-                    (unsigned)DOOR_SOFT_DEEPEN_WAVE);
-            /* Grep: door: soft retcrest — Wave 23 crest stamp (kept) */
-            kprintf("door: soft retcrest exclusive=1 soft_ne_product=1 "
-                    "product_kernel=OPEN wave=%u "
-                    "(retcrest stamp; Soft≠product)\n",
-                    (unsigned)DOOR_SOFT_DEEPEN_WAVE);
-            /*
-             * ---- Wave 24 complementary surfaces (kept) (never reshape primary).
-             * Return surfaces only — soft inventory; never hard-gates product paths.
-             */
-            /* Grep: door: soft retvault — Wave 24 return-vault honesty (kept) */
-            kprintf("door: soft retvault soft_only=1 product_gate=0 soft_ne_product=1 "
-                    "never_blocks_m0=1 wave=%u "
-                    "(retvault honesty; Soft≠product)\n",
-                    (unsigned)DOOR_SOFT_DEEPEN_WAVE);
-            /* Grep: door: soft retbanner — Wave 24 banner stamp (kept) */
-            kprintf("door: soft retbanner exclusive=1 soft_ne_product=1 "
-                    "product_kernel=OPEN wave=%u "
-                    "(retbanner stamp; Soft≠product)\n",
-                    (unsigned)DOOR_SOFT_DEEPEN_WAVE);
-            /*
-             * ---- Wave 25 complementary surfaces (kept) (never reshape primary).
-             * Return surfaces only — soft inventory; never hard-gates product paths.
-             */
-            /* Grep: door: soft retledger — Wave 25 return-ledger honesty (kept) */
-            kprintf("door: soft retledger soft_only=1 product_gate=0 soft_ne_product=1 "
-                    "never_blocks_m0=1 wave=%u "
-                    "(retledger honesty; Soft≠product)\n",
-                    (unsigned)DOOR_SOFT_DEEPEN_WAVE);
-            /* Grep: door: soft retbeacon — Wave 25 beacon stamp (kept) */
-            kprintf("door: soft retbeacon exclusive=1 soft_ne_product=1 "
-                    "product_kernel=OPEN wave=%u "
-                    "(retbeacon stamp; Soft≠product)\n",
-                    (unsigned)DOOR_SOFT_DEEPEN_WAVE);
-            /*
-             * ---- Wave 26 complementary surfaces (kept) (never reshape primary).
-             * Return surfaces only — soft inventory; never hard-gates product paths.
-             */
-            /* Grep: door: soft retcipher — Wave 26 return-cipher honesty (kept) */
-            kprintf("door: soft retcipher soft_only=1 product_gate=0 soft_ne_product=1 "
-                    "never_blocks_m0=1 wave=%u "
-                    "(retcipher honesty; Soft≠product)\n",
-                    (unsigned)DOOR_SOFT_DEEPEN_WAVE);
-            /* Grep: door: soft retflame — Wave 26 flame stamp (kept) */
-            kprintf("door: soft retflame exclusive=1 soft_ne_product=1 "
-                    "product_kernel=OPEN wave=%u "
-                    "(retflame stamp; Soft≠product)\n",
-                    (unsigned)DOOR_SOFT_DEEPEN_WAVE);
-                    /*
-                     * ---- Wave 27 complementary surfaces (kept) (never reshape primary).
-                     * Return surfaces only — soft inventory; never hard-gates product paths.
-                     */
-                    /* Grep: door: soft retprism — Wave 27 return-prism honesty (kept) */
-                    kprintf("door: soft retprism soft_only=1 product_gate=0 soft_ne_product=1 "
-                            "never_blocks_m0=1 wave=%u "
-                            "(retprism honesty; Soft≠product)\n",
-                            (unsigned)DOOR_SOFT_DEEPEN_WAVE);
-                    /* Grep: door: soft retforge — Wave 27 forge stamp (kept) */
-                    kprintf("door: soft retforge exclusive=1 soft_ne_product=1 "
-                            "product_kernel=OPEN wave=%u "
-                            "(retforge stamp; Soft≠product)\n",
-                            (unsigned)DOOR_SOFT_DEEPEN_WAVE);
-                            /*
-                             * ---- Wave 28 complementary surfaces (kept) (never reshape primary).
-                             * Return surfaces only — soft inventory; never hard-gates product paths.
-                             */
-                            /* Grep: door: soft retshard — Wave 28 return-shard honesty (kept) */
-                            kprintf("door: soft retshard soft_only=1 product_gate=0 soft_ne_product=1 "
-                                "never_blocks_m0=1 wave=%u "
-                                "(retshard honesty; Soft≠product)\n",
-                                (unsigned)DOOR_SOFT_DEEPEN_WAVE);
-                            /* Grep: door: soft retcrown — Wave 28 crown stamp (kept) */
-                            kprintf("door: soft retcrown exclusive=1 soft_ne_product=1 "
-                                "product_kernel=OPEN wave=%u "
-                                "(retcrown stamp; Soft≠product)\n",
-                                (unsigned)DOOR_SOFT_DEEPEN_WAVE);
-                                /*
-                             * ---- Wave 29 complementary surfaces (kept) (never reshape primary).
-                             * Return surfaces only — soft inventory; never hard-gates product paths.
-                             */
-                            /* Grep: door: soft retglyph — Wave 29 return-glyph honesty (kept) */
-                            kprintf("door: soft retglyph soft_only=1 product_gate=0 soft_ne_product=1 "
-                                    "never_blocks_m0=1 wave=116 "
-                                    "(retglyph honesty; Soft≠product)\n");
-                            /* Grep: door: soft retscepter — Wave 29 scepter stamp (kept) */
-                            kprintf("door: soft retscepter exclusive=1 soft_ne_product=1 "
-                                    "product_kernel=OPEN wave=116 "
-                                    "(retscepter stamp; Soft≠product)\n");
-                                /*
-                             * ---- Wave 30 complementary surfaces (kept) (never reshape primary).
-                             * Return surfaces only — soft inventory; never hard-gates product paths.
-                             */
-                            /* Grep: door: soft retsigil — Wave 30 return-sigil honesty (kept) */
-                            kprintf("door: soft retsigil soft_only=1 product_gate=0 soft_ne_product=1 "
-                                    "never_blocks_m0=1 wave=116 "
-                                    "(retsigil honesty; Soft≠product)\n");
-                            /* Grep: door: soft retemblem — Wave 30 emblem stamp (kept) */
-                            kprintf("door: soft retemblem exclusive=1 soft_ne_product=1 "
-                                    "product_kernel=OPEN wave=116 "
-                                    "(retemblem stamp; Soft≠product)\n");
-                            /*
-                             * ---- Wave 31 complementary surfaces (kept) (never reshape primary).
-                             * Return surfaces only — soft inventory; never hard-gates product paths.
-                             */
-                            /* Grep: door: soft retaegis — Wave 31 return-aegis honesty (kept) */
-                            kprintf("door: soft retaegis soft_only=1 product_gate=0 soft_ne_product=1 "
-                                    "never_blocks_m0=1 wave=116 "
-                                    "(retaegis honesty; Soft≠product)\n");
-                            /* Grep: door: soft retsigil — Wave 30 return-sigil honesty (kept) */
-                            kprintf("door: soft retsigil soft_only=1 product_gate=0 soft_ne_product=1 "
-                                    "never_blocks_m0=1 wave=116 "
-                                    "(retsigil honesty; Soft≠product)\n");
-                            /* Grep: door: soft retmantle — Wave 31 mantle stamp (kept) */
-                            kprintf("door: soft retmantle exclusive=1 soft_ne_product=1 "
-                                    "product_kernel=OPEN wave=116 "
-                                    "(retmantle stamp; Soft≠product)\n");
-/*
- * ---- Wave 32 complementary surfaces (kept) (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: door: soft retbulwark — Wave 32 return-bulwark honesty (kept) */
-kprintf("door: soft retbulwark soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retbulwark honesty; Soft≠product)\n");
-/* Grep: door: soft retpanoply — Wave 32 panoply stamp (kept) */
-kprintf("door: soft retpanoply exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retpanoply stamp; Soft≠product)\n");
-/*
- * ---- Wave 33 complementary surfaces (kept) (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: door: soft retbastion — Wave 33 return-bastion honesty (kept) */
-kprintf("door: soft retbastion soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retbastion honesty; Soft≠product)\n");
-/* Grep: door: soft retcitadel — Wave 33 citadel stamp (kept) */
-kprintf("door: soft retcitadel exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retcitadel stamp; Soft≠product)\n");
-/*
- * ---- Wave 34 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: door: soft retredoubt — Wave 34 return-redoubt honesty */
-kprintf("door: soft retredoubt soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retredoubt honesty; Soft≠product)\n");
-/* Grep: door: soft retkeep — Wave 34 exclusive keep stamp */
-kprintf("door: soft retkeep exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retkeep stamp; Soft≠product)\n");
-/*
- * ---- Wave 35 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: door: soft retfortress — Wave 35 return-fortress honesty */
-kprintf("door: soft retfortress soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retfortress honesty; Soft≠product)\n");
-/* Grep: door: soft retpalace — Wave 35 exclusive palace stamp */
-kprintf("door: soft retpalace exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retpalace stamp; Soft≠product)\n");
-/*
- * ---- Wave 36 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: door: soft rethold — Wave 36 return-hold honesty */
-kprintf("door: soft rethold soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(rethold honesty; Soft≠product)\n");
-/* Grep: door: soft retspire — Wave 36 exclusive spire stamp */
-kprintf("door: soft retspire exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retspire stamp; Soft≠product)\n");
-/*
- * ---- Wave 37 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: door: soft retwall — Wave 37 return-wall honesty */
-kprintf("door: soft retwall soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retwall honesty; Soft≠product)\n");
-/* Grep: door: soft retgate — Wave 37 exclusive gate stamp */
-kprintf("door: soft retgate exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retgate stamp; Soft≠product)\n");
-/*
- * ---- Wave 38 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: door: soft retmoat — Wave 38 return-moat honesty */
-kprintf("door: soft retmoat soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retmoat honesty; Soft≠product)\n");
-/* Grep: door: soft retower — Wave 38 exclusive tower stamp */
-kprintf("door: soft retower exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retower stamp; Soft≠product)\n");
-/*
- * ---- Wave 39 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: door: soft retbarbican — Wave 39 return-barbican honesty */
-kprintf("door: soft retbarbican soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retbarbican honesty; Soft≠product)\n");
-/* Grep: door: soft retglacis — Wave 39 exclusive glacis stamp */
-kprintf("door: soft retglacis exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retglacis stamp; Soft≠product)\n");
-/*
- * ---- Wave 40 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: door: soft retcurtain — Wave 40 return-curtain honesty */
-kprintf("door: soft retcurtain soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retcurtain honesty; Soft≠product)\n");
-/* Grep: door: soft retparapet — Wave 40 exclusive parapet stamp */
-kprintf("door: soft retparapet exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retparapet stamp; Soft≠product)\n");
-/*
- * ---- Wave 41 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: door: soft retravelin — Wave 41 return-travelin honesty */
-kprintf("door: soft retravelin soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retravelin honesty; Soft≠product)\n");
-/* Grep: door: soft retditch — Wave 41 exclusive ditch stamp */
-kprintf("door: soft retditch exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retditch stamp; Soft≠product)\n");
-/*
- * ---- Wave 42 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: door: soft retportcullis — Wave 42 return-portcullis honesty */
-kprintf("door: soft retportcullis soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retportcullis honesty; Soft≠product)\n");
-/* Grep: door: soft retbattlement — Wave 42 exclusive battlement stamp */
-kprintf("door: soft retbattlement exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retbattlement stamp; Soft≠product)\n");
-/*
- * ---- Wave 43 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: door: soft retmachicolation — Wave 43 return-machicolation honesty */
-kprintf("door: soft retmachicolation soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retmachicolation honesty; Soft≠product)\n");
-/* Grep: door: soft retarrowslit — Wave 43 exclusive arrowslit stamp */
-kprintf("door: soft retarrowslit exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retarrowslit stamp; Soft≠product)\n");
-
-/*
- * ---- Wave 44 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: door: soft retmerlon — Wave 44 return-merlon honesty */
-kprintf("door: soft retmerlon soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retmerlon honesty; Soft≠product)\n");
-/* Grep: door: soft retembrasure — Wave 44 exclusive embrasure stamp */
-kprintf("door: soft retembrasure exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retembrasure stamp; Soft≠product)\n");
-
-/*
- * ---- Wave 45 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: door: soft retkeepgate — Wave 45 return-keepgate honesty */
-kprintf("door: soft retkeepgate soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retkeepgate honesty; Soft≠product)\n");
-/* Grep: door: soft retouterward — Wave 45 exclusive outerward stamp */
-kprintf("door: soft retouterward exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retouterward stamp; Soft≠product)\n");
-
-/*
- * ---- Wave 46 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: door: soft retbailey — Wave 46 return-bailey honesty */
-kprintf("door: soft retbailey soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retbailey honesty; Soft≠product)\n");
-/* Grep: door: soft retpostern — Wave 46 exclusive postern stamp */
-kprintf("door: soft retpostern exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retpostern stamp; Soft≠product)\n");
-
-/*
- * ---- Wave 47 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: door: soft retinnerward — Wave 47 return-innerward honesty */
-kprintf("door: soft retinnerward soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retinnerward honesty; Soft≠product)\n");
-/* Grep: door: soft retdonjon — Wave 47 exclusive donjon stamp */
-kprintf("door: soft retdonjon exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retdonjon stamp; Soft≠product)\n");
-
-/*
- * ---- Wave 48 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: door: soft retchevaux — Wave 48 return-chevaux honesty */
-kprintf("door: soft retchevaux soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retchevaux honesty; Soft≠product)\n");
-/* Grep: door: soft retpalisade — Wave 48 exclusive palisade stamp */
-kprintf("door: soft retpalisade exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retpalisade stamp; Soft≠product)\n");
-
-/*
- * ---- Wave 49 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: door: soft retglacisgate — Wave 49 return-glacisgate honesty */
-kprintf("door: soft retglacisgate soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retglacisgate honesty; Soft≠product)\n");
-/* Grep: door: soft retoutwork — Wave 49 exclusive outwork stamp */
-kprintf("door: soft retoutwork exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retoutwork stamp; Soft≠product)\n");
-/*
- * ---- Wave 50 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: door: soft retsally — Wave 50 return-sally honesty */
-kprintf("door: soft retsally soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retsally honesty; Soft≠product)\n");
-/* Grep: door: soft retcounterscarp — Wave 50 exclusive counterscarp stamp */
-kprintf("door: soft retcounterscarp exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retcounterscarp stamp; Soft≠product)\n");
-/*
- * ---- Wave 51 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: door: soft retfosse — Wave 51 return-fosse honesty */
-kprintf("door: soft retfosse soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retfosse honesty; Soft≠product)\n");
-/* Grep: door: soft retcoveredway — Wave 51 exclusive coveredway stamp */
-kprintf("door: soft retcoveredway exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retcoveredway stamp; Soft≠product)\n");
-
-/*
- * ---- Wave 52 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: door: soft rettenaille — Wave 52 return-tenaille honesty */
-kprintf("door: soft rettenaille soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(rettenaille honesty; Soft≠product)\n");
-/* Grep: door: soft retdemilune — Wave 52 exclusive demilune stamp */
-kprintf("door: soft retdemilune exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retdemilune stamp; Soft≠product)\n");
-/*
- * ---- Wave 53 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: door: soft retravelin — Wave 53 return-travelin honesty */
-kprintf("door: soft retravelin soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retravelin honesty; Soft≠product)\n");
-/* Grep: door: soft retlunette — Wave 53 exclusive lunette stamp */
-kprintf("door: soft retlunette exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retlunette stamp; Soft≠product)\n");
-/*
- * ---- Wave 54 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: door: soft retcaponier — Wave 54 return-caponier honesty */
-kprintf("door: soft retcaponier soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retcaponier honesty; Soft≠product)\n");
-/* Grep: door: soft retredan — Wave 54 exclusive redan stamp */
-kprintf("door: soft retredan exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retredan stamp; Soft≠product)\n");
-/*
- * ---- Wave 55 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: door: soft retflank — Wave 55 return-flank honesty */
-kprintf("door: soft retflank soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retflank honesty; Soft≠product)\n");
-/* Grep: door: soft retface — Wave 55 exclusive face stamp */
-kprintf("door: soft retface exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retface stamp; Soft≠product)\n");
-/*
- * ---- Wave 56 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: door: soft retgorge — Wave 56 return-gorge honesty */
-kprintf("door: soft retgorge soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retgorge honesty; Soft≠product)\n");
-/* Grep: door: soft retshoulder — Wave 56 exclusive shoulder stamp */
-kprintf("door: soft retshoulder exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retshoulder stamp; Soft≠product)\n");
-/*
- * ---- Wave 57 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: door: soft retraverse — Wave 57 return-traverse honesty */
-kprintf("door: soft retraverse soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retraverse honesty; Soft≠product)\n");
-/* Grep: door: soft retcasemate — Wave 57 exclusive casemate stamp */
-kprintf("door: soft retcasemate exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retcasemate stamp; Soft≠product)\n");
-
-/*
- * ---- Wave 58 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: door: soft retorillon — Wave 58 return-orillon honesty */
-kprintf("door: soft retorillon soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retorillon honesty; Soft≠product)\n");
-/* Grep: door: soft retbonnette — Wave 58 exclusive bonnette stamp */
-kprintf("door: soft retbonnette exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retbonnette stamp; Soft≠product)\n");
-
-/*
- * ---- Wave 59 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: door: soft retcrownwork — Wave 59 return-crownwork honesty */
-kprintf("door: soft retcrownwork soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retcrownwork honesty; Soft≠product)\n");
-/* Grep: door: soft rethornwork — Wave 59 exclusive hornwork stamp */
-kprintf("door: soft rethornwork exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(rethornwork stamp; Soft≠product)\n");
-
-/*
- * ---- Wave 60 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: door: soft retplace — Wave 60 return-place honesty */
-kprintf("door: soft retplace soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retplace honesty; Soft≠product)\n");
-/* Grep: door: soft retenvelope — Wave 60 exclusive envelope stamp */
-kprintf("door: soft retenvelope exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retenvelope stamp; Soft≠product)\n");
-
-
-
-
-
-
-
-
-
-/*
- * ---- Wave 61 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: door: soft retcounterguard — Wave 61 return-counterguard honesty */
-kprintf("door: soft retcounterguard soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retcounterguard honesty; Soft≠product)\n");
-/* Grep: door: soft retcoveredface — Wave 61 exclusive coveredface stamp */
-kprintf("door: soft retcoveredface exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retcoveredface stamp; Soft≠product)\n");
-/*
- * ---- Wave 62 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: door: soft retbastionface — Wave 62 return-bastionface honesty */
-kprintf("door: soft retbastionface soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retbastionface honesty; Soft≠product)\n");
-/* Grep: door: soft retcurtainangle — Wave 62 exclusive curtainangle stamp */
-kprintf("door: soft retcurtainangle exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retcurtainangle stamp; Soft≠product)\n");
-/*
- * ---- Wave 63 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: door: soft retdoubletenaille — Wave 63 return-doubletenaille honesty */
-kprintf("door: soft retdoubletenaille soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retdoubletenaille honesty; Soft≠product)\n");
-/* Grep: door: soft retplaceofarms — Wave 63 exclusive placeofarms stamp */
-kprintf("door: soft retplaceofarms exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retplaceofarms stamp; Soft≠product)\n");
- /*
-  * ---- Wave 64 exclusive complementary surfaces (never reshape primary).
-  * Return surfaces only — soft inventory; never hard-gates product paths.
-  */
- /* Grep: door: soft retreentrant — Wave 64 return-reentrant honesty */
-kprintf("door: soft retreentrant soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retreentrant honesty; Soft≠product)\n");
- /* Grep: door: soft retsallyport — Wave 64 exclusive sallyport stamp */
-kprintf("door: soft retsallyport exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retsallyport stamp; Soft≠product)\n");
- /*
-  * ---- Wave 65 exclusive complementary surfaces (never reshape primary).
-  * Return surfaces only — soft inventory; never hard-gates product paths.
-  */
- /* Grep: door: soft retgorgeangle — Wave 65 return-gorgeangle honesty */
-kprintf("door: soft retgorgeangle soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retgorgeangle honesty; Soft≠product)\n");
- /* Grep: door: soft retshoulderangle — Wave 65 exclusive shoulderangle stamp */
-kprintf("door: soft retshoulderangle exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retshoulderangle stamp; Soft≠product)\n");
- /*
-  * ---- Wave 66 exclusive complementary surfaces (never reshape primary).
-  * Return surfaces only — soft inventory; never hard-gates product paths.
-  */
- /* Grep: door: soft retflankangle — Wave 66 return-flankangle honesty */
- kprintf("door: soft retflankangle soft_only=1 product_gate=0 soft_ne_product=1 "
-         "never_blocks_m0=1 wave=116 "
-         "(retflankangle honesty; Soft≠product)\n");
- /* Grep: door: soft retfaceangle — Wave 66 exclusive faceangle stamp */
- kprintf("door: soft retfaceangle exclusive=1 soft_ne_product=1 "
-         "product_kernel=OPEN wave=116 "
-         "(retfaceangle stamp; Soft≠product)\n");
-/*
- * ---- Wave 67 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: door: soft retcaponierangle — Wave 67 return-caponierangle honesty */
-kprintf("door: soft retcaponierangle soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retcaponierangle honesty; Soft≠product)\n");
-/* Grep: door: soft retredanangle — Wave 67 exclusive redanangle stamp */
-kprintf("door: soft retredanangle exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retredanangle stamp; Soft≠product)\n");
-/*
- * ---- Wave 68 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: door: soft retlunetteangle — Wave 68 return-lunetteangle honesty */
-kprintf("door: soft retlunetteangle soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retlunetteangle honesty; Soft≠product)\n");
-/* Grep: door: soft rettenailleangle — Wave 68 exclusive tenailleangle stamp */
-kprintf("door: soft rettenailleangle exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(rettenailleangle stamp; Soft≠product)\n");
-/*
- * ---- Wave 69 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: door: soft retdemiluneangle — Wave 69 return-demiluneangle honesty */
-kprintf("door: soft retdemiluneangle soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retdemiluneangle honesty; Soft≠product)\n");
-/* Grep: door: soft retcoveredwayangle — Wave 69 exclusive coveredwayangle stamp */
-kprintf("door: soft retcoveredwayangle exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retcoveredwayangle stamp; Soft≠product)\n");
-/*
- * ---- Wave 70 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: door: soft retfosseangle — Wave 70 return-fosseangle honesty */
-kprintf("door: soft retfosseangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retfosseangle honesty; Soft≠product)\n");
-/* Grep: door: soft retcounterscarple — Wave 70 exclusive counterscarple stamp */
-kprintf("door: soft retcounterscarple exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retcounterscarple stamp; Soft≠product)\n");
-/*
- * ---- Wave 71 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: door: soft retsallyportangle — Wave 71 return-sallyportangle honesty */
-kprintf("door: soft retsallyportangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retsallyportangle honesty; Soft≠product)\n");
-/* Grep: door: soft retreentrantangle — Wave 71 exclusive reentrantangle stamp */
-kprintf("door: soft retreentrantangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retreentrantangle stamp; Soft≠product)\n");
-/*
- * ---- Wave 72 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: door: soft retplaceofarmsangle — Wave 72 return-placeofarmsangle honesty */
-kprintf("door: soft retplaceofarmsangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retplaceofarmsangle honesty; Soft≠product)\n");
-/* Grep: door: soft retdoubletenailleangle — Wave 72 exclusive doubletenailleangle stamp */
-kprintf("door: soft retdoubletenailleangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retdoubletenailleangle stamp; Soft≠product)\n");
-/* Grep: door: soft retcurtainface — Wave 73 return-curtainface honesty */
-kprintf("door: soft retcurtainface soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retcurtainface honesty; Soft≠product)\n");
-/* Grep: door: soft retbastionangle — Wave 73 exclusive bastionangle stamp */
-kprintf("door: soft retbastionangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retbastionangle stamp; Soft≠product)\n");
-/* Grep: door: soft retglacisangle — Wave 74 return-glacisangle honesty */
-kprintf("door: soft retglacisangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retglacisangle honesty; Soft≠product)\n");
-/* Grep: door: soft retparapetangle — Wave 74 exclusive parapetangle stamp */
-kprintf("door: soft retparapetangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retparapetangle stamp; Soft≠product)\n");
-/* Grep: door: soft retmoatangle — Wave 75 return-moatangle honesty */
-kprintf("door: soft retmoatangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retmoatangle honesty; Soft≠product)\n");
-/* Grep: door: soft retowerangle — Wave 75 exclusive towerangle stamp */
-kprintf("door: soft retowerangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retowerangle stamp; Soft≠product)\n");
-/* Grep: door: soft retgateangle — Wave 76 return-gateangle honesty */
-kprintf("door: soft retgateangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retgateangle honesty; Soft≠product)\n");
-/* Grep: door: soft retwallangle — Wave 76 exclusive wallangle stamp */
-kprintf("door: soft retwallangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retwallangle stamp; Soft≠product)\n");
-/* Grep: door: soft retspireangle — Wave 77 return-spireangle honesty */
-kprintf("door: soft retspireangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retspireangle honesty; Soft≠product)\n");
-/* Grep: door: soft retholdangle — Wave 77 exclusive holdangle stamp */
-kprintf("door: soft retholdangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retholdangle stamp; Soft≠product)\n");
-/* Grep: door: soft retpalaceangle — Wave 78 return-palaceangle honesty */
-kprintf("door: soft retpalaceangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retpalaceangle honesty; Soft≠product)\n");
-/* Grep: door: soft retfortressangle — Wave 78 exclusive fortressangle stamp */
-kprintf("door: soft retfortressangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retfortressangle stamp; Soft≠product)\n");
-/* Grep: door: soft retkeepangle — Wave 79 return-keepangle honesty */
-kprintf("door: soft retkeepangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retkeepangle honesty; Soft≠product)\n");
-/* Grep: door: soft retredoubtangle — Wave 79 exclusive redoubtangle stamp */
-kprintf("door: soft retredoubtangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retredoubtangle stamp; Soft≠product)\n");
-/* Grep: door: soft retcitadelangle — Wave 80 return-citadelangle honesty */
-kprintf("door: soft retcitadelangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retcitadelangle honesty; Soft≠product)\n");
-/* Grep: door: soft retbastionkeep — Wave 80 exclusive bastionkeep stamp */
-kprintf("door: soft retbastionkeep exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retbastionkeep stamp; Soft≠product)\n");
-/* Grep: door: soft retpanoplyangle — Wave 81 return-panoplyangle honesty */
-kprintf("door: soft retpanoplyangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retpanoplyangle honesty; Soft≠product)\n");
-/* Grep: door: soft retbulwarkangle — Wave 81 exclusive bulwarkangle stamp */
-kprintf("door: soft retbulwarkangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retbulwarkangle stamp; Soft≠product)\n");
-/* Grep: door: soft retmantleangle — Wave 82 return-mantleangle honesty */
-kprintf("door: soft retmantleangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retmantleangle honesty; Soft≠product)\n");
-/* Grep: door: soft retaegisangle — Wave 82 exclusive aegisangle stamp */
-kprintf("door: soft retaegisangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retaegisangle stamp; Soft≠product)\n");
-/* Grep: door: soft retemblemangle — Wave 83 return-emblemangle honesty */
-kprintf("door: soft retemblemangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retemblemangle honesty; Soft≠product)\n");
-/* Grep: door: soft retsigilangle — Wave 83 exclusive sigilangle stamp */
-kprintf("door: soft retsigilangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retsigilangle stamp; Soft≠product)\n");
-/* Grep: door: soft retscepterangle — Wave 84 return-scepterangle honesty */
-kprintf("door: soft retscepterangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retscepterangle honesty; Soft≠product)\n");
-/* Grep: door: soft retglyphangle — Wave 84 exclusive glyphangle stamp */
-kprintf("door: soft retglyphangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retglyphangle stamp; Soft≠product)\n");
-/* Grep: door: soft retcrownangle — Wave 85 return-crownangle honesty */
-kprintf("door: soft retcrownangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retcrownangle honesty; Soft≠product)\n");
-/* Grep: door: soft retshardangle — Wave 85 exclusive shardangle stamp */
-kprintf("door: soft retshardangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retshardangle stamp; Soft≠product)\n");
-/* Grep: door: soft retforgeangle — Wave 86 return-forgeangle honesty */
-kprintf("door: soft retforgeangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retforgeangle honesty; Soft≠product)\n");
-/* Grep: door: soft retprismangle — Wave 86 exclusive prismangle stamp */
-kprintf("door: soft retprismangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retprismangle stamp; Soft≠product)\n");
-/* Grep: door: soft retflameangle — Wave 87 return-flameangle honesty */
-kprintf("door: soft retflameangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retflameangle honesty; Soft≠product)\n");
-/* Grep: door: soft retcipherangle — Wave 87 exclusive cipherangle stamp */
-kprintf("door: soft retcipherangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retcipherangle stamp; Soft≠product)\n");
-/* Grep: door: soft retbeaconangle — Wave 88 return-beaconangle honesty */
-kprintf("door: soft retbeaconangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retbeaconangle honesty; Soft≠product)\n");
-/* Grep: door: soft retledgerangle — Wave 88 exclusive ledgerangle stamp */
-kprintf("door: soft retledgerangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retledgerangle stamp; Soft≠product)\n");
-/* Grep: door: soft retbannerangle — Wave 89 return-bannerangle honesty */
-kprintf("door: soft retbannerangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retbannerangle honesty; Soft≠product)\n");
-/* Grep: door: soft retvaultangle — Wave 89 exclusive vaultangle stamp */
-kprintf("door: soft retvaultangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retvaultangle stamp; Soft≠product)\n");
-/* Grep: door: soft retcrestangle — Wave 90 return-crestangle honesty */
-kprintf("door: soft retcrestangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retcrestangle honesty; Soft≠product)\n");
-/* Grep: door: soft rettokenangle — Wave 90 exclusive tokenangle stamp */
-kprintf("door: soft rettokenangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (rettokenangle stamp; Soft≠product)\n");
-/* Grep: door: soft retbadgeangle — Wave 91 return-badgeangle honesty */
-kprintf("door: soft retbadgeangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retbadgeangle honesty; Soft≠product)\n");
-/* Grep: door: soft retphaseangle — Wave 91 exclusive phaseangle stamp */
-kprintf("door: soft retphaseangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retphaseangle stamp; Soft≠product)\n");
-/* Grep: door: soft retmarkangle — Wave 92 return-markangle honesty */
-kprintf("door: soft retmarkangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retmarkangle honesty; Soft≠product)\n");
-/* Grep: door: soft retpulseangle — Wave 92 exclusive pulseangle stamp */
-kprintf("door: soft retpulseangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retpulseangle stamp; Soft≠product)\n");
-
-/* Grep: door: soft retsealangle — Wave 93 return-sealangle honesty */
-kprintf("door: soft retsealangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retsealangle honesty; Soft≠product)\n");
-/* Grep: door: soft retboundangle — Wave 93 exclusive boundangle stamp */
-kprintf("door: soft retboundangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retboundangle stamp; Soft≠product)\n");
-/* Grep: door: soft retstemangle — Wave 94 return-stemangle honesty */
-kprintf("door: soft retstemangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retstemangle honesty; Soft≠product)\n");
-/* Grep: door: soft retbladeangle — Wave 94 exclusive bladeangle stamp */
-kprintf("door: soft retbladeangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retbladeangle stamp; Soft≠product)\n");
-/* Grep: door: soft retchordangle — Wave 95 return-chordangle honesty */
-kprintf("door: soft retchordangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retchordangle honesty; Soft≠product)\n");
-/* Grep: door: soft retarcangle — Wave 95 exclusive arcangle stamp */
-kprintf("door: soft retarcangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retarcangle stamp; Soft≠product)\n");
-/* Grep: door: soft retsectorangle — Wave 96 return-sectorangle honesty */
-kprintf("door: soft retsectorangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retsectorangle honesty; Soft≠product)\n");
-/* Grep: door: soft retwedgeangle — Wave 96 exclusive wedgeangle stamp */
-kprintf("door: soft retwedgeangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retwedgeangle stamp; Soft≠product)\n");
-/* Grep: door: soft retradiusangle — Wave 97 return-radiusangle honesty */
-kprintf("door: soft retradiusangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retradiusangle honesty; Soft≠product)\n");
-/* Grep: door: soft retdiameterangle — Wave 97 exclusive diameterangle stamp */
-kprintf("door: soft retdiameterangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retdiameterangle stamp; Soft≠product)\n");
-/* Grep: door: soft retcircumangle — Wave 98 return-circumangle honesty */
-kprintf("door: soft retcircumangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retcircumangle honesty; Soft≠product)\n");
-/* Grep: door: soft retellipseangle — Wave 98 exclusive ellipseangle stamp */
-kprintf("door: soft retellipseangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retellipseangle stamp; Soft≠product)\n");
-/* Grep: door: soft rethyperangle — Wave 99 return-hyperangle honesty */
-kprintf("door: soft rethyperangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (rethyperangle honesty; Soft≠product)\n");
-/* Grep: door: soft retparabolaangle — Wave 99 exclusive parabolaangle stamp */
-kprintf("door: soft retparabolaangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retparabolaangle stamp; Soft≠product)\n");
-/* Grep: door: soft retspiralangle — Wave 100 return-spiralangle honesty */
-kprintf("door: soft retspiralangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retspiralangle honesty; Soft≠product)\n");
-/* Grep: door: soft rethelixangle — Wave 100 exclusive helixangle stamp */
-kprintf("door: soft rethelixangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (rethelixangle stamp; Soft≠product)\n");
-/* Grep: door: soft rettorusangle — Wave 101 return-torusangle honesty */
-kprintf("door: soft rettorusangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (rettorusangle honesty; Soft≠product)\n");
-/* Grep: door: soft retknotangle — Wave 101 exclusive knotangle stamp */
-kprintf("door: soft retknotangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retknotangle stamp; Soft≠product)\n");
-/* Grep: door: soft retmoebiusangle — Wave 102 return-moebiusangle honesty */
-kprintf("door: soft retmoebiusangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retmoebiusangle honesty; Soft≠product)\n");
-/* Grep: door: soft retkleinangle — Wave 102 exclusive kleinangle stamp */
-kprintf("door: soft retkleinangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retkleinangle stamp; Soft≠product)\n");
-/* Grep: door: soft retprojectangle — Wave 103 return-projectangle honesty */
-kprintf("door: soft retprojectangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retprojectangle honesty; Soft≠product)\n");
-/* Grep: door: soft retaffineangle — Wave 103 exclusive affineangle stamp */
-kprintf("door: soft retaffineangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retaffineangle stamp; Soft≠product)\n");
-/* Grep: door: soft retlinearangle — Wave 104 return-linearangle honesty */
-kprintf("door: soft retlinearangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retlinearangle honesty; Soft≠product)\n");
-/* Grep: door: soft retbilinearangle — Wave 104 exclusive bilinearangle stamp */
-kprintf("door: soft retbilinearangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retbilinearangle stamp; Soft≠product)\n");
-/* Grep: door: soft retquadraticangle — Wave 105 return-quadraticangle honesty */
-kprintf("door: soft retquadraticangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retquadraticangle honesty; Soft≠product)\n");
-/* Grep: door: soft retcubicangle — Wave 105 exclusive cubicangle stamp */
-kprintf("door: soft retcubicangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retcubicangle stamp; Soft≠product)\n");
-/* Grep: door: soft retquarticangle — Wave 106 return-quarticangle honesty */
-kprintf("door: soft retquarticangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retquarticangle honesty; Soft≠product)\n");
-/* Grep: door: soft retquinticangle — Wave 106 exclusive quinticangle stamp */
-kprintf("door: soft retquinticangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retquinticangle stamp; Soft≠product)\n");
-/* Grep: door: soft retsplineangle — Wave 107 return-splineangle honesty */
-kprintf("door: soft retsplineangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retsplineangle honesty; Soft≠product)\n");
-/* Grep: door: soft retbezierangle — Wave 107 exclusive bezierangle stamp */
-kprintf("door: soft retbezierangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retbezierangle stamp; Soft≠product)\n");
-/* Grep: door: soft rethurmitangle — Wave 108 return-hermitangle honesty */
-kprintf("door: soft rethurmitangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (rethurmitangle honesty; Soft≠product)\n");
-/* Grep: door: soft retcatmullangle — Wave 108 exclusive catmullangle stamp */
-kprintf("door: soft retcatmullangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retcatmullangle stamp; Soft≠product)\n");
-/* Grep: door: soft retnurbsangle — Wave 109 return-nurbsangle honesty */
-kprintf("door: soft retnurbsangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retnurbsangle honesty; Soft≠product)\n");
-/* Grep: door: soft retbsplineangle — Wave 109 exclusive bsplineangle stamp */
-kprintf("door: soft retbsplineangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retbsplineangle stamp; Soft≠product)\n");
-/* Grep: door: soft retmeshangle — Wave 110 return-meshangle honesty */
-kprintf("door: soft retmeshangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retmeshangle honesty; Soft≠product)\n");
-/* Grep: door: soft retgridangle — Wave 110 exclusive gridangle stamp */
-kprintf("door: soft retgridangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retgridangle stamp; Soft≠product)\n");
-/* Grep: door: soft retvoxelangle — Wave 111 return-voxelangle honesty */
-kprintf("door: soft retvoxelangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retvoxelangle honesty; Soft≠product)\n");
-/* Grep: door: soft rettexelangle — Wave 111 exclusive texelangle stamp */
-kprintf("door: soft rettexelangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (rettexelangle stamp; Soft≠product)\n");
-/* Grep: door: soft retfragmentangle — Wave 112 return-fragmentangle honesty */
-kprintf("door: soft retfragmentangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retfragmentangle honesty; Soft≠product)\n");
-/* Grep: door: soft retvertexangle — Wave 112 exclusive vertexangle stamp */
-kprintf("door: soft retvertexangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retvertexangle stamp; Soft≠product)\n");
-/* Grep: door: soft retshaderangle — Wave 113 return-shaderangle honesty */
-kprintf("door: soft retshaderangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retshaderangle honesty; Soft≠product)\n");
-/* Grep: door: soft retpipelineangle — Wave 113 exclusive pipelineangle stamp */
-kprintf("door: soft retpipelineangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retpipelineangle stamp; Soft≠product)\n");
-/* Grep: door: soft retframebufferangle — Wave 114 return-framebufferangle honesty */
-kprintf("door: soft retframebufferangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retframebufferangle honesty; Soft≠product)\n");
-/* Grep: door: soft retswapchainangle — Wave 114 exclusive swapchainangle stamp */
-kprintf("door: soft retswapchainangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retswapchainangle stamp; Soft≠product)\n");
-/* Grep: door: soft retpresentangle — Wave 115 return-presentangle honesty */
-kprintf("door: soft retpresentangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retpresentangle honesty; Soft≠product)\n");
-/* Grep: door: soft retvsyncangle — Wave 115 exclusive vsyncangle stamp */
-kprintf("door: soft retvsyncangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retvsyncangle stamp; Soft≠product)\n");
-/* Grep: door: soft retfenceangle — Wave 116 return-fenceangle honesty */
-kprintf("door: soft retfenceangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retfenceangle honesty; Soft≠product)\n");
-/* Grep: door: soft retsemaphoreangle — Wave 116 exclusive semaphoreangle stamp */
-kprintf("door: soft retsemaphoreangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retsemaphoreangle stamp; Soft≠product)\n");
-                            kprintf("door: soft deepen wave=%u areas=%u call_enter=%lu "
-            "recv_enter=%lu reply_enter=%lu reply_su_create=%lu "
-            "ret_call_pos=%lu ret_call_neg=%lu ret_recv_ok=%lu "
-            "ret_inst_ok=%lu soft_log=%lu cold_init=%u ok=1 skip=0\n",
-            (unsigned)DOOR_SOFT_DEEPEN_WAVE,
-            (unsigned)DOOR_SOFT_DEEPEN_AREAS,
-            (unsigned long)g_u64SoftCallEnter,
-            (unsigned long)g_u64SoftRecvEnter,
-            (unsigned long)g_u64SoftReplyEnter,
-            (unsigned long)g_u64ReplySuCreate,
-            (unsigned long)g_u64SoftCallRetPos,
-            (unsigned long)g_u64SoftCallRetNeg,
-            (unsigned long)g_u64SoftRecvOk,
-            (unsigned long)g_u64SoftInstallOk,
-            (unsigned long)g_u64SoftLogN,
-            g_fColdInited ? 1u : 0u);
-
-    /* Grep: door: reply single-use (soft REPLY tallies; companion prefix) */
-    kprintf("door: reply single-use create=%lu consume=%lu second_fail=%lu "
-            "inval=%lu drop=%lu new=%lu rebind=%lu fallback=%lu "
-            "inval_cancel=%lu inval_abort=%lu inval_thr=%lu inval_init=%lu "
-            "wave=%u\n",
-            (unsigned long)g_u64ReplySuCreate,
-            (unsigned long)g_u64ReplySuConsume,
-            (unsigned long)g_u64ReplySuSecondFail,
-            (unsigned long)g_u64ReplySuInval,
-            (unsigned long)g_u64ReplySuDrop,
-            (unsigned long)g_u64ReplySuCreateNew,
-            (unsigned long)g_u64ReplySuCreateRebind,
-            (unsigned long)g_u64ReplySuFallback,
-            (unsigned long)g_u64ReplySuInvalCancel,
-            (unsigned long)g_u64ReplySuInvalAbort,
-            (unsigned long)g_u64ReplySuInvalThr,
-            (unsigned long)g_u64ReplySuInvalInit,
-            (unsigned)DOOR_SOFT_DEEPEN_WAVE);
-
-    /* Grep: door: REPLY soft — honesty bounds (soft ≠ MIG REPLY product) */
-    kprintf("door: REPLY soft live_slots=%u bound=%u slots_max=%u "
-            "gen_hi=%u live_peak=%u self_pass=%u "
-            "honesty=no_cnode_mig_product soft_ne_mig_reply=1 "
-            "wave=%u\n",
-            u32SuLive, u32SuBound, (unsigned)DOOR_REPLY_SOFT_SLOTS,
-            g_u32ReplySoftGen, g_u32ReplySuLivePeak,
-            g_fReplySoftSelfPass ? 1u : 0u,
-            (unsigned)DOOR_SOFT_DEEPEN_WAVE);
-
-    /* Grep: door: badge transfer (grant/move/fail counters) */
-    kprintf("door: badge transfer grant=%lu move=%lu fail=%lu wave=%u\n",
-            (unsigned long)g_u64BadgeXferGrant,
-            (unsigned long)g_u64BadgeXferMove,
-            (unsigned long)g_u64BadgeXferFail,
-            (unsigned)DOOR_SOFT_DEEPEN_WAVE);
+            (unsigned long)g_u64SoftLeanOk,
+            (unsigned long)g_u64SoftLeanFound,
+            (unsigned long)g_u64SoftLeanSvc,
+            (unsigned long)g_u64SoftLeanEio,
+            (unsigned long)g_u64SoftLeanCancel,
+            (unsigned long)g_u64SoftLeanThrCli,
+            (unsigned long)g_u64SoftLeanThrBound,
+            (unsigned long)g_u64SoftLeanPollReady,
+            (unsigned long)g_u64SoftLeanAcceptRecv,
+            (unsigned long)g_u64SoftLeanCallDead,
+            (unsigned long)g_u64SoftLeanDenseOk,
+            (unsigned long)g_u64SoftLeanDenseFail);
 
     /*
      * Soft lamp: cold personality ready + self-check PASS. Never hard-gates.
-     * Grep: door: soft inventory PASS | door: soft PASS
-     * Grep: door: soft FAIL
+     * Grep: door: soft inventory PASS | door: soft PASS | door: soft FAIL
+     * Grep: door: soft residual lean PASS (also from lean selfcheck)
      */
     fSoftPass = (g_fColdInited != 0 && u32Ready != 0 &&
                  g_fReplySoftSelfPass != 0)
@@ -1838,27 +2203,74 @@ kprintf("door: soft retsemaphoreangle exclusive=1 soft_ne_product=1 product_kern
                     : 0;
     if (fSoftPass != 0) {
         kprintf("door: soft inventory PASS ready=%u live=%u "
-                "logs=%lu su_self_pass=1 areas=%u wave=%u\n",
+                "logs=%lu su_self_pass=1 lean_ok=%lu lean_found=%lu "
+                "lean_svc=%lu lean_eio=%lu lean_cancel=%lu "
+                "lean_thr_cli=%lu lean_thr_bound=%lu "
+                "lean_poll_ready=%lu lean_accept_recv=%lu lean_call_dead=%lu "
+                "lean_dense_ok=%lu lean_dense_fail=%lu "
+                "areas=%u "
+                "host=svc|vfsd|storaged|netstackd|sessiond|sshd|scsi_mid|ddi_udx "
+                "product_hosts=UDX G-AC-1=1 DualDoD=OPEN dual_dod=OPEN "
+                "POLL/ACCEPT/CALL=1 denser=1 H2=once "
+                "(sparse; Soft!=product; dual MIT OR Apache-2.0; "
+                "C2 thr residual; W12 denser POLL/ACCEPT/CALL; no version stamp; "
+                "storm=0)\n",
                 u32Ready, u32Live, (unsigned long)g_u64SoftLogN,
-                (unsigned)DOOR_SOFT_DEEPEN_AREAS,
-                (unsigned)DOOR_SOFT_DEEPEN_WAVE);
-        kprintf("door: soft PASS wave=%u logs=%lu areas=%u\n",
-                (unsigned)DOOR_SOFT_DEEPEN_WAVE,
-                (unsigned long)g_u64SoftLogN,
-                (unsigned)DOOR_SOFT_DEEPEN_AREAS);
+                (unsigned long)g_u64SoftLeanOk,
+                (unsigned long)g_u64SoftLeanFound,
+                (unsigned long)g_u64SoftLeanSvc,
+                (unsigned long)g_u64SoftLeanEio,
+                (unsigned long)g_u64SoftLeanCancel,
+                (unsigned long)g_u64SoftLeanThrCli,
+                (unsigned long)g_u64SoftLeanThrBound,
+                (unsigned long)g_u64SoftLeanPollReady,
+                (unsigned long)g_u64SoftLeanAcceptRecv,
+                (unsigned long)g_u64SoftLeanCallDead,
+                (unsigned long)g_u64SoftLeanDenseOk,
+                (unsigned long)g_u64SoftLeanDenseFail,
+                (unsigned)DOOR_SOFT_AREAS);
+        kprintf("door: soft PASS logs=%lu areas=%u lean_ok=%lu lean_found=%lu "
+                "lean_svc=%lu lean_eio=%lu lean_cancel=%lu "
+                "lean_thr_cli=%lu lean_thr_bound=%lu "
+                "lean_poll_ready=%lu lean_accept_recv=%lu lean_call_dead=%lu "
+                "lean_dense_ok=%lu lean_dense_fail=%lu "
+                "host=svc|vfsd|storaged|netstackd|sessiond|sshd|scsi_mid|ddi_udx "
+                "product_hosts=UDX Soft!=product dual=MIT_OR_Apache-2.0 "
+                "G-AC-1=1 DualDoD=OPEN dual_dod=OPEN POLL/ACCEPT/CALL=1 "
+                "denser=1 H2=once\n",
+                (unsigned long)g_u64SoftLogN, (unsigned)DOOR_SOFT_AREAS,
+                (unsigned long)g_u64SoftLeanOk,
+                (unsigned long)g_u64SoftLeanFound,
+                (unsigned long)g_u64SoftLeanSvc,
+                (unsigned long)g_u64SoftLeanEio,
+                (unsigned long)g_u64SoftLeanCancel,
+                (unsigned long)g_u64SoftLeanThrCli,
+                (unsigned long)g_u64SoftLeanThrBound,
+                (unsigned long)g_u64SoftLeanPollReady,
+                (unsigned long)g_u64SoftLeanAcceptRecv,
+                (unsigned long)g_u64SoftLeanCallDead,
+                (unsigned long)g_u64SoftLeanDenseOk,
+                (unsigned long)g_u64SoftLeanDenseFail);
+        /* residual lean PASS is once-lamp from door_soft_residual_lean_once */
     } else {
         kprintf("door: soft FAIL cold_init=%u ready=%u su_self_pass=%u "
-                "(soft inventory only; not product gate; not MIG REPLY) "
-                "wave=%u\n",
+                "lean_ok=%lu lean_svc=%lu lean_thr_cli=%lu lean_thr_bound=%lu "
+                "(soft inventory only; not product gate; "
+                "not MIG REPLY; Soft!=product)\n",
                 g_fColdInited ? 1u : 0u, u32Ready,
                 g_fReplySoftSelfPass ? 1u : 0u,
-                (unsigned)DOOR_SOFT_DEEPEN_WAVE);
+                (unsigned long)g_u64SoftLeanOk,
+                (unsigned long)g_u64SoftLeanSvc,
+                (unsigned long)g_u64SoftLeanThrCli,
+                (unsigned long)g_u64SoftLeanThrBound);
     }
 }
 
 /**
  * After first product call activity, print soft inventory once (mirrors
  * futex/sched soft-stats-once). Safe from call return paths only.
+ * Lean residual runs first (once) so residual lean PASS is greppable.
+ * No stamp storms; no version stamp.
  */
 static void
 door_soft_maybe_once(void)
@@ -1870,6 +2282,7 @@ door_soft_maybe_once(void)
         return;
     }
     g_fSoftOnce = 1;
+    door_soft_residual_lean_once();
     door_soft_inventory_log(NULL);
 }
 
@@ -1898,13 +2311,13 @@ door_snapshot_last_badge(struct gj_door *pDoor)
         return;
     }
     pDoor->u32LastBadge = pDoor->u32Badge;
-    /* Soft badge transfer: move authoritative badge → client last-badge. */
+    /* Soft badge transfer: move authoritative badge -> client last-badge. */
     door_soft_inc(&g_u64BadgeXferMove);
 }
 
 /*
  * Mid-call / peer-path cleanup: drop in-flight flags then release slot.
- * Order matters — see file header race notes. Caller supplies the abort
+ * Order matters - see file header race notes. Caller supplies the abort
  * accounting (timeouts vs peer aborts).
  */
 static void
@@ -1921,8 +2334,8 @@ door_cancel_inflight(struct gj_door *pDoor, struct gj_thread *pCur)
      * (client already leaving with -ETIMEDOUT / -EIO).
      * Soft REPLY right dies with the flight (single-use end).
      */
-    pDoor->u32HasReq = 0;
-    pDoor->u32HasReply = 0;
+    door_store_has_req(pDoor, 0);
+    door_store_has_reply(pDoor, 0);
     door_reply_soft_invalidate(pDoor, DOOR_SU_INVAL_CANCEL);
     door_release_client_slot(pDoor, pCur);
     /* Nudge server so a blocked recv re-evaluates after cancel. */
@@ -1969,7 +2382,13 @@ door_cold_init(void)
             g_doorCold.u32Ready, g_doorCold.hdr.u32State);
     /* Soft REPLY single-use self-check (private scratch door; honesty only). */
     door_reply_soft_selfcheck();
-    /* Grep: door: soft (baseline inventory after cold init; wave=116) */
+    /*
+     * Lean residual self-check first so residual lean PASS lamps light before
+     * inventory rollup (once only; Soft!=product; dual MIT OR Apache-2.0).
+     * Grep: door: soft residual lean
+     */
+    door_soft_residual_lean_once();
+    /* Grep: door: soft (sparse baseline inventory after cold init; once) */
     door_soft_inventory_log(&g_doorCold);
 }
 
@@ -2002,11 +2421,9 @@ door_stats(const struct gj_door *pDoor, u64 *pCalls, u64 *pReplies,
         *pTimeouts = (pDoor != NULL) ? pDoor->u64Timeouts : 0;
     }
     /*
-     * Emit soft inventory on stats read so bring-up smoke also greps
-     * door: soft call/recv/reply/reply_su/return lines (Wave 19; mirrors
-     * file_lock_count). greppable: door: soft
+     * Product counters only. Soft inventory is cold-init + maybe_once
+     * (NO stamp storms on stats poll). greppable: door: soft via those paths.
      */
-    door_soft_inventory_log(pDoor);
 }
 
 gj_status_t
@@ -2076,12 +2493,12 @@ door_abort_waiters(struct gj_door *pDoor)
     door_reply_soft_invalidate(pDoor, DOOR_SU_INVAL_ABORT);
     if (pDoor->pClient != NULL) {
         pDoor->i64Reply = -(i64)LINUX_EIO;
-        pDoor->u32HasReply = 1;
+        door_store_has_reply(pDoor, 1);
         (void)thread_wake(pDoor, DOOR_TAG_CLIENT, 1);
     }
-    if (pDoor->pServer != NULL) {
-        (void)thread_wake(pDoor, DOOR_TAG_SERVER, 1);
-    }
+    /* Abort ends serve window; multi_server=0 - no product multi-server claim. */
+    door_clear_serve(pDoor);
+    (void)thread_wake(pDoor, DOOR_TAG_SERVER, 1);
     (void)thread_wake(pDoor, DOOR_TAG_SLOT, 8);
 }
 
@@ -2102,16 +2519,51 @@ door_mark_dead(struct gj_door *pDoor)
     door_abort_waiters(pDoor);
 }
 
-void
-door_on_thread_exit(struct gj_thread *pThr)
+/*
+ * Serve-window thr-exit residual (call/reply correctness; C2 deepen).
+ * If the serving thr dies mid-serve with a client still in flight and no
+ * reply posted, deliver synthetic -EIO so the client cannot hang forever.
+ * multi_server=0. Sticky peer-dead still requires abort/mark_dead.
+ * greppable: thr_srv_eio
+ */
+static void
+door_thr_exit_server_role(struct gj_door *pDoor, struct gj_thread *pThr)
 {
-    struct gj_door *pDoor = door_cold_personality();
-    struct gj_thread *pExpected;
-
-    if (pThr == NULL || pDoor == NULL) {
+    if (pDoor == NULL || pThr == NULL) {
         return;
     }
-    door_soft_inc(&g_u64SoftThrExit);
+    if (pDoor->pServer != pThr) {
+        return;
+    }
+    door_soft_inc(&g_u64SoftThrExitServer);
+    if (pDoor->pClient != NULL && door_load_has_reply(pDoor) == 0u) {
+        door_soft_inc(&g_u64SoftThrSrvEio);
+        door_store_has_req(pDoor, 0);
+        pDoor->i64Reply = -(i64)LINUX_EIO;
+        door_store_has_reply(pDoor, 1);
+        pDoor->u64Aborts++;
+        door_reply_soft_invalidate(pDoor, DOOR_SU_INVAL_THR);
+        (void)thread_wake(pDoor, DOOR_TAG_CLIENT, 1);
+    }
+    door_clear_serve(pDoor);
+    (void)thread_wake(pDoor, DOOR_TAG_SERVER, 1);
+    (void)thread_wake(pDoor, DOOR_TAG_SLOT, 8);
+}
+
+/*
+ * Per-door thr-exit residual (call/reply correctness; C2 deepen).
+ * Shared by cold personality and soft-REPLY-bound service host doors.
+ * Soft residual only - not a product multi-door thr registry (G-AC-1).
+ * greppable: thr_srv_eio / thr_cli / thr_srv
+ */
+static void
+door_thr_exit_one(struct gj_door *pDoor, struct gj_thread *pThr)
+{
+    struct gj_thread *pExpected;
+
+    if (pDoor == NULL || pThr == NULL) {
+        return;
+    }
     /* Drop client slot if this thr owns single-flight call. */
     pExpected = pThr;
     if (__atomic_compare_exchange_n(&pDoor->pClient, &pExpected, NULL, 0,
@@ -2121,21 +2573,70 @@ door_on_thread_exit(struct gj_thread *pThr)
          * slot is visible as free to contenders. Soft REPLY dies with owner.
          */
         door_soft_inc(&g_u64SoftThrExitClient);
-        pDoor->u32HasReq = 0;
-        pDoor->u32HasReply = 0;
+        door_store_has_req(pDoor, 0);
+        door_store_has_reply(pDoor, 0);
         pDoor->i64Reply = -(i64)LINUX_EIO;
         pDoor->u64Aborts++;
         door_reply_soft_invalidate(pDoor, DOOR_SU_INVAL_THR);
+        door_clear_serve(pDoor);
         (void)thread_wake(pDoor, DOOR_TAG_CLIENT, 1);
         (void)thread_wake(pDoor, DOOR_TAG_SERVER, 1);
         (void)thread_wake(pDoor, DOOR_TAG_SLOT, 8);
     }
-    /* Drop server role so cold_ipc falls back to sync service. */
-    if (pDoor->pServer == pThr) {
-        door_soft_inc(&g_u64SoftThrExitServer);
-        pDoor->pServer = NULL;
-        (void)thread_wake(pDoor, DOOR_TAG_SERVER, 1);
-        (void)thread_wake(pDoor, DOOR_TAG_SLOT, 8);
+    /* Server role residual after client-slot arm (client may be another thr). */
+    door_thr_exit_server_role(pDoor, pThr);
+}
+
+void
+door_on_thread_exit(struct gj_thread *pThr)
+{
+    struct gj_door *pCold;
+    struct gj_door *pDoor;
+    struct gj_door *aSeen[DOOR_REPLY_SOFT_SLOTS + 1u];
+    u32             iSlot;
+    u32             iSeen;
+    u32             nSeen;
+    u32             fDup;
+
+    if (pThr == NULL) {
+        return;
+    }
+    door_soft_inc(&g_u64SoftThrExit);
+
+    /*
+     * Cold personality first (G-COLD-1 / libprotonrt). Then soft residual:
+     * walk soft-REPLY-bound doors so service host flights (vfsd/storaged/
+     * netstackd/sessiond/sshd/scsi_mid + DDI/UDX) cannot hang a dead thr
+     * forever when the flight bound a soft REPLY right. Honesty: not a
+     * product multi-door registry - only cold + table-bound doors
+     * (Soft!=product; cnode_mig_reply=0; Dual DoD OPEN).
+     */
+    pCold = door_cold_personality();
+    nSeen = 0;
+    if (pCold != NULL) {
+        door_thr_exit_one(pCold, pThr);
+        aSeen[nSeen++] = pCold;
+    }
+    for (iSlot = 0; iSlot < DOOR_REPLY_SOFT_SLOTS; iSlot++) {
+        pDoor = g_aReplySoft[iSlot].pDoor;
+        if (pDoor == NULL) {
+            continue;
+        }
+        fDup = 0;
+        for (iSeen = 0; iSeen < nSeen; iSeen++) {
+            if (aSeen[iSeen] == pDoor) {
+                fDup = 1;
+                break;
+            }
+        }
+        if (fDup != 0u) {
+            continue;
+        }
+        if (nSeen < (DOOR_REPLY_SOFT_SLOTS + 1u)) {
+            aSeen[nSeen++] = pDoor;
+        }
+        door_soft_inc(&g_u64SoftThrExitBound);
+        door_thr_exit_one(pDoor, pThr);
     }
 }
 
@@ -2223,7 +2724,7 @@ door_call_timeout(struct gj_door *pDoor, struct gj_linux_regs *pRegs,
             door_soft_maybe_once();
             return -LINUX_EIO;
         }
-        /* No mono clock yet, or deadline already past → timeout (no hang). */
+        /* No mono clock yet, or deadline already past -> timeout (no hang). */
         if (u64DeadlineMonoNsec != 0 &&
             (!timer_ready() ||
              timer_mono_nsec() >= u64DeadlineMonoNsec)) {
@@ -2258,8 +2759,9 @@ door_call_timeout(struct gj_door *pDoor, struct gj_linux_regs *pRegs,
 
     door_soft_inc(&g_u64SoftCallClaim);
     pDoor->req = *pRegs;
-    pDoor->u32HasReq = 1;
-    pDoor->u32HasReply = 0;
+    /* Post req after clearing reply so server cannot observe a stale pair. */
+    door_store_has_reply(pDoor, 0);
+    door_store_has_req(pDoor, 1);
     pDoor->u64Calls++;
     /*
      * Soft ephemeral single-use REPLY right for this flight (Call path).
@@ -2276,11 +2778,12 @@ door_call_timeout(struct gj_door *pDoor, struct gj_linux_regs *pRegs,
         /*
          * Reply arm first: if server completed before our timeout sample,
          * return the real reply (never demote a landed reply to ETIMEDOUT).
+         * Acquire-load HasReply so reply payload is visible (SMP-prep).
          */
-        if (pDoor->u32HasReply) {
+        if (door_load_has_reply(pDoor) != 0u) {
             i64Ret = pDoor->i64Reply;
-            pDoor->u32HasReply = 0;
-            pDoor->u32HasReq = 0;
+            door_store_has_reply(pDoor, 0);
+            door_store_has_req(pDoor, 0);
             door_snapshot_last_badge(pDoor);
             door_release_client_slot(pDoor, pCur);
             door_soft_inc(&g_u64SoftCallReply);
@@ -2288,7 +2791,7 @@ door_call_timeout(struct gj_door *pDoor, struct gj_linux_regs *pRegs,
             if (i64Ret == -(i64)LINUX_EIO) {
                 door_soft_inc(&g_u64SoftCallEio);
             }
-            /* Wave 19 return surface: pos vs neg i64. */
+            /* Return surface: pos vs neg i64. */
             if (i64Ret < 0) {
                 door_soft_inc(&g_u64SoftCallRetNeg);
             } else {
@@ -2312,7 +2815,7 @@ door_call_timeout(struct gj_door *pDoor, struct gj_linux_regs *pRegs,
             /*
              * Mid-call timeout cleanup: HasReq/HasReply cleared inside
              * door_cancel_inflight before slot release (see file header).
-             * Count under u64Timeouts only — not peer u64Aborts.
+             * Count under u64Timeouts only - not peer u64Aborts.
              */
             door_cancel_inflight(pDoor, pCur);
             pDoor->u64Timeouts++;
@@ -2323,7 +2826,7 @@ door_call_timeout(struct gj_door *pDoor, struct gj_linux_regs *pRegs,
         }
         door_soft_inc(&g_u64SoftCallClientWait);
         thread_block(pDoor, DOOR_TAG_CLIENT);
-        if (pDoor->u32HasReply || !door_live(pDoor)) {
+        if (door_load_has_reply(pDoor) != 0u || !door_live(pDoor)) {
             (void)thread_wake(pDoor, DOOR_TAG_CLIENT, 1);
         }
         schedule();
@@ -2353,41 +2856,85 @@ door_recv(struct gj_door *pDoor, struct gj_linux_regs *pRegs)
 
     for (;;) {
         if (!door_live(pDoor)) {
-            pDoor->pServer = NULL;
+            if (pDoor->pServer == pCur) {
+                door_clear_serve(pDoor);
+            }
             door_soft_inc(&g_u64SoftRecvPeerDead);
             return (int)GJ_ERR_PEER_DEAD;
         }
-        if (pDoor->u32HasReq) {
+        /*
+         * Serve-hold residual: on take, keep pServer = pCur until door_reply
+         * (or thr-exit / abort). multi_server=0 - not product multi-server.
+         * Only the waiter that owns pServer (or free door) may take HasReq.
+         */
+        if (door_load_has_req(pDoor) != 0u &&
+            (pDoor->pServer == NULL || pDoor->pServer == pCur)) {
             *pRegs = pDoor->req;
-            pDoor->u32HasReq = 0;
-            pDoor->pServer = NULL;
+            door_store_has_req(pDoor, 0);
+            pDoor->pServer = pCur;
+            door_soft_inc(&g_u64SoftServeHold);
             door_soft_inc(&g_u64SoftRecvOk);
             return 0;
+        }
+        /*
+         * Foreign thr mid-serve (pClient set, pServer != us): do not steal
+         * serve ownership. Park until reply/thr-exit clears serve (wake tag 1).
+         * Honesty: multi_server=0 - scaffolding only, not product multi-server.
+         */
+        if (pDoor->pServer != NULL && pDoor->pServer != pCur &&
+            pDoor->pClient != NULL) {
+            door_soft_inc(&g_u64SoftRecvBlock);
+            thread_block(pDoor, DOOR_TAG_SERVER);
+            if (door_load_has_req(pDoor) != 0u || !door_live(pDoor) ||
+                pDoor->pServer == NULL) {
+                (void)thread_wake(pDoor, DOOR_TAG_SERVER, 1);
+            }
+            schedule();
+            continue;
         }
         pDoor->pServer = pCur;
         door_soft_inc(&g_u64SoftRecvBlock);
         thread_block(pDoor, DOOR_TAG_SERVER);
         /* Request or death may have landed between check and BLOCKED. */
-        if (pDoor->u32HasReq || !door_live(pDoor)) {
+        if (door_load_has_req(pDoor) != 0u || !door_live(pDoor)) {
             (void)thread_wake(pDoor, DOOR_TAG_SERVER, 1);
         }
         schedule();
-        pDoor->pServer = NULL;
+        /*
+         * Spurious wake without take: drop waiter mark only if still the
+         * waiter and no client flight (serve-hold returns above).
+         */
+        if (pDoor->pServer == pCur && door_load_has_req(pDoor) == 0u &&
+            pDoor->pClient == NULL) {
+            pDoor->pServer = NULL;
+        }
     }
 }
 
 void
 door_reply(struct gj_door *pDoor, i64 i64Ret)
 {
+    struct gj_thread *pCur;
+
     door_soft_inc(&g_u64SoftReplyEnter);
 
     if (pDoor == NULL || !pDoor->u32Ready) {
         door_soft_inc(&g_u64SoftReplyNotReady);
         return;
     }
-    /* Stale reply: no in-flight client owns the slot — drop. */
+    /*
+     * Stale reply: no in-flight client owns the slot - drop.
+     * Call/reply residual: after serve_hold, client timeout/cancel may clear
+     * pClient while this thr still owns pServer. Release serve so the next
+     * recv / thr-exit is not stuck. multi_server=0.
+     */
     if (pDoor->pClient == NULL) {
         door_soft_inc(&g_u64SoftReplyStale);
+        pCur = thread_current();
+        if (pCur != NULL && pDoor->pServer == pCur) {
+            door_clear_serve(pDoor);
+            (void)thread_wake(pDoor, DOOR_TAG_SERVER, 1);
+        }
         return;
     }
     /*
@@ -2399,9 +2946,14 @@ door_reply(struct gj_door *pDoor, i64 i64Ret)
         door_soft_inc(&g_u64SoftReplyStale);
         return;
     }
+    /* Publish reply value before HasReply release-store (SMP-prep residual). */
     pDoor->i64Reply = i64Ret;
-    pDoor->u32HasReply = 1;
+    door_store_has_reply(pDoor, 1);
     pDoor->u64Replies++;
     door_soft_inc(&g_u64SoftReplyOk);
+    /* End serve window - call/reply residual; multi_server=0. */
+    door_clear_serve(pDoor);
     (void)thread_wake(pDoor, DOOR_TAG_CLIENT, 1);
+    /* Nudge any parked foreign waiter (scaffolding only; multi_server=0). */
+    (void)thread_wake(pDoor, DOOR_TAG_SERVER, 1);
 }

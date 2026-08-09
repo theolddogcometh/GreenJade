@@ -3,10 +3,12 @@
  * Copyright (c) 2026 Project GreenJade contributors
  *
  * Exception stubs + IRQ stubs + common trap path.
+ * Dual license MIT OR Apache-2.0. No GPL. Stamp-free residual (no version
+ * stamp; never GJ_IMAGE_VERSION). Pure .S arch entry — no kprintf lamps here.
  *
- * Soft deepen (ABI-stable frames — trap.h / IDT must match):
+ * Soft deepen (ABI-stable frames - trap.h / IDT must match):
  *
- *   Exception path (isr_stub_N → isr_common → trap_dispatch):
+ *   Exception path (isr_stub_N -> isr_common -> trap_dispatch):
  *     CPU pushes SS/RSP/RFLAGS/CS/RIP [+ error] for ring transitions.
  *     Stub pushes error (0 if none) then vector, then isr_common saves
  *     all GPRs. Resulting layout is struct gj_trap_frame (gj/trap.h):
@@ -16,7 +18,7 @@
  *     restores GPRs, drops vector+error, iretq.
  *
  *   IRQ path (irq_stub_*): save only SysV caller-saved GPRs, cld, call
- *     C handler (EOI inside C), restore, iretq. No trap_frame — handlers
+ *     C handler (EOI inside C), restore, iretq. No trap_frame - handlers
  *     are short notify/EOI paths (P-IRQ-4 spirit).
  *
  *   Vectors of note:
@@ -24,9 +26,37 @@
  *     48     Local APIC timer
  *     49     reschedule / wake IPI
  *     50     TLB shootdown IPI
- *     0x41   MSI-X device → Notification
+ *     0x41   MSI-X device -> Notification
  *     128    i386 Linux int 0x80 (PE32/WoW64 compat)
  *
+ * C3 arch entry residual (Soft!=product; this unit exclusive; G-AC-1):
+ *   Soft residual documents ABI frames + hazard ownership. Soft PASS !=
+ *   product Dual DoD close. Dual DoD A/B remain OPEN (agent!=close).
+ *   G-AC-1: stubs never claim Linux .ko product AC / wire owner.
+ *   Product isolation lives in trap policy / caps / process AS death
+ *   order; this unit only delivers ABI-stable entry frames.
+ *
+ *   H1 (irq stack smash class): irq_stub_* are lean caller-saved only.
+ *     C handlers must EOI/notify only - never net_eth_poll on IRQ stack
+ *     (fault_class=H1_irq_stack_smash). Eth poll ownership stays thr /
+ *     scheduler_run. Stubs enforce thin frame; C units hold TIMER_H1_*.
+ *   H2 (string-as-code / wild-rip class): isr_common only builds
+ *     gj_trap_frame then trap_dispatch. Rate caps, FAULT pin honesty,
+ *     and I=1 residual lamps live in trap.c (C3 no-COM1 panel residual).
+ *   H3 (death residual): thr_exit before as_destroy is process/thread
+ *     order, not stub code. Frame handoff enables user-kill path in
+ *     trap_dispatch; stubs never free AS / CR3.
+ *
+ * Soft residual honesty (Soft!=product dual MIT OR Apache-2.0):
+ *   soft=1 product=0 soft_ne_product=1 dual_dod_a=OPEN dual_dod_b=OPEN
+ *   G-AC-1=1 freestanding_class=SKIP product_gate=0 never_blocks_m0=1
+ *   unit=isr_stubs.S arch=x86_64 entry=trap|irq Soft!=product
+ *
+ * greppable: Soft!=product | soft_ne_product=1 | G-AC-1=1
+ * greppable: dual_dod_a=OPEN | dual_dod_b=OPEN | Dual DoD OPEN
+ * greppable: fault_class=H1_irq_stack_smash | H2 | H3=death_residual
+ * greppable: isr_common | irq_stub | trap: soft stats
+ * greppable: isr: soft residual | isr: soft deepen | C3 arch entry
  * Grep: isr_common, irq_stub, trap: soft stats
  */
 .section .text

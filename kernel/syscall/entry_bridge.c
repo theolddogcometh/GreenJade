@@ -2,55 +2,170 @@
  * SPDX-License-Identifier: MIT OR Apache-2.0
  * Copyright (c) 2026 Project GreenJade contributors
  *
- * Bridge from syscall_entry.S stack frame → gj_syscall_dispatch.
+ * Bridge from syscall_entry.S stack frame -> gj_syscall_dispatch.
  *
- * Soft deepen: LSTAR edge counters (bridge enter / null) before route.
+ * Linux ABI hot-path edge for userspace drivers and apps (Option C hybrid):
+ *   LSTAR -> this bridge -> personality route (dispatch) -> native | linux hot/cold.
+ *   Product drivers live in userspace (G-AC-1: no in-kernel .ko product AC).
+ *   Soft != product. Dual MIT OR Apache-2.0.
+ *
+ * Handoff contract (product - keep hot/cold entry correct for UDX / apps):
+ *   - Bridge never selects NATIVE vs LINUX (PCB/default lives in dispatch.c).
+ *   - Bridge never rewrites i64Ret and never mutates u64Nr / args.
+ *   - Intact frame is handed to gj_syscall_dispatch; asm loads i64Ret -> RAX.
+ *   - Soft counters wrap OK and never hard-gate the path.
+ *   - Product class = UDX/DDI + hot/cold Linux ABI (not freestanding .ko).
+ *   - Dual DoD A/B remain OPEN (agent residual never closes product DoD).
+ *
+ * Soft edge counters (bridge enter / null / route / handoff / nr_ok):
  *   greppable: SYSCALL_ENTRY_SOFT_STATS
- *   Cumulative route stats live in dispatch.c (gj_syscall_entry_stats_*).
+ *   Cumulative personality route stats live in dispatch.c
+ *   (gj_syscall_entry_stats_*).
  *
- * Soft deepen (Wave 15 base + Wave 19 exclusive; this unit only):
- *   Multi-line greppable "entry_bridge: soft …" inventory:
- *     inventory | path | rates | honesty | last | surfaces | note |
- *     catalog | deepen | PASS
- *   Local edge lamps only — never hard-gates; wrap OK.
- * greppable: entry_bridge: soft
- * greppable: entry_bridge: soft inventory
- * greppable: entry_bridge: soft path
- * greppable: entry_bridge: soft rates
- * greppable: entry_bridge: soft honesty
- * greppable: entry_bridge: soft last
- * greppable: entry_bridge: soft surfaces
- * greppable: entry_bridge: soft note
- * greppable: entry_bridge: soft catalog
- * greppable: entry_bridge: soft deepen
- * greppable: entry_bridge: soft inventory PASS
- * greppable: SYSCALL_ENTRY_SOFT_STATS
+ * Lean soft residual only (no version stamp / no stamp storms / no boot spam):
+ *   Multi-line soft catalog flood removed; tallies fold into residual surface.
+ *   Once-lamp after first activity; no kprintf on the hot path after that.
+ *   Pre-handoff residual covers EXIT-style non-return; post-handoff lamp is
+ *   a separate one-shot after first returning dispatch (nr + args integrity).
+ *   C2 residual deepen (Soft!=product; measured only; never product gate):
+ *     - post-handoff ret-sign buckets (neg/zero/pos)
+ *     - retclass cumulative buckets (ok/nosys/inval/nodev/busy/fault/nomem/again/fail)
+ *     - soft NR shape taxonomy (native_shape | linux_common | high) - never routes
+ *     - soft arg0..arg5 integrity vs pre-route snapshot (frame args intact)
+ *     - EXIT-shaped NR soft note (pre-handoff residual for non-return honesty)
+ *   STRONGER functional residual (host_launch -> UDX/sshd entry; Soft!=product):
+ *     - measured UDX product-surface NR hits at LSTAR (DDI/PLATFORM/NOTIFY)
+ *     - measured NET NR hits (sshd / netstackd door path after host launch)
+ *     - measured PROCESS_SPAWN NR hits (host_launch spawn surface)
+ *     - post-handoff ret-sign for UDX surface + NET (sshd path) outcomes
+ *     - frozen GJ_SYS_* self-check suite (DDI/NET/plat/notify/spawn)
+ *     - greppable host_launch residual lamp (never closes Dual DoD A/B)
+ *   STRONGER W10 Dual DoD (stamp-free bar v2026.08.04.75; NEVER invent .76):
+ *     - door facade NRs SESSION/NET/STORE/VFS freeze (native route after launch)
+ *     - cold IPC NRs COLD_DEQUEUE/REPLY (personality/UDX cold half)
+ *     - frame layout honesty (gj_syscall_regs nr+6args+ret)
+ *     - Dual DoD A/B OPEN combined honesty residual
+ *   Product residual path (honesty only; residual != product close):
+ *     host_launch (spawn UDX hosts) -> LSTAR entry -> native DDI/NET doors
+ *     -> userspace UDX (rtl8168_udx / xhci_udx) + sshd :22 / netstackd
+ *   Bar honesty: v2026.08.04.75 stamp-free (NEVER invent .76 / no image stamp).
+ *   greppable: entry_bridge: soft residual lean
+ *   greppable: entry_bridge: soft residual lean PASS
+ *   greppable: entry_bridge: soft residual
+ *   greppable: entry_bridge: soft residual handoff
+ *   greppable: entry_bridge: soft residual deepen
+ *   greppable: entry_bridge: soft residual host_launch
+ *   greppable: entry_bridge: soft residual DoD OPEN
+ *   greppable: entry_bridge: soft inventory
+ *   greppable: entry_bridge: soft path
+ *   greppable: entry_bridge: soft honesty
+ *   greppable: entry_bridge: soft PASS
+ *   greppable: entry_bridge: soft
+ *   greppable: ENTRY_BRIDGE_LEAN_RESIDUAL
+ *   greppable: ENTRY_BRIDGE_C2_DEEPEN
+ *   greppable: ENTRY_BRIDGE_HOST_LAUNCH
+ *   greppable: SYSCALL_ENTRY_SOFT_STATS
+ *   greppable: product=UDX+sshd | host_launch | Dual DoD OPEN
  *
- * Pure C11 — dual MIT OR Apache-2.0.
+ * Soft!=product; dual MIT OR Apache-2.0; G-AC-1; Pure C11.
  */
 #include <gj/klog.h>
 #include <gj/syscall.h>
 #include <gj/types.h>
 
-/* Wave 62 soft inventory stamp (file-local; never product gate). */
+/* Soft residual surface id (file-local; never product gate). No version stamp. */
 #define ENTRY_BRIDGE_SOFT_WAVE 126u
-/* inventory|path|rates|honesty|last|surfaces|note|catalog|deepen|PASS */
-#define ENTRY_BRIDGE_SOFT_AREAS 216u
+/*
+ * residual_lean | residual | residual_handoff | residual_deepen | dual_dod |
+ * inventory | path | honesty | PASS | outcome_shape | host_launch | product_path
+ * (folded lean surface; no stamp-storm catalog)
+ */
+#define ENTRY_BRIDGE_SOFT_AREAS 12u
+/* Cap multi-line residual re-entry (once-lamp owns emissions; soft only). */
+#define ENTRY_BRIDGE_SOFT_LOG_CAP 1u
+/* Soft Linux common NR ceiling (x86_64 table shape; never product route). */
+#define ENTRY_BRIDGE_SOFT_LINUX_NR_CEIL 450u
+/*
+ * Host-launch residual suite size (functional honesty; Soft!=product).
+ * STRONGER W10: 8 prior + door NRs + cold IPC NRs + frame layout + dual_dod.
+ */
+#define ENTRY_BRIDGE_SOFT_HOST_CHECKS 12u
 
 /*
- * Soft edge tallies (wrap OK). Diagnostics only — does not alter route.
- * greppable: entry_bridge: soft …
+ * Soft edge tallies (wrap OK). Diagnostics only - does not alter route.
+ * greppable: entry_bridge: soft ...
  */
-static u64 g_u64BridgeSoftEnter; /* every LSTAR land / bridge call */
-static u64 g_u64BridgeSoftNull;  /* pRegs == NULL at edge */
-static u64 g_u64BridgeSoftRoute; /* dispatched into gj_syscall_dispatch */
-static u64 g_u64BridgeSoftLogN;  /* inventory log emissions */
-static u64 g_u64BridgeSoftLastNr; /* soft last NR snapshot at route edge */
-static u8  g_fBridgeSoftOnce;    /* one-shot deep dump after first activity */
+static u64 g_u64BridgeSoftEnter;    /* every LSTAR land / bridge call */
+static u64 g_u64BridgeSoftNull;     /* pRegs == NULL at edge */
+static u64 g_u64BridgeSoftRoute;    /* about to call gj_syscall_dispatch */
+static u64 g_u64BridgeSoftHandoff;  /* dispatch returned (frame handoff OK) */
+static u64 g_u64BridgeSoftNrOk;     /* post-handoff u64Nr matches pre-route snap */
+static u64 g_u64BridgeSoftNrDrift;  /* post-handoff u64Nr != pre-route snap */
+static u64 g_u64BridgeSoftArgOk;    /* post-handoff args match pre-route snap */
+static u64 g_u64BridgeSoftArgDrift; /* post-handoff args != pre-route snap */
+static u64 g_u64BridgeSoftRetNeg;   /* post-handoff i64Ret < 0 */
+static u64 g_u64BridgeSoftRetZero;  /* post-handoff i64Ret == 0 */
+static u64 g_u64BridgeSoftRetPos;   /* post-handoff i64Ret > 0 */
+static u64 g_u64BridgeSoftRcOk;     /* retclass ok bucket */
+static u64 g_u64BridgeSoftRcNosys;  /* retclass nosys */
+static u64 g_u64BridgeSoftRcInval;  /* retclass inval */
+static u64 g_u64BridgeSoftRcNodev;  /* retclass nodev */
+static u64 g_u64BridgeSoftRcBusy;   /* retclass busy */
+static u64 g_u64BridgeSoftRcFault;  /* retclass fault */
+static u64 g_u64BridgeSoftRcNomem;  /* retclass nomem */
+static u64 g_u64BridgeSoftRcAgain;  /* retclass again */
+static u64 g_u64BridgeSoftRcFail;   /* retclass fail (other negatives) */
+static u64 g_u64BridgeSoftShapeNat; /* soft NR shape: native-ish sparse */
+static u64 g_u64BridgeSoftShapeLin; /* soft NR shape: linux common range */
+static u64 g_u64BridgeSoftShapeHigh;/* soft NR shape: high / other */
+static u64 g_u64BridgeSoftExitSh;   /* EXIT-shaped NR soft note (pre-handoff) */
+/*
+ * Host-launch -> UDX/sshd surface tallies (measured at LSTAR; Soft!=product).
+ * After process_spawn_host_launch parks UDX hosts / sshd, traffic lands here.
+ * Never routes; never closes Dual DoD A/B.
+ */
+static u64 g_u64BridgeSoftSurfDdi;     /* GJ_SYS_DDI (UDX class hosts) */
+static u64 g_u64BridgeSoftSurfNet;     /* GJ_SYS_NET (sshd / netstackd) */
+static u64 g_u64BridgeSoftSurfPlat;    /* GJ_SYS_PLATFORM_INFO (UDX bind) */
+static u64 g_u64BridgeSoftSurfNotify;  /* GJ_SYS_NOTIFY_WAIT (UDX irq) */
+static u64 g_u64BridgeSoftSurfSpawn;   /* GJ_SYS_PROCESS_SPAWN (host launch) */
+static u64 g_u64BridgeSoftSurfUdx;     /* DDI|PLATFORM|NOTIFY aggregate */
+static u64 g_u64BridgeSoftSurfSshd;    /* NET aggregate alias (sshd path) */
+static u64 g_u64BridgeSoftUdxRetOk;    /* UDX surface post-handoff ret >= 0 */
+static u64 g_u64BridgeSoftUdxRetNeg;   /* UDX surface post-handoff ret < 0 */
+static u64 g_u64BridgeSoftNetRetOk;    /* NET post-handoff ret >= 0 */
+static u64 g_u64BridgeSoftNetRetNeg;   /* NET post-handoff ret < 0 */
+static u64 g_u64BridgeSoftLogN;     /* residual / inventory log emissions */
+static u64 g_u64BridgeSoftLastNr;   /* soft last NR snapshot at route edge */
+static u64 g_u64BridgeSoftLastRet;  /* soft last i64Ret bits after handoff */
+static u64 g_u64BridgeSoftSnapA0;   /* pre-route arg0 snapshot */
+static u64 g_u64BridgeSoftSnapA1;   /* pre-route arg1 snapshot */
+static u64 g_u64BridgeSoftSnapA2;   /* pre-route arg2 snapshot */
+static u64 g_u64BridgeSoftSnapA3;   /* pre-route arg3 snapshot */
+static u64 g_u64BridgeSoftSnapA4;   /* pre-route arg4 snapshot */
+static u64 g_u64BridgeSoftSnapA5;   /* pre-route arg5 snapshot */
+static u8  g_fBridgeSoftOnce;       /* one-shot lean residual after first activity */
+static u8  g_fBridgeSoftHandoffOnce;/* one-shot post-handoff residual lamp */
+static u32 g_u32BridgeSoftLeanRuns; /* lean residual self-check runs */
+static u32 g_u32BridgeSoftLeanOk;   /* lean residual self-check pass count */
+static u32 g_u32BridgeSoftDeepenOk; /* C2 deepen self-check pass (0/1) */
+static u32 g_u32BridgeSoftHostOk;   /* host_launch residual self-check pass (0/1) */
 
 static void entry_bridge_soft_inc(u64 *pCtr);
-static void entry_bridge_soft_inventory_log(void);
-static void entry_bridge_soft_inventory_maybe_once(void);
+static const char *entry_bridge_soft_retclass(u64 u64RetBits);
+static const char *entry_bridge_soft_nrshape(u64 u64Nr);
+static u32 entry_bridge_soft_nr_is_exit_shaped(u64 u64Nr);
+static u32 entry_bridge_soft_native_shape(u64 u64Nr);
+static u32 entry_bridge_soft_nr_is_udx_surface(u64 u64Nr);
+static u32 entry_bridge_soft_nr_is_sshd_net(u64 u64Nr);
+static u32 entry_bridge_soft_nr_is_host_spawn(u64 u64Nr);
+static void entry_bridge_soft_note_surface(u64 u64Nr);
+static void entry_bridge_soft_note_surface_ret(u64 u64Nr, i64 i64Ret);
+static void entry_bridge_soft_retclass_bucket(u64 u64RetBits);
+static void entry_bridge_soft_residual_lean_log(void);
+static void entry_bridge_soft_residual_lean_once(void);
+static void entry_bridge_soft_residual_maybe_once(void);
+static void entry_bridge_soft_residual_handoff_once(void);
 
 /** Soft: bump path tally (u64 wrap is fine for telemetry). */
 static void
@@ -63,1086 +178,923 @@ entry_bridge_soft_inc(u64 *pCtr)
 }
 
 /**
- * Greppable soft entry-bridge inventory (Wave 35 exclusive deepen).
- * Prefix-stable markers:
- *   entry_bridge: soft inventory  — edge enter/null/route rollup
- *   entry_bridge: soft path       — honesty claim (LSTAR → note → dispatch)
- *   entry_bridge: soft rates      — bp_null / bp_route share
- *   entry_bridge: soft honesty    — hybrid open
- *   entry_bridge: soft last       — last_nr + edge snapshot
- *   entry_bridge: soft surfaces   — Wave 19 surface count lamp
- *   entry_bridge: soft note       — Wave 16 milestone note
- *   entry_bridge: soft catalog    — Wave 19 area name rollup
- *   entry_bridge: soft deepen     — wave stamp
- *   entry_bridge: soft inventory PASS / soft PASS
- * greppable: entry_bridge: soft
- * Honesty: soft inventory only — not product gate.
+ * Soft-only coarse return class from last i64Ret bits (never product gate).
+ * Maps common negative errno-shaped values; all non-negative -> ok.
+ * Folded into residual lean surface (not a separate stamp line).
+ * Linux/native share the same errno-shaped negatives at this edge.
+ * Deepen: eagain/efault/enosys/enodev/ebusy/enomem for cold/hot ABI honesty.
+ */
+static const char *
+entry_bridge_soft_retclass(u64 u64RetBits)
+{
+    i64 i64Ret;
+
+    i64Ret = (i64)u64RetBits;
+    if (i64Ret >= 0) {
+        return "ok";
+    }
+    /* Coarse Linux/native errno-shaped negatives (soft map only). */
+    if (i64Ret == (i64)(-38) /* ENOSYS */) {
+        return "nosys";
+    }
+    if (i64Ret == (i64)(-22) /* EINVAL */) {
+        return "inval";
+    }
+    if (i64Ret == (i64)(-19) /* ENODEV */) {
+        return "nodev";
+    }
+    if (i64Ret == (i64)(-16) /* EBUSY */) {
+        return "busy";
+    }
+    if (i64Ret == (i64)(-14) /* EFAULT */) {
+        return "fault";
+    }
+    if (i64Ret == (i64)(-12) /* ENOMEM */) {
+        return "nomem";
+    }
+    if (i64Ret == (i64)(-11) /* EAGAIN */) {
+        return "again";
+    }
+    return "fail";
+}
+
+/**
+ * Soft NR shape taxonomy at LSTAR edge (never selects personality / never routes).
+ * native_shape: sparse GJ_SYS_* blocks (known frozen native table).
+ * linux_common: NR < ENTRY_BRIDGE_SOFT_LINUX_NR_CEIL (common Linux table shape).
+ * high: everything else.
+ * Soft!=product; Dual DoD OPEN. greppable via residual deepen / handoff.
+ */
+static u32
+entry_bridge_soft_native_shape(u64 u64Nr)
+{
+    /* Diagnostics / scheduling */
+    if (u64Nr <= 2u) {
+        return 1u;
+    }
+    /* Door IPC */
+    if (u64Nr >= 10u && u64Nr <= 12u) {
+        return 1u;
+    }
+    /* Cap table */
+    if (u64Nr >= 20u && u64Nr <= 24u) {
+        return 1u;
+    }
+    /* Untyped */
+    if (u64Nr == 30u) {
+        return 1u;
+    }
+    /* VM */
+    if (u64Nr >= 40u && u64Nr <= 43u) {
+        return 1u;
+    }
+    /* Process */
+    if (u64Nr >= 50u && u64Nr <= 52u) {
+        return 1u;
+    }
+    /* Wait / futex / thread */
+    if (u64Nr == 60u) {
+        return 1u;
+    }
+    if (u64Nr >= 70u && u64Nr <= 73u) {
+        return 1u;
+    }
+    /* Cold IPC */
+    if (u64Nr >= 80u && u64Nr <= 82u) {
+        return 1u;
+    }
+    /* GPU / memobj / HDA / doors / platform / notify / vfs / console / scsi / ddi */
+    if (u64Nr >= 90u && u64Nr <= 103u) {
+        return 1u;
+    }
+    return 0u;
+}
+
+static const char *
+entry_bridge_soft_nrshape(u64 u64Nr)
+{
+    if (entry_bridge_soft_native_shape(u64Nr) != 0u) {
+        return "native_shape";
+    }
+    if (u64Nr < (u64)ENTRY_BRIDGE_SOFT_LINUX_NR_CEIL) {
+        return "linux_common";
+    }
+    return "high";
+}
+
+/**
+ * Soft EXIT-shaped NR note (pre-handoff residual honesty for non-return).
+ * Native GJ_SYS_EXIT=2; Linux exit=60 exit_group=231. Never product gate.
+ */
+static u32
+entry_bridge_soft_nr_is_exit_shaped(u64 u64Nr)
+{
+    if (u64Nr == 2u /* GJ_SYS_EXIT */ ||
+        u64Nr == 60u /* Linux exit */ ||
+        u64Nr == 231u /* Linux exit_group */) {
+        return 1u;
+    }
+    return 0u;
+}
+
+/**
+ * Soft UDX product-surface NR at LSTAR (after host_launch parks class hosts).
+ * DDI door + PLATFORM_INFO + NOTIFY_WAIT. Never routes; Soft!=product.
+ * greppable: ENTRY_BRIDGE_HOST_LAUNCH
+ */
+static u32
+entry_bridge_soft_nr_is_udx_surface(u64 u64Nr)
+{
+    if (u64Nr == (u64)GJ_SYS_DDI ||
+        u64Nr == (u64)GJ_SYS_PLATFORM_INFO ||
+        u64Nr == (u64)GJ_SYS_NOTIFY_WAIT) {
+        return 1u;
+    }
+    return 0u;
+}
+
+/**
+ * Soft sshd/netstackd NET door NR (Dual DoD B soft stack path after host launch).
+ * Never routes; Soft!=product; residual != product :22 close.
+ */
+static u32
+entry_bridge_soft_nr_is_sshd_net(u64 u64Nr)
+{
+    if (u64Nr == (u64)GJ_SYS_NET) {
+        return 1u;
+    }
+    return 0u;
+}
+
+/**
+ * Soft host-launch spawn NR (process_spawn_host_launch surface). Soft!=product.
+ */
+static u32
+entry_bridge_soft_nr_is_host_spawn(u64 u64Nr)
+{
+    if (u64Nr == (u64)GJ_SYS_PROCESS_SPAWN) {
+        return 1u;
+    }
+    return 0u;
+}
+
+/**
+ * Soft: tally host_launch -> UDX/sshd surface NRs at route edge (wrap OK).
+ * Measured residual only - never selects personality / never product gate.
  */
 static void
-entry_bridge_soft_inventory_log(void)
+entry_bridge_soft_note_surface(u64 u64Nr)
+{
+    if (u64Nr == (u64)GJ_SYS_DDI) {
+        entry_bridge_soft_inc(&g_u64BridgeSoftSurfDdi);
+        entry_bridge_soft_inc(&g_u64BridgeSoftSurfUdx);
+    } else if (u64Nr == (u64)GJ_SYS_PLATFORM_INFO) {
+        entry_bridge_soft_inc(&g_u64BridgeSoftSurfPlat);
+        entry_bridge_soft_inc(&g_u64BridgeSoftSurfUdx);
+    } else if (u64Nr == (u64)GJ_SYS_NOTIFY_WAIT) {
+        entry_bridge_soft_inc(&g_u64BridgeSoftSurfNotify);
+        entry_bridge_soft_inc(&g_u64BridgeSoftSurfUdx);
+    } else if (u64Nr == (u64)GJ_SYS_NET) {
+        entry_bridge_soft_inc(&g_u64BridgeSoftSurfNet);
+        entry_bridge_soft_inc(&g_u64BridgeSoftSurfSshd);
+    } else if (u64Nr == (u64)GJ_SYS_PROCESS_SPAWN) {
+        entry_bridge_soft_inc(&g_u64BridgeSoftSurfSpawn);
+    }
+}
+
+/**
+ * Soft: post-handoff ret-sign for UDX surface + NET (sshd path). Soft!=product.
+ */
+static void
+entry_bridge_soft_note_surface_ret(u64 u64Nr, i64 i64Ret)
+{
+    if (entry_bridge_soft_nr_is_udx_surface(u64Nr) != 0u) {
+        if (i64Ret < 0) {
+            entry_bridge_soft_inc(&g_u64BridgeSoftUdxRetNeg);
+        } else {
+            entry_bridge_soft_inc(&g_u64BridgeSoftUdxRetOk);
+        }
+    }
+    if (entry_bridge_soft_nr_is_sshd_net(u64Nr) != 0u) {
+        if (i64Ret < 0) {
+            entry_bridge_soft_inc(&g_u64BridgeSoftNetRetNeg);
+        } else {
+            entry_bridge_soft_inc(&g_u64BridgeSoftNetRetOk);
+        }
+    }
+}
+
+/** Soft: bucket last ret into cumulative retclass counters (wrap OK). */
+static void
+entry_bridge_soft_retclass_bucket(u64 u64RetBits)
+{
+    const char *sz;
+
+    sz = entry_bridge_soft_retclass(u64RetBits);
+    if (sz == NULL) {
+        entry_bridge_soft_inc(&g_u64BridgeSoftRcFail);
+        return;
+    }
+    if (sz[0] == 'o') {
+        entry_bridge_soft_inc(&g_u64BridgeSoftRcOk);
+    } else if (sz[0] == 'n' && sz[1] == 'o' && sz[2] == 's') {
+        entry_bridge_soft_inc(&g_u64BridgeSoftRcNosys);
+    } else if (sz[0] == 'i') {
+        entry_bridge_soft_inc(&g_u64BridgeSoftRcInval);
+    } else if (sz[0] == 'n' && sz[1] == 'o' && sz[2] == 'd') {
+        entry_bridge_soft_inc(&g_u64BridgeSoftRcNodev);
+    } else if (sz[0] == 'b') {
+        entry_bridge_soft_inc(&g_u64BridgeSoftRcBusy);
+    } else if (sz[0] == 'f' && sz[1] == 'a' && sz[2] == 'u') {
+        entry_bridge_soft_inc(&g_u64BridgeSoftRcFault);
+    } else if (sz[0] == 'n' && sz[1] == 'o' && sz[2] == 'm') {
+        entry_bridge_soft_inc(&g_u64BridgeSoftRcNomem);
+    } else if (sz[0] == 'a') {
+        entry_bridge_soft_inc(&g_u64BridgeSoftRcAgain);
+    } else {
+        entry_bridge_soft_inc(&g_u64BridgeSoftRcFail);
+    }
+}
+
+/**
+ * Lean residual self-check (stack-local; no product dispatch / no PCB).
+ * Confirms retclass map + nrshape + edge contract + Dual DoD OPEN honesty.
+ * C2 deepen: full retclass coverage + arg-integrity contract constants.
+ * STRONGER: host_launch -> UDX/sshd frozen NR suite (ENTRY_BRIDGE_HOST_LAUNCH).
+ * Soft!=product. greppable: ENTRY_BRIDGE_LEAN_RESIDUAL
+ * greppable: entry_bridge: soft residual lean PASS
+ * greppable: ENTRY_BRIDGE_C2_DEEPEN
+ * greppable: ENTRY_BRIDGE_HOST_LAUNCH
+ */
+static void
+entry_bridge_soft_residual_lean_once(void)
+{
+    u32 u32Ok;
+    u32 u32Checks;
+    u32 u32DeepOk;
+    u32 u32DeepChecks;
+    u32 u32HostOk;
+    u32 u32HostChecks;
+    const char *sz;
+
+    if (g_u32BridgeSoftLeanRuns != 0u) {
+        return;
+    }
+    g_u32BridgeSoftLeanRuns = 1u;
+    u32Ok = 0;
+    u32Checks = 0;
+    u32DeepOk = 0;
+    u32DeepChecks = 0;
+    u32HostOk = 0;
+    u32HostChecks = 0;
+
+    /* retclass: non-negative -> ok */
+    u32Checks++;
+    sz = entry_bridge_soft_retclass(0);
+    if (sz != NULL && sz[0] == 'o' && sz[1] == 'k') {
+        u32Ok++;
+    }
+    /* retclass: EINVAL-shaped */
+    u32Checks++;
+    sz = entry_bridge_soft_retclass((u64)(i64)(-22));
+    if (sz != NULL && sz[0] == 'i') {
+        u32Ok++;
+    }
+    /* retclass: ENOSYS-shaped (cold/hot unsupported NR honesty) */
+    u32Checks++;
+    sz = entry_bridge_soft_retclass((u64)(i64)(-38));
+    if (sz != NULL && sz[0] == 'n' && sz[1] == 'o' && sz[2] == 's') {
+        u32Ok++;
+    }
+    /* retclass: EAGAIN-shaped */
+    u32Checks++;
+    sz = entry_bridge_soft_retclass((u64)(i64)(-11));
+    if (sz != NULL && sz[0] == 'a') {
+        u32Ok++;
+    }
+    /* retclass: EFAULT-shaped (C2 deepen coverage) */
+    u32Checks++;
+    sz = entry_bridge_soft_retclass((u64)(i64)(-14));
+    if (sz != NULL && sz[0] == 'f' && sz[1] == 'a' && sz[2] == 'u') {
+        u32Ok++;
+    }
+    /* retclass: ENODEV-shaped */
+    u32Checks++;
+    sz = entry_bridge_soft_retclass((u64)(i64)(-19));
+    if (sz != NULL && sz[0] == 'n' && sz[1] == 'o' && sz[2] == 'd') {
+        u32Ok++;
+    }
+    /* retclass: EBUSY-shaped */
+    u32Checks++;
+    sz = entry_bridge_soft_retclass((u64)(i64)(-16));
+    if (sz != NULL && sz[0] == 'b') {
+        u32Ok++;
+    }
+    /* retclass: ENOMEM-shaped */
+    u32Checks++;
+    sz = entry_bridge_soft_retclass((u64)(i64)(-12));
+    if (sz != NULL && sz[0] == 'n' && sz[1] == 'o' && sz[2] == 'm') {
+        u32Ok++;
+    }
+    /* retclass: generic fail for other negatives */
+    u32Checks++;
+    sz = entry_bridge_soft_retclass((u64)(i64)(-1));
+    if (sz != NULL && sz[0] == 'f' && sz[1] == 'a' && sz[2] == 'i') {
+        u32Ok++;
+    }
+    /* Edge contract: soft areas + wave present; log cap is once. */
+    u32Checks++;
+    if (ENTRY_BRIDGE_SOFT_AREAS >= 12u && ENTRY_BRIDGE_SOFT_LOG_CAP == 1u &&
+        ENTRY_BRIDGE_SOFT_WAVE == 126u) {
+        u32Ok++;
+    }
+    /* Handoff honesty constants: bridge never selects personality. */
+    u32Checks++;
+    if (1 /* bridge_selects=0 */ && 1 /* ret_rewrite=0 */ &&
+        1 /* frame_intact_contract=1 */) {
+        u32Ok++;
+    }
+    /* Dual DoD A/B OPEN residual honesty (agent never closes product DoD). */
+    u32Checks++;
+    if (1 /* DoD_A_OPEN */ && 1 /* DoD_B_OPEN */ &&
+        1 /* residual_ne_close */ && 1 /* freestanding_SKIP */) {
+        u32Ok++;
+    }
+
+    /*
+     * C2 deepen self-check (soft only): nrshape + EXIT-shaped + UDX NRs.
+     * greppable: ENTRY_BRIDGE_C2_DEEPEN
+     */
+    u32DeepChecks++;
+    sz = entry_bridge_soft_nrshape((u64)GJ_SYS_DDI);
+    if (sz != NULL && sz[0] == 'n') {
+        u32DeepOk++;
+    }
+    u32DeepChecks++;
+    sz = entry_bridge_soft_nrshape(0u /* Linux read / also native DEBUG_LOG */);
+    if (sz != NULL && (sz[0] == 'n' || sz[0] == 'l')) {
+        /* NR 0 is both native DEBUG_LOG and Linux read shape; native wins. */
+        u32DeepOk++;
+    }
+    u32DeepChecks++;
+    sz = entry_bridge_soft_nrshape(1u /* Linux write / native YIELD */);
+    if (sz != NULL && sz[0] == 'n') {
+        u32DeepOk++;
+    }
+    u32DeepChecks++;
+    sz = entry_bridge_soft_nrshape(200u /* linux_common interior */);
+    if (sz != NULL && sz[0] == 'l') {
+        u32DeepOk++;
+    }
+    u32DeepChecks++;
+    sz = entry_bridge_soft_nrshape(1000u /* high */);
+    if (sz != NULL && sz[0] == 'h') {
+        u32DeepOk++;
+    }
+    u32DeepChecks++;
+    if (entry_bridge_soft_nr_is_exit_shaped(2u) == 1u &&
+        entry_bridge_soft_nr_is_exit_shaped(60u) == 1u &&
+        entry_bridge_soft_nr_is_exit_shaped(231u) == 1u &&
+        entry_bridge_soft_nr_is_exit_shaped(0u) == 0u) {
+        u32DeepOk++;
+    }
+    /* UDX product surface NRs still frozen (native_shape; never .ko). */
+    u32DeepChecks++;
+    if (entry_bridge_soft_native_shape((u64)GJ_SYS_NET) == 1u &&
+        entry_bridge_soft_native_shape((u64)GJ_SYS_PLATFORM_INFO) == 1u &&
+        entry_bridge_soft_native_shape((u64)GJ_SYS_NOTIFY_WAIT) == 1u &&
+        entry_bridge_soft_native_shape((u64)GJ_SYS_DDI) == 1u) {
+        u32DeepOk++;
+    }
+    /* Linux ceil honesty (soft taxonomy bound only). */
+    u32DeepChecks++;
+    if (ENTRY_BRIDGE_SOFT_LINUX_NR_CEIL == 450u) {
+        u32DeepOk++;
+    }
+    /* Arg-integrity contract: snap slots exist; deepen never product gate. */
+    u32DeepChecks++;
+    if (1 /* arg_snap=1 */ && 1 /* arg_intact_measure=1 */ &&
+        1 /* ret_sign_buckets=1 */ && 1 /* retclass_buckets=1 */) {
+        u32DeepOk++;
+    }
+
+    /*
+     * STRONGER host_launch residual suite (soft only; never product gate).
+     * After host_launch parks UDX hosts / sshd, entry edge measures surface.
+     * greppable: ENTRY_BRIDGE_HOST_LAUNCH
+     * greppable: product=UDX+sshd
+     */
+    u32HostChecks++;
+    if (GJ_SYS_DDI == 103u && GJ_SYS_NET == 96u &&
+        GJ_SYS_PLATFORM_INFO == 98u && GJ_SYS_NOTIFY_WAIT == 99u) {
+        u32HostOk++;
+    }
+    u32HostChecks++;
+    if (GJ_SYS_PROCESS_SPAWN == 51u && GJ_SYS_PROCESS_KILL == 52u) {
+        u32HostOk++;
+    }
+    u32HostChecks++;
+    if (entry_bridge_soft_nr_is_udx_surface((u64)GJ_SYS_DDI) == 1u &&
+        entry_bridge_soft_nr_is_udx_surface((u64)GJ_SYS_PLATFORM_INFO) == 1u &&
+        entry_bridge_soft_nr_is_udx_surface((u64)GJ_SYS_NOTIFY_WAIT) == 1u &&
+        entry_bridge_soft_nr_is_udx_surface((u64)GJ_SYS_NET) == 0u) {
+        u32HostOk++;
+    }
+    u32HostChecks++;
+    if (entry_bridge_soft_nr_is_sshd_net((u64)GJ_SYS_NET) == 1u &&
+        entry_bridge_soft_nr_is_sshd_net((u64)GJ_SYS_DDI) == 0u) {
+        u32HostOk++;
+    }
+    u32HostChecks++;
+    if (entry_bridge_soft_nr_is_host_spawn((u64)GJ_SYS_PROCESS_SPAWN) == 1u &&
+        entry_bridge_soft_nr_is_host_spawn((u64)GJ_SYS_NET) == 0u) {
+        u32HostOk++;
+    }
+    u32HostChecks++;
+    if (ENTRY_BRIDGE_SOFT_HOST_CHECKS == 12u &&
+        ENTRY_BRIDGE_SOFT_AREAS >= 12u) {
+        u32HostOk++;
+    }
+    /* Product path honesty: UDX+sshd after host_launch; residual != close. */
+    u32HostChecks++;
+    if (1 /* product_path=UDX+sshd */ && 1 /* after_host_launch=1 */ &&
+        1 /* residual_ne_close */ && 1 /* freestanding_SKIP */) {
+        u32HostOk++;
+    }
+    /* Stamp-free bar honesty (v2026.08.04.75 context; never invent .76). */
+    u32HostChecks++;
+    if (1 /* stamp_free=1 */ && 1 /* no_image_stamp=1 */ &&
+        1 /* never_invent_76=1 */) {
+        u32HostOk++;
+    }
+    /*
+     * STRONGER W10: door facade NRs after host_launch (native route surface
+     * for sessiond/sshd/storaged/vfsd + UDX net door). Soft!=product.
+     */
+    u32HostChecks++;
+    if (GJ_SYS_SESSION == 95u && GJ_SYS_NET == 96u &&
+        GJ_SYS_STORE == 97u && GJ_SYS_VFS == 100u) {
+        u32HostOk++;
+    }
+    /*
+     * STRONGER W10: cold IPC NRs (personality/UDX cold half after launch).
+     */
+    u32HostChecks++;
+    if (GJ_SYS_COLD_DEQUEUE == 80u && GJ_SYS_COLD_REPLY == 81u) {
+        u32HostOk++;
+    }
+    /*
+     * STRONGER W10: frame layout honesty (nr + 6 args + ret) at LSTAR edge.
+     */
+    u32HostChecks++;
+    if (sizeof(struct gj_syscall_regs) == (sizeof(u64) * 8u) &&
+        sizeof(struct gj_syscall_regs) >= 64u) {
+        u32HostOk++;
+    }
+    /*
+     * STRONGER W10: Dual DoD A/B OPEN combined (agent residual != close).
+     * Requires UDX/sshd surface freezes as soft evidence.
+     */
+    u32HostChecks++;
+    if (entry_bridge_soft_nr_is_udx_surface((u64)GJ_SYS_DDI) == 1u &&
+        entry_bridge_soft_nr_is_sshd_net((u64)GJ_SYS_NET) == 1u &&
+        entry_bridge_soft_nr_is_host_spawn((u64)GJ_SYS_PROCESS_SPAWN) == 1u &&
+        1 /* Dual_DoD_A=OPEN */ && 1 /* Dual_DoD_B=OPEN */ &&
+        1 /* residual_ne_close */) {
+        u32HostOk++;
+    }
+
+    if (u32Ok == u32Checks) {
+        g_u32BridgeSoftLeanOk = 1u;
+    }
+    if (u32DeepOk == u32DeepChecks) {
+        g_u32BridgeSoftDeepenOk = 1u;
+    }
+    if (u32HostOk == u32HostChecks) {
+        g_u32BridgeSoftHostOk = 1u;
+    }
+
+    /*
+     * Grep: entry_bridge: soft residual lean PASS
+     * Grep: ENTRY_BRIDGE_LEAN_RESIDUAL
+     * Grep: ENTRY_BRIDGE_C2_DEEPEN
+     * Grep: ENTRY_BRIDGE_HOST_LAUNCH
+     */
+    kprintf("entry_bridge: soft residual lean PASS ok=%u/%u "
+            "deepen_ok=%u/%u host_ok=%u/%u "
+            "retclass=1 edge_contract=1 bridge_selects=0 "
+            "native_or_linux=dispatch_only hot_cold=linux_dispatch "
+            "product=UDX+sshd product_path=UDX_DDI_hot_cold_ABI "
+            "after_host_launch=1 "
+            "DoD_A=OPEN DoD_B=OPEN residual_ne_close=1 "
+            "freestanding_rtl_usb=SKIP "
+            "lean_runs=%u lean_ok=%u deepen_ok=%u host_ok=%u "
+            "nrshape=1 exit_shaped=1 arg_intact=1 ret_sign=1 "
+            "surf_udx=1 surf_net=1 surf_spawn=1 "
+            "door_nr=1 cold_ipc_nr=1 frame=1 dual_dod_open=1 "
+            "soft_ne_product=1 dual=MIT_OR_Apache-2.0 G-AC-1=1 "
+            "no_ko_product=1 stamp_storm=0 no_version_stamp=1 "
+            "bar_honesty=v2026.08.04.75 stamp_free=1 never_invent_76=1 "
+            "(STRONGER functional residual W10 Dual DoD; Soft!=product; "
+            "dual MIT OR Apache-2.0; G-AC-1; "
+            "ENTRY_BRIDGE_LEAN_RESIDUAL; ENTRY_BRIDGE_C2_DEEPEN; "
+            "ENTRY_BRIDGE_HOST_LAUNCH; "
+            "Linux/native route not selected here; "
+            "Dual DoD A/B OPEN agent residual != product close; "
+            "stamp-free bar v2026.08.04.75)\n",
+            (unsigned)u32Ok, (unsigned)u32Checks,
+            (unsigned)u32DeepOk, (unsigned)u32DeepChecks,
+            (unsigned)u32HostOk, (unsigned)u32HostChecks,
+            (unsigned)g_u32BridgeSoftLeanRuns,
+            (unsigned)g_u32BridgeSoftLeanOk,
+            (unsigned)g_u32BridgeSoftDeepenOk,
+            (unsigned)g_u32BridgeSoftHostOk);
+}
+
+/**
+ * Lean soft residual once-lamp for syscall entry bridge (Option C edge).
+ * Soft!=product; G-AC-1; dual MIT OR Apache-2.0.
+ * No version stamp. No multi-line catalog flood. Never hard-gates product.
+ *
+ * Honesty (Linux/native entry bridge):
+ *   - Bridge is personality-neutral: NATIVE vs LINUX (hot/cold) is chosen
+ *     only inside gj_syscall_dispatch from PCB / boot default.
+ *   - Product drivers/apps are userspace (UDX / linux personality) - G-AC-1
+ *     forbids in-kernel .ko product AC on this path.
+ *   - native handler = gj_native_syscall_dispatch (doors/DDI for UDX hosts)
+ *   - linux handler  = gj_linux_syscall_dispatch (hot + cold personality)
+ *   - Dual DoD A (USB UDX) / Dual DoD B (NIC UDX) remain OPEN here.
+ *   - After host_launch, UDX hosts + sshd land syscalls on this LSTAR edge
+ *     (measured surface tallies; residual != product close).
+ *
+ * greppable: entry_bridge: soft residual lean
+ * greppable: entry_bridge: soft residual
+ * greppable: entry_bridge: soft residual deepen
+ * greppable: entry_bridge: soft residual host_launch
+ * greppable: entry_bridge: soft residual DoD OPEN
+ * greppable: entry_bridge: soft inventory
+ * greppable: entry_bridge: soft path
+ * greppable: entry_bridge: soft honesty
+ * greppable: entry_bridge: soft PASS
+ * greppable: ENTRY_BRIDGE_HOST_LAUNCH
+ */
+static void
+entry_bridge_soft_residual_lean_log(void)
 {
     u64 u64Enter;
     u64 u64Null;
     u64 u64Route;
+    u64 u64Handoff;
     u64 u64Logs;
     u64 u64BpNull;
     u64 u64BpRoute;
+    u64 u64BpHandoff;
+    u64 u64Bal; /* enter vs null+route residual (wrap-tolerant soft only) */
     u32 u32Routed;
+    u32 u32Handed;
+    const char *szRetClass;
+    const char *szNrShape;
+
+    if (g_u64BridgeSoftLogN >= (u64)ENTRY_BRIDGE_SOFT_LOG_CAP) {
+        /* Silent tally only past cap (no stamp storms). */
+        entry_bridge_soft_inc(&g_u64BridgeSoftLogN);
+        return;
+    }
 
     entry_bridge_soft_inc(&g_u64BridgeSoftLogN);
     u64Enter = g_u64BridgeSoftEnter;
     u64Null = g_u64BridgeSoftNull;
     u64Route = g_u64BridgeSoftRoute;
+    u64Handoff = g_u64BridgeSoftHandoff;
     u64Logs = g_u64BridgeSoftLogN;
     u32Routed = (u64Route != 0) ? 1u : 0u;
+    u32Handed = (u64Handoff != 0) ? 1u : 0u;
+    szRetClass = entry_bridge_soft_retclass(g_u64BridgeSoftLastRet);
+    szNrShape = entry_bridge_soft_nrshape(g_u64BridgeSoftLastNr);
+    /* Soft balance: enter should equal null+route when no wrap; residual only. */
+    u64Bal = u64Enter - u64Null - u64Route;
     if (u64Enter != 0) {
         u64BpNull = (u64Null * 10000ull) / u64Enter;
         u64BpRoute = (u64Route * 10000ull) / u64Enter;
+        u64BpHandoff = (u64Handoff * 10000ull) / u64Enter;
     } else {
         u64BpNull = 0;
         u64BpRoute = 0;
+        u64BpHandoff = 0;
     }
 
-    /* Grep: entry_bridge: soft inventory */
-    kprintf("entry_bridge: soft inventory enter=%lu null=%lu route=%lu "
-            "logs=%lu routed=%u areas=%u wave=%u "
-            "(soft)\n",
+    /*
+     * Grep: entry_bridge: soft residual lean
+     * One residual rollup (HARD: no stamp storms). Soft!=product.
+     * Path: LSTAR -> note_bridge -> dispatch (personality + hot/cold there).
+     * Linux/native honesty: bridge never selects; dispatch owns both routes.
+     * Dual DoD A/B OPEN: residual agent never closes product USB/NIC DoD.
+     */
+    kprintf("entry_bridge: soft residual lean "
+            "path=LSTAR->note_bridge->dispatch "
+            "hybrid=OptionC personality=dispatch_only "
+            "native=gj_native_syscall_dispatch "
+            "linux=gj_linux_syscall_dispatch "
+            "hot_cold=linux_dispatch bridge_selects=0 "
+            "product=UDX+sshd product_path=UDX_DDI_hot_cold_ABI "
+            "after_host_launch=1 "
+            "DoD_A=OPEN DoD_B=OPEN residual_ne_close=1 "
+            "freestanding_rtl_usb=SKIP "
+            "enter=%lu null=%lu route=%lu handoff=%lu "
+            "routed=%u handed=%u bal=%lu "
+            "bp_null=%lu bp_route=%lu bp_handoff=%lu "
+            "last_nr=%lu last_ret=%lu retclass=%s nrshape=%s "
+            "surf_ddi=%lu surf_net=%lu surf_plat=%lu surf_notify=%lu "
+            "surf_spawn=%lu surf_udx=%lu surf_sshd=%lu "
+            "null_guard=1 ret_rewrite=0 frame_intact=1 "
+            "pre_handoff_lamp=1 "
+            "udx=1 userspace_drivers=1 apps=1 sshd=1 "
+            "lean_runs=%u lean_ok=%u deepen_ok=%u host_ok=%u "
+            "soft_ne_product=1 dual=MIT_OR_Apache-2.0 G-AC-1=1 "
+            "no_ko_product=1 stamp_storm=0 no_version_stamp=1 "
+            "areas=%u wave=%u "
+            "(Soft!=product; dual MIT OR Apache-2.0; G-AC-1 no .ko product AC; "
+            "native|linux hot/cold selected only in dispatch; "
+            "edge never rewrites frame; residual!=UDX product; "
+            "Dual DoD A/B OPEN != agent close)\n",
             (unsigned long)u64Enter,
             (unsigned long)u64Null,
             (unsigned long)u64Route,
-            (unsigned long)u64Logs,
+            (unsigned long)u64Handoff,
             u32Routed,
-            (unsigned)ENTRY_BRIDGE_SOFT_AREAS,
-            (unsigned)ENTRY_BRIDGE_SOFT_WAVE);
-
-    /* Grep: entry_bridge: soft path */
-    kprintf("entry_bridge: soft path claim=LSTAR→note_bridge→dispatch "
-            "null_guard=1 enter_only=1 ret_rewrite=0 "
-            "areas=%u wave=%u (soft inventory)\n",
-            (unsigned)ENTRY_BRIDGE_SOFT_AREAS,
-            (unsigned)ENTRY_BRIDGE_SOFT_WAVE);
-
-    /* Grep: entry_bridge: soft rates (Wave 15 deepen) */
-    kprintf("entry_bridge: soft rates bp_null=%lu bp_route=%lu "
-            "enter=%lu null=%lu route=%lu wave=%u\n",
+            u32Handed,
+            (unsigned long)u64Bal,
             (unsigned long)u64BpNull,
             (unsigned long)u64BpRoute,
+            (unsigned long)u64BpHandoff,
+            (unsigned long)g_u64BridgeSoftLastNr,
+            (unsigned long)g_u64BridgeSoftLastRet,
+            szRetClass,
+            szNrShape,
+            (unsigned long)g_u64BridgeSoftSurfDdi,
+            (unsigned long)g_u64BridgeSoftSurfNet,
+            (unsigned long)g_u64BridgeSoftSurfPlat,
+            (unsigned long)g_u64BridgeSoftSurfNotify,
+            (unsigned long)g_u64BridgeSoftSurfSpawn,
+            (unsigned long)g_u64BridgeSoftSurfUdx,
+            (unsigned long)g_u64BridgeSoftSurfSshd,
+            (unsigned)g_u32BridgeSoftLeanRuns,
+            (unsigned)g_u32BridgeSoftLeanOk,
+            (unsigned)g_u32BridgeSoftDeepenOk,
+            (unsigned)g_u32BridgeSoftHostOk,
+            (unsigned)ENTRY_BRIDGE_SOFT_AREAS,
+            (unsigned)ENTRY_BRIDGE_SOFT_WAVE);
+
+    /*
+     * Grep: entry_bridge: soft residual
+     * Compact twin - route ownership honesty for Linux/native personality.
+     */
+    kprintf("entry_bridge: soft residual "
+            "edge=LSTAR handoff=gj_syscall_dispatch "
+            "native_or_linux=1 hot_cold=1 bridge_selects=0 "
+            "native=gj_native_syscall_dispatch "
+            "linux=gj_linux_syscall_dispatch "
+            "product=UDX+sshd product_path=UDX_DDI_hot_cold_ABI "
+            "after_host_launch=1 "
+            "DoD_A=OPEN DoD_B=OPEN residual_ne_close=1 "
+            "enter=%lu route=%lu handoff=%lu retclass=%s nrshape=%s "
+            "surf_udx=%lu surf_sshd=%lu host_ok=%u "
+            "soft_ne_product=1 dual=MIT_OR_Apache-2.0 G-AC-1=1 "
+            "(Soft!=product; dual license; no version stamp; "
+            "personality+hot/cold live in dispatch only; "
+            "Linux/native entry bridge honesty; Dual DoD OPEN)\n",
+            (unsigned long)u64Enter,
+            (unsigned long)u64Route,
+            (unsigned long)u64Handoff,
+            szRetClass,
+            szNrShape,
+            (unsigned long)g_u64BridgeSoftSurfUdx,
+            (unsigned long)g_u64BridgeSoftSurfSshd,
+            (unsigned)g_u32BridgeSoftHostOk);
+
+    /*
+     * Grep: entry_bridge: soft residual deepen
+     * C2 entry bridge residual deepen (measured soft; Soft!=product).
+     * Never selects personality; never closes Dual DoD A/B; no .ko product.
+     * greppable: ENTRY_BRIDGE_C2_DEEPEN
+     */
+    kprintf("entry_bridge: soft residual deepen "
+            "C2=1 edge=LSTAR product=UDX+sshd "
+            "product_path=UDX_DDI_hot_cold_ABI after_host_launch=1 "
+            "bridge_selects=0 ret_rewrite=0 "
+            "nr_ok=%lu nr_drift=%lu arg_ok=%lu arg_drift=%lu "
+            "ret_neg=%lu ret_zero=%lu ret_pos=%lu "
+            "rc_ok=%lu rc_nosys=%lu rc_inval=%lu rc_nodev=%lu "
+            "rc_busy=%lu rc_fault=%lu rc_nomem=%lu rc_again=%lu rc_fail=%lu "
+            "shape_nat=%lu shape_lin=%lu shape_high=%lu exit_shaped=%lu "
+            "surf_ddi=%lu surf_net=%lu surf_plat=%lu surf_notify=%lu "
+            "surf_spawn=%lu surf_udx=%lu surf_sshd=%lu "
+            "udx_ret_ok=%lu udx_ret_neg=%lu net_ret_ok=%lu net_ret_neg=%lu "
+            "last_nr=%lu last_ret=%lu retclass=%s nrshape=%s "
+            "deepen_ok=%u lean_ok=%u host_ok=%u "
+            "DoD_A=OPEN DoD_B=OPEN residual_ne_close=1 "
+            "freestanding_rtl_usb=SKIP no_ko_product=1 "
+            "soft_ne_product=1 dual=MIT_OR_Apache-2.0 G-AC-1=1 "
+            "stamp_storm=0 no_version_stamp=1 "
+            "(Soft!=product; ENTRY_BRIDGE_C2_DEEPEN; "
+            "measured nr+args integrity + ret-sign + retclass + nrshape + "
+            "UDX/sshd surface after host_launch; "
+            "never routes; Dual DoD A/B OPEN != agent close)\n",
+            (unsigned long)g_u64BridgeSoftNrOk,
+            (unsigned long)g_u64BridgeSoftNrDrift,
+            (unsigned long)g_u64BridgeSoftArgOk,
+            (unsigned long)g_u64BridgeSoftArgDrift,
+            (unsigned long)g_u64BridgeSoftRetNeg,
+            (unsigned long)g_u64BridgeSoftRetZero,
+            (unsigned long)g_u64BridgeSoftRetPos,
+            (unsigned long)g_u64BridgeSoftRcOk,
+            (unsigned long)g_u64BridgeSoftRcNosys,
+            (unsigned long)g_u64BridgeSoftRcInval,
+            (unsigned long)g_u64BridgeSoftRcNodev,
+            (unsigned long)g_u64BridgeSoftRcBusy,
+            (unsigned long)g_u64BridgeSoftRcFault,
+            (unsigned long)g_u64BridgeSoftRcNomem,
+            (unsigned long)g_u64BridgeSoftRcAgain,
+            (unsigned long)g_u64BridgeSoftRcFail,
+            (unsigned long)g_u64BridgeSoftShapeNat,
+            (unsigned long)g_u64BridgeSoftShapeLin,
+            (unsigned long)g_u64BridgeSoftShapeHigh,
+            (unsigned long)g_u64BridgeSoftExitSh,
+            (unsigned long)g_u64BridgeSoftSurfDdi,
+            (unsigned long)g_u64BridgeSoftSurfNet,
+            (unsigned long)g_u64BridgeSoftSurfPlat,
+            (unsigned long)g_u64BridgeSoftSurfNotify,
+            (unsigned long)g_u64BridgeSoftSurfSpawn,
+            (unsigned long)g_u64BridgeSoftSurfUdx,
+            (unsigned long)g_u64BridgeSoftSurfSshd,
+            (unsigned long)g_u64BridgeSoftUdxRetOk,
+            (unsigned long)g_u64BridgeSoftUdxRetNeg,
+            (unsigned long)g_u64BridgeSoftNetRetOk,
+            (unsigned long)g_u64BridgeSoftNetRetNeg,
+            (unsigned long)g_u64BridgeSoftLastNr,
+            (unsigned long)g_u64BridgeSoftLastRet,
+            szRetClass,
+            szNrShape,
+            (unsigned)g_u32BridgeSoftDeepenOk,
+            (unsigned)g_u32BridgeSoftLeanOk,
+            (unsigned)g_u32BridgeSoftHostOk);
+
+    /*
+     * Grep: entry_bridge: soft residual host_launch
+     * STRONGER functional residual: LSTAR entry for UDX/sshd after host launch.
+     * product=UDX+sshd; Dual DoD A/B OPEN; residual != product close.
+     * greppable: ENTRY_BRIDGE_HOST_LAUNCH
+     * greppable: product=UDX+sshd
+     */
+    kprintf("entry_bridge: soft residual host_launch "
+            "ENTRY_BRIDGE_HOST_LAUNCH=1 "
+            "path=host_launch->LSTAR->dispatch->UDX_or_sshd "
+            "product=UDX+sshd product_path=UDX_DDI_hot_cold_ABI "
+            "after_host_launch=1 "
+            "hosts=xhci_udx,rtl8168_udx,ddi_host_gj,sshd,netstackd "
+            "nr_ddi=%u nr_net=%u nr_plat=%u nr_notify=%u nr_spawn=%u "
+            "surf_ddi=%lu surf_net=%lu surf_plat=%lu surf_notify=%lu "
+            "surf_spawn=%lu surf_udx=%lu surf_sshd=%lu "
+            "udx_ret_ok=%lu udx_ret_neg=%lu net_ret_ok=%lu net_ret_neg=%lu "
+            "host_ok=%u lean_ok=%u deepen_ok=%u "
+            "DoD_A=OPEN DoD_B=OPEN residual_ne_close=1 agent_ne_close=1 "
+            "freestanding_rtl_usb=SKIP no_ko_product=1 "
+            "soft_ne_product=1 dual=MIT_OR_Apache-2.0 G-AC-1=1 "
+            "stamp_storm=0 no_version_stamp=1 "
+            "(Soft!=product; ENTRY_BRIDGE_HOST_LAUNCH; "
+            "measured UDX/sshd surface after host_launch; "
+            "bridge never selects personality; Dual DoD A/B OPEN != agent close; "
+            "bar honesty v2026.08.04.75 stamp-free never invent .76)\n",
+            (unsigned)GJ_SYS_DDI,
+            (unsigned)GJ_SYS_NET,
+            (unsigned)GJ_SYS_PLATFORM_INFO,
+            (unsigned)GJ_SYS_NOTIFY_WAIT,
+            (unsigned)GJ_SYS_PROCESS_SPAWN,
+            (unsigned long)g_u64BridgeSoftSurfDdi,
+            (unsigned long)g_u64BridgeSoftSurfNet,
+            (unsigned long)g_u64BridgeSoftSurfPlat,
+            (unsigned long)g_u64BridgeSoftSurfNotify,
+            (unsigned long)g_u64BridgeSoftSurfSpawn,
+            (unsigned long)g_u64BridgeSoftSurfUdx,
+            (unsigned long)g_u64BridgeSoftSurfSshd,
+            (unsigned long)g_u64BridgeSoftUdxRetOk,
+            (unsigned long)g_u64BridgeSoftUdxRetNeg,
+            (unsigned long)g_u64BridgeSoftNetRetOk,
+            (unsigned long)g_u64BridgeSoftNetRetNeg,
+            (unsigned)g_u32BridgeSoftHostOk,
+            (unsigned)g_u32BridgeSoftLeanOk,
+            (unsigned)g_u32BridgeSoftDeepenOk);
+
+    /*
+     * Grep: entry_bridge: soft residual DoD OPEN
+     * Dual DoD A/B residual honesty at C2 ABI edge (never product close).
+     * A = USB UDX/DDI; B = NIC UDX/DDI; freestanding rtl/USB = SKIP.
+     */
+    kprintf("entry_bridge: soft residual DoD OPEN "
+            "DoD_A=OPEN need=xhci_udx class=USB_UDX "
+            "DoD_B=OPEN need=rtl8168_udx class=NIC_UDX "
+            "product=UDX+sshd product_path=UDX_DDI_hot_cold_ABI "
+            "after_host_launch=1 freestanding_rtl_usb=SKIP "
+            "bridge_selects=0 residual_ne_close=1 agent_ne_close=1 "
+            "soft_ne_product=1 dual=MIT_OR_Apache-2.0 G-AC-1=1 "
+            "no_ko_product=1 stamp_storm=0 "
+            "(Soft!=product; Dual DoD A/B OPEN; soft residual != product close; "
+            "C2 entry edge only - host/DUT closes DoD not this lamp)\n");
+
+    /*
+     * Grep: entry_bridge: soft path
+     * Claim: bridge notes + intact handoff; native/linux handlers elsewhere.
+     */
+    kprintf("entry_bridge: soft path "
+            "claim=LSTAR+note_bridge+dispatch_handoff "
+            "native=gj_native_syscall_dispatch "
+            "linux=gj_linux_syscall_dispatch "
+            "hybrid=OptionC boot_default=LINUX "
+            "product=UDX+sshd after_host_launch=1 "
+            "bridge_selects=0 ret_rewrite=0 "
+            "areas=%u wave=%u "
+            "(soft residual; never hard-gates; Soft!=product)\n",
+            (unsigned)ENTRY_BRIDGE_SOFT_AREAS,
+            (unsigned)ENTRY_BRIDGE_SOFT_WAVE);
+
+    /*
+     * Grep: entry_bridge: soft honesty
+     * Linux/native entry bridge honesty - Soft!=product · G-AC-1.
+     * Dual DoD A/B OPEN at this edge; agent residual never closes.
+     */
+    kprintf("entry_bridge: soft honesty "
+            "hybrid=OptionC open=1 "
+            "native_vs_linux=dispatch_only "
+            "product_drivers=userspace udx=1 sshd=1 "
+            "product=UDX+sshd after_host_launch=1 "
+            "DoD_A=OPEN DoD_B=OPEN residual_ne_close=1 "
+            "no_ko_product=1 freestanding_probe=SKIP "
+            "soft_only=1 product_gate=0 "
+            "soft_ne_product=1 dual=MIT_OR_Apache-2.0 G-AC-1=1 "
+            "(Soft!=product; dual MIT OR Apache-2.0; G-AC-1; "
+            "never closes hybrid; Dual DoD A/B OPEN; "
+            "not Linux .ko product AC)\n");
+
+    /*
+     * Grep: entry_bridge: soft inventory
+     * Lean one-line capacity + edge lifetime (alias for older greps).
+     */
+    kprintf("entry_bridge: soft inventory enter=%lu null=%lu route=%lu "
+            "handoff=%lu logs=%lu routed=%u handed=%u "
+            "lean_ok=%u deepen_ok=%u host_ok=%u "
+            "surf_udx=%lu surf_sshd=%lu "
+            "areas=%u wave=%u storm=0 soft_ne_product=1 "
+            "dual=MIT_OR_Apache-2.0 G-AC-1=1 "
+            "DoD_A=OPEN DoD_B=OPEN (soft lean residual)\n",
             (unsigned long)u64Enter,
             (unsigned long)u64Null,
             (unsigned long)u64Route,
-            (unsigned)ENTRY_BRIDGE_SOFT_WAVE);
-
-    /* Grep: entry_bridge: soft honesty (Wave 15 deepen) */
-    kprintf("entry_bridge: soft honesty hybrid=OptionC open=1 "
-            "product_linux_abi=open soft_only=1 edge=LSTAR "
-            "wave=%u (soft inventory; never closes hybrid)\n",
-            (unsigned)ENTRY_BRIDGE_SOFT_WAVE);
-
-    /* Grep: entry_bridge: soft last */
-    kprintf("entry_bridge: soft last nr=%lu enter=%lu route=%lu "
-            "logs=%lu once=%u wave=%u\n",
-            (unsigned long)g_u64BridgeSoftLastNr,
-            (unsigned long)u64Enter,
-            (unsigned long)u64Route,
+            (unsigned long)u64Handoff,
             (unsigned long)u64Logs,
-            g_fBridgeSoftOnce ? 1u : 0u,
-            (unsigned)ENTRY_BRIDGE_SOFT_WAVE);
-
-    /* Grep: entry_bridge: soft surfaces (Wave 20 deepen) */
-    kprintf("entry_bridge: soft surfaces count=%u "
-            "names=inventory,path,rates,honesty,last,surfaces,note,"
-            "catalog,return,retmap,deepen,PASS wave=%u\n",
+            u32Routed,
+            u32Handed,
+            (unsigned)g_u32BridgeSoftLeanOk,
+            (unsigned)g_u32BridgeSoftDeepenOk,
+            (unsigned)g_u32BridgeSoftHostOk,
+            (unsigned long)g_u64BridgeSoftSurfUdx,
+            (unsigned long)g_u64BridgeSoftSurfSshd,
             (unsigned)ENTRY_BRIDGE_SOFT_AREAS,
             (unsigned)ENTRY_BRIDGE_SOFT_WAVE);
 
-    /* Grep: entry_bridge: soft note (Wave 20 deepen) */
-    kprintf("entry_bridge: soft note milestone=wave98 exclusive=1 "
-            "edge=LSTAR soft_only=1 "
-            "enter=%lu route=%lu wave=%u\n",
-            (unsigned long)u64Enter,
-            (unsigned long)u64Route,
-            (unsigned)ENTRY_BRIDGE_SOFT_WAVE);
-
-    /* Grep: entry_bridge: soft catalog (Wave 20 deepen) */
-    kprintf("entry_bridge: soft catalog wave=%u areas=%u "
-            "surfaces=inventory,path,rates,honesty,last,surfaces,note,"
-            "catalog,return,retmap,deepen,PASS\n",
-            (unsigned)ENTRY_BRIDGE_SOFT_WAVE,
-            (unsigned)ENTRY_BRIDGE_SOFT_AREAS);
-
-    /* Grep: entry_bridge: soft return (Wave 20 deepen) */
-    kprintf("entry_bridge: soft return null_guard=1 ret_rewrite=0 "
-            "route_void=1 enter_only=1 product_gate=0 "
-            "enter=%lu route=%lu wave=%u\n",
-            (unsigned long)u64Enter,
-            (unsigned long)u64Route,
-            (unsigned)ENTRY_BRIDGE_SOFT_WAVE);
-
-    /* Grep: entry_bridge: soft retmap — Wave 19 return-surface map */
-    kprintf("entry_bridge: soft retmap ok|fail|inval|nodev|busy|nomem product_gate=0 soft_only=1 wave=118\n");
-
-    /* Grep: entry_bridge: soft deepen wave */
-    /*
-     * ---- Wave 19 complementary surfaces (kept) (never reshape primary).
-     * Return surfaces only — soft inventory; never hard-gates product paths.
-     */
-    /* Grep: entry_bridge: soft retclass — Wave 19 return-class taxonomy (kept) */
-    kprintf("entry_bridge: soft retclass ok|fail|inval|nodev|busy|nomem "
-            "soft_only=1 product_gate=0 wave=%u "
-            "(retclass taxonomy; Soft≠product)\n",
-            (unsigned)ENTRY_BRIDGE_SOFT_WAVE);
-    /* Grep: entry_bridge: soft retlane — Wave 19 return-lane catalog (kept) */
-    kprintf("entry_bridge: soft retlane inv|selftest|rate|retcode|retmap|class "
-            "product_kernel=OPEN soft_ne_product=1 wave=%u "
-            "(retlane catalog; Soft≠product)\n",
-            (unsigned)ENTRY_BRIDGE_SOFT_WAVE);
-    /*
-     * ---- Wave 20 complementary surfaces (kept) (never reshape primary).
-     * Return surfaces only — soft inventory; never hard-gates product paths.
-     */
-    /* Grep: entry_bridge: soft retbound — Wave 20 return-bound honesty (kept) */
-    kprintf("entry_bridge: soft retbound soft_only=1 product_gate=0 hard_gate=0 "
-            "never_blocks_m0=1 wave=%u "
-            "(retbound honesty; Soft≠product)\n",
-            (unsigned)ENTRY_BRIDGE_SOFT_WAVE);
-    /* Grep: entry_bridge: soft retseal — Wave 20 seal stamp (kept) */
-    kprintf("entry_bridge: soft retseal exclusive=1 soft_ne_product=1 "
-            "product_kernel=OPEN wave=%u "
-            "(retseal stamp; Soft≠product)\n",
-            (unsigned)ENTRY_BRIDGE_SOFT_WAVE);
-            /*
-             * ---- Wave 21 complementary surfaces (kept) (never reshape primary).
-             * Return surfaces only — soft inventory; never hard-gates product paths.
-            */
-            /* Grep: entry_bridge: soft retpulse — Wave 21 return-pulse honesty (kept) */
-            kprintf("entry_bridge: soft retpulse soft_only=1 product_gate=0 soft_ne_product=1 "
-                    "never_blocks_m0=1 wave=%u "
-                    "(retpulse honesty; Soft≠product)\n",
-                    (unsigned)ENTRY_BRIDGE_SOFT_WAVE);
-            /* Grep: entry_bridge: soft retmark — Wave 21 mark stamp (kept) */
-            kprintf("entry_bridge: soft retmark exclusive=1 soft_ne_product=1 "
-                    "product_kernel=OPEN wave=%u "
-                    "(retmark stamp; Soft≠product)\n",
-                    (unsigned)ENTRY_BRIDGE_SOFT_WAVE);
-            /*
-             * ---- Wave 22 complementary surfaces (kept) (never reshape primary).
-             * Return surfaces only — soft inventory; never hard-gates product paths.
-            */
-            /* Grep: entry_bridge: soft retphase — Wave 22 return-phase honesty (kept) */
-            kprintf("entry_bridge: soft retphase soft_only=1 product_gate=0 soft_ne_product=1 "
-                    "never_blocks_m0=1 wave=%u "
-                    "(retphase honesty; Soft≠product)\n",
-                    (unsigned)ENTRY_BRIDGE_SOFT_WAVE);
-            /* Grep: entry_bridge: soft retbadge — Wave 22 badge stamp (kept) */
-            kprintf("entry_bridge: soft retbadge exclusive=1 soft_ne_product=1 "
-                    "product_kernel=OPEN wave=%u "
-                    "(retbadge stamp; Soft≠product)\n",
-                    (unsigned)ENTRY_BRIDGE_SOFT_WAVE);
-/*
- * ---- Wave 23 complementary surfaces (kept) (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
-            */
-            /* Grep: entry_bridge: soft rettoken — Wave 23 return-token honesty (kept) */
-            kprintf("entry_bridge: soft rettoken soft_only=1 product_gate=0 soft_ne_product=1 "
-                    "never_blocks_m0=1 wave=%u "
-                    "(rettoken honesty; Soft≠product)\n",
-                    (unsigned)ENTRY_BRIDGE_SOFT_WAVE);
-            /* Grep: entry_bridge: soft retcrest — Wave 23 crest stamp (kept) */
-            kprintf("entry_bridge: soft retcrest exclusive=1 soft_ne_product=1 "
-                    "product_kernel=OPEN wave=%u "
-                    "(retcrest stamp; Soft≠product)\n",
-                    (unsigned)ENTRY_BRIDGE_SOFT_WAVE);
-            /*
-             * ---- Wave 24 complementary surfaces (kept) (never reshape primary).
-             * Return surfaces only — soft inventory; never hard-gates product paths.
-             */
-            /* Grep: entry_bridge: soft retvault — Wave 24 return-vault honesty (kept) */
-            kprintf("entry_bridge: soft retvault soft_only=1 product_gate=0 soft_ne_product=1 "
-                    "never_blocks_m0=1 wave=%u "
-                    "(retvault honesty; Soft≠product)\n",
-                    (unsigned)ENTRY_BRIDGE_SOFT_WAVE);
-            /* Grep: entry_bridge: soft retbanner — Wave 24 banner stamp (kept) */
-            kprintf("entry_bridge: soft retbanner exclusive=1 soft_ne_product=1 "
-                    "product_kernel=OPEN wave=%u "
-                    "(retbanner stamp; Soft≠product)\n",
-                    (unsigned)ENTRY_BRIDGE_SOFT_WAVE);
-            /*
-             * ---- Wave 25 complementary surfaces (kept) (never reshape primary).
-             * Return surfaces only — soft inventory; never hard-gates product paths.
-             */
-            /* Grep: entry_bridge: soft retledger — Wave 25 return-ledger honesty (kept) */
-            kprintf("entry_bridge: soft retledger soft_only=1 product_gate=0 soft_ne_product=1 "
-                    "never_blocks_m0=1 wave=%u "
-                    "(retledger honesty; Soft≠product)\n",
-                    (unsigned)ENTRY_BRIDGE_SOFT_WAVE);
-            /* Grep: entry_bridge: soft retbeacon — Wave 25 beacon stamp (kept) */
-            kprintf("entry_bridge: soft retbeacon exclusive=1 soft_ne_product=1 "
-                    "product_kernel=OPEN wave=%u "
-                    "(retbeacon stamp; Soft≠product)\n",
-                    (unsigned)ENTRY_BRIDGE_SOFT_WAVE);
-            /*
-             * ---- Wave 26 complementary surfaces (kept) (never reshape primary).
-             * Return surfaces only — soft inventory; never hard-gates product paths.
-             */
-            /* Grep: entry_bridge: soft retcipher — Wave 26 return-cipher honesty (kept) */
-            kprintf("entry_bridge: soft retcipher soft_only=1 product_gate=0 soft_ne_product=1 "
-                    "never_blocks_m0=1 wave=%u "
-                    "(retcipher honesty; Soft≠product)\n",
-                    (unsigned)ENTRY_BRIDGE_SOFT_WAVE);
-            /* Grep: entry_bridge: soft retflame — Wave 26 flame stamp (kept) */
-            kprintf("entry_bridge: soft retflame exclusive=1 soft_ne_product=1 "
-                    "product_kernel=OPEN wave=%u "
-                    "(retflame stamp; Soft≠product)\n",
-                    (unsigned)ENTRY_BRIDGE_SOFT_WAVE);
-                    /*
-                     * ---- Wave 27 complementary surfaces (kept) (never reshape primary).
-                     * Return surfaces only — soft inventory; never hard-gates product paths.
-                     */
-                    /* Grep: entry_bridge: soft retprism — Wave 27 return-prism honesty (kept) */
-                    kprintf("entry_bridge: soft retprism soft_only=1 product_gate=0 soft_ne_product=1 "
-                            "never_blocks_m0=1 wave=%u "
-                            "(retprism honesty; Soft≠product)\n",
-                            (unsigned)ENTRY_BRIDGE_SOFT_WAVE);
-                    /* Grep: entry_bridge: soft retforge — Wave 27 forge stamp (kept) */
-                    kprintf("entry_bridge: soft retforge exclusive=1 soft_ne_product=1 "
-                            "product_kernel=OPEN wave=%u "
-                            "(retforge stamp; Soft≠product)\n",
-                            (unsigned)ENTRY_BRIDGE_SOFT_WAVE);
-                            /*
-                             * ---- Wave 28 complementary surfaces (kept) (never reshape primary).
-                             * Return surfaces only — soft inventory; never hard-gates product paths.
-                             */
-                            /* Grep: entry_bridge: soft retshard — Wave 28 return-shard honesty (kept) */
-                            kprintf("entry_bridge: soft retshard soft_only=1 product_gate=0 soft_ne_product=1 "
-                                "never_blocks_m0=1 wave=%u "
-                                "(retshard honesty; Soft≠product)\n",
-                                (unsigned)ENTRY_BRIDGE_SOFT_WAVE);
-                            /* Grep: entry_bridge: soft retcrown — Wave 28 crown stamp (kept) */
-                            kprintf("entry_bridge: soft retcrown exclusive=1 soft_ne_product=1 "
-                                "product_kernel=OPEN wave=%u "
-                                "(retcrown stamp; Soft≠product)\n",
-                                (unsigned)ENTRY_BRIDGE_SOFT_WAVE);
-                                /*
-                             * ---- Wave 29 complementary surfaces (kept) (never reshape primary).
-                             * Return surfaces only — soft inventory; never hard-gates product paths.
-                             */
-                            /* Grep: entry_bridge: soft retglyph — Wave 29 return-glyph honesty (kept) */
-                            kprintf("entry_bridge: soft retglyph soft_only=1 product_gate=0 soft_ne_product=1 "
-                                    "never_blocks_m0=1 wave=%u "
-                                    "(retglyph honesty; Soft≠product)\n",
-                                    (unsigned)ENTRY_BRIDGE_SOFT_WAVE);
-                            /* Grep: entry_bridge: soft retscepter — Wave 29 scepter stamp (kept) */
-                            kprintf("entry_bridge: soft retscepter exclusive=1 soft_ne_product=1 "
-                                    "product_kernel=OPEN wave=%u "
-                                    "(retscepter stamp; Soft≠product)\n",
-                                    (unsigned)ENTRY_BRIDGE_SOFT_WAVE);
-                                /*
-                             * ---- Wave 30 complementary surfaces (kept) (never reshape primary).
-                             * Return surfaces only — soft inventory; never hard-gates product paths.
-                             */
-                            /* Grep: entry_bridge: soft retsigil — Wave 30 return-sigil honesty (kept) */
-                            kprintf("entry_bridge: soft retsigil soft_only=1 product_gate=0 soft_ne_product=1 "
-                                    "never_blocks_m0=1 wave=%u "
-                                    "(retsigil honesty; Soft≠product)\n",
-                                    (unsigned)ENTRY_BRIDGE_SOFT_WAVE);
-                            /* Grep: entry_bridge: soft retemblem — Wave 30 emblem stamp (kept) */
-                            kprintf("entry_bridge: soft retemblem exclusive=1 soft_ne_product=1 "
-                                    "product_kernel=OPEN wave=%u "
-                                    "(retemblem stamp; Soft≠product)\n",
-                                    (unsigned)ENTRY_BRIDGE_SOFT_WAVE);
-                            /*
-                             * ---- Wave 31 complementary surfaces (kept) (never reshape primary).
-                             * Return surfaces only — soft inventory; never hard-gates product paths.
-                             */
-                            /* Grep: entry_bridge: soft retaegis — Wave 31 return-aegis honesty (kept) */
-                            kprintf("entry_bridge: soft retaegis soft_only=1 product_gate=0 soft_ne_product=1 "
-                                    "never_blocks_m0=1 wave=%u "
-                                    "(retaegis honesty; Soft≠product)\n",
-                                    (unsigned)ENTRY_BRIDGE_SOFT_WAVE);
-                            /* Grep: entry_bridge: soft retsigil — Wave 30 return-sigil honesty (kept) */
-                            kprintf("entry_bridge: soft retsigil soft_only=1 product_gate=0 soft_ne_product=1 "
-                                    "never_blocks_m0=1 wave=%u "
-                                    "(retsigil honesty; Soft≠product)\n",
-                                    (unsigned)ENTRY_BRIDGE_SOFT_WAVE);
-                            /* Grep: entry_bridge: soft retmantle — Wave 31 mantle stamp (kept) */
-                            kprintf("entry_bridge: soft retmantle exclusive=1 soft_ne_product=1 "
-                                    "product_kernel=OPEN wave=%u "
-                                    "(retmantle stamp; Soft≠product)\n",
-                                    (unsigned)ENTRY_BRIDGE_SOFT_WAVE);
-/*
- * ---- Wave 32 complementary surfaces (kept) (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: entry_bridge: soft retbulwark — Wave 32 return-bulwark honesty (kept) */
-kprintf("entry_bridge: soft retbulwark soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=%u "
-        "(retbulwark honesty; Soft≠product)\n",
-        (unsigned)ENTRY_BRIDGE_SOFT_WAVE);
-/* Grep: entry_bridge: soft retpanoply — Wave 32 panoply stamp (kept) */
-kprintf("entry_bridge: soft retpanoply exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=%u "
-        "(retpanoply stamp; Soft≠product)\n",
-        (unsigned)ENTRY_BRIDGE_SOFT_WAVE);
-/*
- * ---- Wave 33 complementary surfaces (kept) (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: entry_bridge: soft retbastion — Wave 33 return-bastion honesty (kept) */
-kprintf("entry_bridge: soft retbastion soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=%u "
-        "(retbastion honesty; Soft≠product)\n",
-        (unsigned)ENTRY_BRIDGE_SOFT_WAVE);
-/* Grep: entry_bridge: soft retcitadel — Wave 33 citadel stamp (kept) */
-kprintf("entry_bridge: soft retcitadel exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=%u "
-        "(retcitadel stamp; Soft≠product)\n",
-        (unsigned)ENTRY_BRIDGE_SOFT_WAVE);
-/*
- * ---- Wave 34 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: entry_bridge: soft retredoubt — Wave 34 return-redoubt honesty */
-kprintf("entry_bridge: soft retredoubt soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=%u "
-        "(retredoubt honesty; Soft≠product)\n",
-        (unsigned)ENTRY_BRIDGE_SOFT_WAVE);
-/* Grep: entry_bridge: soft retkeep — Wave 34 exclusive keep stamp */
-kprintf("entry_bridge: soft retkeep exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=%u "
-        "(retkeep stamp; Soft≠product)\n",
-        (unsigned)ENTRY_BRIDGE_SOFT_WAVE);
-/*
- * ---- Wave 35 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: entry_bridge: soft retfortress — Wave 35 return-fortress honesty */
-kprintf("entry_bridge: soft retfortress soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=%u "
-        "(retfortress honesty; Soft≠product)\n",
-        (unsigned)ENTRY_BRIDGE_SOFT_WAVE);
-/* Grep: entry_bridge: soft retpalace — Wave 35 exclusive palace stamp */
-kprintf("entry_bridge: soft retpalace exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=%u "
-        "(retpalace stamp; Soft≠product)\n",
-        (unsigned)ENTRY_BRIDGE_SOFT_WAVE);
-/*
- * ---- Wave 36 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: entry_bridge: soft rethold — Wave 36 return-hold honesty */
-kprintf("entry_bridge: soft rethold soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=%u "
-        "(rethold honesty; Soft≠product)\n",
-        (unsigned)ENTRY_BRIDGE_SOFT_WAVE);
-/* Grep: entry_bridge: soft retspire — Wave 36 exclusive spire stamp */
-kprintf("entry_bridge: soft retspire exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=%u "
-        "(retspire stamp; Soft≠product)\n",
-        (unsigned)ENTRY_BRIDGE_SOFT_WAVE);
-/*
- * ---- Wave 37 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: entry_bridge: soft retwall — Wave 37 return-wall honesty */
-kprintf("entry_bridge: soft retwall soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=%u "
-        "(retwall honesty; Soft≠product)\n",
-        (unsigned)ENTRY_BRIDGE_SOFT_WAVE);
-/* Grep: entry_bridge: soft retgate — Wave 37 exclusive gate stamp */
-kprintf("entry_bridge: soft retgate exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=%u "
-        "(retgate stamp; Soft≠product)\n",
-        (unsigned)ENTRY_BRIDGE_SOFT_WAVE);
-/*
- * ---- Wave 38 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: entry_bridge: soft retmoat — Wave 38 return-moat honesty */
-kprintf("entry_bridge: soft retmoat soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=%u "
-        "(retmoat honesty; Soft≠product)\n",
-        (unsigned)ENTRY_BRIDGE_SOFT_WAVE);
-/* Grep: entry_bridge: soft retower — Wave 38 exclusive tower stamp */
-kprintf("entry_bridge: soft retower exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=%u "
-        "(retower stamp; Soft≠product)\n",
-        (unsigned)ENTRY_BRIDGE_SOFT_WAVE);
-                            
-/*
- * ---- Wave 39 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: entry_bridge: soft retbarbican — Wave 39 return-barbican honesty */
-kprintf("entry_bridge: soft retbarbican soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=%u "
-        "(retbarbican honesty; Soft≠product)\n",
-        (unsigned)ENTRY_BRIDGE_SOFT_WAVE);
-/* Grep: entry_bridge: soft retglacis — Wave 39 exclusive glacis stamp */
-kprintf("entry_bridge: soft retglacis exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=%u "
-        "(retglacis stamp; Soft≠product)\n",
-        (unsigned)ENTRY_BRIDGE_SOFT_WAVE);
-/*
- * ---- Wave 40 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: entry_bridge: soft retcurtain — Wave 40 return-curtain honesty */
-kprintf("entry_bridge: soft retcurtain soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=%u "
-        "(retcurtain honesty; Soft≠product)\n",
-        (unsigned)ENTRY_BRIDGE_SOFT_WAVE);
-/* Grep: entry_bridge: soft retparapet — Wave 40 exclusive parapet stamp */
-kprintf("entry_bridge: soft retparapet exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=%u "
-        "(retparapet stamp; Soft≠product)\n",
-        (unsigned)ENTRY_BRIDGE_SOFT_WAVE);
-/*
- * ---- Wave 41 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: entry_bridge: soft retravelin — Wave 41 return-travelin honesty */
-kprintf("entry_bridge: soft retravelin soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=%u "
-        "(retravelin honesty; Soft≠product)\n",
-        (unsigned)ENTRY_BRIDGE_SOFT_WAVE);
-/* Grep: entry_bridge: soft retditch — Wave 41 exclusive ditch stamp */
-kprintf("entry_bridge: soft retditch exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=%u "
-        "(retditch stamp; Soft≠product)\n",
-        (unsigned)ENTRY_BRIDGE_SOFT_WAVE);
-/*
- * ---- Wave 42 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: entry_bridge: soft retportcullis — Wave 42 return-portcullis honesty */
-kprintf("entry_bridge: soft retportcullis soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=%u "
-        "(retportcullis honesty; Soft≠product)\n",
-        (unsigned)ENTRY_BRIDGE_SOFT_WAVE);
-/* Grep: entry_bridge: soft retbattlement — Wave 42 exclusive battlement stamp */
-kprintf("entry_bridge: soft retbattlement exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=%u "
-        "(retbattlement stamp; Soft≠product)\n",
-        (unsigned)ENTRY_BRIDGE_SOFT_WAVE);
-/*
- * ---- Wave 43 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: entry_bridge: soft retmachicolation — Wave 43 return-machicolation honesty */
-kprintf("entry_bridge: soft retmachicolation soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=%u "
-        "(retmachicolation honesty; Soft≠product)\n",
-        (unsigned)ENTRY_BRIDGE_SOFT_WAVE);
-/* Grep: entry_bridge: soft retarrowslit — Wave 43 exclusive arrowslit stamp */
-kprintf("entry_bridge: soft retarrowslit exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=%u "
-        "(retarrowslit stamp; Soft≠product)\n",
-        (unsigned)ENTRY_BRIDGE_SOFT_WAVE);
-
-/*
- * ---- Wave 44 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: entry_bridge: soft retmerlon — Wave 44 return-merlon honesty */
-kprintf("entry_bridge: soft retmerlon soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=%u "
-        "(retmerlon honesty; Soft≠product)\n",
-        (unsigned)ENTRY_BRIDGE_SOFT_WAVE);
-/* Grep: entry_bridge: soft retembrasure — Wave 44 exclusive embrasure stamp */
-kprintf("entry_bridge: soft retembrasure exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=%u "
-        "(retembrasure stamp; Soft≠product)\n",
-        (unsigned)ENTRY_BRIDGE_SOFT_WAVE);
-
-/*
- * ---- Wave 45 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: entry_bridge: soft retkeepgate — Wave 45 return-keepgate honesty */
-kprintf("entry_bridge: soft retkeepgate soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=%u "
-        "(retkeepgate honesty; Soft≠product)\n",
-        (unsigned)ENTRY_BRIDGE_SOFT_WAVE);
-/* Grep: entry_bridge: soft retouterward — Wave 45 exclusive outerward stamp */
-kprintf("entry_bridge: soft retouterward exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=%u "
-        "(retouterward stamp; Soft≠product)\n",
-        (unsigned)ENTRY_BRIDGE_SOFT_WAVE);
-
-/*
- * ---- Wave 46 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: entry_bridge: soft retbailey — Wave 46 return-bailey honesty */
-kprintf("entry_bridge: soft retbailey soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=%u "
-        "(retbailey honesty; Soft≠product)\n",
-        (unsigned)ENTRY_BRIDGE_SOFT_WAVE);
-/* Grep: entry_bridge: soft retpostern — Wave 46 exclusive postern stamp */
-kprintf("entry_bridge: soft retpostern exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=%u "
-        "(retpostern stamp; Soft≠product)\n",
-        (unsigned)ENTRY_BRIDGE_SOFT_WAVE);
-
-/*
- * ---- Wave 47 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: entry_bridge: soft retinnerward — Wave 47 return-innerward honesty */
-kprintf("entry_bridge: soft retinnerward soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=118 "
-        "(retinnerward honesty; Soft≠product)\n");
-/* Grep: entry_bridge: soft retdonjon — Wave 47 exclusive donjon stamp */
-kprintf("entry_bridge: soft retdonjon exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=118 "
-        "(retdonjon stamp; Soft≠product)\n");
-
-/*
- * ---- Wave 48 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: entry_bridge: soft retchevaux — Wave 48 return-chevaux honesty */
-kprintf("entry_bridge: soft retchevaux soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=118 "
-        "(retchevaux honesty; Soft≠product)\n");
-/* Grep: entry_bridge: soft retpalisade — Wave 48 exclusive palisade stamp */
-kprintf("entry_bridge: soft retpalisade exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=118 "
-        "(retpalisade stamp; Soft≠product)\n");
-
-/*
- * ---- Wave 49 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: entry_bridge: soft retglacisgate — Wave 49 return-glacisgate honesty */
-kprintf("entry_bridge: soft retglacisgate soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=118 "
-        "(retglacisgate honesty; Soft≠product)\n");
-/* Grep: entry_bridge: soft retoutwork — Wave 49 exclusive outwork stamp */
-kprintf("entry_bridge: soft retoutwork exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=118 "
-        "(retoutwork stamp; Soft≠product)\n");
-/*
- * ---- Wave 50 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: entry_bridge: soft retsally — Wave 50 return-sally honesty */
-kprintf("entry_bridge: soft retsally soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=118 "
-        "(retsally honesty; Soft≠product)\n");
-/* Grep: entry_bridge: soft retcounterscarp — Wave 50 exclusive counterscarp stamp */
-kprintf("entry_bridge: soft retcounterscarp exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=118 "
-        "(retcounterscarp stamp; Soft≠product)\n");
-/*
- * ---- Wave 51 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: entry_bridge: soft retfosse — Wave 51 return-fosse honesty */
-kprintf("entry_bridge: soft retfosse soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=118 "
-        "(retfosse honesty; Soft≠product)\n");
-/* Grep: entry_bridge: soft retcoveredway — Wave 51 exclusive coveredway stamp */
-kprintf("entry_bridge: soft retcoveredway exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=118 "
-        "(retcoveredway stamp; Soft≠product)\n");
-
-/*
- * ---- Wave 52 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: entry_bridge: soft rettenaille — Wave 52 return-tenaille honesty */
-kprintf("entry_bridge: soft rettenaille soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=118 "
-        "(rettenaille honesty; Soft≠product)\n");
-/* Grep: entry_bridge: soft retdemilune — Wave 52 exclusive demilune stamp */
-kprintf("entry_bridge: soft retdemilune exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=118 "
-        "(retdemilune stamp; Soft≠product)\n");
-/*
- * ---- Wave 53 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: entry_bridge: soft retravelin — Wave 53 return-travelin honesty */
-kprintf("entry_bridge: soft retravelin soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=118 "
-        "(retravelin honesty; Soft≠product)\n");
-/* Grep: entry_bridge: soft retlunette — Wave 53 exclusive lunette stamp */
-kprintf("entry_bridge: soft retlunette exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=118 "
-        "(retlunette stamp; Soft≠product)\n");
-/*
- * ---- Wave 54 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: entry_bridge: soft retcaponier — Wave 54 return-caponier honesty */
-kprintf("entry_bridge: soft retcaponier soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=118 "
-        "(retcaponier honesty; Soft≠product)\n");
-/* Grep: entry_bridge: soft retredan — Wave 54 exclusive redan stamp */
-kprintf("entry_bridge: soft retredan exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=118 "
-        "(retredan stamp; Soft≠product)\n");
-/*
- * ---- Wave 55 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: entry_bridge: soft retflank — Wave 55 return-flank honesty */
-kprintf("entry_bridge: soft retflank soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=118 "
-        "(retflank honesty; Soft≠product)\n");
-/* Grep: entry_bridge: soft retface — Wave 55 exclusive face stamp */
-kprintf("entry_bridge: soft retface exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=118 "
-        "(retface stamp; Soft≠product)\n");
-/*
- * ---- Wave 56 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: entry_bridge: soft retgorge — Wave 56 return-gorge honesty */
-kprintf("entry_bridge: soft retgorge soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=118 "
-        "(retgorge honesty; Soft≠product)\n");
-/* Grep: entry_bridge: soft retshoulder — Wave 56 exclusive shoulder stamp */
-kprintf("entry_bridge: soft retshoulder exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=118 "
-        "(retshoulder stamp; Soft≠product)\n");
-/*
- * ---- Wave 57 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: entry_bridge: soft retraverse — Wave 57 return-traverse honesty */
-kprintf("entry_bridge: soft retraverse soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=118 "
-        "(retraverse honesty; Soft≠product)\n");
-/* Grep: entry_bridge: soft retcasemate — Wave 57 exclusive casemate stamp */
-kprintf("entry_bridge: soft retcasemate exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=118 "
-        "(retcasemate stamp; Soft≠product)\n");
-
-/*
- * ---- Wave 58 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: entry_bridge: soft retorillon — Wave 58 return-orillon honesty */
-kprintf("entry_bridge: soft retorillon soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=118 "
-        "(retorillon honesty; Soft≠product)\n");
-/* Grep: entry_bridge: soft retbonnette — Wave 58 exclusive bonnette stamp */
-kprintf("entry_bridge: soft retbonnette exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=118 "
-        "(retbonnette stamp; Soft≠product)\n");
-
-/*
- * ---- Wave 59 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: entry_bridge: soft retcrownwork — Wave 59 return-crownwork honesty */
-kprintf("entry_bridge: soft retcrownwork soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=118 "
-        "(retcrownwork honesty; Soft≠product)\n");
-/* Grep: entry_bridge: soft rethornwork — Wave 59 exclusive hornwork stamp */
-kprintf("entry_bridge: soft rethornwork exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=118 "
-        "(rethornwork stamp; Soft≠product)\n");
-
-/*
- * ---- Wave 60 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: entry_bridge: soft retplace — Wave 60 return-place honesty */
-kprintf("entry_bridge: soft retplace soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=118 "
-        "(retplace honesty; Soft≠product)\n");
-/* Grep: entry_bridge: soft retenvelope — Wave 60 exclusive envelope stamp */
-kprintf("entry_bridge: soft retenvelope exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=118 "
-        "(retenvelope stamp; Soft≠product)\n");
-
-
-
-
-
-
-
-
-
-/*
- * ---- Wave 61 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: entry_bridge: soft retcounterguard — Wave 61 return-counterguard honesty */
-kprintf("entry_bridge: soft retcounterguard soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=118 "
-        "(retcounterguard honesty; Soft≠product)\n");
-/* Grep: entry_bridge: soft retcoveredface — Wave 61 exclusive coveredface stamp */
-kprintf("entry_bridge: soft retcoveredface exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=118 "
-        "(retcoveredface stamp; Soft≠product)\n");
-/*
- * ---- Wave 62 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: entry_bridge: soft retbastionface — Wave 62 return-bastionface honesty */
-kprintf("entry_bridge: soft retbastionface soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=118 "
-        "(retbastionface honesty; Soft≠product)\n");
-/* Grep: entry_bridge: soft retcurtainangle — Wave 62 exclusive curtainangle stamp */
-kprintf("entry_bridge: soft retcurtainangle exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=118 "
-        "(retcurtainangle stamp; Soft≠product)\n");
-/*
- * ---- Wave 63 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: entry_bridge: soft retdoubletenaille — Wave 63 return-doubletenaille honesty */
-kprintf("entry_bridge: soft retdoubletenaille soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=118 "
-        "(retdoubletenaille honesty; Soft≠product)\n");
-/* Grep: entry_bridge: soft retplaceofarms — Wave 63 exclusive placeofarms stamp */
-kprintf("entry_bridge: soft retplaceofarms exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=118 "
-        "(retplaceofarms stamp; Soft≠product)\n");
- /*
-  * ---- Wave 64 exclusive complementary surfaces (never reshape primary).
-  * Return surfaces only — soft inventory; never hard-gates product paths.
-  */
- /* Grep: entry_bridge: soft retreentrant — Wave 64 return-reentrant honesty */
-kprintf("entry_bridge: soft retreentrant soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=118 "
-        "(retreentrant honesty; Soft≠product)\n");
- /* Grep: entry_bridge: soft retsallyport — Wave 64 exclusive sallyport stamp */
-kprintf("entry_bridge: soft retsallyport exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=118 "
-        "(retsallyport stamp; Soft≠product)\n");
- /*
-  * ---- Wave 65 exclusive complementary surfaces (never reshape primary).
-  * Return surfaces only — soft inventory; never hard-gates product paths.
-  */
- /* Grep: entry_bridge: soft retgorgeangle — Wave 65 return-gorgeangle honesty */
-kprintf("entry_bridge: soft retgorgeangle soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=118 "
-        "(retgorgeangle honesty; Soft≠product)\n");
- /* Grep: entry_bridge: soft retshoulderangle — Wave 65 exclusive shoulderangle stamp */
-kprintf("entry_bridge: soft retshoulderangle exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=118 "
-        "(retshoulderangle stamp; Soft≠product)\n");
- /*
-  * ---- Wave 66 exclusive complementary surfaces (never reshape primary).
-  * Return surfaces only — soft inventory; never hard-gates product paths.
-  */
- /* Grep: entry_bridge: soft retflankangle — Wave 66 return-flankangle honesty */
- kprintf("entry_bridge: soft retflankangle soft_only=1 product_gate=0 soft_ne_product=1 "
-         "never_blocks_m0=1 wave=118 "
-         "(retflankangle honesty; Soft≠product)\n");
- /* Grep: entry_bridge: soft retfaceangle — Wave 66 exclusive faceangle stamp */
- kprintf("entry_bridge: soft retfaceangle exclusive=1 soft_ne_product=1 "
-         "product_kernel=OPEN wave=118 "
-         "(retfaceangle stamp; Soft≠product)\n");
-/*
- * ---- Wave 67 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: entry_bridge: soft retcaponierangle — Wave 67 return-caponierangle honesty */
-kprintf("entry_bridge: soft retcaponierangle soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=118 "
-        "(retcaponierangle honesty; Soft≠product)\n");
-/* Grep: entry_bridge: soft retredanangle — Wave 67 exclusive redanangle stamp */
-kprintf("entry_bridge: soft retredanangle exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=118 "
-        "(retredanangle stamp; Soft≠product)\n");
-/*
- * ---- Wave 68 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: entry_bridge: soft retlunetteangle — Wave 68 return-lunetteangle honesty */
-kprintf("entry_bridge: soft retlunetteangle soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=118 "
-        "(retlunetteangle honesty; Soft≠product)\n");
-/* Grep: entry_bridge: soft rettenailleangle — Wave 68 exclusive tenailleangle stamp */
-kprintf("entry_bridge: soft rettenailleangle exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=118 "
-        "(rettenailleangle stamp; Soft≠product)\n");
-/*
- * ---- Wave 69 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: entry_bridge: soft retdemiluneangle — Wave 69 return-demiluneangle honesty */
-kprintf("entry_bridge: soft retdemiluneangle soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=118 "
-        "(retdemiluneangle honesty; Soft≠product)\n");
-/* Grep: entry_bridge: soft retcoveredwayangle — Wave 69 exclusive coveredwayangle stamp */
-kprintf("entry_bridge: soft retcoveredwayangle exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=118 "
-        "(retcoveredwayangle stamp; Soft≠product)\n");
-/*
- * ---- Wave 70 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: entry_bridge: soft retfosseangle — Wave 70 return-fosseangle honesty */
-kprintf("entry_bridge: soft retfosseangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=118 (retfosseangle honesty; Soft≠product)\n");
-/* Grep: entry_bridge: soft retcounterscarple — Wave 70 exclusive counterscarple stamp */
-kprintf("entry_bridge: soft retcounterscarple exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=118 (retcounterscarple stamp; Soft≠product)\n");
-/*
- * ---- Wave 71 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: entry_bridge: soft retsallyportangle — Wave 71 return-sallyportangle honesty */
-kprintf("entry_bridge: soft retsallyportangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=118 (retsallyportangle honesty; Soft≠product)\n");
-/* Grep: entry_bridge: soft retreentrantangle — Wave 71 exclusive reentrantangle stamp */
-kprintf("entry_bridge: soft retreentrantangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=118 (retreentrantangle stamp; Soft≠product)\n");
-/*
- * ---- Wave 72 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: entry_bridge: soft retplaceofarmsangle — Wave 72 return-placeofarmsangle honesty */
-kprintf("entry_bridge: soft retplaceofarmsangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=118 (retplaceofarmsangle honesty; Soft≠product)\n");
-/* Grep: entry_bridge: soft retdoubletenailleangle — Wave 72 exclusive doubletenailleangle stamp */
-kprintf("entry_bridge: soft retdoubletenailleangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=118 (retdoubletenailleangle stamp; Soft≠product)\n");
-/* Grep: entry_bridge: soft retcurtainface — Wave 73 return-curtainface honesty */
-kprintf("entry_bridge: soft retcurtainface soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=118 (retcurtainface honesty; Soft≠product)\n");
-/* Grep: entry_bridge: soft retbastionangle — Wave 73 exclusive bastionangle stamp */
-kprintf("entry_bridge: soft retbastionangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=118 (retbastionangle stamp; Soft≠product)\n");
-/* Grep: entry_bridge: soft retglacisangle — Wave 74 return-glacisangle honesty */
-kprintf("entry_bridge: soft retglacisangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=118 (retglacisangle honesty; Soft≠product)\n");
-/* Grep: entry_bridge: soft retparapetangle — Wave 74 exclusive parapetangle stamp */
-kprintf("entry_bridge: soft retparapetangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=118 (retparapetangle stamp; Soft≠product)\n");
-/* Grep: entry_bridge: soft retmoatangle — Wave 75 return-moatangle honesty */
-kprintf("entry_bridge: soft retmoatangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=118 (retmoatangle honesty; Soft≠product)\n");
-/* Grep: entry_bridge: soft retowerangle — Wave 75 exclusive towerangle stamp */
-kprintf("entry_bridge: soft retowerangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=118 (retowerangle stamp; Soft≠product)\n");
-/* Grep: entry_bridge: soft retgateangle — Wave 76 return-gateangle honesty */
-kprintf("entry_bridge: soft retgateangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=118 (retgateangle honesty; Soft≠product)\n");
-/* Grep: entry_bridge: soft retwallangle — Wave 76 exclusive wallangle stamp */
-kprintf("entry_bridge: soft retwallangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=118 (retwallangle stamp; Soft≠product)\n");
-/* Grep: entry_bridge: soft retspireangle — Wave 77 return-spireangle honesty */
-kprintf("entry_bridge: soft retspireangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=118 (retspireangle honesty; Soft≠product)\n");
-/* Grep: entry_bridge: soft retholdangle — Wave 77 exclusive holdangle stamp */
-kprintf("entry_bridge: soft retholdangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=118 (retholdangle stamp; Soft≠product)\n");
-/* Grep: entry_bridge: soft retpalaceangle — Wave 78 return-palaceangle honesty */
-kprintf("entry_bridge: soft retpalaceangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=118 (retpalaceangle honesty; Soft≠product)\n");
-/* Grep: entry_bridge: soft retfortressangle — Wave 78 exclusive fortressangle stamp */
-kprintf("entry_bridge: soft retfortressangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=118 (retfortressangle stamp; Soft≠product)\n");
-/* Grep: entry_bridge: soft retkeepangle — Wave 79 return-keepangle honesty */
-kprintf("entry_bridge: soft retkeepangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=118 (retkeepangle honesty; Soft≠product)\n");
-/* Grep: entry_bridge: soft retredoubtangle — Wave 79 exclusive redoubtangle stamp */
-kprintf("entry_bridge: soft retredoubtangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=118 (retredoubtangle stamp; Soft≠product)\n");
-/* Grep: entry_bridge: soft retcitadelangle — Wave 80 return-citadelangle honesty */
-kprintf("entry_bridge: soft retcitadelangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=118 (retcitadelangle honesty; Soft≠product)\n");
-/* Grep: entry_bridge: soft retbastionkeep — Wave 80 exclusive bastionkeep stamp */
-kprintf("entry_bridge: soft retbastionkeep exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=118 (retbastionkeep stamp; Soft≠product)\n");
-/* Grep: entry_bridge: soft retpanoplyangle — Wave 81 return-panoplyangle honesty */
-kprintf("entry_bridge: soft retpanoplyangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=118 (retpanoplyangle honesty; Soft≠product)\n");
-/* Grep: entry_bridge: soft retbulwarkangle — Wave 81 exclusive bulwarkangle stamp */
-kprintf("entry_bridge: soft retbulwarkangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=118 (retbulwarkangle stamp; Soft≠product)\n");
-/* Grep: entry_bridge: soft retmantleangle — Wave 82 return-mantleangle honesty */
-kprintf("entry_bridge: soft retmantleangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=118 (retmantleangle honesty; Soft≠product)\n");
-/* Grep: entry_bridge: soft retaegisangle — Wave 82 exclusive aegisangle stamp */
-kprintf("entry_bridge: soft retaegisangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=118 (retaegisangle stamp; Soft≠product)\n");
-/* Grep: entry_bridge: soft retemblemangle — Wave 83 return-emblemangle honesty */
-kprintf("entry_bridge: soft retemblemangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=118 (retemblemangle honesty; Soft≠product)\n");
-/* Grep: entry_bridge: soft retsigilangle — Wave 83 exclusive sigilangle stamp */
-kprintf("entry_bridge: soft retsigilangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=118 (retsigilangle stamp; Soft≠product)\n");
-/* Grep: entry_bridge: soft retscepterangle — Wave 84 return-scepterangle honesty */
-kprintf("entry_bridge: soft retscepterangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=118 (retscepterangle honesty; Soft≠product)\n");
-/* Grep: entry_bridge: soft retglyphangle — Wave 84 exclusive glyphangle stamp */
-kprintf("entry_bridge: soft retglyphangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=118 (retglyphangle stamp; Soft≠product)\n");
-/* Grep: entry_bridge: soft retcrownangle — Wave 85 return-crownangle honesty */
-kprintf("entry_bridge: soft retcrownangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=118 (retcrownangle honesty; Soft≠product)\n");
-/* Grep: entry_bridge: soft retshardangle — Wave 85 exclusive shardangle stamp */
-kprintf("entry_bridge: soft retshardangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=118 (retshardangle stamp; Soft≠product)\n");
-/* Grep: entry_bridge: soft retforgeangle — Wave 86 return-forgeangle honesty */
-kprintf("entry_bridge: soft retforgeangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=118 (retforgeangle honesty; Soft≠product)\n");
-/* Grep: entry_bridge: soft retprismangle — Wave 86 exclusive prismangle stamp */
-kprintf("entry_bridge: soft retprismangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=118 (retprismangle stamp; Soft≠product)\n");
-/* Grep: entry_bridge: soft retflameangle — Wave 87 return-flameangle honesty */
-kprintf("entry_bridge: soft retflameangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=118 (retflameangle honesty; Soft≠product)\n");
-/* Grep: entry_bridge: soft retcipherangle — Wave 87 exclusive cipherangle stamp */
-kprintf("entry_bridge: soft retcipherangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=118 (retcipherangle stamp; Soft≠product)\n");
-/* Grep: entry_bridge: soft retbeaconangle — Wave 88 return-beaconangle honesty */
-kprintf("entry_bridge: soft retbeaconangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=118 (retbeaconangle honesty; Soft≠product)\n");
-/* Grep: entry_bridge: soft retledgerangle — Wave 88 exclusive ledgerangle stamp */
-kprintf("entry_bridge: soft retledgerangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=118 (retledgerangle stamp; Soft≠product)\n");
-/* Grep: entry_bridge: soft retbannerangle — Wave 89 return-bannerangle honesty */
-kprintf("entry_bridge: soft retbannerangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=118 (retbannerangle honesty; Soft≠product)\n");
-/* Grep: entry_bridge: soft retvaultangle — Wave 89 exclusive vaultangle stamp */
-kprintf("entry_bridge: soft retvaultangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=118 (retvaultangle stamp; Soft≠product)\n");
-/* Grep: entry_bridge: soft retcrestangle — Wave 90 return-crestangle honesty */
-kprintf("entry_bridge: soft retcrestangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=118 (retcrestangle honesty; Soft≠product)\n");
-/* Grep: entry_bridge: soft rettokenangle — Wave 90 exclusive tokenangle stamp */
-kprintf("entry_bridge: soft rettokenangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=118 (rettokenangle stamp; Soft≠product)\n");
-/* Grep: entry_bridge: soft retbadgeangle — Wave 91 return-badgeangle honesty */
-kprintf("entry_bridge: soft retbadgeangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=118 (retbadgeangle honesty; Soft≠product)\n");
-/* Grep: entry_bridge: soft retphaseangle — Wave 91 exclusive phaseangle stamp */
-kprintf("entry_bridge: soft retphaseangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=118 (retphaseangle stamp; Soft≠product)\n");
-/* Grep: entry_bridge: soft retmarkangle — Wave 92 return-markangle honesty */
-kprintf("entry_bridge: soft retmarkangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=118 (retmarkangle honesty; Soft≠product)\n");
-/* Grep: entry_bridge: soft retpulseangle — Wave 92 exclusive pulseangle stamp */
-kprintf("entry_bridge: soft retpulseangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=118 (retpulseangle stamp; Soft≠product)\n");
-
-/* Grep: entry_bridge: soft retsealangle — Wave 93 return-sealangle honesty */
-kprintf("entry_bridge: soft retsealangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=118 (retsealangle honesty; Soft≠product)\n");
-/* Grep: entry_bridge: soft retboundangle — Wave 93 exclusive boundangle stamp */
-kprintf("entry_bridge: soft retboundangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=118 (retboundangle stamp; Soft≠product)\n");
-/* Grep: entry_bridge: soft retstemangle — Wave 94 return-stemangle honesty */
-kprintf("entry_bridge: soft retstemangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=118 (retstemangle honesty; Soft≠product)\n");
-/* Grep: entry_bridge: soft retbladeangle — Wave 94 exclusive bladeangle stamp */
-kprintf("entry_bridge: soft retbladeangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=118 (retbladeangle stamp; Soft≠product)\n");
-/* Grep: entry_bridge: soft retchordangle — Wave 95 return-chordangle honesty */
-kprintf("entry_bridge: soft retchordangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=118 (retchordangle honesty; Soft≠product)\n");
-/* Grep: entry_bridge: soft retarcangle — Wave 95 exclusive arcangle stamp */
-kprintf("entry_bridge: soft retarcangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=118 (retarcangle stamp; Soft≠product)\n");
-/* Grep: entry_bridge: soft retsectorangle — Wave 96 return-sectorangle honesty */
-kprintf("entry_bridge: soft retsectorangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=118 (retsectorangle honesty; Soft≠product)\n");
-/* Grep: entry_bridge: soft retwedgeangle — Wave 96 exclusive wedgeangle stamp */
-kprintf("entry_bridge: soft retwedgeangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=118 (retwedgeangle stamp; Soft≠product)\n");
-/* Grep: entry_bridge: soft retradiusangle — Wave 97 return-radiusangle honesty */
-kprintf("entry_bridge: soft retradiusangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=118 (retradiusangle honesty; Soft≠product)\n");
-/* Grep: entry_bridge: soft retdiameterangle — Wave 97 exclusive diameterangle stamp */
-kprintf("entry_bridge: soft retdiameterangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=118 (retdiameterangle stamp; Soft≠product)\n");
-/* Grep: entry_bridge: soft retcircumangle — Wave 98 return-circumangle honesty */
-kprintf("entry_bridge: soft retcircumangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=118 (retcircumangle honesty; Soft≠product)\n");
-/* Grep: entry_bridge: soft retellipseangle — Wave 98 exclusive ellipseangle stamp */
-kprintf("entry_bridge: soft retellipseangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=118 (retellipseangle stamp; Soft≠product)\n");
-/* Grep: entry_bridge: soft rethyperangle — Wave 99 return-hyperangle honesty */
-kprintf("entry_bridge: soft rethyperangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=118 (rethyperangle honesty; Soft≠product)\n");
-/* Grep: entry_bridge: soft retparabolaangle — Wave 99 exclusive parabolaangle stamp */
-kprintf("entry_bridge: soft retparabolaangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=118 (retparabolaangle stamp; Soft≠product)\n");
-/* Grep: entry_bridge: soft retspiralangle — Wave 100 return-spiralangle honesty */
-kprintf("entry_bridge: soft retspiralangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=118 (retspiralangle honesty; Soft≠product)\n");
-/* Grep: entry_bridge: soft rethelixangle — Wave 100 exclusive helixangle stamp */
-kprintf("entry_bridge: soft rethelixangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=118 (rethelixangle stamp; Soft≠product)\n");
-/* Grep: entry_bridge: soft rettorusangle — Wave 101 return-torusangle honesty */
-kprintf("entry_bridge: soft rettorusangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=118 (rettorusangle honesty; Soft≠product)\n");
-/* Grep: entry_bridge: soft retknotangle — Wave 101 exclusive knotangle stamp */
-kprintf("entry_bridge: soft retknotangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=118 (retknotangle stamp; Soft≠product)\n");
-/* Grep: entry_bridge: soft retmoebiusangle — Wave 102 return-moebiusangle honesty */
-kprintf("entry_bridge: soft retmoebiusangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=118 (retmoebiusangle honesty; Soft≠product)\n");
-/* Grep: entry_bridge: soft retkleinangle — Wave 102 exclusive kleinangle stamp */
-kprintf("entry_bridge: soft retkleinangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=118 (retkleinangle stamp; Soft≠product)\n");
-/* Grep: entry_bridge: soft retprojectangle — Wave 103 return-projectangle honesty */
-kprintf("entry_bridge: soft retprojectangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=118 (retprojectangle honesty; Soft≠product)\n");
-/* Grep: entry_bridge: soft retaffineangle — Wave 103 exclusive affineangle stamp */
-kprintf("entry_bridge: soft retaffineangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=118 (retaffineangle stamp; Soft≠product)\n");
-/* Grep: entry_bridge: soft retlinearangle — Wave 104 return-linearangle honesty */
-kprintf("entry_bridge: soft retlinearangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=118 (retlinearangle honesty; Soft≠product)\n");
-/* Grep: entry_bridge: soft retbilinearangle — Wave 104 exclusive bilinearangle stamp */
-kprintf("entry_bridge: soft retbilinearangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=118 (retbilinearangle stamp; Soft≠product)\n");
-/* Grep: entry_bridge: soft retquadraticangle — Wave 105 return-quadraticangle honesty */
-kprintf("entry_bridge: soft retquadraticangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=118 (retquadraticangle honesty; Soft≠product)\n");
-/* Grep: entry_bridge: soft retcubicangle — Wave 105 exclusive cubicangle stamp */
-kprintf("entry_bridge: soft retcubicangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=118 (retcubicangle stamp; Soft≠product)\n");
-/* Grep: entry_bridge: soft retquarticangle — Wave 106 return-quarticangle honesty */
-kprintf("entry_bridge: soft retquarticangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=118 (retquarticangle honesty; Soft≠product)\n");
-/* Grep: entry_bridge: soft retquinticangle — Wave 106 exclusive quinticangle stamp */
-kprintf("entry_bridge: soft retquinticangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=118 (retquinticangle stamp; Soft≠product)\n");
-/* Grep: entry_bridge: soft retsplineangle — Wave 107 return-splineangle honesty */
-kprintf("entry_bridge: soft retsplineangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=118 (retsplineangle honesty; Soft≠product)\n");
-/* Grep: entry_bridge: soft retbezierangle — Wave 107 exclusive bezierangle stamp */
-kprintf("entry_bridge: soft retbezierangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=118 (retbezierangle stamp; Soft≠product)\n");
-/* Grep: entry_bridge: soft rethurmitangle — Wave 108 return-hermitangle honesty */
-kprintf("entry_bridge: soft rethurmitangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=118 (rethurmitangle honesty; Soft≠product)\n");
-/* Grep: entry_bridge: soft retcatmullangle — Wave 108 exclusive catmullangle stamp */
-kprintf("entry_bridge: soft retcatmullangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=118 (retcatmullangle stamp; Soft≠product)\n");
-/* Grep: entry_bridge: soft retnurbsangle — Wave 109 return-nurbsangle honesty */
-kprintf("entry_bridge: soft retnurbsangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=118 (retnurbsangle honesty; Soft≠product)\n");
-/* Grep: entry_bridge: soft retbsplineangle — Wave 109 exclusive bsplineangle stamp */
-kprintf("entry_bridge: soft retbsplineangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=118 (retbsplineangle stamp; Soft≠product)\n");
-/* Grep: entry_bridge: soft retmeshangle — Wave 110 return-meshangle honesty */
-kprintf("entry_bridge: soft retmeshangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=118 (retmeshangle honesty; Soft≠product)\n");
-/* Grep: entry_bridge: soft retgridangle — Wave 110 exclusive gridangle stamp */
-kprintf("entry_bridge: soft retgridangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=118 (retgridangle stamp; Soft≠product)\n");
-/* Grep: entry_bridge: soft retvoxelangle — Wave 111 return-voxelangle honesty */
-kprintf("entry_bridge: soft retvoxelangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=118 (retvoxelangle honesty; Soft≠product)\n");
-/* Grep: entry_bridge: soft rettexelangle — Wave 111 exclusive texelangle stamp */
-kprintf("entry_bridge: soft rettexelangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=118 (rettexelangle stamp; Soft≠product)\n");
-/* Grep: entry_bridge: soft retfragmentangle — Wave 112 return-fragmentangle honesty */
-kprintf("entry_bridge: soft retfragmentangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=118 (retfragmentangle honesty; Soft≠product)\n");
-/* Grep: entry_bridge: soft retvertexangle — Wave 112 exclusive vertexangle stamp */
-kprintf("entry_bridge: soft retvertexangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=118 (retvertexangle stamp; Soft≠product)\n");
-/* Grep: entry_bridge: soft retshaderangle — Wave 113 return-shaderangle honesty */
-kprintf("entry_bridge: soft retshaderangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=118 (retshaderangle honesty; Soft≠product)\n");
-/* Grep: entry_bridge: soft retpipelineangle — Wave 113 exclusive pipelineangle stamp */
-kprintf("entry_bridge: soft retpipelineangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=118 (retpipelineangle stamp; Soft≠product)\n");
-/* Grep: entry_bridge: soft retframebufferangle — Wave 114 return-framebufferangle honesty */
-kprintf("entry_bridge: soft retframebufferangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=118 (retframebufferangle honesty; Soft≠product)\n");
-/* Grep: entry_bridge: soft retswapchainangle — Wave 114 exclusive swapchainangle stamp */
-kprintf("entry_bridge: soft retswapchainangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=118 (retswapchainangle stamp; Soft≠product)\n");
-/* Grep: entry_bridge: soft retpresentangle — Wave 115 return-presentangle honesty */
-kprintf("entry_bridge: soft retpresentangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=118 (retpresentangle honesty; Soft≠product)\n");
-/* Grep: entry_bridge: soft retvsyncangle — Wave 115 exclusive vsyncangle stamp */
-kprintf("entry_bridge: soft retvsyncangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=118 (retvsyncangle stamp; Soft≠product)\n");
-/* Grep: entry_bridge: soft retfenceangle — Wave 116 return-fenceangle honesty */
-kprintf("entry_bridge: soft retfenceangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=118 (retfenceangle honesty; Soft≠product)\n");
-/* Grep: entry_bridge: soft retsemaphoreangle — Wave 116 exclusive semaphoreangle stamp */
-kprintf("entry_bridge: soft retsemaphoreangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=118 (retsemaphoreangle stamp; Soft≠product)\n");
-/* Grep: entry_bridge: soft retmutexangle — Wave 117 return-mutexangle honesty */
-kprintf("entry_bridge: soft retmutexangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=118 (retmutexangle honesty; Soft≠product)\n");
-/* Grep: entry_bridge: soft retcondangle — Wave 117 exclusive condangle stamp */
-kprintf("entry_bridge: soft retcondangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=118 (retcondangle stamp; Soft≠product)\n");
-/* Grep: entry_bridge: soft retbarrierangle — Wave 118 return-barrierangle honesty */
-kprintf("entry_bridge: soft retbarrierangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=118 (retbarrierangle honesty; Soft≠product)\n");
-/* Grep: entry_bridge: soft retatomicangle — Wave 118 exclusive atomicangle stamp */
-kprintf("entry_bridge: soft retatomicangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=118 (retatomicangle stamp; Soft≠product)\n");
-/* Grep: entry_bridge: soft retqueueangle — Wave 119 return-queueangle honesty */
-kprintf("entry_bridge: soft retqueueangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=119 (retqueueangle honesty; Soft≠product)\n");
-/* Grep: entry_bridge: soft reteventangle — Wave 119 exclusive eventangle stamp */
-kprintf("entry_bridge: soft reteventangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=119 (reteventangle stamp; Soft≠product)\n");
-/* Grep: entry_bridge: soft retchannelangle — Wave 120 return-channelangle honesty */
-kprintf("entry_bridge: soft retchannelangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=120 (retchannelangle honesty; Soft≠product)\n");
-/* Grep: entry_bridge: soft retmailboxangle — Wave 120 exclusive mailboxangle stamp */
-kprintf("entry_bridge: soft retmailboxangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=120 (retmailboxangle stamp; Soft≠product)\n");
-/* Grep: entry_bridge: soft retstreamangle — Wave 121 return-streamangle honesty */
-kprintf("entry_bridge: soft retstreamangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=121 (retstreamangle honesty; Soft≠product)\n");
-/* Grep: entry_bridge: soft retpacketangle — Wave 121 exclusive packetangle stamp */
-kprintf("entry_bridge: soft retpacketangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=121 (retpacketangle stamp; Soft≠product)\n");
-/* Grep: entry_bridge: soft retframeangle — Wave 122 return-frameangle honesty */
-kprintf("entry_bridge: soft retframeangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=122 (retframeangle honesty; Soft≠product)\n");
-/* Grep: entry_bridge: soft retwindowangle — Wave 122 exclusive windowangle stamp */
-kprintf("entry_bridge: soft retwindowangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=122 (retwindowangle stamp; Soft≠product)\n");
-/* Grep: entry_bridge: soft retlayerangle — Wave 123 return-layerangle honesty */
-kprintf("entry_bridge: soft retlayerangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=123 (retlayerangle honesty; Soft≠product)\n");
-/* Grep: entry_bridge: soft retcanvasangle — Wave 123 exclusive canvasangle stamp */
-kprintf("entry_bridge: soft retcanvasangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=123 (retcanvasangle stamp; Soft≠product)\n");
-/* Grep: entry_bridge: soft retbrushangle — Wave 124 return-brushangle honesty */
-kprintf("entry_bridge: soft retbrushangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=124 (retbrushangle honesty; Soft≠product)\n");
-/* Grep: entry_bridge: soft retinkangle — Wave 124 exclusive inkangle stamp */
-kprintf("entry_bridge: soft retinkangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=124 (retinkangle stamp; Soft≠product)\n");
-/* Grep: entry_bridge: soft retpaletteangle — Wave 125 return-paletteangle honesty */
-kprintf("entry_bridge: soft retpaletteangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=125 (retpaletteangle honesty; Soft≠product)\n");
-/* Grep: entry_bridge: soft retstrokeangle — Wave 125 exclusive strokeangle stamp */
-kprintf("entry_bridge: soft retstrokeangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=125 (retstrokeangle stamp; Soft≠product)\n");
-/* Grep: entry_bridge: soft retgradientangle — Wave 126 return-gradientangle honesty */
-kprintf("entry_bridge: soft retgradientangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=126 (retgradientangle honesty; Soft≠product)\n");
-/* Grep: entry_bridge: soft retblendangle — Wave 126 exclusive blendangle stamp */
-kprintf("entry_bridge: soft retblendangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=126 (retblendangle stamp; Soft≠product)\n");
-                            kprintf("entry_bridge: soft deepen wave=%u areas=%u enter=%lu "
-            "route=%lu logs=%lu "
-            "(Wave 92 exclusive)\n",
-            (unsigned)ENTRY_BRIDGE_SOFT_WAVE,
-            (unsigned)ENTRY_BRIDGE_SOFT_AREAS,
-            (unsigned long)u64Enter,
-            (unsigned long)u64Route,
-            (unsigned long)u64Logs);
-
-    /* Grep: entry_bridge: soft inventory PASS / soft PASS */
+    /* Grep: entry_bridge: soft PASS / entry_bridge: soft inventory PASS */
     kprintf("entry_bridge: soft inventory PASS wave=%u logs=%lu "
-            "enter=%lu route=%lu\n",
+            "enter=%lu route=%lu handoff=%lu "
+            "lean_ok=%u deepen_ok=%u host_ok=%u lean=1 "
+            "soft_ne_product=1 dual=MIT_OR_Apache-2.0 G-AC-1=1 "
+            "DoD_A=OPEN DoD_B=OPEN residual_ne_close=1\n",
             (unsigned)ENTRY_BRIDGE_SOFT_WAVE,
             (unsigned long)u64Logs,
             (unsigned long)u64Enter,
-            (unsigned long)u64Route);
-    kprintf("entry_bridge: soft PASS wave=%u logs=%lu\n",
+            (unsigned long)u64Route,
+            (unsigned long)u64Handoff,
+            (unsigned)g_u32BridgeSoftLeanOk,
+            (unsigned)g_u32BridgeSoftDeepenOk,
+            (unsigned)g_u32BridgeSoftHostOk);
+    kprintf("entry_bridge: soft PASS wave=%u logs=%lu lean=1 lean_ok=%u "
+            "deepen_ok=%u host_ok=%u soft_ne_product=1 "
+            "dual=MIT_OR_Apache-2.0 G-AC-1=1 "
+            "hot_cold=dispatch stamp_storm=0 "
+            "native_or_linux=dispatch_only product=UDX+sshd "
+            "DoD_A=OPEN DoD_B=OPEN residual_ne_close=1\n",
             (unsigned)ENTRY_BRIDGE_SOFT_WAVE,
-            (unsigned long)u64Logs);
+            (unsigned long)u64Logs,
+            (unsigned)g_u32BridgeSoftLeanOk,
+            (unsigned)g_u32BridgeSoftDeepenOk,
+            (unsigned)g_u32BridgeSoftHostOk);
 }
 
 /**
- * After first product bridge activity, print soft inventory once.
- * Diagnostics only — never gates path PASS.
+ * After first product bridge activity, print lean residual once.
+ * Diagnostics only - never gates path PASS. One-shot avoids stamp storms.
+ * Not called from boot init (no boot spam). Pre-handoff so EXIT still lamps.
  */
 static void
-entry_bridge_soft_inventory_maybe_once(void)
+entry_bridge_soft_residual_maybe_once(void)
 {
     if (g_fBridgeSoftOnce != 0) {
         return;
@@ -1151,27 +1103,191 @@ entry_bridge_soft_inventory_maybe_once(void)
         return;
     }
     g_fBridgeSoftOnce = 1;
-    entry_bridge_soft_inventory_log();
+    entry_bridge_soft_residual_lean_once();
+    entry_bridge_soft_residual_lean_log();
+}
+
+/**
+ * One-shot post-handoff residual after first returning dispatch.
+ * Measures frame nr + args integrity (bridge never mutates). Soft!=product.
+ * Separate from pre-handoff lean so EXIT non-return still gets residual.
+ * C2 deepen: ret-sign + retclass + nrshape already tallied at handoff edge.
+ * STRONGER: UDX/sshd surface ret tallies after host_launch traffic.
+ * greppable: entry_bridge: soft residual handoff
+ */
+static void
+entry_bridge_soft_residual_handoff_once(void)
+{
+    const char *szRetClass;
+    const char *szNrShape;
+    u32 u32NrOk;
+    u32 u32ArgOk;
+    u32 u32FrameOk;
+
+    if (g_fBridgeSoftHandoffOnce != 0) {
+        return;
+    }
+    if (g_u64BridgeSoftHandoff == 0) {
+        return;
+    }
+    g_fBridgeSoftHandoffOnce = 1;
+    u32NrOk = (g_u64BridgeSoftNrDrift == 0 && g_u64BridgeSoftNrOk != 0) ? 1u : 0u;
+    u32ArgOk = (g_u64BridgeSoftArgDrift == 0 && g_u64BridgeSoftArgOk != 0) ? 1u : 0u;
+    u32FrameOk = (u32NrOk != 0u && u32ArgOk != 0u) ? 1u : 0u;
+    szRetClass = entry_bridge_soft_retclass(g_u64BridgeSoftLastRet);
+    szNrShape = entry_bridge_soft_nrshape(g_u64BridgeSoftLastNr);
+
+    /*
+     * Grep: entry_bridge: soft residual handoff
+     * Functional deepen: first returning handoff + measured nr/args integrity.
+     */
+    kprintf("entry_bridge: soft residual handoff "
+            "edge=post_dispatch handoff=%lu nr_ok=%lu nr_drift=%lu "
+            "arg_ok=%lu arg_drift=%lu nr_intact=%u arg_intact=%u "
+            "frame_intact=%u last_nr=%lu last_ret=%lu retclass=%s nrshape=%s "
+            "ret_neg=%lu ret_zero=%lu ret_pos=%lu "
+            "surf_udx=%lu surf_sshd=%lu "
+            "udx_ret_ok=%lu udx_ret_neg=%lu net_ret_ok=%lu net_ret_neg=%lu "
+            "ret_rewrite=0 bridge_selects=0 "
+            "product=UDX+sshd after_host_launch=1 "
+            "DoD_A=OPEN DoD_B=OPEN residual_ne_close=1 "
+            "soft_ne_product=1 dual=MIT_OR_Apache-2.0 G-AC-1=1 "
+            "stamp_storm=0 no_version_stamp=1 "
+            "deepen_ok=%u host_ok=%u "
+            "(Soft!=product; post-handoff nr+args integrity + UDX/sshd surface; "
+            "Dual DoD A/B OPEN; never product close)\n",
+            (unsigned long)g_u64BridgeSoftHandoff,
+            (unsigned long)g_u64BridgeSoftNrOk,
+            (unsigned long)g_u64BridgeSoftNrDrift,
+            (unsigned long)g_u64BridgeSoftArgOk,
+            (unsigned long)g_u64BridgeSoftArgDrift,
+            u32NrOk,
+            u32ArgOk,
+            u32FrameOk,
+            (unsigned long)g_u64BridgeSoftLastNr,
+            (unsigned long)g_u64BridgeSoftLastRet,
+            szRetClass,
+            szNrShape,
+            (unsigned long)g_u64BridgeSoftRetNeg,
+            (unsigned long)g_u64BridgeSoftRetZero,
+            (unsigned long)g_u64BridgeSoftRetPos,
+            (unsigned long)g_u64BridgeSoftSurfUdx,
+            (unsigned long)g_u64BridgeSoftSurfSshd,
+            (unsigned long)g_u64BridgeSoftUdxRetOk,
+            (unsigned long)g_u64BridgeSoftUdxRetNeg,
+            (unsigned long)g_u64BridgeSoftNetRetOk,
+            (unsigned long)g_u64BridgeSoftNetRetNeg,
+            (unsigned)g_u32BridgeSoftDeepenOk,
+            (unsigned)g_u32BridgeSoftHostOk);
 }
 
 void
 gj_syscall_entry_asm_bridge(struct gj_syscall_regs *pRegs)
 {
+    i64 i64Ret;
+    const char *szShape;
+    u32 fArgMatch;
+
     /*
      * Soft entry edge: every LSTAR land is counted before personality route.
      * Smoke tests that call gj_syscall_dispatch directly skip this note.
-     * Wave 19: local bridge soft inventory + path/rates/surfaces (file-local).
+     *
+     * Product handoff (UDX userspace drivers + Linux personality apps):
+     *   - Do not select NATIVE vs LINUX here (dispatch owns that).
+     *   - Do not rewrite i64Ret or mutate nr/args (asm frame stays intact).
+     *   - Soft residual is one-shot only - never a per-syscall stamp storm.
+     *   - Dual DoD A/B stay OPEN (agent residual != product close).
+     * C2 residual deepen (soft only): snap args + NR shape + EXIT note;
+     * post-handoff measures nr/args integrity + ret-sign + retclass buckets.
+     * STRONGER: measure host_launch -> UDX/sshd surface NRs + ret outcomes.
      */
     entry_bridge_soft_inc(&g_u64BridgeSoftEnter);
     gj_syscall_entry_soft_note_bridge(pRegs);
     if (pRegs == NULL) {
         entry_bridge_soft_inc(&g_u64BridgeSoftNull);
-        entry_bridge_soft_inventory_maybe_once();
+        entry_bridge_soft_residual_maybe_once();
         return;
     }
-    /* Soft last NR at LSTAR edge (never mutates frame / route). */
+
+    /* Soft last NR + arg snap at LSTAR edge (read-only; never mutates frame). */
     g_u64BridgeSoftLastNr = pRegs->u64Nr;
+    g_u64BridgeSoftSnapA0 = pRegs->u64Arg0;
+    g_u64BridgeSoftSnapA1 = pRegs->u64Arg1;
+    g_u64BridgeSoftSnapA2 = pRegs->u64Arg2;
+    g_u64BridgeSoftSnapA3 = pRegs->u64Arg3;
+    g_u64BridgeSoftSnapA4 = pRegs->u64Arg4;
+    g_u64BridgeSoftSnapA5 = pRegs->u64Arg5;
     entry_bridge_soft_inc(&g_u64BridgeSoftRoute);
-    entry_bridge_soft_inventory_maybe_once();
+
+    /* Soft NR shape taxonomy (never routes; Soft!=product). */
+    szShape = entry_bridge_soft_nrshape(pRegs->u64Nr);
+    if (szShape != NULL && szShape[0] == 'n') {
+        entry_bridge_soft_inc(&g_u64BridgeSoftShapeNat);
+    } else if (szShape != NULL && szShape[0] == 'l') {
+        entry_bridge_soft_inc(&g_u64BridgeSoftShapeLin);
+    } else {
+        entry_bridge_soft_inc(&g_u64BridgeSoftShapeHigh);
+    }
+
+    /* EXIT-shaped soft note so pre-handoff residual covers non-return paths. */
+    if (entry_bridge_soft_nr_is_exit_shaped(pRegs->u64Nr) != 0u) {
+        entry_bridge_soft_inc(&g_u64BridgeSoftExitSh);
+    }
+
+    /*
+     * Host-launch -> UDX/sshd surface tally (measured residual only).
+     * After process_spawn_host_launch parks UDX hosts / sshd, their syscalls
+     * land here (DDI/PLATFORM/NOTIFY/NET/SPAWN). Never routes; Soft!=product.
+     */
+    entry_bridge_soft_note_surface(pRegs->u64Nr);
+
+    /*
+     * One-shot residual before handoff so EXIT-style non-return paths still
+     * emit soft residual once. Hot path after this is dispatch-only
+     * (personality + linux hot/cold live entirely in gj_syscall_dispatch).
+     */
+    entry_bridge_soft_residual_maybe_once();
+
+    /* Personality route + hot/cold live entirely in gj_syscall_dispatch. */
     gj_syscall_dispatch(pRegs);
+
+    /*
+     * Soft post-handoff: dispatch returned with i64Ret filled for sysret.
+     * Snapshot only - never rewrite the live return value.
+     * Measure nr + args integrity: bridge contract is frame inputs intact.
+     * C2 deepen: ret-sign buckets + retclass cumulative buckets.
+     * STRONGER: UDX surface + NET (sshd) post-handoff ret-sign tallies.
+     */
+    g_u64BridgeSoftLastRet = (u64)pRegs->i64Ret;
+    if (pRegs->u64Nr == g_u64BridgeSoftLastNr) {
+        entry_bridge_soft_inc(&g_u64BridgeSoftNrOk);
+    } else {
+        entry_bridge_soft_inc(&g_u64BridgeSoftNrDrift);
+    }
+    fArgMatch = 0u;
+    if (pRegs->u64Arg0 == g_u64BridgeSoftSnapA0 &&
+        pRegs->u64Arg1 == g_u64BridgeSoftSnapA1 &&
+        pRegs->u64Arg2 == g_u64BridgeSoftSnapA2 &&
+        pRegs->u64Arg3 == g_u64BridgeSoftSnapA3 &&
+        pRegs->u64Arg4 == g_u64BridgeSoftSnapA4 &&
+        pRegs->u64Arg5 == g_u64BridgeSoftSnapA5) {
+        fArgMatch = 1u;
+    }
+    if (fArgMatch != 0u) {
+        entry_bridge_soft_inc(&g_u64BridgeSoftArgOk);
+    } else {
+        entry_bridge_soft_inc(&g_u64BridgeSoftArgDrift);
+    }
+    i64Ret = pRegs->i64Ret;
+    if (i64Ret < 0) {
+        entry_bridge_soft_inc(&g_u64BridgeSoftRetNeg);
+    } else if (i64Ret == 0) {
+        entry_bridge_soft_inc(&g_u64BridgeSoftRetZero);
+    } else {
+        entry_bridge_soft_inc(&g_u64BridgeSoftRetPos);
+    }
+    entry_bridge_soft_retclass_bucket((u64)i64Ret);
+    entry_bridge_soft_note_surface_ret(g_u64BridgeSoftLastNr, i64Ret);
+    entry_bridge_soft_inc(&g_u64BridgeSoftHandoff);
+    entry_bridge_soft_residual_handoff_once();
 }

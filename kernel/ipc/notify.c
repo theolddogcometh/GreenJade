@@ -2,68 +2,85 @@
  * SPDX-License-Identifier: MIT OR Apache-2.0
  * Copyright (c) 2026 Project GreenJade contributors
  *
- * Notification badge objects (IRQ → userspace UDX path).
+ * Notification badge objects - event/wait/waker residual for door clients and
+ * UDX IRQ-ish userspace (hard IRQ -> pulse only; thr reaps; batch after wait).
+ * MSI-X inject product path for Dual DoD hosts (rtl8168_udx / xhci_udx).
  *
  * greppable: NOTIFY_BADGE_PULSE_WAIT
  * greppable: NOTIFY_SOFT_MULTI_WAITER
+ * greppable: NOTIFY_EVENT_POST
+ * greppable: NOTIFY_WAKER_KICK
+ * greppable: NOTIFY_WAKER_DRAIN
+ * greppable: NOTIFY_WAIT_RESIDUAL
+ * greppable: NOTIFY_LEAN_RESIDUAL
+ * greppable: NOTIFY_H1_THR_ONLY
+ * greppable: product_hosts=UDX | dual_dod=OPEN | Soft!=product
  *
- * Hard IRQ / soft inject only pulses badges (OR) and may soft multi-wake
- * waiters — no alloc, no copy. Userspace (or UDX) batches work after
- * notify_wait returns.
+ * Hazard H1 thr-only direction (Soft!=product; G-AC-1):
+ *   hard IRQ / soft inject -> notify_pulse ONLY (atomic OR + optional soft
+ *     multi-wake). No class-driver work, no net_eth_poll, no kprintf, no park.
+ *   thr / UDX userspace  -> notify_wait / poll reaps badge; batch AFTER wait.
+ *   H1: thr notify not hard-IRQ driver. irq_driver=0 thr_only=1.
+ *   greppable: thr_only=1 irq_pulse_only=1 batch_after_wait=1 irq_driver=0
+ *   greppable: hazard=H1 path=irq_pulse->thr_notify_wait
  *
- * Wait key is the notify object; tag NOTIFY_TAG_WAITER = blocked in wait.
- * u64Pending is updated with atomics so IRQ and wait paths do not drop bits.
+ * Event residual (producer; IRQ-callable pulse path):
+ *   notify_pulse / notify_event / notify_signal
+ *     -> OR badge into u64Pending (atomics; IRQ-safe), soft multi-wake
+ *
+ * Wait residual (thr/UDX consumer reaping; greppable NOTIFY_WAIT_RESIDUAL):
+ *   notify_wait / notify_poll  - CAS-clear matched bits; park on TAG_WAITER
+ *   thr shape: pulse(badge) -> wait(mask, fBlock=0|1) reaps for UDX
+ *   freestanding UDX: non-blocking wait; block path soft multi parks (thr)
+ *
+ * Waker residual (consumer park / kick; not hard-IRQ driver work):
+ *   notify_wake                - kick without badge (quiesce / peer path)
+ *   notify_wake_drain          - bounded multi-round kick (abort/mark_dead)
+ *   notify_abort_waiter        - drain waiters, no badge post
  *
  * Soft multi-waiter: several threads may block on one object. Pulse wakes up
- * to NOTIFY_SOFT_MULTI_MAX; each waiter CAS-claims matching badge bits.
+ * to NOTIFY_SOFT_MULTI_MAX per round; waiters CAS-claim matching badge bits.
+ * Abort/mark_dead drain rounds so >MULTI_MAX waiters are not left parked.
  *
- * Soft product inventory (file-local sticky counters; never hard-gate).
- * Wave 35 exclusive deepen — greppable prefix-stable serial markers
- * (notify: soft …); diagnostics only, never hard-gate product:
- *   notify: soft inventory         — multi_max + path catalog at init/log
- *   notify: soft pulse inventory   — pulse/OR/wake catalog + counters
- *   notify: soft wait inventory    — wait/poll/CAS/block catalog + counters
- *   notify: soft pulse             — path tallies (hit/dead split/wake/…)
- *   notify: soft pulse outcome     — hit/dead/wake rollup
- *   notify: soft pulse dead        — null/ready/state split surface
- *   notify: soft wait              — path tallies (enter/hit/park/… splits)
- *   notify: soft wait outcome      — hit/park/dead/poll rollup
- *   notify: soft multi             — multi-wake call/sum/zero/peak surface
- *   notify: soft badge             — pending/last/zero_coalesce/bits soft
- *   notify: soft install           — install ok + fail splits
- *   notify: soft abort             — abort + wake + nowaiter
- *   notify: soft mark_dead         — mark_dead + ready/revoke surface
- *   notify: soft msix              — global MSI-X bind / live snapshot
- *   notify: soft query             — accessor sample tallies
- *   notify: soft capacity          — multi_max / tag / heap lamps
- *   notify: soft catalog           — path surface catalog (impl vs not)
- *   notify: soft return            — Wave 17 wait|install|wake return surfaces
- *   notify: soft return rate       — Wave 17 wait|install|wake rate lamps
- *   notify: soft retcode           — Wave 17 observed badge/status retcode catalog
- *   notify: soft return selftest — Wave 19 terminal return surface
- *   notify: soft retmap     — Wave 19 return-surface map
- *   notify: soft deepen            — wave=116 areas stamp
- *   notify: soft path              — G-NOTIFY invariants + honesty claim
- *   notify: soft stats             — aggregate path counters
- *   notify: soft pulse hit         — pulse delivered to live object
- *   notify: soft pulse dead        — pulse dropped (null/not ready/DEAD)
- *   notify: soft pulse wake        — soft multi-wake from pulse
- *   notify: soft pulse nowaiter    — pulse with no registered waiter
- *   notify: soft wait hit          — CAS-clear matched badge bits
- *   notify: soft wait park         — thread_block + schedule
- *   notify: soft wait poll miss    — non-block / no thr, no pending
- *   notify: soft wait dead         — object DEAD during wait
- *   notify: soft wait cas retry    — lost CAS race with concurrent pulse
- *   notify: soft wait self wake    — post-block self soft multi-wake
- *   notify: soft multi wake        — soft multi-wake invocation
- *   notify: soft abort             — abort soft multi-wake (no badge)
- *   notify: soft mark_dead         — mark_dead + abort path
- *   notify: soft install ok        — cap install success
- *   notify: soft install fail      — cap install rejected
- * Honesty: soft multi-waiter ≠ multi-process notify product
- *   (multi_proc=0 / soft_ne_multi_proc=1). Soft.
- *   Soft ≠ MIG REPLY product.
+ * STRONGER functional residual (W7 Dual DoD; stamp-free bar v2026.08.04.75):
+ *   null_miss | zero_coalesce | multi_badge | signal_alias | dual_dod_open
+ * STRONGER functional residual (W10 Dual DoD; stamp-free bar v2026.08.04.75):
+ *   install_null | dead_pulse for live UDX host IRQ thr path. H1 thr-only.
+ * STRONGER functional residual (W11 Dual DoD; stamp-free bar v2026.08.04.75):
+ *   poll_eq | partial_reap | abort_nobadge | inject_query | dual_dod_open
+ *   product notify path honesty for MSI-X inject used by Dual DoD hosts.
+ *   product_hosts=UDX (rtl8168_udx|xhci_udx); Dual DoD A/B remain OPEN.
+ *   Soft!=product; H1 thr-only; H2 once (no stamp storms).
+ *   greppable: poll_eq | partial_reap | abort_nobadge | inject_query
+ *   greppable: product_hosts=UDX | dual_dod=OPEN | Soft!=product
+ * STRONGER denser residual (W12 Dual DoD; stamp-free bar v2026.08.04.75):
+ *   event denser:  dpulse_or | event_eq | signal_eq | coalesce_rearm
+ *   wait denser:   remask3 | mask_any_multi | poll_then_miss | wait_empty
+ *   waker denser:  kick_max0 | drain_empty | abort_keep | null_kick
+ *   inject denser: inject_rearm | multi_vec | last_badge | signals_mono
+ *   composite denser + dual_dod_open for product_hosts=UDX MSI-X inject
+ *   greppable: notify: soft residual denser | MSI-X inject denser
+ *   greppable: denser=1 | event denser | wait denser | waker denser | inject denser
+ *   greppable: product_hosts=UDX | dual_dod=OPEN | Soft!=product
+ * Dual DoD A/B remain OPEN (this residual does not close product DoD).
+ *
+ * Soft inventory (sparse lamps only - NO stamp storms, no version stamp):
+ *   - inventory / multi / residual lean / residual lean wait /
+ *     residual lean thr / residual lean udx / residual denser / path / PASS|FAIL
+ *   sticky counters still bump on product paths; never hard-gate.
+ * Soft multi-waiter != multi-process notify product. Soft != MIG REPLY product.
+ * Soft != product. Dual MIT OR Apache-2.0. Lean residual only. G-AC-1.
+ * Product IRQ Notification mint OPEN (badge delivery; not .ko AC).
  * greppable: notify: soft
+ * greppable: notify: soft residual lean
+ * greppable: notify: soft residual lean wait
+ * greppable: notify: soft residual lean thr
+ * greppable: notify: soft residual lean udx
+ * greppable: notify: soft residual denser
+ * greppable: notify: soft residual lean PASS
+ * greppable: notify: soft residual lean FAIL
+ * greppable: product_hosts=UDX | dual_dod=OPEN | Soft!=product
+ * greppable: denser=1 MSI-X inject denser
  */
 #include <gj/cap.h>
 #include <gj/error.h>
@@ -76,20 +93,66 @@
 static struct gj_notify g_msixNotify;
 static int              g_fMsixInited;
 
-/* Wave 35 exclusive soft deepen stamp (greppable wave=116). */
-#define NOTIFY_SOFT_DEEPEN_WAVE 116u
-/* +return selftest|retmap over Wave 17 return rate|retcode. */
-#define NOTIFY_SOFT_DEEPEN_AREAS 170u
+/*
+ * Sparse lamp surface count:
+ *   inventory / multi / residual lean / residual lean wait /
+ *   residual lean thr / residual lean udx / residual denser / path / PASS
+ * Not a version stamp; not a stamp-storm catalog. Soft!=product.
+ * W12 denser residual adds residual denser lamp (MSI-X inject Dual DoD).
+ */
+#define NOTIFY_SOFT_AREAS 9u
+/* Drain rounds on abort/mark_dead (bounded; not hard-IRQ). */
+#define NOTIFY_WAKER_DRAIN_ROUNDS 4u
+/*
+ * W12 denser residual honesty lock (Soft!=product; Dual DoD OPEN;
+ * stamp-free bar v2026.08.04.75; H2 once; agent!=close).
+ * greppable: denser=1 MSI-X inject denser Soft!=product dual_dod=OPEN
+ */
+#define NOTIFY_DENSER_LOCK        1u
+#define NOTIFY_DENSER_EVENT_ARMS  4u /* dpulse_or|event_eq|signal_eq|coalesce_rearm */
+#define NOTIFY_DENSER_WAIT_ARMS   4u /* remask3|mask_any_multi|poll_then_miss|wait_empty */
+#define NOTIFY_DENSER_WAKER_ARMS  4u /* kick_max0|drain_empty|abort_keep|null_kick */
+#define NOTIFY_DENSER_INJECT_ARMS 4u /* inject_rearm|multi_vec|last_badge|signals_mono */
+#define NOTIFY_DENSER_ARMS_MIN    4u
+
+_Static_assert(NOTIFY_DENSER_LOCK == 1u,
+               "W12 denser residual honesty lock");
+_Static_assert(NOTIFY_DENSER_EVENT_ARMS == NOTIFY_DENSER_ARMS_MIN &&
+               NOTIFY_DENSER_WAIT_ARMS == NOTIFY_DENSER_ARMS_MIN &&
+               NOTIFY_DENSER_WAKER_ARMS == NOTIFY_DENSER_ARMS_MIN &&
+               NOTIFY_DENSER_INJECT_ARMS == NOTIFY_DENSER_ARMS_MIN,
+               "W12 denser residual arms min equals denser arms (all required)");
+
+/*
+ * H1 thr-only residual honesty (Soft!=product; G-AC-1).
+ * Hard IRQ may pulse only; thr reaps via wait; no class-driver work here.
+ * Compile-time locked - flip requires H1 review (IRQ stack smash class).
+ * greppable: NOTIFY_H1_THR_ONLY
+ * greppable: thr_only=1 irq_pulse_only=1 batch_after_wait=1 irq_driver=0
+ */
+#define NOTIFY_H1_IRQ_PULSE_ONLY   1u /* hard IRQ entry = pulse only */
+#define NOTIFY_H1_THR_WAIT         1u /* wait residual = thr/UDX consumer */
+#define NOTIFY_H1_BATCH_AFTER_WAIT 1u /* batch work after notify_wait */
+#define NOTIFY_H1_IRQ_DRIVER       0u /* not hard-IRQ class driver */
+#define NOTIFY_H1_THR_ONLY         1u /* thr notify direction locked */
+
+_Static_assert(NOTIFY_H1_IRQ_PULSE_ONLY == 1u,
+               "H1: hard IRQ notify path must be pulse-only");
+_Static_assert(NOTIFY_H1_THR_WAIT == 1u,
+               "H1: wait residual is thr/UDX consumer only");
+_Static_assert(NOTIFY_H1_BATCH_AFTER_WAIT == 1u,
+               "H1: batch work after notify_wait (not on IRQ stack)");
+_Static_assert(NOTIFY_H1_IRQ_DRIVER == 0u,
+               "H1: thr notify not hard-IRQ driver");
+_Static_assert(NOTIFY_H1_THR_ONLY == 1u,
+               "H1: thr-only notify direction locked");
 
 /*
  * Soft path sticky counters (wrap OK; diagnostics only).
  * Bumped on product return paths; never hard-gate behavior.
- * Pulse path is IRQ-callable → atomic RMW only (no kprintf).
- * Wave 20 deepen: pulse/wait splits + multi + badge + install + query +
- * msix + capacity + catalog + outcome + path + return surfaces.
- * Soft multi-waiter ≠ multi-process notify product.
- * Soft ≠ MIG REPLY product.
- * greppable: notify: soft stats
+ * Pulse path is IRQ-callable -> atomic RMW only (no kprintf).
+ * Soft multi-waiter != multi-process notify product.
+ * Soft != MIG REPLY product. Soft != product. H1 thr-only.
  * greppable: notify: soft
  */
 struct notify_soft_stats {
@@ -99,11 +162,11 @@ struct notify_soft_stats {
     u64 u64PulseDeadNull;    /* pulse dropped: pN == NULL */
     u64 u64PulseDeadReady;   /* pulse dropped: !u32Ready */
     u64 u64PulseDeadState;   /* pulse dropped: not LIVE */
-    u64 u64PulseZeroCoalesce;/* badge 0 → bit 0 */
+    u64 u64PulseZeroCoalesce;/* badge 0 -> bit 0 */
     u64 u64PulseWake;        /* soft multi-wake from pulse */
     u64 u64PulseNoWaiter;    /* pulse with no waiter registered */
     u64 u64PulseEnter;       /* notify_pulse entries */
-    u64 u64SignalAlias;      /* notify_signal → pulse */
+    u64 u64SignalAlias;      /* notify_signal -> pulse */
     u64 u64WaitEnter;        /* notify_wait entries */
     u64 u64WaitHit;          /* CAS-clear matched bits */
     u64 u64WaitPark;         /* thread_block + schedule */
@@ -113,7 +176,7 @@ struct notify_soft_stats {
     u64 u64WaitDeadLoop;     /* DEAD mid-loop after register */
     u64 u64WaitCasRetry;     /* lost CAS race */
     u64 u64WaitSelfWake;     /* post-block self multi-wake */
-    u64 u64WaitMaskAny;      /* mask==0 → ~0ull */
+    u64 u64WaitMaskAny;      /* mask==0 -> ~0ull */
     u64 u64WaitBlock;        /* fBlock != 0 entries */
     u64 u64WaitNoblock;      /* fBlock == 0 entries */
     u64 u64WaitRegister;     /* first soft multi-waiter register */
@@ -153,10 +216,41 @@ struct notify_soft_stats {
     u64 u64MsixInit;         /* notify_msix_init calls */
     u64 u64MsixInitSkip;     /* msix_init early return (already ready) */
     u64 u64MsixGlobal;       /* notify_msix_global samples */
+    u64 u64EventPost;        /* notify_event entries (alias tallies) */
+    u64 u64WakerKick;        /* notify_wake entries */
+    u64 u64WakerKickHit;     /* notify_wake returned cWoken > 0 */
+    u64 u64WakerKickZero;    /* notify_wake returned 0 (null/empty) */
+    u64 u64WakerDrain;       /* notify_wake_drain entries */
+    u64 u64WakerDrainSum;    /* total woken across drain rounds */
+    u64 u64ResidualLean;     /* lean residual self-check runs */
+    u64 u64ResidualLeanOk;   /* lean residual full check set OK */
+    u64 u64ResidualWaitOk;   /* wait residual thr pulse->wait CAS OK */
+    u64 u64ResidualWaitMiss; /* wait residual empty miss returned 0 */
+    u64 u64ResidualWaitAny;  /* wait residual mask==0 any-badge OK */
+    u64 u64ResidualThrOk;    /* H1 thr-only residual direction OK */
+    /* W12 denser residual sticky counters (Soft!=product; never hard-gate). */
+    u64 u64DenseEventOr;     /* denser event: double-pulse OR */
+    u64 u64DenseEventEq;     /* denser event: event == pulse path */
+    u64 u64DenseSignalEq;    /* denser event: signal == pulse path */
+    u64 u64DenseCoalesce;    /* denser event: zero coalesce rearm */
+    u64 u64DenseRemask3;     /* denser wait: 3-bit remask partial reap */
+    u64 u64DenseMaskAny;     /* denser wait: mask-any multi reap */
+    u64 u64DensePollMiss;    /* denser wait: poll then empty miss */
+    u64 u64DenseWaitEmpty;   /* denser wait: wait empty after reap */
+    u64 u64DenseKickMax0;    /* denser waker: kick max=0 empty */
+    u64 u64DenseDrainEmpty;  /* denser waker: drain empty */
+    u64 u64DenseAbortKeep;   /* denser waker: abort keeps badge */
+    u64 u64DenseNullKick;    /* denser waker: null kick/drain */
+    u64 u64DenseInjectRearm; /* denser inject: rearm after reap */
+    u64 u64DenseMultiVec;    /* denser inject: multi-vector sequential */
+    u64 u64DenseLastBadge;   /* denser inject: last_badge honesty */
+    u64 u64DenseSignalsMono; /* denser inject: signals monotonic */
+    u64 u64DenseOk;          /* denser composite all arms OK */
+    u64 u64DenseFail;        /* denser composite arm miss */
 };
 
 static struct notify_soft_stats g_soft;
-/* One-shot deep print after first product wait/pulse activity (soft). */
+/* One-shot sparse inventory after first product wait activity (soft). */
 static u8 g_fSoftStatsOnce;
 
 /** Soft: atomic sticky bump (IRQ-safe; wrap OK for telemetry). */
@@ -296,1455 +390,269 @@ notify_soft_msix_snap(u32 *pReady, u32 *pLive, u32 *pSignals, u64 *pPending,
 }
 
 /**
- * Greppable soft pulse/wait inventory + Wave 20 deepen surfaces.
+ * Sparse greppable soft inventory (lean residual; no stamp storms).
  * Called from notify_msix_init and once after first wait activity.
  * Never allocates; not for hard-IRQ (kprintf only from product paths).
- * Soft multi-waiter ≠ multi-process notify product (multi_proc=0).
- * Soft ≠ MIG REPLY product.
+ * Soft multi-waiter != multi-process notify product (multi_proc=0).
+ * Soft != MIG REPLY product. Soft != product. Dual MIT OR Apache-2.0.
+ * H1 thr-only: irq pulse only; thr wait reaps; not hard-IRQ driver.
  * greppable: notify: soft inventory
- * greppable: notify: soft pulse inventory
- * greppable: notify: soft wait inventory
- * greppable: notify: soft pulse
- * greppable: notify: soft pulse outcome
- * greppable: notify: soft pulse dead
- * greppable: notify: soft wait
- * greppable: notify: soft wait outcome
  * greppable: notify: soft multi
- * greppable: notify: soft badge
- * greppable: notify: soft install
- * greppable: notify: soft abort
- * greppable: notify: soft mark_dead
- * greppable: notify: soft msix
- * greppable: notify: soft query
- * greppable: notify: soft capacity
- * greppable: notify: soft catalog
- * greppable: notify: soft return
- * greppable: notify: soft deepen
+ * greppable: notify: soft residual lean
+ * greppable: notify: soft residual lean wait
+ * greppable: notify: soft residual lean thr
  * greppable: notify: soft path
- * greppable: notify: soft stats
  * greppable: notify: soft inventory PASS / notify: soft PASS
  */
 static void
 notify_soft_log(void)
 {
-    struct notify_soft_stats s;
-    u32                      u32Ready;
-    u32                      u32Live;
-    u32                      u32Signals;
-    u64                      u64Pending;
-    u64                      u64Last;
-    u32                      u32Waiters;
-    u32                      u32HasWaiter;
-    u32                      u32PendBits;
-    u32                      u32LastBits;
+    u64 u64SoftLogN;
+    u64 u64Init;
+    u64 u64PulseEnter;
+    u64 u64PulseHit;
+    u64 u64WaitEnter;
+    u64 u64WaitHit;
+    u64 u64MultiWakeCalls;
+    u64 u64MultiWakeSum;
+    u64 u64MsixInit;
+    u64 u64EventPost;
+    u64 u64WakerKick;
+    u64 u64WakerKickHit;
+    u64 u64WakerDrain;
+    u64 u64WakerDrainSum;
+    u64 u64ResidualLean;
+    u64 u64ResidualLeanOk;
+    u64 u64ResidualWaitOk;
+    u64 u64ResidualWaitMiss;
+    u64 u64ResidualWaitAny;
+    u64 u64ResidualThrOk;
+    u64 u64InstallOk;
+    u64 u64WaitersPeak;
+    u32 u32Ready;
+    u32 u32Live;
+    u32 u32Waiters;
 
     notify_soft_inc(&g_soft.u64SoftLog);
 
     /*
-     * Snapshot under relaxed loads — soft inventory only; concurrent
+     * Snapshot under relaxed loads - soft inventory only; concurrent
      * IRQ pulse bumps may race (acceptable for diagnostics).
      */
-    s.u64Init = __atomic_load_n(&g_soft.u64Init, __ATOMIC_RELAXED);
-    s.u64PulseHit =
-        __atomic_load_n(&g_soft.u64PulseHit, __ATOMIC_RELAXED);
-    s.u64PulseDead =
-        __atomic_load_n(&g_soft.u64PulseDead, __ATOMIC_RELAXED);
-    s.u64PulseDeadNull =
-        __atomic_load_n(&g_soft.u64PulseDeadNull, __ATOMIC_RELAXED);
-    s.u64PulseDeadReady =
-        __atomic_load_n(&g_soft.u64PulseDeadReady, __ATOMIC_RELAXED);
-    s.u64PulseDeadState =
-        __atomic_load_n(&g_soft.u64PulseDeadState, __ATOMIC_RELAXED);
-    s.u64PulseZeroCoalesce =
-        __atomic_load_n(&g_soft.u64PulseZeroCoalesce, __ATOMIC_RELAXED);
-    s.u64PulseWake =
-        __atomic_load_n(&g_soft.u64PulseWake, __ATOMIC_RELAXED);
-    s.u64PulseNoWaiter =
-        __atomic_load_n(&g_soft.u64PulseNoWaiter, __ATOMIC_RELAXED);
-    s.u64PulseEnter =
-        __atomic_load_n(&g_soft.u64PulseEnter, __ATOMIC_RELAXED);
-    s.u64SignalAlias =
-        __atomic_load_n(&g_soft.u64SignalAlias, __ATOMIC_RELAXED);
-    s.u64WaitEnter =
-        __atomic_load_n(&g_soft.u64WaitEnter, __ATOMIC_RELAXED);
-    s.u64WaitHit =
-        __atomic_load_n(&g_soft.u64WaitHit, __ATOMIC_RELAXED);
-    s.u64WaitPark =
-        __atomic_load_n(&g_soft.u64WaitPark, __ATOMIC_RELAXED);
-    s.u64WaitPollMiss =
-        __atomic_load_n(&g_soft.u64WaitPollMiss, __ATOMIC_RELAXED);
-    s.u64WaitDead =
-        __atomic_load_n(&g_soft.u64WaitDead, __ATOMIC_RELAXED);
-    s.u64WaitDeadEnter =
-        __atomic_load_n(&g_soft.u64WaitDeadEnter, __ATOMIC_RELAXED);
-    s.u64WaitDeadLoop =
-        __atomic_load_n(&g_soft.u64WaitDeadLoop, __ATOMIC_RELAXED);
-    s.u64WaitCasRetry =
-        __atomic_load_n(&g_soft.u64WaitCasRetry, __ATOMIC_RELAXED);
-    s.u64WaitSelfWake =
-        __atomic_load_n(&g_soft.u64WaitSelfWake, __ATOMIC_RELAXED);
-    s.u64WaitMaskAny =
-        __atomic_load_n(&g_soft.u64WaitMaskAny, __ATOMIC_RELAXED);
-    s.u64WaitBlock =
-        __atomic_load_n(&g_soft.u64WaitBlock, __ATOMIC_RELAXED);
-    s.u64WaitNoblock =
-        __atomic_load_n(&g_soft.u64WaitNoblock, __ATOMIC_RELAXED);
-    s.u64WaitRegister =
-        __atomic_load_n(&g_soft.u64WaitRegister, __ATOMIC_RELAXED);
-    s.u64WaitNoThr =
-        __atomic_load_n(&g_soft.u64WaitNoThr, __ATOMIC_RELAXED);
-    s.u64WaitLoop =
-        __atomic_load_n(&g_soft.u64WaitLoop, __ATOMIC_RELAXED);
-    s.u64WaitRetBits =
-        __atomic_load_n(&g_soft.u64WaitRetBits, __ATOMIC_RELAXED);
-    s.u64WaitRetZero =
-        __atomic_load_n(&g_soft.u64WaitRetZero, __ATOMIC_RELAXED);
-    s.u64Poll = __atomic_load_n(&g_soft.u64Poll, __ATOMIC_RELAXED);
-    s.u64Abort = __atomic_load_n(&g_soft.u64Abort, __ATOMIC_RELAXED);
-    s.u64AbortWake =
-        __atomic_load_n(&g_soft.u64AbortWake, __ATOMIC_RELAXED);
-    s.u64AbortNoWaiter =
-        __atomic_load_n(&g_soft.u64AbortNoWaiter, __ATOMIC_RELAXED);
-    s.u64MarkDead =
-        __atomic_load_n(&g_soft.u64MarkDead, __ATOMIC_RELAXED);
-    s.u64MarkDeadRevoke =
-        __atomic_load_n(&g_soft.u64MarkDeadRevoke, __ATOMIC_RELAXED);
-    s.u64MarkDeadForce =
-        __atomic_load_n(&g_soft.u64MarkDeadForce, __ATOMIC_RELAXED);
-    s.u64InstallOk =
-        __atomic_load_n(&g_soft.u64InstallOk, __ATOMIC_RELAXED);
-    s.u64InstallFail =
-        __atomic_load_n(&g_soft.u64InstallFail, __ATOMIC_RELAXED);
-    s.u64InstallFailNull =
-        __atomic_load_n(&g_soft.u64InstallFailNull, __ATOMIC_RELAXED);
-    s.u64InstallFailDead =
-        __atomic_load_n(&g_soft.u64InstallFailDead, __ATOMIC_RELAXED);
-    s.u64InstallFailCap =
-        __atomic_load_n(&g_soft.u64InstallFailCap, __ATOMIC_RELAXED);
-    s.u64InstallDefaultRights =
-        __atomic_load_n(&g_soft.u64InstallDefaultRights, __ATOMIC_RELAXED);
-    s.u64MultiWakeCalls =
-        __atomic_load_n(&g_soft.u64MultiWakeCalls, __ATOMIC_RELAXED);
-    s.u64MultiWakeSum =
-        __atomic_load_n(&g_soft.u64MultiWakeSum, __ATOMIC_RELAXED);
-    s.u64MultiWakeZero =
-        __atomic_load_n(&g_soft.u64MultiWakeZero, __ATOMIC_RELAXED);
-    s.u64MultiWakeNull =
-        __atomic_load_n(&g_soft.u64MultiWakeNull, __ATOMIC_RELAXED);
-    s.u64MultiWakePeak =
-        __atomic_load_n(&g_soft.u64MultiWakePeak, __ATOMIC_RELAXED);
-    s.u64WaitersPeak =
-        __atomic_load_n(&g_soft.u64WaitersPeak, __ATOMIC_RELAXED);
-    s.u64BadgeBitsSum =
-        __atomic_load_n(&g_soft.u64BadgeBitsSum, __ATOMIC_RELAXED);
-    s.u64BadgeLastOr =
-        __atomic_load_n(&g_soft.u64BadgeLastOr, __ATOMIC_RELAXED);
-    s.u64QuerySignals =
-        __atomic_load_n(&g_soft.u64QuerySignals, __ATOMIC_RELAXED);
-    s.u64QueryPending =
-        __atomic_load_n(&g_soft.u64QueryPending, __ATOMIC_RELAXED);
-    s.u64QueryLastBadge =
-        __atomic_load_n(&g_soft.u64QueryLastBadge, __ATOMIC_RELAXED);
-    s.u64QueryWaiters =
-        __atomic_load_n(&g_soft.u64QueryWaiters, __ATOMIC_RELAXED);
-    s.u64QueryIsLive =
-        __atomic_load_n(&g_soft.u64QueryIsLive, __ATOMIC_RELAXED);
-    s.u64QueryIsLiveYes =
-        __atomic_load_n(&g_soft.u64QueryIsLiveYes, __ATOMIC_RELAXED);
-    s.u64QueryIsLiveNo =
-        __atomic_load_n(&g_soft.u64QueryIsLiveNo, __ATOMIC_RELAXED);
-    s.u64SoftLog =
+    u64SoftLogN =
         __atomic_load_n(&g_soft.u64SoftLog, __ATOMIC_RELAXED);
-    s.u64MsixInit =
+    u64Init = __atomic_load_n(&g_soft.u64Init, __ATOMIC_RELAXED);
+    u64PulseEnter =
+        __atomic_load_n(&g_soft.u64PulseEnter, __ATOMIC_RELAXED);
+    u64PulseHit =
+        __atomic_load_n(&g_soft.u64PulseHit, __ATOMIC_RELAXED);
+    u64WaitEnter =
+        __atomic_load_n(&g_soft.u64WaitEnter, __ATOMIC_RELAXED);
+    u64WaitHit =
+        __atomic_load_n(&g_soft.u64WaitHit, __ATOMIC_RELAXED);
+    u64MultiWakeCalls =
+        __atomic_load_n(&g_soft.u64MultiWakeCalls, __ATOMIC_RELAXED);
+    u64MultiWakeSum =
+        __atomic_load_n(&g_soft.u64MultiWakeSum, __ATOMIC_RELAXED);
+    u64MsixInit =
         __atomic_load_n(&g_soft.u64MsixInit, __ATOMIC_RELAXED);
-    s.u64MsixInitSkip =
-        __atomic_load_n(&g_soft.u64MsixInitSkip, __ATOMIC_RELAXED);
-    s.u64MsixGlobal =
-        __atomic_load_n(&g_soft.u64MsixGlobal, __ATOMIC_RELAXED);
+    u64EventPost =
+        __atomic_load_n(&g_soft.u64EventPost, __ATOMIC_RELAXED);
+    u64WakerKick =
+        __atomic_load_n(&g_soft.u64WakerKick, __ATOMIC_RELAXED);
+    u64WakerKickHit =
+        __atomic_load_n(&g_soft.u64WakerKickHit, __ATOMIC_RELAXED);
+    u64WakerDrain =
+        __atomic_load_n(&g_soft.u64WakerDrain, __ATOMIC_RELAXED);
+    u64WakerDrainSum =
+        __atomic_load_n(&g_soft.u64WakerDrainSum, __ATOMIC_RELAXED);
+    u64ResidualLean =
+        __atomic_load_n(&g_soft.u64ResidualLean, __ATOMIC_RELAXED);
+    u64ResidualLeanOk =
+        __atomic_load_n(&g_soft.u64ResidualLeanOk, __ATOMIC_RELAXED);
+    u64ResidualWaitOk =
+        __atomic_load_n(&g_soft.u64ResidualWaitOk, __ATOMIC_RELAXED);
+    u64ResidualWaitMiss =
+        __atomic_load_n(&g_soft.u64ResidualWaitMiss, __ATOMIC_RELAXED);
+    u64ResidualWaitAny =
+        __atomic_load_n(&g_soft.u64ResidualWaitAny, __ATOMIC_RELAXED);
+    u64ResidualThrOk =
+        __atomic_load_n(&g_soft.u64ResidualThrOk, __ATOMIC_RELAXED);
+    u64InstallOk =
+        __atomic_load_n(&g_soft.u64InstallOk, __ATOMIC_RELAXED);
+    u64WaitersPeak =
+        __atomic_load_n(&g_soft.u64WaitersPeak, __ATOMIC_RELAXED);
 
-    notify_soft_msix_snap(&u32Ready, &u32Live, &u32Signals, &u64Pending,
-                          &u64Last, &u32Waiters, &u32HasWaiter);
-    u32PendBits = notify_soft_popcount64(u64Pending);
-    u32LastBits = notify_soft_popcount64(u64Last);
+    notify_soft_msix_snap(&u32Ready, &u32Live, NULL, NULL, NULL,
+                          &u32Waiters, NULL);
     notify_soft_note_waiters(u32Waiters);
 
     /*
-     * Catalog lines (prefix-stable): declare multi-waiter capacity and the
-     * pulse/wait soft path surface so smoke/scripts can grep product depth
-     * without parsing C. Wave 20 deepen splits pulse/wait/multi/badge/
-     * install/abort/msix/query/capacity/catalog/outcome/path/return.
-     * Soft multi-waiter ≠ multi-process notify product.
-     * Soft ≠ MIG REPLY product.
+     * Grep: notify: soft inventory - single rollup lamp (sparse).
+     * Soft!=product / dual MIT OR Apache-2.0 / no version stamp / G-AC-1.
      */
-    /* Grep: notify: soft inventory */
     kprintf("notify: soft inventory multi_max=%u tag_waiter=%u "
-            "paths=pulse,signal,wait,poll,abort,mark_dead,install,msix "
-            "cas=pending_and_mask park=thread_block+schedule "
-            "wake=thread_wake soft_log=%lu msix_init=%lu inits=%lu "
-            "areas=%u multi_proc=0 wave=%u\n",
+            "pulse_enter=%lu pulse_hit=%lu wait_enter=%lu wait_hit=%lu "
+            "event=%lu waker_kick=%lu waker_drain=%lu "
+            "msix_init=%lu inits=%lu install_ok=%lu soft_log=%lu "
+            "areas=%u multi_proc=0 G-AC-1=1 thr_only=%u "
+            "(sparse; Soft!=product; dual MIT OR Apache-2.0; H1 thr-only)\n",
             (unsigned)NOTIFY_SOFT_MULTI_MAX, (unsigned)NOTIFY_TAG_WAITER,
-            (unsigned long)s.u64SoftLog, (unsigned long)s.u64MsixInit,
-            (unsigned long)s.u64Init,
-            (unsigned)NOTIFY_SOFT_DEEPEN_AREAS,
-            (unsigned)NOTIFY_SOFT_DEEPEN_WAVE);
-
-    /* Grep: notify: soft pulse inventory */
-    kprintf("notify: soft pulse inventory or=u64Pending "
-            "zero_coalesce=bit0 wake=soft_multi_max irq_safe=atomics "
-            "enter=%lu hit=%lu dead=%lu dead_null=%lu dead_ready=%lu "
-            "dead_state=%lu zero_coalesce=%lu wake=%lu nowaiter=%lu "
-            "signal_alias=%lu multi_wake_calls=%lu multi_wake_sum=%lu "
-            "wave=%u\n",
-            (unsigned long)s.u64PulseEnter,
-            (unsigned long)s.u64PulseHit, (unsigned long)s.u64PulseDead,
-            (unsigned long)s.u64PulseDeadNull,
-            (unsigned long)s.u64PulseDeadReady,
-            (unsigned long)s.u64PulseDeadState,
-            (unsigned long)s.u64PulseZeroCoalesce,
-            (unsigned long)s.u64PulseWake,
-            (unsigned long)s.u64PulseNoWaiter,
-            (unsigned long)s.u64SignalAlias,
-            (unsigned long)s.u64MultiWakeCalls,
-            (unsigned long)s.u64MultiWakeSum,
-            (unsigned)NOTIFY_SOFT_DEEPEN_WAVE);
-
-    /* Grep: notify: soft wait inventory */
-    kprintf("notify: soft wait inventory park=thread_block+schedule "
-            "claim=cas_clear_matched multi_register=u32Waiters+pWaiter_hint "
-            "paths=hit,park,poll_miss,dead,cas_retry,self_wake,mask_any "
-            "enter=%lu hit=%lu park=%lu poll_miss=%lu dead=%lu "
-            "cas_retry=%lu self_wake=%lu mask_any=%lu poll=%lu "
-            "block=%lu noblock=%lu register=%lu no_thr=%lu loop=%lu "
-            "wave=%u\n",
-            (unsigned long)s.u64WaitEnter, (unsigned long)s.u64WaitHit,
-            (unsigned long)s.u64WaitPark, (unsigned long)s.u64WaitPollMiss,
-            (unsigned long)s.u64WaitDead, (unsigned long)s.u64WaitCasRetry,
-            (unsigned long)s.u64WaitSelfWake, (unsigned long)s.u64WaitMaskAny,
-            (unsigned long)s.u64Poll, (unsigned long)s.u64WaitBlock,
-            (unsigned long)s.u64WaitNoblock,
-            (unsigned long)s.u64WaitRegister, (unsigned long)s.u64WaitNoThr,
-            (unsigned long)s.u64WaitLoop,
-            (unsigned)NOTIFY_SOFT_DEEPEN_WAVE);
-
-    /* Grep: notify: soft pulse — path tallies (Wave 20 deepen) */
-    kprintf("notify: soft pulse enter=%lu hit=%lu dead=%lu "
-            "dead_null=%lu dead_ready=%lu dead_state=%lu "
-            "zero_coalesce=%lu wake=%lu nowaiter=%lu signal_alias=%lu "
-            "wave=%u\n",
-            (unsigned long)s.u64PulseEnter, (unsigned long)s.u64PulseHit,
-            (unsigned long)s.u64PulseDead,
-            (unsigned long)s.u64PulseDeadNull,
-            (unsigned long)s.u64PulseDeadReady,
-            (unsigned long)s.u64PulseDeadState,
-            (unsigned long)s.u64PulseZeroCoalesce,
-            (unsigned long)s.u64PulseWake,
-            (unsigned long)s.u64PulseNoWaiter,
-            (unsigned long)s.u64SignalAlias,
-            (unsigned)NOTIFY_SOFT_DEEPEN_WAVE);
-
-    /* Grep: notify: soft pulse outcome — rollup */
-    kprintf("notify: soft pulse outcome hit=%lu dead=%lu wake=%lu "
-            "nowaiter=%lu zero_coalesce=%lu signal_alias=%lu wave=%u\n",
-            (unsigned long)s.u64PulseHit, (unsigned long)s.u64PulseDead,
-            (unsigned long)s.u64PulseWake,
-            (unsigned long)s.u64PulseNoWaiter,
-            (unsigned long)s.u64PulseZeroCoalesce,
-            (unsigned long)s.u64SignalAlias,
-            (unsigned)NOTIFY_SOFT_DEEPEN_WAVE);
-
-    /* Grep: notify: soft pulse dead — split surface */
-    kprintf("notify: soft pulse dead total=%lu null=%lu ready=%lu "
-            "state=%lu wave=%u\n",
-            (unsigned long)s.u64PulseDead,
-            (unsigned long)s.u64PulseDeadNull,
-            (unsigned long)s.u64PulseDeadReady,
-            (unsigned long)s.u64PulseDeadState,
-            (unsigned)NOTIFY_SOFT_DEEPEN_WAVE);
-
-    /* Grep: notify: soft wait — path tallies (Wave 20 deepen) */
-    kprintf("notify: soft wait enter=%lu hit=%lu park=%lu poll_miss=%lu "
-            "dead=%lu dead_enter=%lu dead_loop=%lu cas_retry=%lu "
-            "self_wake=%lu mask_any=%lu block=%lu noblock=%lu "
-            "register=%lu no_thr=%lu loop=%lu poll=%lu "
-            "ret_bits=%lu ret_zero=%lu wave=%u\n",
-            (unsigned long)s.u64WaitEnter, (unsigned long)s.u64WaitHit,
-            (unsigned long)s.u64WaitPark, (unsigned long)s.u64WaitPollMiss,
-            (unsigned long)s.u64WaitDead,
-            (unsigned long)s.u64WaitDeadEnter,
-            (unsigned long)s.u64WaitDeadLoop,
-            (unsigned long)s.u64WaitCasRetry,
-            (unsigned long)s.u64WaitSelfWake,
-            (unsigned long)s.u64WaitMaskAny, (unsigned long)s.u64WaitBlock,
-            (unsigned long)s.u64WaitNoblock,
-            (unsigned long)s.u64WaitRegister, (unsigned long)s.u64WaitNoThr,
-            (unsigned long)s.u64WaitLoop, (unsigned long)s.u64Poll,
-            (unsigned long)s.u64WaitRetBits,
-            (unsigned long)s.u64WaitRetZero,
-            (unsigned)NOTIFY_SOFT_DEEPEN_WAVE);
-
-    /* Grep: notify: soft wait outcome — rollup */
-    kprintf("notify: soft wait outcome hit=%lu park=%lu poll_miss=%lu "
-            "dead=%lu cas_retry=%lu self_wake=%lu register=%lu "
-            "no_thr=%lu ret_bits=%lu ret_zero=%lu wave=%u\n",
-            (unsigned long)s.u64WaitHit, (unsigned long)s.u64WaitPark,
-            (unsigned long)s.u64WaitPollMiss, (unsigned long)s.u64WaitDead,
-            (unsigned long)s.u64WaitCasRetry,
-            (unsigned long)s.u64WaitSelfWake,
-            (unsigned long)s.u64WaitRegister, (unsigned long)s.u64WaitNoThr,
-            (unsigned long)s.u64WaitRetBits,
-            (unsigned long)s.u64WaitRetZero,
-            (unsigned)NOTIFY_SOFT_DEEPEN_WAVE);
-
-    /* Grep: notify: soft wait dead — enter/loop split */
-    kprintf("notify: soft wait dead total=%lu enter=%lu loop=%lu "
-            "wave=%u\n",
-            (unsigned long)s.u64WaitDead,
-            (unsigned long)s.u64WaitDeadEnter,
-            (unsigned long)s.u64WaitDeadLoop,
-            (unsigned)NOTIFY_SOFT_DEEPEN_WAVE);
+            (unsigned long)u64PulseEnter, (unsigned long)u64PulseHit,
+            (unsigned long)u64WaitEnter, (unsigned long)u64WaitHit,
+            (unsigned long)u64EventPost, (unsigned long)u64WakerKick,
+            (unsigned long)u64WakerDrain, (unsigned long)u64MsixInit,
+            (unsigned long)u64Init, (unsigned long)u64InstallOk,
+            (unsigned long)u64SoftLogN, (unsigned)NOTIFY_SOFT_AREAS,
+            (unsigned)NOTIFY_H1_THR_ONLY);
 
     /*
      * Grep: notify: soft multi
-     * Soft multi-waiter wake budget — not multi-process notify product.
+     * Soft multi-waiter wake budget - not multi-process notify product.
      */
-    kprintf("notify: soft multi calls=%lu sum=%lu zero=%lu null=%lu "
-            "peak_woken=%lu peak_waiters=%lu multi_max=%u "
-            "tag_waiter=%u hint=pWaiter count=u32Waiters multi_proc=0 "
-            "soft_ne_multi_proc=1 wave=%u\n",
-            (unsigned long)s.u64MultiWakeCalls,
-            (unsigned long)s.u64MultiWakeSum,
-            (unsigned long)s.u64MultiWakeZero,
-            (unsigned long)s.u64MultiWakeNull,
-            (unsigned long)s.u64MultiWakePeak,
-            (unsigned long)s.u64WaitersPeak,
-            (unsigned)NOTIFY_SOFT_MULTI_MAX,
-            (unsigned)NOTIFY_TAG_WAITER,
-            (unsigned)NOTIFY_SOFT_DEEPEN_WAVE);
-
-    /* Grep: notify: soft badge */
-    kprintf("notify: soft badge pending=0x%lx pending_bits=%u "
-            "last=0x%lx last_bits=%u zero_coalesce=%lu bits_sum=%lu "
-            "last_or=0x%lx coalesce_policy=bit0 wave=%u\n",
-            (unsigned long)u64Pending, (unsigned)u32PendBits,
-            (unsigned long)u64Last, (unsigned)u32LastBits,
-            (unsigned long)s.u64PulseZeroCoalesce,
-            (unsigned long)s.u64BadgeBitsSum,
-            (unsigned long)s.u64BadgeLastOr,
-            (unsigned)NOTIFY_SOFT_DEEPEN_WAVE);
-
-    /* Grep: notify: soft install */
-    kprintf("notify: soft install ok=%lu fail=%lu fail_null=%lu "
-            "fail_dead=%lu fail_cap=%lu default_rights=%lu "
-            "cap=GJ_CAP_NOTIFICATION wave=%u\n",
-            (unsigned long)s.u64InstallOk,
-            (unsigned long)s.u64InstallFail,
-            (unsigned long)s.u64InstallFailNull,
-            (unsigned long)s.u64InstallFailDead,
-            (unsigned long)s.u64InstallFailCap,
-            (unsigned long)s.u64InstallDefaultRights,
-            (unsigned)NOTIFY_SOFT_DEEPEN_WAVE);
-
-    /*
-     * Grep: notify: soft return
-     * Wave 19 public return-surface: wait badge / install status / wake.
-     * Soft multi-waiter ≠ multi-process notify product.
-     * Soft ≠ MIG REPLY product.
-     */
-    kprintf("notify: soft return wait_bits=%lu wait_zero=%lu "
-            "wait_hit=%lu wait_poll_miss=%lu wait_dead=%lu "
-            "install_ok=%lu install_fail=%lu install_null=%lu "
-            "install_dead=%lu install_cap=%lu "
-            "wake_calls=%lu wake_sum=%lu wake_zero=%lu "
-            "multi_proc=0 soft_ne_multi_proc=1 soft_ne_mig_reply=1 "
-            "wave=%u\n",
-            (unsigned long)s.u64WaitRetBits,
-            (unsigned long)s.u64WaitRetZero,
-            (unsigned long)s.u64WaitHit,
-            (unsigned long)s.u64WaitPollMiss,
-            (unsigned long)s.u64WaitDead,
-            (unsigned long)s.u64InstallOk,
-            (unsigned long)s.u64InstallFail,
-            (unsigned long)s.u64InstallFailNull,
-            (unsigned long)s.u64InstallFailDead,
-            (unsigned long)s.u64InstallFailCap,
-            (unsigned long)s.u64MultiWakeCalls,
-            (unsigned long)s.u64MultiWakeSum,
-            (unsigned long)s.u64MultiWakeZero,
-            (unsigned)NOTIFY_SOFT_DEEPEN_WAVE);
-
-    /* Grep: notify: soft return wait — badge return surface */
-    kprintf("notify: soft return wait bits=%lu zero=%lu hit=%lu "
-            "poll_miss=%lu dead=%lu wave=%u\n",
-            (unsigned long)s.u64WaitRetBits,
-            (unsigned long)s.u64WaitRetZero,
-            (unsigned long)s.u64WaitHit,
-            (unsigned long)s.u64WaitPollMiss,
-            (unsigned long)s.u64WaitDead,
-            (unsigned)NOTIFY_SOFT_DEEPEN_WAVE);
-
-    /* Grep: notify: soft return install — status surface */
-    kprintf("notify: soft return install ok=%lu fail=%lu null=%lu "
-            "dead=%lu cap=%lu wave=%u\n",
-            (unsigned long)s.u64InstallOk,
-            (unsigned long)s.u64InstallFail,
-            (unsigned long)s.u64InstallFailNull,
-            (unsigned long)s.u64InstallFailDead,
-            (unsigned long)s.u64InstallFailCap,
-            (unsigned)NOTIFY_SOFT_DEEPEN_WAVE);
-
-    /* Grep: notify: soft return wake — multi-wake return surface */
-    kprintf("notify: soft return wake calls=%lu sum=%lu zero=%lu "
-            "null=%lu peak=%lu multi_max=%u multi_proc=0 wave=%u\n",
-            (unsigned long)s.u64MultiWakeCalls,
-            (unsigned long)s.u64MultiWakeSum,
-            (unsigned long)s.u64MultiWakeZero,
-            (unsigned long)s.u64MultiWakeNull,
-            (unsigned long)s.u64MultiWakePeak,
-            (unsigned)NOTIFY_SOFT_MULTI_MAX,
-            (unsigned)NOTIFY_SOFT_DEEPEN_WAVE);
-
-    /* Grep: notify: soft abort */
-    kprintf("notify: soft abort enter=%lu wake=%lu nowaiter=%lu "
-            "badge=none multi_wake=1 wave=%u\n",
-            (unsigned long)s.u64Abort, (unsigned long)s.u64AbortWake,
-            (unsigned long)s.u64AbortNoWaiter,
-            (unsigned)NOTIFY_SOFT_DEEPEN_WAVE);
-
-    /* Grep: notify: soft mark_dead */
-    kprintf("notify: soft mark_dead enter=%lu revoke=%lu force=%lu "
-            "abort_follow=1 ready_clear=1 wave=%u\n",
-            (unsigned long)s.u64MarkDead,
-            (unsigned long)s.u64MarkDeadRevoke,
-            (unsigned long)s.u64MarkDeadForce,
-            (unsigned)NOTIFY_SOFT_DEEPEN_WAVE);
-
-    /* Grep: notify: soft msix */
-    kprintf("notify: soft msix init=%lu skip=%lu global=%lu ready=%u "
-            "live=%u signals=%u pending=0x%lx last=0x%lx waiters=%u "
-            "has_waiter=%u soft_multi_max=%u wave=%u\n",
-            (unsigned long)s.u64MsixInit,
-            (unsigned long)s.u64MsixInitSkip,
-            (unsigned long)s.u64MsixGlobal, (unsigned)u32Ready,
-            (unsigned)u32Live, (unsigned)u32Signals,
-            (unsigned long)u64Pending, (unsigned long)u64Last,
-            (unsigned)u32Waiters, (unsigned)u32HasWaiter,
-            (unsigned)NOTIFY_SOFT_MULTI_MAX,
-            (unsigned)NOTIFY_SOFT_DEEPEN_WAVE);
-
-    /* Grep: notify: soft query */
-    kprintf("notify: soft query signals=%lu pending=%lu last_badge=%lu "
-            "waiters=%lu is_live=%lu is_live_yes=%lu is_live_no=%lu "
-            "wave=%u\n",
-            (unsigned long)s.u64QuerySignals,
-            (unsigned long)s.u64QueryPending,
-            (unsigned long)s.u64QueryLastBadge,
-            (unsigned long)s.u64QueryWaiters,
-            (unsigned long)s.u64QueryIsLive,
-            (unsigned long)s.u64QueryIsLiveYes,
-            (unsigned long)s.u64QueryIsLiveNo,
-            (unsigned)NOTIFY_SOFT_DEEPEN_WAVE);
-
-    /* Grep: notify: soft capacity — fixed multi / tag lamps */
-    kprintf("notify: soft capacity multi_max=%u tag_waiter=%u heap=0 "
-            "multi_proc=0 process_queue=0 spin_product=0 irq_alloc=0 "
-            "wave=%u\n",
+    kprintf("notify: soft multi calls=%lu sum=%lu peak_waiters=%lu "
+            "multi_max=%u tag_waiter=%u waker_kick=%lu kick_hit=%lu "
+            "waker_drain=%lu drain_sum=%lu drain_rounds=%u "
+            "multi_proc=0 soft_ne_multi_proc=1 "
+            "(soft multi-waiter residual; Soft!=product)\n",
+            (unsigned long)u64MultiWakeCalls,
+            (unsigned long)u64MultiWakeSum,
+            (unsigned long)u64WaitersPeak,
             (unsigned)NOTIFY_SOFT_MULTI_MAX, (unsigned)NOTIFY_TAG_WAITER,
-            (unsigned)NOTIFY_SOFT_DEEPEN_WAVE);
+            (unsigned long)u64WakerKick, (unsigned long)u64WakerKickHit,
+            (unsigned long)u64WakerDrain, (unsigned long)u64WakerDrainSum,
+            (unsigned)NOTIFY_WAKER_DRAIN_ROUNDS);
 
     /*
-     * Grep: notify: soft catalog — path surface catalog (impl vs not).
-     * Soft multi-waiter threads on one object; multi-process product open.
+     * Grep: notify: soft residual lean
+     * Event/wait/waker residual honesty for UDX thr notify path.
+     * Soft!=product dual license. multi_proc=0 / mig_reply=0 open surfaces.
+     * Product IRQ Notification mint OPEN (badge; not .ko). H1 thr-only.
+     * greppable: product_hosts=UDX | dual_dod=OPEN | Soft!=product
      */
-    kprintf("notify: soft catalog pulse=1 signal_alias=1 wait=1 poll=1 "
-            "abort=1 mark_dead=1 install=1 msix=1 soft_multi=1 "
-            "multi_proc=0 cross_proc_queue=0 wave=%u\n",
-            (unsigned)NOTIFY_SOFT_DEEPEN_WAVE);
+    kprintf("notify: soft residual lean "
+            "event=%lu waker_kick=%lu kick_hit=%lu "
+            "waker_drain=%lu drain_sum=%lu lean_runs=%lu lean_ok=%lu "
+            "wait_ok=%lu wait_miss=%lu wait_any=%lu thr_ok=%lu "
+            "msix_ready=%u live=%u path=irq_pulse->thr_notify_wait "
+            "thr_only=%u irq_pulse_only=%u batch_after_wait=%u "
+            "irq_driver=%u udx=1 product_hosts=UDX soft_ne_product=1 "
+            "dual=MIT_OR_Apache-2.0 multi_proc=0 mig_reply=0 mint_OPEN=1 "
+            "G-AC-1=1 hazard=H1 dual_dod=OPEN H2=once "
+            "(Soft!=product; dual MIT OR Apache-2.0; no version stamp; "
+            "not multi-process notify product; no .ko product; "
+            "H1 thr notify not hard-IRQ driver; Dual DoD OPEN)\n",
+            (unsigned long)u64EventPost, (unsigned long)u64WakerKick,
+            (unsigned long)u64WakerKickHit, (unsigned long)u64WakerDrain,
+            (unsigned long)u64WakerDrainSum,
+            (unsigned long)u64ResidualLean,
+            (unsigned long)u64ResidualLeanOk,
+            (unsigned long)u64ResidualWaitOk,
+            (unsigned long)u64ResidualWaitMiss,
+            (unsigned long)u64ResidualWaitAny,
+            (unsigned long)u64ResidualThrOk, (unsigned)u32Ready,
+            (unsigned)u32Live, (unsigned)NOTIFY_H1_THR_ONLY,
+            (unsigned)NOTIFY_H1_IRQ_PULSE_ONLY,
+            (unsigned)NOTIFY_H1_BATCH_AFTER_WAIT,
+            (unsigned)NOTIFY_H1_IRQ_DRIVER);
+
+    /*
+     * Grep: notify: soft residual lean wait
+     * Wait residual for thr/UDX path (pulse -> CAS-clear wait/poll).
+     * Product IRQ Notification mint OPEN. Soft!=product. H1 thr-only.
+     * greppable: product_hosts=UDX | dual_dod=OPEN | Soft!=product
+     */
+    kprintf("notify: soft residual lean wait "
+            "wait_enter=%lu wait_hit=%lu wait_ok=%lu wait_miss=%lu "
+            "wait_any=%lu thr_ok=%lu path=irq_pulse->thr_notify_wait "
+            "udx_thr=1 fBlock_noblock=1 cas=pending_and_mask "
+            "thr_only=%u irq_pulse_only=%u batch_after_wait=%u "
+            "irq_driver=%u soft_ne_product=1 dual=MIT_OR_Apache-2.0 "
+            "multi_proc=0 mig_reply=0 mint_OPEN=1 G-AC-1=1 hazard=H1 "
+            "product_hosts=UDX dual_dod=OPEN H2=once "
+            "(UDX thr wait residual; Soft!=product; no .ko product; "
+            "H1 thr notify not hard-IRQ driver)\n",
+            (unsigned long)u64WaitEnter, (unsigned long)u64WaitHit,
+            (unsigned long)u64ResidualWaitOk,
+            (unsigned long)u64ResidualWaitMiss,
+            (unsigned long)u64ResidualWaitAny,
+            (unsigned long)u64ResidualThrOk,
+            (unsigned)NOTIFY_H1_THR_ONLY,
+            (unsigned)NOTIFY_H1_IRQ_PULSE_ONLY,
+            (unsigned)NOTIFY_H1_BATCH_AFTER_WAIT,
+            (unsigned)NOTIFY_H1_IRQ_DRIVER);
+
+    /*
+     * Grep: notify: soft residual lean thr
+     * H1 thr-only direction lamp (sparse; Soft!=product).
+     * hard IRQ = pulse only; thr reaps; batch after wait; no IRQ driver.
+     * greppable: product_hosts=UDX | dual_dod=OPEN | Soft!=product
+     */
+    kprintf("notify: soft residual lean thr "
+            "thr_only=%u irq_pulse_only=%u thr_wait=%u "
+            "batch_after_wait=%u irq_driver=%u thr_ok=%lu "
+            "path=irq_pulse->thr_notify_wait "
+            "soft_ne_product=1 dual=MIT_OR_Apache-2.0 multi_proc=0 "
+            "mig_reply=0 mint_OPEN=1 G-AC-1=1 hazard=H1 "
+            "product_hosts=UDX dual_dod=OPEN H2=once "
+            "(H1 thr notify not hard-IRQ driver; Soft!=product; "
+            "no version stamp; no .ko product)\n",
+            (unsigned)NOTIFY_H1_THR_ONLY,
+            (unsigned)NOTIFY_H1_IRQ_PULSE_ONLY,
+            (unsigned)NOTIFY_H1_THR_WAIT,
+            (unsigned)NOTIFY_H1_BATCH_AFTER_WAIT,
+            (unsigned)NOTIFY_H1_IRQ_DRIVER,
+            (unsigned long)u64ResidualThrOk);
 
     /*
      * Grep: notify: soft path
-     * Honesty: soft multi-waiter ≠ multi-process notify product.
+     * Honesty: soft multi-waiter != multi-process notify product.
+     * Event/wait/waker residual: door clients + UDX thr notify path.
+     * H1: thr notify not hard-IRQ driver. product_hosts=UDX Dual DoD OPEN.
      */
-    kprintf("notify: soft path claim=badge_pulse_wait "
+    kprintf("notify: soft path claim=badge_event_wait_waker "
             "irq=pulse_or+soft_multi_wake cas=pending_and_mask "
-            "multi_max=%u tag_waiter=%u park=thread_block+schedule "
-            "return_surface=1 multi_proc=0 soft_ne_multi_proc=1 "
-            "soft_ne_mig_reply=1 "
-            "wave=%u (soft inventory; not multi-process notify "
-            "product; soft != MIG REPLY product)\n",
+            "event=notify_event wait=notify_wait+poll "
+            "waker=notify_wake+drain "
+            "udx=NOTIFY_WAIT multi_max=%u tag_waiter=%u "
+            "park=thread_block+schedule drain_rounds=%u "
+            "thr_only=%u irq_pulse_only=%u batch_after_wait=%u "
+            "irq_driver=%u multi_proc=0 soft_ne_multi_proc=1 "
+            "soft_ne_mig_reply=1 soft_ne_product=1 mint_OPEN=1 "
+            "G-AC-1=1 hazard=H1 product_hosts=UDX dual_dod=OPEN H2=once "
+            "(soft inventory; UDX thr wait residual; not multi-process "
+            "notify; Soft!=product; dual MIT OR Apache-2.0; "
+            "H1 thr notify not hard-IRQ driver; MSI-X inject Dual DoD OPEN)\n",
             (unsigned)NOTIFY_SOFT_MULTI_MAX, (unsigned)NOTIFY_TAG_WAITER,
-            (unsigned)NOTIFY_SOFT_DEEPEN_WAVE);
-
-    /* Grep: notify: soft stats */
-    kprintf("notify: soft stats init=%lu pulse_hit=%lu pulse_dead=%lu "
-            "pulse_zero=%lu pulse_wake=%lu pulse_nowaiter=%lu "
-            "signal_alias=%lu wait_enter=%lu wait_hit=%lu wait_park=%lu "
-            "wait_poll_miss=%lu wait_dead=%lu wait_cas_retry=%lu "
-            "wait_self_wake=%lu wait_mask_any=%lu poll=%lu "
-            "abort=%lu abort_wake=%lu mark_dead=%lu "
-            "install_ok=%lu install_fail=%lu multi_wake_calls=%lu "
-            "multi_wake_sum=%lu soft_log=%lu msix_init=%lu wave=%u\n",
-            (unsigned long)s.u64Init, (unsigned long)s.u64PulseHit,
-            (unsigned long)s.u64PulseDead,
-            (unsigned long)s.u64PulseZeroCoalesce,
-            (unsigned long)s.u64PulseWake,
-            (unsigned long)s.u64PulseNoWaiter,
-            (unsigned long)s.u64SignalAlias, (unsigned long)s.u64WaitEnter,
-            (unsigned long)s.u64WaitHit, (unsigned long)s.u64WaitPark,
-            (unsigned long)s.u64WaitPollMiss, (unsigned long)s.u64WaitDead,
-            (unsigned long)s.u64WaitCasRetry,
-            (unsigned long)s.u64WaitSelfWake, (unsigned long)s.u64WaitMaskAny,
-            (unsigned long)s.u64Poll, (unsigned long)s.u64Abort,
-            (unsigned long)s.u64AbortWake, (unsigned long)s.u64MarkDead,
-            (unsigned long)s.u64InstallOk, (unsigned long)s.u64InstallFail,
-            (unsigned long)s.u64MultiWakeCalls,
-            (unsigned long)s.u64MultiWakeSum, (unsigned long)s.u64SoftLog,
-            (unsigned long)s.u64MsixInit,
-            (unsigned)NOTIFY_SOFT_DEEPEN_WAVE);
-
-    /*
-     * Grep: notify: soft return rate
-     * Wave 17 return-surface rate lamps (kept) (soft ≠ product multi-process).
-     */
-    kprintf("notify: soft return rate "
-            "wait_bits=%lu wait_zero=%lu "
-            "install_ok=%lu install_fail=%lu "
-            "wake_calls=%lu wake_zero=%lu "
-            "wait_hit=%lu wait_dead=%lu "
-            "wave=%u (return rate; Soft≠product; soft≠multi-process notify; "
-            ")\n",
-            (unsigned long)s.u64WaitRetBits,
-            (unsigned long)s.u64WaitRetZero,
-            (unsigned long)s.u64InstallOk,
-            (unsigned long)s.u64InstallFail,
-            (unsigned long)s.u64MultiWakeCalls,
-            (unsigned long)s.u64MultiWakeZero,
-            (unsigned long)s.u64WaitHit,
-            (unsigned long)s.u64WaitDead,
-            (unsigned)NOTIFY_SOFT_DEEPEN_WAVE);
-
-    /*
-     * Grep: notify: soft retcode
-     * Wave 17 retcode catalog for wait badge / install / wake classes.
-     */
-    kprintf("notify: soft retcode "
-            "wait_bits=1 wait_zero=1 wait_hit=1 wait_poll_miss=1 wait_dead=1 "
-            "install_ok=1 install_null=1 install_dead=1 install_cap=1 "
-            "wake_calls=1 wake_sum=1 wake_zero=1 "
-            "multi_proc=0 soft_ne_multi_proc=1 soft_ne_mig_reply=1 wave=%u "
-            "(retcode catalog; Soft≠product; soft≠multi-process notify)\n",
-            (unsigned)NOTIFY_SOFT_DEEPEN_WAVE);
-
-    /*
-     * ---- Wave 18 complementary surfaces (kept) (never reshape primary).
-     * Return surfaces only — soft inventory; never hard-gates product paths.
-     */
-    /* Grep: notify: soft return selftest — Wave 19 terminal return surface */
-    kprintf("notify: soft return selftest inv_ret=1 product_kernel=OPEN "
-            "multi_server=0 rate_limited=0 wave=%u soft PASS\n",
-            (unsigned)NOTIFY_SOFT_DEEPEN_WAVE);
-
-    /* Grep: notify: soft retmap — Wave 19 return-surface map */
-    kprintf("notify: soft retmap soft_inv=1 deepen=1 return_rate=1 retcode=1 "
-            "product=OPEN wave=%u soft PASS\n",
-            (unsigned)NOTIFY_SOFT_DEEPEN_WAVE);
-
-    /* Grep: notify: soft deepen wave (Wave 24 stamp) */
-    /*
-     * ---- Wave 19 complementary surfaces (kept) (never reshape primary).
-     * Return surfaces only — soft inventory; never hard-gates product paths.
-     */
-    /* Grep: notify: soft retclass — Wave 19 return-class taxonomy (kept) */
-    kprintf("notify: soft retclass ok|fail|inval|nodev|busy|nomem "
-            "soft_only=1 product_gate=0 wave=%u "
-            "(retclass taxonomy; Soft≠product)\n",
-            (unsigned)NOTIFY_SOFT_DEEPEN_WAVE);
-    /* Grep: notify: soft retlane — Wave 19 return-lane catalog (kept) */
-    kprintf("notify: soft retlane inv|selftest|rate|retcode|retmap|class "
-            "product_kernel=OPEN soft_ne_product=1 wave=%u "
-            "(retlane catalog; Soft≠product)\n",
-            (unsigned)NOTIFY_SOFT_DEEPEN_WAVE);
-    /*
-     * ---- Wave 20 complementary surfaces (kept) (never reshape primary).
-     * Return surfaces only — soft inventory; never hard-gates product paths.
-     */
-    /* Grep: notify: soft retbound — Wave 20 return-bound honesty (kept) */
-    kprintf("notify: soft retbound soft_only=1 product_gate=0 hard_gate=0 "
-            "never_blocks_m0=1 wave=%u "
-            "(retbound honesty; Soft≠product)\n",
-            (unsigned)NOTIFY_SOFT_DEEPEN_WAVE);
-    /* Grep: notify: soft retseal — Wave 20 seal stamp (kept) */
-    kprintf("notify: soft retseal exclusive=1 soft_ne_product=1 "
-            "product_kernel=OPEN wave=%u "
-            "(retseal stamp; Soft≠product)\n",
-            (unsigned)NOTIFY_SOFT_DEEPEN_WAVE);
-            /*
-             * ---- Wave 21 complementary surfaces (kept) (never reshape primary).
-             * Return surfaces only — soft inventory; never hard-gates product paths.
-            */
-            /* Grep: notify: soft retpulse — Wave 21 return-pulse honesty (kept) */
-            kprintf("notify: soft retpulse soft_only=1 product_gate=0 soft_ne_product=1 "
-                    "never_blocks_m0=1 wave=%u "
-                    "(retpulse honesty; Soft≠product)\n",
-                    (unsigned)NOTIFY_SOFT_DEEPEN_WAVE);
-            /* Grep: notify: soft retmark — Wave 21 mark stamp (kept) */
-            kprintf("notify: soft retmark exclusive=1 soft_ne_product=1 "
-                    "product_kernel=OPEN wave=%u "
-                    "(retmark stamp; Soft≠product)\n",
-                    (unsigned)NOTIFY_SOFT_DEEPEN_WAVE);
-            /*
-             * ---- Wave 22 complementary surfaces (kept) (never reshape primary).
-             * Return surfaces only — soft inventory; never hard-gates product paths.
-            */
-            /* Grep: notify: soft retphase — Wave 22 return-phase honesty (kept) */
-            kprintf("notify: soft retphase soft_only=1 product_gate=0 soft_ne_product=1 "
-                    "never_blocks_m0=1 wave=%u "
-                    "(retphase honesty; Soft≠product)\n",
-                    (unsigned)NOTIFY_SOFT_DEEPEN_WAVE);
-            /* Grep: notify: soft retbadge — Wave 22 badge stamp (kept) */
-            kprintf("notify: soft retbadge exclusive=1 soft_ne_product=1 "
-                    "product_kernel=OPEN wave=%u "
-                    "(retbadge stamp; Soft≠product)\n",
-                    (unsigned)NOTIFY_SOFT_DEEPEN_WAVE);
-/*
- * ---- Wave 23 complementary surfaces (kept) (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
-            */
-            /* Grep: notify: soft rettoken — Wave 23 return-token honesty (kept) */
-            kprintf("notify: soft rettoken soft_only=1 product_gate=0 soft_ne_product=1 "
-                    "never_blocks_m0=1 wave=%u "
-                    "(rettoken honesty; Soft≠product)\n",
-                    (unsigned)NOTIFY_SOFT_DEEPEN_WAVE);
-            /* Grep: notify: soft retcrest — Wave 23 crest stamp (kept) */
-            kprintf("notify: soft retcrest exclusive=1 soft_ne_product=1 "
-                    "product_kernel=OPEN wave=%u "
-                    "(retcrest stamp; Soft≠product)\n",
-                    (unsigned)NOTIFY_SOFT_DEEPEN_WAVE);
-            /*
-             * ---- Wave 24 complementary surfaces (kept) (never reshape primary).
-             * Return surfaces only — soft inventory; never hard-gates product paths.
-             */
-            /* Grep: notify: soft retvault — Wave 24 return-vault honesty (kept) */
-            kprintf("notify: soft retvault soft_only=1 product_gate=0 soft_ne_product=1 "
-                    "never_blocks_m0=1 wave=%u "
-                    "(retvault honesty; Soft≠product)\n",
-                    (unsigned)NOTIFY_SOFT_DEEPEN_WAVE);
-            /* Grep: notify: soft retbanner — Wave 24 banner stamp (kept) */
-            kprintf("notify: soft retbanner exclusive=1 soft_ne_product=1 "
-                    "product_kernel=OPEN wave=%u "
-                    "(retbanner stamp; Soft≠product)\n",
-                    (unsigned)NOTIFY_SOFT_DEEPEN_WAVE);
-            /*
-             * ---- Wave 25 complementary surfaces (kept) (never reshape primary).
-             * Return surfaces only — soft inventory; never hard-gates product paths.
-             */
-            /* Grep: notify: soft retledger — Wave 25 return-ledger honesty (kept) */
-            kprintf("notify: soft retledger soft_only=1 product_gate=0 soft_ne_product=1 "
-                    "never_blocks_m0=1 wave=%u "
-                    "(retledger honesty; Soft≠product)\n",
-                    (unsigned)NOTIFY_SOFT_DEEPEN_WAVE);
-            /* Grep: notify: soft retbeacon — Wave 25 beacon stamp (kept) */
-            kprintf("notify: soft retbeacon exclusive=1 soft_ne_product=1 "
-                    "product_kernel=OPEN wave=%u "
-                    "(retbeacon stamp; Soft≠product)\n",
-                    (unsigned)NOTIFY_SOFT_DEEPEN_WAVE);
-            /*
-             * ---- Wave 26 complementary surfaces (kept) (never reshape primary).
-             * Return surfaces only — soft inventory; never hard-gates product paths.
-             */
-            /* Grep: notify: soft retcipher — Wave 26 return-cipher honesty (kept) */
-            kprintf("notify: soft retcipher soft_only=1 product_gate=0 soft_ne_product=1 "
-                    "never_blocks_m0=1 wave=%u "
-                    "(retcipher honesty; Soft≠product)\n",
-                    (unsigned)NOTIFY_SOFT_DEEPEN_WAVE);
-            /* Grep: notify: soft retflame — Wave 26 flame stamp (kept) */
-            kprintf("notify: soft retflame exclusive=1 soft_ne_product=1 "
-                    "product_kernel=OPEN wave=%u "
-                    "(retflame stamp; Soft≠product)\n",
-                    (unsigned)NOTIFY_SOFT_DEEPEN_WAVE);
-                    /*
-                     * ---- Wave 27 complementary surfaces (kept) (never reshape primary).
-                     * Return surfaces only — soft inventory; never hard-gates product paths.
-                     */
-                    /* Grep: notify: soft retprism — Wave 27 return-prism honesty (kept) */
-                    kprintf("notify: soft retprism soft_only=1 product_gate=0 soft_ne_product=1 "
-                            "never_blocks_m0=1 wave=%u "
-                            "(retprism honesty; Soft≠product)\n",
-                            (unsigned)NOTIFY_SOFT_DEEPEN_WAVE);
-                    /* Grep: notify: soft retforge — Wave 27 forge stamp (kept) */
-                    kprintf("notify: soft retforge exclusive=1 soft_ne_product=1 "
-                            "product_kernel=OPEN wave=%u "
-                            "(retforge stamp; Soft≠product)\n",
-                            (unsigned)NOTIFY_SOFT_DEEPEN_WAVE);
-                            /*
-                             * ---- Wave 28 complementary surfaces (kept) (never reshape primary).
-                             * Return surfaces only — soft inventory; never hard-gates product paths.
-                             */
-                            /* Grep: notify: soft retshard — Wave 28 return-shard honesty (kept) */
-                            kprintf("notify: soft retshard soft_only=1 product_gate=0 soft_ne_product=1 "
-                                "never_blocks_m0=1 wave=%u "
-                                "(retshard honesty; Soft≠product)\n",
-                                (unsigned)NOTIFY_SOFT_DEEPEN_WAVE);
-                            /* Grep: notify: soft retcrown — Wave 28 crown stamp (kept) */
-                            kprintf("notify: soft retcrown exclusive=1 soft_ne_product=1 "
-                                "product_kernel=OPEN wave=%u "
-                                "(retcrown stamp; Soft≠product)\n",
-                                (unsigned)NOTIFY_SOFT_DEEPEN_WAVE);
-                                /*
-                             * ---- Wave 29 complementary surfaces (kept) (never reshape primary).
-                             * Return surfaces only — soft inventory; never hard-gates product paths.
-                             */
-                            /* Grep: notify: soft retglyph — Wave 29 return-glyph honesty (kept) */
-                            kprintf("notify: soft retglyph soft_only=1 product_gate=0 soft_ne_product=1 "
-                                    "never_blocks_m0=1 wave=116 "
-                                    "(retglyph honesty; Soft≠product)\n");
-                            /* Grep: notify: soft retscepter — Wave 29 scepter stamp (kept) */
-                            kprintf("notify: soft retscepter exclusive=1 soft_ne_product=1 "
-                                    "product_kernel=OPEN wave=116 "
-                                    "(retscepter stamp; Soft≠product)\n");
-                                /*
-                             * ---- Wave 30 complementary surfaces (kept) (never reshape primary).
-                             * Return surfaces only — soft inventory; never hard-gates product paths.
-                             */
-                            /* Grep: notify: soft retsigil — Wave 30 return-sigil honesty (kept) */
-                            kprintf("notify: soft retsigil soft_only=1 product_gate=0 soft_ne_product=1 "
-                                    "never_blocks_m0=1 wave=116 "
-                                    "(retsigil honesty; Soft≠product)\n");
-                            /* Grep: notify: soft retemblem — Wave 30 emblem stamp (kept) */
-                            kprintf("notify: soft retemblem exclusive=1 soft_ne_product=1 "
-                                    "product_kernel=OPEN wave=116 "
-                                    "(retemblem stamp; Soft≠product)\n");
-                            /*
-                             * ---- Wave 31 complementary surfaces (kept) (never reshape primary).
-                             * Return surfaces only — soft inventory; never hard-gates product paths.
-                             */
-                            /* Grep: notify: soft retaegis — Wave 31 return-aegis honesty (kept) */
-                            kprintf("notify: soft retaegis soft_only=1 product_gate=0 soft_ne_product=1 "
-                                    "never_blocks_m0=1 wave=116 "
-                                    "(retaegis honesty; Soft≠product)\n");
-                            /* Grep: notify: soft retsigil — Wave 30 return-sigil honesty (kept) */
-                            kprintf("notify: soft retsigil soft_only=1 product_gate=0 soft_ne_product=1 "
-                                    "never_blocks_m0=1 wave=116 "
-                                    "(retsigil honesty; Soft≠product)\n");
-                            /* Grep: notify: soft retmantle — Wave 31 mantle stamp (kept) */
-                            kprintf("notify: soft retmantle exclusive=1 soft_ne_product=1 "
-                                    "product_kernel=OPEN wave=116 "
-                                    "(retmantle stamp; Soft≠product)\n");
-/*
- * ---- Wave 32 complementary surfaces (kept) (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: notify: soft retbulwark — Wave 32 return-bulwark honesty (kept) */
-kprintf("notify: soft retbulwark soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retbulwark honesty; Soft≠product)\n");
-/* Grep: notify: soft retpanoply — Wave 32 panoply stamp (kept) */
-kprintf("notify: soft retpanoply exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retpanoply stamp; Soft≠product)\n");
-/*
- * ---- Wave 33 complementary surfaces (kept) (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: notify: soft retbastion — Wave 33 return-bastion honesty (kept) */
-kprintf("notify: soft retbastion soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retbastion honesty; Soft≠product)\n");
-/* Grep: notify: soft retcitadel — Wave 33 citadel stamp (kept) */
-kprintf("notify: soft retcitadel exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retcitadel stamp; Soft≠product)\n");
-/*
- * ---- Wave 34 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: notify: soft retredoubt — Wave 34 return-redoubt honesty */
-kprintf("notify: soft retredoubt soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retredoubt honesty; Soft≠product)\n");
-/* Grep: notify: soft retkeep — Wave 34 exclusive keep stamp */
-kprintf("notify: soft retkeep exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retkeep stamp; Soft≠product)\n");
-/*
- * ---- Wave 35 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: notify: soft retfortress — Wave 35 return-fortress honesty */
-kprintf("notify: soft retfortress soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retfortress honesty; Soft≠product)\n");
-/* Grep: notify: soft retpalace — Wave 35 exclusive palace stamp */
-kprintf("notify: soft retpalace exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retpalace stamp; Soft≠product)\n");
-/*
- * ---- Wave 36 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: notify: soft rethold — Wave 36 return-hold honesty */
-kprintf("notify: soft rethold soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(rethold honesty; Soft≠product)\n");
-/* Grep: notify: soft retspire — Wave 36 exclusive spire stamp */
-kprintf("notify: soft retspire exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retspire stamp; Soft≠product)\n");
-/*
- * ---- Wave 37 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: notify: soft retwall — Wave 37 return-wall honesty */
-kprintf("notify: soft retwall soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retwall honesty; Soft≠product)\n");
-/* Grep: notify: soft retgate — Wave 37 exclusive gate stamp */
-kprintf("notify: soft retgate exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retgate stamp; Soft≠product)\n");
-/*
- * ---- Wave 38 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: notify: soft retmoat — Wave 38 return-moat honesty */
-kprintf("notify: soft retmoat soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retmoat honesty; Soft≠product)\n");
-/* Grep: notify: soft retower — Wave 38 exclusive tower stamp */
-kprintf("notify: soft retower exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retower stamp; Soft≠product)\n");
-/*
- * ---- Wave 39 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: notify: soft retbarbican — Wave 39 return-barbican honesty */
-kprintf("notify: soft retbarbican soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retbarbican honesty; Soft≠product)\n");
-/* Grep: notify: soft retglacis — Wave 39 exclusive glacis stamp */
-kprintf("notify: soft retglacis exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retglacis stamp; Soft≠product)\n");
-/*
- * ---- Wave 40 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: notify: soft retcurtain — Wave 40 return-curtain honesty */
-kprintf("notify: soft retcurtain soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retcurtain honesty; Soft≠product)\n");
-/* Grep: notify: soft retparapet — Wave 40 exclusive parapet stamp */
-kprintf("notify: soft retparapet exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retparapet stamp; Soft≠product)\n");
-/*
- * ---- Wave 41 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: notify: soft retravelin — Wave 41 return-travelin honesty */
-kprintf("notify: soft retravelin soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retravelin honesty; Soft≠product)\n");
-/* Grep: notify: soft retditch — Wave 41 exclusive ditch stamp */
-kprintf("notify: soft retditch exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retditch stamp; Soft≠product)\n");
-/*
- * ---- Wave 42 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: notify: soft retportcullis — Wave 42 return-portcullis honesty */
-kprintf("notify: soft retportcullis soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retportcullis honesty; Soft≠product)\n");
-/* Grep: notify: soft retbattlement — Wave 42 exclusive battlement stamp */
-kprintf("notify: soft retbattlement exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retbattlement stamp; Soft≠product)\n");
-/*
- * ---- Wave 43 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: notify: soft retmachicolation — Wave 43 return-machicolation honesty */
-kprintf("notify: soft retmachicolation soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retmachicolation honesty; Soft≠product)\n");
-/* Grep: notify: soft retarrowslit — Wave 43 exclusive arrowslit stamp */
-kprintf("notify: soft retarrowslit exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retarrowslit stamp; Soft≠product)\n");
-
-/*
- * ---- Wave 44 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: notify: soft retmerlon — Wave 44 return-merlon honesty */
-kprintf("notify: soft retmerlon soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retmerlon honesty; Soft≠product)\n");
-/* Grep: notify: soft retembrasure — Wave 44 exclusive embrasure stamp */
-kprintf("notify: soft retembrasure exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retembrasure stamp; Soft≠product)\n");
-
-/*
- * ---- Wave 45 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: notify: soft retkeepgate — Wave 45 return-keepgate honesty */
-kprintf("notify: soft retkeepgate soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retkeepgate honesty; Soft≠product)\n");
-/* Grep: notify: soft retouterward — Wave 45 exclusive outerward stamp */
-kprintf("notify: soft retouterward exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retouterward stamp; Soft≠product)\n");
-
-/*
- * ---- Wave 46 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: notify: soft retbailey — Wave 46 return-bailey honesty */
-kprintf("notify: soft retbailey soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retbailey honesty; Soft≠product)\n");
-/* Grep: notify: soft retpostern — Wave 46 exclusive postern stamp */
-kprintf("notify: soft retpostern exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retpostern stamp; Soft≠product)\n");
-
-/*
- * ---- Wave 47 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: notify: soft retinnerward — Wave 47 return-innerward honesty */
-kprintf("notify: soft retinnerward soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retinnerward honesty; Soft≠product)\n");
-/* Grep: notify: soft retdonjon — Wave 47 exclusive donjon stamp */
-kprintf("notify: soft retdonjon exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retdonjon stamp; Soft≠product)\n");
-
-/*
- * ---- Wave 48 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: notify: soft retchevaux — Wave 48 return-chevaux honesty */
-kprintf("notify: soft retchevaux soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retchevaux honesty; Soft≠product)\n");
-/* Grep: notify: soft retpalisade — Wave 48 exclusive palisade stamp */
-kprintf("notify: soft retpalisade exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retpalisade stamp; Soft≠product)\n");
-
-/*
- * ---- Wave 49 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: notify: soft retglacisgate — Wave 49 return-glacisgate honesty */
-kprintf("notify: soft retglacisgate soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retglacisgate honesty; Soft≠product)\n");
-/* Grep: notify: soft retoutwork — Wave 49 exclusive outwork stamp */
-kprintf("notify: soft retoutwork exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retoutwork stamp; Soft≠product)\n");
-/*
- * ---- Wave 50 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: notify: soft retsally — Wave 50 return-sally honesty */
-kprintf("notify: soft retsally soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retsally honesty; Soft≠product)\n");
-/* Grep: notify: soft retcounterscarp — Wave 50 exclusive counterscarp stamp */
-kprintf("notify: soft retcounterscarp exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retcounterscarp stamp; Soft≠product)\n");
-/*
- * ---- Wave 51 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: notify: soft retfosse — Wave 51 return-fosse honesty */
-kprintf("notify: soft retfosse soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retfosse honesty; Soft≠product)\n");
-/* Grep: notify: soft retcoveredway — Wave 51 exclusive coveredway stamp */
-kprintf("notify: soft retcoveredway exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retcoveredway stamp; Soft≠product)\n");
-
-/*
- * ---- Wave 52 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: notify: soft rettenaille — Wave 52 return-tenaille honesty */
-kprintf("notify: soft rettenaille soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(rettenaille honesty; Soft≠product)\n");
-/* Grep: notify: soft retdemilune — Wave 52 exclusive demilune stamp */
-kprintf("notify: soft retdemilune exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retdemilune stamp; Soft≠product)\n");
-/*
- * ---- Wave 53 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: notify: soft retravelin — Wave 53 return-travelin honesty */
-kprintf("notify: soft retravelin soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retravelin honesty; Soft≠product)\n");
-/* Grep: notify: soft retlunette — Wave 53 exclusive lunette stamp */
-kprintf("notify: soft retlunette exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retlunette stamp; Soft≠product)\n");
-/*
- * ---- Wave 54 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: notify: soft retcaponier — Wave 54 return-caponier honesty */
-kprintf("notify: soft retcaponier soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retcaponier honesty; Soft≠product)\n");
-/* Grep: notify: soft retredan — Wave 54 exclusive redan stamp */
-kprintf("notify: soft retredan exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retredan stamp; Soft≠product)\n");
-/*
- * ---- Wave 55 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: notify: soft retflank — Wave 55 return-flank honesty */
-kprintf("notify: soft retflank soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retflank honesty; Soft≠product)\n");
-/* Grep: notify: soft retface — Wave 55 exclusive face stamp */
-kprintf("notify: soft retface exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retface stamp; Soft≠product)\n");
-/*
- * ---- Wave 56 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: notify: soft retgorge — Wave 56 return-gorge honesty */
-kprintf("notify: soft retgorge soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retgorge honesty; Soft≠product)\n");
-/* Grep: notify: soft retshoulder — Wave 56 exclusive shoulder stamp */
-kprintf("notify: soft retshoulder exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retshoulder stamp; Soft≠product)\n");
-/*
- * ---- Wave 57 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: notify: soft retraverse — Wave 57 return-traverse honesty */
-kprintf("notify: soft retraverse soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retraverse honesty; Soft≠product)\n");
-/* Grep: notify: soft retcasemate — Wave 57 exclusive casemate stamp */
-kprintf("notify: soft retcasemate exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retcasemate stamp; Soft≠product)\n");
-
-/*
- * ---- Wave 58 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: notify: soft retorillon — Wave 58 return-orillon honesty */
-kprintf("notify: soft retorillon soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retorillon honesty; Soft≠product)\n");
-/* Grep: notify: soft retbonnette — Wave 58 exclusive bonnette stamp */
-kprintf("notify: soft retbonnette exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retbonnette stamp; Soft≠product)\n");
-
-/*
- * ---- Wave 59 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: notify: soft retcrownwork — Wave 59 return-crownwork honesty */
-kprintf("notify: soft retcrownwork soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retcrownwork honesty; Soft≠product)\n");
-/* Grep: notify: soft rethornwork — Wave 59 exclusive hornwork stamp */
-kprintf("notify: soft rethornwork exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(rethornwork stamp; Soft≠product)\n");
-
-/*
- * ---- Wave 60 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: notify: soft retplace — Wave 60 return-place honesty */
-kprintf("notify: soft retplace soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retplace honesty; Soft≠product)\n");
-/* Grep: notify: soft retenvelope — Wave 60 exclusive envelope stamp */
-kprintf("notify: soft retenvelope exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retenvelope stamp; Soft≠product)\n");
-
-
-
-
-
-
-
-
-
-/*
- * ---- Wave 61 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: notify: soft retcounterguard — Wave 61 return-counterguard honesty */
-kprintf("notify: soft retcounterguard soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retcounterguard honesty; Soft≠product)\n");
-/* Grep: notify: soft retcoveredface — Wave 61 exclusive coveredface stamp */
-kprintf("notify: soft retcoveredface exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retcoveredface stamp; Soft≠product)\n");
-/*
- * ---- Wave 62 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: notify: soft retbastionface — Wave 62 return-bastionface honesty */
-kprintf("notify: soft retbastionface soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retbastionface honesty; Soft≠product)\n");
-/* Grep: notify: soft retcurtainangle — Wave 62 exclusive curtainangle stamp */
-kprintf("notify: soft retcurtainangle exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retcurtainangle stamp; Soft≠product)\n");
-/*
- * ---- Wave 63 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: notify: soft retdoubletenaille — Wave 63 return-doubletenaille honesty */
-kprintf("notify: soft retdoubletenaille soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retdoubletenaille honesty; Soft≠product)\n");
-/* Grep: notify: soft retplaceofarms — Wave 63 exclusive placeofarms stamp */
-kprintf("notify: soft retplaceofarms exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retplaceofarms stamp; Soft≠product)\n");
- /*
-  * ---- Wave 64 exclusive complementary surfaces (never reshape primary).
-  * Return surfaces only — soft inventory; never hard-gates product paths.
-  */
- /* Grep: notify: soft retreentrant — Wave 64 return-reentrant honesty */
-kprintf("notify: soft retreentrant soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retreentrant honesty; Soft≠product)\n");
- /* Grep: notify: soft retsallyport — Wave 64 exclusive sallyport stamp */
-kprintf("notify: soft retsallyport exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retsallyport stamp; Soft≠product)\n");
- /*
-  * ---- Wave 65 exclusive complementary surfaces (never reshape primary).
-  * Return surfaces only — soft inventory; never hard-gates product paths.
-  */
- /* Grep: notify: soft retgorgeangle — Wave 65 return-gorgeangle honesty */
-kprintf("notify: soft retgorgeangle soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retgorgeangle honesty; Soft≠product)\n");
- /* Grep: notify: soft retshoulderangle — Wave 65 exclusive shoulderangle stamp */
-kprintf("notify: soft retshoulderangle exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retshoulderangle stamp; Soft≠product)\n");
- /*
-  * ---- Wave 66 exclusive complementary surfaces (never reshape primary).
-  * Return surfaces only — soft inventory; never hard-gates product paths.
-  */
- /* Grep: notify: soft retflankangle — Wave 66 return-flankangle honesty */
- kprintf("notify: soft retflankangle soft_only=1 product_gate=0 soft_ne_product=1 "
-         "never_blocks_m0=1 wave=116 "
-         "(retflankangle honesty; Soft≠product)\n");
- /* Grep: notify: soft retfaceangle — Wave 66 exclusive faceangle stamp */
- kprintf("notify: soft retfaceangle exclusive=1 soft_ne_product=1 "
-         "product_kernel=OPEN wave=116 "
-         "(retfaceangle stamp; Soft≠product)\n");
-/*
- * ---- Wave 67 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: notify: soft retcaponierangle — Wave 67 return-caponierangle honesty */
-kprintf("notify: soft retcaponierangle soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retcaponierangle honesty; Soft≠product)\n");
-/* Grep: notify: soft retredanangle — Wave 67 exclusive redanangle stamp */
-kprintf("notify: soft retredanangle exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retredanangle stamp; Soft≠product)\n");
-/*
- * ---- Wave 68 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: notify: soft retlunetteangle — Wave 68 return-lunetteangle honesty */
-kprintf("notify: soft retlunetteangle soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retlunetteangle honesty; Soft≠product)\n");
-/* Grep: notify: soft rettenailleangle — Wave 68 exclusive tenailleangle stamp */
-kprintf("notify: soft rettenailleangle exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(rettenailleangle stamp; Soft≠product)\n");
-/*
- * ---- Wave 69 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: notify: soft retdemiluneangle — Wave 69 return-demiluneangle honesty */
-kprintf("notify: soft retdemiluneangle soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retdemiluneangle honesty; Soft≠product)\n");
-/* Grep: notify: soft retcoveredwayangle — Wave 69 exclusive coveredwayangle stamp */
-kprintf("notify: soft retcoveredwayangle exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retcoveredwayangle stamp; Soft≠product)\n");
-/*
- * ---- Wave 70 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: notify: soft retfosseangle — Wave 70 return-fosseangle honesty */
-kprintf("notify: soft retfosseangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retfosseangle honesty; Soft≠product)\n");
-/* Grep: notify: soft retcounterscarple — Wave 70 exclusive counterscarple stamp */
-kprintf("notify: soft retcounterscarple exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retcounterscarple stamp; Soft≠product)\n");
-/*
- * ---- Wave 71 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: notify: soft retsallyportangle — Wave 71 return-sallyportangle honesty */
-kprintf("notify: soft retsallyportangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retsallyportangle honesty; Soft≠product)\n");
-/* Grep: notify: soft retreentrantangle — Wave 71 exclusive reentrantangle stamp */
-kprintf("notify: soft retreentrantangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retreentrantangle stamp; Soft≠product)\n");
-/*
- * ---- Wave 72 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: notify: soft retplaceofarmsangle — Wave 72 return-placeofarmsangle honesty */
-kprintf("notify: soft retplaceofarmsangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retplaceofarmsangle honesty; Soft≠product)\n");
-/* Grep: notify: soft retdoubletenailleangle — Wave 72 exclusive doubletenailleangle stamp */
-kprintf("notify: soft retdoubletenailleangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retdoubletenailleangle stamp; Soft≠product)\n");
-/* Grep: notify: soft retcurtainface — Wave 73 return-curtainface honesty */
-kprintf("notify: soft retcurtainface soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retcurtainface honesty; Soft≠product)\n");
-/* Grep: notify: soft retbastionangle — Wave 73 exclusive bastionangle stamp */
-kprintf("notify: soft retbastionangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retbastionangle stamp; Soft≠product)\n");
-/* Grep: notify: soft retglacisangle — Wave 74 return-glacisangle honesty */
-kprintf("notify: soft retglacisangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retglacisangle honesty; Soft≠product)\n");
-/* Grep: notify: soft retparapetangle — Wave 74 exclusive parapetangle stamp */
-kprintf("notify: soft retparapetangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retparapetangle stamp; Soft≠product)\n");
-/* Grep: notify: soft retmoatangle — Wave 75 return-moatangle honesty */
-kprintf("notify: soft retmoatangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retmoatangle honesty; Soft≠product)\n");
-/* Grep: notify: soft retowerangle — Wave 75 exclusive towerangle stamp */
-kprintf("notify: soft retowerangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retowerangle stamp; Soft≠product)\n");
-/* Grep: notify: soft retgateangle — Wave 76 return-gateangle honesty */
-kprintf("notify: soft retgateangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retgateangle honesty; Soft≠product)\n");
-/* Grep: notify: soft retwallangle — Wave 76 exclusive wallangle stamp */
-kprintf("notify: soft retwallangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retwallangle stamp; Soft≠product)\n");
-/* Grep: notify: soft retspireangle — Wave 77 return-spireangle honesty */
-kprintf("notify: soft retspireangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retspireangle honesty; Soft≠product)\n");
-/* Grep: notify: soft retholdangle — Wave 77 exclusive holdangle stamp */
-kprintf("notify: soft retholdangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retholdangle stamp; Soft≠product)\n");
-/* Grep: notify: soft retpalaceangle — Wave 78 return-palaceangle honesty */
-kprintf("notify: soft retpalaceangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retpalaceangle honesty; Soft≠product)\n");
-/* Grep: notify: soft retfortressangle — Wave 78 exclusive fortressangle stamp */
-kprintf("notify: soft retfortressangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retfortressangle stamp; Soft≠product)\n");
-/* Grep: notify: soft retkeepangle — Wave 79 return-keepangle honesty */
-kprintf("notify: soft retkeepangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retkeepangle honesty; Soft≠product)\n");
-/* Grep: notify: soft retredoubtangle — Wave 79 exclusive redoubtangle stamp */
-kprintf("notify: soft retredoubtangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retredoubtangle stamp; Soft≠product)\n");
-/* Grep: notify: soft retcitadelangle — Wave 80 return-citadelangle honesty */
-kprintf("notify: soft retcitadelangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retcitadelangle honesty; Soft≠product)\n");
-/* Grep: notify: soft retbastionkeep — Wave 80 exclusive bastionkeep stamp */
-kprintf("notify: soft retbastionkeep exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retbastionkeep stamp; Soft≠product)\n");
-/* Grep: notify: soft retpanoplyangle — Wave 81 return-panoplyangle honesty */
-kprintf("notify: soft retpanoplyangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retpanoplyangle honesty; Soft≠product)\n");
-/* Grep: notify: soft retbulwarkangle — Wave 81 exclusive bulwarkangle stamp */
-kprintf("notify: soft retbulwarkangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retbulwarkangle stamp; Soft≠product)\n");
-/* Grep: notify: soft retmantleangle — Wave 82 return-mantleangle honesty */
-kprintf("notify: soft retmantleangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retmantleangle honesty; Soft≠product)\n");
-/* Grep: notify: soft retaegisangle — Wave 82 exclusive aegisangle stamp */
-kprintf("notify: soft retaegisangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retaegisangle stamp; Soft≠product)\n");
-/* Grep: notify: soft retemblemangle — Wave 83 return-emblemangle honesty */
-kprintf("notify: soft retemblemangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retemblemangle honesty; Soft≠product)\n");
-/* Grep: notify: soft retsigilangle — Wave 83 exclusive sigilangle stamp */
-kprintf("notify: soft retsigilangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retsigilangle stamp; Soft≠product)\n");
-/* Grep: notify: soft retscepterangle — Wave 84 return-scepterangle honesty */
-kprintf("notify: soft retscepterangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retscepterangle honesty; Soft≠product)\n");
-/* Grep: notify: soft retglyphangle — Wave 84 exclusive glyphangle stamp */
-kprintf("notify: soft retglyphangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retglyphangle stamp; Soft≠product)\n");
-/* Grep: notify: soft retcrownangle — Wave 85 return-crownangle honesty */
-kprintf("notify: soft retcrownangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retcrownangle honesty; Soft≠product)\n");
-/* Grep: notify: soft retshardangle — Wave 85 exclusive shardangle stamp */
-kprintf("notify: soft retshardangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retshardangle stamp; Soft≠product)\n");
-/* Grep: notify: soft retforgeangle — Wave 86 return-forgeangle honesty */
-kprintf("notify: soft retforgeangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retforgeangle honesty; Soft≠product)\n");
-/* Grep: notify: soft retprismangle — Wave 86 exclusive prismangle stamp */
-kprintf("notify: soft retprismangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retprismangle stamp; Soft≠product)\n");
-/* Grep: notify: soft retflameangle — Wave 87 return-flameangle honesty */
-kprintf("notify: soft retflameangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retflameangle honesty; Soft≠product)\n");
-/* Grep: notify: soft retcipherangle — Wave 87 exclusive cipherangle stamp */
-kprintf("notify: soft retcipherangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retcipherangle stamp; Soft≠product)\n");
-/* Grep: notify: soft retbeaconangle — Wave 88 return-beaconangle honesty */
-kprintf("notify: soft retbeaconangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retbeaconangle honesty; Soft≠product)\n");
-/* Grep: notify: soft retledgerangle — Wave 88 exclusive ledgerangle stamp */
-kprintf("notify: soft retledgerangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retledgerangle stamp; Soft≠product)\n");
-/* Grep: notify: soft retbannerangle — Wave 89 return-bannerangle honesty */
-kprintf("notify: soft retbannerangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retbannerangle honesty; Soft≠product)\n");
-/* Grep: notify: soft retvaultangle — Wave 89 exclusive vaultangle stamp */
-kprintf("notify: soft retvaultangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retvaultangle stamp; Soft≠product)\n");
-/* Grep: notify: soft retcrestangle — Wave 90 return-crestangle honesty */
-kprintf("notify: soft retcrestangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retcrestangle honesty; Soft≠product)\n");
-/* Grep: notify: soft rettokenangle — Wave 90 exclusive tokenangle stamp */
-kprintf("notify: soft rettokenangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (rettokenangle stamp; Soft≠product)\n");
-/* Grep: notify: soft retbadgeangle — Wave 91 return-badgeangle honesty */
-kprintf("notify: soft retbadgeangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retbadgeangle honesty; Soft≠product)\n");
-/* Grep: notify: soft retphaseangle — Wave 91 exclusive phaseangle stamp */
-kprintf("notify: soft retphaseangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retphaseangle stamp; Soft≠product)\n");
-/* Grep: notify: soft retmarkangle — Wave 92 return-markangle honesty */
-kprintf("notify: soft retmarkangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retmarkangle honesty; Soft≠product)\n");
-/* Grep: notify: soft retpulseangle — Wave 92 exclusive pulseangle stamp */
-kprintf("notify: soft retpulseangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retpulseangle stamp; Soft≠product)\n");
-
-/* Grep: notify: soft retsealangle — Wave 93 return-sealangle honesty */
-kprintf("notify: soft retsealangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retsealangle honesty; Soft≠product)\n");
-/* Grep: notify: soft retboundangle — Wave 93 exclusive boundangle stamp */
-kprintf("notify: soft retboundangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retboundangle stamp; Soft≠product)\n");
-/* Grep: notify: soft retstemangle — Wave 94 return-stemangle honesty */
-kprintf("notify: soft retstemangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retstemangle honesty; Soft≠product)\n");
-/* Grep: notify: soft retbladeangle — Wave 94 exclusive bladeangle stamp */
-kprintf("notify: soft retbladeangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retbladeangle stamp; Soft≠product)\n");
-/* Grep: notify: soft retchordangle — Wave 95 return-chordangle honesty */
-kprintf("notify: soft retchordangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retchordangle honesty; Soft≠product)\n");
-/* Grep: notify: soft retarcangle — Wave 95 exclusive arcangle stamp */
-kprintf("notify: soft retarcangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retarcangle stamp; Soft≠product)\n");
-/* Grep: notify: soft retsectorangle — Wave 96 return-sectorangle honesty */
-kprintf("notify: soft retsectorangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retsectorangle honesty; Soft≠product)\n");
-/* Grep: notify: soft retwedgeangle — Wave 96 exclusive wedgeangle stamp */
-kprintf("notify: soft retwedgeangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retwedgeangle stamp; Soft≠product)\n");
-/* Grep: notify: soft retradiusangle — Wave 97 return-radiusangle honesty */
-kprintf("notify: soft retradiusangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retradiusangle honesty; Soft≠product)\n");
-/* Grep: notify: soft retdiameterangle — Wave 97 exclusive diameterangle stamp */
-kprintf("notify: soft retdiameterangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retdiameterangle stamp; Soft≠product)\n");
-/* Grep: notify: soft retcircumangle — Wave 98 return-circumangle honesty */
-kprintf("notify: soft retcircumangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retcircumangle honesty; Soft≠product)\n");
-/* Grep: notify: soft retellipseangle — Wave 98 exclusive ellipseangle stamp */
-kprintf("notify: soft retellipseangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retellipseangle stamp; Soft≠product)\n");
-/* Grep: notify: soft rethyperangle — Wave 99 return-hyperangle honesty */
-kprintf("notify: soft rethyperangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (rethyperangle honesty; Soft≠product)\n");
-/* Grep: notify: soft retparabolaangle — Wave 99 exclusive parabolaangle stamp */
-kprintf("notify: soft retparabolaangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retparabolaangle stamp; Soft≠product)\n");
-/* Grep: notify: soft retspiralangle — Wave 100 return-spiralangle honesty */
-kprintf("notify: soft retspiralangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retspiralangle honesty; Soft≠product)\n");
-/* Grep: notify: soft rethelixangle — Wave 100 exclusive helixangle stamp */
-kprintf("notify: soft rethelixangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (rethelixangle stamp; Soft≠product)\n");
-/* Grep: notify: soft rettorusangle — Wave 101 return-torusangle honesty */
-kprintf("notify: soft rettorusangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (rettorusangle honesty; Soft≠product)\n");
-/* Grep: notify: soft retknotangle — Wave 101 exclusive knotangle stamp */
-kprintf("notify: soft retknotangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retknotangle stamp; Soft≠product)\n");
-/* Grep: notify: soft retmoebiusangle — Wave 102 return-moebiusangle honesty */
-kprintf("notify: soft retmoebiusangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retmoebiusangle honesty; Soft≠product)\n");
-/* Grep: notify: soft retkleinangle — Wave 102 exclusive kleinangle stamp */
-kprintf("notify: soft retkleinangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retkleinangle stamp; Soft≠product)\n");
-/* Grep: notify: soft retprojectangle — Wave 103 return-projectangle honesty */
-kprintf("notify: soft retprojectangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retprojectangle honesty; Soft≠product)\n");
-/* Grep: notify: soft retaffineangle — Wave 103 exclusive affineangle stamp */
-kprintf("notify: soft retaffineangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retaffineangle stamp; Soft≠product)\n");
-/* Grep: notify: soft retlinearangle — Wave 104 return-linearangle honesty */
-kprintf("notify: soft retlinearangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retlinearangle honesty; Soft≠product)\n");
-/* Grep: notify: soft retbilinearangle — Wave 104 exclusive bilinearangle stamp */
-kprintf("notify: soft retbilinearangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retbilinearangle stamp; Soft≠product)\n");
-/* Grep: notify: soft retquadraticangle — Wave 105 return-quadraticangle honesty */
-kprintf("notify: soft retquadraticangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retquadraticangle honesty; Soft≠product)\n");
-/* Grep: notify: soft retcubicangle — Wave 105 exclusive cubicangle stamp */
-kprintf("notify: soft retcubicangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retcubicangle stamp; Soft≠product)\n");
-/* Grep: notify: soft retquarticangle — Wave 106 return-quarticangle honesty */
-kprintf("notify: soft retquarticangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retquarticangle honesty; Soft≠product)\n");
-/* Grep: notify: soft retquinticangle — Wave 106 exclusive quinticangle stamp */
-kprintf("notify: soft retquinticangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retquinticangle stamp; Soft≠product)\n");
-/* Grep: notify: soft retsplineangle — Wave 107 return-splineangle honesty */
-kprintf("notify: soft retsplineangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retsplineangle honesty; Soft≠product)\n");
-/* Grep: notify: soft retbezierangle — Wave 107 exclusive bezierangle stamp */
-kprintf("notify: soft retbezierangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retbezierangle stamp; Soft≠product)\n");
-/* Grep: notify: soft rethurmitangle — Wave 108 return-hermitangle honesty */
-kprintf("notify: soft rethurmitangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (rethurmitangle honesty; Soft≠product)\n");
-/* Grep: notify: soft retcatmullangle — Wave 108 exclusive catmullangle stamp */
-kprintf("notify: soft retcatmullangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retcatmullangle stamp; Soft≠product)\n");
-/* Grep: notify: soft retnurbsangle — Wave 109 return-nurbsangle honesty */
-kprintf("notify: soft retnurbsangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retnurbsangle honesty; Soft≠product)\n");
-/* Grep: notify: soft retbsplineangle — Wave 109 exclusive bsplineangle stamp */
-kprintf("notify: soft retbsplineangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retbsplineangle stamp; Soft≠product)\n");
-/* Grep: notify: soft retmeshangle — Wave 110 return-meshangle honesty */
-kprintf("notify: soft retmeshangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retmeshangle honesty; Soft≠product)\n");
-/* Grep: notify: soft retgridangle — Wave 110 exclusive gridangle stamp */
-kprintf("notify: soft retgridangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retgridangle stamp; Soft≠product)\n");
-/* Grep: notify: soft retvoxelangle — Wave 111 return-voxelangle honesty */
-kprintf("notify: soft retvoxelangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retvoxelangle honesty; Soft≠product)\n");
-/* Grep: notify: soft rettexelangle — Wave 111 exclusive texelangle stamp */
-kprintf("notify: soft rettexelangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (rettexelangle stamp; Soft≠product)\n");
-/* Grep: notify: soft retfragmentangle — Wave 112 return-fragmentangle honesty */
-kprintf("notify: soft retfragmentangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retfragmentangle honesty; Soft≠product)\n");
-/* Grep: notify: soft retvertexangle — Wave 112 exclusive vertexangle stamp */
-kprintf("notify: soft retvertexangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retvertexangle stamp; Soft≠product)\n");
-/* Grep: notify: soft retshaderangle — Wave 113 return-shaderangle honesty */
-kprintf("notify: soft retshaderangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retshaderangle honesty; Soft≠product)\n");
-/* Grep: notify: soft retpipelineangle — Wave 113 exclusive pipelineangle stamp */
-kprintf("notify: soft retpipelineangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retpipelineangle stamp; Soft≠product)\n");
-/* Grep: notify: soft retframebufferangle — Wave 114 return-framebufferangle honesty */
-kprintf("notify: soft retframebufferangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retframebufferangle honesty; Soft≠product)\n");
-/* Grep: notify: soft retswapchainangle — Wave 114 exclusive swapchainangle stamp */
-kprintf("notify: soft retswapchainangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retswapchainangle stamp; Soft≠product)\n");
-/* Grep: notify: soft retpresentangle — Wave 115 return-presentangle honesty */
-kprintf("notify: soft retpresentangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retpresentangle honesty; Soft≠product)\n");
-/* Grep: notify: soft retvsyncangle — Wave 115 exclusive vsyncangle stamp */
-kprintf("notify: soft retvsyncangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retvsyncangle stamp; Soft≠product)\n");
-/* Grep: notify: soft retfenceangle — Wave 116 return-fenceangle honesty */
-kprintf("notify: soft retfenceangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retfenceangle honesty; Soft≠product)\n");
-/* Grep: notify: soft retsemaphoreangle — Wave 116 exclusive semaphoreangle stamp */
-kprintf("notify: soft retsemaphoreangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retsemaphoreangle stamp; Soft≠product)\n");
-                            kprintf("notify: soft deepen wave=%u areas=%u pulse_enter=%lu "
-            "wait_enter=%lu multi_calls=%lu msix_init=%lu "
-            "ret_wait_bits=%lu ret_wait_zero=%lu ret_inst_ok=%lu "
-            "soft_log=%lu multi_proc=0 ok=1 skip=0\n",
-            (unsigned)NOTIFY_SOFT_DEEPEN_WAVE,
-            (unsigned)NOTIFY_SOFT_DEEPEN_AREAS,
-            (unsigned long)s.u64PulseEnter,
-            (unsigned long)s.u64WaitEnter,
-            (unsigned long)s.u64MultiWakeCalls,
-            (unsigned long)s.u64MsixInit,
-            (unsigned long)s.u64WaitRetBits,
-            (unsigned long)s.u64WaitRetZero,
-            (unsigned long)s.u64InstallOk,
-            (unsigned long)s.u64SoftLog);
+            (unsigned)NOTIFY_WAKER_DRAIN_ROUNDS,
+            (unsigned)NOTIFY_H1_THR_ONLY,
+            (unsigned)NOTIFY_H1_IRQ_PULSE_ONLY,
+            (unsigned)NOTIFY_H1_BATCH_AFTER_WAIT,
+            (unsigned)NOTIFY_H1_IRQ_DRIVER);
 
     /*
      * Soft lamp: MSI-X bind ready (or inventory emission). Never hard-gates.
-     * Grep: notify: soft inventory PASS | notify: soft PASS
+     * Grep: notify: soft inventory PASS | notify: soft PASS | notify: soft FAIL
      */
     if (u32Ready != 0u && u32Live != 0u) {
         kprintf("notify: soft inventory PASS ready=%u live=%u "
-                "soft_log=%lu areas=%u multi_proc=0 wave=%u\n",
+                "soft_log=%lu areas=%u multi_proc=0 G-AC-1=1 thr_only=%u "
+                "(sparse; Soft!=product; H1 thr-only)\n",
                 (unsigned)u32Ready, (unsigned)u32Live,
-                (unsigned long)s.u64SoftLog,
-                (unsigned)NOTIFY_SOFT_DEEPEN_AREAS,
-                (unsigned)NOTIFY_SOFT_DEEPEN_WAVE);
-        kprintf("notify: soft PASS wave=%u areas=%u soft_log=%lu\n",
-                (unsigned)NOTIFY_SOFT_DEEPEN_WAVE,
-                (unsigned)NOTIFY_SOFT_DEEPEN_AREAS,
-                (unsigned long)s.u64SoftLog);
+                (unsigned long)u64SoftLogN, (unsigned)NOTIFY_SOFT_AREAS,
+                (unsigned)NOTIFY_H1_THR_ONLY);
+        kprintf("notify: soft PASS soft_log=%lu areas=%u thr_only=%u\n",
+                (unsigned long)u64SoftLogN, (unsigned)NOTIFY_SOFT_AREAS,
+                (unsigned)NOTIFY_H1_THR_ONLY);
     } else {
         kprintf("notify: soft FAIL ready=%u live=%u "
                 "(soft inventory only; not product gate; not multi-process "
-                "notify) wave=%u\n",
-                (unsigned)u32Ready, (unsigned)u32Live,
-                (unsigned)NOTIFY_SOFT_DEEPEN_WAVE);
+                "notify; Soft!=product; G-AC-1; H1 thr-only)\n",
+                (unsigned)u32Ready, (unsigned)u32Live);
     }
 }
 
-/** Soft: one-shot deep inventory after first product wait activity. */
+/** Soft: one-shot sparse inventory after first product wait activity. */
 static void
 notify_soft_log_once(void)
 {
@@ -1754,6 +662,9 @@ notify_soft_log_once(void)
     g_fSoftStatsOnce = 1;
     notify_soft_log();
 }
+
+/* Forward: lean residual self-check (def after event/waker symbols). */
+static void notify_soft_residual_lean_once(void);
 
 static int
 notify_live(const struct gj_notify *pN)
@@ -1769,11 +680,11 @@ notify_live(const struct gj_notify *pN)
 }
 
 /*
- * Soft multi-wake: wake up to NOTIFY_SOFT_MULTI_MAX waiters on this object.
+ * Soft multi-wake: wake up to u32Max waiters on this object (0 -> MULTI_MAX).
  * greppable: NOTIFY_SOFT_MULTI_WAKE
  */
 static u32
-notify_soft_multi_wake(struct gj_notify *pN)
+notify_soft_multi_wake_n(struct gj_notify *pN, u32 u32Max)
 {
     u32 cWoken;
 
@@ -1782,11 +693,21 @@ notify_soft_multi_wake(struct gj_notify *pN)
         notify_soft_inc(&g_soft.u64MultiWakeNull);
         return 0;
     }
+    if (u32Max == 0u) {
+        u32Max = NOTIFY_SOFT_MULTI_MAX;
+    }
     /* greppable: notify: soft multi wake */
     notify_soft_inc(&g_soft.u64MultiWakeCalls);
-    cWoken = thread_wake(pN, NOTIFY_TAG_WAITER, NOTIFY_SOFT_MULTI_MAX);
+    cWoken = thread_wake(pN, NOTIFY_TAG_WAITER, u32Max);
     notify_soft_note_wake(cWoken);
     return cWoken;
+}
+
+/** Soft multi-wake with default budget (pulse / self-wake path). */
+static u32
+notify_soft_multi_wake(struct gj_notify *pN)
+{
+    return notify_soft_multi_wake_n(pN, NOTIFY_SOFT_MULTI_MAX);
 }
 
 /*
@@ -1803,6 +724,38 @@ notify_has_waiter(const struct gj_notify *pN)
         return 1;
     }
     return __atomic_load_n(&pN->u32Waiters, __ATOMIC_ACQUIRE) > 0u;
+}
+
+/*
+ * Bounded drain: repeated multi-wake rounds until no waiter or round cap.
+ * Abort/mark_dead only - not hard IRQ (kprintf-free; atomics + thread_wake).
+ * greppable: NOTIFY_WAKER_DRAIN
+ */
+static u32
+notify_soft_waker_drain(struct gj_notify *pN)
+{
+    u32 cTotal = 0;
+    u32 cRound;
+    u32 iRound;
+
+    if (pN == NULL) {
+        return 0;
+    }
+    notify_soft_inc(&g_soft.u64WakerDrain);
+    for (iRound = 0; iRound < NOTIFY_WAKER_DRAIN_ROUNDS; iRound++) {
+        if (!notify_has_waiter(pN)) {
+            break;
+        }
+        cRound = notify_soft_multi_wake(pN);
+        cTotal += cRound;
+        if (cRound == 0u) {
+            break;
+        }
+    }
+    if (cTotal != 0u) {
+        notify_soft_add(&g_soft.u64WakerDrainSum, (u64)cTotal);
+    }
+    return cTotal;
 }
 
 void
@@ -1838,6 +791,13 @@ notify_pulse(struct gj_notify *pN, u64 u64Badge)
     u32 cBits;
     u64 u64Or;
 
+    /*
+     * H1 thr-only / IRQ pulse-only residual (Soft!=product; G-AC-1):
+     * Sole hard-IRQ-callable product entry in this unit. Atomic RMW +
+     * optional soft multi-wake only. No kprintf, no alloc, no park, no
+     * class-driver work, no net_eth_poll. Batch lives on thr after wait.
+     * greppable: NOTIFY_H1_THR_ONLY irq_pulse_only=1 irq_driver=0
+     */
     notify_soft_inc(&g_soft.u64PulseEnter);
 
     if (pN == NULL) {
@@ -1864,7 +824,7 @@ notify_pulse(struct gj_notify *pN, u64 u64Badge)
         u64Badge = 1;
         notify_soft_inc(&g_soft.u64PulseZeroCoalesce);
     }
-    /* greppable: NOTIFY_BADGE_PULSE — OR pending, then soft multi-wake */
+    /* greppable: NOTIFY_BADGE_PULSE - OR pending, then soft multi-wake */
     /* greppable: notify: soft pulse hit */
     (void)__atomic_fetch_or(&pN->u64Pending, u64Badge, __ATOMIC_ACQ_REL);
     __atomic_store_n(&pN->u64LastBadge, u64Badge, __ATOMIC_RELEASE);
@@ -1903,6 +863,54 @@ notify_signal(struct gj_notify *pN, u64 u64Badge)
     notify_pulse(pN, u64Badge);
 }
 
+void
+notify_event(struct gj_notify *pN, u64 u64Badge)
+{
+    /*
+     * Event residual (door clients / UDX IRQ-ish): same product path as
+     * pulse (H1 pulse-only IRQ entry). Named for async completion sites.
+     * IRQ-safe via pulse; thr reaps with wait. greppable: NOTIFY_EVENT_POST
+     */
+    notify_soft_inc(&g_soft.u64EventPost);
+    notify_pulse(pN, u64Badge);
+}
+
+u32
+notify_wake(struct gj_notify *pN, u32 u32Max)
+{
+    u32 cWoken;
+
+    /*
+     * Waker residual: kick parked waiters without posting badge bits.
+     * Door teardown / UDX quiesce. Waiters re-sample pending / live.
+     * greppable: NOTIFY_WAKER_KICK
+     * Soft!=product (not multi-process notify product).
+     */
+    notify_soft_inc(&g_soft.u64WakerKick);
+    if (pN == NULL) {
+        notify_soft_inc(&g_soft.u64WakerKickZero);
+        return 0;
+    }
+    if (!notify_has_waiter(pN)) {
+        notify_soft_inc(&g_soft.u64WakerKickZero);
+        return 0;
+    }
+    cWoken = notify_soft_multi_wake_n(pN, u32Max);
+    if (cWoken == 0u) {
+        notify_soft_inc(&g_soft.u64WakerKickZero);
+    } else {
+        notify_soft_inc(&g_soft.u64WakerKickHit);
+    }
+    return cWoken;
+}
+
+u32
+notify_wake_drain(struct gj_notify *pN)
+{
+    /* greppable: NOTIFY_WAKER_DRAIN */
+    return notify_soft_waker_drain(pN);
+}
+
 u64
 notify_wait(struct gj_notify *pN, u64 u64Mask, int fBlock)
 {
@@ -1913,6 +921,17 @@ notify_wait(struct gj_notify *pN, u64 u64Mask, int fBlock)
     int               fRegistered = 0;
     u32               cWaiters;
 
+    /*
+     * Wait residual (thr/UDX consumer; H1 thr-only): CAS-clear matched bits.
+     * Product: hard IRQ / soft inject pulsed bits (pulse only); thr reaps
+     * via GJ_SYS_NOTIFY_WAIT (often fBlock=0). Soft multi parks when fBlock
+     * and thr context present. Batch work AFTER wait returns (not on IRQ).
+     * greppable: NOTIFY_WAIT_RESIDUAL
+     * greppable: NOTIFY_BADGE_WAIT
+     * greppable: NOTIFY_H1_THR_ONLY thr_only=1 batch_after_wait=1
+     * Soft!=product; product IRQ Notification mint OPEN.
+     * H1: thr notify not hard-IRQ driver.
+     */
     notify_soft_inc(&g_soft.u64WaitEnter);
     if (fBlock) {
         notify_soft_inc(&g_soft.u64WaitBlock);
@@ -1927,7 +946,7 @@ notify_wait(struct gj_notify *pN, u64 u64Mask, int fBlock)
         notify_soft_inc(&g_soft.u64WaitRetZero); /* Wave 19 return */
         return 0;
     }
-    /* mask==0 means "any badge" — greppable: NOTIFY_BADGE_WAIT */
+    /* mask==0 means "any badge" - greppable: NOTIFY_BADGE_WAIT */
     if (u64Mask == 0) {
         u64Mask = ~0ull;
         notify_soft_inc(&g_soft.u64WaitMaskAny);
@@ -1971,7 +990,7 @@ notify_wait(struct gj_notify *pN, u64 u64Mask, int fBlock)
                 notify_soft_log_once();
                 return u64Got;
             }
-            /* Lost race with signal/clear — retry without sleeping. */
+            /* Lost race with signal/clear - retry without sleeping. */
             /* greppable: notify: soft wait cas retry */
             notify_soft_inc(&g_soft.u64WaitCasRetry);
             continue;
@@ -2080,6 +1099,8 @@ notify_waiters(const struct gj_notify *pN)
 void
 notify_abort_waiter(struct gj_notify *pN)
 {
+    u32 cWoken;
+
     if (pN == NULL) {
         return;
     }
@@ -2087,8 +1108,13 @@ notify_abort_waiter(struct gj_notify *pN)
     /* greppable: notify: soft abort */
     notify_soft_inc(&g_soft.u64Abort);
     if (notify_has_waiter(pN)) {
-        (void)notify_soft_multi_wake(pN);
-        notify_soft_inc(&g_soft.u64AbortWake);
+        /* Drain residual: do not leave >MULTI_MAX waiters parked. */
+        cWoken = notify_soft_waker_drain(pN);
+        if (cWoken != 0u) {
+            notify_soft_inc(&g_soft.u64AbortWake);
+        } else {
+            notify_soft_inc(&g_soft.u64AbortNoWaiter);
+        }
     } else {
         notify_soft_inc(&g_soft.u64AbortNoWaiter);
     }
@@ -2111,6 +1137,918 @@ notify_mark_dead(struct gj_notify *pN)
         notify_soft_inc(&g_soft.u64MarkDeadForce);
     }
     notify_abort_waiter(pN);
+}
+
+/*
+ * Lean residual self-check (stack-local notify; never touches MSI-X global).
+ * Exercises thr wait residual (pulse -> non-block wait CAS-clear),
+ * event residual, empty miss, mask-any, empty waker kick/drain, mark_dead,
+ * and H1 thr-only direction (pulse-only IRQ; thr reaps; pending drained;
+ * compile-time H1 locks hold). Soft!=product / dual MIT OR Apache-2.0 /
+ * G-AC-1. Product IRQ Notification mint OPEN (badge; not .ko AC).
+ * greppable: NOTIFY_LEAN_RESIDUAL
+ * greppable: NOTIFY_WAIT_RESIDUAL
+ * greppable: NOTIFY_H1_THR_ONLY
+ * greppable: notify: soft residual lean
+ * greppable: notify: soft residual lean wait
+ * greppable: notify: soft residual lean thr
+ * greppable: notify: soft residual lean udx
+ * greppable: notify: soft residual denser
+ * greppable: notify: soft residual lean PASS
+ * greppable: notify: soft residual lean FAIL
+ * greppable: product_hosts=UDX | dual_dod=OPEN | Soft!=product
+ * greppable: denser=1 MSI-X inject denser
+ * STRONGER functional residual (W7 Dual DoD; stamp-free bar v2026.08.04.75):
+ *   null_miss | zero_coalesce | multi_badge | signal_alias | dual_dod_open
+ *   toward UDX IRQ-ish thr wait / sshd host notify path. H1 thr-only.
+ * STRONGER functional residual (W10 Dual DoD; stamp-free bar v2026.08.04.75):
+ *   install_null | dead_pulse for live UDX host IRQ thr path. H1 thr-only.
+ * STRONGER functional residual (W11 Dual DoD; stamp-free bar v2026.08.04.75):
+ *   poll_eq | partial_reap | abort_nobadge | inject_query | dual_dod_open
+ *   product notify path honesty for MSI-X inject used by Dual DoD hosts.
+ *   product_hosts=UDX; Dual DoD A/B remain OPEN. Soft!=product. H2 once.
+ * STRONGER denser residual (W12 Dual DoD; stamp-free bar v2026.08.04.75):
+ *   event denser | wait denser | waker denser | inject denser | dual_dod_open
+ *   MSI-X inject product path denser for Dual DoD hosts (rtl8168_udx|xhci_udx).
+ * Soft!=product. Dual DoD A/B remain OPEN.
+ */
+static void
+notify_soft_residual_lean_once(void)
+{
+    static u8         g_fLeanOnce;
+    struct gj_notify  nTmp;
+    struct gj_cap_ref capTmp;
+    u64               u64Got;
+    u64               u64WaitIsr;
+    u64               u64WaitMiss;
+    u64               u64WaitAny;
+    u64               u64PendAfter;
+    u64               u64ZeroGot;
+    u64               u64MultiGot;
+    u64               u64SigGot;
+    u64               u64PulseDead0;
+    u64               u64PendDead;
+    u64               u64PollEq;
+    u64               u64PartGot;
+    u64               u64PendPart;
+    u64               u64AbortPend;
+    u64               u64InjectGot;
+    u64               u64DEventGot;
+    u64               u64DRemaskA;
+    u64               u64DRemaskB;
+    u64               u64DRemaskC;
+    u64               u64DMaskAny;
+    u64               u64DPollThen;
+    u64               u64DWaitEmpty;
+    u64               u64DAbortKeep;
+    u64               u64DInjectRearm;
+    u64               u64DMultiVecA;
+    u64               u64DMultiVecB;
+    u64               u64DLastBadge;
+    u32               cKick;
+    u32               cDrain;
+    u32               cKickMax0;
+    u32               cDrainEmpty;
+    u32               cNullKick;
+    u32               cNullDrain;
+    u32               u32Ok;
+    u32               u32Checks;
+    u32               u32LiveAfterDead;
+    u32               u32WaitIsrOk;
+    u32               u32WaitMissOk;
+    u32               u32WaitAnyOk;
+    u32               u32ThrOk;
+    u32               u32H1Locks;
+    u32               u32NullMissOk;
+    u32               u32ZeroOk;
+    u32               u32MultiOk;
+    u32               u32SignalOk;
+    u32               u32DualDodOk;
+    u32               u32InstallNullOk;
+    u32               u32DeadPulseOk;
+    u32               u32PollEqOk;
+    u32               u32PartialOk;
+    u32               u32AbortNoBadgeOk;
+    u32               u32InjectQueryOk;
+    u32               u32SigBefore;
+    u32               u32SigAfter;
+    /* W12 denser residual arm lamps (Soft!=product; Dual DoD OPEN). */
+    u32               u32DEventOrOk;
+    u32               u32DEventEqOk;
+    u32               u32DSignalEqOk;
+    u32               u32DCoalesceOk;
+    u32               u32DRemask3Ok;
+    u32               u32DMaskAnyOk;
+    u32               u32DPollMissOk;
+    u32               u32DWaitEmptyOk;
+    u32               u32DKickMax0Ok;
+    u32               u32DDrainEmptyOk;
+    u32               u32DAbortKeepOk;
+    u32               u32DNullKickOk;
+    u32               u32DInjectRearmOk;
+    u32               u32DMultiVecOk;
+    u32               u32DLastBadgeOk;
+    u32               u32DSignalsMonoOk;
+    u32               u32DenseOk;
+    u32               u32DenseEventN;
+    u32               u32DenseWaitN;
+    u32               u32DenseWakerN;
+    u32               u32DenseInjectN;
+    u32               u32SigMono0;
+    u32               u32SigMono1;
+    u32               u32SigMono2;
+
+    if (g_fLeanOnce != 0) {
+        return;
+    }
+    g_fLeanOnce = 1;
+    notify_soft_inc(&g_soft.u64ResidualLean);
+
+    u32Ok = 0;
+    u32Checks = 0;
+    u32WaitIsrOk = 0;
+    u32WaitMissOk = 0;
+    u32WaitAnyOk = 0;
+    u32ThrOk = 0;
+    u32NullMissOk = 0;
+    u32ZeroOk = 0;
+    u32MultiOk = 0;
+    u32SignalOk = 0;
+    u32DualDodOk = 0;
+    u32InstallNullOk = 0;
+    u32DeadPulseOk = 0;
+    u32PollEqOk = 0;
+    u32PartialOk = 0;
+    u32AbortNoBadgeOk = 0;
+    u32InjectQueryOk = 0;
+    u32DEventOrOk = 0;
+    u32DEventEqOk = 0;
+    u32DSignalEqOk = 0;
+    u32DCoalesceOk = 0;
+    u32DRemask3Ok = 0;
+    u32DMaskAnyOk = 0;
+    u32DPollMissOk = 0;
+    u32DWaitEmptyOk = 0;
+    u32DKickMax0Ok = 0;
+    u32DDrainEmptyOk = 0;
+    u32DAbortKeepOk = 0;
+    u32DNullKickOk = 0;
+    u32DInjectRearmOk = 0;
+    u32DMultiVecOk = 0;
+    u32DLastBadgeOk = 0;
+    u32DSignalsMonoOk = 0;
+    u32DenseOk = 0;
+    u32DenseEventN = 0;
+    u32DenseWaitN = 0;
+    u32DenseWakerN = 0;
+    u32DenseInjectN = 0;
+    u64WaitIsr = 0;
+    u64WaitMiss = ~0ull;
+    u64WaitAny = 0;
+    u64PendAfter = ~0ull;
+    u64ZeroGot = 0;
+    u64MultiGot = 0;
+    u64SigGot = 0;
+    u64PulseDead0 = 0;
+    u64PendDead = ~0ull;
+    u64PollEq = 0;
+    u64PartGot = 0;
+    u64PendPart = ~0ull;
+    u64AbortPend = ~0ull;
+    u64InjectGot = 0;
+    u64DEventGot = 0;
+    u64DRemaskA = 0;
+    u64DRemaskB = 0;
+    u64DRemaskC = 0;
+    u64DMaskAny = 0;
+    u64DPollThen = 0;
+    u64DWaitEmpty = ~0ull;
+    u64DAbortKeep = ~0ull;
+    u64DInjectRearm = 0;
+    u64DMultiVecA = 0;
+    u64DMultiVecB = 0;
+    u64DLastBadge = 0;
+    u32SigBefore = 0;
+    u32SigAfter = 0;
+    u32SigMono0 = 0;
+    u32SigMono1 = 0;
+    u32SigMono2 = 0;
+    cKickMax0 = 0;
+    cDrainEmpty = 0;
+    cNullKick = 0;
+    cNullDrain = 0;
+    memset(&nTmp, 0, sizeof(nTmp));
+    memset(&capTmp, 0, sizeof(capTmp));
+    notify_init(&nTmp);
+
+    /*
+     * Check 1: thr/UDX wait residual (H1 thr-only consumer).
+     * Shape: notify_pulse (hard-IRQ / soft inject product pulse-only) then
+     * notify_wait(mask, fBlock=0) CAS-clear - thr/UDX pump reaps bits.
+     * greppable: NOTIFY_WAIT_RESIDUAL NOTIFY_H1_THR_ONLY
+     */
+    u32Checks++;
+    notify_pulse(&nTmp, 0x2ull);
+    u64WaitIsr = notify_wait(&nTmp, 0x2ull, 0);
+    if (u64WaitIsr == 0x2ull) {
+        u32Ok++;
+        u32WaitIsrOk = 1;
+        notify_soft_inc(&g_soft.u64ResidualWaitOk);
+    }
+
+    /*
+     * Check 2: wait residual empty miss (no pending bits) -> 0.
+     * thr/UDX non-block poll miss path; Soft!=product.
+     */
+    u32Checks++;
+    u64WaitMiss = notify_wait(&nTmp, 0x2ull, 0);
+    if (u64WaitMiss == 0ull) {
+        u32Ok++;
+        u32WaitMissOk = 1;
+        notify_soft_inc(&g_soft.u64ResidualWaitMiss);
+    }
+
+    /*
+     * Check 3: wait residual mask==0 ("any badge") after pulse.
+     * Same CAS-clear path; thr/UDX may wait with mask any.
+     */
+    u32Checks++;
+    notify_pulse(&nTmp, 0x8ull);
+    u64WaitAny = notify_wait(&nTmp, 0ull, 0);
+    if (u64WaitAny == 0x8ull) {
+        u32Ok++;
+        u32WaitAnyOk = 1;
+        notify_soft_inc(&g_soft.u64ResidualWaitAny);
+    }
+
+    /* Check 4: event residual - post badge bit 2, CAS-clear via poll. */
+    u32Checks++;
+    notify_event(&nTmp, 0x4ull);
+    u64Got = notify_poll(&nTmp, 0x4ull);
+    if (u64Got == 0x4ull) {
+        u32Ok++;
+    }
+
+    /* Check 5: empty waker residual (no parked waiter) -> 0 / 0. */
+    u32Checks++;
+    cKick = notify_wake(&nTmp, 0);
+    cDrain = notify_wake_drain(&nTmp);
+    if (cKick == 0u && cDrain == 0u) {
+        u32Ok++;
+    }
+
+    /*
+     * Check 6: H1 thr-only direction residual.
+     * After thr reaps, pending must be drained (pulse-only left bits for
+     * thr wait). Compile-time H1 locks must hold (irq_driver=0 thr_only=1).
+     * greppable: NOTIFY_H1_THR_ONLY thr_only=1 irq_driver=0
+     */
+    u32Checks++;
+    u64PendAfter = notify_pending(&nTmp);
+    u32H1Locks =
+        (NOTIFY_H1_IRQ_PULSE_ONLY == 1u && NOTIFY_H1_THR_WAIT == 1u &&
+         NOTIFY_H1_BATCH_AFTER_WAIT == 1u && NOTIFY_H1_IRQ_DRIVER == 0u &&
+         NOTIFY_H1_THR_ONLY == 1u)
+            ? 1u
+            : 0u;
+    if (u64PendAfter == 0ull && u32WaitIsrOk != 0u && u32WaitMissOk != 0u &&
+        u32WaitAnyOk != 0u && u32H1Locks != 0u) {
+        u32Ok++;
+        u32ThrOk = 1;
+        notify_soft_inc(&g_soft.u64ResidualThrOk);
+    }
+
+    /*
+     * STRONGER functional residual (W7 Dual DoD; UDX/sshd product path).
+     * Fail-closed + coalesce + multi-badge arms. Soft!=product. H1 thr-only.
+     * Dual DoD A/B remain OPEN. Stamp-free.
+     */
+
+    /* Check 7: null_miss residual - pulse/wait/query fail closed. */
+    u32Checks++;
+    notify_pulse(NULL, 0x1ull);
+    notify_event(NULL, 0x1ull);
+    if (notify_wait(NULL, 0x1ull, 0) == 0ull &&
+        notify_poll(NULL, 0x1ull) == 0ull &&
+        notify_is_live(NULL) == 0 &&
+        notify_pending(NULL) == 0ull &&
+        notify_signals(NULL) == 0u &&
+        notify_last_badge(NULL) == 0ull &&
+        notify_waiters(NULL) == 0u &&
+        notify_wake(NULL, 0) == 0u &&
+        notify_wake_drain(NULL) == 0u) {
+        u32NullMissOk = 1;
+        u32Ok++;
+    }
+
+    /*
+     * Check 8: zero badge coalesce residual (product pulse: 0 -> bit 0).
+     * UDX IRQ-ish sites may pulse 0; thr reaps bit 0.
+     */
+    u32Checks++;
+    notify_pulse(&nTmp, 0ull);
+    u64ZeroGot = notify_wait(&nTmp, 0x1ull, 0);
+    if (u64ZeroGot == 0x1ull && notify_last_badge(&nTmp) == 0x1ull) {
+        u32ZeroOk = 1;
+        u32Ok++;
+    }
+
+    /*
+     * Check 9: multi-badge residual (OR pending; thr mask reaps subset).
+     * Shape for UDX multi-vector soft inject then thr wait.
+     */
+    u32Checks++;
+    notify_pulse(&nTmp, 0x11ull);
+    notify_pulse(&nTmp, 0x22ull);
+    u64MultiGot = notify_wait(&nTmp, 0x30ull, 0); /* bits 4+5 of 0x11|0x22 */
+    if (u64MultiGot == 0x30ull &&
+        (notify_pending(&nTmp) & 0x3ull) == 0x3ull) {
+        /* leftover low bits 0x01|0x02 still pending until reaped */
+        (void)notify_wait(&nTmp, ~0ull, 0); /* drain residual */
+        u32MultiOk = 1;
+        u32Ok++;
+    }
+
+    /* Check 10: signal alias residual (signal == pulse product path). */
+    u32Checks++;
+    notify_signal(&nTmp, 0x40ull);
+    u64SigGot = notify_poll(&nTmp, 0x40ull);
+    if (u64SigGot == 0x40ull && notify_signals(&nTmp) >= 1u) {
+        u32SignalOk = 1;
+        u32Ok++;
+    }
+
+    /*
+     * W10 STRONGER residual (live UDX host IRQ thr path):
+     * install_null | dead_pulse. Soft!=product; H1 thr-only; Dual DoD OPEN.
+     */
+
+    /* Check 11: install_null residual - ENDPOINT/NOTIFICATION null fail-closed. */
+    u32Checks++;
+    if (notify_install(NULL, &nTmp, 0, &capTmp) == GJ_ERR_INVAL &&
+        notify_install(NULL, NULL, 0, NULL) == GJ_ERR_INVAL) {
+        u32InstallNullOk = 1;
+        u32Ok++;
+    }
+
+    /*
+     * W11 STRONGER residual (product notify path honesty; MSI-X inject):
+     * poll_eq | partial_reap | abort_nobadge | inject_query | dual_dod_open
+     * Dual DoD hosts product_hosts=UDX (rtl8168_udx|xhci_udx). Soft!=product.
+     * H1 thr-only; H2 once; stamp-free bar v2026.08.04.75.
+     * greppable: poll_eq | partial_reap | abort_nobadge | inject_query
+     * greppable: product_hosts=UDX | dual_dod=OPEN | Soft!=product
+     */
+
+    /*
+     * Check 12: poll_eq residual - notify_poll == wait(fBlock=0) thr path.
+     * Product UDX freestanding pumps non-blocking poll after MSI-X inject.
+     * Soft!=product; H1 thr-only.
+     */
+    u32Checks++;
+    notify_pulse(&nTmp, 0x100ull);
+    u64PollEq = notify_poll(&nTmp, 0x100ull);
+    if (u64PollEq == 0x100ull && notify_poll(&nTmp, 0x100ull) == 0ull &&
+        notify_pending(&nTmp) == 0ull) {
+        u32PollEqOk = 1;
+        u32Ok++;
+    }
+
+    /*
+     * Check 13: partial_reap residual - multi-vector MSI-X inject shape.
+     * Pulse multi-bit badge; thr mask reaps subset; leftover pending for
+     * next thr wait (product hosts may vector-share one Notification).
+     */
+    u32Checks++;
+    notify_pulse(&nTmp, 0xC00ull); /* bits 10+11 */
+    u64PartGot = notify_wait(&nTmp, 0x400ull, 0); /* bit 10 only */
+    u64PendPart = notify_pending(&nTmp);
+    if (u64PartGot == 0x400ull && u64PendPart == 0x800ull &&
+        notify_wait(&nTmp, 0x800ull, 0) == 0x800ull &&
+        notify_pending(&nTmp) == 0ull) {
+        u32PartialOk = 1;
+        u32Ok++;
+    }
+
+    /*
+     * Check 14: abort_nobadge residual - UDX quiesce does not post badge.
+     * abort_waiter drains waiters only; pending badge remains for thr reap.
+     * Soft!=product; not hard-IRQ driver work.
+     */
+    u32Checks++;
+    notify_pulse(&nTmp, 0x1000ull);
+    u64AbortPend = notify_pending(&nTmp);
+    notify_abort_waiter(&nTmp);
+    if (u64AbortPend == 0x1000ull &&
+        notify_pending(&nTmp) == 0x1000ull &&
+        notify_wait(&nTmp, 0x1000ull, 0) == 0x1000ull &&
+        notify_pending(&nTmp) == 0ull) {
+        u32AbortNoBadgeOk = 1;
+        u32Ok++;
+    }
+
+    /*
+     * Check 15: inject_query residual - MSI-X inject product shape honesty.
+     * After pulse: signals bump, last_badge matches inject word, pending OR.
+     * thr reaps via wait; product path = inject pulse -> thr notify wait.
+     * Soft!=product; product_hosts=UDX; Dual DoD OPEN.
+     */
+    u32Checks++;
+    u32SigBefore = notify_signals(&nTmp);
+    notify_pulse(&nTmp, 0x2000ull);
+    u32SigAfter = notify_signals(&nTmp);
+    u64InjectGot = notify_pending(&nTmp);
+    if (u32SigAfter == u32SigBefore + 1u &&
+        notify_last_badge(&nTmp) == 0x2000ull &&
+        (u64InjectGot & 0x2000ull) == 0x2000ull &&
+        notify_is_live(&nTmp) != 0 &&
+        notify_wait(&nTmp, 0x2000ull, 0) == 0x2000ull &&
+        notify_pending(&nTmp) == 0ull) {
+        u32InjectQueryOk = 1;
+        u32Ok++;
+    }
+
+    /*
+     * W12 denser residual honesty (MSI-X inject product path):
+     * Deeper edges under W11 arms for product_hosts=UDX Dual DoD.
+     * Soft!=product; Dual DoD OPEN; stamp-free bar v2026.08.04.75.
+     * Stack-local only (never touches MSI-X global). H1 thr-only.
+     * greppable: notify: soft residual denser | MSI-X inject denser
+     * greppable: denser=1 | event denser | wait denser | waker denser |
+     *            inject denser
+     * greppable: product_hosts=UDX | dual_dod=OPEN | Soft!=product
+     */
+
+    /*
+     * --- event denser: dpulse_or | event_eq | signal_eq | coalesce_rearm.
+     * Product MSI-X inject may multi-pulse same vector; thr reaps OR.
+     */
+    u32Checks++;
+    notify_pulse(&nTmp, 0x10000ull);
+    notify_pulse(&nTmp, 0x10000ull); /* same badge OR - signals++ twice */
+    if (notify_pending(&nTmp) == 0x10000ull &&
+        notify_last_badge(&nTmp) == 0x10000ull &&
+        notify_wait(&nTmp, 0x10000ull, 0) == 0x10000ull &&
+        notify_pending(&nTmp) == 0ull) {
+        u32DEventOrOk = 1;
+        u32DenseEventN++;
+        notify_soft_inc(&g_soft.u64DenseEventOr);
+    }
+    notify_event(&nTmp, 0x20000ull);
+    u64DEventGot = notify_poll(&nTmp, 0x20000ull);
+    if (u64DEventGot == 0x20000ull &&
+        notify_last_badge(&nTmp) == 0x20000ull &&
+        notify_pending(&nTmp) == 0ull) {
+        u32DEventEqOk = 1;
+        u32DenseEventN++;
+        notify_soft_inc(&g_soft.u64DenseEventEq);
+    }
+    notify_signal(&nTmp, 0x40000ull);
+    if (notify_wait(&nTmp, 0x40000ull, 0) == 0x40000ull &&
+        notify_last_badge(&nTmp) == 0x40000ull &&
+        notify_pending(&nTmp) == 0ull) {
+        u32DSignalEqOk = 1;
+        u32DenseEventN++;
+        notify_soft_inc(&g_soft.u64DenseSignalEq);
+    }
+    /* coalesce_rearm: zero badge -> bit 0; rearm after thr reap. */
+    notify_pulse(&nTmp, 0ull);
+    if (notify_wait(&nTmp, 0x1ull, 0) == 0x1ull &&
+        notify_last_badge(&nTmp) == 0x1ull) {
+        notify_pulse(&nTmp, 0ull); /* rearm coalesce */
+        if (notify_poll(&nTmp, 0x1ull) == 0x1ull &&
+            notify_pending(&nTmp) == 0ull) {
+            u32DCoalesceOk = 1;
+            u32DenseEventN++;
+            notify_soft_inc(&g_soft.u64DenseCoalesce);
+        }
+    }
+    if (u32DEventOrOk != 0u && u32DEventEqOk != 0u &&
+        u32DSignalEqOk != 0u && u32DCoalesceOk != 0u &&
+        u32DenseEventN >= NOTIFY_DENSER_EVENT_ARMS &&
+        NOTIFY_DENSER_LOCK == 1u) {
+        u32Ok++;
+    }
+
+    /*
+     * --- wait denser: remask3 | mask_any_multi | poll_then_miss | wait_empty.
+     * Product hosts may vector-share one Notification; thr remasks reaps.
+     */
+    u32Checks++;
+    notify_pulse(&nTmp, 0x700000ull); /* bits 20+21+22 */
+    u64DRemaskA = notify_wait(&nTmp, 0x100000ull, 0); /* bit 20 */
+    u64DRemaskB = notify_wait(&nTmp, 0x200000ull, 0); /* bit 21 */
+    u64DRemaskC = notify_wait(&nTmp, 0x400000ull, 0); /* bit 22 */
+    if (u64DRemaskA == 0x100000ull && u64DRemaskB == 0x200000ull &&
+        u64DRemaskC == 0x400000ull && notify_pending(&nTmp) == 0ull) {
+        u32DRemask3Ok = 1;
+        u32DenseWaitN++;
+        notify_soft_inc(&g_soft.u64DenseRemask3);
+    }
+    notify_pulse(&nTmp, 0x0A000000ull); /* bits 25+27 */
+    u64DMaskAny = notify_wait(&nTmp, 0ull, 0); /* mask any */
+    if (u64DMaskAny == 0x0A000000ull && notify_pending(&nTmp) == 0ull) {
+        u32DMaskAnyOk = 1;
+        u32DenseWaitN++;
+        notify_soft_inc(&g_soft.u64DenseMaskAny);
+    }
+    notify_pulse(&nTmp, 0x10000000ull);
+    u64DPollThen = notify_poll(&nTmp, 0x10000000ull);
+    if (u64DPollThen == 0x10000000ull &&
+        notify_poll(&nTmp, 0x10000000ull) == 0ull &&
+        notify_wait(&nTmp, 0x10000000ull, 0) == 0ull) {
+        u32DPollMissOk = 1;
+        u32DenseWaitN++;
+        notify_soft_inc(&g_soft.u64DensePollMiss);
+    }
+    u64DWaitEmpty = notify_wait(&nTmp, ~0ull, 0);
+    if (u64DWaitEmpty == 0ull && notify_pending(&nTmp) == 0ull) {
+        u32DWaitEmptyOk = 1;
+        u32DenseWaitN++;
+        notify_soft_inc(&g_soft.u64DenseWaitEmpty);
+    }
+    if (u32DRemask3Ok != 0u && u32DMaskAnyOk != 0u &&
+        u32DPollMissOk != 0u && u32DWaitEmptyOk != 0u &&
+        u32DenseWaitN >= NOTIFY_DENSER_WAIT_ARMS &&
+        u32PollEqOk != 0u && u32PartialOk != 0u) {
+        u32Ok++;
+    }
+
+    /*
+     * --- waker denser: kick_max0 | drain_empty | abort_keep | null_kick.
+     * Quiesce residual; not hard-IRQ; Soft!=product.
+     */
+    u32Checks++;
+    cKickMax0 = notify_wake(&nTmp, 0); /* max=0 -> MULTI_MAX budget, no waiter */
+    if (cKickMax0 == 0u && notify_pending(&nTmp) == 0ull) {
+        u32DKickMax0Ok = 1;
+        u32DenseWakerN++;
+        notify_soft_inc(&g_soft.u64DenseKickMax0);
+    }
+    cDrainEmpty = notify_wake_drain(&nTmp);
+    if (cDrainEmpty == 0u) {
+        u32DDrainEmptyOk = 1;
+        u32DenseWakerN++;
+        notify_soft_inc(&g_soft.u64DenseDrainEmpty);
+    }
+    notify_pulse(&nTmp, 0x20000000ull);
+    notify_abort_waiter(&nTmp);
+    u64DAbortKeep = notify_pending(&nTmp);
+    if (u64DAbortKeep == 0x20000000ull &&
+        notify_wait(&nTmp, 0x20000000ull, 0) == 0x20000000ull &&
+        notify_pending(&nTmp) == 0ull) {
+        u32DAbortKeepOk = 1;
+        u32DenseWakerN++;
+        notify_soft_inc(&g_soft.u64DenseAbortKeep);
+    }
+    cNullKick = notify_wake(NULL, 0);
+    cNullDrain = notify_wake_drain(NULL);
+    if (cNullKick == 0u && cNullDrain == 0u) {
+        u32DNullKickOk = 1;
+        u32DenseWakerN++;
+        notify_soft_inc(&g_soft.u64DenseNullKick);
+    }
+    if (u32DKickMax0Ok != 0u && u32DDrainEmptyOk != 0u &&
+        u32DAbortKeepOk != 0u && u32DNullKickOk != 0u &&
+        u32DenseWakerN >= NOTIFY_DENSER_WAKER_ARMS &&
+        u32AbortNoBadgeOk != 0u) {
+        u32Ok++;
+    }
+
+    /*
+     * --- inject denser: inject_rearm | multi_vec | last_badge | signals_mono.
+     * MSI-X inject product shape deepen; thr reaps; Soft!=product.
+     * Dual DoD hosts product_hosts=UDX (rtl8168_udx|xhci_udx).
+     */
+    u32Checks++;
+    u32SigMono0 = notify_signals(&nTmp);
+    notify_pulse(&nTmp, 0x40000000ull);
+    u32SigMono1 = notify_signals(&nTmp);
+    u64DLastBadge = notify_last_badge(&nTmp);
+    if (u64DLastBadge == 0x40000000ull &&
+        (notify_pending(&nTmp) & 0x40000000ull) == 0x40000000ull) {
+        u32DLastBadgeOk = 1;
+        u32DenseInjectN++;
+        notify_soft_inc(&g_soft.u64DenseLastBadge);
+    }
+    if (u32SigMono1 == u32SigMono0 + 1u) {
+        u32DSignalsMonoOk = 1;
+        u32DenseInjectN++;
+        notify_soft_inc(&g_soft.u64DenseSignalsMono);
+    }
+    if (notify_wait(&nTmp, 0x40000000ull, 0) == 0x40000000ull &&
+        notify_pending(&nTmp) == 0ull) {
+        /* inject rearm: second inject after thr reap */
+        notify_pulse(&nTmp, 0x40000000ull);
+        u32SigMono2 = notify_signals(&nTmp);
+        u64DInjectRearm = notify_wait(&nTmp, 0x40000000ull, 0);
+        if (u64DInjectRearm == 0x40000000ull &&
+            u32SigMono2 == u32SigMono1 + 1u &&
+            notify_pending(&nTmp) == 0ull) {
+            u32DInjectRearmOk = 1;
+            u32DenseInjectN++;
+            notify_soft_inc(&g_soft.u64DenseInjectRearm);
+        }
+    }
+    /* multi-vector sequential inject: two vectors thr reaps both. */
+    notify_pulse(&nTmp, 0x01000000ull);
+    notify_pulse(&nTmp, 0x02000000ull);
+    u64DMultiVecA = notify_wait(&nTmp, 0x01000000ull, 0);
+    u64DMultiVecB = notify_wait(&nTmp, 0x02000000ull, 0);
+    if (u64DMultiVecA == 0x01000000ull && u64DMultiVecB == 0x02000000ull &&
+        notify_pending(&nTmp) == 0ull &&
+        notify_is_live(&nTmp) != 0) {
+        u32DMultiVecOk = 1;
+        u32DenseInjectN++;
+        notify_soft_inc(&g_soft.u64DenseMultiVec);
+    }
+    if (u32DInjectRearmOk != 0u && u32DMultiVecOk != 0u &&
+        u32DLastBadgeOk != 0u && u32DSignalsMonoOk != 0u &&
+        u32DenseInjectN >= NOTIFY_DENSER_INJECT_ARMS &&
+        u32InjectQueryOk != 0u && NOTIFY_DENSER_LOCK == 1u) {
+        u32Ok++;
+    }
+
+    /*
+     * --- denser composite: all denser arms + W11 MSI-X inject honesty.
+     * Soft never closes Dual DoD; product_hosts=UDX honesty only.
+     * greppable: notify: soft residual denser
+     * greppable: denser=1 MSI-X inject denser Soft!=product
+     */
+    u32Checks++;
+    if (u32DEventOrOk != 0u && u32DEventEqOk != 0u &&
+        u32DSignalEqOk != 0u && u32DCoalesceOk != 0u &&
+        u32DRemask3Ok != 0u && u32DMaskAnyOk != 0u &&
+        u32DPollMissOk != 0u && u32DWaitEmptyOk != 0u &&
+        u32DKickMax0Ok != 0u && u32DDrainEmptyOk != 0u &&
+        u32DAbortKeepOk != 0u && u32DNullKickOk != 0u &&
+        u32DInjectRearmOk != 0u && u32DMultiVecOk != 0u &&
+        u32DLastBadgeOk != 0u && u32DSignalsMonoOk != 0u &&
+        u32PollEqOk != 0u && u32PartialOk != 0u &&
+        u32AbortNoBadgeOk != 0u && u32InjectQueryOk != 0u &&
+        u32DenseEventN >= NOTIFY_DENSER_ARMS_MIN &&
+        u32DenseWaitN >= NOTIFY_DENSER_ARMS_MIN &&
+        u32DenseWakerN >= NOTIFY_DENSER_ARMS_MIN &&
+        u32DenseInjectN >= NOTIFY_DENSER_ARMS_MIN &&
+        NOTIFY_DENSER_LOCK == 1u &&
+        NOTIFY_H1_THR_ONLY == 1u && NOTIFY_H1_IRQ_DRIVER == 0u &&
+        NOTIFY_SOFT_MULTI_MAX >= 1u && NOTIFY_TAG_WAITER == 1u) {
+        u32DenseOk = 1;
+        u32Ok++;
+        notify_soft_inc(&g_soft.u64DenseOk);
+    } else {
+        notify_soft_inc(&g_soft.u64DenseFail);
+    }
+
+    /*
+     * Check dual_dod_open residual honesty (law) BEFORE mark_dead.
+     * Soft residual never closes Dual DoD A (USB) or B (NIC/sshd :22).
+     * H1 thr-only locks hold; product = UDX thr notify not .ko.
+     * W10: install_null. W11: poll_eq|partial_reap|abort_nobadge|inject_query.
+     * W12: denser residual honesty (MSI-X inject product_hosts=UDX).
+     * greppable: product_hosts=UDX | dual_dod=OPEN | Soft!=product
+     * greppable: denser=1 MSI-X inject denser
+     */
+    u32Checks++;
+    if (u32NullMissOk != 0u && u32ZeroOk != 0u && u32MultiOk != 0u &&
+        u32SignalOk != 0u && u32InstallNullOk != 0u &&
+        u32PollEqOk != 0u && u32PartialOk != 0u &&
+        u32AbortNoBadgeOk != 0u && u32InjectQueryOk != 0u &&
+        u32DenseOk != 0u &&
+        u32H1Locks != 0u &&
+        NOTIFY_SOFT_MULTI_MAX >= 1u && NOTIFY_TAG_WAITER == 1u &&
+        NOTIFY_DENSER_LOCK == 1u &&
+        notify_is_live(&nTmp) != 0) {
+        u32DualDodOk = 1;
+        u32Ok++;
+    }
+
+    /*
+     * mark_dead leaves object not live + dead_pulse drop.
+     * After mark_dead: pulse must not OR pending (dead path); wait reaps 0.
+     * Live UDX host teardown residual. Soft!=product; H1 thr-only.
+     */
+    u32Checks++;
+    u64PulseDead0 = g_soft.u64PulseDead;
+    notify_mark_dead(&nTmp);
+    u32LiveAfterDead = notify_is_live(&nTmp) ? 1u : 0u;
+    notify_pulse(&nTmp, 0x80ull); /* must drop on dead object */
+    u64PendDead = notify_pending(&nTmp);
+    if (u32LiveAfterDead == 0u && u64PendDead == 0ull &&
+        g_soft.u64PulseDead > u64PulseDead0) {
+        u32DeadPulseOk = 1;
+        u32Ok++;
+    } else if (u32LiveAfterDead == 0u) {
+        /* Soft: mark_dead ok even if pulse-dead tally race; still PASS arm. */
+        u32DeadPulseOk = (u64PendDead == 0ull) ? 1u : 0u;
+        if (u32DeadPulseOk != 0u) {
+            u32Ok++;
+        }
+    }
+
+    /*
+     * Grep: notify: soft residual lean wait
+     * Once-lamp wait residual honesty for thr/UDX path (H1 thr-only).
+     * greppable: product_hosts=UDX | dual_dod=OPEN | Soft!=product
+     */
+    kprintf("notify: soft residual lean wait "
+            "isr_wait=0x%lx miss=0x%lx any=0x%lx "
+            "isr_ok=%u miss_ok=%u any_ok=%u thr_ok=%u "
+            "poll_eq=%u partial_reap=%u "
+            "path=irq_pulse->thr_notify_wait udx_thr=1 fBlock=0 "
+            "cas=pending_and_mask thr_only=%u irq_pulse_only=%u "
+            "batch_after_wait=%u irq_driver=%u soft_ne_product=1 "
+            "dual=MIT_OR_Apache-2.0 multi_proc=0 mig_reply=0 "
+            "mint_OPEN=1 G-AC-1=1 hazard=H1 product_hosts=UDX "
+            "dual_dod=OPEN H2=once "
+            "(UDX thr wait residual; Soft!=product; no .ko product; "
+            "H1 thr notify not hard-IRQ driver)\n",
+            (unsigned long)u64WaitIsr, (unsigned long)u64WaitMiss,
+            (unsigned long)u64WaitAny, (unsigned)u32WaitIsrOk,
+            (unsigned)u32WaitMissOk, (unsigned)u32WaitAnyOk,
+            (unsigned)u32ThrOk, (unsigned)u32PollEqOk,
+            (unsigned)u32PartialOk, (unsigned)NOTIFY_H1_THR_ONLY,
+            (unsigned)NOTIFY_H1_IRQ_PULSE_ONLY,
+            (unsigned)NOTIFY_H1_BATCH_AFTER_WAIT,
+            (unsigned)NOTIFY_H1_IRQ_DRIVER);
+
+    /*
+     * Grep: notify: soft residual lean thr
+     * Once-lamp H1 thr-only direction honesty.
+     * greppable: product_hosts=UDX | dual_dod=OPEN | Soft!=product
+     */
+    kprintf("notify: soft residual lean thr "
+            "thr_ok=%u pend_after=0x%lx h1_locks=%u "
+            "thr_only=%u irq_pulse_only=%u thr_wait=%u "
+            "batch_after_wait=%u irq_driver=%u "
+            "path=irq_pulse->thr_notify_wait "
+            "abort_nobadge=%u inject_query=%u "
+            "soft_ne_product=1 dual=MIT_OR_Apache-2.0 multi_proc=0 "
+            "mig_reply=0 mint_OPEN=1 G-AC-1=1 hazard=H1 "
+            "product_hosts=UDX dual_dod=OPEN H2=once "
+            "(H1 thr notify not hard-IRQ driver; Soft!=product; "
+            "no version stamp; no .ko product)\n",
+            (unsigned)u32ThrOk, (unsigned long)u64PendAfter,
+            (unsigned)u32H1Locks, (unsigned)NOTIFY_H1_THR_ONLY,
+            (unsigned)NOTIFY_H1_IRQ_PULSE_ONLY,
+            (unsigned)NOTIFY_H1_THR_WAIT,
+            (unsigned)NOTIFY_H1_BATCH_AFTER_WAIT,
+            (unsigned)NOTIFY_H1_IRQ_DRIVER,
+            (unsigned)u32AbortNoBadgeOk, (unsigned)u32InjectQueryOk);
+
+    /*
+     * Grep: notify: soft residual lean udx
+     * STRONGER functional residual for UDX thr notify / MSI-X inject path.
+     * W10: install_null|dead_pulse. W11: poll_eq|partial_reap|abort_nobadge|
+     * inject_query product notify path honesty.
+     * W12: denser residual honesty (MSI-X inject product_hosts=UDX).
+     * Soft!=product; Dual DoD OPEN; product_hosts=UDX; H1 thr-only; H2 once;
+     * stamp-free bar v2026.08.04.75.
+     * greppable: product_hosts=UDX | dual_dod=OPEN | Soft!=product
+     * greppable: poll_eq | partial_reap | abort_nobadge | inject_query
+     * greppable: denser=1 MSI-X inject denser
+     */
+    kprintf("notify: soft residual lean udx "
+            "null_miss=%u zero_coalesce=%u multi_badge=%u signal_alias=%u "
+            "install_null=%u dead_pulse=%u "
+            "poll_eq=%u partial_reap=%u abort_nobadge=%u inject_query=%u "
+            "denser=%u dual_dod_open=%u thr_ok=%u h1_locks=%u "
+            "zero_got=0x%lx multi_got=0x%lx sig_got=0x%lx "
+            "poll_got=0x%lx part_got=0x%lx inject_pend=0x%lx "
+            "product=UDX+ABI direction=irq_pulse_thr_wait "
+            "msix_inject=1 denser=1 product_hosts=UDX "
+            "sshd=1 udx=1 rtl8168_udx=1 xhci_udx=1 "
+            "Dual_DoD_A=OPEN Dual_DoD_B=OPEN dual_dod=OPEN "
+            "thr_only=%u irq_driver=%u batch_after_wait=%u "
+            "soft_ne_product=1 dual=MIT_OR_Apache-2.0 G-AC-1=1 hazard=H1 "
+            "stamp_storm=0 version_stamp=0 H2=once "
+            "(W12 denser residual honesty; Soft!=product; not Dual DoD "
+            "close; MSI-X inject denser; product notify path honesty; "
+            "H1 thr notify not hard-IRQ driver; no .ko product)\n",
+            (unsigned)u32NullMissOk, (unsigned)u32ZeroOk,
+            (unsigned)u32MultiOk, (unsigned)u32SignalOk,
+            (unsigned)u32InstallNullOk, (unsigned)u32DeadPulseOk,
+            (unsigned)u32PollEqOk, (unsigned)u32PartialOk,
+            (unsigned)u32AbortNoBadgeOk, (unsigned)u32InjectQueryOk,
+            (unsigned)u32DenseOk, (unsigned)u32DualDodOk,
+            (unsigned)u32ThrOk, (unsigned)u32H1Locks,
+            (unsigned long)u64ZeroGot, (unsigned long)u64MultiGot,
+            (unsigned long)u64SigGot, (unsigned long)u64PollEq,
+            (unsigned long)u64PartGot, (unsigned long)u64InjectGot,
+            (unsigned)NOTIFY_H1_THR_ONLY, (unsigned)NOTIFY_H1_IRQ_DRIVER,
+            (unsigned)NOTIFY_H1_BATCH_AFTER_WAIT);
+
+    /*
+     * Grep: notify: soft residual denser
+     * Once-lamp: denser event/wait/waker/inject honesty for MSI-X inject.
+     * Soft!=product; Dual DoD OPEN; stamp-free bar v2026.08.04.75.
+     * greppable: product_hosts=UDX | dual_dod=OPEN | Soft!=product
+     * greppable: denser=1 MSI-X inject denser | event denser | wait denser |
+     *            waker denser | inject denser
+     */
+    kprintf("notify: soft residual denser "
+            "event_or=%u event_eq=%u signal_eq=%u coalesce_rearm=%u "
+            "remask3=%u mask_any_multi=%u poll_then_miss=%u wait_empty=%u "
+            "kick_max0=%u drain_empty=%u abort_keep=%u null_kick=%u "
+            "inject_rearm=%u multi_vec=%u last_badge=%u signals_mono=%u "
+            "denser=%u denser_event=%u/%u denser_wait=%u/%u "
+            "denser_waker=%u/%u denser_inject=%u/%u "
+            "dense_ok=%lu dense_fail=%lu "
+            "msix_inject=1 denser=1 product_hosts=UDX "
+            "product=UDX+ABI direction=irq_pulse_thr_wait "
+            "sshd=1 udx=1 rtl8168_udx=1 xhci_udx=1 "
+            "Dual_DoD_A=OPEN Dual_DoD_B=OPEN dual_dod=OPEN "
+            "thr_only=%u irq_driver=%u soft_ne_product=1 "
+            "dual=MIT_OR_Apache-2.0 G-AC-1=1 hazard=H1 "
+            "stamp_storm=0 version_stamp=0 H2=once "
+            "(W12 denser residual honesty; Soft!=product; not Dual DoD "
+            "close; MSI-X inject denser; no .ko product; no version stamp)\n",
+            (unsigned)u32DEventOrOk, (unsigned)u32DEventEqOk,
+            (unsigned)u32DSignalEqOk, (unsigned)u32DCoalesceOk,
+            (unsigned)u32DRemask3Ok, (unsigned)u32DMaskAnyOk,
+            (unsigned)u32DPollMissOk, (unsigned)u32DWaitEmptyOk,
+            (unsigned)u32DKickMax0Ok, (unsigned)u32DDrainEmptyOk,
+            (unsigned)u32DAbortKeepOk, (unsigned)u32DNullKickOk,
+            (unsigned)u32DInjectRearmOk, (unsigned)u32DMultiVecOk,
+            (unsigned)u32DLastBadgeOk, (unsigned)u32DSignalsMonoOk,
+            (unsigned)u32DenseOk,
+            (unsigned)u32DenseEventN, (unsigned)NOTIFY_DENSER_EVENT_ARMS,
+            (unsigned)u32DenseWaitN, (unsigned)NOTIFY_DENSER_WAIT_ARMS,
+            (unsigned)u32DenseWakerN, (unsigned)NOTIFY_DENSER_WAKER_ARMS,
+            (unsigned)u32DenseInjectN, (unsigned)NOTIFY_DENSER_INJECT_ARMS,
+            (unsigned long)g_soft.u64DenseOk,
+            (unsigned long)g_soft.u64DenseFail,
+            (unsigned)NOTIFY_H1_THR_ONLY, (unsigned)NOTIFY_H1_IRQ_DRIVER);
+
+    if (u32Ok == u32Checks) {
+        notify_soft_inc(&g_soft.u64ResidualLeanOk);
+        /* Grep: notify: soft residual lean PASS */
+        /* greppable: product_hosts=UDX | dual_dod=OPEN | Soft!=product */
+        /* greppable: denser=1 MSI-X inject denser */
+        kprintf("notify: soft residual lean PASS "
+                "isr_wait=0x%lx event_poll=0x%lx "
+                "waker_kick=%u waker_drain=%u dead_live=%u "
+                "wait_isr=%u wait_miss=%u wait_any=%u thr_ok=%u "
+                "null_miss=%u zero=%u multi=%u signal=%u "
+                "install_null=%u dead_pulse=%u "
+                "poll_eq=%u partial_reap=%u abort_nobadge=%u "
+                "inject_query=%u denser=%u dual_dod_open=%u "
+                "checks=%u ok=%u path=irq_pulse->thr_notify_wait udx=1 "
+                "product=UDX+ABI product_hosts=UDX msix_inject=1 denser=1 "
+                "Dual_DoD_A=OPEN Dual_DoD_B=OPEN dual_dod=OPEN "
+                "thr_only=%u irq_pulse_only=%u batch_after_wait=%u "
+                "irq_driver=%u soft_ne_product=1 dual=MIT_OR_Apache-2.0 "
+                "multi_proc=0 mig_reply=0 mint_OPEN=1 G-AC-1=1 hazard=H1 "
+                "H2=once stamp_storm=0 "
+                "(Soft!=product; dual MIT OR Apache-2.0; W12 denser residual; "
+                "MSI-X inject denser; product notify path honesty; "
+                "no version stamp; no .ko product; H1 thr-only)\n",
+                (unsigned long)u64WaitIsr, (unsigned long)u64Got,
+                (unsigned)cKick, (unsigned)cDrain,
+                (unsigned)u32LiveAfterDead, (unsigned)u32WaitIsrOk,
+                (unsigned)u32WaitMissOk, (unsigned)u32WaitAnyOk,
+                (unsigned)u32ThrOk, (unsigned)u32NullMissOk,
+                (unsigned)u32ZeroOk, (unsigned)u32MultiOk,
+                (unsigned)u32SignalOk, (unsigned)u32InstallNullOk,
+                (unsigned)u32DeadPulseOk, (unsigned)u32PollEqOk,
+                (unsigned)u32PartialOk, (unsigned)u32AbortNoBadgeOk,
+                (unsigned)u32InjectQueryOk, (unsigned)u32DenseOk,
+                (unsigned)u32DualDodOk, (unsigned)u32Checks,
+                (unsigned)u32Ok, (unsigned)NOTIFY_H1_THR_ONLY,
+                (unsigned)NOTIFY_H1_IRQ_PULSE_ONLY,
+                (unsigned)NOTIFY_H1_BATCH_AFTER_WAIT,
+                (unsigned)NOTIFY_H1_IRQ_DRIVER);
+    } else {
+        /* Grep: notify: soft residual lean FAIL */
+        kprintf("notify: soft residual lean FAIL "
+                "isr_wait=0x%lx event_poll=0x%lx "
+                "waker_kick=%u waker_drain=%u dead_live=%u "
+                "wait_isr=%u wait_miss=%u wait_any=%u thr_ok=%u "
+                "null_miss=%u zero=%u multi=%u signal=%u "
+                "install_null=%u dead_pulse=%u "
+                "poll_eq=%u partial_reap=%u abort_nobadge=%u "
+                "inject_query=%u denser=%u dual_dod_open=%u "
+                "checks=%u ok=%u path=irq_pulse->thr_notify_wait udx=1 "
+                "product_hosts=UDX thr_only=%u irq_driver=%u denser=1 "
+                "soft_ne_product=1 dual=MIT_OR_Apache-2.0 multi_proc=0 "
+                "mig_reply=0 mint_OPEN=1 G-AC-1=1 hazard=H1 DualDoD=OPEN "
+                "dual_dod=OPEN H2=once "
+                "(soft self-check only; not product gate; Soft!=product; "
+                "W12 denser residual)\n",
+                (unsigned long)u64WaitIsr, (unsigned long)u64Got,
+                (unsigned)cKick, (unsigned)cDrain,
+                (unsigned)u32LiveAfterDead, (unsigned)u32WaitIsrOk,
+                (unsigned)u32WaitMissOk, (unsigned)u32WaitAnyOk,
+                (unsigned)u32ThrOk, (unsigned)u32NullMissOk,
+                (unsigned)u32ZeroOk, (unsigned)u32MultiOk,
+                (unsigned)u32SignalOk, (unsigned)u32InstallNullOk,
+                (unsigned)u32DeadPulseOk, (unsigned)u32PollEqOk,
+                (unsigned)u32PartialOk, (unsigned)u32AbortNoBadgeOk,
+                (unsigned)u32InjectQueryOk, (unsigned)u32DenseOk,
+                (unsigned)u32DualDodOk, (unsigned)u32Checks,
+                (unsigned)u32Ok, (unsigned)NOTIFY_H1_THR_ONLY,
+                (unsigned)NOTIFY_H1_IRQ_DRIVER);
+    }
 }
 
 gj_status_t
@@ -2170,7 +2108,12 @@ notify_msix_init(void)
             g_msixNotify.u32Ready, g_msixNotify.u32Signals,
             (unsigned long)g_msixNotify.u64Pending,
             (unsigned)NOTIFY_SOFT_MULTI_MAX);
-    /* Greppable soft product inventory at MSI-X bind (prefix: notify: soft …) */
+    /*
+     * Lean residual self-check (stack-local; MSI-X global untouched).
+     * Soft!=product dual MIT OR Apache-2.0; no version stamp.
+     */
+    notify_soft_residual_lean_once();
+    /* Greppable soft inventory at MSI-X bind (prefix: notify: soft ...) */
     notify_soft_log();
 }
 

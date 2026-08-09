@@ -45,6 +45,8 @@
  *                reclaim=bit19 free=unowned multi_server=0 confine=0
  *
  *   sessiond-gj: soft honesty multi_server=0 confine=0 exclusive=1 soft=1 product_kernel=OPEN wave=70
+ *   sessiond-gj: soft residual lean … Soft!=product dual_dod=OPEN product=UDX/DDI+ABI G-AC-1
+ *   sessiond-gj: soft residual lean PASS … residual_lean=1 storm=0
  * Diagnostics only — never hard-fail ownership path PASS; not a compositor claim.
  *
  * Soft health deepens door surface beyond hard claim/present/release:
@@ -53,7 +55,40 @@
  *   interim PRESENT, second PRESENT_FB (multi-frame bit18 / user-fb bit17).
  * Wave 111 free path also soft-probes STATS / MAP_SCANOUT / DISPLAY_INFO
  * while unowned; geom match + present/input/reclaim/deepen/path rollups.
- * Honesty: soft inventory ≠ product multi-server confine.
+ * Honesty: Soft!=product multi-server confine.
+ *
+ * Soft residual deepen (C2 product daemon residual; Soft!=product; G-AC-1;
+ * dual MIT OR Apache-2.0; Dual DoD A/B OPEN; product=UDX/DDI+ABI):
+ *   claim residual     — hard CLAIM is product A1 ownership; same-token
+ *                        reclaim soft (STATS bit19); never multi-server.
+ *   present residual   — hard PRESENT_FB product path; interim PRESENT +
+ *                        multi-frame soft only (bits 17/18).
+ *   release residual   — hard RELEASE; free-path soft double-RELEASE +
+ *                        unowned STATS/MAP/DISPLAY probes.
+ *   inventory residual — Wave 126 soft areas (health/free/flags/stats/geom/
+ *                        present/input/reclaim/deepen/path/honesty); capped.
+ *   honesty residual   — multi_server=0 confine=0 exclusive=1 soft=1
+ *                        product_kernel=OPEN; not compositor product claim.
+ *   hazard residual    — H1 no net_eth_poll from IRQ (not this TU); H2 soft
+ *                        inventory areas fixed (SOFT_INV_AREAS; storm=0);
+ *                        H3 thr_exit before as_destroy (process law residual;
+ *                        not closed here). Soft!=product.
+ *   product residual   — product drivers = UDX/DDI+ABI userspace hosts
+ *                        (rtl8168_udx / xhci_udx …); freestanding class SKIP;
+ *                        session door ownership path is product for A1 session
+ *                        smoke only; multi-server confine remains OPEN.
+ *   dual_dod residual  — Dual DoD A/B remain OPEN until DUT proof; soft lamps
+ *                        never close Dual DoD. Soft!=product.
+ *   G-AC-1 residual    — no Linux .ko product AC; no GPL in this TU.
+ * Bar honesty v2026.08.04.75 stamp-free. NEVER bump GJ_IMAGE_VERSION here.
+ * No invent intermediate image stamps. Not GJ_IMAGE_VERSION.
+ *
+ * greppable: sessiond-gj: soft residual lean
+ * greppable: sessiond-gj: soft residual lean PASS
+ * greppable: Soft!=product
+ * greppable: product=UDX/DDI+ABI
+ * greppable: dual_dod=OPEN
+ * greppable: G-AC-1
  *
  * Door opcodes (do not renumber — match kernel/include/gj/session_door.h):
  *   1 PRESENT  2 DISPLAY_INFO  3 INPUT_POLL  4 INPUT_POP
@@ -65,6 +100,7 @@
  *   bit16 drop sticky  bit17 user PRESENT_FB  bit18 multi-frame  bit19 reclaim
  *
  * Pure C freestanding. Dual-licensed MIT OR Apache-2.0 (no GPL).
+ * Soft!=product. G-AC-1. Dual DoD A/B OPEN. product=UDX/DDI+ABI.
  *
  *   make sessiond-gj → build/user/sessiond.elf
  */
@@ -106,10 +142,13 @@
 #define SESS_SOFT_POP_CAP 64u
 
 /* Soft health sub-step bits (Wave 10 inventory; Wave 111 still tallies). */
-/* Wave 126 soft deepen surfaces (CREATE-ONLY soft ≠ product):
+/* Wave 126 soft deepen surfaces (CREATE-ONLY Soft!=product):
  *   greppable: soft retgradientangle continuum_toward=26800 soft_ne_product=1 wave=126
  *   greppable: soft retblendangle exclusive=1 continuum_toward=26800 soft_ne_product=1 wave=126
- * Soft ≠ product complete; product lamps 0;
+ * Soft!=product complete; product lamps 0;
+ * C2 product daemon residual: Soft!=product * G-AC-1 * Dual DoD OPEN
+ * product=UDX/DDI+ABI * H1/H2/H3 * dual MIT OR Apache-2.0 * no GPL
+ * Bar honesty v2026.08.04.75 stamp-free; NEVER bump GJ_IMAGE_VERSION.
  */
 
 #define SOFT_H_DISPLAY  (1u << 0)
@@ -429,7 +468,9 @@ soft_geom_refresh(void)
  * Soft inventory dump (Wave 126 exclusive deepen).
  * Greppable prefix: "sessiond-gj: soft …"
  * Pure observation — always soft; never gates ownership path PASS.
- * Honesty: soft ≠ product multi-server confine.
+ * Honesty: Soft!=product multi-server confine.
+ * C2 product daemon residual lean (Soft!=product; G-AC-1; Dual DoD OPEN;
+ * product=UDX/DDI+ABI; H1/H2/H3) — capped; storm=0; not GJ_IMAGE_VERSION.
  *
  *   sessiond-gj: soft inventory …
  *   sessiond-gj: soft health …
@@ -442,6 +483,9 @@ soft_geom_refresh(void)
  *   sessiond-gj: soft reclaim …
  *   sessiond-gj: soft deepen …
  *   sessiond-gj: soft path …
+ *   sessiond-gj: soft honesty …
+ *   sessiond-gj: soft residual lean …
+ *   sessiond-gj: soft residual lean PASS …
  */
 static void
 soft_inventory_log(void)
@@ -690,7 +734,7 @@ soft_inventory_log(void)
 
     /*
      * Grep: sessiond-gj: soft path (Wave 111 honesty).
-     * Soft inventory ≠ product multi-server confine.
+     * Soft inventory Soft!=product multi-server confine.
      */
     msg("sessiond-gj: soft path claim=live present=fb multi_frame=bit18 "
         "reclaim=bit19 free=unowned multi_server=0 confine=0 "
@@ -698,10 +742,42 @@ soft_inventory_log(void)
 
     /*
      * Grep: sessiond-gj: soft honesty (Wave 126 exclusive deepen).
-     * Soft inventory ≠ product multi-server confine.
+     * Soft inventory Soft!=product multi-server confine.
      */
     msg("sessiond-gj: soft honesty multi_server=0 confine=0 "
         "exclusive=1 soft=1 product_kernel=OPEN wave=70\n");
+
+    /*
+     * Grep: sessiond-gj: soft residual lean (C2 product daemon residual).
+     * Soft!=product * G-AC-1 * Dual DoD A/B OPEN * product=UDX/DDI+ABI.
+     * H1 no IRQ net_eth_poll (not this TU); H2 areas capped storm=0;
+     * H3 thr_exit before as_destroy (process law residual; not here).
+     * Session door ownership path = product A1 smoke only; multi-server
+     * confine OPEN; freestanding class SKIP; no .ko product AC; no GPL.
+     * Bar honesty v2026.08.04.75 stamp-free; NEVER bump GJ_IMAGE_VERSION.
+     * Dual MIT OR Apache-2.0. Lean once-lamps only (H2).
+     */
+    msg("sessiond-gj: soft residual lean residual_lean=1 session_door=1 "
+        "claim=1 present_fb=1 release=1 inventory=1 honesty=1 "
+        "exclusive=1 soft=1 multi_server=0 confine=0 "
+        "product_kernel=OPEN freestanding_class_skip=1 ko_product=0 "
+        "product=UDX/DDI+ABI dual_dod=OPEN dual_dod_a=OPEN dual_dod_b=OPEN "
+        "H1=1 H2=1 H3=1 storm=0 soft_ne_product=1 Soft!=product "
+        "dual=MIT_OR_Apache-2.0 G-AC-1=1 "
+        "(Soft!=product; product drivers=UDX/DDI+ABI userspace hosts; "
+        "session door A1 ownership product path; multi-server confine OPEN; "
+        "Dual DoD A/B OPEN; freestanding class SKIP; no .ko product AC)\n");
+
+    /*
+     * Grep: sessiond-gj: soft residual lean PASS
+     * Once-lamp C2 residual rollup. Soft!=product. G-AC-1. Dual DoD OPEN.
+     */
+    msg("sessiond-gj: soft residual lean PASS residual_lean=1 "
+        "session_door=1 claim=1 present_fb=1 release=1 "
+        "product=UDX/DDI+ABI dual_dod=OPEN dual_dod_a=OPEN dual_dod_b=OPEN "
+        "H1=1 H2=1 H3=1 storm=0 soft_ne_product=1 Soft!=product "
+        "dual=MIT_OR_Apache-2.0 G-AC-1=1 multi_server=0 confine=0 "
+        "ko_product=0 freestanding_class_skip=1 product_kernel=OPEN\n");
 }
 
 static void

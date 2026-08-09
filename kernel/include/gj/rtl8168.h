@@ -2,99 +2,91 @@
  * SPDX-License-Identifier: MIT OR Apache-2.0
  * Copyright (c) 2026 Project GreenJade contributors
  *
- * Clean-room Realtek RTL8111/8168 Gigabit Ethernet (PCI 10ec:8168).
+ * Clean-room Realtek RTL8111/8168 (PCI 10ec:8168) freestanding residual.
  * Pure C11 freestanding. Dual MIT OR Apache-2.0. No GPL / no r8169 paste.
  *
- * Public PCI IDs + MMIO register map only (Realtek / OSDev-class docs).
- * Poll-mode TX/RX for freestanding sshd on G752VT-class laptops.
+ * *** FREESTANDING SKIP DEFAULT · NOT PRODUCT (ABI-first pivot) ***
+ * GJ_RTL8168_PROBE stays 0: freestanding class SKIP (same policy as USB MSC).
+ * Product laptop NIC = userspace rtl8168_udx + hot+cold ABI + DDI/UDX caps.
+ * T0 product net = virtio-net until UDX owns wire. Soft!=product · G-AC-1.
  *
- * Soft ≠ product close for every rev; soft SKIP if no matching PCI.
- * greppable: rtl8168: probe PASS|SKIP|FAIL | rtl8168: ready PASS
+ * STOP freestanding rtl rabbit hole. NEVER re-enable freestanding NIC as
+ * default. NEVER thrash R-climb as product engineering. Residual thrash
+ * stripped: this unit is lean SKIP honesty stubs only (API for linkers).
+ * Opt-in -DGJ_RTL8168_PROBE=1 does not restore BAR/rings/R-climb.
+ *
+ * greppable: rtl8168: probe SKIP | GJ_RTL8168_PROBE=0
+ * greppable: rtl8168: soft residual product=UDX+ABI
+ * greppable: rtl8168: soft residual lean
+ * greppable: Soft!=product
  */
 #pragma once
 
 #include <gj/types.h>
 
 /**
- * Scan PCI for first 10ec:8168, map BAR, soft-reset, program desc rings,
- * enable TX/RX. Soft SKIP (return 0) when absent (QEMU virtio-only).
- * Returns 0 always for bring-up (never hard-gates boot).
+ * Freestanding residual probe — always SKIP honesty under default gate.
+ * GJ_RTL8168_PROBE stays 0: no BAR claim, no rings, no R-climb.
+ * Returns 0 always (never hard-gates boot). Soft!=product.
+ * Product NIC = rtl8168_udx + ABI. Grep: rtl8168: probe SKIP
  */
 int rtl8168_probe(void);
 
-/** Non-zero if link path is programmed and rings are live. */
+/** Always 0 — freestanding residual never owns wire. Soft!=product. */
 int rtl8168_ready(void);
 
-/** Soft: non-zero if PHY reports link (best-effort; 0 if unknown). */
+/** Always 0 — no freestanding PHY path. Soft!=product. */
 int rtl8168_link_up(void);
 
 /**
- * Transmit one Ethernet frame (dst..payload, no FCS). Returns 0 on queue,
- * -1 if not ready / ring busy (OWN) / bad args. Ring-full → tx_busy;
- * bad args / not ready → tx_fail (busy ≠ fail).
+ * Always fail (-1). Product TX = rtl8168_udx + ABI. Soft!=product.
  */
 int rtl8168_tx(const void *pFrame, u32 cbLen);
 
 /**
- * Poll one completed RX frame into pOut (up to cbMax). Returns byte length
- * or -1 if empty / not ready.
+ * Always empty (-1). Product RX = rtl8168_udx + ABI. Soft!=product.
  */
 i32 rtl8168_rx(void *pOut, u32 cbMax);
 
-/** Copy station MAC (6 bytes) into pMac when ready; else zeros. */
+/** Zeros pMac — freestanding has no station. Soft!=product. */
 void rtl8168_mac(u8 *pMac);
 
 /**
- * Keep CHIPCMD TE|RE asserted and clear IntrStatus. Call from net_eth_poll
- * so RX does not stall after long idle / bus power quirks (G752).
+ * No-op keep-alive. Freestanding SKIP / no R-climb thrash. Soft!=product.
  */
 void rtl8168_poll_hw(void);
 
-/** Soft counters for panel / kprintf. */
+/** Soft counters always 0 (honesty; Soft!=product). */
 u32 rtl8168_tx_count(void);
 u32 rtl8168_rx_count(void);
-/**
- * Real TX errors only (bad args / not ready). Ring-full is tx_busy, not fail
- * (OpenBSD/if_re style: busy ≠ fail).
- */
 u32 rtl8168_tx_fail(void);
-/** TX ring full / OWN still set after brief wait (would block). */
 u32 rtl8168_tx_busy(void);
-/** Frames completed by NIC but dropped (RES/ROR/bad len). */
 u32 rtl8168_rx_drop(void);
 
 /**
- * Soft MMIO handoff prepare (phase 1 → phase-2 readiness).
- * Gate GJ_SOFT_R8169_MMIO_HANDOFF==0 (default): no-op, log once
- *   "rtl8168: soft mmio handoff SKIP (gate off)"
- * Gate 1: stop TE/RE, mask IntrMask, clear ready, mark net_l2 pending.
- * Leaves g_pMmio mapped but idle (no unmap). poll_hw/tx/rx refuse TE|RE.
- * Does NOT call soft/.ko open; does NOT set g_fMmioHandoff. Soft≠product.
- * Grep: rtl8168: soft mmio handoff
+ * Soft MMIO handoff prepare — residual SKIP honesty only.
+ * Soft!=product · G-AC-1. Product NIC = rtl8168_udx + ABI.
+ * Grep: rtl8168: soft mmio handoff SKIP
  */
 void rtl8168_soft_handoff_prepare(void);
 
-/** Non-zero after successful phase-1 prepare (gate on path only). */
+/** Always 0 — freestanding never prepares handoff. Soft!=product. */
 int  rtl8168_soft_handoff_prepared(void);
 
 /**
- * Soft hybrid kick: PCI BM/ASPM + one-shot full ring rearm + program_hw
- * (no chip soft-reset). CPlus TXENB|PCI_MRW|MACSTAT_DIS first, EarlyOffV2
- * RxConfig, force RxCfg after RE. Prefer over reclaim after SOFT
- * (photo 3283 reclaim→R0). Soft≠product.
- * Grep: rtl8168: soft kick wire | soft rx empty
+ * Soft kick wire — residual SKIP (no freestanding thrash). Soft!=product.
+ * Grep: rtl8168: soft kick wire SKIP
  */
 void rtl8168_kick_wire(void);
 
 /**
- * Hybrid 4a: reclaim freestanding wire after soft REAL r8169.ko probe.
- *
- * Hostish REAL probe maps the same BAR and reprograms the NIC (soft-reset,
- * new rings). That orphans freestanding TX/RX rings → OWN stuck, B### busy,
- * pings not returned. Call after REAL probe when gate0 keeps freestanding
- * as wire owner. Re-soft-reset, re-arm rings, rtl_program_hw, TX selftest.
- * No-op if not ready / handoff prepared / no MMIO. Soft≠product.
- * Grep: rtl8168: soft reclaim wire
- * Returns 0 on reclaim+selftest PASS, -1 on skip/fail.
+ * Post-TE rearm — residual SKIP. Soft!=product.
+ * Grep: rtl8168: soft post-te rearm SKIP
+ */
+int rtl8168_post_te_rearm(void);
+
+/**
+ * Reclaim wire — residual SKIP. Soft!=product · G-AC-1.
+ * Grep: rtl8168: soft reclaim wire SKIP
  */
 int  rtl8168_reclaim_wire(void);

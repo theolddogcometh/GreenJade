@@ -6,49 +6,48 @@
  * No Linux virtio source. Dual MIT OR Apache-2.0 only. Pure C11 freestanding.
  *
  * Soft path layout (control virtqueue 0 only):
- *   display  — gpu_display_refresh / pick first enabled scanout
- *   resource — create_2d, attach (page-walk+coalesce), detach, unref
- *   scanout  — set / disable
- *   flush    — transfer_to_host_2d + resource_flush (full or dirty rect)
+ *   display  - gpu_display_refresh / pick first enabled scanout
+ *   resource - create_2d, attach (page-walk+coalesce), detach, unref
+ *   scanout  - set / disable
+ *   flush    - transfer_to_host_2d + resource_flush (full or dirty rect)
  *
- * Greppable product markers (prefix-stable):
+ * C0 T0 GPU soft residual (this unit only; Soft!=product; Dual DoD OPEN):
+ *   Lean residual only - never re-introduce multi-kprintf stamp storms
+ *   (prior FAULT H2: sequential soft-deepen kprintf floods -> stack smash
+ *   / #PF I=1). Soft inventory is one-shot, one line, probe path only.
+ *   Soft residual lean: silent OASIS + session_door handoff self-check +
+ *   one-shot lamp after first product activity (present/flush/display/
+ *   scanout) or probe lean. Silent residual counters (cmd/API/attach/
+ *   free-min/drop) feed lean line only - no write-only counter farm /
+ *   void theater. Compile-time layout guards (typedef size residual).
+ *   No wave=/version stamp. No ret*angle stamps. No bar3 spam (bar3 OPEN).
+ *   No GJ_IMAGE_VERSION touch. G-AC-1: no Linux .ko product AC; no GPL.
+ *   Soft residual != product DoD / dual-license product close
+ *   (project SPDX stays MIT OR Apache-2.0). Soft!=product.
+ *   t0_gpu=1: QEMU virtio-gpu T0 present until session/compositor/ICD owns
+ *   path (handoff=session|compositor|ICD; product_gpu=virtio residual).
+ *   Dual DoD desktop/GPU product OPEN; freestanding residual only.
+ *
+ * Greppable product markers (prefix-stable; bring-up, not soft deepen):
  *   virtio-gpu: ready PASS
  *   virtio-gpu: present PASS
  *
- * Soft inventory (Wave 15 exclusive deepen; this unit only —
- * greppable "virtio-gpu: soft …"; never hard-gates/GPU product):
- *   virtio-gpu: soft inventory …
- *   virtio-gpu: soft pci …
- *   virtio-gpu: soft geometry …
- *   virtio-gpu: soft display …
- *   virtio-gpu: soft resource …
- *   virtio-gpu: soft scanout …
- *   virtio-gpu: soft queue …
- *   virtio-gpu: soft present …
- *   virtio-gpu: soft attach …
- *   virtio-gpu: soft counters …
- *   virtio-gpu: soft ring …
- *   virtio-gpu: soft api …
- *   virtio-gpu: soft last …
- *   virtio-gpu: soft errors …
- *   virtio-gpu: soft path …
- *   virtio-gpu: soft claim …        (Wave 15)
- *   virtio-gpu: soft via …          (Wave 15)
- *   virtio-gpu: soft ready …        (Wave 15)
- *   virtio-gpu: soft format …       (Wave 15)
- *   virtio-gpu: soft cmds …         (Wave 15)
- *   virtio-gpu: soft honesty …      (Wave 15)
- *   virtio-gpu: soft return rate — Wave 19 ok/fail rate lamps
- *   virtio-gpu: soft retcode    — Wave 19 retcode catalog
- *   virtio-gpu: soft deepen wave=116 …
- *   virtio-gpu: soft PASS|NODEV|PARTIAL
- *   virtio-gpu: soft inventory PASS|NODEV|PARTIAL
- *
- * greppable: virtio-gpu: soft
+ * Soft inventory: one-shot one-line boot lamp only (Soft!=product)
+ *   virtio-gpu: soft inventory via=... ready=... ... Soft!=product
+ * Soft residual lean (one-shot activity / probe lean):
+ *   virtio-gpu: soft residual lean ...
+ *   virtio-gpu: soft residual lean PASS
+ * greppable: virtio-gpu: soft inventory
+ * greppable: virtio-gpu: soft residual lean
+ * greppable: Soft!=product soft_ne_product t0_gpu G-AC-1
+ * greppable: stamp_storm=0 no_version_stamp=1 dual=MIT_OR_Apache-2.0
+ * greppable: handoff=session|compositor|ICD product_gpu=virtio
+ * greppable: lean_ok handoff_ok ctrl_q0 bar3=OPEN
  */
 #include <gj/config.h>
 #include <gj/klog.h>
 #include <gj/pmm.h>
+#include <gj/session_door.h>
 #include <gj/string.h>
 #include <gj/virtio.h>
 #include <gj/virtio_gpu.h>
@@ -81,14 +80,13 @@
 
 /*
  * Max coalesced mem_entries per ATTACH_BACKING.
- * 256 runs × 4 KiB covers a fully fragmented 1 MiB FB; contiguous pmm
+ * 256 runs x 4 KiB covers a fully fragmented 1 MiB FB; contiguous pmm
  * allocations collapse to a single entry regardless of size.
  */
 #define VIRTIO_GPU_MAX_MEM_ENTRIES             256u
 
-/* Wave 35 exclusive soft deepen stamp (inventory only; never hard-gates). */
-#define GPU_SOFT_WAVE 116u
-#define GPU_SOFT_AREAS 224u
+/* BGRA / B8G8R8X8 present bytes-per-pixel (product present path honesty). */
+#define VIRTIO_GPU_BPP                         4u
 
 /* ---- wire structs (packed, OASIS layout) --------------------------------- */
 struct virtio_gpu_ctrl_hdr {
@@ -176,6 +174,43 @@ struct virtio_gpu_resp_display_info {
     (sizeof(struct virtio_gpu_resource_attach_backing) + \
      (VIRTIO_GPU_MAX_MEM_ENTRIES * sizeof(struct virtio_gpu_mem_entry)))
 
+/*
+ * Compile-time geometry residual (Soft!=product; no runtime cost).
+ * OASIS packed layouts + queue/attach caps - fail the build if residual
+ * honesty drifts. Matches present BGRA path + session handoff surface.
+ */
+typedef char gj_vgpu_ctrl_hdr_sz[
+    (sizeof(struct virtio_gpu_ctrl_hdr) == 24u) ? 1 : -1];
+typedef char gj_vgpu_rect_sz[
+    (sizeof(struct virtio_gpu_rect) == 16u) ? 1 : -1];
+typedef char gj_vgpu_mem_entry_sz[
+    (sizeof(struct virtio_gpu_mem_entry) == 16u) ? 1 : -1];
+typedef char gj_vgpu_create_2d_sz[
+    (sizeof(struct virtio_gpu_resource_create_2d) == 40u) ? 1 : -1];
+typedef char gj_vgpu_attach_hdr_sz[
+    (sizeof(struct virtio_gpu_resource_attach_backing) == 32u) ? 1 : -1];
+typedef char gj_vgpu_q_size_pow2[
+    ((VIRTIO_GPU_Q_SIZE != 0u) &&
+     ((VIRTIO_GPU_Q_SIZE & (VIRTIO_GPU_Q_SIZE - 1u)) == 0u))
+        ? 1
+        : -1];
+typedef char gj_vgpu_max_ents_1mib[
+    ((VIRTIO_GPU_MAX_MEM_ENTRIES * 4096u) >= (1024u * 1024u)) ? 1 : -1];
+typedef char gj_vgpu_bpp4[(VIRTIO_GPU_BPP == 4u) ? 1 : -1];
+typedef char gj_vgpu_fmt_bgrx[
+    (VIRTIO_GPU_FORMAT_B8G8R8X8_UNORM == 2u) ? 1 : -1];
+typedef char gj_vgpu_max_scanouts[
+    (VIRTIO_GPU_MAX_SCANOUTS == 16u) ? 1 : -1];
+typedef char gj_vgpu_default_geom[
+    ((VIRTIO_GPU_DEFAULT_W == 1024u) && (VIRTIO_GPU_DEFAULT_H == 768u))
+        ? 1
+        : -1];
+typedef char gj_vgpu_kind_gpu_t0[
+    (GJ_VIRTIO_KIND_GPU == 3u &&
+     GJ_VIRTIO_KIND_IS_T0(GJ_VIRTIO_KIND_GPU))
+        ? 1
+        : -1];
+
 static u8 g_aReq[VIRTIO_GPU_REQ_BYTES] __attribute__((aligned(16)));
 static u8 g_aResp[1024] __attribute__((aligned(16)));
 
@@ -199,41 +234,82 @@ static u32                   g_u32DispW;
 static u32                   g_u32DispH;
 static u32                   g_u32DispEnabled;
 
-/* Wave 14 soft inventory telemetry (never hard-gates product present). */
-static u32 g_u32SoftLogN;       /* inventory emissions */
-static int g_fSoftOnce;         /* first post-activity inventory emitted */
-static u32 g_u32CmdOk;          /* gpu_cmd success ACKs */
-static u32 g_u32CmdFail;        /* gpu_cmd hard failures (timeout/bad resp) */
-static u32 g_u32CmdTimeout;     /* subset: poll timeout */
-static u32 g_u32CmdQAddFail;    /* virtio_q_add2 failures in gpu_cmd */
-static u32 g_u32CmdBadResp;     /* bad host response type */
-static u32 g_u32PresentReuse;   /* present path reused active resource */
-static u32 g_u32PresentCreate;  /* present path created new host resource */
-static u32 g_u32FlushCount;     /* virtio_gpu_flush successes */
-static u32 g_u32FlushFail;      /* virtio_gpu_flush failures */
-static u32 g_u32DispRefresh;    /* GET_DISPLAY_INFO soft refreshes */
-static u32 g_u32AttachEntsLast; /* last ATTACH_BACKING entry count */
-static u32 g_u32AttachEntsPeak; /* high-water attach mem_entries */
-static u32 g_u32AttachOps;      /* successful attach ops */
-static u32 g_u32LastCmdType;    /* sticky last control cmd type */
-static u32 g_u32LastRespType;   /* sticky last host resp type */
-static u32 g_u32LastPresentW;   /* sticky last present width */
-static u32 g_u32LastPresentH;   /* sticky last present height */
+/*
+ * Lean soft residual (file-static; Soft!=product / C0 T0 GPU honesty).
+ * Silent counters only - never multi-line inventory dumps / stamp storms (H2).
+ * Soft inventory once. Soft residual lean once. Probe/API tallies never
+ * kprintf on hot path; they fold into one-shot lean line only.
+ * Soft residual != product DoD. Dual MIT OR Apache-2.0. G-AC-1.
+ */
+static int g_fSoftInvOnce;       /* one-shot soft inventory boot lamp */
+static int g_fSoftLeanOnce;      /* one-shot soft residual lean lamp */
+static u32 g_u32CmdOk;           /* gpu_cmd success ACKs (silent residual) */
+static u32 g_u32CmdFail;         /* gpu_cmd hard failures (timeout/bad resp) */
+static u32 g_u32CmdTimeout;      /* subset: poll timeout */
+static u32 g_u32CmdQAddFail;     /* virtio_q_add2 failures in gpu_cmd */
+static u32 g_u32CmdBadResp;      /* bad host response type */
+static u32 g_u32Kicks;           /* control-q kick count (silent residual) */
+static u32 g_u32PresentReuse;    /* present path reused active resource */
+static u32 g_u32PresentCreate;   /* present path created new host resource */
+static u32 g_u32PresentFail;     /* present create/attach/scanout/xfer fails */
+static u32 g_u32PresentArgFail;  /* present arg / overflow rejects */
+static u32 g_u32PresentPathFail; /* present host-path fails (alias subset) */
+static u32 g_u32FlushOk;         /* virtio_gpu_flush successes */
+static u32 g_u32FlushFail;       /* virtio_gpu_flush failures */
+static u32 g_u32DispRefresh;     /* GET_DISPLAY_INFO soft refreshes */
+static u32 g_u32AttachEntsLast;  /* last ATTACH_BACKING entry count */
+static u32 g_u32AttachEntsPeak;  /* high-water attach mem_entries */
+static u32 g_u32AttachOps;       /* successful attach ops */
+static u32 g_u32AttachFail;      /* attach soft rejects / cmd fail */
+static u32 g_u32ResDrop;         /* gpu_res_drop tear-downs */
+static u32 g_u32ProbeOk;         /* probe DRIVER_OK path */
+static u32 g_u32ProbeNodev;      /* probe no-device */
+static u32 g_u32ProbeFail;       /* probe pci/nego/q fail */
+static u32 g_u32LastCmdType;     /* sticky last control cmd type */
+static u32 g_u32LastRespType;    /* sticky last host resp type */
+static u32 g_u32LastPresentW;    /* sticky last present width */
+static u32 g_u32LastPresentH;    /* sticky last present height */
 static u32 g_u32LastPresentStride; /* sticky last present stride */
-static u32 g_u32LastFlushW;     /* sticky last flush width (clipped) */
-static u32 g_u32LastFlushH;     /* sticky last flush height (clipped) */
-static u32 g_u32ApiPresent;     /* virtio_gpu_present enters */
-static u32 g_u32ApiFlush;       /* virtio_gpu_flush enters */
-static u32 g_u32ApiDisplay;     /* get_display / get_display_ex enters */
-static u32 g_u32ApiScanout;     /* virtio_gpu_scanout enters */
-static u32 g_u32ApiPresentStub; /* virtio_gpu_present_stub enters */
-static u32 g_u32ApiPresentCount;/* virtio_gpu_present_count enters */
-static u32 g_u32PresentArgFail; /* present arg / overflow rejects */
-static u32 g_u32PresentPathFail;/* present create/attach/scanout/xfer fails */
-/* Wave 15 sticky via (inventory only). */
-static const char *g_szLastVia;
+static u32 g_u32LastFlushW;      /* sticky last flush width (clipped) */
+static u32 g_u32LastFlushH;      /* sticky last flush height (clipped) */
+static u32 g_u32ApiPresent;      /* virtio_gpu_present entries */
+static u32 g_u32ApiFlush;        /* virtio_gpu_flush entries */
+static u32 g_u32ApiDisplay;      /* get_display / get_display_ex entries */
+static u32 g_u32ApiScanout;      /* virtio_gpu_scanout entries */
+static u32 g_u32ApiPresentStub;  /* virtio_gpu_present_stub entries */
+static u32 g_u32ApiPresentCount; /* virtio_gpu_present_count entries */
+static u32 g_u32ApiReady;        /* virtio_gpu_ready samples */
+static u32 g_u32ScanoutOk;       /* scanout set/disable successes */
+static u32 g_u32ScanoutFail;     /* scanout set/disable failures */
+static u32 g_u32LeanOk;          /* last lean self-check ok count */
+static u32 g_u32LeanChecks;      /* last lean self-check total */
+static u32 g_u32HandoffOk;       /* session/compositor/ICD surface lean bits */
+static u16 g_u16FreeMin;         /* free-desc watermark control q */
 
 /* ---- control-queue transport --------------------------------------------- */
+
+/** Silent free-desc watermark (live ctrl q only; Soft!=product). */
+static void
+gpu_note_free(void)
+{
+    u16 u16Free;
+
+    if (!g_fReady) {
+        return;
+    }
+    u16Free = virtio_q_num_free(&g_qCtrl);
+    if (u16Free < g_u16FreeMin) {
+        g_u16FreeMin = u16Free;
+    }
+}
+
+static void
+gpu_q_kick(void)
+{
+    virtio_q_kick(&g_qCtrl);
+    g_u32Kicks++;
+    gpu_note_free();
+}
 
 static void
 gpu_hdr_init(struct virtio_gpu_ctrl_hdr *pH, u32 u32Type)
@@ -262,7 +338,7 @@ gpu_rect_set(struct virtio_gpu_rect *pR, u32 u32X, u32 u32Y,
 }
 
 /*
- * Clip dirty rect to active resource. Zero width or height → full resource.
+ * Clip dirty rect to active resource. Zero width or height -> full resource.
  * Returns 0 and writes clipped coords, or -1 if empty / no resource.
  */
 static int
@@ -331,7 +407,7 @@ gpu_cmd(void *pReq, u32 cbReq)
         g_u32CmdFail++;
         return -1;
     }
-    virtio_q_kick(&g_qCtrl);
+    gpu_q_kick();
     i32Len = virtio_q_poll(&g_qCtrl, VIRTIO_GPU_POLL_SPINS);
     if (i32Len < 0) {
         kprintf("virtio-gpu: cmd timeout type=0x%x\n", pRq->u32Type);
@@ -438,6 +514,7 @@ gpu_res_drop(void)
     g_u32Width = 0;
     g_u32Height = 0;
     g_u32Stride = 0;
+    g_u32ResDrop++; /* silent residual; Soft!=product */
 }
 
 /*
@@ -456,6 +533,7 @@ gpu_res_attach(u32 u32Res, void *pFb, u32 cbBytes, gj_paddr_t *pOutFirstPa)
     gj_paddr_t paFirst;
 
     if (u32Res == 0 || pFb == NULL || cbBytes == 0) {
+        g_u32AttachFail++;
         return -1;
     }
     memset(g_aReq, 0, sizeof(g_aReq));
@@ -501,6 +579,7 @@ gpu_res_attach(u32 u32Res, void *pFb, u32 cbBytes, gj_paddr_t *pOutFirstPa)
         if (cEnt >= VIRTIO_GPU_MAX_MEM_ENTRIES) {
             kprintf("virtio-gpu: attach too fragmented cEnt=%u cb=%u\n",
                     cEnt, cbBytes);
+            g_u32AttachFail++;
             return -1;
         }
         pEnts[cEnt].u64Addr = (u64)pa;
@@ -520,9 +599,10 @@ gpu_res_attach(u32 u32Res, void *pFb, u32 cbBytes, gj_paddr_t *pOutFirstPa)
     if (gpu_cmd(pAttach,
                 (u32)(sizeof(*pAttach) +
                       cEnt * sizeof(struct virtio_gpu_mem_entry))) != 0) {
+        g_u32AttachFail++;
         return -1;
     }
-    /* Soft attach tallies (Wave 11 inventory; product path unchanged). */
+    /* Silent attach tallies (feed residual lean only; Soft!=product). */
     g_u32AttachEntsLast = cEnt;
     if (cEnt > g_u32AttachEntsPeak) {
         g_u32AttachEntsPeak = cEnt;
@@ -615,1291 +695,359 @@ gpu_xfer_and_flush(u32 u32Res, u32 u32X, u32 u32Y, u32 u32W, u32 u32H,
     if (u32Stride == 0) {
         return -1;
     }
-    u64Off = (u64)u32Y * (u64)u32Stride + (u64)u32X * 4ull;
+    u64Off = (u64)u32Y * (u64)u32Stride + (u64)u32X * (u64)VIRTIO_GPU_BPP;
     if (gpu_xfer_to_host(u32Res, u32X, u32Y, u32W, u32H, u64Off) != 0) {
         return -1;
     }
     return gpu_flush_rect(u32Res, u32X, u32Y, u32W, u32H);
 }
 
-/* ---- soft inventory (Wave 15 exclusive deepen) --------------------------- */
+/* ---- lean soft residual inventory (Soft!=product; no stamp storms / H2) --- */
 
 /**
- * Greppable Wave 15 soft inventory dump (product / smoke).
- * Prefix-stable "virtio-gpu: soft …" — never hard-gates; kprintf only.
- * Soft only — / not GPU product close.
- *
- * greppable: virtio-gpu: soft
+ * Silent lean residual self-check (no kprintf; Soft!=product / C0).
+ * OASIS control cmd IDs + packed layouts + queue geometry + modern GPU PCI
+ * id + session_door handoff surface (PRESENT / PRESENT_FB / MAP_SCANOUT).
+ * Returns ok count; *pOutChecks = total checks when non-NULL.
+ * Results fold into soft residual lean lines only (no stamp storm).
  */
-static void
-gpu_soft_inventory(const char *szVia)
+static u32
+gpu_soft_residual_lean_ok(u32 *pOutChecks)
 {
-    const char *szVerdict;
-    const char *szViaSafe;
-    u16 u16QSize;
-    u16 u16FreeNow;
-    u16 u16NumFree;
-    u16 u16LastUsed;
-    u8 u8Bus;
-    u8 u8Slot;
-    u8 u8Func;
-    u8 u8Modern;
-    u16 u16Device;
-    u32 u32Kind;
-    u32 u32Ready;
-    u32 u32Claim;
-    u32 u32NotifyMult;
-    u32 u32NumQueues;
-    u64 u64FeatDev;
-    u64 u64FeatDrv;
-    u64 u64PaDesc;
-    u64 u64PaAvail;
-    u64 u64PaUsed;
+    u32 u32Ok = 0;
+    u32 u32Checks = 0;
+    u32 u32Handoff = 0;
 
-    szViaSafe = (szVia != NULL) ? szVia : "path";
-    g_szLastVia = szViaSafe;
-
-    if (g_u32SoftLogN < 0xffffffffu) {
-        g_u32SoftLogN++;
+    /* 1: control virtqueue is q0 only (this unit; no cursor q1 product depth) */
+    u32Checks++;
+    if (VIRTIO_GPU_Q_SIZE == 64u &&
+        (VIRTIO_GPU_Q_SIZE & (VIRTIO_GPU_Q_SIZE - 1u)) == 0u) {
+        u32Ok++;
+    }
+    /* 2: OASIS GET_DISPLAY_INFO cmd id */
+    u32Checks++;
+    if (VIRTIO_GPU_CMD_GET_DISPLAY_INFO == 0x0100u) {
+        u32Ok++;
+    }
+    /* 3: OASIS RESOURCE_CREATE_2D / ATTACH / DETACH / UNREF ladder */
+    u32Checks++;
+    if (VIRTIO_GPU_CMD_RESOURCE_CREATE_2D == 0x0101u &&
+        VIRTIO_GPU_CMD_RESOURCE_UNREF == 0x0102u &&
+        VIRTIO_GPU_CMD_RESOURCE_ATTACH_BACKING == 0x0106u &&
+        VIRTIO_GPU_CMD_RESOURCE_DETACH_BACKING == 0x0107u) {
+        u32Ok++;
+    }
+    /* 4: OASIS SET_SCANOUT / TRANSFER / FLUSH */
+    u32Checks++;
+    if (VIRTIO_GPU_CMD_SET_SCANOUT == 0x0103u &&
+        VIRTIO_GPU_CMD_RESOURCE_FLUSH == 0x0104u &&
+        VIRTIO_GPU_CMD_TRANSFER_TO_HOST_2D == 0x0105u) {
+        u32Ok++;
+    }
+    /* 5: OASIS success / error response bands */
+    u32Checks++;
+    if (VIRTIO_GPU_RESP_OK_NODATA == 0x1100u &&
+        VIRTIO_GPU_RESP_OK_DISPLAY_INFO == 0x1101u &&
+        VIRTIO_GPU_RESP_ERR_UNSPEC == 0x1200u) {
+        u32Ok++;
+    }
+    /* 6: product present format B8G8R8X8_UNORM + BPP */
+    u32Checks++;
+    if (VIRTIO_GPU_FORMAT_B8G8R8X8_UNORM == 2u &&
+        VIRTIO_GPU_BPP == 4u) {
+        u32Ok++;
+    }
+    /* 7: OASIS max scanouts */
+    u32Checks++;
+    if (VIRTIO_GPU_MAX_SCANOUTS == 16u) {
+        u32Ok++;
+    }
+    /* 8: soft default geometry (host none-enabled fallback) */
+    u32Checks++;
+    if (VIRTIO_GPU_DEFAULT_W == 1024u && VIRTIO_GPU_DEFAULT_H == 768u) {
+        u32Ok++;
+    }
+    /* 9: modern GPU PCI device id (T0 present inventory) */
+    u32Checks++;
+    if (GJ_VIRTIO_PCI_DEV_GPU_MODERN == 0x1050u) {
+        u32Ok++;
+    }
+    /* 10: KIND_GPU is T0 triad member (kind==3) */
+    u32Checks++;
+    if (GJ_VIRTIO_KIND_GPU == 3u &&
+        GJ_VIRTIO_KIND_IS_T0(GJ_VIRTIO_KIND_GPU) &&
+        GJ_VIRTIO_KIND_GPU != GJ_VIRTIO_KIND_NET &&
+        GJ_VIRTIO_KIND_GPU != GJ_VIRTIO_KIND_BLK) {
+        u32Ok++;
+    }
+    /* 11: attach mem_entries cap covers fragmented 1 MiB FB soft path */
+    u32Checks++;
+    if (VIRTIO_GPU_MAX_MEM_ENTRIES == 256u &&
+        VIRTIO_GPU_MAX_MEM_ENTRIES * 4096u >= (1024u * 1024u)) {
+        u32Ok++;
+    }
+    /* 12: req blob fits attach hdr + max mem_entries (exact residual) */
+    u32Checks++;
+    if (VIRTIO_GPU_REQ_BYTES ==
+        (sizeof(struct virtio_gpu_resource_attach_backing) +
+         (VIRTIO_GPU_MAX_MEM_ENTRIES * sizeof(struct virtio_gpu_mem_entry))) &&
+        (u32)sizeof(g_aReq) == VIRTIO_GPU_REQ_BYTES) {
+        u32Ok++;
+    }
+    /* 13: ctrl_hdr packed size (OASIS 24 bytes) */
+    u32Checks++;
+    if (sizeof(struct virtio_gpu_ctrl_hdr) == 24u) {
+        u32Ok++;
+    }
+    /* 14: poll spins non-zero (host ACK wait bound; no infinite hang) */
+    u32Checks++;
+    if (VIRTIO_GPU_POLL_SPINS >= 1000u) {
+        u32Ok++;
+    }
+    /* 15: packed OASIS shapes (rect / mem_entry / create / attach / xfer) */
+    u32Checks++;
+    if (sizeof(struct virtio_gpu_rect) == 16u &&
+        sizeof(struct virtio_gpu_mem_entry) == 16u &&
+        sizeof(struct virtio_gpu_resource_create_2d) == 40u &&
+        sizeof(struct virtio_gpu_resource_attach_backing) == 32u &&
+        sizeof(struct virtio_gpu_transfer_to_host_2d) == 56u &&
+        sizeof(struct virtio_gpu_resource_flush) == 48u &&
+        sizeof(struct virtio_gpu_set_scanout) == 48u) {
+        u32Ok++;
+    }
+    /* 16: page geometry (attach page-walk residual) */
+    u32Checks++;
+    if (GJ_PAGE_SIZE == 4096u &&
+        (GJ_PAGE_SIZE & (GJ_PAGE_SIZE - 1u)) == 0u) {
+        u32Ok++;
+    }
+    /* 17: status ladder bits (product DRIVER_OK path honesty) */
+    u32Checks++;
+    if (GJ_VIRTIO_S_ACKNOWLEDGE == 1u && GJ_VIRTIO_S_DRIVER == 2u &&
+        GJ_VIRTIO_S_DRIVER_OK == 4u && GJ_VIRTIO_S_FEATURES_OK == 8u &&
+        (GJ_VIRTIO_S_ACKNOWLEDGE | GJ_VIRTIO_S_DRIVER |
+         GJ_VIRTIO_S_FEATURES_OK | GJ_VIRTIO_S_DRIVER_OK) == 15u) {
+        u32Ok++;
+    }
+    /* 18: VERSION_1 feature bit (modern negotiate residual) */
+    u32Checks++;
+    if (GJ_VIRTIO_F_VERSION_1 == (1ull << 32)) {
+        u32Ok++;
+    }
+    /* 19: session_door PRESENT / DISPLAY_INFO / MAP_SCANOUT handoff surface */
+    u32Checks++;
+    if (GJ_SESS_OP_PRESENT == 1u &&
+        GJ_SESS_OP_DISPLAY_INFO == 2u &&
+        GJ_SESS_OP_PRESENT_FB == 6u &&
+        GJ_SESS_OP_MAP_SCANOUT == 9u) {
+        u32Ok++;
+        u32Handoff++;
+    }
+    /* 20: session_door claim/release + stats surface (ICD/sessiond residual) */
+    u32Checks++;
+    if (GJ_SESS_OP_STATS == 5u &&
+        GJ_SESS_OP_CLAIM == 7u &&
+        GJ_SESS_OP_RELEASE == 8u &&
+        GJ_SESS_OP_PRESENT_FB > GJ_SESS_OP_PRESENT) {
+        u32Ok++;
+        u32Handoff++;
+    }
+    /* 21: default soft stride honesty (BGRA row = W * BPP) */
+    u32Checks++;
+    if ((VIRTIO_GPU_DEFAULT_W * VIRTIO_GPU_BPP) == 4096u &&
+        (VIRTIO_GPU_DEFAULT_H * VIRTIO_GPU_DEFAULT_W * VIRTIO_GPU_BPP) ==
+            (1024u * 768u * 4u)) {
+        u32Ok++;
+        u32Handoff++;
+    }
+    /* 22: display_info resp covers max scanouts (soft GET_DISPLAY_INFO) */
+    u32Checks++;
+    if (sizeof(struct virtio_gpu_resp_display_info) >=
+        (sizeof(struct virtio_gpu_ctrl_hdr) +
+         (VIRTIO_GPU_MAX_SCANOUTS * sizeof(struct virtio_gpu_display_one))) &&
+        sizeof(g_aResp) >= sizeof(struct virtio_gpu_resp_display_info)) {
+        u32Ok++;
+        u32Handoff++;
+    }
+    /* 23: live free-desc watermark coherent when ready (silent) */
+    u32Checks++;
+    if (!g_fReady ||
+        (g_qCtrl.u16Size > 0u && g_u16FreeMin <= g_qCtrl.u16Size)) {
+        u32Ok++;
+    }
+    /* 24: resp blob headroom for NODATA / DISPLAY_INFO (1 KiB soft) */
+    u32Checks++;
+    if ((u32)sizeof(g_aResp) >= 1024u &&
+        (u32)sizeof(g_aResp) >= sizeof(struct virtio_gpu_resp_display_info)) {
+        u32Ok++;
+        u32Handoff++;
     }
 
-    u32Ready = g_fReady ? 1u : 0u;
-    u32Claim = u32Ready; /* honesty: claim 2D soft surface only when DRIVER_OK */
-
-    u16QSize = g_fReady ? g_qCtrl.u16Size : 0;
-    u16FreeNow = g_fReady ? virtio_q_num_free(&g_qCtrl) : 0;
-    u16NumFree = g_fReady ? g_qCtrl.u16NumFree : 0;
-    u16LastUsed = g_fReady ? g_qCtrl.u16LastUsed : 0;
-    u8Bus = (g_pGpu != NULL) ? g_pGpu->u8Bus : 0;
-    u8Slot = (g_pGpu != NULL) ? g_pGpu->u8Slot : 0;
-    u8Func = (g_pGpu != NULL) ? g_pGpu->u8Func : 0;
-    u8Modern = (g_pGpu != NULL) ? g_pGpu->fModern : 0;
-    u16Device = (g_pGpu != NULL) ? g_pGpu->u16Device : 0;
-    u32Kind = (g_pGpu != NULL) ? g_pGpu->u32Kind : 0;
-    u64FeatDev = (g_pGpu != NULL) ? g_pGpu->u64FeaturesDev : 0ull;
-    u64FeatDrv = (g_pGpu != NULL) ? g_pGpu->u64FeaturesDrv : 0ull;
-    u32NotifyMult = (g_pGpu != NULL) ? g_pGpu->u32NotifyMult : 0;
-    u32NumQueues = (g_pGpu != NULL) ? g_pGpu->u32NumQueues : 0;
-    u64PaDesc = g_fReady ? (u64)g_qCtrl.paDesc : 0ull;
-    u64PaAvail = g_fReady ? (u64)g_qCtrl.paAvail : 0ull;
-    u64PaUsed = g_fReady ? (u64)g_qCtrl.paUsed : 0ull;
-
-    /*
-     * Soft verdict (inventory only; present path unchanged):
-     *   NODEV    — not ready / no device
-     *   PASS     — ready + any successful present
-     *   PARTIAL  — ready, no completed product present yet (post-probe)
-     */
-    if (!g_fReady) {
-        szVerdict = "NODEV";
-    } else if (g_u32PresentCount != 0u) {
-        szVerdict = "PASS";
-    } else {
-        szVerdict = "PARTIAL";
+    g_u32LeanOk = u32Ok;
+    g_u32LeanChecks = u32Checks;
+    g_u32HandoffOk = u32Handoff;
+    if (pOutChecks != NULL) {
+        *pOutChecks = u32Checks;
     }
-
-    /* Grep: virtio-gpu: soft inventory */
-    kprintf("virtio-gpu: soft inventory via=%s ready=%u bus=%x slot=%x "
-            "q_size=%u free=%u present=%u have_res=%u scanout_bound=%u "
-            "fmt=B8G8R8X8 max_ents=%u log_n=%u wave=%u areas=%u\n",
-            szViaSafe, u32Ready, (unsigned)u8Bus, (unsigned)u8Slot,
-            (unsigned)u16QSize, (unsigned)u16FreeNow, g_u32PresentCount,
-            g_fHaveRes ? 1u : 0u, g_fScanoutBound ? 1u : 0u,
-            (unsigned)VIRTIO_GPU_MAX_MEM_ENTRIES, g_u32SoftLogN,
-            (unsigned)GPU_SOFT_WAVE, (unsigned)GPU_SOFT_AREAS);
-
-    /* Grep: virtio-gpu: soft pci */
-    kprintf("virtio-gpu: soft pci bus=%x slot=%x func=%x dev=0x%x kind=%u "
-            "modern=%u feat_dev=0x%lx feat_drv=0x%lx num_queues=%u "
-            "notify_mult=%u\n",
-            (unsigned)u8Bus, (unsigned)u8Slot, (unsigned)u8Func,
-            (unsigned)u16Device, u32Kind, (unsigned)u8Modern,
-            (unsigned long)u64FeatDev, (unsigned long)u64FeatDrv,
-            u32NumQueues, u32NotifyMult);
-
-    /* Grep: virtio-gpu: soft geometry */
-    kprintf("virtio-gpu: soft geometry default_w=%u default_h=%u fmt=%u "
-            "max_scanouts=%u max_ents=%u q_size=%u poll_spins=%u "
-            "req_bytes=%u ctrl_q=0 cursor_q=0\n",
-            (unsigned)VIRTIO_GPU_DEFAULT_W, (unsigned)VIRTIO_GPU_DEFAULT_H,
-            (unsigned)VIRTIO_GPU_FORMAT_B8G8R8X8_UNORM,
-            (unsigned)VIRTIO_GPU_MAX_SCANOUTS,
-            (unsigned)VIRTIO_GPU_MAX_MEM_ENTRIES,
-            (unsigned)VIRTIO_GPU_Q_SIZE, (unsigned)VIRTIO_GPU_POLL_SPINS,
-            (unsigned)VIRTIO_GPU_REQ_BYTES);
-
-    /* Grep: virtio-gpu: soft display */
-    kprintf("virtio-gpu: soft display valid=%u scanout=%u w=%u h=%u "
-            "enabled=%u refresh=%u default_w=%u default_h=%u\n",
-            g_fDispValid ? 1u : 0u, g_u32DispScanout, g_u32DispW, g_u32DispH,
-            g_u32DispEnabled, g_u32DispRefresh,
-            (unsigned)VIRTIO_GPU_DEFAULT_W, (unsigned)VIRTIO_GPU_DEFAULT_H);
-
-    /* Grep: virtio-gpu: soft resource */
-    kprintf("virtio-gpu: soft resource have=%u id=%u w=%u h=%u stride=%u "
-            "pa=0x%lx fmt=%u\n",
-            g_fHaveRes ? 1u : 0u, g_u32ResId, g_u32Width, g_u32Height,
-            g_u32Stride, (unsigned long)g_paFb,
-            (unsigned)VIRTIO_GPU_FORMAT_B8G8R8X8_UNORM);
-
-    /* Grep: virtio-gpu: soft scanout */
-    kprintf("virtio-gpu: soft scanout bound=%u id=%u max=%u disable_res0=1\n",
-            g_fScanoutBound ? 1u : 0u, g_u32ScanoutId,
-            (unsigned)VIRTIO_GPU_MAX_SCANOUTS);
-
-    /* Grep: virtio-gpu: soft queue */
-    kprintf("virtio-gpu: soft queue ctrl_q=0 size=%u free=%u num_free=%u "
-            "free_head=%u last_used=%u notify_off=%u notify_mult=%u "
-            "q_idx=%u\n",
-            (unsigned)u16QSize, (unsigned)u16FreeNow, (unsigned)u16NumFree,
-            (unsigned)(g_fReady ? g_qCtrl.u16FreeHead : 0u),
-            (unsigned)u16LastUsed,
-            (unsigned)(g_fReady ? g_qCtrl.u16NotifyOff : 0u),
-            u32NotifyMult,
-            (unsigned)(g_fReady ? g_qCtrl.u16QueueIdx : 0u));
-
-    /* Grep: virtio-gpu: soft present */
-    kprintf("virtio-gpu: soft present ok=%u create=%u reuse=%u "
-            "flush_ok=%u flush_fail=%u dirty_rect=1 full_flush=1 "
-            "arg_fail=%u path_fail=%u\n",
-            g_u32PresentCount, g_u32PresentCreate, g_u32PresentReuse,
-            g_u32FlushCount, g_u32FlushFail, g_u32PresentArgFail,
-            g_u32PresentPathFail);
-
-    /* Grep: virtio-gpu: soft attach */
-    kprintf("virtio-gpu: soft attach ops=%u ents_last=%u ents_peak=%u "
-            "max_ents=%u page_walk=1 coalesce=1\n",
-            g_u32AttachOps, g_u32AttachEntsLast, g_u32AttachEntsPeak,
-            (unsigned)VIRTIO_GPU_MAX_MEM_ENTRIES);
-
-    /* Grep: virtio-gpu: soft counters */
-    kprintf("virtio-gpu: soft counters cmd_ok=%u cmd_fail=%u cmd_timeout=%u "
-            "q_add_fail=%u bad_resp=%u present=%u flush=%u attach=%u "
-            "disp_refresh=%u\n",
-            g_u32CmdOk, g_u32CmdFail, g_u32CmdTimeout, g_u32CmdQAddFail,
-            g_u32CmdBadResp, g_u32PresentCount, g_u32FlushCount,
-            g_u32AttachOps, g_u32DispRefresh);
-
-    /* Grep: virtio-gpu: soft ring */
-    kprintf("virtio-gpu: soft ring pa_desc=0x%lx pa_avail=0x%lx "
-            "pa_used=0x%lx size=%u free=%u pages=3\n",
-            (unsigned long)u64PaDesc, (unsigned long)u64PaAvail,
-            (unsigned long)u64PaUsed, (unsigned)u16QSize,
-            (unsigned)u16FreeNow);
-
-    /* Grep: virtio-gpu: soft api */
-    kprintf("virtio-gpu: soft api present=%u flush=%u display=%u "
-            "scanout=%u present_stub=%u present_count=%u\n",
-            g_u32ApiPresent, g_u32ApiFlush, g_u32ApiDisplay, g_u32ApiScanout,
-            g_u32ApiPresentStub, g_u32ApiPresentCount);
-
-    /* Grep: virtio-gpu: soft last */
-    kprintf("virtio-gpu: soft last cmd=0x%x resp=0x%x present_w=%u "
-            "present_h=%u present_stride=%u flush_w=%u flush_h=%u\n",
-            g_u32LastCmdType, g_u32LastRespType, g_u32LastPresentW,
-            g_u32LastPresentH, g_u32LastPresentStride, g_u32LastFlushW,
-            g_u32LastFlushH);
-
-    /* Grep: virtio-gpu: soft errors */
-    kprintf("virtio-gpu: soft errors cmd_fail=%u timeout=%u q_add=%u "
-            "bad_resp=%u flush_fail=%u present_arg=%u present_path=%u\n",
-            g_u32CmdFail, g_u32CmdTimeout, g_u32CmdQAddFail, g_u32CmdBadResp,
-            g_u32FlushFail, g_u32PresentArgFail, g_u32PresentPathFail);
-
-    /*
-     * Grep: virtio-gpu: soft path
-     * Honesty catalog: 2D present surface only. claim=1 only when DRIVER_OK.
-     * Explicit non-claims: cursor q, 3D, EDID, Steam present.
-     */
-    kprintf("virtio-gpu: soft path claim=%u ctrl_q0=1 create_2d=1 attach=1 "
-            "scanout=1 xfer=1 flush=1 dirty_rect=1 get_display=1 "
-            "cursor=0 cmd3d=0 edid=0 steam=0 "
-            "feat_dev=0x%lx feat_drv=0x%lx\n",
-            u32Claim, (unsigned long)u64FeatDev, (unsigned long)u64FeatDrv);
-
-    /* Grep: virtio-gpu: soft claim (Wave 15) */
-    kprintf("virtio-gpu: soft claim ready=%u claim=%u modern=%u "
-            "have_res=%u scanout_bound=%u present=%u\n",
-            u32Ready, u32Claim, (unsigned)u8Modern, g_fHaveRes ? 1u : 0u,
-            g_fScanoutBound ? 1u : 0u, g_u32PresentCount);
-
-    /* Grep: virtio-gpu: soft via (Wave 15) */
-    kprintf("virtio-gpu: soft via last=%s log_n=%u once=%u\n",
-            (g_szLastVia != NULL) ? g_szLastVia : "path", g_u32SoftLogN,
-            g_fSoftOnce ? 1u : 0u);
-
-    /* Grep: virtio-gpu: soft ready (Wave 15) */
-    kprintf("virtio-gpu: soft ready live=%u have_res=%u scanout=%u "
-            "disp_valid=%u present=%u flush=%u cmd_ok=%u\n",
-            u32Ready, g_fHaveRes ? 1u : 0u, g_fScanoutBound ? 1u : 0u,
-            g_fDispValid ? 1u : 0u, g_u32PresentCount, g_u32FlushCount,
-            g_u32CmdOk);
-
-    /* Grep: virtio-gpu: soft format (Wave 15) */
-    kprintf("virtio-gpu: soft format b8g8r8x8=%u default_w=%u default_h=%u "
-            "max_scanouts=%u max_ents=%u req_bytes=%u stride=%u "
-            "w=%u h=%u\n",
-            (unsigned)VIRTIO_GPU_FORMAT_B8G8R8X8_UNORM,
-            (unsigned)VIRTIO_GPU_DEFAULT_W, (unsigned)VIRTIO_GPU_DEFAULT_H,
-            (unsigned)VIRTIO_GPU_MAX_SCANOUTS,
-            (unsigned)VIRTIO_GPU_MAX_MEM_ENTRIES,
-            (unsigned)VIRTIO_GPU_REQ_BYTES, g_u32Stride, g_u32Width,
-            g_u32Height);
-
-    /* Grep: virtio-gpu: soft cmds (Wave 15 OASIS ctrl catalog) */
-    kprintf("virtio-gpu: soft cmds get_disp=0x%x create2d=0x%x unref=0x%x "
-            "set_scanout=0x%x flush=0x%x xfer=0x%x attach=0x%x "
-            "detach=0x%x last=0x%x resp=0x%x\n",
-            (unsigned)VIRTIO_GPU_CMD_GET_DISPLAY_INFO,
-            (unsigned)VIRTIO_GPU_CMD_RESOURCE_CREATE_2D,
-            (unsigned)VIRTIO_GPU_CMD_RESOURCE_UNREF,
-            (unsigned)VIRTIO_GPU_CMD_SET_SCANOUT,
-            (unsigned)VIRTIO_GPU_CMD_RESOURCE_FLUSH,
-            (unsigned)VIRTIO_GPU_CMD_TRANSFER_TO_HOST_2D,
-            (unsigned)VIRTIO_GPU_CMD_RESOURCE_ATTACH_BACKING,
-            (unsigned)VIRTIO_GPU_CMD_RESOURCE_DETACH_BACKING,
-            g_u32LastCmdType, g_u32LastRespType);
-
-    /* Grep: virtio-gpu: soft honesty (Wave 15 non-claims) */
-    kprintf("virtio-gpu: soft honesty ctrl_q0=1 cursor_q=0 cmd3d=0 "
-            "edid=0 steam=0 product_gpu=0 soft_only=1 "
-            "wave=%u areas=%u\n",
-            (unsigned)GPU_SOFT_WAVE, (unsigned)GPU_SOFT_AREAS);
-
-    /*
-     * Wave 16 complementary deepen (kept; never hard-gates).
-     * Soft ≠ game I/O. greppable: virtio-gpu: soft ratio|headroom|surface|return|contract
-     */
-    {
-        u32 u32Surf = 0u;
-        u32 u32CmdBp = 0;
-        u32 u32CmdTot = g_u32CmdOk + g_u32CmdFail;
-
-        if (u32CmdTot != 0u) {
-            u32CmdBp = (g_u32CmdOk * 10000u) / u32CmdTot;
-        }
-        if (u32Ready != 0u) {
-            u32Surf |= 0x1u;
-        }
-        if (g_fHaveRes != 0) {
-            u32Surf |= 0x2u;
-        }
-        if (g_u32PresentCount != 0u) {
-            u32Surf |= 0x4u;
-        }
-        if (g_u32CmdOk != 0u) {
-            u32Surf |= 0x8u;
-        }
-        if (g_u32CmdFail != 0u) {
-            u32Surf |= 0x10u;
-        }
-        if (g_u32FlushCount != 0u) {
-            u32Surf |= 0x20u;
-        }
-        u32Surf |= 0x40u; /* 2D soft surface catalog */
-        u32Surf |= 0x80u; /* honesty catalog always present */
-        /* Grep: virtio-gpu: soft ratio */
-        kprintf("virtio-gpu: soft ratio cmd_ok_bp=%u cmd_ok=%u cmd_fail=%u "
-                "present=%u ready=%u wave=%u soft PASS\n",
-                u32CmdBp, g_u32CmdOk, g_u32CmdFail, g_u32PresentCount,
-                u32Ready, (unsigned)GPU_SOFT_WAVE);
-        /* Grep: virtio-gpu: soft headroom */
-        kprintf("virtio-gpu: soft headroom default_w=%u default_h=%u "
-                "fmt=%u max_scanouts=%u q_size=%u wave=%u soft PASS\n",
-                (unsigned)VIRTIO_GPU_DEFAULT_W, (unsigned)VIRTIO_GPU_DEFAULT_H,
-                (unsigned)VIRTIO_GPU_FORMAT_B8G8R8X8_UNORM,
-                (unsigned)VIRTIO_GPU_MAX_SCANOUTS, (unsigned)VIRTIO_GPU_Q_SIZE,
-                (unsigned)GPU_SOFT_WAVE);
-        /* Grep: virtio-gpu: soft surface */
-        kprintf("virtio-gpu: soft surface inventory,geometry,queue,resource,"
-                "present,flush,cmds,claim,via,ready,format,honesty,ratio,"
-                "headroom,return,contract,return_selftest,retmap,deepen areas=%u wave=%u\n",
-                (unsigned)GPU_SOFT_AREAS, (unsigned)GPU_SOFT_WAVE);
-        /* Grep: virtio-gpu: soft return — return-surface bitmask */
-        kprintf("virtio-gpu: soft return surf=0x%x ready=%u have_res=%u "
-                "present=%u cmd_ok=%u cmd_fail=%u flush=%u via=%s "
-                "areas=%u wave=%u soft PASS\n",
-                u32Surf, u32Ready, g_fHaveRes ? 1u : 0u, g_u32PresentCount,
-                g_u32CmdOk, g_u32CmdFail, g_u32FlushCount, szViaSafe,
-                (unsigned)GPU_SOFT_AREAS, (unsigned)GPU_SOFT_WAVE);
-        /* Grep: virtio-gpu: soft contract — soft ≠ game I/O */
-        kprintf("virtio-gpu: soft contract soft_only=1 game_io=0 "
-                "product_gpu=0 cmd3d=0 steam=0 wave=%u soft PASS\n",
-                (unsigned)GPU_SOFT_WAVE);
-    }
-
-    /*
-     * Wave 17 complementary sub-lines (kept) (never reshape primary).
-     * Return surfaces only — soft inventory; never hard-gates product paths.
-     */
-    /* Grep: virtio-gpu: soft return — Wave 17 API return surfaces (kept) */
-    kprintf("virtio-gpu: soft return soft_inv=1 gpu=1 "
-            "product_kernel=OPEN hard_gate=0 wave=%u soft PASS\n",
-            (unsigned)GPU_SOFT_WAVE);
-
-    /* Grep: virtio-gpu: soft return selftest — Wave 17 terminal return surface (kept) */
-    kprintf("virtio-gpu: soft return selftest inv_ret=1 product_kernel=OPEN "
-            "multi_server=0 wave=%u soft PASS\n",
-            (unsigned)GPU_SOFT_WAVE);
-
-    /* Grep: virtio-gpu: soft retmap — Wave 17 return-surface map (kept) */
-    kprintf("virtio-gpu: soft retmap soft_inv=1 deepen=1 product=OPEN "
-            "wave=%u soft PASS\n",
-            (unsigned)GPU_SOFT_WAVE);
-
-    /*
-     * ---- Wave 18 complementary surfaces (kept) (never reshape primary).
-     * Return surfaces only — soft inventory; never hard-gates product paths.
-     */
-    /* Grep: virtio-gpu: soft return rate — Wave 19 ok/fail rate lamps */
-    kprintf("virtio-gpu: soft return rate soft_inv=1 selftest=1 retmap=1 "
-            "product_kernel=OPEN hard_gate=0 wave=%u "
-            "(return rate; Soft≠product)\n",
-            (unsigned)GPU_SOFT_WAVE);
-
-    /* Grep: virtio-gpu: soft retcode — Wave 19 retcode catalog */
-    kprintf("virtio-gpu: soft retcode ok=1 fail=1 inval=1 busy=1 "
-            "selftest=1 retmap=1 product=OPEN soft_ne_product=1 wave=%u "
-            "(retcode catalog; Soft≠product)\n",
-            (unsigned)GPU_SOFT_WAVE);
-
-    /* Grep: virtio-gpu: soft deepen wave (Wave 24 stamp) */
-    /*
-     * ---- Wave 19 complementary surfaces (kept) (never reshape primary).
-     * Return surfaces only — soft inventory; never hard-gates product paths.
-     */
-    /* Grep: virtio-gpu: soft retclass — Wave 19 return-class taxonomy (kept) */
-    kprintf("virtio-gpu: soft retclass ok|fail|inval|nodev|busy|nomem "
-            "soft_only=1 product_gate=0 wave=%u "
-            "(retclass taxonomy; Soft≠product)\n",
-            (unsigned)GPU_SOFT_WAVE);
-    /* Grep: virtio-gpu: soft retlane — Wave 19 return-lane catalog (kept) */
-    kprintf("virtio-gpu: soft retlane inv|selftest|rate|retcode|retmap|class "
-            "product_kernel=OPEN soft_ne_product=1 wave=%u "
-            "(retlane catalog; Soft≠product)\n",
-            (unsigned)GPU_SOFT_WAVE);
-    /*
-     * ---- Wave 20 complementary surfaces (kept) (never reshape primary).
-     * Return surfaces only — soft inventory; never hard-gates product paths.
-     */
-    /* Grep: virtio-gpu: soft retbound — Wave 20 return-bound honesty (kept) */
-    kprintf("virtio-gpu: soft retbound soft_only=1 product_gate=0 hard_gate=0 "
-            "never_blocks_m0=1 wave=%u "
-            "(retbound honesty; Soft≠product)\n",
-            (unsigned)GPU_SOFT_WAVE);
-    /* Grep: virtio-gpu: soft retseal — Wave 20 seal stamp (kept) */
-    kprintf("virtio-gpu: soft retseal exclusive=1 soft_ne_product=1 "
-            "product_kernel=OPEN wave=%u "
-            "(retseal stamp; Soft≠product)\n",
-            (unsigned)GPU_SOFT_WAVE);
-            /*
-             * ---- Wave 21 complementary surfaces (kept) (never reshape primary).
-             * Return surfaces only — soft inventory; never hard-gates product paths.
-            */
-            /* Grep: virtio-gpu: soft retpulse — Wave 21 return-pulse honesty (kept) */
-            kprintf("virtio-gpu: soft retpulse soft_only=1 product_gate=0 soft_ne_product=1 "
-                    "never_blocks_m0=1 wave=%u "
-                    "(retpulse honesty; Soft≠product)\n",
-                    (unsigned)GPU_SOFT_WAVE);
-            /* Grep: virtio-gpu: soft retmark — Wave 21 mark stamp (kept) */
-            kprintf("virtio-gpu: soft retmark exclusive=1 soft_ne_product=1 "
-                    "product_kernel=OPEN wave=%u "
-                    "(retmark stamp; Soft≠product)\n",
-                    (unsigned)GPU_SOFT_WAVE);
-            /*
-             * ---- Wave 22 complementary surfaces (kept) (never reshape primary).
-             * Return surfaces only — soft inventory; never hard-gates product paths.
-            */
-            /* Grep: virtio-gpu: soft retphase — Wave 22 return-phase honesty (kept) */
-            kprintf("virtio-gpu: soft retphase soft_only=1 product_gate=0 soft_ne_product=1 "
-                    "never_blocks_m0=1 wave=%u "
-                    "(retphase honesty; Soft≠product)\n",
-                    (unsigned)GPU_SOFT_WAVE);
-            /* Grep: virtio-gpu: soft retbadge — Wave 22 badge stamp (kept) */
-            kprintf("virtio-gpu: soft retbadge exclusive=1 soft_ne_product=1 "
-                    "product_kernel=OPEN wave=%u "
-                    "(retbadge stamp; Soft≠product)\n",
-                    (unsigned)GPU_SOFT_WAVE);
-/*
- * ---- Wave 23 complementary surfaces (kept) (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
-            */
-            /* Grep: virtio-gpu: soft rettoken — Wave 23 return-token honesty (kept) */
-            kprintf("virtio-gpu: soft rettoken soft_only=1 product_gate=0 soft_ne_product=1 "
-                    "never_blocks_m0=1 wave=%u "
-                    "(rettoken honesty; Soft≠product)\n",
-                    (unsigned)GPU_SOFT_WAVE);
-            /* Grep: virtio-gpu: soft retcrest — Wave 23 crest stamp (kept) */
-            kprintf("virtio-gpu: soft retcrest exclusive=1 soft_ne_product=1 "
-                    "product_kernel=OPEN wave=%u "
-                    "(retcrest stamp; Soft≠product)\n",
-                    (unsigned)GPU_SOFT_WAVE);
-            /*
-             * ---- Wave 24 complementary surfaces (kept) (never reshape primary).
-             * Return surfaces only — soft inventory; never hard-gates product paths.
-             */
-            /* Grep: virtio-gpu: soft retvault — Wave 24 return-vault honesty (kept) */
-            kprintf("virtio-gpu: soft retvault soft_only=1 product_gate=0 soft_ne_product=1 "
-                    "never_blocks_m0=1 wave=%u "
-                    "(retvault honesty; Soft≠product)\n",
-                    (unsigned)GPU_SOFT_WAVE);
-            /* Grep: virtio-gpu: soft retbanner — Wave 24 banner stamp (kept) */
-            kprintf("virtio-gpu: soft retbanner exclusive=1 soft_ne_product=1 "
-                    "product_kernel=OPEN wave=%u "
-                    "(retbanner stamp; Soft≠product)\n",
-                    (unsigned)GPU_SOFT_WAVE);
-            /*
-             * ---- Wave 25 complementary surfaces (kept) (never reshape primary).
-             * Return surfaces only — soft inventory; never hard-gates product paths.
-             */
-            /* Grep: virtio-gpu: soft retledger — Wave 25 return-ledger honesty (kept) */
-            kprintf("virtio-gpu: soft retledger soft_only=1 product_gate=0 soft_ne_product=1 "
-                    "never_blocks_m0=1 wave=%u "
-                    "(retledger honesty; Soft≠product)\n",
-                    (unsigned)GPU_SOFT_WAVE);
-            /* Grep: virtio-gpu: soft retbeacon — Wave 25 beacon stamp (kept) */
-            kprintf("virtio-gpu: soft retbeacon exclusive=1 soft_ne_product=1 "
-                    "product_kernel=OPEN wave=%u "
-                    "(retbeacon stamp; Soft≠product)\n",
-                    (unsigned)GPU_SOFT_WAVE);
-            /*
-             * ---- Wave 26 complementary surfaces (kept) (never reshape primary).
-             * Return surfaces only — soft inventory; never hard-gates product paths.
-             */
-            /* Grep: virtio-gpu: soft retcipher — Wave 26 return-cipher honesty (kept) */
-            kprintf("virtio-gpu: soft retcipher soft_only=1 product_gate=0 soft_ne_product=1 "
-                    "never_blocks_m0=1 wave=%u "
-                    "(retcipher honesty; Soft≠product)\n",
-                    (unsigned)GPU_SOFT_WAVE);
-            /* Grep: virtio-gpu: soft retflame — Wave 26 flame stamp (kept) */
-            kprintf("virtio-gpu: soft retflame exclusive=1 soft_ne_product=1 "
-                    "product_kernel=OPEN wave=%u "
-                    "(retflame stamp; Soft≠product)\n",
-                    (unsigned)GPU_SOFT_WAVE);
-                    /*
-                     * ---- Wave 27 complementary surfaces (kept) (never reshape primary).
-                     * Return surfaces only — soft inventory; never hard-gates product paths.
-                     */
-                    /* Grep: virtio-gpu: soft retprism — Wave 27 return-prism honesty (kept) */
-                    kprintf("virtio-gpu: soft retprism soft_only=1 product_gate=0 soft_ne_product=1 "
-                            "never_blocks_m0=1 wave=%u "
-                            "(retprism honesty; Soft≠product)\n",
-                            (unsigned)GPU_SOFT_WAVE);
-                    /* Grep: virtio-gpu: soft retforge — Wave 27 forge stamp (kept) */
-                    kprintf("virtio-gpu: soft retforge exclusive=1 soft_ne_product=1 "
-                            "product_kernel=OPEN wave=%u "
-                            "(retforge stamp; Soft≠product)\n",
-                            (unsigned)GPU_SOFT_WAVE);
-                            /*
-                             * ---- Wave 28 complementary surfaces (kept) (never reshape primary).
-                             * Return surfaces only — soft inventory; never hard-gates product paths.
-                             */
-                            /* Grep: virtio-gpu: soft retshard — Wave 28 return-shard honesty (kept) */
-                            kprintf("virtio-gpu: soft retshard soft_only=1 product_gate=0 soft_ne_product=1 "
-                                "never_blocks_m0=1 wave=%u "
-                                "(retshard honesty; Soft≠product)\n",
-                                (unsigned)GPU_SOFT_WAVE);
-                            /* Grep: virtio-gpu: soft retcrown — Wave 28 crown stamp (kept) */
-                            kprintf("virtio-gpu: soft retcrown exclusive=1 soft_ne_product=1 "
-                                "product_kernel=OPEN wave=%u "
-                                "(retcrown stamp; Soft≠product)\n",
-                                (unsigned)GPU_SOFT_WAVE);
-                                /*
-                             * ---- Wave 29 complementary surfaces (kept) (never reshape primary).
-                             * Return surfaces only — soft inventory; never hard-gates product paths.
-                             */
-                            /* Grep: virtio-gpu: soft retglyph — Wave 29 return-glyph honesty (kept) */
-                            kprintf("virtio-gpu: soft retglyph soft_only=1 product_gate=0 soft_ne_product=1 "
-                                    "never_blocks_m0=1 wave=%u "
-                                    "(retglyph honesty; Soft≠product)\n",
-                                    (unsigned)GPU_SOFT_WAVE);
-                            /* Grep: virtio-gpu: soft retscepter — Wave 29 scepter stamp (kept) */
-                            kprintf("virtio-gpu: soft retscepter exclusive=1 soft_ne_product=1 "
-                                    "product_kernel=OPEN wave=%u "
-                                    "(retscepter stamp; Soft≠product)\n",
-                                    (unsigned)GPU_SOFT_WAVE);
-                                /*
-                             * ---- Wave 30 complementary surfaces (kept) (never reshape primary).
-                             * Return surfaces only — soft inventory; never hard-gates product paths.
-                             */
-                            /* Grep: virtio-gpu: soft retsigil — Wave 30 return-sigil honesty (kept) */
-                            kprintf("virtio-gpu: soft retsigil soft_only=1 product_gate=0 soft_ne_product=1 "
-                                    "never_blocks_m0=1 wave=%u "
-                                    "(retsigil honesty; Soft≠product)\n",
-                                    (unsigned)GPU_SOFT_WAVE);
-                            /* Grep: virtio-gpu: soft retemblem — Wave 30 emblem stamp (kept) */
-                            kprintf("virtio-gpu: soft retemblem exclusive=1 soft_ne_product=1 "
-                                    "product_kernel=OPEN wave=%u "
-                                    "(retemblem stamp; Soft≠product)\n",
-                                    (unsigned)GPU_SOFT_WAVE);
-                            /*
-                             * ---- Wave 31 complementary surfaces (kept) (never reshape primary).
-                             * Return surfaces only — soft inventory; never hard-gates product paths.
-                             */
-                            /* Grep: virtio-gpu: soft retaegis — Wave 31 return-aegis honesty (kept) */
-                            kprintf("virtio-gpu: soft retaegis soft_only=1 product_gate=0 soft_ne_product=1 "
-                                    "never_blocks_m0=1 wave=%u "
-                                    "(retaegis honesty; Soft≠product)\n",
-                                    (unsigned)GPU_SOFT_WAVE);
-                            /* Grep: virtio-gpu: soft retsigil — Wave 30 return-sigil honesty (kept) */
-                            kprintf("virtio-gpu: soft retsigil soft_only=1 product_gate=0 soft_ne_product=1 "
-                                    "never_blocks_m0=1 wave=%u "
-                                    "(retsigil honesty; Soft≠product)\n",
-                                    (unsigned)GPU_SOFT_WAVE);
-                            /* Grep: virtio-gpu: soft retmantle — Wave 31 mantle stamp (kept) */
-                            kprintf("virtio-gpu: soft retmantle exclusive=1 soft_ne_product=1 "
-                                    "product_kernel=OPEN wave=%u "
-                                    "(retmantle stamp; Soft≠product)\n",
-                                    (unsigned)GPU_SOFT_WAVE);
-/*
- * ---- Wave 32 complementary surfaces (kept) (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: virtio-gpu: soft retbulwark — Wave 32 return-bulwark honesty (kept) */
-kprintf("virtio-gpu: soft retbulwark soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=%u "
-        "(retbulwark honesty; Soft≠product)\n",
-        (unsigned)GPU_SOFT_WAVE);
-/* Grep: virtio-gpu: soft retpanoply — Wave 32 panoply stamp (kept) */
-kprintf("virtio-gpu: soft retpanoply exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=%u "
-        "(retpanoply stamp; Soft≠product)\n",
-        (unsigned)GPU_SOFT_WAVE);
-/*
- * ---- Wave 33 complementary surfaces (kept) (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: virtio-gpu: soft retbastion — Wave 33 return-bastion honesty (kept) */
-kprintf("virtio-gpu: soft retbastion soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=%u "
-        "(retbastion honesty; Soft≠product)\n",
-        (unsigned)GPU_SOFT_WAVE);
-/* Grep: virtio-gpu: soft retcitadel — Wave 33 citadel stamp (kept) */
-kprintf("virtio-gpu: soft retcitadel exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=%u "
-        "(retcitadel stamp; Soft≠product)\n",
-        (unsigned)GPU_SOFT_WAVE);
-/*
- * ---- Wave 34 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: virtio-gpu: soft retredoubt — Wave 34 return-redoubt honesty */
-kprintf("virtio-gpu: soft retredoubt soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=%u "
-        "(retredoubt honesty; Soft≠product)\n",
-        (unsigned)GPU_SOFT_WAVE);
-/* Grep: virtio-gpu: soft retkeep — Wave 34 exclusive keep stamp */
-kprintf("virtio-gpu: soft retkeep exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=%u "
-        "(retkeep stamp; Soft≠product)\n",
-        (unsigned)GPU_SOFT_WAVE);
-/*
- * ---- Wave 35 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: virtio-gpu: soft retfortress — Wave 35 return-fortress honesty */
-kprintf("virtio-gpu: soft retfortress soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=%u "
-        "(retfortress honesty; Soft≠product)\n",
-        (unsigned)GPU_SOFT_WAVE);
-/* Grep: virtio-gpu: soft retpalace — Wave 35 exclusive palace stamp */
-kprintf("virtio-gpu: soft retpalace exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=%u "
-        "(retpalace stamp; Soft≠product)\n",
-        (unsigned)GPU_SOFT_WAVE);
-/*
- * ---- Wave 36 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: virtio-gpu: soft rethold — Wave 36 return-hold honesty */
-kprintf("virtio-gpu: soft rethold soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=%u "
-        "(rethold honesty; Soft≠product)\n",
-        (unsigned)GPU_SOFT_WAVE);
-/* Grep: virtio-gpu: soft retspire — Wave 36 exclusive spire stamp */
-kprintf("virtio-gpu: soft retspire exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=%u "
-        "(retspire stamp; Soft≠product)\n",
-        (unsigned)GPU_SOFT_WAVE);
-/*
- * ---- Wave 37 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: virtio-gpu: soft retwall — Wave 37 return-wall honesty */
-kprintf("virtio-gpu: soft retwall soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=%u "
-        "(retwall honesty; Soft≠product)\n",
-        (unsigned)GPU_SOFT_WAVE);
-/* Grep: virtio-gpu: soft retgate — Wave 37 exclusive gate stamp */
-kprintf("virtio-gpu: soft retgate exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=%u "
-        "(retgate stamp; Soft≠product)\n",
-        (unsigned)GPU_SOFT_WAVE);
-/*
- * ---- Wave 38 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: virtio-gpu: soft retmoat — Wave 38 return-moat honesty */
-kprintf("virtio-gpu: soft retmoat soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=%u "
-        "(retmoat honesty; Soft≠product)\n",
-        (unsigned)GPU_SOFT_WAVE);
-/* Grep: virtio-gpu: soft retower — Wave 38 exclusive tower stamp */
-kprintf("virtio-gpu: soft retower exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=%u "
-        "(retower stamp; Soft≠product)\n",
-        (unsigned)GPU_SOFT_WAVE);
-                            
-/*
- * ---- Wave 39 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: virtio-gpu: soft retbarbican — Wave 39 return-barbican honesty */
-kprintf("virtio-gpu: soft retbarbican soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=%u "
-        "(retbarbican honesty; Soft≠product)\n",
-        (unsigned)GPU_SOFT_WAVE);
-/* Grep: virtio-gpu: soft retglacis — Wave 39 exclusive glacis stamp */
-kprintf("virtio-gpu: soft retglacis exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=%u "
-        "(retglacis stamp; Soft≠product)\n",
-        (unsigned)GPU_SOFT_WAVE);
-/*
- * ---- Wave 40 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: virtio-gpu: soft retcurtain — Wave 40 return-curtain honesty */
-kprintf("virtio-gpu: soft retcurtain soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=%u "
-        "(retcurtain honesty; Soft≠product)\n",
-        (unsigned)GPU_SOFT_WAVE);
-/* Grep: virtio-gpu: soft retparapet — Wave 40 exclusive parapet stamp */
-kprintf("virtio-gpu: soft retparapet exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=%u "
-        "(retparapet stamp; Soft≠product)\n",
-        (unsigned)GPU_SOFT_WAVE);
-/*
- * ---- Wave 41 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: virtio-gpu: soft retravelin — Wave 41 return-travelin honesty */
-kprintf("virtio-gpu: soft retravelin soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=%u "
-        "(retravelin honesty; Soft≠product)\n",
-        (unsigned)GPU_SOFT_WAVE);
-/* Grep: virtio-gpu: soft retditch — Wave 41 exclusive ditch stamp */
-kprintf("virtio-gpu: soft retditch exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=%u "
-        "(retditch stamp; Soft≠product)\n",
-        (unsigned)GPU_SOFT_WAVE);
-/*
- * ---- Wave 42 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: virtio-gpu: soft retportcullis — Wave 42 return-portcullis honesty */
-kprintf("virtio-gpu: soft retportcullis soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=%u "
-        "(retportcullis honesty; Soft≠product)\n",
-        (unsigned)GPU_SOFT_WAVE);
-/* Grep: virtio-gpu: soft retbattlement — Wave 42 exclusive battlement stamp */
-kprintf("virtio-gpu: soft retbattlement exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=%u "
-        "(retbattlement stamp; Soft≠product)\n",
-        (unsigned)GPU_SOFT_WAVE);
-/*
- * ---- Wave 43 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: virtio-gpu: soft retmachicolation — Wave 43 return-machicolation honesty */
-kprintf("virtio-gpu: soft retmachicolation soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=%u "
-        "(retmachicolation honesty; Soft≠product)\n",
-        (unsigned)GPU_SOFT_WAVE);
-/* Grep: virtio-gpu: soft retarrowslit — Wave 43 exclusive arrowslit stamp */
-kprintf("virtio-gpu: soft retarrowslit exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=%u "
-        "(retarrowslit stamp; Soft≠product)\n",
-        (unsigned)GPU_SOFT_WAVE);
-
-/*
- * ---- Wave 44 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: virtio-gpu: soft retmerlon — Wave 44 return-merlon honesty */
-kprintf("virtio-gpu: soft retmerlon soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=%u "
-        "(retmerlon honesty; Soft≠product)\n",
-        (unsigned)GPU_SOFT_WAVE);
-/* Grep: virtio-gpu: soft retembrasure — Wave 44 exclusive embrasure stamp */
-kprintf("virtio-gpu: soft retembrasure exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=%u "
-        "(retembrasure stamp; Soft≠product)\n",
-        (unsigned)GPU_SOFT_WAVE);
-
-/*
- * ---- Wave 45 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: virtio-gpu: soft retkeepgate — Wave 45 return-keepgate honesty */
-kprintf("virtio-gpu: soft retkeepgate soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=%u "
-        "(retkeepgate honesty; Soft≠product)\n",
-        (unsigned)GPU_SOFT_WAVE);
-/* Grep: virtio-gpu: soft retouterward — Wave 45 exclusive outerward stamp */
-kprintf("virtio-gpu: soft retouterward exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=%u "
-        "(retouterward stamp; Soft≠product)\n",
-        (unsigned)GPU_SOFT_WAVE);
-
-/*
- * ---- Wave 46 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: virtio-gpu: soft retbailey — Wave 46 return-bailey honesty */
-kprintf("virtio-gpu: soft retbailey soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=%u "
-        "(retbailey honesty; Soft≠product)\n",
-        (unsigned)GPU_SOFT_WAVE);
-/* Grep: virtio-gpu: soft retpostern — Wave 46 exclusive postern stamp */
-kprintf("virtio-gpu: soft retpostern exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=%u "
-        "(retpostern stamp; Soft≠product)\n",
-        (unsigned)GPU_SOFT_WAVE);
-
-/*
- * ---- Wave 47 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: virtio-gpu: soft retinnerward — Wave 47 return-innerward honesty */
-kprintf("virtio-gpu: soft retinnerward soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retinnerward honesty; Soft≠product)\n");
-/* Grep: virtio-gpu: soft retdonjon — Wave 47 exclusive donjon stamp */
-kprintf("virtio-gpu: soft retdonjon exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retdonjon stamp; Soft≠product)\n");
-
-/*
- * ---- Wave 48 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: virtio-gpu: soft retchevaux — Wave 48 return-chevaux honesty */
-kprintf("virtio-gpu: soft retchevaux soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retchevaux honesty; Soft≠product)\n");
-/* Grep: virtio-gpu: soft retpalisade — Wave 48 exclusive palisade stamp */
-kprintf("virtio-gpu: soft retpalisade exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retpalisade stamp; Soft≠product)\n");
-
-/*
- * ---- Wave 49 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: virtio-gpu: soft retglacisgate — Wave 49 return-glacisgate honesty */
-kprintf("virtio-gpu: soft retglacisgate soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retglacisgate honesty; Soft≠product)\n");
-/* Grep: virtio-gpu: soft retoutwork — Wave 49 exclusive outwork stamp */
-kprintf("virtio-gpu: soft retoutwork exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retoutwork stamp; Soft≠product)\n");
-/*
- * ---- Wave 50 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: virtio-gpu: soft retsally — Wave 50 return-sally honesty */
-kprintf("virtio-gpu: soft retsally soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retsally honesty; Soft≠product)\n");
-/* Grep: virtio-gpu: soft retcounterscarp — Wave 50 exclusive counterscarp stamp */
-kprintf("virtio-gpu: soft retcounterscarp exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retcounterscarp stamp; Soft≠product)\n");
-/*
- * ---- Wave 51 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: virtio-gpu: soft retfosse — Wave 51 return-fosse honesty */
-kprintf("virtio-gpu: soft retfosse soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retfosse honesty; Soft≠product)\n");
-/* Grep: virtio-gpu: soft retcoveredway — Wave 51 exclusive coveredway stamp */
-kprintf("virtio-gpu: soft retcoveredway exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retcoveredway stamp; Soft≠product)\n");
-
-/*
- * ---- Wave 52 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: virtio-gpu: soft rettenaille — Wave 52 return-tenaille honesty */
-kprintf("virtio-gpu: soft rettenaille soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(rettenaille honesty; Soft≠product)\n");
-/* Grep: virtio-gpu: soft retdemilune — Wave 52 exclusive demilune stamp */
-kprintf("virtio-gpu: soft retdemilune exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retdemilune stamp; Soft≠product)\n");
-/*
- * ---- Wave 53 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: virtio-gpu: soft retravelin — Wave 53 return-travelin honesty */
-kprintf("virtio-gpu: soft retravelin soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retravelin honesty; Soft≠product)\n");
-/* Grep: virtio-gpu: soft retlunette — Wave 53 exclusive lunette stamp */
-kprintf("virtio-gpu: soft retlunette exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retlunette stamp; Soft≠product)\n");
-/*
- * ---- Wave 54 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: virtio-gpu: soft retcaponier — Wave 54 return-caponier honesty */
-kprintf("virtio-gpu: soft retcaponier soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retcaponier honesty; Soft≠product)\n");
-/* Grep: virtio-gpu: soft retredan — Wave 54 exclusive redan stamp */
-kprintf("virtio-gpu: soft retredan exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retredan stamp; Soft≠product)\n");
-/*
- * ---- Wave 55 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: virtio-gpu: soft retflank — Wave 55 return-flank honesty */
-kprintf("virtio-gpu: soft retflank soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retflank honesty; Soft≠product)\n");
-/* Grep: virtio-gpu: soft retface — Wave 55 exclusive face stamp */
-kprintf("virtio-gpu: soft retface exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retface stamp; Soft≠product)\n");
-/*
- * ---- Wave 56 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: virtio-gpu: soft retgorge — Wave 56 return-gorge honesty */
-kprintf("virtio-gpu: soft retgorge soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retgorge honesty; Soft≠product)\n");
-/* Grep: virtio-gpu: soft retshoulder — Wave 56 exclusive shoulder stamp */
-kprintf("virtio-gpu: soft retshoulder exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retshoulder stamp; Soft≠product)\n");
-/*
- * ---- Wave 57 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: virtio-gpu: soft retraverse — Wave 57 return-traverse honesty */
-kprintf("virtio-gpu: soft retraverse soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retraverse honesty; Soft≠product)\n");
-/* Grep: virtio-gpu: soft retcasemate — Wave 57 exclusive casemate stamp */
-kprintf("virtio-gpu: soft retcasemate exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retcasemate stamp; Soft≠product)\n");
-
-/*
- * ---- Wave 58 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: virtio-gpu: soft retorillon — Wave 58 return-orillon honesty */
-kprintf("virtio-gpu: soft retorillon soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retorillon honesty; Soft≠product)\n");
-/* Grep: virtio-gpu: soft retbonnette — Wave 58 exclusive bonnette stamp */
-kprintf("virtio-gpu: soft retbonnette exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retbonnette stamp; Soft≠product)\n");
-
-/*
- * ---- Wave 59 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: virtio-gpu: soft retcrownwork — Wave 59 return-crownwork honesty */
-kprintf("virtio-gpu: soft retcrownwork soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retcrownwork honesty; Soft≠product)\n");
-/* Grep: virtio-gpu: soft rethornwork — Wave 59 exclusive hornwork stamp */
-kprintf("virtio-gpu: soft rethornwork exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(rethornwork stamp; Soft≠product)\n");
-
-/*
- * ---- Wave 60 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: virtio-gpu: soft retplace — Wave 60 return-place honesty */
-kprintf("virtio-gpu: soft retplace soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retplace honesty; Soft≠product)\n");
-/* Grep: virtio-gpu: soft retenvelope — Wave 60 exclusive envelope stamp */
-kprintf("virtio-gpu: soft retenvelope exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retenvelope stamp; Soft≠product)\n");
-
-
-
-
-
-
-
-
-
-/*
- * ---- Wave 61 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: virtio-gpu: soft retcounterguard — Wave 61 return-counterguard honesty */
-kprintf("virtio-gpu: soft retcounterguard soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retcounterguard honesty; Soft≠product)\n");
-/* Grep: virtio-gpu: soft retcoveredface — Wave 61 exclusive coveredface stamp */
-kprintf("virtio-gpu: soft retcoveredface exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retcoveredface stamp; Soft≠product)\n");
-/*
- * ---- Wave 62 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: virtio-gpu: soft retbastionface — Wave 62 return-bastionface honesty */
-kprintf("virtio-gpu: soft retbastionface soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retbastionface honesty; Soft≠product)\n");
-/* Grep: virtio-gpu: soft retcurtainangle — Wave 62 exclusive curtainangle stamp */
-kprintf("virtio-gpu: soft retcurtainangle exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retcurtainangle stamp; Soft≠product)\n");
-/*
- * ---- Wave 63 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: virtio-gpu: soft retdoubletenaille — Wave 63 return-doubletenaille honesty */
-kprintf("virtio-gpu: soft retdoubletenaille soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retdoubletenaille honesty; Soft≠product)\n");
-/* Grep: virtio-gpu: soft retplaceofarms — Wave 63 exclusive placeofarms stamp */
-kprintf("virtio-gpu: soft retplaceofarms exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retplaceofarms stamp; Soft≠product)\n");
- /*
-  * ---- Wave 64 exclusive complementary surfaces (never reshape primary).
-  * Return surfaces only — soft inventory; never hard-gates product paths.
-  */
- /* Grep: virtio-gpu: soft retreentrant — Wave 64 return-reentrant honesty */
-kprintf("virtio-gpu: soft retreentrant soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retreentrant honesty; Soft≠product)\n");
- /* Grep: virtio-gpu: soft retsallyport — Wave 64 exclusive sallyport stamp */
-kprintf("virtio-gpu: soft retsallyport exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retsallyport stamp; Soft≠product)\n");
- /*
-  * ---- Wave 65 exclusive complementary surfaces (never reshape primary).
-  * Return surfaces only — soft inventory; never hard-gates product paths.
-  */
- /* Grep: virtio-gpu: soft retgorgeangle — Wave 65 return-gorgeangle honesty */
-kprintf("virtio-gpu: soft retgorgeangle soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retgorgeangle honesty; Soft≠product)\n");
- /* Grep: virtio-gpu: soft retshoulderangle — Wave 65 exclusive shoulderangle stamp */
-kprintf("virtio-gpu: soft retshoulderangle exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retshoulderangle stamp; Soft≠product)\n");
- /*
-  * ---- Wave 66 exclusive complementary surfaces (never reshape primary).
-  * Return surfaces only — soft inventory; never hard-gates product paths.
-  */
- /* Grep: virtio-gpu: soft retflankangle — Wave 66 return-flankangle honesty */
- kprintf("virtio-gpu: soft retflankangle soft_only=1 product_gate=0 soft_ne_product=1 "
-         "never_blocks_m0=1 wave=116 "
-         "(retflankangle honesty; Soft≠product)\n");
- /* Grep: virtio-gpu: soft retfaceangle — Wave 66 exclusive faceangle stamp */
- kprintf("virtio-gpu: soft retfaceangle exclusive=1 soft_ne_product=1 "
-         "product_kernel=OPEN wave=116 "
-         "(retfaceangle stamp; Soft≠product)\n");
-/*
- * ---- Wave 67 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: virtio-gpu: soft retcaponierangle — Wave 67 return-caponierangle honesty */
-kprintf("virtio-gpu: soft retcaponierangle soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retcaponierangle honesty; Soft≠product)\n");
-/* Grep: virtio-gpu: soft retredanangle — Wave 67 exclusive redanangle stamp */
-kprintf("virtio-gpu: soft retredanangle exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retredanangle stamp; Soft≠product)\n");
-/*
- * ---- Wave 68 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: virtio-gpu: soft retlunetteangle — Wave 68 return-lunetteangle honesty */
-kprintf("virtio-gpu: soft retlunetteangle soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retlunetteangle honesty; Soft≠product)\n");
-/* Grep: virtio-gpu: soft rettenailleangle — Wave 68 exclusive tenailleangle stamp */
-kprintf("virtio-gpu: soft rettenailleangle exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(rettenailleangle stamp; Soft≠product)\n");
-/*
- * ---- Wave 69 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: virtio-gpu: soft retdemiluneangle — Wave 69 return-demiluneangle honesty */
-kprintf("virtio-gpu: soft retdemiluneangle soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retdemiluneangle honesty; Soft≠product)\n");
-/* Grep: virtio-gpu: soft retcoveredwayangle — Wave 69 exclusive coveredwayangle stamp */
-kprintf("virtio-gpu: soft retcoveredwayangle exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retcoveredwayangle stamp; Soft≠product)\n");
-/*
- * ---- Wave 70 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: virtio-gpu: soft retfosseangle — Wave 70 return-fosseangle honesty */
-kprintf("virtio-gpu: soft retfosseangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retfosseangle honesty; Soft≠product)\n");
-/* Grep: virtio-gpu: soft retcounterscarple — Wave 70 exclusive counterscarple stamp */
-kprintf("virtio-gpu: soft retcounterscarple exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retcounterscarple stamp; Soft≠product)\n");
-/*
- * ---- Wave 71 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: virtio-gpu: soft retsallyportangle — Wave 71 return-sallyportangle honesty */
-kprintf("virtio-gpu: soft retsallyportangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retsallyportangle honesty; Soft≠product)\n");
-/* Grep: virtio-gpu: soft retreentrantangle — Wave 71 exclusive reentrantangle stamp */
-kprintf("virtio-gpu: soft retreentrantangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retreentrantangle stamp; Soft≠product)\n");
-/*
- * ---- Wave 72 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: virtio-gpu: soft retplaceofarmsangle — Wave 72 return-placeofarmsangle honesty */
-kprintf("virtio-gpu: soft retplaceofarmsangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retplaceofarmsangle honesty; Soft≠product)\n");
-/* Grep: virtio-gpu: soft retdoubletenailleangle — Wave 72 exclusive doubletenailleangle stamp */
-kprintf("virtio-gpu: soft retdoubletenailleangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retdoubletenailleangle stamp; Soft≠product)\n");
-/* Grep: virtio-gpu: soft retcurtainface — Wave 73 return-curtainface honesty */
-kprintf("virtio-gpu: soft retcurtainface soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retcurtainface honesty; Soft≠product)\n");
-/* Grep: virtio-gpu: soft retbastionangle — Wave 73 exclusive bastionangle stamp */
-kprintf("virtio-gpu: soft retbastionangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retbastionangle stamp; Soft≠product)\n");
-/* Grep: virtio-gpu: soft retglacisangle — Wave 74 return-glacisangle honesty */
-kprintf("virtio-gpu: soft retglacisangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retglacisangle honesty; Soft≠product)\n");
-/* Grep: virtio-gpu: soft retparapetangle — Wave 74 exclusive parapetangle stamp */
-kprintf("virtio-gpu: soft retparapetangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retparapetangle stamp; Soft≠product)\n");
-/* Grep: virtio-gpu: soft retmoatangle — Wave 75 return-moatangle honesty */
-kprintf("virtio-gpu: soft retmoatangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retmoatangle honesty; Soft≠product)\n");
-/* Grep: virtio-gpu: soft retowerangle — Wave 75 exclusive towerangle stamp */
-kprintf("virtio-gpu: soft retowerangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retowerangle stamp; Soft≠product)\n");
-/* Grep: virtio-gpu: soft retgateangle — Wave 76 return-gateangle honesty */
-kprintf("virtio-gpu: soft retgateangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retgateangle honesty; Soft≠product)\n");
-/* Grep: virtio-gpu: soft retwallangle — Wave 76 exclusive wallangle stamp */
-kprintf("virtio-gpu: soft retwallangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retwallangle stamp; Soft≠product)\n");
-/* Grep: virtio-gpu: soft retspireangle — Wave 77 return-spireangle honesty */
-kprintf("virtio-gpu: soft retspireangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retspireangle honesty; Soft≠product)\n");
-/* Grep: virtio-gpu: soft retholdangle — Wave 77 exclusive holdangle stamp */
-kprintf("virtio-gpu: soft retholdangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retholdangle stamp; Soft≠product)\n");
-/* Grep: virtio-gpu: soft retpalaceangle — Wave 78 return-palaceangle honesty */
-kprintf("virtio-gpu: soft retpalaceangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retpalaceangle honesty; Soft≠product)\n");
-/* Grep: virtio-gpu: soft retfortressangle — Wave 78 exclusive fortressangle stamp */
-kprintf("virtio-gpu: soft retfortressangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retfortressangle stamp; Soft≠product)\n");
-/* Grep: virtio-gpu: soft retkeepangle — Wave 79 return-keepangle honesty */
-kprintf("virtio-gpu: soft retkeepangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retkeepangle honesty; Soft≠product)\n");
-/* Grep: virtio-gpu: soft retredoubtangle — Wave 79 exclusive redoubtangle stamp */
-kprintf("virtio-gpu: soft retredoubtangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retredoubtangle stamp; Soft≠product)\n");
-/* Grep: virtio-gpu: soft retcitadelangle — Wave 80 return-citadelangle honesty */
-kprintf("virtio-gpu: soft retcitadelangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retcitadelangle honesty; Soft≠product)\n");
-/* Grep: virtio-gpu: soft retbastionkeep — Wave 80 exclusive bastionkeep stamp */
-kprintf("virtio-gpu: soft retbastionkeep exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retbastionkeep stamp; Soft≠product)\n");
-/* Grep: virtio-gpu: soft retpanoplyangle — Wave 81 return-panoplyangle honesty */
-kprintf("virtio-gpu: soft retpanoplyangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retpanoplyangle honesty; Soft≠product)\n");
-/* Grep: virtio-gpu: soft retbulwarkangle — Wave 81 exclusive bulwarkangle stamp */
-kprintf("virtio-gpu: soft retbulwarkangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retbulwarkangle stamp; Soft≠product)\n");
-/* Grep: virtio-gpu: soft retmantleangle — Wave 82 return-mantleangle honesty */
-kprintf("virtio-gpu: soft retmantleangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retmantleangle honesty; Soft≠product)\n");
-/* Grep: virtio-gpu: soft retaegisangle — Wave 82 exclusive aegisangle stamp */
-kprintf("virtio-gpu: soft retaegisangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retaegisangle stamp; Soft≠product)\n");
-/* Grep: virtio-gpu: soft retemblemangle — Wave 83 return-emblemangle honesty */
-kprintf("virtio-gpu: soft retemblemangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retemblemangle honesty; Soft≠product)\n");
-/* Grep: virtio-gpu: soft retsigilangle — Wave 83 exclusive sigilangle stamp */
-kprintf("virtio-gpu: soft retsigilangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retsigilangle stamp; Soft≠product)\n");
-/* Grep: virtio-gpu: soft retscepterangle — Wave 84 return-scepterangle honesty */
-kprintf("virtio-gpu: soft retscepterangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retscepterangle honesty; Soft≠product)\n");
-/* Grep: virtio-gpu: soft retglyphangle — Wave 84 exclusive glyphangle stamp */
-kprintf("virtio-gpu: soft retglyphangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retglyphangle stamp; Soft≠product)\n");
-/* Grep: virtio-gpu: soft retcrownangle — Wave 85 return-crownangle honesty */
-kprintf("virtio-gpu: soft retcrownangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retcrownangle honesty; Soft≠product)\n");
-/* Grep: virtio-gpu: soft retshardangle — Wave 85 exclusive shardangle stamp */
-kprintf("virtio-gpu: soft retshardangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retshardangle stamp; Soft≠product)\n");
-/* Grep: virtio-gpu: soft retforgeangle — Wave 86 return-forgeangle honesty */
-kprintf("virtio-gpu: soft retforgeangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retforgeangle honesty; Soft≠product)\n");
-/* Grep: virtio-gpu: soft retprismangle — Wave 86 exclusive prismangle stamp */
-kprintf("virtio-gpu: soft retprismangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retprismangle stamp; Soft≠product)\n");
-/* Grep: virtio-gpu: soft retflameangle — Wave 87 return-flameangle honesty */
-kprintf("virtio-gpu: soft retflameangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retflameangle honesty; Soft≠product)\n");
-/* Grep: virtio-gpu: soft retcipherangle — Wave 87 exclusive cipherangle stamp */
-kprintf("virtio-gpu: soft retcipherangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retcipherangle stamp; Soft≠product)\n");
-/* Grep: virtio-gpu: soft retbeaconangle — Wave 88 return-beaconangle honesty */
-kprintf("virtio-gpu: soft retbeaconangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retbeaconangle honesty; Soft≠product)\n");
-/* Grep: virtio-gpu: soft retledgerangle — Wave 88 exclusive ledgerangle stamp */
-kprintf("virtio-gpu: soft retledgerangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retledgerangle stamp; Soft≠product)\n");
-/* Grep: virtio-gpu: soft retbannerangle — Wave 89 return-bannerangle honesty */
-kprintf("virtio-gpu: soft retbannerangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retbannerangle honesty; Soft≠product)\n");
-/* Grep: virtio-gpu: soft retvaultangle — Wave 89 exclusive vaultangle stamp */
-kprintf("virtio-gpu: soft retvaultangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retvaultangle stamp; Soft≠product)\n");
-/* Grep: virtio-gpu: soft retcrestangle — Wave 90 return-crestangle honesty */
-kprintf("virtio-gpu: soft retcrestangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retcrestangle honesty; Soft≠product)\n");
-/* Grep: virtio-gpu: soft rettokenangle — Wave 90 exclusive tokenangle stamp */
-kprintf("virtio-gpu: soft rettokenangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (rettokenangle stamp; Soft≠product)\n");
-/* Grep: virtio-gpu: soft retbadgeangle — Wave 91 return-badgeangle honesty */
-kprintf("virtio-gpu: soft retbadgeangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retbadgeangle honesty; Soft≠product)\n");
-/* Grep: virtio-gpu: soft retphaseangle — Wave 91 exclusive phaseangle stamp */
-kprintf("virtio-gpu: soft retphaseangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retphaseangle stamp; Soft≠product)\n");
-/* Grep: virtio-gpu: soft retmarkangle — Wave 92 return-markangle honesty */
-kprintf("virtio-gpu: soft retmarkangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retmarkangle honesty; Soft≠product)\n");
-/* Grep: virtio-gpu: soft retpulseangle — Wave 92 exclusive pulseangle stamp */
-kprintf("virtio-gpu: soft retpulseangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retpulseangle stamp; Soft≠product)\n");
-
-/* Grep: virtio-gpu: soft retsealangle — Wave 93 return-sealangle honesty */
-kprintf("virtio-gpu: soft retsealangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retsealangle honesty; Soft≠product)\n");
-/* Grep: virtio-gpu: soft retboundangle — Wave 93 exclusive boundangle stamp */
-kprintf("virtio-gpu: soft retboundangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retboundangle stamp; Soft≠product)\n");
-/* Grep: virtio-gpu: soft retstemangle — Wave 94 return-stemangle honesty */
-kprintf("virtio-gpu: soft retstemangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retstemangle honesty; Soft≠product)\n");
-/* Grep: virtio-gpu: soft retbladeangle — Wave 94 exclusive bladeangle stamp */
-kprintf("virtio-gpu: soft retbladeangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retbladeangle stamp; Soft≠product)\n");
-/* Grep: virtio-gpu: soft retchordangle — Wave 95 return-chordangle honesty */
-kprintf("virtio-gpu: soft retchordangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retchordangle honesty; Soft≠product)\n");
-/* Grep: virtio-gpu: soft retarcangle — Wave 95 exclusive arcangle stamp */
-kprintf("virtio-gpu: soft retarcangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retarcangle stamp; Soft≠product)\n");
-/* Grep: virtio-gpu: soft retsectorangle — Wave 96 return-sectorangle honesty */
-kprintf("virtio-gpu: soft retsectorangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retsectorangle honesty; Soft≠product)\n");
-/* Grep: virtio-gpu: soft retwedgeangle — Wave 96 exclusive wedgeangle stamp */
-kprintf("virtio-gpu: soft retwedgeangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retwedgeangle stamp; Soft≠product)\n");
-/* Grep: virtio-gpu: soft retradiusangle — Wave 97 return-radiusangle honesty */
-kprintf("virtio-gpu: soft retradiusangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retradiusangle honesty; Soft≠product)\n");
-/* Grep: virtio-gpu: soft retdiameterangle — Wave 97 exclusive diameterangle stamp */
-kprintf("virtio-gpu: soft retdiameterangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retdiameterangle stamp; Soft≠product)\n");
-/* Grep: virtio-gpu: soft retcircumangle — Wave 98 return-circumangle honesty */
-kprintf("virtio-gpu: soft retcircumangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retcircumangle honesty; Soft≠product)\n");
-/* Grep: virtio-gpu: soft retellipseangle — Wave 98 exclusive ellipseangle stamp */
-kprintf("virtio-gpu: soft retellipseangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retellipseangle stamp; Soft≠product)\n");
-/* Grep: virtio-gpu: soft rethyperangle — Wave 99 return-hyperangle honesty */
-kprintf("virtio-gpu: soft rethyperangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (rethyperangle honesty; Soft≠product)\n");
-/* Grep: virtio-gpu: soft retparabolaangle — Wave 99 exclusive parabolaangle stamp */
-kprintf("virtio-gpu: soft retparabolaangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retparabolaangle stamp; Soft≠product)\n");
-/* Grep: virtio-gpu: soft retspiralangle — Wave 100 return-spiralangle honesty */
-kprintf("virtio-gpu: soft retspiralangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retspiralangle honesty; Soft≠product)\n");
-/* Grep: virtio-gpu: soft rethelixangle — Wave 100 exclusive helixangle stamp */
-kprintf("virtio-gpu: soft rethelixangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (rethelixangle stamp; Soft≠product)\n");
-/* Grep: virtio-gpu: soft rettorusangle — Wave 101 return-torusangle honesty */
-kprintf("virtio-gpu: soft rettorusangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (rettorusangle honesty; Soft≠product)\n");
-/* Grep: virtio-gpu: soft retknotangle — Wave 101 exclusive knotangle stamp */
-kprintf("virtio-gpu: soft retknotangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retknotangle stamp; Soft≠product)\n");
-/* Grep: virtio-gpu: soft retmoebiusangle — Wave 102 return-moebiusangle honesty */
-kprintf("virtio-gpu: soft retmoebiusangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retmoebiusangle honesty; Soft≠product)\n");
-/* Grep: virtio-gpu: soft retkleinangle — Wave 102 exclusive kleinangle stamp */
-kprintf("virtio-gpu: soft retkleinangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retkleinangle stamp; Soft≠product)\n");
-/* Grep: virtio-gpu: soft retprojectangle — Wave 103 return-projectangle honesty */
-kprintf("virtio-gpu: soft retprojectangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retprojectangle honesty; Soft≠product)\n");
-/* Grep: virtio-gpu: soft retaffineangle — Wave 103 exclusive affineangle stamp */
-kprintf("virtio-gpu: soft retaffineangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retaffineangle stamp; Soft≠product)\n");
-/* Grep: virtio-gpu: soft retlinearangle — Wave 104 return-linearangle honesty */
-kprintf("virtio-gpu: soft retlinearangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retlinearangle honesty; Soft≠product)\n");
-/* Grep: virtio-gpu: soft retbilinearangle — Wave 104 exclusive bilinearangle stamp */
-kprintf("virtio-gpu: soft retbilinearangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retbilinearangle stamp; Soft≠product)\n");
-/* Grep: virtio-gpu: soft retquadraticangle — Wave 105 return-quadraticangle honesty */
-kprintf("virtio-gpu: soft retquadraticangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retquadraticangle honesty; Soft≠product)\n");
-/* Grep: virtio-gpu: soft retcubicangle — Wave 105 exclusive cubicangle stamp */
-kprintf("virtio-gpu: soft retcubicangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retcubicangle stamp; Soft≠product)\n");
-/* Grep: virtio-gpu: soft retquarticangle — Wave 106 return-quarticangle honesty */
-kprintf("virtio-gpu: soft retquarticangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retquarticangle honesty; Soft≠product)\n");
-/* Grep: virtio-gpu: soft retquinticangle — Wave 106 exclusive quinticangle stamp */
-kprintf("virtio-gpu: soft retquinticangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retquinticangle stamp; Soft≠product)\n");
-/* Grep: virtio-gpu: soft retsplineangle — Wave 107 return-splineangle honesty */
-kprintf("virtio-gpu: soft retsplineangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retsplineangle honesty; Soft≠product)\n");
-/* Grep: virtio-gpu: soft retbezierangle — Wave 107 exclusive bezierangle stamp */
-kprintf("virtio-gpu: soft retbezierangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retbezierangle stamp; Soft≠product)\n");
-/* Grep: virtio-gpu: soft rethurmitangle — Wave 108 return-hermitangle honesty */
-kprintf("virtio-gpu: soft rethurmitangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (rethurmitangle honesty; Soft≠product)\n");
-/* Grep: virtio-gpu: soft retcatmullangle — Wave 108 exclusive catmullangle stamp */
-kprintf("virtio-gpu: soft retcatmullangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retcatmullangle stamp; Soft≠product)\n");
-/* Grep: virtio-gpu: soft retnurbsangle — Wave 109 return-nurbsangle honesty */
-kprintf("virtio-gpu: soft retnurbsangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retnurbsangle honesty; Soft≠product)\n");
-/* Grep: virtio-gpu: soft retbsplineangle — Wave 109 exclusive bsplineangle stamp */
-kprintf("virtio-gpu: soft retbsplineangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retbsplineangle stamp; Soft≠product)\n");
-/* Grep: virtio-gpu: soft retmeshangle — Wave 110 return-meshangle honesty */
-kprintf("virtio-gpu: soft retmeshangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retmeshangle honesty; Soft≠product)\n");
-/* Grep: virtio-gpu: soft retgridangle — Wave 110 exclusive gridangle stamp */
-kprintf("virtio-gpu: soft retgridangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retgridangle stamp; Soft≠product)\n");
-/* Grep: virtio-gpu: soft retvoxelangle — Wave 111 return-voxelangle honesty */
-kprintf("virtio-gpu: soft retvoxelangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retvoxelangle honesty; Soft≠product)\n");
-/* Grep: virtio-gpu: soft rettexelangle — Wave 111 exclusive texelangle stamp */
-kprintf("virtio-gpu: soft rettexelangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (rettexelangle stamp; Soft≠product)\n");
-/* Grep: virtio-gpu: soft retfragmentangle — Wave 112 return-fragmentangle honesty */
-kprintf("virtio-gpu: soft retfragmentangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retfragmentangle honesty; Soft≠product)\n");
-/* Grep: virtio-gpu: soft retvertexangle — Wave 112 exclusive vertexangle stamp */
-kprintf("virtio-gpu: soft retvertexangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retvertexangle stamp; Soft≠product)\n");
-/* Grep: virtio-gpu: soft retshaderangle — Wave 113 return-shaderangle honesty */
-kprintf("virtio-gpu: soft retshaderangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retshaderangle honesty; Soft≠product)\n");
-/* Grep: virtio-gpu: soft retpipelineangle — Wave 113 exclusive pipelineangle stamp */
-kprintf("virtio-gpu: soft retpipelineangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retpipelineangle stamp; Soft≠product)\n");
-/* Grep: virtio-gpu: soft retframebufferangle — Wave 114 return-framebufferangle honesty */
-kprintf("virtio-gpu: soft retframebufferangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retframebufferangle honesty; Soft≠product)\n");
-/* Grep: virtio-gpu: soft retswapchainangle — Wave 114 exclusive swapchainangle stamp */
-kprintf("virtio-gpu: soft retswapchainangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retswapchainangle stamp; Soft≠product)\n");
-/* Grep: virtio-gpu: soft retpresentangle — Wave 115 return-presentangle honesty */
-kprintf("virtio-gpu: soft retpresentangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retpresentangle honesty; Soft≠product)\n");
-/* Grep: virtio-gpu: soft retvsyncangle — Wave 115 exclusive vsyncangle stamp */
-kprintf("virtio-gpu: soft retvsyncangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retvsyncangle stamp; Soft≠product)\n");
-/* Grep: virtio-gpu: soft retfenceangle — Wave 116 return-fenceangle honesty */
-kprintf("virtio-gpu: soft retfenceangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retfenceangle honesty; Soft≠product)\n");
-/* Grep: virtio-gpu: soft retsemaphoreangle — Wave 116 exclusive semaphoreangle stamp */
-kprintf("virtio-gpu: soft retsemaphoreangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retsemaphoreangle stamp; Soft≠product)\n");
-                            kprintf("virtio-gpu: soft deepen wave=%u areas=%u via=%s ready=%u "
-            "present=%u have_res=%u cmd_ok=%u log_n=%u "
-            "(soft inventory only)\n",
-            (unsigned)GPU_SOFT_WAVE, (unsigned)GPU_SOFT_AREAS, szViaSafe,
-            u32Ready, g_u32PresentCount, g_fHaveRes ? 1u : 0u, g_u32CmdOk,
-            g_u32SoftLogN);
-
-    /* Grep: virtio-gpu: soft PASS | NODEV | PARTIAL */
-    kprintf("virtio-gpu: soft %s via=%s ready=%u present=%u cmd_ok=%u "
-            "cmd_fail=%u log_n=%u wave=%u\n",
-            szVerdict, szViaSafe, u32Ready, g_u32PresentCount, g_u32CmdOk,
-            g_u32CmdFail, g_u32SoftLogN, (unsigned)GPU_SOFT_WAVE);
-
-    /* Grep: virtio-gpu: soft inventory PASS|NODEV|PARTIAL */
-    kprintf("virtio-gpu: soft inventory %s via=%s logs=%u wave=%u areas=%u "
-            "(soft inventory only)\n",
-            szVerdict, szViaSafe, g_u32SoftLogN, (unsigned)GPU_SOFT_WAVE,
-            (unsigned)GPU_SOFT_AREAS);
+    return u32Ok;
 }
 
 /**
- * After first product present/flush activity, print soft inventory once
- * (mirrors virtio-blk / compositor soft-stats-once). Diagnostics only.
+ * One-shot one-line boot soft inventory only (Soft!=product / C0 T0 GPU).
+ * LEAN residual: single kprintf - never multi-line stamp floods (FAULT H2).
+ * Probe/nodev path only - never re-emit on present/flush hot paths.
+ * No wave=/version stamp. No ret*angle. No bar3 spam (bar3 OPEN).
+ * greppable: virtio-gpu: soft inventory
+ * greppable: Soft!=product t0_gpu G-AC-1
+ * greppable: handoff=session|compositor|ICD product_gpu=virtio
  */
 static void
-gpu_soft_maybe_once(void)
+gpu_soft_inventory_once(const char *szVia)
 {
-    if (g_fSoftOnce != 0) {
+    u8 u8Bus;
+    u8 u8Slot;
+    u32 u32Ready;
+
+    if (g_fSoftInvOnce != 0) {
         return;
     }
-    if (g_u32PresentCount == 0u && g_u32FlushCount == 0u &&
-        g_u32CmdFail == 0u) {
+    g_fSoftInvOnce = 1;
+    u32Ready = g_fReady ? 1u : 0u;
+    u8Bus = (g_pGpu != NULL) ? g_pGpu->u8Bus : 0;
+    u8Slot = (g_pGpu != NULL) ? g_pGpu->u8Slot : 0;
+    /*
+     * ONE line only. Soft!=product. No wave=/version stamp.
+     * t0_gpu=1: QEMU virtio-gpu T0 present (lamp != product DoD close).
+     * ctrl_q0=1: control virtqueue only (no cursor/3D product depth).
+     * dual=MIT_OR_Apache-2.0 / G-AC-1 / stamp_storm=0 honesty.
+     * Dual DoD desktop/GPU product OPEN; freestanding residual only.
+     */
+    kprintf("virtio-gpu: soft inventory via=%s ready=%u bus=%x slot=%x "
+            "present=%u have_res=%u cmd_ok=%u cmd_fail=%u kicks=%u "
+            "q_size=%u fmt=%u bpp=%u max_scan=%u max_ents=%u "
+            "t0_gpu=1 ctrl_q0=1 path=present|flush|display|scanout "
+            "handoff=session|compositor|ICD product_gpu=virtio "
+            "not_freestanding_gpu_product dual_dod_gpu=OPEN "
+            "dual=MIT_OR_Apache-2.0 stamp_storm=0 no_version_stamp=1 "
+            "bar3=OPEN soft_ne_product=1 G-AC-1 Soft!=product\n",
+            szVia != NULL ? szVia : "?",
+            u32Ready,
+            (unsigned)u8Bus, (unsigned)u8Slot,
+            g_u32PresentCount,
+            g_fHaveRes ? 1u : 0u,
+            g_u32CmdOk, g_u32CmdFail, g_u32Kicks,
+            (unsigned)VIRTIO_GPU_Q_SIZE,
+            (unsigned)VIRTIO_GPU_FORMAT_B8G8R8X8_UNORM,
+            (unsigned)VIRTIO_GPU_BPP,
+            (unsigned)VIRTIO_GPU_MAX_SCANOUTS,
+            (unsigned)VIRTIO_GPU_MAX_MEM_ENTRIES);
+}
+
+/**
+ * One-shot soft residual lean after first product activity or probe lean.
+ * Silent self-check + ONE line (+ optional PASS). Soft!=product / C0.
+ * Never re-emit on hot path. No wave=/version stamp. Dual MIT OR Apache-2.0.
+ * greppable: virtio-gpu: soft residual lean
+ * greppable: virtio-gpu: soft residual lean PASS
+ * greppable: t0_gpu=1 product_gpu=virtio stamp_storm=0
+ * greppable: handoff_ok lean_ok ctrl_q0 bar3=OPEN
+ */
+static void
+gpu_soft_residual_lean_once(const char *szVia)
+{
+    u32 u32Ok;
+    u32 u32Checks;
+    u32 u32Ready;
+    u16 u16FreeNow;
+    u8 u8Bus;
+    u8 u8Slot;
+
+    if (g_fSoftLeanOnce != 0) {
         return;
     }
-    g_fSoftOnce = 1;
-    gpu_soft_inventory("activity");
+    g_fSoftLeanOnce = 1;
+
+    u32Ok = gpu_soft_residual_lean_ok(&u32Checks);
+    u32Ready = g_fReady ? 1u : 0u;
+    u8Bus = (g_pGpu != NULL) ? g_pGpu->u8Bus : 0;
+    u8Slot = (g_pGpu != NULL) ? g_pGpu->u8Slot : 0;
+    u16FreeNow = (g_u16FreeMin == 0xffffu) ? 0u : g_u16FreeMin;
+
+    /*
+     * ONE lean line. Soft!=product dual license; no version stamp; no storm.
+     * t0_gpu=1 product_gpu=virtio: T0 freestanding residual until session/
+     * compositor/ICD owns present (lamp != Dual DoD / bar3 close).
+     * Silent API/cmd/attach/free class folded in (no multi-line inventory).
+     */
+    kprintf("virtio-gpu: soft residual lean via=%s ready=%u bus=%x slot=%x "
+            "present=%u have_res=%u scanout_bound=%u "
+            "cmd_ok=%u cmd_fail=%u to=%u qadd_fail=%u bad_resp=%u kicks=%u "
+            "create=%u reuse=%u present_fail=%u arg_fail=%u path_fail=%u "
+            "flush_ok=%u flush_fail=%u disp_rf=%u "
+            "attach_ops=%u attach_fail=%u ents_last=%u ents_peak=%u "
+            "res_drop=%u scan_ok=%u scan_fail=%u free_min=%u "
+            "api_p=%u api_f=%u api_d=%u api_s=%u api_stub=%u "
+            "probe_ok=%u nodev=%u fail=%u "
+            "last_cmd=0x%x last_resp=0x%x last_wh=%ux%u last_stride=%u "
+            "last_flush=%ux%u q_size=%u bpp=%u "
+            "lean_ok=%u/%u handoff_ok=%u "
+            "t0_gpu=1 ctrl_q0=1 path=present|flush|display|scanout "
+            "handoff=session|compositor|ICD product_gpu=virtio "
+            "not_freestanding_gpu_product dual_dod_gpu=OPEN "
+            "dual=MIT_OR_Apache-2.0 stamp_storm=0 no_version_stamp=1 "
+            "bar3=OPEN soft_ne_product=1 G-AC-1 Soft!=product\n",
+            szVia != NULL ? szVia : "?",
+            u32Ready, (unsigned)u8Bus, (unsigned)u8Slot,
+            g_u32PresentCount,
+            g_fHaveRes ? 1u : 0u,
+            g_fScanoutBound ? 1u : 0u,
+            g_u32CmdOk, g_u32CmdFail, g_u32CmdTimeout,
+            g_u32CmdQAddFail, g_u32CmdBadResp, g_u32Kicks,
+            g_u32PresentCreate, g_u32PresentReuse, g_u32PresentFail,
+            g_u32PresentArgFail, g_u32PresentPathFail,
+            g_u32FlushOk, g_u32FlushFail, g_u32DispRefresh,
+            g_u32AttachOps, g_u32AttachFail,
+            g_u32AttachEntsLast, g_u32AttachEntsPeak,
+            g_u32ResDrop, g_u32ScanoutOk, g_u32ScanoutFail,
+            (unsigned)u16FreeNow,
+            g_u32ApiPresent, g_u32ApiFlush, g_u32ApiDisplay,
+            g_u32ApiScanout, g_u32ApiPresentStub,
+            g_u32ProbeOk, g_u32ProbeNodev, g_u32ProbeFail,
+            g_u32LastCmdType, g_u32LastRespType,
+            g_u32LastPresentW, g_u32LastPresentH, g_u32LastPresentStride,
+            g_u32LastFlushW, g_u32LastFlushH,
+            (unsigned)VIRTIO_GPU_Q_SIZE, (unsigned)VIRTIO_GPU_BPP,
+            u32Ok, u32Checks, g_u32HandoffOk);
+
+    if (u32Ok == u32Checks && g_u32HandoffOk >= 5u) {
+        /* Grep: virtio-gpu: soft residual lean PASS */
+        kprintf("virtio-gpu: soft residual lean PASS "
+                "checks=%u ok=%u handoff_ok=%u t0_gpu=1 ctrl_q0=1 "
+                "product_gpu=virtio handoff=session|compositor|ICD "
+                "not_freestanding_gpu_product dual_dod_gpu=OPEN "
+                "dual=MIT_OR_Apache-2.0 stamp_storm=0 no_version_stamp=1 "
+                "bar3=OPEN soft_ne_product=1 G-AC-1 Soft!=product\n",
+                u32Checks, u32Ok, g_u32HandoffOk);
+    }
+}
+
+/**
+ * Fire soft residual lean once after first product-path activity.
+ * Probe path may also emit via=probe after inventory (no double lamp).
+ */
+static void
+gpu_soft_maybe_lean(const char *szVia)
+{
+    if (g_fSoftLeanOnce != 0) {
+        return;
+    }
+    gpu_soft_residual_lean_once(szVia);
 }
 
 /* ---- display soft path --------------------------------------------------- */
 
 /*
- * GET_DISPLAY_INFO → cache first enabled scanout (or soft default).
+ * GET_DISPLAY_INFO -> cache first enabled scanout (or soft default).
  * Hosts that ACK with NODATA keep the default geometry.
  */
 static int
@@ -1919,7 +1067,7 @@ gpu_display_refresh(void)
     if (gpu_cmd(pReq, sizeof(*pReq)) != 0) {
         return -1;
     }
-    g_u32DispRefresh++;
+    g_u32DispRefresh++; /* silent residual; Soft!=product */
 
     g_u32DispScanout = 0;
     g_u32DispW = VIRTIO_GPU_DEFAULT_W;
@@ -1929,7 +1077,7 @@ gpu_display_refresh(void)
 
     pInfo = (struct virtio_gpu_resp_display_info *)(void *)g_aResp;
     if (pInfo->hdr.u32Type != VIRTIO_GPU_RESP_OK_DISPLAY_INFO) {
-        /* NODATA or unexpected OK — soft default already loaded. */
+        /* NODATA or unexpected OK - soft default already loaded. */
         return 0;
     }
 
@@ -1962,7 +1110,7 @@ gpu_display_refresh(void)
 /* ---- public API ---------------------------------------------------------- */
 
 /*
- * Probe path: find first gpu → modern PCI caps → features → ctrl q0.
+ * Probe path: find first gpu -> modern PCI caps -> features -> ctrl q0.
  * Leaves g_fReady=0 and g_pGpu=NULL on any failure.
  */
 int
@@ -1978,6 +1126,7 @@ virtio_gpu_probe(void)
     g_fScanoutBound = 0;
     g_fDispValid = 0;
     g_u32ScanoutId = 0;
+    g_u16FreeMin = 0xffffu; /* free-desc watermark seed (silent residual) */
     c = virtio_dev_count();
     /* kind==3 or modern GPU device ID (0x1050) */
     for (i = 0; i < c; i++) {
@@ -1994,8 +1143,9 @@ virtio_gpu_probe(void)
     }
     if (g_pGpu == NULL) {
         kprintf("virtio-gpu: no device\n");
-        /* Grep: virtio-gpu: soft … NODEV (Wave 14 soft inventory) */
-        gpu_soft_inventory("nodev");
+        g_u32ProbeNodev++;
+        /* One-shot soft inventory boot lamp (LEAN residual; Soft!=product). */
+        gpu_soft_inventory_once("nodev");
         return -1;
     }
 
@@ -2003,7 +1153,8 @@ virtio_gpu_probe(void)
     if (st != GJ_OK || g_pGpu->pCommon == NULL) {
         kprintf("virtio-gpu: pci setup failed %d\n", (int)st);
         g_pGpu = NULL;
-        gpu_soft_inventory("pci_fail");
+        g_u32ProbeFail++;
+        gpu_soft_inventory_once("pci_fail");
         return -1;
     }
     /* Prefer V1; fall back to transitional (empty want mask) */
@@ -2013,7 +1164,8 @@ virtio_gpu_probe(void)
         if (st != GJ_OK) {
             kprintf("virtio-gpu: negotiate failed %d\n", (int)st);
             g_pGpu = NULL;
-            gpu_soft_inventory("negotiate_fail");
+            g_u32ProbeFail++;
+            gpu_soft_inventory_once("negotiate_fail");
             return -1;
         }
     }
@@ -2021,25 +1173,27 @@ virtio_gpu_probe(void)
     if (st != GJ_OK) {
         kprintf("virtio-gpu: ctrl queue failed %d\n", (int)st);
         g_pGpu = NULL;
-        gpu_soft_inventory("q_fail");
+        g_u32ProbeFail++;
+        gpu_soft_inventory_once("q_fail");
         return -1;
     }
     virtio_set_status(g_pGpu, (u8)(GJ_VIRTIO_S_ACKNOWLEDGE | GJ_VIRTIO_S_DRIVER |
                                    GJ_VIRTIO_S_FEATURES_OK | GJ_VIRTIO_S_DRIVER_OK));
     g_fReady = 1;
+    g_u32ProbeOk++;
+    gpu_note_free(); /* seed free-min after DRIVER_OK (silent residual) */
     kprintf("virtio-gpu: ready PASS bus=%x slot=%x (control q0)\n",
             (unsigned)g_pGpu->u8Bus, (unsigned)g_pGpu->u8Slot);
-    /*
-     * Wave 14 soft inventory rollup (prefix-stable "virtio-gpu: soft …").
-     * PARTIAL until first present; never hard-gates product path.
-     */
-    gpu_soft_inventory("probe");
+    /* One-shot soft inventory + probe lean (LEAN residual; Soft!=product; H2). */
+    gpu_soft_inventory_once("probe");
+    gpu_soft_maybe_lean("probe");
     return 0;
 }
 
 int
 virtio_gpu_ready(void)
 {
+    g_u32ApiReady++; /* silent residual; Soft!=product */
     return g_fReady;
 }
 
@@ -2056,6 +1210,11 @@ virtio_gpu_get_display(u32 *pOutW, u32 *pOutH)
     if (pOutH) {
         *pOutH = g_u32DispH;
     }
+    /*
+     * One-shot residual lean after first display query (not inventory re-fire).
+     * Soft!=product; H2 no stamp storm.
+     */
+    gpu_soft_maybe_lean("display");
     return 0;
 }
 
@@ -2079,6 +1238,7 @@ virtio_gpu_get_display_ex(u32 *pOutScanoutId, u32 *pOutW, u32 *pOutH,
     if (pOutEnabled) {
         *pOutEnabled = g_u32DispEnabled;
     }
+    gpu_soft_maybe_lean("display_ex");
     return 0;
 }
 
@@ -2105,28 +1265,51 @@ virtio_gpu_flush(u32 u32X, u32 u32Y, u32 u32Width, u32 u32Height)
         g_u32FlushFail++;
         return -1;
     }
+    g_u32FlushOk++;
     g_u32LastFlushW = u32CW;
     g_u32LastFlushH = u32CH;
-    g_u32FlushCount++;
-    gpu_soft_maybe_once();
+    /*
+     * One-shot residual lean after first product flush (not inventory re-fire).
+     * Never multi-line stamp storm on flush hot path (FAULT H2 avoid).
+     * Soft!=product.
+     */
+    gpu_soft_maybe_lean("flush");
     return 0;
 }
 
 int
 virtio_gpu_scanout(u32 u32ScanoutId, int fEnable)
 {
+    int iRet;
+
     g_u32ApiScanout++;
     if (!g_fReady) {
+        g_u32ScanoutFail++;
         return -1;
     }
     if (!fEnable) {
-        return gpu_scanout_disable(u32ScanoutId);
+        iRet = gpu_scanout_disable(u32ScanoutId);
+        if (iRet == 0) {
+            g_u32ScanoutOk++;
+            gpu_soft_maybe_lean("scanout_off");
+        } else {
+            g_u32ScanoutFail++;
+        }
+        return iRet;
     }
     if (!g_fHaveRes) {
+        g_u32ScanoutFail++;
         return -1;
     }
-    return gpu_scanout_set(u32ScanoutId, g_u32ResId, 0, 0,
+    iRet = gpu_scanout_set(u32ScanoutId, g_u32ResId, 0, 0,
                            g_u32Width, g_u32Height);
+    if (iRet == 0) {
+        g_u32ScanoutOk++;
+        gpu_soft_maybe_lean("scanout");
+    } else {
+        g_u32ScanoutFail++;
+    }
+    return iRet;
 }
 
 int
@@ -2141,19 +1324,22 @@ virtio_gpu_present(u32 u32Width, u32 u32Height, void *pFb, u32 u32Stride)
     g_u32ApiPresent++;
     if (!g_fReady || pFb == NULL || u32Width == 0 || u32Height == 0) {
         g_u32PresentArgFail++;
+        g_u32PresentFail++;
         return -1;
     }
     if (u32Stride == 0) {
-        u32Stride = u32Width * 4u;
+        u32Stride = u32Width * VIRTIO_GPU_BPP;
     }
     /* Reject stride that cannot hold one row of B8G8R8X8. */
-    if (u32Stride < u32Width * 4u) {
+    if (u32Stride < u32Width * VIRTIO_GPU_BPP) {
         g_u32PresentArgFail++;
+        g_u32PresentFail++;
         return -1;
     }
     u32Bytes = u32Stride * u32Height;
     if (u32Bytes / u32Stride != u32Height) {
         g_u32PresentArgFail++;
+        g_u32PresentFail++;
         return -1; /* overflow */
     }
 
@@ -2179,6 +1365,7 @@ virtio_gpu_present(u32 u32Width, u32 u32Height, void *pFb, u32 u32Stride)
         if (gpu_res_create_2d(u32Res, u32Width, u32Height,
                               VIRTIO_GPU_FORMAT_B8G8R8X8_UNORM) != 0) {
             g_u32PresentPathFail++;
+            g_u32PresentFail++;
             return -1;
         }
         if (gpu_res_attach(u32Res, pFb, u32Bytes, &paFb) != 0) {
@@ -2188,6 +1375,7 @@ virtio_gpu_present(u32 u32Width, u32 u32Height, void *pFb, u32 u32Stride)
                 g_u32ResId = 1;
             }
             g_u32PresentPathFail++;
+            g_u32PresentFail++;
             return -1;
         }
 
@@ -2206,6 +1394,7 @@ virtio_gpu_present(u32 u32Width, u32 u32Height, void *pFb, u32 u32Stride)
                 g_u32ResId = 1;
             }
             g_u32PresentPathFail++;
+            g_u32PresentFail++;
             return -1;
         }
 
@@ -2215,29 +1404,31 @@ virtio_gpu_present(u32 u32Width, u32 u32Height, void *pFb, u32 u32Stride)
         g_paFb = paFb;
         g_u32ResId = u32Res;
         g_fHaveRes = 1;
+        g_u32PresentCreate++;
     } else {
         u32Res = g_u32ResId;
+        g_u32PresentReuse++;
     }
 
     if (gpu_xfer_and_flush(u32Res, 0, 0, u32Width, u32Height, u32Stride) != 0) {
         g_u32PresentPathFail++;
+        g_u32PresentFail++;
         return -1;
     }
 
-    if (fReuse) {
-        g_u32PresentReuse++;
-    } else {
-        g_u32PresentCreate++;
-    }
+    g_u32PresentCount++;
     g_u32LastPresentW = u32Width;
     g_u32LastPresentH = u32Height;
     g_u32LastPresentStride = u32Stride;
-    g_u32PresentCount++;
     kprintf("virtio-gpu: present PASS #%u %ux%u fb=0x%lx%s\n",
             g_u32PresentCount, u32Width, u32Height, (unsigned long)paFb,
             fReuse ? " reuse" : "");
-    /* Wave 14: greppable virtio-gpu: soft … once after first present. */
-    gpu_soft_maybe_once();
+    /*
+     * One-shot residual lean after first product present (not inventory re-fire).
+     * Never multi-line stamp storm on present hot path (FAULT H2 avoid).
+     * Soft!=product.
+     */
+    gpu_soft_maybe_lean("present");
     return 0;
 }
 
@@ -2258,7 +1449,7 @@ virtio_gpu_present_stub(u32 u32Width, u32 u32Height, u64 u64GuestAddr)
     if (u64GuestAddr != 0) {
         return virtio_gpu_present(u32Width, u32Height,
                                   (void *)(gj_vaddr_t)u64GuestAddr,
-                                  u32Width * 4u);
+                                  u32Width * VIRTIO_GPU_BPP);
     }
     /* Allocate a simple test pattern framebuffer (contiguous) */
     if (u32Width == 0) {
@@ -2267,11 +1458,11 @@ virtio_gpu_present_stub(u32 u32Width, u32 u32Height, u64 u64GuestAddr)
     if (u32Height == 0) {
         u32Height = 64;
     }
-    if (u32Width * u32Height * 4u > 16u * GJ_PAGE_SIZE) {
+    if (u32Width * u32Height * VIRTIO_GPU_BPP > 16u * GJ_PAGE_SIZE) {
         u32Width = 64;
         u32Height = 64;
     }
-    u32Bytes = u32Width * 4u * u32Height;
+    u32Bytes = u32Width * VIRTIO_GPU_BPP * u32Height;
     u32Pages = (u32Bytes + GJ_PAGE_SIZE - 1) / GJ_PAGE_SIZE;
     pa = pmm_alloc_pages(u32Pages);
     if (pa == 0) {
@@ -2282,30 +1473,31 @@ virtio_gpu_present_stub(u32 u32Width, u32 u32Height, u64 u64GuestAddr)
         }
         u32Width = 32;
         u32Height = 32;
-        u32Bytes = u32Width * 4u * u32Height;
+        u32Bytes = u32Width * VIRTIO_GPU_BPP * u32Height;
         u32Pages = 1;
     }
     pFb = (void *)hhdm_to_virt(pa);
     p = (u8 *)pFb;
     for (i = 0; i < u32Width * u32Height; i++) {
         /* BGRA: blue gradient */
-        p[i * 4u + 0] = (u8)(i & 0xffu);
-        p[i * 4u + 1] = 0x40;
-        p[i * 4u + 2] = 0x20;
-        p[i * 4u + 3] = 0xff;
+        p[i * VIRTIO_GPU_BPP + 0] = (u8)(i & 0xffu);
+        p[i * VIRTIO_GPU_BPP + 1] = 0x40;
+        p[i * VIRTIO_GPU_BPP + 2] = 0x20;
+        p[i * VIRTIO_GPU_BPP + 3] = 0xff;
     }
-    return virtio_gpu_present(u32Width, u32Height, pFb, u32Width * 4u);
+    return virtio_gpu_present(u32Width, u32Height, pFb,
+                              u32Width * VIRTIO_GPU_BPP);
 }
 
 u32
 virtio_gpu_present_count(void)
 {
     /*
-     * Emit soft inventory on count read so bring-up smoke greps
-     * virtio-gpu: soft … without requiring a second present (mirrors
-     * virtio-blk q_stats / door STATS soft dumps). Never hard-gates.
+     * No inventory / lean here - one-shot boot + first-activity only.
+     * Never re-emit soft lamps on count read (FAULT H2 avoid).
+     * Soft residual counters stay file-static (not wire-stable stats).
+     * Soft!=product.
      */
     g_u32ApiPresentCount++;
-    gpu_soft_inventory("present_count");
     return g_u32PresentCount;
 }

@@ -34,14 +34,26 @@
  *   greppable: GJ_SO_SOFT_DEEPEN
  *   greppable: GJ_SO_SOFT_PATH
  *   greppable: GJ_SO_SOFT_NOTE
+ *   greppable: GJ_SO_SOFT_RESIDUAL
  *   greppable: libgj-so: soft deepen wave=70
- * Soft batches live under src/ (unwired). Diagnostics only —.
+ * Soft batches live under src/ (unwired). Diagnostics only.
  *
  * Soft inventory (Wave 126 exclusive deepen):
  *   libgj-so: soft inventory wave=70 surfaces=12 caps=0x1f stamp=SYSV
  *   libgj-so: soft deepen wave=70 areas=export,init,get,hash,stamp,caps,
  *              probe,touch,path,inventory,wave,note
  *   libgj-so: soft path hash=sysv soname=libgj-so.so.1
+ *
+ * ---------------------------------------------------------------------------
+ * C2 lib residual Soft!=product (exclusive residual; stamp-free)
+ * ---------------------------------------------------------------------------
+ * Soft deepen dynsyms enrich SysV DT_HASH only. Soft residual honesty never
+ * closes Dual DoD A/B, never lights bar3, never is Linux .ko product AC.
+ * Soft!=product; G-AC-1; Dual DoD A/B OPEN; dual MIT OR Apache-2.0.
+ * ASCII Soft!=product only; no nested comments; no GJ_IMAGE_VERSION invent.
+ * greppable: Soft!=product | libgj-so: soft residual | Dual DoD OPEN | G-AC-1
+ * greppable: libgj-so: soft residual Soft!=product
+ * greppable: dual_dod_a=OPEN dual_dod_b=OPEN residual_lean=1 stamp_free=1
  */
 #include <stddef.h>
 #include <stdint.h>
@@ -85,6 +97,7 @@ static volatile uint32_t g_u32SoftHashN;
 static volatile uint32_t g_u32SoftInvN;
 static volatile uint32_t g_u32SoftDeepenN;
 static volatile uint32_t g_u32SoftPathN;
+static volatile uint32_t g_u32SoftResidualN;
 
 /*
  * Cold soft inventory blob (rodata). Never consulted by hot product path.
@@ -97,9 +110,9 @@ static const char g_szSoSoftInventory[] =
     "symbols=gj_so_export,gj_so_init,gj_so_get_export,gj_so_sysv_hash,"
     "gj_so_soft_stamp,gj_so_soft_caps,gj_so_soft_get,gj_so_soft_id,"
     "gj_so_soft_probe,gj_so_soft_touch,gj_so_soft_inventory,"
-    "gj_so_soft_deepen,gj_so_soft_path,gj_so_soft_note "
+    "gj_so_soft_deepen,gj_so_soft_path,gj_so_soft_note,gj_so_soft_residual "
     "policy=freestanding,sysv_hash,no_libc,soft_null "
-    "deepen=wave17 hot_path=clean multi_server=0 confine=0";
+    "deepen=wave17 hot_path=clean multi_server=0 confine=0 Soft!=product";
 
 /*
  * Wave 126 soft deepen stamp.
@@ -110,7 +123,8 @@ static const char g_szSoSoftDeepen[] =
     "libgj-so: soft deepen wave=70 areas=12 "
     "export,init,get,hash,stamp,caps,probe,touch,path,inventory,wave,note "
     "product_export=0x42 soft_stamp=SYSV hot_path=clean "
-    "multi_server=0 confine=0 "
+    "multi_server=0 confine=0 Soft!=product G-AC-1=1 "
+    "dual_dod_a=OPEN dual_dod_b=OPEN residual_lean=1 "
     "retgradientangle=1 retblendangle=1 continuum_toward=26800 soft_ne_product=1 wave=126";
 /*
  * Soft path honesty line.
@@ -120,17 +134,32 @@ static const char g_szSoSoftDeepen[] =
 static const char g_szSoSoftPath[] =
     "libgj-so: soft path hash=sysv soname=libgj-so.so.1 "
     "export=0x42 freestanding=1 pure_c=1 no_heap=1 no_libc=1 "
-    "multi_server=0 confine=0 (soft inventory)";
+    "multi_server=0 confine=0 Soft!=product (soft inventory)";
 
 /*
- * Soft honesty line (Wave 126 exclusive).
+ * Soft honesty line (Wave 126 exclusive + C2 residual Soft!=product).
  * Grep: libgj-so: soft honesty
- * Grep: libgj-so: soft retgradientangle / retblendangle (CREATE-ONLY soft ≠ product)
+ * Grep: libgj-so: soft retgradientangle / retblendangle (CREATE-ONLY Soft!=product)
  */
 static const char g_szSoSoftHonesty[] =
     "libgj-so: soft honesty multi_server=0 confine=0 exclusive=1 "
-    "soft=1 product_kernel=OPEN wave=70 "
+    "soft=1 product_kernel=OPEN wave=70 Soft!=product G-AC-1=1 "
+    "dual_dod_a=OPEN dual_dod_b=OPEN residual_lean=1 stamp_free=1 "
     "retgradientangle=1 retblendangle=1 continuum_toward=26800 soft_ne_product=1 wave=126";
+
+/*
+ * C2 lib residual Soft!=product honesty (cold rodata; stamp-free).
+ * Soft residual enrich only — not Dual DoD close / not bar3 / not .ko AC.
+ * Grep: libgj-so: soft residual
+ * greppable: GJ_SO_SOFT_RESIDUAL / Soft!=product / Dual DoD OPEN / G-AC-1
+ */
+static const char g_szSoSoftResidual[] =
+    "libgj-so: soft residual Soft!=product dual_dod_a=OPEN dual_dod_b=OPEN "
+    "G-AC-1=1 multi_server=0 confine=0 exclusive=1 residual_lean=1 "
+    "product_export=0x42 hash=sysv soname=libgj-so.so.1 "
+    "dual=MIT_OR_Apache-2.0 soft=1 product_kernel=OPEN stamp_free=1 "
+    "soft_ne_product=1 hot_path=clean no_ko=1";
+
 /* Soft area name catalog (Wave 111; cold only). */
 static const char *const g_apszSoSoftAreas[] = {
 	"export",
@@ -292,6 +321,20 @@ const char *
 gj_so_soft_honesty(void)
 {
 	return g_szSoSoftHonesty;
+}
+
+/*
+ * C2 lib residual Soft!=product accessor (cold; never hard-fails product).
+ * Soft residual honesty only — Dual DoD A/B stay OPEN; G-AC-1; stamp-free.
+ * Grep: libgj-so: soft residual
+ * greppable: GJ_SO_SOFT_RESIDUAL / Soft!=product
+ */
+const char *
+gj_so_soft_residual(void)
+{
+	/* greppable: GJ_SO_SOFT_RESIDUAL */
+	g_u32SoftResidualN++;
+	return g_szSoSoftResidual;
 }
 
 /* Cold soft inventory: Wave 111 stamp. Grep: libgj-so: soft wave= */

@@ -1,0 +1,5 @@
+created=0
+already_existed=400
+planned=400
+range=53201..53600
+note=CREATE-ONLY O_EXCL: full range already present (identity+decade lamps). Emitter landed at _emit_wave_53600_once.py for re-run.

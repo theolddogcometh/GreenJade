@@ -2,8 +2,8 @@
  * SPDX-License-Identifier: MIT OR Apache-2.0
  * Copyright (c) 2026 Project GreenJade contributors
  *
- * Session door — userspace sessiond hand-off surface (A1 / Proton T0).
- * Pure C11 freestanding, dual MIT OR Apache-2.0.
+ * Session door - userspace sessiond hand-off surface (A1 / Proton T0).
+ * Pure C11 freestanding. Dual MIT OR Apache-2.0. Soft!=product.
  *
  * Dispatched via GJ_SYS_SESSION (arg0 = opcode). Ownership token 0 means
  * the kernel interim owns policy; a non-zero claim means sessiond owns
@@ -11,7 +11,7 @@
  * a full userspace compositor takes over MAP_SCANOUT / PRESENT_FB.
  *
  * Dispatch contract:
- *   session_door_call(op, arg1, arg2, arg3) → i64
+ *   session_door_call(op, arg1, arg2, arg3) -> i64
  *   Success: 0, 1 (INPUT_POP filled), or soft positive counts
  *   Errors:  negative GJ_ERR_* (BUSY / FAULT / INVAL / NODEV soft)
  *
@@ -25,13 +25,27 @@
  *   Dimensions clamped to compositor bring-up tile (≤ 256; session door
  *   matches GJ_SESS_MAX_DIM).
  *
+ * Lean soft residual (impl session_door.c exclusive; Soft!=product dual):
+ *   Functional once-lamp: ops/dims/path/lic self-check (GJ_SESS_LEAN_CHECKS).
+ *   Path honesty: claim -> present/FB -> input hub -> map scanout.
+ *   Emission: first product call / diag readers (claim_count, user_presents)
+ *   once-lamp only - no stamp storms on every diagnostic re-read.
+ *   Soft inventory capped (GJ_SESS_SOFT_LOG_CAP) for init/first/STATS greps.
+ *   Never hard-gates; diagnostics only. Soft residual != desktop product.
+ *   Product mint OPEN; desktop_product OPEN. No bar3 close claims here
+ *   (LAW: dual MIT/Apache Soft!=product; bar3 OPEN — see STEAM_BAR3_STATUS).
+ *   greppable: session_door: soft residual lean
+ *   greppable: session_door: soft residual lean PASS
+ *   greppable: Soft!=product | product=0 | desktop_product=OPEN
+ *
  * User pointers: copy_{to,from}_user when the range is in the user VA
  * window; early kernel smokes may pass HHDM/static buffers.
  *
- * Greppable product markers (keep ABI stable):
+ * Greppable product markers (keep ABI stable; soft smoke only):
  *   session_door: PASS / ownership PASS
  *   session_door claim soft
  *   compositor multi-frame soft (via PRESENT_FB / present_n)
+ * Soft smoke PASS != desktop compositor product DoD; Soft!=product.
  */
 #pragma once
 
@@ -39,11 +53,11 @@
 
 /* Session door opcodes (arg0 when using GJ_SYS_SESSION) */
 #define GJ_SESS_OP_PRESENT      1u /* present current scanout (compositor) */
-#define GJ_SESS_OP_DISPLAY_INFO 2u /* arg1 → user u32[2] {w, h} */
+#define GJ_SESS_OP_DISPLAY_INFO 2u /* arg1 -> user u32[2] {w, h} */
 #define GJ_SESS_OP_INPUT_POLL   3u /* drain virtio-input into hub */
-#define GJ_SESS_OP_INPUT_POP    4u /* arg1 → gj_input_event; ret 1/0 */
+#define GJ_SESS_OP_INPUT_POP    4u /* arg1 -> gj_input_event; ret 1/0 */
 /**
- * STATS: arg1 → user u32[5]
+ * STATS: arg1 -> user u32[5]
  *   [0] compositor presents (lifetime success)
  *   [1] input events pushed (lifetime)
  *   [2] door call count
@@ -73,8 +87,8 @@
 #define GJ_SESS_OP_RELEASE      8u
 /**
  * Map scanout FB (interim VA hint, not a true userspace map):
- *   arg1 → user u64 VA hint
- *   arg2 → user u32[3] {w, h, stride_bytes}
+ *   arg1 -> user u64 VA hint
+ *   arg2 -> user u32[3] {w, h, stride_bytes}
  * Soft: reports compositor geometry; full map is product follow-on.
  */
 #define GJ_SESS_OP_MAP_SCANOUT  9u

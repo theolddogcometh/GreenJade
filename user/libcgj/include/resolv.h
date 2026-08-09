@@ -21,6 +21,16 @@
  * ---------
  * Full POSIX/Linux completeness; stubs and soft fills may return ENOSYS
  * until the hybrid ABI path is wired. See docs/GLIBC_COMPAT.md.
+ *
+ * Soft residual (C2 libcgj resolv.h; Soft!=product; G-AC-1; Dual DoD A/B OPEN):
+ *   soft     = __res_state + res_init/res_query/res_search stubs (no real DNS
+ *              in libc; DNS may live in netstackd later)
+ *   product  = Dual DoD B = rtl8168_udx + DDI + netstackd (OPEN); freestanding SKIP
+ *   honesty  = resolv soft != product DNS close; agent PASS != Dual DoD close;
+ *              stamp-free bar honesty (no version stamp); G-AC-1 no .ko AC
+ *   law      = dual MIT OR Apache-2.0; no GPL; H1 no net_eth_poll from IRQ;
+ *              H2 no stamp storms
+ * greppable: libcgj: resolv soft residual Soft!=product
  */
 #pragma once
 

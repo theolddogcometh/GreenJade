@@ -3,7 +3,7 @@
  * Copyright (c) 2026 Project GreenJade contributors
  *
  * Hybrid Option C: classify + hot handlers + cold personality hook.
- * Pure C11 clean-room — dual MIT OR Apache-2.0. No Linux/GPL source.
+ * Pure C11 clean-room - dual MIT OR Apache-2.0. No Linux/GPL source.
  *
  * -------------------------------------------------------------------------
  * Role
@@ -18,26 +18,66 @@
  *        │ SYSCALL
  *        ▼
  *   gj_linux_syscall_dispatch
- *        ├─ HOT  → gj_linux_hot_* (+ user_copy, CapJit, PA futex)
- *        ├─ COLD → cold_ipc_submit → doors / service / queue
- *        └─ NONE → -ENOSYS
+ *        ├─ HOT  -> gj_linux_hot_* (+ user_copy, CapJit, PA futex)
+ *        ├─ COLD -> cold_ipc_submit -> doors / service / queue
+ *        └─ NONE -> -ENOSYS
+ *
+ * -------------------------------------------------------------------------
+ * Lean residual (this header + linux_dispatch.c only; Soft!=product)
+ * -------------------------------------------------------------------------
+ * Exclusive residual deepen is the dispatch-table cold/hot split and the
+ * product personality route honesty - NOT freestanding rtl / UDX thrash.
+ * Soft!=product. G-AC-1 (no Linux .ko product AC). Dual MIT OR Apache-2.0.
+ * No version stamp. No stamp storms. Never hard-gates hybrid product.
+ *
+ * Cold/hot split honesty (soft once-lamp residual; deepen):
+ *   PATH_HOT  = in-kernel gj_linux_hot_* (may soft-defer -ENOSYS -> cold)
+ *   PATH_COLD = personality (cold_ipc doors/service/queue, or legacy hook)
+ *   PATH_NONE = -ENOSYS (in-table unregistered or OOR as NONE-shaped)
+ *   Static claim: hot_slots + cold_slots + none_slots (+ path_bad) == table
+ *   Armed honesty: armed_ok when every PATH_HOT has non-NULL pfn
+ *   split_ok when hybrid both sides live, armed_ok, path_bad==0
+ *   Runtime path split tallies: hot_direct | hot_defer | hot_null |
+ *     cold_ipc | cold_leg | cold_bare | path_none | oor
+ *   Soft bp: table slot share + runtime path share (basis points; soft only)
+ *   hot_may_defer=1 (HOT -ENOSYS falls through to personality)
+ *   freestanding_thrash=0 (dispatch residual only - not rtl/UDX wire)
+ *   greppable: linux: dispatch soft residual cold_hot split
+ *
+ * Product personality residual (soft once-lamp residual; deepen):
+ *   Cold NRs are libprotonrt-shaped (docs/PROTON_PERSONALITY.md).
+ *   Prefer cold_ipc_personality_attached() (doors/service) over legacy
+ *   g_pfnCold; bare ENOSYS when neither bound.
+ *   pers_route: 2=attached preferred, 1=legacy only, 0=bare
+ *   pers_prefer_ok=1 when attached is preferred route (product shape)
+ *   cold_route bp: ipc | leg | bare share of cold hits (soft only)
+ *   init_module / delete_module / finit_module stay PATH_COLD eng residual
+ *   only - never product .ko AC (G-AC-1). freestanding_thrash=0.
+ *   greppable: linux: dispatch soft residual personality
+ *
+ * Shared lean residual rollup:
+ *   greppable: linux: dispatch soft residual lean
+ *   greppable: linux: soft residual lean
+ *   greppable: Soft!=product | soft_ne_product=1 | G-AC-1 | freestanding_thrash=0
  *
  * Soft product surfaces
  * ---------------------
  *   greppable: "linux: nr class soft"
+ *   greppable: "linux: dispatch soft"
  *   greppable: GJ_LINUX_NR_TABLE
- *   gj_linux_nr_class_stats — table inventory + runtime deepen
- *   gj_linux_nr_class_soft_log — safe pre-init (idle NONE); PASS needs integrity
+ *   gj_linux_nr_class_stats - table inventory + runtime deepen
+ *   gj_linux_nr_class_soft_log - safe pre-init (idle NONE); PASS needs integrity
  *   Coarse hits also mirrored on gj_linux_dispatch_stats (syscall.h)
  *
  * Registration contract
  * ---------------------
  *   set_hot / set_cold fill a sparse table of size GJ_LINUX_NR_TABLE.
  *   Must cover the highest NR registered (currently ≤ 456).
- *   OOR or NULL hot pfn → reject (soft-counted); cold may be NULL → ENOSYS.
+ *   OOR or NULL hot pfn -> reject (soft-counted); cold may be NULL -> ENOSYS.
  *
  * Related: gj/linux_abi.h (NRs, path enum, regs), gj/cold_ipc.h,
- *          gj/syscall.h (top-level route), gj/process.h (current PCB).
+ *          gj/syscall.h (top-level route), gj/process.h (current PCB),
+ *          docs/LINUX_ABI_HYBRID.md, docs/PROTON_PERSONALITY.md.
  */
 #pragma once
 
@@ -46,7 +86,7 @@
 #include <gj/types.h>
 
 /*
- * Sparse index table for Linux NR → path/hot fn.
+ * Sparse index table for Linux NR -> path/hot fn.
  * Must cover highest NR we set_hot/set_cold (currently ≤ 456).
  * Slots default PATH_NONE until init registers the product hot/cold set.
  */
@@ -87,7 +127,7 @@ void gj_linux_set_cold_handler(gj_linux_cold_fn_t pfn, void *pCtx);
 void gj_protonrt_attach_cold(void);
 
 /**
- * Classify NR → HOT / COLD / NONE (gj_linux_path from linux_abi.h).
+ * Classify NR -> HOT / COLD / NONE (gj_linux_path from linux_abi.h).
  * OOR NRs behave as NONE for dispatch (ENOSYS + soft u64Oor).
  */
 enum gj_linux_path gj_linux_classify(u64 u64Nr);
@@ -102,17 +142,29 @@ void gj_linux_syscall_dispatch(struct gj_linux_regs *pRegs);
 /**
  * Deep NR-table classification + set_hot/set_cold coverage inventory.
  *
- * Slot fields (u32HotSlots/Cold/None/…) are filled by a post-init scan of
+ * Slot fields (u32HotSlots/Cold/None/...) are filled by a post-init scan of
  * the path table (authoritative). set_* Ok/Reject count registration
  * attempts. Runtime u64* deepen hybrid accounting beyond hit totals
- * (hot-defer→cold, OOR, PATH_NONE, null guard, cold route split).
+ * (hot-defer->cold, OOR, PATH_NONE, null guard, cold route split).
+ *
+ * Cold/hot split honesty (Soft!=product; residual only; deepen):
+ *   u32HotSlots / u32ColdSlots / u32NoneSlots = static table path claim.
+ *   u64HotHits  = HOT direct success (handler ret != -ENOSYS).
+ *   u64HotDeferCold / u64HotNull = HOT that fell through to cold/ENOSYS.
+ *   u64ColdHits + u64ColdIpc / u64ColdLegacy / u64ColdBare =
+ *     personality route split (attached doors/service vs legacy vs bare).
+ *   Soft residual once-lamps never rewrite these counters or hard-gate.
+ *   Residual deepen emits soft bp shares + sum_ok / split_ok / prefer_ok
+ *   honesty only - freestanding_thrash=0 (no rtl/UDX wire thrash).
  *
  * Safety: GJ_LINUX_PATH_HOT == 0, so BSS path[] looks fully HOT before
  * gj_linux_dispatch_init. soft_log / stats_get must not treat pre-init
  * tables as product coverage (g_fNrClassLive / idle NONE path).
  *
  * Soft log: gj_linux_nr_class_soft_log (greppable PASS|PARTIAL|NONE).
+ * Residual: linux: dispatch soft residual lean|cold_hot split|personality.
  * Never hard-gates product paths; wrap-OK diagnostics only.
+ * Soft!=product · G-AC-1 · dual MIT OR Apache-2.0 · freestanding_thrash=0.
  */
 struct gj_linux_nr_class_stats {
     u32 u32TableSize;    /* GJ_LINUX_NR_TABLE */
@@ -136,35 +188,35 @@ struct gj_linux_nr_class_stats {
     u64 u64HotHits;
     u64 u64ColdHits;
     u64 u64Enosys;
-    u64 u64HotDeferCold; /* HOT handler returned -ENOSYS → cold/ENOSYS */
-    u64 u64HotNull;      /* PATH_HOT runtime with NULL pfn → cold/ENOSYS */
+    u64 u64HotDeferCold; /* HOT handler returned -ENOSYS -> cold/ENOSYS */
+    u64 u64HotNull;      /* PATH_HOT runtime with NULL pfn -> cold/ENOSYS */
     u64 u64Oor;          /* NR >= table */
-    u64 u64NonePath;     /* in-table PATH_NONE → ENOSYS */
+    u64 u64NonePath;     /* in-table PATH_NONE -> ENOSYS */
     u64 u64Entries;      /* non-NULL dispatch calls */
     u64 u64NullGuard;    /* NULL pRegs early return */
     u64 u64ColdIpc;      /* cold_ipc_submit hits */
     u64 u64ColdLegacy;   /* g_pfnCold legacy hook hits */
-    u64 u64ColdBare;     /* cold/hot-defer with no personality → ENOSYS */
+    u64 u64ColdBare;     /* cold/hot-defer with no personality -> ENOSYS */
     u64 u64LastNr;       /* last NR observed (soft snapshot) */
     u64 u64LastRet;      /* last i64Ret bit pattern */
 };
 
 /**
  * Snapshot classification + coverage + runtime counters.
- * NULL pOut → no-op. Pre-init: returns zeroed inventory (no HOT=0 BSS trap).
+ * NULL pOut -> no-op. Pre-init: returns zeroed inventory (no HOT=0 BSS trap).
  */
 void gj_linux_nr_class_stats_get(struct gj_linux_nr_class_stats *pOut);
 
 /**
- * Soft inventory log (greppable; safe pre-init → idle NONE):
- *   linux: nr class soft PASS|PARTIAL|NONE hot=… cold=… none=… class=…
- *          max=… table=… set_hot=… set_cold=… rej_h=… rej_c=…
- *   linux: nr class soft hits_h=… hits_c=… enosys=… defer=… hot_null=…
- *          oor=… none_path=… max_h=… max_c=…
- *   linux: nr class soft armed=… null_slots=… path_bad=… live=…
- *          entries=… null=… cold_ipc=… cold_leg=… cold_bare=…
- *          last_nr=… last_ret=…
- *   linux: nr class soft idle (dispatch not init)   — pre-init only
+ * Soft inventory log (greppable; safe pre-init -> idle NONE):
+ *   linux: nr class soft PASS|PARTIAL|NONE hot=... cold=... none=... class=...
+ *          max=... table=... set_hot=... set_cold=... rej_h=... rej_c=...
+ *   linux: nr class soft hits_h=... hits_c=... enosys=... defer=... hot_null=...
+ *          oor=... none_path=... max_h=... max_c=...
+ *   linux: nr class soft armed=... null_slots=... path_bad=... live=...
+ *          entries=... null=... cold_ipc=... cold_leg=... cold_bare=...
+ *          last_nr=... last_ret=...
+ *   linux: nr class soft idle (dispatch not init)   - pre-init only
  */
 void gj_linux_nr_class_soft_log(void);
 
@@ -172,7 +224,7 @@ void gj_linux_nr_class_soft_log(void);
  * Hot path implementations (linux_hot.c)
  * -------------------------------------------------------------------------
  * Each returns Linux-style i64 in the hot convention (negative -errno).
- * Handlers must copy user memory with fail-closed FAULT → -EFAULT.
+ * Handlers must copy user memory with fail-closed FAULT -> -EFAULT.
  * CapJit / W|X policy is enforced on mprotect-class ops from PCB flags.
  * ------------------------------------------------------------------------- */
 

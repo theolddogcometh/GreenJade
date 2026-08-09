@@ -21,10 +21,10 @@
 #define GJ_VK_SC_MAGIC   0x53564a47u /* 'GJVS' */
 
 /* Wave 126 exclusive soft inventory stamp. */
-/* Wave 126 soft deepen surfaces (CREATE-ONLY soft ≠ product):
+/* Wave 126 soft deepen surfaces (CREATE-ONLY Soft!=product):
  *   greppable: soft retgradientangle continuum_toward=26800 soft_ne_product=1 wave=126
  *   greppable: soft retblendangle exclusive=1 continuum_toward=26800 soft_ne_product=1 wave=126
- * Soft ≠ product complete; product lamps 0;
+ * Soft!=product complete; product lamps 0; Dual DoD OPEN; G-AC-1 no .ko product AC
  */
 
 #define GJ_VK_ICD_SOFT_WAVE 70u
@@ -512,7 +512,7 @@ static const char g_szGjVkIcdSoftPath[] =
  */
 static const char g_szGjVkIcdSoftHonesty[] =
     "gj_vk_icd: soft honesty multi_server=0 confine=0 exclusive=1 "
-    "soft=1 product_kernel=OPEN wave=70";
+    "soft=1 product_kernel=OPEN wave=70 Soft!=product dual_dod=OPEN G-AC-1";
 
 /* Soft area name catalog (Wave 111; cold only). */
 static const char *const g_apszGjVkIcdSoftAreas[] = {

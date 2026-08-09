@@ -19,6 +19,17 @@
  * Non-goals
  * ---------
  * Full ISO 10646 locale multibyte state machines for every encoding.
+ *
+ * Soft residual (C2 libcgj header; Soft!=product; G-AC-1; Dual DoD A/B OPEN):
+ *   soft path  = wcs*/wmem*/mbrtowc/fwprintf UTF-8/C-locale bring-up
+ *   product    = full locale multibyte product state machines (OPEN)
+ *   catalog    = WEOF + wide string/memory + conversion + wide stdio +
+ *                open_wmemstream soft surface
+ *   honesty    = Soft!=product; complements uchar/stdio soft residual
+ *   Bar honesty v2026.08.04.75. NEVER bump GJ_IMAGE_VERSION from this unit.
+ * greppable: libcgj: soft residual wchar
+ * greppable: libcgj: soft residual wchar Soft!=product
+ * Dual MIT OR Apache-2.0. No GPL. G-AC-1. Dual DoD A/B OPEN.
  */
 #pragma once
 

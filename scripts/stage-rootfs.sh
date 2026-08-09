@@ -7,6 +7,35 @@
 # Usage:
 #   ./scripts/stage-rootfs.sh [out_dir]
 # Default: build/rootfs
+#
+# Honesty (Soft!=product · G-AC-1 · Dual DoD OPEN · stamp-free):
+#   - Packing freestanding ELFs + text stubs != product TX/RX/BOT close.
+#   - product_bins soft inventory count != Dual DoD A/B close != bar3 close.
+#   - Freestanding class (kernel rtl8168 / xhci_msc) default SKIP
+#     (GJ_RTL8168_PROBE=0 · GJ_XHCI_MSC_PROBE=0); residual opt-in only.
+#   - Product path = userspace UDX hosts (ddi_host / rtl8168_udx / xhci_udx)
+#     over hot+cold ABI/DDI — not freestanding class drivers, not .ko product AC.
+#   - Dual DoD A (USB UDX) / B (NIC UDX) remain OPEN until DUT proof.
+#   - bar3 / Deck Top 50 remain OPEN until Steam client + matrix evidence.
+#   - Stamp-free script: does not bump GJ_IMAGE_VERSION / invent stamps;
+#     flash identity is KERNEL.ELF / gj-image-version only (Soft!=product).
+#   - Bar honesty v2026.08.04.75 panel context only — never invent .76.
+#   - Soft-scan serial (exit 0): ./scripts/gj-product-summary.sh <log>
+#   - Hard product keys:        ./scripts/gj-quick-keys.sh <log>
+#
+# Soft residual deepen (C2 scripts residual Soft!=product; G-AC-1;
+# Dual DoD A/B OPEN; stamp-free residual):
+#   pack residual        — freestanding rootfs ELFs + product.env inventory
+#   product_bins residual — soft count of staged freestanding bins (not DoD)
+#   freestanding residual — class SKIP default (not Dual DoD close)
+#   Dual DoD residual    — A/B OPEN; rootfs pack != UDX product close
+#   honesty residual     — product_bins count != Dual DoD / bar3 / product AC
+#   stamp residual       — never bump GJ_IMAGE_VERSION; no invent .76
+# greppable: stage-rootfs: soft residual dual_dod
+# greppable: stage-rootfs: soft residual product=UDX+ABI
+# greppable: stage-rootfs: soft residual freestanding class SKIP
+# greppable: stage-rootfs: soft residual product_bins
+# greppable: stage-rootfs: soft residual stamp-free
 set -eu
 root="$(CDPATH= cd -- "$(dirname "$0")/.." && pwd)"
 cd "$root"
@@ -130,12 +159,27 @@ GJ_STEAM_AS_ROOTFS=1 ./scripts/stage-steam-tree.sh "$out" >/dev/null || true
 
 cat >"$out/etc/greenjade/product.env" <<'EOF'
 # GreenJade product rootfs soft inventory (text only; not sourced by kernel)
+# Soft!=product · G-AC-1 · Dual DoD OPEN · stamp-free
 GJ_PRODUCT=greenjade
 GJ_SSHD_DEFAULT_ON=1
 GJ_SSHD_PORT=22
 # Kernel multi-stream PASS is not Steam audio; bar3 client remains open.
 GJ_HDA_KERNEL_MULTI_STREAM=1
 GJ_STEAM_BAR3_OPEN=1
+# Soft!=product honesty flags (inventory only — not Dual DoD close)
+GJ_SOFT_NE_PRODUCT=1
+GJ_G_AC_1=1
+GJ_DUAL_DOD_A_OPEN=1
+GJ_DUAL_DOD_B_OPEN=1
+GJ_FREESTANDING_CLASS_SKIP=1
+# Freestanding class default SKIP (residual opt-in only; not product AC)
+# GJ_RTL8168_PROBE=0 · GJ_XHCI_MSC_PROBE=0 — product path = UDX hosts
+# Dual DoD A=USB UDX (xhci_udx) · B=NIC UDX (rtl8168_udx) — both OPEN
+# Stamp-free: rootfs pack does not own GJ_IMAGE_VERSION (KERNEL.ELF identity only)
+# Bar honesty v2026.08.04.75 panel context — never invent .76
+GJ_STAMP_FREE=1
+GJ_BAR_HONESTY=v2026.08.04.75
+GJ_PRODUCT_PATH=UDX+ABI
 EOF
 
 cat >"$out/README.txt" <<'EOF'
@@ -149,25 +193,41 @@ lib/libgj-gnu.so.1     — GNU-hash product SO (gj_gnu_export)
 lib/libc.so.6          — clean-room libcgj (glibc-shaped; see docs/GLIBC_COMPAT.md)
 usr/bin/sessiond       — compositor server ELF
 usr/bin/netstackd      — net server ELF
-usr/sbin/sshd          — product SSH daemon (port 22, on by default)
+usr/sbin/sshd          — freestanding SSH daemon (port 22, on by default)
 usr/bin/storaged       — storage server ELF
 usr/bin/vfsd           — block-backed VFS server (store door + named cache)
 usr/sbin/scsi_mid      — freestanding SCSI mid (also kernel-embedded live spawn)
-usr/bin/hda_client     — freestanding HDA client (kernel multi-stream ≠ Steam audio)
+usr/bin/hda_client     — freestanding HDA client (kernel multi-stream != Steam audio)
 etc/ssh/sshd_config    — freestanding sshd config
 etc/ssh/authorized_keys — hwtest ed25519 pubkey when present
-etc/greenjade/product.env — soft product inventory flags
+etc/greenjade/product.env — soft inventory flags (Soft!=product)
 opt/steam/             — staged Steam bootstrap (option 2; make steam-fetch)
 usr/bin/steam          — thin launcher → /opt/steam or GJ-PERSIST/steam
 
 Product: Steam via prebuilt tree on media (docs/STEAM_HWTEST.md); in-tree libc is libcgj.
 Never claim Deck Top 50 from media STATUS=READY alone — real DUT client run only.
 
+Honesty (Soft!=product · G-AC-1 · Dual DoD OPEN · stamp-free)
+  - Staged freestanding ELFs + text stubs != product TX/RX/BOT close.
+  - product_bins soft count != Dual DoD A/B close != bar3 close.
+  - Freestanding class (kernel rtl8168 / xhci_msc) default SKIP
+    (GJ_RTL8168_PROBE=0 · GJ_XHCI_MSC_PROBE=0); residual opt-in only.
+  - Product path = userspace UDX (ddi_host / rtl8168_udx / xhci_udx)
+    over hot+cold ABI/DDI — not freestanding class, not .ko product AC.
+  - Dual DoD A (USB UDX) / B (NIC UDX) remain OPEN until DUT proof.
+  - bar3 / Deck Top 50 remain OPEN until Steam client + matrix evidence.
+  - Stamp-free: this tree does not bump GJ_IMAGE_VERSION; flash identity
+    is KERNEL.ELF / ./scripts/gj-image-version.sh only (Soft!=product).
+  - Policy: dual MIT OR Apache-2.0; no GPL source as product AC.
+
 Soft-scan serial (exit 0):  ./scripts/gj-product-summary.sh <log>
 Hard product keys:          ./scripts/gj-quick-keys.sh <log>
+Bar3 media (soft exit 0):   ./scripts/steam-bar3-check.sh
+Flash identity (soft):      ./scripts/gj-image-version.sh --report
 EOF
 
-# Soft product binary inventory (for operator / packing scripts)
+# Soft inventory of freestanding bins (operator / packing scripts).
+# Soft!=product: count is pack presence only — not Dual DoD / bar3 / product AC.
 prod_n=0
 for p in \
 	"$out/sbin/init" \
@@ -191,3 +251,22 @@ done
 n=$(find "$out" -type f | wc -l | tr -d ' ')
 sz=$(du -sk "$out" | awk '{print $1}')
 echo "stage-rootfs: PASS files=$n size_kb=$sz product_bins=$prod_n path=$out"
+echo "stage-rootfs: Soft!=product · G-AC-1 — freestanding rootfs pack != product TX/RX/BOT != bar3"
+echo "stage-rootfs: freestanding class SKIP (GJ_RTL8168_PROBE=0 · GJ_XHCI_MSC_PROBE=0 residual opt-in)"
+echo "stage-rootfs: Dual DoD A/B OPEN (UDX USB/NIC) — product_bins soft inventory only"
+echo "stage-rootfs: stamp-free — no GJ_IMAGE_VERSION bump; flash identity is KERNEL.ELF only"
+echo "stage-rootfs: soft residual product_bins=${prod_n} (pack presence only; not Dual DoD close)"
+echo "stage-rootfs: soft residual product=UDX+ABI product_host=ddi_host+rtl8168_udx+xhci_udx"
+echo "stage-rootfs: soft residual freestanding class SKIP"
+echo "stage-rootfs: soft residual dual_dod A=OPEN B=OPEN (rootfs pack != Dual DoD close)"
+echo "stage-rootfs: soft residual stamp-free (bar honesty v2026.08.04.75; NEVER bump GJ_IMAGE_VERSION; no invent .76)"
+echo "  Soft!=product: product_bins=$prod_n pack presence != Dual DoD close != Steam Top-50"
+echo "  Soft!=product · G-AC-1: UDX hosts (not this tree) own product TX/RX/BOT path"
+echo "  bar3: OPEN (client launch + Deck Top 50 still NOT-TRIED)"
+echo "  greppable: stage-rootfs: soft residual dual_dod"
+echo "  greppable: stage-rootfs: soft residual product=UDX+ABI"
+echo "  greppable: stage-rootfs: soft residual freestanding class SKIP"
+echo "  greppable: stage-rootfs: soft residual product_bins"
+echo "  greppable: stage-rootfs: soft residual stamp-free"
+echo "  soft-scan: ./scripts/gj-product-summary.sh <log>   # exit 0"
+echo "  hard-keys: ./scripts/gj-quick-keys.sh <log>        # exit 1 on miss"

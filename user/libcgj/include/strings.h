@@ -18,6 +18,14 @@
  * Non-goals
  * ---------
  * Locale-aware case folding beyond C locale.
+ *
+ * Soft residual lean (this unit; Soft!=product; G-AC-1; Dual DoD A/B OPEN):
+ *   - BSD/legacy string helpers; C-locale case fold residual only
+ *   - Soft!=product: libcgj strings surface != UDX/DDI product close
+ *   - product = UDX/DDI + hot/cold Linux ABI; freestanding rtl/USB SKIP
+ *   - agent PASS != close Dual DoD; no stamp storms; bar v2026.08.04.75 parent-only
+ *   - dual MIT OR Apache-2.0; no GPL; no Linux .ko product AC (G-AC-1)
+ * Grep: libcgj strings.h: soft residual lean Soft!=product
  */
 #pragma once
 

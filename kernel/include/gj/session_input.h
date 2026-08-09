@@ -2,7 +2,7 @@
  * SPDX-License-Identifier: MIT OR Apache-2.0
  * Copyright (c) 2026 Project GreenJade contributors
  *
- * Session input hub — small fan-in ring for virtio-input (A1 path).
+ * Session input hub - small fan-in ring for virtio-input (A1 path).
  * Pure C11 freestanding, dual MIT OR Apache-2.0.
  *
  * Producers: session_input_poll (idle loop / GJ_SESS_OP_INPUT_POLL) and
@@ -16,14 +16,14 @@
  *   interim keyboard/pointer path). Drops are counted for STATS.
  *
  * Soft fan-in sources (v1 deepen):
- *   GJ_INPUT_SRC_VIRTIO — live virtio-input drain
- *   GJ_INPUT_SRC_SOFT   — soft inject / secondary producer slot
+ *   GJ_INPUT_SRC_VIRTIO - live virtio-input drain
+ *   GJ_INPUT_SRC_SOFT   - soft inject / secondary producer slot
  * Architecture is multi-source; only virtio is live at A1. Per-source
  * pushed counters support future PS/2 / tablet slots without redesign.
  *
  * Door STATS packing (session_door):
  *   pending count in flags bits 8..15 (clamped 0..255)
- *   sticky drop observed → bit16
+ *   sticky drop observed -> bit16
  *
  * Greppable:
  *   session_input fan-in

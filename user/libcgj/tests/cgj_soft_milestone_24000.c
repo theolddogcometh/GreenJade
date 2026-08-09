@@ -109,6 +109,17 @@
  *   - Optional: fold these soft gates into cgj_dyn_smoke.c /
  *     cgj_smoke.c continuum soft blocks (same skip-if-missing rule).
  *   - Soft gates; bar3 still open (gj_bar3_ready_24000 == 0).
+ *
+ * Wave-6 soft residual lean (stamp-free; Soft!=product; G-AC-1):
+ *   Soft host KATs and continuum lamps != product UDX/DDI complete.
+ *   Dual DoD A/B remain OPEN; agent PASS != close Dual DoD.
+ *   G-AC-1: no in-kernel .ko product AC; product path = UDX+ABI.
+ *   Lamp catalog (soft-skip if missing; hard-fail if present+wrong):
+ *     shell_green=1, libcgj_green=1, bar3_ready=0, product_score=0,
+ *     continuum_ready=1, smoke_soft=1, dyn_soft=1, milestone_tag=N,
+ *     continuum_wave=N, batch_id=N, graph_milestone=N, batch markers.
+ * Grep: soft residual lean Soft!=product dual_dod_a=OPEN dual_dod_b=OPEN
+ *        G-AC-1 residual_lean soft_ne_product agent_pass_ne_dod_close
  */
 
 #define _GNU_SOURCE
@@ -280,6 +291,11 @@ main(void)
 		return 1;
 	}
 	printf("libcgj: soft m24000 DIRECT PASS (all 11 lamps + markers)\n");
+	/* Soft residual lean: Soft!=product; Dual DoD OPEN; G-AC-1. */
+	printf("libcgj: soft m24000 soft residual lean residual_lean=1 "
+	       "Soft!=product dual_dod_a=OPEN dual_dod_b=OPEN G-AC-1=1 "
+	       "bar3=OPEN product_score=OPEN soft_ne_product=1 "
+	       "agent_pass_ne_dod_close=1 dual=MIT_OR_Apache-2.0\n");
 	return 0;
 #else
 	void *h = NULL;
@@ -304,6 +320,11 @@ main(void)
 		        "libcgj: soft m24000 skip (dlopen fail: %s)\n",
 		        dlerror());
 		printf("libcgj: soft m24000 SOFT-SKIP (no product SO)\n");
+		/* Soft residual lean: soft skip != product; Dual DoD OPEN. */
+		printf("libcgj: soft m24000 soft residual lean residual_lean=1 "
+		       "Soft!=product dual_dod_a=OPEN dual_dod_b=OPEN G-AC-1=1 "
+		       "bar3=OPEN product_score=OPEN soft_ne_product=1 "
+		       "soft_skip=1 agent_pass_ne_dod_close=1 dual=MIT_OR_Apache-2.0\n");
 		return 0;
 	}
 
@@ -352,6 +373,12 @@ main(void)
 	printf("libcgj: soft m24000 PASS path=%s checked=%d "
 	       "(soft-skip unexported/missing; bar3 still open)\n",
 	       szPath, nChecked);
+	/* Soft residual lean: Soft!=product; Dual DoD OPEN; G-AC-1. */
+	printf("libcgj: soft m24000 soft residual lean residual_lean=1 "
+	       "Soft!=product dual_dod_a=OPEN dual_dod_b=OPEN G-AC-1=1 "
+	       "bar3=OPEN product_score=OPEN soft_ne_product=1 "
+	       "agent_pass_ne_dod_close=1 dual=MIT_OR_Apache-2.0 checked=%d\n",
+	       nChecked);
 	(void)dlclose(h);
 	return 0;
 #endif

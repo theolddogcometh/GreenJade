@@ -222,3 +222,7 @@ Full surface (STATS/CAP/QUEUE_INFO/FLUSH, etc.): parent
 3. fsync barrier on writeback (`GJ_STORE_OP_FLUSH`).
 
 See also: [ABI-first pivot](../../docs/ABI_FIRST_PIVOT.md) (product direction).
+
+---
+
+**Project:** GreenJade pure-C microkernel · dual **MIT OR Apache-2.0** · Soft≠product · Dual DoD A/B **OPEN**. See [root README](../../README.md). Support: [Patreon — TheOldDog](https://www.patreon.com/cw/TheOldDog).

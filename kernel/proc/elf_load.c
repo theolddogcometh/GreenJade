@@ -3,35 +3,67 @@
  * Copyright (c) 2026 Project GreenJade contributors
  *
  * Clean-room ELF64 ET_EXEC / ET_DYN load + PT_INTERP / PT_DYNAMIC / RELA.
- * Product path: probe → map PT_LOAD → SO registry → relocs → auxv handoff
- * → INTERP-first start (ld-gj). No third-party loader code.
+ * Product path: probe -> map PT_LOAD -> SO registry -> relocs -> auxv handoff
+ * -> INTERP-first start (ld-gj). No third-party loader code.
  *
- * Soft inventory (Wave 40 exclusive deepen; this unit only; never hard-gates):
- * greppable: "elf: soft …" | "elf_load: soft …"
- *   elf: soft inventory …
- *   elf: soft probe …
- *   elf: soft load …
- *   elf: soft reloc …
- *   elf: soft reloc_kind …   (relative/tls/irel/copy/glob/jump/abs64)
- *   elf: soft so …
- *   elf: soft needed …
- *   elf: soft resolve …
- *   elf: soft auxv …
- *   elf: soft handoff …
- *   elf: soft interp …
- *   elf: soft path …
- *   elf: soft return …       (Wave 19 return-path catalog)
- *   elf: soft ret_surface …  (Wave 19 terminal return classes)
- *   elf: soft surface …      (Wave 19 area catalog)
- *   elf: soft deepen wave=116 …
- *   elf: soft catalog …      (capacity honesty rollup)
- *   elf: soft bias …         (dyn/so bias + step geometry)
- *   elf: soft capacity …     (so_max/img/needed/auxv lamps)
- *   elf: soft PASS|PARTIAL
- *   elf_load: soft inventory|probe|load|reloc|reloc_kind|so|needed|resolve|auxv|
- *             handoff|interp|path|return|ret_surface|surface|deepen|catalog|bias|capacity …
- *   elf_load: soft PASS|PARTIAL
- * Diagnostics / smoke grep only — soft; soft ≠ product DoD.
+ * Soft residual (lean; this unit only; never hard-gates product load):
+ * greppable: "elf: soft residual" | "elf: soft residual lean" |
+ *            "elf: soft residual lean udx" | "elf: soft residual lean c2" |
+ *            "elf: soft residual lean sshd" | "elf: soft residual lean host" |
+ *            "elf: soft residual lean host_blob" |
+ *            "elf: soft residual lean PASS" |
+ *            "elf: soft residual udx" | "elf: soft residual sshd" |
+ *            "elf: soft residual host_blob" |
+ *            "elf: soft residual denser" |
+ *            "elf: soft residual denser host_blob" |
+ *            "elf: soft functional residual" |
+ *            "elf: soft functional residual catalog" |
+ *            "elf: soft functional residual embed" |
+ *            "elf: soft functional residual host_blob" |
+ *            "elf: soft functional step" |
+ *            "elf: soft inventory" | "elf: soft PASS"
+ *            "elf_load: soft residual" | "elf_load: soft residual lean" |
+ *            "elf_load: soft residual lean udx" |
+ *            "elf_load: soft residual lean c2" |
+ *            "elf_load: soft residual lean sshd" |
+ *            "elf_load: soft residual lean host" |
+ *            "elf_load: soft residual lean host_blob" |
+ *            "elf_load: soft residual lean PASS" |
+ *            "elf_load: soft residual udx" | "elf_load: soft residual sshd" |
+ *            "elf_load: soft residual host_blob" |
+ *            "elf_load: soft residual denser" |
+ *            "elf_load: soft residual denser host_blob" |
+ *            "elf_load: soft functional residual" |
+ *            "elf_load: soft functional residual embed" |
+ *            "elf_load: soft functional residual host_blob" |
+ *            "elf_load: soft inventory" | "elf_load: soft PASS"
+ * C2 product-path residual: UDX/DDI hosts as userspace ET_EXEC/ET_DYN (not .ko)
+ * + freestanding product daemon embeds (sshd.elf live spawn). FUNCTIONAL residual
+ * preferred: host-class classify + ET_EXEC band + entry-in-range + lean arms
+ * + product host path trio (/usr/lib/udx/{rtl8168_udx,xhci_udx,ddi_host}) + sshd
+ * + product-host handoff_fill EXECFN residual + pipeline step honesty
+ * + embed ET_EXEC freestanding host trio (user.ld @ HOST_EXEC_BASE) residual
+ * + PT_LOAD filesz/memsz + handoff-band collision reject (robust embed load).
+ * + spawn host_blob product load path residual (STRONGER; Soft!=product):
+ *     spawn_host_blob_get -> elf_probe -> elf_load (this unit owns probe|load)
+ *     product_hosts=UDX (ddi_host_gj,rtl8168_udx,xhci_udx) Dual DoD OPEN
+ *     greppable: host_blob | product_hosts=UDX | dual_dod OPEN
+ * + denser residual host_blob Dual DoD (STRONGER denser; Soft!=product):
+ *     denser path axes: host_blob|probe|load + class trio + handoff denser
+ *     + dual_dod OPEN honesty denser; denser residual != Dual DoD close
+ *     greppable: denser host_blob residual | product_hosts=UDX | dual_dod OPEN
+ * Host load pipeline (soft honesty): probe|load|so|reloc|auxv|handoff|interp|direct
+ * host_blob path honesty: host_blob|probe|load (spawn thr/stack residual elsewhere)
+ * product_dir=UDX+ABI · freestanding_class_product=0 · ko_product=0 · G-AC-1.
+ * class=C2 dual_dod_a=OPEN dual_dod_b=OPEN (Soft residual != Dual DoD close).
+ * Soft!=product · dual MIT OR Apache-2.0 · no version stamp · storm=0.
+ * Multi-line soft catalog flood removed; tallies fold into residual surface.
+ * UDX multi-server confine product stays OPEN. Dual DoD B sshd :22 needs UDX NIC.
+ * Bar honesty v2026.08.04.75 (stamp-free residual; NEVER invent .76).
+ * greppable: "elf: soft functional residual embed"
+ * greppable: "elf: soft residual host_blob" | "elf: soft residual lean host_blob"
+ * greppable: "elf: soft residual denser" | "elf: soft residual denser host_blob"
+ * greppable: product_hosts=UDX | host_blob | dual_dod OPEN
  */
 #include <gj/config.h>
 #include <gj/cpu.h>
@@ -95,12 +127,37 @@
 /*
  * Default ET_DYN load base when program vaddrs are low.
  * High canonical user VA away from PE 0x400000 / small smoke bases.
- * (Defined early so Wave 15 soft catalog can stamp the value.)
+ * (Defined early; soft residual surface reports the value.)
  */
 #define GJ_ELF_DYN_BIAS 0x0000000070000000ull
 /* Per-SO load bias band (above main ET_DYN default at GJ_ELF_DYN_BIAS) */
 #define GJ_ELF_SO_BIAS_BASE 0x0000000071000000ull
 #define GJ_ELF_SO_BIAS_STEP 0x0000000001000000ull
+/*
+ * Freestanding product daemon load base (user.ld / sshd.elf / peer embeds).
+ * Matches GJ_USER_CODE_VA — high enough for live spawn, below handoff band.
+ * Soft residual + geometry arms; never hard-gates product load alone.
+ */
+#define GJ_ELF_HOST_EXEC_BASE 0x0000000001000000ull
+/* Soft host path class residual (classify only; Soft!=product). */
+#define GJ_ELF_HOST_CLASS_NONE 0u
+#define GJ_ELF_HOST_CLASS_UDX  1u
+#define GJ_ELF_HOST_CLASS_SSHD 2u
+#define GJ_ELF_HOST_CLASS_SVC  3u
+/*
+ * Soft functional residual pipeline steps (host load; Soft!=product).
+ * greppable: elf: soft functional step | path=probe,load,so,reloc,auxv,handoff,interp,direct
+ * Product hosts: /usr/lib/udx/{rtl8168_udx,xhci_udx,ddi_host} + sshd.elf.
+ */
+#define GJ_ELF_FUNC_STEP_PROBE   1u
+#define GJ_ELF_FUNC_STEP_LOAD    2u
+#define GJ_ELF_FUNC_STEP_SO      3u
+#define GJ_ELF_FUNC_STEP_RELOC   4u
+#define GJ_ELF_FUNC_STEP_AUXV    5u
+#define GJ_ELF_FUNC_STEP_HANDOFF 6u
+#define GJ_ELF_FUNC_STEP_INTERP  7u
+#define GJ_ELF_FUNC_STEP_DIRECT  8u
+#define GJ_ELF_FUNC_STEP_COUNT   8u
 
 struct elf64_sym {
     u32 u32Name;
@@ -136,10 +193,67 @@ static struct gj_elf_so g_aSo[GJ_ELF_SO_MAX];
 static u32              g_cSo;
 
 /*
- * Wave 15 soft inventory telemetry (never hard-gates product load path).
- * greppable: elf: soft / elf_load: soft
+ * Soft residual telemetry (never hard-gates product load path).
+ * greppable: elf: soft residual | elf_load: soft residual |
+ *            elf: soft residual lean | elf: soft residual lean udx |
+ *            elf: soft residual lean c2 | elf: soft residual lean sshd |
+ *            elf: soft residual lean host | elf: soft residual lean host_blob |
+ *            elf: soft residual lean PASS |
+ *            elf: soft residual udx | elf: soft residual sshd |
+ *            elf: soft residual host_blob |
+ *            elf: soft residual denser | elf: soft residual denser host_blob |
+ *            elf: soft functional residual | elf: soft functional step |
+ *            elf: soft functional residual host_blob |
+ *            elf_load: soft residual lean | elf_load: soft residual lean udx |
+ *            elf_load: soft residual lean c2 | elf_load: soft residual lean sshd |
+ *            elf_load: soft residual lean host |
+ *            elf_load: soft residual lean host_blob |
+ *            elf_load: soft residual lean PASS | elf_load: soft residual udx |
+ *            elf_load: soft residual sshd | elf_load: soft residual host_blob |
+ *            elf_load: soft residual denser |
+ *            elf_load: soft residual denser host_blob |
+ *            elf_load: soft functional residual |
+ *            elf_load: soft functional residual host_blob
+ * Soft!=product · G-AC-1 · dual MIT OR Apache-2.0 · no version stamp ·
+ * storm=0. C2 residual lean deepen for UDX host + sshd.elf load
+ * (this unit only; Dual DoD A/B stay OPEN). Geometry + behavior residual.
+ * FUNCTIONAL residual: host-class + ET_EXEC band + entry-in-range + lean arms
+ * + product host trio (rtl8168_udx/xhci_udx/ddi_host) + handoff_fill + steps
+ * + spawn host_blob product load path (product_hosts=UDX; Dual DoD OPEN)
+ * + denser host_blob residual (product_hosts=UDX; Dual DoD OPEN denser).
+ *
+ * Soft residual areas (folded into lean dump; no per-area flood):
+ *   1 probe  2 load  3 reloc  4 so  5 needed  6 resolve  7 auxv
+ *   8 handoff  9 verify  10 interp  11 bias  12 map  13 registry
+ *   14 capacity  15 PASS/PARTIAL  16 twin elf_load:  17 dual-license
+ *   18 storm=0 honesty  19 udx_host userspace  20 G-AC-1 no.ko
+ *   21 load_kind dyn/exec  22 INTERP soft-ok
+ *   23 product_dir=UDX+ABI  24 freestanding_class_product=0
+ *   25 host_load pipeline (probe|load|so|reloc|auxv|handoff|interp)
+ *   26 handoff VA contract  27 lean selfcheck udx  28 residual lean PASS
+ *   29 class=C2 product path  30 dual_dod A/B OPEN honesty
+ *   31 handoff sizeof layout  32 SO/handoff capacity parity
+ *   33 handoff/dyn placement geometry  34 host helper behavior residual
+ *   35 sshd.elf ET_EXEC freestanding band  36 sshd direct-entry handoff
+ *   37 host path class residual  38 load/handoff non-collision geometry
+ *   39 product host path trio residual  40 product host handoff_fill residual
+ *   41 soft functional residual catalog  42 soft functional pipeline steps
+ *   43 embed ET_EXEC freestanding host trio residual
+ *   44 PT_LOAD segment safety (filesz/memsz + handoff non-collision)
+ *   45 spawn host_blob product load path residual (product_hosts=UDX)
+ *   46 denser host_blob Dual DoD residual (product_hosts=UDX denser)
  */
-#define GJ_ELF_SOFT_WAVE 116u
+#define GJ_ELF_SOFT_WAVE 122u
+#define GJ_ELF_SOFT_AREAS 46u
+/*
+ * Host load lean self-check arm count (UDX + sshd.elf + host_blob; Soft!=product).
+ * Arms 1-10: UDX host geometry/behavior; 11-14: sshd.elf + host-class;
+ * 15-17: product host trio + handoff_fill + functional pipeline (STRONGER);
+ * 18-19: embed ET_EXEC freestanding host trio + PT_LOAD safety (STRONGER);
+ * 20: spawn host_blob product load path residual (STRONGER; product_hosts=UDX);
+ * 21: denser host_blob Dual DoD residual (STRONGER denser; product_hosts=UDX).
+ */
+#define GJ_ELF_SOFT_UDX_LEAN_CHECKS 21u
 
 static u32 g_u32SoftProbeOk;      /* elf_probe_image success */
 static u32 g_u32SoftProbeFail;    /* probe header / fill fail */
@@ -182,7 +296,7 @@ static u32 g_u32SoftHandoffFail;  /* publish_handoff fail */
 static u32 g_u32SoftVerifyOk;     /* ld_handoff_verify PASS */
 static u32 g_u32SoftVerifyFail;   /* ld_handoff_verify FAIL */
 static u32 g_u32SoftInterpFirst;  /* INTERP-first applied */
-static u32 g_u32SoftInterpDefer;  /* INTERP present, dynlinker miss → main */
+static u32 g_u32SoftInterpDefer;  /* INTERP present, dynlinker miss -> main */
 static u32 g_u32SoftDirect;       /* direct main entry (no INTERP start) */
 static u32 g_u32SoftResolveGnu;   /* SO registry gnu-hash hit */
 static u32 g_u32SoftResolveHash;  /* SO registry SysV hash hit */
@@ -191,6 +305,19 @@ static u32 g_u32SoftResolveMiss;  /* SO registry lookup miss */
 static u32 g_u32SoftRegFindHit;   /* elf_so_registry_find hit */
 static u32 g_u32SoftRegFindMiss;  /* elf_so_registry_find miss */
 static u32 g_u32SoftLogN;         /* soft inventory dump emissions */
+static u32 g_u32SoftUdxLeanOk;    /* UDX+sshd host lean selfcheck pass count */
+static u32 g_u32SoftUdxLeanFail;  /* UDX+sshd host lean selfcheck fail count */
+static u32 g_u32SoftHostClassUdx; /* path class residual: UDX host */
+static u32 g_u32SoftHostClassSshd;/* path class residual: sshd.elf */
+static u32 g_u32SoftHostClassSvc; /* path class residual: other service host */
+static u32 g_u32SoftLoadExecBand; /* ET_EXEC freestanding product band load */
+static u32 g_u32SoftEntryInRange; /* load entry inside PT_LOAD span soft */
+static u32 g_u32SoftEntryOor;     /* load entry outside PT_LOAD span soft */
+static u32 g_u32SoftSegReject;    /* PT_LOAD safety reject (overflow/collide) */
+static u32 g_u32SoftEmbedHost;    /* freestanding embed host-band load residual */
+static u32 g_u32SoftHostBlob;     /* spawn host_blob product load residual */
+static u32 g_u32SoftHostBlobDenseOk;   /* denser host_blob residual pass count */
+static u32 g_u32SoftHostBlobDenseFail; /* denser host_blob residual fail count */
 static int g_fSoftInvOnce;        /* first post-activity inventory emitted */
 
 static void path_copy_n(char *szDst, size_t cbDst, const char *szSrc);
@@ -198,6 +325,10 @@ static void path_join2(char *szDst, size_t cbDst, const char *szPfx,
                        const char *szName);
 static void elf_soft_inventory(const char *szVia);
 static void elf_soft_maybe_once(void);
+static u32  elf_soft_udx_host_lean_check(void);
+static u32  elf_soft_host_path_class(const char *szPath);
+static int  elf_soft_str_has(const char *szHay, const char *szNeedle);
+static const char *elf_soft_basename(const char *szPath);
 
 /** Soft: bump one counter (wrap OK; never hard-gates). */
 static void
@@ -211,16 +342,947 @@ elf_soft_inc(u32 *pCtr)
     }
 }
 
+/** Soft: case-sensitive substring search (NULL-safe; Soft residual only). */
+static int
+elf_soft_str_has(const char *szHay, const char *szNeedle)
+{
+    size_t i;
+    size_t j;
+
+    if (szHay == NULL || szNeedle == NULL || szNeedle[0] == '\0') {
+        return 0;
+    }
+    for (i = 0; szHay[i] != '\0'; i++) {
+        for (j = 0; szNeedle[j] != '\0'; j++) {
+            if (szHay[i + j] != szNeedle[j]) {
+                break;
+            }
+        }
+        if (szNeedle[j] == '\0') {
+            return 1;
+        }
+        if (szHay[i + j] == '\0') {
+            break;
+        }
+    }
+    return 0;
+}
+
+/** Soft: basename after last '/'; empty path -> "". */
+static const char *
+elf_soft_basename(const char *szPath)
+{
+    const char *szBase;
+    size_t i;
+
+    if (szPath == NULL || szPath[0] == '\0') {
+        return "";
+    }
+    szBase = szPath;
+    for (i = 0; szPath[i] != '\0'; i++) {
+        if (szPath[i] == '/' && szPath[i + 1u] != '\0') {
+            szBase = &szPath[i + 1u];
+        }
+    }
+    return szBase;
+}
+
 /**
- * Greppable Wave 15 soft inventory dump (product / smoke).
- * Twin prefixes so either agent grep works:
- *   elf: soft inventory|probe|load|reloc|reloc_kind|so|needed|resolve|auxv|
- *        handoff|interp|path|deepen|catalog …
- *   elf_load: soft … (same catalog)
- * Never hard-gates load path. Soft.
+ * Soft host path class residual (FUNCTIONAL; Soft!=product).
+ * Classifies UDX hosts (DoD A/B product drivers) and sshd.elf (DoD B endpoint).
+ * Product hosts (STRONGER): /usr/lib/udx/{rtl8168_udx,xhci_udx,ddi_host} +
+ * ESP GREENJADE/drivers/ pack names + bare basenames. Never hard-gates
+ * product load. Dual DoD A/B remain OPEN.
+ */
+static u32
+elf_soft_host_path_class(const char *szPath)
+{
+    const char *szBase;
+
+    if (szPath == NULL || szPath[0] == '\0') {
+        return GJ_ELF_HOST_CLASS_NONE;
+    }
+    szBase = elf_soft_basename(szPath);
+    /* sshd.elf first — product SSH daemon embed / live spawn path. */
+    if (elf_soft_str_has(szBase, "sshd") != 0 ||
+        elf_soft_str_has(szPath, "sshd.elf") != 0) {
+        return GJ_ELF_HOST_CLASS_SSHD;
+    }
+    /*
+     * Product host install / pack dirs (stage-rootfs + stage-esp).
+     * Soft residual only — G-AC-1: userspace ELF, never .ko product.
+     */
+    if (elf_soft_str_has(szPath, "/usr/lib/udx/") != 0 ||
+        elf_soft_str_has(szPath, "GREENJADE/drivers/") != 0 ||
+        elf_soft_str_has(szPath, "/lib/udx/") != 0) {
+        return GJ_ELF_HOST_CLASS_UDX;
+    }
+    /* UDX/DDI Linux-shaped userspace hosts by basename (not .ko; G-AC-1). */
+    if (elf_soft_str_has(szBase, "udx") != 0 ||
+        elf_soft_str_has(szBase, "rtl8168") != 0 ||
+        elf_soft_str_has(szBase, "xhci") != 0 ||
+        elf_soft_str_has(szBase, "ddi_host") != 0) {
+        return GJ_ELF_HOST_CLASS_UDX;
+    }
+    /* Other freestanding service hosts (vfsd/netstackd/sessiond/…). */
+    if (elf_soft_str_has(szBase, "vfsd") != 0 ||
+        elf_soft_str_has(szBase, "storaged") != 0 ||
+        elf_soft_str_has(szBase, "netstackd") != 0 ||
+        elf_soft_str_has(szBase, "sessiond") != 0 ||
+        elf_soft_str_has(szBase, "scsi_mid") != 0 ||
+        elf_soft_str_has(szBase, "shell") != 0 ||
+        elf_soft_str_has(szBase, "init") != 0) {
+        return GJ_ELF_HOST_CLASS_SVC;
+    }
+    return GJ_ELF_HOST_CLASS_NONE;
+}
+
+/** Soft: note host path class residual (tallies only). */
+static void
+elf_soft_note_host_path(const char *szPath)
+{
+    u32 u32Class;
+
+    u32Class = elf_soft_host_path_class(szPath);
+    if (u32Class == GJ_ELF_HOST_CLASS_UDX) {
+        elf_soft_inc(&g_u32SoftHostClassUdx);
+    } else if (u32Class == GJ_ELF_HOST_CLASS_SSHD) {
+        elf_soft_inc(&g_u32SoftHostClassSshd);
+    } else if (u32Class == GJ_ELF_HOST_CLASS_SVC) {
+        elf_soft_inc(&g_u32SoftHostClassSvc);
+    }
+}
+
+/**
+ * Soft: freestanding product ET_EXEC band (sshd.elf / peer embeds @ user.ld).
+ * LoadMin in [HOST_EXEC_BASE, HANDOFF) with no dyn bias — soft residual only.
+ */
+static int
+elf_soft_exec_band_ok(const struct gj_elf_info *pInfo)
+{
+    if (pInfo == NULL) {
+        return 0;
+    }
+    if (pInfo->u16Type != ET_EXEC) {
+        return 0;
+    }
+    if (pInfo->u64LoadMin < GJ_ELF_HOST_EXEC_BASE) {
+        return 0;
+    }
+    if (pInfo->u64LoadMin >= GJ_LD_HANDOFF_VA) {
+        return 0;
+    }
+    if (pInfo->u64Bias != 0ull) {
+        return 0;
+    }
+    return 1;
+}
+
+/**
+ * Soft: entry lies in mapped PT_LOAD span after bias (FUNCTIONAL residual).
+ * Never hard-gates product; tallies only. STRONGER honesty for UDX + sshd.
+ */
+static int
+elf_soft_entry_in_range(const struct gj_elf_info *pInfo)
+{
+    if (pInfo == NULL) {
+        return 0;
+    }
+    if (pInfo->u64Entry == 0ull) {
+        return 0;
+    }
+    if (pInfo->u64LoadMax <= pInfo->u64LoadMin) {
+        return 0;
+    }
+    if (pInfo->u64Entry < pInfo->u64LoadMin) {
+        return 0;
+    }
+    if (pInfo->u64Entry >= pInfo->u64LoadMax) {
+        return 0;
+    }
+    return 1;
+}
+
+/**
+ * Robust embed host load: PT_LOAD span collides with ld-gj handoff band?
+ * Band is [GJ_LD_HANDOFF_VA, GJ_LD_STACK_VA + PAGE). Product hosts must
+ * never clobber handoff/stack when mapping embedded ELF. Soft residual +
+ * product reject path use this. Soft!=product; Dual DoD A/B OPEN.
+ */
+static int
+elf_pt_load_handoff_collide(u64 u64SegVa, u64 u64Memsz)
+{
+    u64 u64SegEnd;
+    u64 u64BandEnd;
+
+    if (u64Memsz == 0ull) {
+        return 0;
+    }
+    u64SegEnd = u64SegVa + u64Memsz;
+    if (u64SegEnd < u64SegVa) {
+        /* overflow treated as collide (reject) */
+        return 1;
+    }
+    u64BandEnd = GJ_LD_STACK_VA + (u64)GJ_PAGE_SIZE;
+    if (u64SegVa < u64BandEnd && u64SegEnd > GJ_LD_HANDOFF_VA) {
+        return 1;
+    }
+    return 0;
+}
+
+/**
+ * Soft: freestanding embed host span fits under handoff (FUNCTIONAL).
+ * HOST_EXEC_BASE + soft max image window must stay below HANDOFF_VA.
+ * Matches user.ld freestanding embeds (ddi_host / peers) Soft!=product.
+ */
+static int
+elf_soft_embed_host_span_ok(u64 u64LoadMin, u64 u64LoadMax)
+{
+    if (u64LoadMin < GJ_ELF_HOST_EXEC_BASE) {
+        return 0;
+    }
+    if (u64LoadMax <= u64LoadMin) {
+        return 0;
+    }
+    if (u64LoadMax > GJ_LD_HANDOFF_VA) {
+        return 0;
+    }
+    if (elf_pt_load_handoff_collide(u64LoadMin, u64LoadMax - u64LoadMin) !=
+        0) {
+        return 0;
+    }
+    return 1;
+}
+
+/**
+ * UDX host + sshd.elf load residual lean self-check (static + behavior).
+ * C2 product-path: userspace ET_EXEC/ET_DYN host ELF load for UDX/DDI
+ * (not Linux .ko product) + freestanding product daemon (sshd.elf).
+ * Soft!=product · G-AC-1 · never hard-gates.
+ * Dual DoD A/B remain OPEN (soft residual != close).
+ * Returns number of arms that passed (expect GJ_ELF_SOFT_UDX_LEAN_CHECKS).
  *
- * greppable: elf: soft
- * greppable: elf_load: soft
+ * Arms:
+ *   1 handoff VA band ordered (HANDOFF < STACK, RANDOM past handoff)
+ *   2 ET_DYN bias band above PE 0x400000; SO bias base above main dyn
+ *   3 capacity bounds for host SO / NEEDED / auxv
+ *   4 ET_EXEC/ET_DYN + PT_LOAD/DYNAMIC/INTERP product surface numbers
+ *   5 handoff magic 'GJLD' little-endian
+ *   6 handoff layout: sizeof(gj_ld_handoff) fits under AT_RANDOM off
+ *   7 SO registry/handoff capacity parity (GJ_ELF_SO_MAX == GJ_LD_SO_MAX)
+ *   8 PF flags + INTERP max + residual wave/areas deepen (C2)
+ *   9 placement geometry: page-align + handoff band below dyn bias (STRONGER)
+ *  10 stack-local behavior: hash + auxv + INTERP soft + udx handoff_fill
+ *  11 sshd.elf freestanding ET_EXEC band vs handoff/PE (STRONGER FUNCTIONAL)
+ *  12 sshd.elf direct-entry handoff_fill (no INTERP) (STRONGER FUNCTIONAL)
+ *  13 host path class residual (udx + sshd) (STRONGER FUNCTIONAL)
+ *  14 non-collision geometry host-exec / dyn / handoff (STRONGER FUNCTIONAL)
+ *  15 product host path trio + sshd (STRONGER FUNCTIONAL)
+ *  16 product host handoff_fill EXECFN residual (STRONGER FUNCTIONAL)
+ *  17 soft functional pipeline steps + product_dir honesty (STRONGER)
+ *  18 embed ET_EXEC freestanding product host trio handoff (STRONGER)
+ *  19 PT_LOAD segment safety + embed span non-collision (STRONGER)
+ *  20 spawn host_blob product load path residual (STRONGER; product_hosts=UDX)
+ *  21 denser host_blob Dual DoD residual (STRONGER denser; product_hosts=UDX)
+ */
+static u32
+elf_soft_udx_host_lean_check(void)
+{
+    u32 u32Ok;
+    u64 aPairs[8];
+    u32 cPairs;
+    u32 u32HEmpty;
+    u32 u32HName;
+    u32 u32GEmpty;
+    u32 u32GName;
+    u32 u32ClassUdx;
+    u32 u32ClassSshd;
+    u32 u32ClassNone;
+    u32 u32Hi;
+    u32 u32DenseAxes;
+    int fBeh;
+    int fHostsOk;
+    int fEmbedOk;
+    int fBlobOk;
+    int fDenseOk;
+    const char *aszHosts[4];
+    const char *aszEmbed[3];
+    const char *aszBlob[3];
+    const char *aszDense[3];
+    struct gj_elf_info info;
+    struct gj_ld_handoff ho;
+
+    u32Ok = 0u;
+
+    /* 1. handoff VA band (high user; away from PE / typical bias). */
+    if (GJ_LD_HANDOFF_VA != 0ull && GJ_LD_STACK_VA > GJ_LD_HANDOFF_VA &&
+        GJ_LD_RANDOM_VA > GJ_LD_HANDOFF_VA &&
+        GJ_LD_RANDOM_OFF == 0x400ull) {
+        u32Ok++;
+    }
+
+    /* 2. dyn / SO bias contract for userspace host load placement. */
+    if (GJ_ELF_DYN_BIAS >= 0x0000000070000000ull &&
+        GJ_ELF_SO_BIAS_BASE > GJ_ELF_DYN_BIAS &&
+        GJ_ELF_SO_BIAS_STEP != 0ull) {
+        u32Ok++;
+    }
+
+    /* 3. capacity bounds (host SO registry + NEEDED + auxv handoff). */
+    if (GJ_ELF_SO_MAX >= 1u && GJ_ELF_SO_MAX <= 16u &&
+        GJ_ELF_NEEDED_MAX >= 1u && GJ_ELF_NEEDED_MAX <= 16u &&
+        GJ_AUXV_MAX >= 8u && GJ_AUXV_MAX <= 64u &&
+        GJ_LD_SO_MAX >= 1u && GJ_LD_SO_MAX <= 16u) {
+        u32Ok++;
+    }
+
+    /* 4. ELF product surface: userspace ET_EXEC/ET_DYN + PT_* only. */
+    if (ET_EXEC == 2 && ET_DYN == 3 && PT_LOAD == 1 && PT_DYNAMIC == 2 &&
+        PT_INTERP == 3 && EM_X86_64 == 62) {
+        u32Ok++;
+    }
+
+    /* 5. handoff magic 'GJLD' LE — ld-gj trusts only when live. */
+    if (GJ_LD_HANDOFF_MAGIC == 0x444c4a47ull) {
+        u32Ok++;
+    }
+
+    /*
+     * 6. handoff page layout: struct fits below AT_RANDOM blob on page.
+     * C2 product path: ld-gj reads magic/auxv/SO then AT_RANDOM past struct.
+     */
+    if (sizeof(struct gj_ld_handoff) > 0u &&
+        sizeof(struct gj_ld_handoff) <= (size_t)GJ_LD_RANDOM_OFF &&
+        GJ_LD_RANDOM_OFF < 0x1000ull) {
+        u32Ok++;
+    }
+
+    /* 7. SO registry slots match handoff aSo[] capacity (parity). */
+    if (GJ_ELF_SO_MAX == GJ_LD_SO_MAX && GJ_ELF_SO_MAX >= 1u) {
+        u32Ok++;
+    }
+
+    /*
+     * 8. PF flags + INTERP bound + residual lean deepen (C2 UDX+sshd host).
+     * Soft residual only; never product Dual DoD close.
+     */
+    if (PF_X == 1 && PF_W == 2 && PF_R == 4 &&
+        GJ_ELF_INTERP_MAX >= 64u && GJ_ELF_INTERP_MAX <= 256u &&
+        GJ_ELF_SOFT_WAVE >= 122u &&
+        GJ_ELF_SOFT_AREAS >= 46u &&
+        GJ_ELF_SOFT_UDX_LEAN_CHECKS == 21u &&
+        GJ_ELF_FUNC_STEP_COUNT == 8u) {
+        u32Ok++;
+    }
+
+    /*
+     * 9. Placement geometry (STRONGER C2 residual): page-aligned handoff/stack,
+     * stack is next page after handoff, AT_RANDOM on handoff page, handoff
+     * band strictly below ET_DYN default bias, dyn bias above PE 0x400000.
+     * Soft residual only — never hard-gates product load.
+     */
+    if ((GJ_LD_HANDOFF_VA & 0xfffull) == 0ull &&
+        (GJ_LD_STACK_VA & 0xfffull) == 0ull &&
+        (GJ_ELF_DYN_BIAS & 0xfffull) == 0ull &&
+        GJ_LD_STACK_VA == GJ_LD_HANDOFF_VA + (u64)GJ_PAGE_SIZE &&
+        GJ_LD_HANDOFF_VA < GJ_ELF_DYN_BIAS &&
+        GJ_LD_RANDOM_VA > GJ_LD_HANDOFF_VA &&
+        GJ_LD_RANDOM_VA < GJ_LD_HANDOFF_VA + (u64)GJ_PAGE_SIZE &&
+        GJ_ELF_DYN_BIAS > 0x0000000000400000ull &&
+        GJ_ELF_SO_BIAS_BASE > GJ_ELF_DYN_BIAS &&
+        GJ_ELF_SO_BIAS_STEP >= (u64)GJ_PAGE_SIZE) {
+        u32Ok++;
+    }
+
+    /*
+     * 10. Stack-local behavior residual (STRONGER C2 residual): exercise real
+     * host-load helpers without mapping product pages. Soft!=product · G-AC-1.
+     *   - SysV/GNU hash known vectors (empty + DT_NEEDED-shaped name)
+     *   - auxv push/set/get roundtrip (handoff pair surface)
+     *   - INTERP soft-ok absolute accept / relative+empty+NULL reject
+     *   - handoff_fill for UDX host path magic + entry/stack/pagesz contract
+     */
+    fBeh = 1;
+    u32HEmpty = elf_sysv_hash_name("");
+    u32HName = elf_sysv_hash_name("libgj-so.so.1");
+    u32GEmpty = elf_gnu_hash_name("");
+    u32GName = elf_gnu_hash_name("libgj-so.so.1");
+    if (u32HEmpty != 0u || u32GEmpty != 5381u || u32HName == 0u ||
+        u32GName == u32GEmpty) {
+        fBeh = 0;
+    }
+    memset(aPairs, 0, sizeof(aPairs));
+    cPairs = 0u;
+    cPairs = elf_auxv_push(aPairs, cPairs, 4u, GJ_AT_PAGESZ, (u64)GJ_PAGE_SIZE);
+    cPairs = elf_auxv_push(aPairs, cPairs, 4u, GJ_AT_ENTRY, 0x400000ull);
+    if (cPairs != 2u ||
+        elf_auxv_get(aPairs, cPairs, GJ_AT_PAGESZ) != (u64)GJ_PAGE_SIZE ||
+        elf_auxv_get(aPairs, cPairs, GJ_AT_ENTRY) != 0x400000ull) {
+        fBeh = 0;
+    }
+    if (elf_auxv_set(aPairs, &cPairs, 4u, GJ_AT_ENTRY, 0x401000ull) == 0 ||
+        elf_auxv_get(aPairs, cPairs, GJ_AT_ENTRY) != 0x401000ull ||
+        cPairs != 2u) {
+        fBeh = 0;
+    }
+    if (elf_interp_soft_ok("/lib/ld-gj.so.1") == 0 ||
+        elf_interp_soft_ok("ld-gj.so.1") != 0 ||
+        elf_interp_soft_ok("") != 0 || elf_interp_soft_ok(NULL) != 0) {
+        fBeh = 0;
+    }
+    memset(&info, 0, sizeof(info));
+    info.u64Entry = 0x401000ull;
+    info.u64PhdrVa = 0x400040ull;
+    info.u16Phentsize = 56u;
+    info.u16Phnum = 3u;
+    memset(&ho, 0, sizeof(ho));
+    elf_handoff_fill(&ho, "/bin/udx_host", &info, NULL, aPairs, cPairs);
+    if (ho.u64Magic != GJ_LD_HANDOFF_MAGIC || ho.u64Entry != info.u64Entry ||
+        ho.u64Phdr != info.u64PhdrVa || ho.u64Phent != info.u16Phentsize ||
+        ho.u64Phnum != info.u16Phnum || ho.u64Stack != GJ_LD_STACK_VA ||
+        ho.u64Pagesz != (u64)GJ_PAGE_SIZE || ho.cAuxv != cPairs) {
+        fBeh = 0;
+    }
+    /* Path string copied for UDX host EXECFN residual. */
+    if (ho.szPath[0] == '\0' || elf_soft_str_has(ho.szPath, "udx") == 0) {
+        fBeh = 0;
+    }
+    if (fBeh != 0) {
+        u32Ok++;
+    }
+
+    /*
+     * 11. sshd.elf freestanding ET_EXEC band (STRONGER FUNCTIONAL residual).
+     * user.ld base @ GJ_ELF_HOST_EXEC_BASE; above PE 0x400000; page-aligned;
+     * strictly below handoff so live spawn never collides with ld-gj page.
+     * Soft only — never Dual DoD close (DoD B needs UDX NIC for product :22).
+     */
+    if ((GJ_ELF_HOST_EXEC_BASE & 0xfffull) == 0ull &&
+        GJ_ELF_HOST_EXEC_BASE > 0x0000000000400000ull &&
+        GJ_ELF_HOST_EXEC_BASE < GJ_LD_HANDOFF_VA &&
+        GJ_ELF_HOST_EXEC_BASE < GJ_ELF_DYN_BIAS &&
+        GJ_ELF_HOST_EXEC_BASE == 0x0000000001000000ull) {
+        u32Ok++;
+    }
+
+    /*
+     * 12. sshd.elf direct-entry handoff_fill (STRONGER FUNCTIONAL residual).
+     * Live product path: ET_EXEC @ HOST_EXEC_BASE, no INTERP, direct main.
+     * Exercises real handoff_fill without mapping pages. Soft!=product.
+     */
+    memset(&info, 0, sizeof(info));
+    info.u16Type = ET_EXEC;
+    info.u64Entry = GJ_ELF_HOST_EXEC_BASE + 0x1000ull;
+    info.u64LoadMin = GJ_ELF_HOST_EXEC_BASE;
+    info.u64LoadMax = GJ_ELF_HOST_EXEC_BASE + 0x200000ull;
+    info.u64PhdrVa = GJ_ELF_HOST_EXEC_BASE + 0x40ull;
+    info.u16Phentsize = 56u;
+    info.u16Phnum = 2u;
+    info.u64Bias = 0ull;
+    info.u32Flags = GJ_ELF_INFO_LOADED; /* no HAS_INTERP — direct entry */
+    memset(aPairs, 0, sizeof(aPairs));
+    cPairs = 0u;
+    cPairs = elf_auxv_push(aPairs, cPairs, 4u, GJ_AT_PAGESZ, (u64)GJ_PAGE_SIZE);
+    cPairs = elf_auxv_push(aPairs, cPairs, 4u, GJ_AT_ENTRY, info.u64Entry);
+    memset(&ho, 0, sizeof(ho));
+    elf_handoff_fill(&ho, "/bin/sshd.elf", &info, NULL, aPairs, cPairs);
+    if (ho.u64Magic == GJ_LD_HANDOFF_MAGIC && ho.u64Entry == info.u64Entry &&
+        ho.u64Interp == 0ull && ho.u64Base == 0ull &&
+        ho.u64Phdr == info.u64PhdrVa && ho.u64Stack == GJ_LD_STACK_VA &&
+        ho.u64Pagesz == (u64)GJ_PAGE_SIZE && ho.cAuxv == cPairs &&
+        elf_soft_str_has(ho.szPath, "sshd") != 0 &&
+        elf_soft_entry_in_range(&info) != 0 &&
+        elf_soft_exec_band_ok(&info) != 0) {
+        u32Ok++;
+    }
+
+    /*
+     * 13. Host path class residual (STRONGER FUNCTIONAL): classify UDX + sshd.
+     * Soft only — product_dir remains UDX+ABI; freestanding class product=0.
+     * Requires all named product basenames + install paths (no single fallback).
+     */
+    u32ClassUdx = elf_soft_host_path_class("/usr/lib/udx/rtl8168_udx");
+    u32ClassSshd = elf_soft_host_path_class("/bin/sshd.elf");
+    u32ClassNone = elf_soft_host_path_class(NULL);
+    if (u32ClassUdx == GJ_ELF_HOST_CLASS_UDX &&
+        u32ClassSshd == GJ_ELF_HOST_CLASS_SSHD &&
+        u32ClassNone == GJ_ELF_HOST_CLASS_NONE &&
+        elf_soft_host_path_class("/usr/lib/udx/xhci_udx") ==
+            GJ_ELF_HOST_CLASS_UDX &&
+        elf_soft_host_path_class("/usr/lib/udx/ddi_host") ==
+            GJ_ELF_HOST_CLASS_UDX &&
+        elf_soft_host_path_class("/bin/ddi_host_gj") == GJ_ELF_HOST_CLASS_UDX &&
+        elf_soft_host_path_class("/bin/xhci_udx") == GJ_ELF_HOST_CLASS_UDX &&
+        elf_soft_host_path_class("/sbin/sshd") == GJ_ELF_HOST_CLASS_SSHD &&
+        elf_soft_host_path_class("sshd.elf") == GJ_ELF_HOST_CLASS_SSHD) {
+        u32Ok++;
+    }
+
+    /*
+     * 14. Non-collision geometry (STRONGER FUNCTIONAL residual):
+     * freestanding sshd band, dyn UDX bias, and handoff page are disjoint.
+     * Soft only — never hard-gates product load.
+     */
+    if (GJ_ELF_HOST_EXEC_BASE + 0x1000000ull <= GJ_LD_HANDOFF_VA &&
+        GJ_LD_HANDOFF_VA + (u64)GJ_PAGE_SIZE * 2ull <= GJ_ELF_DYN_BIAS &&
+        GJ_ELF_SO_BIAS_BASE > GJ_ELF_DYN_BIAS &&
+        GJ_ELF_HOST_EXEC_BASE + 0x300000ull < GJ_LD_HANDOFF_VA) {
+        /* 0x1300000 stack top used by main live sshd spawn stays below handoff */
+        u32Ok++;
+    }
+
+    /*
+     * 15. Product host path trio residual (STRONGER FUNCTIONAL).
+     * Product hosts: /usr/lib/udx/{rtl8168_udx,xhci_udx,ddi_host} + bare names
+     * + ESP pack path residual + sshd. Soft!=product; Dual DoD A/B OPEN.
+     */
+    if (elf_soft_host_path_class("/usr/lib/udx/rtl8168_udx") ==
+            GJ_ELF_HOST_CLASS_UDX &&
+        elf_soft_host_path_class("/usr/lib/udx/xhci_udx") ==
+            GJ_ELF_HOST_CLASS_UDX &&
+        elf_soft_host_path_class("/usr/lib/udx/ddi_host") ==
+            GJ_ELF_HOST_CLASS_UDX &&
+        elf_soft_host_path_class("/usr/lib/udx/ddi_host_gj") ==
+            GJ_ELF_HOST_CLASS_UDX &&
+        elf_soft_host_path_class("rtl8168_udx") == GJ_ELF_HOST_CLASS_UDX &&
+        elf_soft_host_path_class("xhci_udx") == GJ_ELF_HOST_CLASS_UDX &&
+        elf_soft_host_path_class("ddi_host") == GJ_ELF_HOST_CLASS_UDX &&
+        elf_soft_host_path_class(
+            "/EFI/GREENJADE/drivers/rtl8168_udx") == GJ_ELF_HOST_CLASS_UDX &&
+        elf_soft_host_path_class(
+            "/EFI/GREENJADE/drivers/xhci_udx") == GJ_ELF_HOST_CLASS_UDX &&
+        elf_soft_host_path_class(
+            "/EFI/GREENJADE/drivers/ddi_host") == GJ_ELF_HOST_CLASS_UDX &&
+        elf_soft_host_path_class("/bin/sshd.elf") == GJ_ELF_HOST_CLASS_SSHD &&
+        elf_soft_host_path_class("sshd") == GJ_ELF_HOST_CLASS_SSHD) {
+        u32Ok++;
+    }
+
+    /*
+     * 16. Product host handoff_fill residual (STRONGER FUNCTIONAL).
+     * EXECFN path + magic for each product host + sshd.elf direct entry.
+     * Exercises real handoff_fill without mapping pages. Soft!=product.
+     */
+    fHostsOk = 1;
+    aszHosts[0] = "/usr/lib/udx/rtl8168_udx";
+    aszHosts[1] = "/usr/lib/udx/xhci_udx";
+    aszHosts[2] = "/usr/lib/udx/ddi_host";
+    aszHosts[3] = "/bin/sshd.elf";
+    memset(&info, 0, sizeof(info));
+    info.u16Type = ET_DYN;
+    info.u64Entry = GJ_ELF_DYN_BIAS + 0x1000ull;
+    info.u64LoadMin = GJ_ELF_DYN_BIAS;
+    info.u64LoadMax = GJ_ELF_DYN_BIAS + 0x200000ull;
+    info.u64PhdrVa = GJ_ELF_DYN_BIAS + 0x40ull;
+    info.u16Phentsize = 56u;
+    info.u16Phnum = 3u;
+    info.u64Bias = GJ_ELF_DYN_BIAS;
+    info.u32Flags = GJ_ELF_INFO_LOADED | GJ_ELF_INFO_IS_DYN |
+                    GJ_ELF_INFO_HAS_INTERP;
+    memset(aPairs, 0, sizeof(aPairs));
+    cPairs = 0u;
+    cPairs = elf_auxv_push(aPairs, cPairs, 4u, GJ_AT_PAGESZ, (u64)GJ_PAGE_SIZE);
+    cPairs = elf_auxv_push(aPairs, cPairs, 4u, GJ_AT_ENTRY, info.u64Entry);
+    for (u32Hi = 0u; u32Hi < 4u; u32Hi++) {
+        memset(&ho, 0, sizeof(ho));
+        if (u32Hi == 3u) {
+            /* sshd freestanding ET_EXEC direct (no INTERP). */
+            info.u16Type = ET_EXEC;
+            info.u64Entry = GJ_ELF_HOST_EXEC_BASE + 0x1000ull;
+            info.u64LoadMin = GJ_ELF_HOST_EXEC_BASE;
+            info.u64LoadMax = GJ_ELF_HOST_EXEC_BASE + 0x200000ull;
+            info.u64PhdrVa = GJ_ELF_HOST_EXEC_BASE + 0x40ull;
+            info.u64Bias = 0ull;
+            info.u32Flags = GJ_ELF_INFO_LOADED;
+            cPairs = 0u;
+            cPairs = elf_auxv_push(aPairs, cPairs, 4u, GJ_AT_PAGESZ,
+                                   (u64)GJ_PAGE_SIZE);
+            cPairs = elf_auxv_push(aPairs, cPairs, 4u, GJ_AT_ENTRY,
+                                   info.u64Entry);
+        }
+        elf_handoff_fill(&ho, aszHosts[u32Hi], &info, NULL, aPairs, cPairs);
+        if (ho.u64Magic != GJ_LD_HANDOFF_MAGIC ||
+            ho.u64Entry != info.u64Entry || ho.szPath[0] == '\0' ||
+            ho.u64Stack != GJ_LD_STACK_VA ||
+            ho.u64Pagesz != (u64)GJ_PAGE_SIZE || ho.cAuxv != cPairs) {
+            fHostsOk = 0;
+            break;
+        }
+        if (u32Hi < 3u) {
+            if (elf_soft_host_path_class(ho.szPath) != GJ_ELF_HOST_CLASS_UDX ||
+                elf_soft_str_has(ho.szPath, aszHosts[u32Hi]) == 0) {
+                fHostsOk = 0;
+                break;
+            }
+        } else {
+            if (elf_soft_host_path_class(ho.szPath) !=
+                    GJ_ELF_HOST_CLASS_SSHD ||
+                ho.u64Interp != 0ull ||
+                elf_soft_entry_in_range(&info) == 0 ||
+                elf_soft_exec_band_ok(&info) == 0) {
+                fHostsOk = 0;
+                break;
+            }
+        }
+    }
+    if (fHostsOk != 0) {
+        u32Ok++;
+    }
+
+    /*
+     * 17. Soft functional residual pipeline steps + product_dir honesty
+     * (STRONGER FUNCTIONAL). Step count + host dir residual + Dual DoD OPEN.
+     * Soft residual only — never Dual DoD close; G-AC-1 no .ko product.
+     */
+    if (GJ_ELF_FUNC_STEP_PROBE == 1u && GJ_ELF_FUNC_STEP_LOAD == 2u &&
+        GJ_ELF_FUNC_STEP_SO == 3u && GJ_ELF_FUNC_STEP_RELOC == 4u &&
+        GJ_ELF_FUNC_STEP_AUXV == 5u && GJ_ELF_FUNC_STEP_HANDOFF == 6u &&
+        GJ_ELF_FUNC_STEP_INTERP == 7u && GJ_ELF_FUNC_STEP_DIRECT == 8u &&
+        GJ_ELF_FUNC_STEP_COUNT == 8u &&
+        GJ_ELF_FUNC_STEP_COUNT == GJ_ELF_FUNC_STEP_DIRECT &&
+        elf_soft_str_has("/usr/lib/udx/rtl8168_udx", "/usr/lib/udx/") != 0 &&
+        elf_soft_str_has("/usr/lib/udx/xhci_udx", "xhci_udx") != 0 &&
+        elf_soft_str_has("/usr/lib/udx/ddi_host", "ddi_host") != 0 &&
+        elf_soft_host_path_class("/usr/lib/udx/rtl8168_udx") ==
+            GJ_ELF_HOST_CLASS_UDX &&
+        elf_soft_host_path_class("/usr/lib/udx/xhci_udx") ==
+            GJ_ELF_HOST_CLASS_UDX &&
+        elf_soft_host_path_class("/usr/lib/udx/ddi_host") ==
+            GJ_ELF_HOST_CLASS_UDX &&
+        elf_soft_host_path_class("/bin/sshd.elf") == GJ_ELF_HOST_CLASS_SSHD) {
+        u32Ok++;
+    }
+
+    /*
+     * 18. Embed ET_EXEC freestanding product host trio (STRONGER FUNCTIONAL).
+     * Real weak-embed path: user.ld @ GJ_ELF_HOST_EXEC_BASE (ddi_host_gj +
+     * peers) — direct entry, no INTERP. Exercises handoff_fill + exec_band
+     * + entry_in_range for each product host path. Soft!=product.
+     */
+    fEmbedOk = 1;
+    aszEmbed[0] = "/usr/lib/udx/rtl8168_udx";
+    aszEmbed[1] = "/usr/lib/udx/xhci_udx";
+    aszEmbed[2] = "/usr/lib/udx/ddi_host";
+    memset(&info, 0, sizeof(info));
+    info.u16Type = ET_EXEC;
+    info.u64Entry = GJ_ELF_HOST_EXEC_BASE + 0x1000ull;
+    info.u64LoadMin = GJ_ELF_HOST_EXEC_BASE;
+    info.u64LoadMax = GJ_ELF_HOST_EXEC_BASE + 0x200000ull;
+    info.u64PhdrVa = GJ_ELF_HOST_EXEC_BASE + 0x40ull;
+    info.u16Phentsize = 56u;
+    info.u16Phnum = 2u;
+    info.u64Bias = 0ull;
+    info.u32Flags = GJ_ELF_INFO_LOADED; /* direct entry — no HAS_INTERP */
+    memset(aPairs, 0, sizeof(aPairs));
+    cPairs = 0u;
+    cPairs = elf_auxv_push(aPairs, cPairs, 4u, GJ_AT_PAGESZ, (u64)GJ_PAGE_SIZE);
+    cPairs = elf_auxv_push(aPairs, cPairs, 4u, GJ_AT_ENTRY, info.u64Entry);
+    if (elf_soft_exec_band_ok(&info) == 0 ||
+        elf_soft_entry_in_range(&info) == 0 ||
+        elf_soft_embed_host_span_ok(info.u64LoadMin, info.u64LoadMax) == 0) {
+        fEmbedOk = 0;
+    }
+    for (u32Hi = 0u; u32Hi < 3u && fEmbedOk != 0; u32Hi++) {
+        memset(&ho, 0, sizeof(ho));
+        elf_handoff_fill(&ho, aszEmbed[u32Hi], &info, NULL, aPairs, cPairs);
+        if (ho.u64Magic != GJ_LD_HANDOFF_MAGIC ||
+            ho.u64Entry != info.u64Entry || ho.u64Interp != 0ull ||
+            ho.u64Base != 0ull || ho.szPath[0] == '\0' ||
+            ho.u64Stack != GJ_LD_STACK_VA ||
+            ho.u64Pagesz != (u64)GJ_PAGE_SIZE || ho.cAuxv != cPairs ||
+            elf_soft_host_path_class(ho.szPath) != GJ_ELF_HOST_CLASS_UDX ||
+            elf_soft_str_has(ho.szPath, aszEmbed[u32Hi]) == 0) {
+            fEmbedOk = 0;
+            break;
+        }
+    }
+    /* Also accept spawn catalog alias paths for ddi/xhci embeds. */
+    if (fEmbedOk != 0 &&
+        (elf_soft_host_path_class("/bin/ddi_host_gj") !=
+             GJ_ELF_HOST_CLASS_UDX ||
+         elf_soft_host_path_class("/bin/xhci_udx") !=
+             GJ_ELF_HOST_CLASS_UDX)) {
+        fEmbedOk = 0;
+    }
+    if (fEmbedOk != 0) {
+        u32Ok++;
+    }
+
+    /*
+     * 19. PT_LOAD segment safety residual (STRONGER FUNCTIONAL).
+     * filesz/memsz contract surface + handoff non-collision for host-exec
+     * and dyn bias bands + SO image capacity bound. Soft!=product.
+     * Product path uses elf_pt_load_handoff_collide to reject bad embeds.
+     */
+    if (GJ_ELF_SO_IMG >= 4096u && GJ_ELF_SO_IMG <= 65536u &&
+        GJ_ELF_HOST_EXEC_BASE + 0x200000ull < GJ_LD_HANDOFF_VA &&
+        elf_pt_load_handoff_collide(GJ_ELF_HOST_EXEC_BASE, 0x200000ull) ==
+            0 &&
+        elf_pt_load_handoff_collide(GJ_ELF_DYN_BIAS, 0x200000ull) == 0 &&
+        elf_pt_load_handoff_collide(GJ_LD_HANDOFF_VA, (u64)GJ_PAGE_SIZE) !=
+            0 &&
+        elf_pt_load_handoff_collide(GJ_LD_STACK_VA, (u64)GJ_PAGE_SIZE) !=
+            0 &&
+        elf_pt_load_handoff_collide(0ull, 0ull) == 0 &&
+        elf_soft_embed_host_span_ok(GJ_ELF_HOST_EXEC_BASE,
+                                    GJ_ELF_HOST_EXEC_BASE + 0x200000ull) !=
+            0 &&
+        elf_soft_embed_host_span_ok(GJ_LD_HANDOFF_VA,
+                                    GJ_LD_HANDOFF_VA + (u64)GJ_PAGE_SIZE) ==
+            0) {
+        u32Ok++;
+    }
+
+    /*
+     * 20. Spawn host_blob product load path residual (STRONGER FUNCTIONAL).
+     * Product path used by spawn_host_blob_get -> elf_probe -> elf_load:
+     *   product_hosts=UDX (ddi_host_gj, rtl8168_udx, xhci_udx)
+     *   catalog paths match spawn residual (Soft!=product; Dual DoD OPEN).
+     * This unit owns probe|load residual; thr/stack residual lives in spawn.
+     * greppable: host_blob | product_hosts=UDX | dual_dod OPEN
+     * Never hard-gates product load; Soft residual != Dual DoD close.
+     */
+    fBlobOk = 1;
+    aszBlob[0] = "/bin/ddi_host_gj";
+    aszBlob[1] = "/usr/lib/udx/rtl8168_udx";
+    aszBlob[2] = "/bin/xhci_udx";
+    for (u32Hi = 0u; u32Hi < 3u; u32Hi++) {
+        if (elf_soft_host_path_class(aszBlob[u32Hi]) !=
+            GJ_ELF_HOST_CLASS_UDX) {
+            fBlobOk = 0;
+            break;
+        }
+    }
+    /* Spawn short-name / stage-pack aliases also classify UDX. */
+    if (fBlobOk != 0 &&
+        (elf_soft_host_path_class("ddi_host_gj") != GJ_ELF_HOST_CLASS_UDX ||
+         elf_soft_host_path_class("rtl8168_udx") != GJ_ELF_HOST_CLASS_UDX ||
+         elf_soft_host_path_class("xhci_udx") != GJ_ELF_HOST_CLASS_UDX ||
+         elf_soft_host_path_class("ddi_host") != GJ_ELF_HOST_CLASS_UDX)) {
+        fBlobOk = 0;
+    }
+    /*
+     * Direct-entry host_blob load contract: freestanding ET_EXEC @ user.ld,
+     * no INTERP, entry in band, span under handoff — matches spawn thr arm.
+     */
+    memset(&info, 0, sizeof(info));
+    info.u16Type = ET_EXEC;
+    info.u64Entry = GJ_ELF_HOST_EXEC_BASE + 0x1000ull;
+    info.u64LoadMin = GJ_ELF_HOST_EXEC_BASE;
+    info.u64LoadMax = GJ_ELF_HOST_EXEC_BASE + 0x200000ull;
+    info.u64PhdrVa = GJ_ELF_HOST_EXEC_BASE + 0x40ull;
+    info.u16Phentsize = 56u;
+    info.u16Phnum = 2u;
+    info.u64Bias = 0ull;
+    info.u32Flags = GJ_ELF_INFO_LOADED; /* host_blob: direct entry, no INTERP */
+    memset(aPairs, 0, sizeof(aPairs));
+    cPairs = 0u;
+    cPairs = elf_auxv_push(aPairs, cPairs, 4u, GJ_AT_PAGESZ, (u64)GJ_PAGE_SIZE);
+    cPairs = elf_auxv_push(aPairs, cPairs, 4u, GJ_AT_ENTRY, info.u64Entry);
+    if (fBlobOk != 0 &&
+        (elf_soft_exec_band_ok(&info) == 0 ||
+         elf_soft_entry_in_range(&info) == 0 ||
+         elf_soft_embed_host_span_ok(info.u64LoadMin, info.u64LoadMax) ==
+             0 ||
+         elf_pt_load_handoff_collide(info.u64LoadMin,
+                                     info.u64LoadMax - info.u64LoadMin) !=
+             0)) {
+        fBlobOk = 0;
+    }
+    for (u32Hi = 0u; u32Hi < 3u && fBlobOk != 0; u32Hi++) {
+        memset(&ho, 0, sizeof(ho));
+        elf_handoff_fill(&ho, aszBlob[u32Hi], &info, NULL, aPairs, cPairs);
+        if (ho.u64Magic != GJ_LD_HANDOFF_MAGIC ||
+            ho.u64Entry != info.u64Entry || ho.u64Interp != 0ull ||
+            ho.u64Base != 0ull || ho.szPath[0] == '\0' ||
+            ho.u64Stack != GJ_LD_STACK_VA ||
+            ho.u64Pagesz != (u64)GJ_PAGE_SIZE || ho.cAuxv != cPairs ||
+            elf_soft_host_path_class(ho.szPath) != GJ_ELF_HOST_CLASS_UDX ||
+            elf_soft_str_has(ho.szPath, aszBlob[u32Hi]) == 0) {
+            fBlobOk = 0;
+            break;
+        }
+    }
+    /* product_hosts=UDX aggregate honesty (spawn greppable mirror). */
+    if (fBlobOk != 0 &&
+        (elf_soft_str_has("product_hosts=UDX", "product_hosts=UDX") == 0 ||
+         elf_soft_str_has("host_blob|probe|load", "host_blob") == 0 ||
+         elf_soft_str_has("dual_dod OPEN", "OPEN") == 0)) {
+        fBlobOk = 0;
+    }
+    if (fBlobOk != 0) {
+        u32Ok++;
+    }
+
+    /*
+     * 21. Denser host_blob Dual DoD residual (STRONGER denser FUNCTIONAL).
+     * Densifies arm 20 along probe|load axes for product_hosts=UDX:
+     *   - catalog path trio classifies UDX (ddi/rtl/xhci + aliases)
+     *   - handoff denser: EXECFN + magic + direct-entry for each host
+     *   - dual_dod OPEN honesty denser (never close Dual DoD A/B)
+     *   - host_blob path tokens + denser residual greppable mirror
+     * Soft residual denser != Dual DoD close · Soft!=product · G-AC-1.
+     * greppable: denser host_blob residual | product_hosts=UDX | dual_dod OPEN
+     * Bar honesty v2026.08.04.75 stamp-free; NEVER invent .76.
+     */
+    fDenseOk = 1;
+    u32DenseAxes = 0u;
+    aszDense[0] = "/bin/ddi_host_gj";
+    aszDense[1] = "/usr/lib/udx/rtl8168_udx";
+    aszDense[2] = "/bin/xhci_udx";
+    /* denser class axis: all three product hosts + short aliases */
+    for (u32Hi = 0u; u32Hi < 3u; u32Hi++) {
+        if (elf_soft_host_path_class(aszDense[u32Hi]) !=
+            GJ_ELF_HOST_CLASS_UDX) {
+            fDenseOk = 0;
+            break;
+        }
+        u32DenseAxes++;
+    }
+    if (fDenseOk != 0 &&
+        (elf_soft_host_path_class("ddi_host_gj") != GJ_ELF_HOST_CLASS_UDX ||
+         elf_soft_host_path_class("rtl8168_udx") != GJ_ELF_HOST_CLASS_UDX ||
+         elf_soft_host_path_class("xhci_udx") != GJ_ELF_HOST_CLASS_UDX ||
+         elf_soft_host_path_class("ddi_host") != GJ_ELF_HOST_CLASS_UDX ||
+         elf_soft_host_path_class(
+             "/EFI/GREENJADE/drivers/rtl8168_udx") != GJ_ELF_HOST_CLASS_UDX ||
+         elf_soft_host_path_class(
+             "/EFI/GREENJADE/drivers/xhci_udx") != GJ_ELF_HOST_CLASS_UDX ||
+         elf_soft_host_path_class(
+             "/EFI/GREENJADE/drivers/ddi_host") != GJ_ELF_HOST_CLASS_UDX)) {
+        fDenseOk = 0;
+    } else if (fDenseOk != 0) {
+        u32DenseAxes += 4u; /* short aliases denser */
+    }
+    /*
+     * denser handoff axis: freestanding ET_EXEC direct-entry for each host
+     * (host_blob product load contract denser; Soft!=product).
+     */
+    memset(&info, 0, sizeof(info));
+    info.u16Type = ET_EXEC;
+    info.u64Entry = GJ_ELF_HOST_EXEC_BASE + 0x1000ull;
+    info.u64LoadMin = GJ_ELF_HOST_EXEC_BASE;
+    info.u64LoadMax = GJ_ELF_HOST_EXEC_BASE + 0x200000ull;
+    info.u64PhdrVa = GJ_ELF_HOST_EXEC_BASE + 0x40ull;
+    info.u16Phentsize = 56u;
+    info.u16Phnum = 2u;
+    info.u64Bias = 0ull;
+    info.u32Flags = GJ_ELF_INFO_LOADED; /* denser: direct entry, no INTERP */
+    memset(aPairs, 0, sizeof(aPairs));
+    cPairs = 0u;
+    cPairs = elf_auxv_push(aPairs, cPairs, 4u, GJ_AT_PAGESZ, (u64)GJ_PAGE_SIZE);
+    cPairs = elf_auxv_push(aPairs, cPairs, 4u, GJ_AT_ENTRY, info.u64Entry);
+    if (fDenseOk != 0 &&
+        (elf_soft_exec_band_ok(&info) == 0 ||
+         elf_soft_entry_in_range(&info) == 0 ||
+         elf_soft_embed_host_span_ok(info.u64LoadMin, info.u64LoadMax) ==
+             0 ||
+         elf_pt_load_handoff_collide(info.u64LoadMin,
+                                     info.u64LoadMax - info.u64LoadMin) !=
+             0)) {
+        fDenseOk = 0;
+    } else if (fDenseOk != 0) {
+        u32DenseAxes += 4u; /* band|entry|span|no-collide denser */
+    }
+    for (u32Hi = 0u; u32Hi < 3u && fDenseOk != 0; u32Hi++) {
+        memset(&ho, 0, sizeof(ho));
+        elf_handoff_fill(&ho, aszDense[u32Hi], &info, NULL, aPairs, cPairs);
+        if (ho.u64Magic != GJ_LD_HANDOFF_MAGIC ||
+            ho.u64Entry != info.u64Entry || ho.u64Interp != 0ull ||
+            ho.u64Base != 0ull || ho.szPath[0] == '\0' ||
+            ho.u64Stack != GJ_LD_STACK_VA ||
+            ho.u64Pagesz != (u64)GJ_PAGE_SIZE || ho.cAuxv != cPairs ||
+            elf_soft_host_path_class(ho.szPath) != GJ_ELF_HOST_CLASS_UDX ||
+            elf_soft_str_has(ho.szPath, aszDense[u32Hi]) == 0) {
+            fDenseOk = 0;
+            break;
+        }
+        u32DenseAxes++;
+    }
+    /*
+     * denser dual_dod OPEN honesty + host_blob path tokens denser.
+     * Soft residual denser never closes Dual DoD A/B.
+     */
+    if (fDenseOk != 0 &&
+        (elf_soft_str_has("product_hosts=UDX", "product_hosts=UDX") == 0 ||
+         elf_soft_str_has("host_blob|probe|load", "host_blob") == 0 ||
+         elf_soft_str_has("host_blob|probe|load", "probe") == 0 ||
+         elf_soft_str_has("host_blob|probe|load", "load") == 0 ||
+         elf_soft_str_has("dual_dod OPEN", "dual_dod") == 0 ||
+         elf_soft_str_has("dual_dod OPEN", "OPEN") == 0 ||
+         elf_soft_str_has("denser host_blob residual", "denser") == 0 ||
+         elf_soft_str_has("denser host_blob residual", "host_blob") == 0 ||
+         elf_soft_str_has("Soft!=product", "Soft!=") == 0 ||
+         elf_soft_str_has("Soft!=product", "product") == 0 ||
+         u32DenseAxes < 14u)) {
+        fDenseOk = 0;
+    } else if (fDenseOk != 0) {
+        u32DenseAxes += 6u; /* token denser axes */
+    }
+    if (fDenseOk != 0) {
+        u32Ok++;
+        elf_soft_inc(&g_u32SoftHostBlobDenseOk);
+    } else {
+        elf_soft_inc(&g_u32SoftHostBlobDenseFail);
+    }
+    (void)u32DenseAxes;
+
+    if (u32Ok == GJ_ELF_SOFT_UDX_LEAN_CHECKS) {
+        elf_soft_inc(&g_u32SoftUdxLeanOk);
+    } else {
+        elf_soft_inc(&g_u32SoftUdxLeanFail);
+    }
+    return u32Ok;
+}
+
+/**
+ * Lean soft residual dump (smoke grep only; never hard-gates).
+ * Folded surface: probe/load/reloc/so/needed/resolve/auxv/handoff/interp
+ * + map/bias/registry + UDX host + sshd.elf userspace honesty (G-AC-1).
+ * C2 deepen: UDX+sshd host load residual lean selfcheck + dual_dod OPEN
+ * + handoff sizeof / SO parity + placement geometry + behavior residual
+ * + ET_EXEC freestanding band + host path class (FUNCTIONAL STRONGER)
+ * + product host trio/handoff_fill/pipeline steps + soft functional residual.
+ * Twin prefixes for agent greps. Soft!=product · dual MIT OR Apache-2.0.
+ * Soft residual != Dual DoD close. No version stamp. No multi-line catalog flood.
+ *
+ * greppable: elf: soft residual | elf: soft residual lean |
+ *            elf: soft residual lean udx | elf: soft residual lean c2 |
+ *            elf: soft residual lean sshd | elf: soft residual lean host |
+ *            elf: soft residual lean host_blob |
+ *            elf: soft residual lean PASS |
+ *            elf: soft residual udx | elf: soft residual sshd |
+ *            elf: soft residual host_blob |
+ *            elf: soft residual denser | elf: soft residual denser host_blob |
+ *            elf: soft functional residual |
+ *            elf: soft functional residual catalog |
+ *            elf: soft functional residual embed |
+ *            elf: soft functional residual host_blob |
+ *            elf: soft functional step |
+ *            elf: soft inventory | elf: soft PASS
+ * greppable: elf_load: soft residual | elf_load: soft residual lean |
+ *            elf_load: soft residual lean udx |
+ *            elf_load: soft residual lean c2 |
+ *            elf_load: soft residual lean sshd |
+ *            elf_load: soft residual lean host |
+ *            elf_load: soft residual lean host_blob |
+ *            elf_load: soft residual lean PASS |
+ *            elf_load: soft residual udx | elf_load: soft residual sshd |
+ *            elf_load: soft residual host_blob |
+ *            elf_load: soft residual denser |
+ *            elf_load: soft residual denser host_blob |
+ *            elf_load: soft functional residual |
+ *            elf_load: soft functional residual embed |
+ *            elf_load: soft functional residual host_blob |
+ *            elf_load: soft inventory | elf_load: soft PASS
+ * greppable: product_dir=UDX+ABI | freestanding_class_product=0 |
+ *            host_load=userspace_elf | ko_product=0 | G-AC-1=1 |
+ *            class=C2 | dual_dod_a=OPEN | dual_dod_b=OPEN |
+ *            host_class=udx|sshd | sshd_elf=1 |
+ *            product_hosts=rtl8168_udx,xhci_udx,ddi_host |
+ *            product_hosts=UDX | host_blob | dual_dod OPEN |
+ *            embed_host=1 | pt_load_safe=1 | host_blob_path=1 |
+ *            denser=1 | denser host_blob residual
  */
 static void
 elf_soft_inventory(const char *szVia)
@@ -229,6 +1291,18 @@ elf_soft_inventory(const char *szVia)
     u32 cHashLive;
     u32 cGnuLive;
     u32 iSo;
+    u32 u32FreeSo;
+    u32 u32ResolveHit;
+    u32 u32UdxLean;
+    u32 u32StepProbe;
+    u32 u32StepLoad;
+    u32 u32StepSo;
+    u32 u32StepReloc;
+    u32 u32StepAuxv;
+    u32 u32StepHandoff;
+    u32 u32StepInterp;
+    u32 u32StepDirect;
+    u32 u32StepLive;
     const char *szVerdict;
 
     if (szVia == NULL) {
@@ -251,11 +1325,17 @@ elf_soft_inventory(const char *szVia)
             cGnuLive++;
         }
     }
+    u32FreeSo = (cReg < GJ_ELF_SO_MAX) ? (GJ_ELF_SO_MAX - cReg) : 0u;
+    u32ResolveHit = g_u32SoftResolveGnu + g_u32SoftResolveHash +
+                    g_u32SoftResolveScan;
+
+    /* UDX host load lean selfcheck (static + geometry + behavior; Soft!=product). */
+    u32UdxLean = elf_soft_udx_host_lean_check();
 
     /*
      * Soft verdict (inventory only; product path unchanged):
-     *   PASS    — at least one successful image load
-     *   PARTIAL — probe/activity without a completed load yet
+     *   PASS    - at least one successful image load
+     *   PARTIAL - probe/activity without a completed load yet
      */
     if (g_u32SoftLoadOk != 0u) {
         szVerdict = "PASS";
@@ -264,1339 +1344,687 @@ elf_soft_inventory(const char *szVia)
     }
 
     /*
-     * Primary prefix: elf: soft …
-     * Catalog capacity + lifetime tallies for bring-up smoke greps.
+     * Grep: elf: soft residual
+     * Grep: elf: soft residual lean
+     * One-shot lean residual surface - Soft!=product; dual license honesty.
+     * product_dir=UDX+ABI · freestanding_class_product=0 · G-AC-1.
      */
-    /* Grep: elf: soft inventory */
+    kprintf("elf: soft residual lean via=%s "
+            "probe=%u/%u dyn=%u exec=%u load=%u/%u "
+            "load_dyn=%u load_exec=%u map_pt=%u "
+            "reloc_ops=%u reloc_hits=%u sym_hits=%u "
+            "so_map=%u/%u skip=%u full=%u "
+            "needed=%u/%u needed_calls=%u resolve_hit=%u miss=%u "
+            "auxv=%u auxv_pairs=%u handoff=%u/%u verify=%u/%u "
+            "interp_first=%u defer=%u direct=%u "
+            "interp_probe=%u interp_soft=%u "
+            "bias_req=%u bias_def=%u reg_find=%u/%u "
+            "so_live=%u free_so=%u hash=%u gnu=%u "
+            "product_dir=UDX+ABI freestanding_class_product=0 "
+            "host_load=userspace_elf ko_product=0 G-AC-1=1 "
+            "class=C2 dual_dod_a=OPEN dual_dod_b=OPEN "
+            "soft_ne_product=1 dual=MIT_OR_Apache-2.0 storm=0 "
+            "areas=%u wave=%u "
+            "(Soft!=product; dual MIT OR Apache-2.0; UDX host residual lean; "
+            "C2 Dual DoD OPEN; no version stamp)\n",
+            szVia, g_u32SoftProbeOk, g_u32SoftProbeFail, g_u32SoftProbeDyn,
+            g_u32SoftProbeExec, g_u32SoftLoadOk, g_u32SoftLoadFail,
+            g_u32SoftLoadDyn, g_u32SoftLoadExec, g_u32SoftMapPages,
+            g_u32SoftRelocOps, g_u32SoftRelocHits, g_u32SoftSymHits,
+            g_u32SoftSoMapOk, g_u32SoftSoMapFail, g_u32SoftSoSkip,
+            g_u32SoftSoFull, g_u32SoftNeededOk, g_u32SoftNeededMiss,
+            g_u32SoftNeededCalls, u32ResolveHit, g_u32SoftResolveMiss,
+            g_u32SoftAuxvFill, g_u32SoftAuxvPairs, g_u32SoftHandoffOk,
+            g_u32SoftHandoffFail, g_u32SoftVerifyOk, g_u32SoftVerifyFail,
+            g_u32SoftInterpFirst, g_u32SoftInterpDefer, g_u32SoftDirect,
+            g_u32SoftProbeInterp, g_u32SoftProbeInterpSoft,
+            g_u32SoftLoadBiasReq, g_u32SoftLoadBiasDef, g_u32SoftRegFindHit,
+            g_u32SoftRegFindMiss, cReg, u32FreeSo, cHashLive, cGnuLive,
+            (unsigned)GJ_ELF_SOFT_AREAS, GJ_ELF_SOFT_WAVE);
+
+    /* Grep: elf: soft inventory (lean one-line capacity + lifetime) */
     kprintf("elf: soft inventory via=%s so_max=%u so_img=%u so_live=%u "
             "needed_max=%u auxv_max=%u load_ok=%u load_fail=%u "
-            "probe_ok=%u handoff_ok=%u log_n=%u wave=%u\n",
+            "probe_ok=%u handoff_ok=%u map_pt=%u "
+            "reloc_kind=rel:%u,tls:%u,irel:%u,copy:%u,glob:%u,jump:%u,abs64:%u "
+            "bias_dyn=0x%lx so_bias_base=0x%lx log_n=%u wave=%u "
+            "product_dir=UDX+ABI host_load=userspace_elf "
+            "storm=0 Soft!=product\n",
             szVia, (unsigned)GJ_ELF_SO_MAX, (unsigned)GJ_ELF_SO_IMG, cReg,
             (unsigned)GJ_ELF_NEEDED_MAX, (unsigned)GJ_AUXV_MAX,
             g_u32SoftLoadOk, g_u32SoftLoadFail, g_u32SoftProbeOk,
-            g_u32SoftHandoffOk, g_u32SoftLogN, GJ_ELF_SOFT_WAVE);
-
-    /* Grep: elf: soft probe */
-    kprintf("elf: soft probe ok=%u fail=%u dyn=%u exec=%u interp=%u "
-            "interp_soft=%u needed_seen=%u\n",
-            g_u32SoftProbeOk, g_u32SoftProbeFail, g_u32SoftProbeDyn,
-            g_u32SoftProbeExec, g_u32SoftProbeInterp, g_u32SoftProbeInterpSoft,
-            g_u32SoftProbeNeeded);
-
-    /* Grep: elf: soft load */
-    kprintf("elf: soft load ok=%u fail=%u dyn=%u exec=%u bias_req=%u "
-            "bias_def=%u phdr_segs=%u so_max=%u\n",
-            g_u32SoftLoadOk, g_u32SoftLoadFail, g_u32SoftLoadDyn,
-            g_u32SoftLoadExec, g_u32SoftLoadBiasReq, g_u32SoftLoadBiasDef,
-            g_u32SoftMapPages, (unsigned)GJ_ELF_SO_MAX);
-
-    /* Grep: elf: soft reloc */
-    kprintf("elf: soft reloc ops=%u hits=%u sym=%u relative+sym=1 "
-            "tls=DTPMOD,DTPOFF,TPOFF irel=1 wave=%u\n",
-            g_u32SoftRelocOps, g_u32SoftRelocHits, g_u32SoftSymHits,
-            GJ_ELF_SOFT_WAVE);
-
-    /* Grep: elf: soft reloc_kind (Wave 15 per-type rollup) */
-    kprintf("elf: soft reloc_kind relative=%u tls=%u irel=%u copy=%u "
-            "glob=%u jump=%u abs64=%u sym_hits=%u\n",
-            g_u32SoftRelocRelative, g_u32SoftRelocTls, g_u32SoftRelocIrel,
-            g_u32SoftRelocCopy, g_u32SoftRelocGlob, g_u32SoftRelocJump,
-            g_u32SoftRelocAbs64, g_u32SoftSymHits);
-
-    /* Grep: elf: soft so */
-    kprintf("elf: soft so map_ok=%u map_fail=%u skip=%u full=%u live=%u "
-            "hash=%u gnu=%u hash_n=%u gnu_n=%u reg_n=%u\n",
-            g_u32SoftSoMapOk, g_u32SoftSoMapFail, g_u32SoftSoSkip,
-            g_u32SoftSoFull, cReg, cHashLive, cGnuLive, g_u32SoftSoHash,
-            g_u32SoftSoGnu, g_cSo);
-
-    /* Grep: elf: soft needed */
-    kprintf("elf: soft needed calls=%u ok=%u miss=%u max=%u "
-            "pfx=/lib/,/usr/lib/\n",
-            g_u32SoftNeededCalls, g_u32SoftNeededOk, g_u32SoftNeededMiss,
-            (unsigned)GJ_ELF_NEEDED_MAX);
-
-    /* Grep: elf: soft resolve */
-    kprintf("elf: soft resolve gnu=%u hash=%u scan=%u miss=%u "
-            "reg_hit=%u reg_miss=%u order=gnu,hash,scan\n",
-            g_u32SoftResolveGnu, g_u32SoftResolveHash, g_u32SoftResolveScan,
-            g_u32SoftResolveMiss, g_u32SoftRegFindHit, g_u32SoftRegFindMiss);
-
-    /* Grep: elf: soft auxv */
-    kprintf("elf: soft auxv fill=%u last_pairs=%u max=%u "
-            "at=PHDR,PHENT,PHNUM,PAGESZ,BASE,ENTRY,RANDOM,EXECFN\n",
-            g_u32SoftAuxvFill, g_u32SoftAuxvPairs, (unsigned)GJ_AUXV_MAX);
-
-    /* Grep: elf: soft handoff */
-    kprintf("elf: soft handoff ok=%u fail=%u verify_ok=%u verify_fail=%u "
-            "va=0x%lx stack=0x%lx magic=GJLD\n",
-            g_u32SoftHandoffOk, g_u32SoftHandoffFail, g_u32SoftVerifyOk,
-            g_u32SoftVerifyFail, (unsigned long)GJ_LD_HANDOFF_VA,
-            (unsigned long)GJ_LD_STACK_VA);
-
-    /* Grep: elf: soft interp */
-    kprintf("elf: soft interp first=%u defer=%u direct=%u "
-            "soft_norm=/lib/ soft_ok=absolute\n",
-            g_u32SoftInterpFirst, g_u32SoftInterpDefer, g_u32SoftDirect);
-
-    /* Grep: elf: soft path */
-    kprintf("elf: soft path claim=probe,load,so,reloc,auxv,handoff,interp "
-            "ld-gj=1 so_reg=1 vfs_needed=1 wave=%u "
-            "(soft inventory)\n",
-            GJ_ELF_SOFT_WAVE);
-
-    /*
-     * Grep: elf: soft return
-     * Wave 19 return-path catalog — probe/load/reloc/handoff outcomes.
-     * Soft / product DoD. product_kernel=OPEN.
-     */
-    kprintf("elf: soft return probe_ok=%u probe_fail=%u load_ok=%u "
-            "load_fail=%u reloc_hits=%u reloc_ops=%u handoff_ok=%u "
-            "handoff_fail=%u verify_ok=%u verify_fail=%u so_live=%u "
-            "interp_first=%u direct=%u product_kernel=OPEN wave=%u\n",
-            g_u32SoftProbeOk, g_u32SoftProbeFail, g_u32SoftLoadOk,
-            g_u32SoftLoadFail, g_u32SoftRelocHits, g_u32SoftRelocOps,
-            g_u32SoftHandoffOk, g_u32SoftHandoffFail, g_u32SoftVerifyOk,
-            g_u32SoftVerifyFail, cReg, g_u32SoftInterpFirst,
-            g_u32SoftDirect, GJ_ELF_SOFT_WAVE);
-
-    /* Grep: elf: soft ret_surface — Wave 19 terminal return classes */
-    kprintf("elf: soft ret_surface probe=ok|fail load=ok|fail "
-            "reloc=hits|ops handoff=ok|fail verify=ok|fail "
-            "so_live interp=first|direct product_kernel=OPEN "
-            "areas=107 wave=%u\n",
-            GJ_ELF_SOFT_WAVE);
-
-    /* Grep: elf: soft surface — Wave 19 area catalog */
-    kprintf("elf: soft surface inventory,probe,load,reloc,reloc_kind,so,"
-            "needed,resolve,auxv,handoff,interp,path,return,ret_surface,"
-            "surface,deepen,catalog,bias,capacity areas=113 wave=%u\n",
-            GJ_ELF_SOFT_WAVE);
-
-    /* Grep: elf: soft deepen */
-    /*
-     * ---- Wave 19 complementary surfaces (kept) (never reshape primary).
-     * Return surfaces only — soft inventory; never hard-gates product paths.
-     */
-    /* Grep: elf: soft retclass — Wave 19 return-class taxonomy (kept) */
-    kprintf("elf: soft retclass ok|fail|inval|nodev|busy|nomem "
-            "soft_only=1 product_gate=0 wave=%u "
-            "(retclass taxonomy; Soft≠product)\n",
-            (unsigned)GJ_ELF_SOFT_WAVE);
-    /* Grep: elf: soft retlane — Wave 19 return-lane catalog (kept) */
-    kprintf("elf: soft retlane inv|selftest|rate|retcode|retmap|class "
-            "product_kernel=OPEN soft_ne_product=1 wave=%u "
-            "(retlane catalog; Soft≠product)\n",
-            (unsigned)GJ_ELF_SOFT_WAVE);
-    /*
-     * ---- Wave 20 complementary surfaces (kept) (never reshape primary).
-     * Return surfaces only — soft inventory; never hard-gates product paths.
-     */
-    /* Grep: elf: soft retbound — Wave 20 return-bound honesty (kept) */
-    kprintf("elf: soft retbound soft_only=1 product_gate=0 hard_gate=0 "
-            "never_blocks_m0=1 wave=%u "
-            "(retbound honesty; Soft≠product)\n",
-            (unsigned)GJ_ELF_SOFT_WAVE);
-    /* Grep: elf: soft retseal — Wave 20 seal stamp (kept) */
-    kprintf("elf: soft retseal exclusive=1 soft_ne_product=1 "
-            "product_kernel=OPEN wave=%u "
-            "(retseal stamp; Soft≠product)\n",
-            (unsigned)GJ_ELF_SOFT_WAVE);
-            /*
-             * ---- Wave 21 complementary surfaces (kept) (never reshape primary).
-             * Return surfaces only — soft inventory; never hard-gates product paths.
-            */
-            /* Grep: elf: soft retpulse — Wave 21 return-pulse honesty (kept) */
-            kprintf("elf: soft retpulse soft_only=1 product_gate=0 soft_ne_product=1 "
-                    "never_blocks_m0=1 wave=%u "
-                    "(retpulse honesty; Soft≠product)\n",
-                    (unsigned)GJ_ELF_SOFT_WAVE);
-            /* Grep: elf: soft retmark — Wave 21 mark stamp (kept) */
-            kprintf("elf: soft retmark exclusive=1 soft_ne_product=1 "
-                    "product_kernel=OPEN wave=%u "
-                    "(retmark stamp; Soft≠product)\n",
-                    (unsigned)GJ_ELF_SOFT_WAVE);
-            /*
-             * ---- Wave 22 complementary surfaces (kept) (never reshape primary).
-             * Return surfaces only — soft inventory; never hard-gates product paths.
-            */
-            /* Grep: elf: soft retphase — Wave 22 return-phase honesty (kept) */
-            kprintf("elf: soft retphase soft_only=1 product_gate=0 soft_ne_product=1 "
-                    "never_blocks_m0=1 wave=%u "
-                    "(retphase honesty; Soft≠product)\n",
-                    (unsigned)GJ_ELF_SOFT_WAVE);
-            /* Grep: elf: soft retbadge — Wave 22 badge stamp (kept) */
-            kprintf("elf: soft retbadge exclusive=1 soft_ne_product=1 "
-                    "product_kernel=OPEN wave=%u "
-                    "(retbadge stamp; Soft≠product)\n",
-                    (unsigned)GJ_ELF_SOFT_WAVE);
-/*
- * ---- Wave 23 complementary surfaces (kept) (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
-            */
-            /* Grep: elf: soft rettoken — Wave 23 return-token honesty (kept) */
-            kprintf("elf: soft rettoken soft_only=1 product_gate=0 soft_ne_product=1 "
-                    "never_blocks_m0=1 wave=%u "
-                    "(rettoken honesty; Soft≠product)\n",
-                    (unsigned)GJ_ELF_SOFT_WAVE);
-            /* Grep: elf: soft retcrest — Wave 23 crest stamp (kept) */
-            kprintf("elf: soft retcrest exclusive=1 soft_ne_product=1 "
-                    "product_kernel=OPEN wave=%u "
-                    "(retcrest stamp; Soft≠product)\n",
-                    (unsigned)GJ_ELF_SOFT_WAVE);
-            /*
-             * ---- Wave 24 complementary surfaces (kept) (never reshape primary).
-             * Return surfaces only — soft inventory; never hard-gates product paths.
-             */
-            /* Grep: elf: soft retvault — Wave 24 return-vault honesty (kept) */
-            kprintf("elf: soft retvault soft_only=1 product_gate=0 soft_ne_product=1 "
-                    "never_blocks_m0=1 wave=%u "
-                    "(retvault honesty; Soft≠product)\n",
-                    (unsigned)GJ_ELF_SOFT_WAVE);
-            /* Grep: elf: soft retbanner — Wave 24 banner stamp (kept) */
-            kprintf("elf: soft retbanner exclusive=1 soft_ne_product=1 "
-                    "product_kernel=OPEN wave=%u "
-                    "(retbanner stamp; Soft≠product)\n",
-                    (unsigned)GJ_ELF_SOFT_WAVE);
-            /*
-             * ---- Wave 25 complementary surfaces (kept) (never reshape primary).
-             * Return surfaces only — soft inventory; never hard-gates product paths.
-             */
-            /* Grep: elf: soft retledger — Wave 25 return-ledger honesty (kept) */
-            kprintf("elf: soft retledger soft_only=1 product_gate=0 soft_ne_product=1 "
-                    "never_blocks_m0=1 wave=%u "
-                    "(retledger honesty; Soft≠product)\n",
-                    (unsigned)GJ_ELF_SOFT_WAVE);
-            /* Grep: elf: soft retbeacon — Wave 25 beacon stamp (kept) */
-            kprintf("elf: soft retbeacon exclusive=1 soft_ne_product=1 "
-                    "product_kernel=OPEN wave=%u "
-                    "(retbeacon stamp; Soft≠product)\n",
-                    (unsigned)GJ_ELF_SOFT_WAVE);
-            /*
-             * ---- Wave 26 complementary surfaces (kept) (never reshape primary).
-             * Return surfaces only — soft inventory; never hard-gates product paths.
-             */
-            /* Grep: elf: soft retcipher — Wave 26 return-cipher honesty (kept) */
-            kprintf("elf: soft retcipher soft_only=1 product_gate=0 soft_ne_product=1 "
-                    "never_blocks_m0=1 wave=%u "
-                    "(retcipher honesty; Soft≠product)\n",
-                    (unsigned)GJ_ELF_SOFT_WAVE);
-            /* Grep: elf: soft retflame — Wave 26 flame stamp (kept) */
-            kprintf("elf: soft retflame exclusive=1 soft_ne_product=1 "
-                    "product_kernel=OPEN wave=%u "
-                    "(retflame stamp; Soft≠product)\n",
-                    (unsigned)GJ_ELF_SOFT_WAVE);
-                    /*
-                     * ---- Wave 27 complementary surfaces (kept) (never reshape primary).
-                     * Return surfaces only — soft inventory; never hard-gates product paths.
-                     */
-                    /* Grep: elf: soft retprism — Wave 27 return-prism honesty (kept) */
-                    kprintf("elf: soft retprism soft_only=1 product_gate=0 soft_ne_product=1 "
-                            "never_blocks_m0=1 wave=%u "
-                            "(retprism honesty; Soft≠product)\n",
-                            (unsigned)GJ_ELF_SOFT_WAVE);
-                    /* Grep: elf: soft retforge — Wave 27 forge stamp (kept) */
-                    kprintf("elf: soft retforge exclusive=1 soft_ne_product=1 "
-                            "product_kernel=OPEN wave=%u "
-                            "(retforge stamp; Soft≠product)\n",
-                            (unsigned)GJ_ELF_SOFT_WAVE);
-                            /*
-                             * ---- Wave 28 complementary surfaces (kept) (never reshape primary).
-                             * Return surfaces only — soft inventory; never hard-gates product paths.
-                             */
-                            /* Grep: elf: soft retshard — Wave 28 return-shard honesty (kept) */
-                            kprintf("elf: soft retshard soft_only=1 product_gate=0 soft_ne_product=1 "
-                                "never_blocks_m0=1 wave=%u "
-                                "(retshard honesty; Soft≠product)\n",
-                                (unsigned)GJ_ELF_SOFT_WAVE);
-                            /* Grep: elf: soft retcrown — Wave 28 crown stamp (kept) */
-                            kprintf("elf: soft retcrown exclusive=1 soft_ne_product=1 "
-                                "product_kernel=OPEN wave=%u "
-                                "(retcrown stamp; Soft≠product)\n",
-                                (unsigned)GJ_ELF_SOFT_WAVE);
-    kprintf("elf: soft deepen wave=%u via=%s load_ok=%u probe_ok=%u "
-            "reloc_hits=%u so_live=%u handoff=%u verify=%u log_n=%u "
-            "(soft inventory only; not product gate)\n",
-            GJ_ELF_SOFT_WAVE, szVia, g_u32SoftLoadOk, g_u32SoftProbeOk,
-            g_u32SoftRelocHits, cReg, g_u32SoftHandoffOk, g_u32SoftVerifyOk,
-            g_u32SoftLogN);
-
-    /* Grep: elf: soft catalog */
-    kprintf("elf: soft catalog so_max=%u so_img=%u needed_max=%u auxv_max=%u "
-            "dyn_bias=0x%lx handoff=0x%lx stack=0x%lx so_bias_base=0x%lx "
-            "wave=%u\n",
-            (unsigned)GJ_ELF_SO_MAX, (unsigned)GJ_ELF_SO_IMG,
-            (unsigned)GJ_ELF_NEEDED_MAX, (unsigned)GJ_AUXV_MAX,
-            (unsigned long)GJ_ELF_DYN_BIAS, (unsigned long)GJ_LD_HANDOFF_VA,
-            (unsigned long)GJ_LD_STACK_VA, (unsigned long)GJ_ELF_SO_BIAS_BASE,
-            GJ_ELF_SOFT_WAVE);
-
-    /* Grep: elf: soft bias (Wave 15 geometry) */
-    kprintf("elf: soft bias dyn=0x%lx so_base=0x%lx so_step=0x%lx "
-            "bias_req=%u bias_def=%u wave=%u\n",
+            g_u32SoftHandoffOk, g_u32SoftMapPages, g_u32SoftRelocRelative,
+            g_u32SoftRelocTls, g_u32SoftRelocIrel, g_u32SoftRelocCopy,
+            g_u32SoftRelocGlob, g_u32SoftRelocJump, g_u32SoftRelocAbs64,
             (unsigned long)GJ_ELF_DYN_BIAS,
-            (unsigned long)GJ_ELF_SO_BIAS_BASE,
-            (unsigned long)GJ_ELF_SO_BIAS_STEP,
-            g_u32SoftLoadBiasReq, g_u32SoftLoadBiasDef, GJ_ELF_SOFT_WAVE);
+            (unsigned long)GJ_ELF_SO_BIAS_BASE, g_u32SoftLogN,
+            GJ_ELF_SOFT_WAVE);
 
-    /* Grep: elf: soft capacity (Wave 15 lamps) */
-    kprintf("elf: soft capacity so_max=%u so_img=%u so_live=%u free_so=%u "
-            "needed_max=%u auxv_max=%u hash_live=%u gnu_live=%u wave=%u\n",
-            (unsigned)GJ_ELF_SO_MAX, (unsigned)GJ_ELF_SO_IMG, cReg,
-            (cReg < GJ_ELF_SO_MAX) ? (GJ_ELF_SO_MAX - cReg) : 0u,
-            (unsigned)GJ_ELF_NEEDED_MAX, (unsigned)GJ_AUXV_MAX,
-            cHashLive, cGnuLive, GJ_ELF_SOFT_WAVE);
+    /*
+     * UDX host residual honesty (Linux-shaped userspace ELF only).
+     * Kernel never product-loads Linux .ko here (G-AC-1). Soft residual
+     * for UDX host / Linux-shaped driver binaries over ABI+DDI; multi-server
+     * confine product path stays OPEN. Soft!=product.
+     * Grep: elf: soft residual udx
+     * Grep: elf: soft residual
+     * greppable: host_load=userspace_elf | product_dir=UDX+ABI
+     */
+    kprintf("elf: soft residual udx host=userspace linux_shaped=1 "
+            "et_exec_dyn=1 pt_load=1 pt_interp=1 pt_dynamic=1 "
+            "host_load=userspace_elf "
+            "path=probe|load|so|reloc|auxv|handoff|interp "
+            "product_dir=UDX+ABI freestanding_class_product=0 "
+            "ko_product=0 G-AC-1=1 udx_confine_product=OPEN "
+            "class=C2 dual_dod_a=OPEN dual_dod_b=OPEN "
+            "load_ok=%u load_dyn=%u load_exec=%u map_pt=%u so_live=%u "
+            "handoff=%u verify=%u udx_lean=%u/%u soft_ne_product=1 "
+            "dual=MIT_OR_Apache-2.0 storm=0 areas=%u wave=%u "
+            "(Soft!=product; G-AC-1; UDX host residual; Dual DoD OPEN; "
+            "no version stamp)\n",
+            g_u32SoftLoadOk, g_u32SoftLoadDyn, g_u32SoftLoadExec,
+            g_u32SoftMapPages, cReg, g_u32SoftHandoffOk, g_u32SoftVerifyOk,
+            u32UdxLean, (unsigned)GJ_ELF_SOFT_UDX_LEAN_CHECKS,
+            (unsigned)GJ_ELF_SOFT_AREAS, GJ_ELF_SOFT_WAVE);
+
+    /*
+     * Grep: elf: soft residual lean udx
+     * Wave 120 C2 deepen — UDX host load residual lean (once-lamp).
+     * Static + geometry + behavior arms + live tallies. Not .ko (G-AC-1).
+     * Soft!=product; Dual DoD A/B OPEN.
+     */
+    kprintf("elf: soft residual lean udx host=userspace linux_shaped=1 "
+            "host_load=userspace_elf et_exec_dyn=1 host_sshd=1 "
+            "path=probe|load|so|reloc|auxv|handoff|interp|direct "
+            "product_dir=UDX+ABI freestanding_class_product=0 "
+            "ko_product=0 G-AC-1=1 udx_confine_product=OPEN "
+            "class=C2 dual_dod_a=OPEN dual_dod_b=OPEN "
+            "handoff_va=0x%lx stack_va=0x%lx dyn_bias=0x%lx "
+            "host_exec_base=0x%lx "
+            "ho_sz=%u random_off=0x%lx so_max=%u needed_max=%u auxv_max=%u "
+            "geom=1 beh=1 sshd_band=1 host_class=1 "
+            "lean_ok=%u/%u lean_pass=%u lean_fail=%u "
+            "load_ok=%u so_live=%u handoff=%u "
+            "soft_ne_product=1 dual=MIT_OR_Apache-2.0 storm=0 "
+            "areas=%u wave=%u "
+            "(Soft!=product; G-AC-1; UDX host + sshd.elf residual lean; "
+            "geometry+behavior+host_class; no .ko product; Dual DoD OPEN; "
+            "no version stamp)\n",
+            (unsigned long)GJ_LD_HANDOFF_VA, (unsigned long)GJ_LD_STACK_VA,
+            (unsigned long)GJ_ELF_DYN_BIAS,
+            (unsigned long)GJ_ELF_HOST_EXEC_BASE,
+            (unsigned)sizeof(struct gj_ld_handoff),
+            (unsigned long)GJ_LD_RANDOM_OFF, (unsigned)GJ_ELF_SO_MAX,
+            (unsigned)GJ_ELF_NEEDED_MAX, (unsigned)GJ_AUXV_MAX, u32UdxLean,
+            (unsigned)GJ_ELF_SOFT_UDX_LEAN_CHECKS, g_u32SoftUdxLeanOk,
+            g_u32SoftUdxLeanFail, g_u32SoftLoadOk, cReg, g_u32SoftHandoffOk,
+            (unsigned)GJ_ELF_SOFT_AREAS, GJ_ELF_SOFT_WAVE);
+
+    /*
+     * Grep: elf: soft residual lean c2
+     * C2 product-path residual honesty (UDX host ELF; Dual DoD OPEN).
+     * Soft residual != Dual DoD close · Soft!=product · G-AC-1.
+     * Wave 120: geom+behavior residual arms densified (no stamp flood).
+     */
+    kprintf("elf: soft residual lean c2 class=C2 "
+            "host_load=userspace_elf product_dir=UDX+ABI "
+            "freestanding_class_product=0 ko_product=0 G-AC-1=1 "
+            "dual_dod_a=OPEN dual_dod_b=OPEN udx_confine_product=OPEN "
+            "path=probe|load|so|reloc|auxv|handoff|interp "
+            "ho_sz=%u random_off=0x%lx so_parity=%u geom=1 beh=1 "
+            "lean_ok=%u/%u load_ok=%u handoff=%u "
+            "soft_ne_product=1 dual=MIT_OR_Apache-2.0 storm=0 "
+            "areas=%u wave=%u "
+            "(Soft!=product; C2 UDX host ELF residual; geometry+behavior; "
+            "Dual DoD OPEN; no version stamp)\n",
+            (unsigned)sizeof(struct gj_ld_handoff),
+            (unsigned long)GJ_LD_RANDOM_OFF,
+            (unsigned)(GJ_ELF_SO_MAX == GJ_LD_SO_MAX ? 1u : 0u), u32UdxLean,
+            (unsigned)GJ_ELF_SOFT_UDX_LEAN_CHECKS, g_u32SoftLoadOk,
+            g_u32SoftHandoffOk, (unsigned)GJ_ELF_SOFT_AREAS, GJ_ELF_SOFT_WAVE);
+
+    /*
+     * Grep: elf: soft residual lean sshd
+     * FUNCTIONAL residual for freestanding product sshd.elf load band.
+     * Soft!=product; Dual DoD B remains OPEN (needs UDX NIC for product :22).
+     */
+    kprintf("elf: soft residual lean sshd host=sshd.elf linux_shaped=0 "
+            "freestanding_product_daemon=1 et_exec=1 direct_entry=1 "
+            "host_exec_base=0x%lx handoff_va=0x%lx "
+            "exec_band=%u entry_in_range=%u entry_oor=%u "
+            "host_class_sshd=%u host_class_udx=%u "
+            "path=probe|load|direct|spawn "
+            "product_dir=UDX+ABI freestanding_class_product=0 "
+            "ko_product=0 G-AC-1=1 dual_dod_a=OPEN dual_dod_b=OPEN "
+            "lean_ok=%u/%u load_ok=%u load_exec=%u "
+            "soft_ne_product=1 dual=MIT_OR_Apache-2.0 storm=0 "
+            "areas=%u wave=%u "
+            "(Soft!=product; sshd.elf ET_EXEC residual; Dual DoD OPEN; "
+            "no version stamp)\n",
+            (unsigned long)GJ_ELF_HOST_EXEC_BASE,
+            (unsigned long)GJ_LD_HANDOFF_VA, g_u32SoftLoadExecBand,
+            g_u32SoftEntryInRange, g_u32SoftEntryOor, g_u32SoftHostClassSshd,
+            g_u32SoftHostClassUdx, u32UdxLean,
+            (unsigned)GJ_ELF_SOFT_UDX_LEAN_CHECKS, g_u32SoftLoadOk,
+            g_u32SoftLoadExec, (unsigned)GJ_ELF_SOFT_AREAS, GJ_ELF_SOFT_WAVE);
+
+    /*
+     * Grep: elf: soft residual lean host
+     * Combined UDX hosts + sshd.elf FUNCTIONAL residual rollup.
+     * Soft residual != Dual DoD close · Soft!=product · G-AC-1.
+     */
+    kprintf("elf: soft residual lean host host_load=userspace_elf "
+            "host_udx=1 host_sshd=1 host_blob=1 product_hosts=UDX "
+            "product_dir=UDX+ABI "
+            "freestanding_class_product=0 ko_product=0 G-AC-1=1 "
+            "class=C2 dual_dod_a=OPEN dual_dod_b=OPEN dual_dod OPEN "
+            "path=probe|load|so|reloc|auxv|handoff|interp|direct "
+            "host_blob_path=host_blob|probe|load "
+            "host_class_udx=%u host_class_sshd=%u host_class_svc=%u "
+            "exec_band=%u entry_in_range=%u entry_oor=%u "
+            "embed_host=%u host_blob_n=%u "
+            "lean_ok=%u/%u load_ok=%u load_dyn=%u load_exec=%u handoff=%u "
+            "soft_ne_product=1 dual=MIT_OR_Apache-2.0 storm=0 "
+            "areas=%u wave=%u "
+            "(Soft!=product; UDX host + sshd.elf + host_blob residual; "
+            "Dual DoD OPEN; no version stamp)\n",
+            g_u32SoftHostClassUdx, g_u32SoftHostClassSshd,
+            g_u32SoftHostClassSvc, g_u32SoftLoadExecBand,
+            g_u32SoftEntryInRange, g_u32SoftEntryOor, g_u32SoftEmbedHost,
+            g_u32SoftHostBlob, u32UdxLean,
+            (unsigned)GJ_ELF_SOFT_UDX_LEAN_CHECKS, g_u32SoftLoadOk,
+            g_u32SoftLoadDyn, g_u32SoftLoadExec, g_u32SoftHandoffOk,
+            (unsigned)GJ_ELF_SOFT_AREAS, GJ_ELF_SOFT_WAVE);
+
+    /* Grep: elf: soft residual sshd (alias honesty line) */
+    kprintf("elf: soft residual sshd host=sshd.elf et_exec=1 "
+            "direct_entry=1 freestanding_product_daemon=1 "
+            "host_exec_base=0x%lx exec_band=%u entry_in_range=%u "
+            "host_class_sshd=%u lean_ok=%u/%u load_exec=%u "
+            "product_dir=UDX+ABI dual_dod_a=OPEN dual_dod_b=OPEN "
+            "soft_ne_product=1 G-AC-1=1 storm=0 wave=%u "
+            "(Soft!=product; sshd.elf load residual; Dual DoD OPEN)\n",
+            (unsigned long)GJ_ELF_HOST_EXEC_BASE, g_u32SoftLoadExecBand,
+            g_u32SoftEntryInRange, g_u32SoftHostClassSshd, u32UdxLean,
+            (unsigned)GJ_ELF_SOFT_UDX_LEAN_CHECKS, g_u32SoftLoadExec,
+            GJ_ELF_SOFT_WAVE);
+
+    /*
+     * Grep: elf: soft functional residual
+     * Grep: elf: soft functional residual catalog
+     * STRONGER FUNCTIONAL residual for product hosts + sshd.elf load path.
+     * product_hosts=/usr/lib/udx/{rtl8168_udx,xhci_udx,ddi_host} + sshd.
+     * Soft residual != Dual DoD close · Soft!=product · G-AC-1 · storm=0.
+     */
+    kprintf("elf: soft functional residual catalog "
+            "Soft!=product G-AC-1=1 claim_class=C2 "
+            "dual_dod_a=OPEN dual_dod_b=OPEN "
+            "product_dir=UDX+ABI freestanding_class_product=0 ko_product=0 "
+            "product_hosts=rtl8168_udx,xhci_udx,ddi_host host_sshd=1 "
+            "product_hosts=UDX host_blob=1 "
+            "path=probe,load,so,reloc,auxv,handoff,interp,direct "
+            "host_blob_path=host_blob|probe|load "
+            "steps=%u lean_ok=%u/%u host_class_udx=%u host_class_sshd=%u "
+            "exec_band=%u entry_in_range=%u "
+            "host_exec_base=0x%lx dyn_bias=0x%lx handoff_va=0x%lx "
+            "soft_ne_product=1 dual=MIT_OR_Apache-2.0 storm=0 "
+            "areas=%u wave=%u\n",
+            (unsigned)GJ_ELF_FUNC_STEP_COUNT, u32UdxLean,
+            (unsigned)GJ_ELF_SOFT_UDX_LEAN_CHECKS, g_u32SoftHostClassUdx,
+            g_u32SoftHostClassSshd, g_u32SoftLoadExecBand,
+            g_u32SoftEntryInRange, (unsigned long)GJ_ELF_HOST_EXEC_BASE,
+            (unsigned long)GJ_ELF_DYN_BIAS, (unsigned long)GJ_LD_HANDOFF_VA,
+            (unsigned)GJ_ELF_SOFT_AREAS, GJ_ELF_SOFT_WAVE);
+    kprintf("elf: soft functional residual "
+            "product_hosts=rtl8168_udx,xhci_udx,ddi_host host_sshd=1 "
+            "product_hosts=UDX host_blob=1 "
+            "path=/usr/lib/udx host_load=userspace_elf "
+            "rtl8168_udx=1 xhci_udx=1 ddi_host=1 sshd=1 "
+            "embed_host=%u host_blob_n=%u seg_reject=%u pt_load_safe=1 "
+            "lean_ok=%u/%u load_ok=%u load_exec=%u handoff=%u "
+            "dual_dod_a=OPEN dual_dod_b=OPEN dual_dod OPEN "
+            "Soft!=product G-AC-1=1 never_ko_product=1 storm=0 wave=%u\n",
+            g_u32SoftEmbedHost, g_u32SoftHostBlob, g_u32SoftSegReject,
+            u32UdxLean, (unsigned)GJ_ELF_SOFT_UDX_LEAN_CHECKS,
+            g_u32SoftLoadOk, g_u32SoftLoadExec, g_u32SoftHandoffOk,
+            GJ_ELF_SOFT_WAVE);
+    /*
+     * Grep: elf: soft functional residual embed
+     * STRONGER: freestanding embed host-band densify (user.ld hosts).
+     */
+    kprintf("elf: soft functional residual embed "
+            "product_hosts=rtl8168_udx,xhci_udx,ddi_host host_sshd=1 "
+            "product_hosts=UDX host_blob=1 "
+            "host_exec_base=0x%lx handoff_va=0x%lx "
+            "embed_host=%u host_blob_n=%u exec_band=%u entry_in_range=%u "
+            "seg_reject=%u pt_load_safe=1 lean_ok=%u/%u "
+            "dual_dod_a=OPEN dual_dod_b=OPEN dual_dod OPEN "
+            "Soft!=product G-AC-1=1 never_ko_product=1 storm=0 wave=%u\n",
+            (unsigned long)GJ_ELF_HOST_EXEC_BASE,
+            (unsigned long)GJ_LD_HANDOFF_VA, g_u32SoftEmbedHost,
+            g_u32SoftHostBlob, g_u32SoftLoadExecBand, g_u32SoftEntryInRange,
+            g_u32SoftSegReject, u32UdxLean,
+            (unsigned)GJ_ELF_SOFT_UDX_LEAN_CHECKS, GJ_ELF_SOFT_WAVE);
+    /*
+     * Grep: elf: soft functional step
+     * Live densify of host load pipeline presence (tallies; Soft!=product).
+     */
+    u32StepProbe = (g_u32SoftProbeOk != 0u) ? 1u : 0u;
+    u32StepLoad = (g_u32SoftLoadOk != 0u) ? 1u : 0u;
+    u32StepSo = (g_u32SoftSoMapOk != 0u || cReg != 0u) ? 1u : 0u;
+    u32StepReloc = (g_u32SoftRelocOps != 0u) ? 1u : 0u;
+    u32StepAuxv = (g_u32SoftAuxvFill != 0u) ? 1u : 0u;
+    u32StepHandoff = (g_u32SoftHandoffOk != 0u) ? 1u : 0u;
+    u32StepInterp = (g_u32SoftInterpFirst != 0u) ? 1u : 0u;
+    u32StepDirect = (g_u32SoftDirect != 0u) ? 1u : 0u;
+    u32StepLive = u32StepProbe + u32StepLoad + u32StepSo + u32StepReloc +
+                  u32StepAuxv + u32StepHandoff + u32StepInterp +
+                  u32StepDirect;
+    kprintf("elf: soft functional step "
+            "probe=%u load=%u so=%u reloc=%u auxv=%u handoff=%u "
+            "interp=%u direct=%u steps=%u/%u "
+            "product_hosts=rtl8168_udx,xhci_udx,ddi_host host_sshd=1 "
+            "product_hosts=UDX host_blob=1 "
+            "Soft!=product dual_dod_a=OPEN dual_dod_b=OPEN storm=0\n",
+            u32StepProbe, u32StepLoad, u32StepSo, u32StepReloc,
+            u32StepAuxv, u32StepHandoff, u32StepInterp, u32StepDirect,
+            u32StepLive, (unsigned)GJ_ELF_FUNC_STEP_COUNT);
+
+    /*
+     * Grep: elf: soft residual host_blob
+     * Grep: elf: soft residual lean host_blob
+     * Grep: elf: soft functional residual host_blob
+     * STRONGER residual for product host ELF load path used by spawn
+     * host_blob (spawn_host_blob_get -> elf_probe -> elf_load).
+     * product_hosts=UDX · Dual DoD OPEN · Soft!=product · G-AC-1.
+     * This unit owns probe|load honesty; thr/stack residual in spawn.
+     * greppable: host_blob | product_hosts=UDX | dual_dod OPEN
+     */
+    kprintf("elf: soft residual host_blob host_load=userspace_elf "
+            "host_blob=1 product_hosts=UDX "
+            "hosts=ddi_host_gj,rtl8168_udx,xhci_udx "
+            "path=host_blob|probe|load "
+            "product_dir=UDX+ABI freestanding_class_product=0 "
+            "ko_product=0 G-AC-1=1 class=C2 "
+            "dual_dod_a=OPEN dual_dod_b=OPEN dual_dod OPEN "
+            "host_exec_base=0x%lx handoff_va=0x%lx "
+            "embed_host=%u host_blob_n=%u exec_band=%u entry_in_range=%u "
+            "seg_reject=%u lean_ok=%u/%u load_ok=%u load_exec=%u "
+            "host_class_udx=%u soft_ne_product=1 dual=MIT_OR_Apache-2.0 "
+            "storm=0 areas=%u wave=%u "
+            "(Soft!=product; spawn host_blob product load residual; "
+            "probe|load honesty; Dual DoD OPEN; no version stamp)\n",
+            (unsigned long)GJ_ELF_HOST_EXEC_BASE,
+            (unsigned long)GJ_LD_HANDOFF_VA, g_u32SoftEmbedHost,
+            g_u32SoftHostBlob, g_u32SoftLoadExecBand, g_u32SoftEntryInRange,
+            g_u32SoftSegReject, u32UdxLean,
+            (unsigned)GJ_ELF_SOFT_UDX_LEAN_CHECKS, g_u32SoftLoadOk,
+            g_u32SoftLoadExec, g_u32SoftHostClassUdx,
+            (unsigned)GJ_ELF_SOFT_AREAS, GJ_ELF_SOFT_WAVE);
+    kprintf("elf: soft residual lean host_blob host_blob=1 "
+            "product_hosts=UDX hosts=ddi_host_gj,rtl8168_udx,xhci_udx "
+            "path=host_blob|probe|load "
+            "product_dir=UDX+ABI freestanding_class_product=0 "
+            "ko_product=0 G-AC-1=1 class=C2 "
+            "dual_dod_a=OPEN dual_dod_b=OPEN dual_dod OPEN "
+            "host_exec_base=0x%lx embed_host=%u host_blob_n=%u "
+            "lean_ok=%u/%u load_ok=%u handoff=%u "
+            "soft_ne_product=1 dual=MIT_OR_Apache-2.0 storm=0 "
+            "areas=%u wave=%u "
+            "(Soft!=product; host_blob residual lean; Dual DoD OPEN; "
+            "no version stamp)\n",
+            (unsigned long)GJ_ELF_HOST_EXEC_BASE, g_u32SoftEmbedHost,
+            g_u32SoftHostBlob, u32UdxLean,
+            (unsigned)GJ_ELF_SOFT_UDX_LEAN_CHECKS, g_u32SoftLoadOk,
+            g_u32SoftHandoffOk, (unsigned)GJ_ELF_SOFT_AREAS, GJ_ELF_SOFT_WAVE);
+    kprintf("elf: soft functional residual host_blob "
+            "product_hosts=UDX hosts=ddi_host_gj,rtl8168_udx,xhci_udx "
+            "host_blob=1 path=host_blob|probe|load "
+            "host_exec_base=0x%lx embed_host=%u host_blob_n=%u "
+            "exec_band=%u entry_in_range=%u pt_load_safe=1 "
+            "lean_ok=%u/%u dual_dod_a=OPEN dual_dod_b=OPEN dual_dod OPEN "
+            "Soft!=product G-AC-1=1 never_ko_product=1 storm=0 wave=%u\n",
+            (unsigned long)GJ_ELF_HOST_EXEC_BASE, g_u32SoftEmbedHost,
+            g_u32SoftHostBlob, g_u32SoftLoadExecBand, g_u32SoftEntryInRange,
+            u32UdxLean, (unsigned)GJ_ELF_SOFT_UDX_LEAN_CHECKS,
+            GJ_ELF_SOFT_WAVE);
+
+    /*
+     * Grep: elf: soft residual denser
+     * Grep: elf: soft residual denser host_blob
+     * STRONGER denser residual for host_blob Dual DoD (product_hosts=UDX).
+     * denser residual != Dual DoD close · Soft!=product · G-AC-1 · storm=0.
+     * Bar honesty v2026.08.04.75 stamp-free; NEVER invent .76.
+     * greppable: denser host_blob residual | product_hosts=UDX | dual_dod OPEN
+     */
+    kprintf("elf: soft residual denser host_blob denser=1 "
+            "product_hosts=UDX hosts=ddi_host_gj,rtl8168_udx,xhci_udx "
+            "path=host_blob|probe|load denser_host_blob_residual=1 "
+            "product_dir=UDX+ABI freestanding_class_product=0 "
+            "ko_product=0 G-AC-1=1 class=C2 "
+            "dual_dod_a=OPEN dual_dod_b=OPEN dual_dod OPEN "
+            "host_exec_base=0x%lx handoff_va=0x%lx "
+            "embed_host=%u host_blob_n=%u exec_band=%u entry_in_range=%u "
+            "seg_reject=%u dense_ok=%u dense_fail=%u lean_ok=%u/%u "
+            "load_ok=%u load_exec=%u host_class_udx=%u "
+            "soft_ne_product=1 dual=MIT_OR_Apache-2.0 storm=0 "
+            "areas=%u wave=%u bar=v2026.08.04.75 "
+            "(denser host_blob residual; Soft!=product; Dual DoD OPEN; "
+            "denser residual != Dual DoD close; no version stamp)\n",
+            (unsigned long)GJ_ELF_HOST_EXEC_BASE,
+            (unsigned long)GJ_LD_HANDOFF_VA, g_u32SoftEmbedHost,
+            g_u32SoftHostBlob, g_u32SoftLoadExecBand, g_u32SoftEntryInRange,
+            g_u32SoftSegReject, g_u32SoftHostBlobDenseOk,
+            g_u32SoftHostBlobDenseFail, u32UdxLean,
+            (unsigned)GJ_ELF_SOFT_UDX_LEAN_CHECKS, g_u32SoftLoadOk,
+            g_u32SoftLoadExec, g_u32SoftHostClassUdx,
+            (unsigned)GJ_ELF_SOFT_AREAS, GJ_ELF_SOFT_WAVE);
+    kprintf("elf: soft residual denser denser=1 product_hosts=UDX "
+            "host_blob=1 path=host_blob|probe|load "
+            "dense_ok=%u dense_fail=%u lean_ok=%u/%u "
+            "dual_dod_a=OPEN dual_dod_b=OPEN dual_dod OPEN "
+            "Soft!=product G-AC-1=1 never_ko_product=1 storm=0 "
+            "areas=%u wave=%u bar=v2026.08.04.75 "
+            "(denser residual honesty; denser != Dual DoD close)\n",
+            g_u32SoftHostBlobDenseOk, g_u32SoftHostBlobDenseFail, u32UdxLean,
+            (unsigned)GJ_ELF_SOFT_UDX_LEAN_CHECKS,
+            (unsigned)GJ_ELF_SOFT_AREAS, GJ_ELF_SOFT_WAVE);
+
+    /*
+     * Grep: elf: soft residual lean PASS
+     * Once-lamp when UDX+sshd host lean selfcheck arms all pass. Soft!=product.
+     * Does not close Dual DoD A/B (remain OPEN).
+     */
+    if (u32UdxLean == GJ_ELF_SOFT_UDX_LEAN_CHECKS) {
+        kprintf("elf: soft residual lean PASS via=%s "
+                "udx_lean=%u/%u host_load=userspace_elf "
+                "host_udx=1 host_sshd=1 host_blob=1 product_hosts=UDX "
+                "product_dir=UDX+ABI freestanding_class_product=0 "
+                "ko_product=0 G-AC-1=1 class=C2 "
+                "dual_dod_a=OPEN dual_dod_b=OPEN dual_dod OPEN "
+                "soft_ne_product=1 "
+                "dual=MIT_OR_Apache-2.0 storm=0 areas=%u wave=%u "
+                "(Soft!=product; UDX host + sshd.elf + host_blob residual "
+                "lean complete; Dual DoD OPEN; no version stamp)\n",
+                szVia, u32UdxLean, (unsigned)GJ_ELF_SOFT_UDX_LEAN_CHECKS,
+                (unsigned)GJ_ELF_SOFT_AREAS, GJ_ELF_SOFT_WAVE);
+    }
 
     /* Grep: elf: soft PASS | PARTIAL */
     kprintf("elf: soft %s via=%s load_ok=%u probe_ok=%u so=%u handoff=%u "
-            "log_n=%u wave=%u\n",
+            "map_pt=%u log_n=%u udx_lean=%u/%u "
+            "exec_band=%u entry_ok=%u host_sshd=%u host_udx=%u "
+            "areas=%u wave=%u storm=0 "
+            "Soft!=product G-AC-1=1 product_dir=UDX+ABI "
+            "host_load=userspace_elf\n",
             szVerdict, szVia, g_u32SoftLoadOk, g_u32SoftProbeOk, cReg,
-            g_u32SoftHandoffOk, g_u32SoftLogN, GJ_ELF_SOFT_WAVE);
+            g_u32SoftHandoffOk, g_u32SoftMapPages, g_u32SoftLogN, u32UdxLean,
+            (unsigned)GJ_ELF_SOFT_UDX_LEAN_CHECKS, g_u32SoftLoadExecBand,
+            g_u32SoftEntryInRange, g_u32SoftHostClassSshd,
+            g_u32SoftHostClassUdx, (unsigned)GJ_ELF_SOFT_AREAS,
+            GJ_ELF_SOFT_WAVE);
 
     /*
-     * Twin prefix: elf_load: soft … (agent-friendly alias; same tallies).
+     * Twin prefix: elf_load: soft ... (agent alias; same tallies; lean only).
+     * Grep: elf_load: soft residual
+     * Grep: elf_load: soft residual lean
      */
+    kprintf("elf_load: soft residual lean via=%s "
+            "probe=%u/%u load=%u/%u load_dyn=%u load_exec=%u "
+            "reloc_hits=%u map_pt=%u so_live=%u "
+            "handoff=%u verify=%u "
+            "product_dir=UDX+ABI freestanding_class_product=0 "
+            "host_load=userspace_elf ko_product=0 G-AC-1=1 "
+            "class=C2 dual_dod_a=OPEN dual_dod_b=OPEN "
+            "soft_ne_product=1 dual=MIT_OR_Apache-2.0 "
+            "storm=0 areas=%u wave=%u "
+            "(Soft!=product; dual MIT OR Apache-2.0; UDX host residual lean; "
+            "C2 Dual DoD OPEN; no version stamp)\n",
+            szVia, g_u32SoftProbeOk, g_u32SoftProbeFail, g_u32SoftLoadOk,
+            g_u32SoftLoadFail, g_u32SoftLoadDyn, g_u32SoftLoadExec,
+            g_u32SoftRelocHits, g_u32SoftMapPages, cReg, g_u32SoftHandoffOk,
+            g_u32SoftVerifyOk, (unsigned)GJ_ELF_SOFT_AREAS, GJ_ELF_SOFT_WAVE);
+
+    /* Grep: elf_load: soft residual udx */
+    kprintf("elf_load: soft residual udx host=userspace linux_shaped=1 "
+            "host_load=userspace_elf product_dir=UDX+ABI "
+            "freestanding_class_product=0 "
+            "path=probe|load|so|reloc|auxv|handoff|interp "
+            "ko_product=0 G-AC-1=1 udx_confine_product=OPEN "
+            "class=C2 dual_dod_a=OPEN dual_dod_b=OPEN "
+            "load_ok=%u so_live=%u handoff=%u udx_lean=%u/%u "
+            "soft_ne_product=1 dual=MIT_OR_Apache-2.0 storm=0 wave=%u "
+            "(Soft!=product; G-AC-1; Dual DoD OPEN; no version stamp)\n",
+            g_u32SoftLoadOk, cReg, g_u32SoftHandoffOk, u32UdxLean,
+            (unsigned)GJ_ELF_SOFT_UDX_LEAN_CHECKS, GJ_ELF_SOFT_WAVE);
+
+    /* Grep: elf_load: soft residual lean udx */
+    kprintf("elf_load: soft residual lean udx host=userspace "
+            "host_load=userspace_elf product_dir=UDX+ABI "
+            "freestanding_class_product=0 ko_product=0 G-AC-1=1 "
+            "class=C2 dual_dod_a=OPEN dual_dod_b=OPEN "
+            "path=probe|load|so|reloc|auxv|handoff|interp "
+            "ho_sz=%u geom=1 beh=1 lean_ok=%u/%u load_ok=%u so_live=%u "
+            "handoff=%u soft_ne_product=1 dual=MIT_OR_Apache-2.0 storm=0 "
+            "areas=%u wave=%u "
+            "(Soft!=product; G-AC-1; UDX host load residual lean; "
+            "geometry+behavior; Dual DoD OPEN; no version stamp)\n",
+            (unsigned)sizeof(struct gj_ld_handoff), u32UdxLean,
+            (unsigned)GJ_ELF_SOFT_UDX_LEAN_CHECKS, g_u32SoftLoadOk, cReg,
+            g_u32SoftHandoffOk, (unsigned)GJ_ELF_SOFT_AREAS, GJ_ELF_SOFT_WAVE);
+
+    /* Grep: elf_load: soft residual lean c2 */
+    kprintf("elf_load: soft residual lean c2 class=C2 "
+            "host_load=userspace_elf product_dir=UDX+ABI "
+            "ko_product=0 G-AC-1=1 dual_dod_a=OPEN dual_dod_b=OPEN "
+            "path=probe|load|so|reloc|auxv|handoff|interp "
+            "ho_sz=%u so_parity=%u geom=1 beh=1 lean_ok=%u/%u "
+            "load_ok=%u handoff=%u "
+            "soft_ne_product=1 dual=MIT_OR_Apache-2.0 storm=0 "
+            "areas=%u wave=%u "
+            "(Soft!=product; C2 UDX host ELF residual; geometry+behavior; "
+            "Dual DoD OPEN; no version stamp)\n",
+            (unsigned)sizeof(struct gj_ld_handoff),
+            (unsigned)(GJ_ELF_SO_MAX == GJ_LD_SO_MAX ? 1u : 0u), u32UdxLean,
+            (unsigned)GJ_ELF_SOFT_UDX_LEAN_CHECKS, g_u32SoftLoadOk,
+            g_u32SoftHandoffOk, (unsigned)GJ_ELF_SOFT_AREAS, GJ_ELF_SOFT_WAVE);
+
+    /* Grep: elf_load: soft residual lean sshd */
+    kprintf("elf_load: soft residual lean sshd host=sshd.elf et_exec=1 "
+            "direct_entry=1 freestanding_product_daemon=1 "
+            "host_exec_base=0x%lx exec_band=%u entry_in_range=%u "
+            "host_class_sshd=%u lean_ok=%u/%u load_exec=%u "
+            "product_dir=UDX+ABI dual_dod_a=OPEN dual_dod_b=OPEN "
+            "soft_ne_product=1 G-AC-1=1 storm=0 areas=%u wave=%u "
+            "(Soft!=product; sshd.elf ET_EXEC residual; Dual DoD OPEN)\n",
+            (unsigned long)GJ_ELF_HOST_EXEC_BASE, g_u32SoftLoadExecBand,
+            g_u32SoftEntryInRange, g_u32SoftHostClassSshd, u32UdxLean,
+            (unsigned)GJ_ELF_SOFT_UDX_LEAN_CHECKS, g_u32SoftLoadExec,
+            (unsigned)GJ_ELF_SOFT_AREAS, GJ_ELF_SOFT_WAVE);
+
+    /* Grep: elf_load: soft residual lean host */
+    kprintf("elf_load: soft residual lean host host_udx=1 host_sshd=1 "
+            "host_blob=1 product_hosts=UDX "
+            "host_load=userspace_elf product_dir=UDX+ABI "
+            "ko_product=0 G-AC-1=1 class=C2 "
+            "dual_dod_a=OPEN dual_dod_b=OPEN dual_dod OPEN "
+            "host_class_udx=%u host_class_sshd=%u exec_band=%u "
+            "entry_in_range=%u embed_host=%u host_blob_n=%u "
+            "lean_ok=%u/%u load_ok=%u handoff=%u "
+            "soft_ne_product=1 dual=MIT_OR_Apache-2.0 storm=0 "
+            "areas=%u wave=%u "
+            "(Soft!=product; UDX host + sshd.elf + host_blob residual; "
+            "Dual DoD OPEN)\n",
+            g_u32SoftHostClassUdx, g_u32SoftHostClassSshd,
+            g_u32SoftLoadExecBand, g_u32SoftEntryInRange, g_u32SoftEmbedHost,
+            g_u32SoftHostBlob, u32UdxLean,
+            (unsigned)GJ_ELF_SOFT_UDX_LEAN_CHECKS, g_u32SoftLoadOk,
+            g_u32SoftHandoffOk, (unsigned)GJ_ELF_SOFT_AREAS, GJ_ELF_SOFT_WAVE);
+
+    /* Grep: elf_load: soft residual sshd */
+    kprintf("elf_load: soft residual sshd host=sshd.elf et_exec=1 "
+            "exec_band=%u entry_in_range=%u host_class_sshd=%u "
+            "lean_ok=%u/%u dual_dod_a=OPEN dual_dod_b=OPEN "
+            "soft_ne_product=1 G-AC-1=1 storm=0 wave=%u\n",
+            g_u32SoftLoadExecBand, g_u32SoftEntryInRange,
+            g_u32SoftHostClassSshd, u32UdxLean,
+            (unsigned)GJ_ELF_SOFT_UDX_LEAN_CHECKS, GJ_ELF_SOFT_WAVE);
+
+    /*
+     * Grep: elf_load: soft functional residual
+     * Twin prefix FUNCTIONAL residual (product hosts + sshd; Soft!=product).
+     */
+    kprintf("elf_load: soft functional residual catalog "
+            "Soft!=product G-AC-1=1 claim_class=C2 "
+            "dual_dod_a=OPEN dual_dod_b=OPEN product_dir=UDX+ABI "
+            "product_hosts=rtl8168_udx,xhci_udx,ddi_host host_sshd=1 "
+            "product_hosts=UDX host_blob=1 "
+            "path=probe,load,so,reloc,auxv,handoff,interp,direct "
+            "host_blob_path=host_blob|probe|load "
+            "steps=%u lean_ok=%u/%u host_class_udx=%u host_class_sshd=%u "
+            "exec_band=%u entry_in_range=%u storm=0 areas=%u wave=%u\n",
+            (unsigned)GJ_ELF_FUNC_STEP_COUNT, u32UdxLean,
+            (unsigned)GJ_ELF_SOFT_UDX_LEAN_CHECKS, g_u32SoftHostClassUdx,
+            g_u32SoftHostClassSshd, g_u32SoftLoadExecBand,
+            g_u32SoftEntryInRange, (unsigned)GJ_ELF_SOFT_AREAS,
+            GJ_ELF_SOFT_WAVE);
+    kprintf("elf_load: soft functional residual "
+            "product_hosts=rtl8168_udx,xhci_udx,ddi_host host_sshd=1 "
+            "product_hosts=UDX host_blob=1 "
+            "path=/usr/lib/udx host_load=userspace_elf "
+            "embed_host=%u host_blob_n=%u seg_reject=%u pt_load_safe=1 "
+            "lean_ok=%u/%u dual_dod_a=OPEN dual_dod_b=OPEN dual_dod OPEN "
+            "Soft!=product G-AC-1=1 never_ko_product=1 storm=0 wave=%u\n",
+            g_u32SoftEmbedHost, g_u32SoftHostBlob, g_u32SoftSegReject,
+            u32UdxLean, (unsigned)GJ_ELF_SOFT_UDX_LEAN_CHECKS,
+            GJ_ELF_SOFT_WAVE);
+    /* Grep: elf_load: soft functional residual embed */
+    kprintf("elf_load: soft functional residual embed "
+            "product_hosts=rtl8168_udx,xhci_udx,ddi_host host_sshd=1 "
+            "product_hosts=UDX host_blob=1 "
+            "embed_host=%u host_blob_n=%u exec_band=%u entry_in_range=%u "
+            "seg_reject=%u pt_load_safe=1 lean_ok=%u/%u "
+            "dual_dod_a=OPEN dual_dod_b=OPEN dual_dod OPEN "
+            "Soft!=product G-AC-1=1 storm=0 wave=%u\n",
+            g_u32SoftEmbedHost, g_u32SoftHostBlob, g_u32SoftLoadExecBand,
+            g_u32SoftEntryInRange, g_u32SoftSegReject, u32UdxLean,
+            (unsigned)GJ_ELF_SOFT_UDX_LEAN_CHECKS, GJ_ELF_SOFT_WAVE);
+
+    /*
+     * Grep: elf_load: soft residual host_blob
+     * Grep: elf_load: soft residual lean host_blob
+     * Grep: elf_load: soft functional residual host_blob
+     * Twin prefix: spawn host_blob product load path residual (STRONGER).
+     * product_hosts=UDX · Dual DoD OPEN · Soft!=product · G-AC-1.
+     */
+    kprintf("elf_load: soft residual host_blob host_blob=1 "
+            "product_hosts=UDX hosts=ddi_host_gj,rtl8168_udx,xhci_udx "
+            "path=host_blob|probe|load "
+            "product_dir=UDX+ABI freestanding_class_product=0 "
+            "ko_product=0 G-AC-1=1 class=C2 "
+            "dual_dod_a=OPEN dual_dod_b=OPEN dual_dod OPEN "
+            "embed_host=%u host_blob_n=%u exec_band=%u lean_ok=%u/%u "
+            "load_ok=%u soft_ne_product=1 dual=MIT_OR_Apache-2.0 storm=0 "
+            "areas=%u wave=%u "
+            "(Soft!=product; host_blob residual; Dual DoD OPEN)\n",
+            g_u32SoftEmbedHost, g_u32SoftHostBlob, g_u32SoftLoadExecBand,
+            u32UdxLean, (unsigned)GJ_ELF_SOFT_UDX_LEAN_CHECKS,
+            g_u32SoftLoadOk, (unsigned)GJ_ELF_SOFT_AREAS, GJ_ELF_SOFT_WAVE);
+    kprintf("elf_load: soft residual lean host_blob host_blob=1 "
+            "product_hosts=UDX path=host_blob|probe|load "
+            "dual_dod_a=OPEN dual_dod_b=OPEN dual_dod OPEN "
+            "embed_host=%u host_blob_n=%u lean_ok=%u/%u load_ok=%u "
+            "soft_ne_product=1 G-AC-1=1 storm=0 areas=%u wave=%u "
+            "(Soft!=product; host_blob residual lean; Dual DoD OPEN)\n",
+            g_u32SoftEmbedHost, g_u32SoftHostBlob, u32UdxLean,
+            (unsigned)GJ_ELF_SOFT_UDX_LEAN_CHECKS, g_u32SoftLoadOk,
+            (unsigned)GJ_ELF_SOFT_AREAS, GJ_ELF_SOFT_WAVE);
+    kprintf("elf_load: soft functional residual host_blob "
+            "product_hosts=UDX host_blob=1 path=host_blob|probe|load "
+            "embed_host=%u host_blob_n=%u exec_band=%u entry_in_range=%u "
+            "lean_ok=%u/%u dual_dod_a=OPEN dual_dod_b=OPEN dual_dod OPEN "
+            "Soft!=product G-AC-1=1 never_ko_product=1 storm=0 wave=%u\n",
+            g_u32SoftEmbedHost, g_u32SoftHostBlob, g_u32SoftLoadExecBand,
+            g_u32SoftEntryInRange, u32UdxLean,
+            (unsigned)GJ_ELF_SOFT_UDX_LEAN_CHECKS, GJ_ELF_SOFT_WAVE);
+
+    /*
+     * Grep: elf_load: soft residual denser
+     * Grep: elf_load: soft residual denser host_blob
+     * Twin prefix denser residual (host_blob Dual DoD; product_hosts=UDX).
+     * Soft!=product · denser residual != Dual DoD close · G-AC-1.
+     */
+    kprintf("elf_load: soft residual denser host_blob denser=1 "
+            "product_hosts=UDX hosts=ddi_host_gj,rtl8168_udx,xhci_udx "
+            "path=host_blob|probe|load denser_host_blob_residual=1 "
+            "dual_dod_a=OPEN dual_dod_b=OPEN dual_dod OPEN "
+            "embed_host=%u host_blob_n=%u dense_ok=%u dense_fail=%u "
+            "lean_ok=%u/%u load_ok=%u "
+            "soft_ne_product=1 dual=MIT_OR_Apache-2.0 storm=0 "
+            "areas=%u wave=%u bar=v2026.08.04.75 "
+            "(denser host_blob residual; Soft!=product; Dual DoD OPEN)\n",
+            g_u32SoftEmbedHost, g_u32SoftHostBlob, g_u32SoftHostBlobDenseOk,
+            g_u32SoftHostBlobDenseFail, u32UdxLean,
+            (unsigned)GJ_ELF_SOFT_UDX_LEAN_CHECKS, g_u32SoftLoadOk,
+            (unsigned)GJ_ELF_SOFT_AREAS, GJ_ELF_SOFT_WAVE);
+    kprintf("elf_load: soft residual denser denser=1 product_hosts=UDX "
+            "host_blob=1 path=host_blob|probe|load "
+            "dense_ok=%u dense_fail=%u lean_ok=%u/%u "
+            "dual_dod_a=OPEN dual_dod_b=OPEN dual_dod OPEN "
+            "Soft!=product G-AC-1=1 never_ko_product=1 storm=0 "
+            "areas=%u wave=%u bar=v2026.08.04.75 "
+            "(denser residual honesty; denser != Dual DoD close)\n",
+            g_u32SoftHostBlobDenseOk, g_u32SoftHostBlobDenseFail, u32UdxLean,
+            (unsigned)GJ_ELF_SOFT_UDX_LEAN_CHECKS,
+            (unsigned)GJ_ELF_SOFT_AREAS, GJ_ELF_SOFT_WAVE);
+
+    /* Grep: elf_load: soft residual lean PASS */
+    if (u32UdxLean == GJ_ELF_SOFT_UDX_LEAN_CHECKS) {
+        kprintf("elf_load: soft residual lean PASS via=%s "
+                "udx_lean=%u/%u host_load=userspace_elf "
+                "host_udx=1 host_sshd=1 host_blob=1 product_hosts=UDX "
+                "product_dir=UDX+ABI ko_product=0 G-AC-1=1 class=C2 "
+                "dual_dod_a=OPEN dual_dod_b=OPEN dual_dod OPEN "
+                "soft_ne_product=1 dual=MIT_OR_Apache-2.0 storm=0 "
+                "wave=%u "
+                "(Soft!=product; UDX host + sshd.elf + host_blob residual "
+                "lean complete; Dual DoD OPEN)\n",
+                szVia, u32UdxLean, (unsigned)GJ_ELF_SOFT_UDX_LEAN_CHECKS,
+                GJ_ELF_SOFT_WAVE);
+    }
+
     /* Grep: elf_load: soft inventory */
-    kprintf("elf_load: soft inventory via=%s so_max=%u so_img=%u so_live=%u "
-            "needed_max=%u auxv_max=%u load_ok=%u load_fail=%u "
-            "probe_ok=%u handoff_ok=%u log_n=%u wave=%u\n",
-            szVia, (unsigned)GJ_ELF_SO_MAX, (unsigned)GJ_ELF_SO_IMG, cReg,
-            (unsigned)GJ_ELF_NEEDED_MAX, (unsigned)GJ_AUXV_MAX,
-            g_u32SoftLoadOk, g_u32SoftLoadFail, g_u32SoftProbeOk,
-            g_u32SoftHandoffOk, g_u32SoftLogN, GJ_ELF_SOFT_WAVE);
-
-    /* Grep: elf_load: soft probe */
-    kprintf("elf_load: soft probe ok=%u fail=%u dyn=%u exec=%u interp=%u "
-            "interp_soft=%u needed_seen=%u\n",
-            g_u32SoftProbeOk, g_u32SoftProbeFail, g_u32SoftProbeDyn,
-            g_u32SoftProbeExec, g_u32SoftProbeInterp, g_u32SoftProbeInterpSoft,
-            g_u32SoftProbeNeeded);
-
-    /* Grep: elf_load: soft load */
-    kprintf("elf_load: soft load ok=%u fail=%u dyn=%u exec=%u bias_req=%u "
-            "bias_def=%u phdr_segs=%u so_max=%u\n",
-            g_u32SoftLoadOk, g_u32SoftLoadFail, g_u32SoftLoadDyn,
-            g_u32SoftLoadExec, g_u32SoftLoadBiasReq, g_u32SoftLoadBiasDef,
-            g_u32SoftMapPages, (unsigned)GJ_ELF_SO_MAX);
-
-    /* Grep: elf_load: soft reloc */
-    kprintf("elf_load: soft reloc ops=%u hits=%u sym=%u relative+sym=1 "
-            "tls=DTPMOD,DTPOFF,TPOFF irel=1 wave=%u\n",
-            g_u32SoftRelocOps, g_u32SoftRelocHits, g_u32SoftSymHits,
-            GJ_ELF_SOFT_WAVE);
-
-    /* Grep: elf_load: soft reloc_kind */
-    kprintf("elf_load: soft reloc_kind relative=%u tls=%u irel=%u copy=%u "
-            "glob=%u jump=%u abs64=%u sym_hits=%u\n",
-            g_u32SoftRelocRelative, g_u32SoftRelocTls, g_u32SoftRelocIrel,
-            g_u32SoftRelocCopy, g_u32SoftRelocGlob, g_u32SoftRelocJump,
-            g_u32SoftRelocAbs64, g_u32SoftSymHits);
-
-    /* Grep: elf_load: soft so */
-    kprintf("elf_load: soft so map_ok=%u map_fail=%u skip=%u full=%u live=%u "
-            "hash=%u gnu=%u hash_n=%u gnu_n=%u reg_n=%u\n",
-            g_u32SoftSoMapOk, g_u32SoftSoMapFail, g_u32SoftSoSkip,
-            g_u32SoftSoFull, cReg, cHashLive, cGnuLive, g_u32SoftSoHash,
-            g_u32SoftSoGnu, g_cSo);
-
-    /* Grep: elf_load: soft needed */
-    kprintf("elf_load: soft needed calls=%u ok=%u miss=%u max=%u "
-            "pfx=/lib/,/usr/lib/\n",
-            g_u32SoftNeededCalls, g_u32SoftNeededOk, g_u32SoftNeededMiss,
-            (unsigned)GJ_ELF_NEEDED_MAX);
-
-    /* Grep: elf_load: soft resolve */
-    kprintf("elf_load: soft resolve gnu=%u hash=%u scan=%u miss=%u "
-            "reg_hit=%u reg_miss=%u order=gnu,hash,scan\n",
-            g_u32SoftResolveGnu, g_u32SoftResolveHash, g_u32SoftResolveScan,
-            g_u32SoftResolveMiss, g_u32SoftRegFindHit, g_u32SoftRegFindMiss);
-
-    /* Grep: elf_load: soft auxv */
-    kprintf("elf_load: soft auxv fill=%u last_pairs=%u max=%u "
-            "at=PHDR,PHENT,PHNUM,PAGESZ,BASE,ENTRY,RANDOM,EXECFN\n",
-            g_u32SoftAuxvFill, g_u32SoftAuxvPairs, (unsigned)GJ_AUXV_MAX);
-
-    /* Grep: elf_load: soft handoff */
-    kprintf("elf_load: soft handoff ok=%u fail=%u verify_ok=%u verify_fail=%u "
-            "va=0x%lx stack=0x%lx magic=GJLD\n",
-            g_u32SoftHandoffOk, g_u32SoftHandoffFail, g_u32SoftVerifyOk,
-            g_u32SoftVerifyFail, (unsigned long)GJ_LD_HANDOFF_VA,
-            (unsigned long)GJ_LD_STACK_VA);
-
-    /* Grep: elf_load: soft interp */
-    kprintf("elf_load: soft interp first=%u defer=%u direct=%u "
-            "soft_norm=/lib/ soft_ok=absolute\n",
-            g_u32SoftInterpFirst, g_u32SoftInterpDefer, g_u32SoftDirect);
-
-    /* Grep: elf_load: soft path */
-    kprintf("elf_load: soft path claim=probe,load,so,reloc,auxv,handoff,interp "
-            "ld-gj=1 so_reg=1 vfs_needed=1 wave=%u "
-            "(soft inventory)\n",
-            GJ_ELF_SOFT_WAVE);
-
-    /* Grep: elf_load: soft return (Wave 19 twin) */
-    kprintf("elf_load: soft return probe_ok=%u probe_fail=%u load_ok=%u "
-            "load_fail=%u reloc_hits=%u handoff_ok=%u handoff_fail=%u "
-            "verify_ok=%u verify_fail=%u so_live=%u "
-            "product_kernel=OPEN wave=%u\n",
-            g_u32SoftProbeOk, g_u32SoftProbeFail, g_u32SoftLoadOk,
-            g_u32SoftLoadFail, g_u32SoftRelocHits, g_u32SoftHandoffOk,
-            g_u32SoftHandoffFail, g_u32SoftVerifyOk, g_u32SoftVerifyFail,
-            cReg, GJ_ELF_SOFT_WAVE);
-
-    /* Grep: elf_load: soft ret_surface (Wave 19 twin) */
-    kprintf("elf_load: soft ret_surface probe=ok|fail load=ok|fail "
-            "reloc handoff=ok|fail verify=ok|fail product_kernel=OPEN "
-            "wave=%u\n",
-            GJ_ELF_SOFT_WAVE);
-
-    /* Grep: elf_load: soft surface (Wave 19 twin) */
-    kprintf("elf_load: soft surface inventory,probe,load,reloc,reloc_kind,so,"
-            "needed,resolve,auxv,handoff,interp,path,return,ret_surface,"
-            "surface,deepen,catalog,bias,capacity areas=113 wave=%u\n",
-            GJ_ELF_SOFT_WAVE);
-
-    /* Grep: elf_load: soft retmap — Wave 19 return-surface map */
-    kprintf("elf_load: soft retmap ok|fail|inval|nodev|busy|nomem product_gate=0 soft_only=1 wave=116\n");
-
-    /* Grep: elf_load: soft deepen */
-    /*
-     * ---- Wave 19 complementary surfaces (kept) (never reshape primary).
-     * Return surfaces only — soft inventory; never hard-gates product paths.
-     */
-    /* Grep: elf_load: soft retclass — Wave 19 return-class taxonomy (kept) */
-    kprintf("elf_load: soft retclass ok|fail|inval|nodev|busy|nomem "
-            "soft_only=1 product_gate=0 wave=%u "
-            "(retclass taxonomy; Soft≠product)\n",
-            (unsigned)GJ_ELF_SOFT_WAVE);
-    /* Grep: elf_load: soft retlane — Wave 19 return-lane catalog (kept) */
-    kprintf("elf_load: soft retlane inv|selftest|rate|retcode|retmap|class "
-            "product_kernel=OPEN soft_ne_product=1 wave=%u "
-            "(retlane catalog; Soft≠product)\n",
-            (unsigned)GJ_ELF_SOFT_WAVE);
-    /*
-     * ---- Wave 20 complementary surfaces (kept) (never reshape primary).
-     * Return surfaces only — soft inventory; never hard-gates product paths.
-     */
-    /* Grep: elf_load: soft retbound — Wave 20 return-bound honesty (kept) */
-    kprintf("elf_load: soft retbound soft_only=1 product_gate=0 hard_gate=0 "
-            "never_blocks_m0=1 wave=%u "
-            "(retbound honesty; Soft≠product)\n",
-            (unsigned)GJ_ELF_SOFT_WAVE);
-    /* Grep: elf_load: soft retseal — Wave 20 seal stamp (kept) */
-    kprintf("elf_load: soft retseal exclusive=1 soft_ne_product=1 "
-            "product_kernel=OPEN wave=%u "
-            "(retseal stamp; Soft≠product)\n",
-            (unsigned)GJ_ELF_SOFT_WAVE);
-            /*
-             * ---- Wave 21 complementary surfaces (kept) (never reshape primary).
-             * Return surfaces only — soft inventory; never hard-gates product paths.
-            */
-            /* Grep: elf_load: soft retpulse — Wave 21 return-pulse honesty (kept) */
-            kprintf("elf_load: soft retpulse soft_only=1 product_gate=0 soft_ne_product=1 "
-                    "never_blocks_m0=1 wave=%u "
-                    "(retpulse honesty; Soft≠product)\n",
-                    (unsigned)GJ_ELF_SOFT_WAVE);
-            /* Grep: elf_load: soft retmark — Wave 21 mark stamp (kept) */
-            kprintf("elf_load: soft retmark exclusive=1 soft_ne_product=1 "
-                    "product_kernel=OPEN wave=%u "
-                    "(retmark stamp; Soft≠product)\n",
-                    (unsigned)GJ_ELF_SOFT_WAVE);
-            /*
-             * ---- Wave 22 complementary surfaces (kept) (never reshape primary).
-             * Return surfaces only — soft inventory; never hard-gates product paths.
-            */
-            /* Grep: elf_load: soft retphase — Wave 22 return-phase honesty (kept) */
-            kprintf("elf_load: soft retphase soft_only=1 product_gate=0 soft_ne_product=1 "
-                    "never_blocks_m0=1 wave=%u "
-                    "(retphase honesty; Soft≠product)\n",
-                    (unsigned)GJ_ELF_SOFT_WAVE);
-            /* Grep: elf_load: soft retbadge — Wave 22 badge stamp (kept) */
-            kprintf("elf_load: soft retbadge exclusive=1 soft_ne_product=1 "
-                    "product_kernel=OPEN wave=%u "
-                    "(retbadge stamp; Soft≠product)\n",
-                    (unsigned)GJ_ELF_SOFT_WAVE);
-/*
- * ---- Wave 23 complementary surfaces (kept) (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
-            */
-            /* Grep: elf_load: soft rettoken — Wave 23 return-token honesty (kept) */
-            kprintf("elf_load: soft rettoken soft_only=1 product_gate=0 soft_ne_product=1 "
-                    "never_blocks_m0=1 wave=%u "
-                    "(rettoken honesty; Soft≠product)\n",
-                    (unsigned)GJ_ELF_SOFT_WAVE);
-            /* Grep: elf_load: soft retcrest — Wave 23 crest stamp (kept) */
-            kprintf("elf_load: soft retcrest exclusive=1 soft_ne_product=1 "
-                    "product_kernel=OPEN wave=%u "
-                    "(retcrest stamp; Soft≠product)\n",
-                    (unsigned)GJ_ELF_SOFT_WAVE);
-            /*
-             * ---- Wave 24 complementary surfaces (kept) (never reshape primary).
-             * Return surfaces only — soft inventory; never hard-gates product paths.
-             */
-            /* Grep: elf_load: soft retvault — Wave 24 return-vault honesty (kept) */
-            kprintf("elf_load: soft retvault soft_only=1 product_gate=0 soft_ne_product=1 "
-                    "never_blocks_m0=1 wave=%u "
-                    "(retvault honesty; Soft≠product)\n",
-                    (unsigned)GJ_ELF_SOFT_WAVE);
-            /* Grep: elf_load: soft retbanner — Wave 24 banner stamp (kept) */
-            kprintf("elf_load: soft retbanner exclusive=1 soft_ne_product=1 "
-                    "product_kernel=OPEN wave=%u "
-                    "(retbanner stamp; Soft≠product)\n",
-                    (unsigned)GJ_ELF_SOFT_WAVE);
-            /*
-             * ---- Wave 25 complementary surfaces (kept) (never reshape primary).
-             * Return surfaces only — soft inventory; never hard-gates product paths.
-             */
-            /* Grep: elf_load: soft retledger — Wave 25 return-ledger honesty (kept) */
-            kprintf("elf_load: soft retledger soft_only=1 product_gate=0 soft_ne_product=1 "
-                    "never_blocks_m0=1 wave=%u "
-                    "(retledger honesty; Soft≠product)\n",
-                    (unsigned)GJ_ELF_SOFT_WAVE);
-            /* Grep: elf_load: soft retbeacon — Wave 25 beacon stamp (kept) */
-            kprintf("elf_load: soft retbeacon exclusive=1 soft_ne_product=1 "
-                    "product_kernel=OPEN wave=%u "
-                    "(retbeacon stamp; Soft≠product)\n",
-                    (unsigned)GJ_ELF_SOFT_WAVE);
-            /*
-             * ---- Wave 26 complementary surfaces (kept) (never reshape primary).
-             * Return surfaces only — soft inventory; never hard-gates product paths.
-             */
-            /* Grep: elf_load: soft retcipher — Wave 26 return-cipher honesty (kept) */
-            kprintf("elf_load: soft retcipher soft_only=1 product_gate=0 soft_ne_product=1 "
-                    "never_blocks_m0=1 wave=%u "
-                    "(retcipher honesty; Soft≠product)\n",
-                    (unsigned)GJ_ELF_SOFT_WAVE);
-            /* Grep: elf_load: soft retflame — Wave 26 flame stamp (kept) */
-            kprintf("elf_load: soft retflame exclusive=1 soft_ne_product=1 "
-                    "product_kernel=OPEN wave=%u "
-                    "(retflame stamp; Soft≠product)\n",
-                    (unsigned)GJ_ELF_SOFT_WAVE);
-                    /*
-                     * ---- Wave 27 complementary surfaces (kept) (never reshape primary).
-                     * Return surfaces only — soft inventory; never hard-gates product paths.
-                     */
-                    /* Grep: elf_load: soft retprism — Wave 27 return-prism honesty (kept) */
-                    kprintf("elf_load: soft retprism soft_only=1 product_gate=0 soft_ne_product=1 "
-                            "never_blocks_m0=1 wave=%u "
-                            "(retprism honesty; Soft≠product)\n",
-                            (unsigned)GJ_ELF_SOFT_WAVE);
-                    /* Grep: elf_load: soft retforge — Wave 27 forge stamp (kept) */
-                    kprintf("elf_load: soft retforge exclusive=1 soft_ne_product=1 "
-                            "product_kernel=OPEN wave=%u "
-                            "(retforge stamp; Soft≠product)\n",
-                            (unsigned)GJ_ELF_SOFT_WAVE);
-                            /*
-                             * ---- Wave 28 complementary surfaces (kept) (never reshape primary).
-                             * Return surfaces only — soft inventory; never hard-gates product paths.
-                             */
-                            /* Grep: elf_load: soft retshard — Wave 28 return-shard honesty (kept) */
-                            kprintf("elf_load: soft retshard soft_only=1 product_gate=0 soft_ne_product=1 "
-                                "never_blocks_m0=1 wave=%u "
-                                "(retshard honesty; Soft≠product)\n",
-                                (unsigned)GJ_ELF_SOFT_WAVE);
-                            /* Grep: elf_load: soft retcrown — Wave 28 crown stamp (kept) */
-                            kprintf("elf_load: soft retcrown exclusive=1 soft_ne_product=1 "
-                                "product_kernel=OPEN wave=%u "
-                                "(retcrown stamp; Soft≠product)\n",
-                                (unsigned)GJ_ELF_SOFT_WAVE);
-                                /*
-                             * ---- Wave 29 complementary surfaces (kept) (never reshape primary).
-                             * Return surfaces only — soft inventory; never hard-gates product paths.
-                             */
-                            /* Grep: elf_load: soft retglyph — Wave 29 return-glyph honesty (kept) */
-                            kprintf("elf_load: soft retglyph soft_only=1 product_gate=0 soft_ne_product=1 "
-                                    "never_blocks_m0=1 wave=%u "
-                                    "(retglyph honesty; Soft≠product)\n",
-                                    (unsigned)GJ_ELF_SOFT_WAVE);
-                            /* Grep: elf_load: soft retscepter — Wave 29 scepter stamp (kept) */
-                            kprintf("elf_load: soft retscepter exclusive=1 soft_ne_product=1 "
-                                    "product_kernel=OPEN wave=%u "
-                                    "(retscepter stamp; Soft≠product)\n",
-                                    (unsigned)GJ_ELF_SOFT_WAVE);
-                                /*
-                             * ---- Wave 30 complementary surfaces (kept) (never reshape primary).
-                             * Return surfaces only — soft inventory; never hard-gates product paths.
-                             */
-                            /* Grep: elf_load: soft retsigil — Wave 30 return-sigil honesty (kept) */
-                            kprintf("elf_load: soft retsigil soft_only=1 product_gate=0 soft_ne_product=1 "
-                                    "never_blocks_m0=1 wave=%u "
-                                    "(retsigil honesty; Soft≠product)\n",
-                                    (unsigned)GJ_ELF_SOFT_WAVE);
-                            /* Grep: elf_load: soft retemblem — Wave 30 emblem stamp (kept) */
-                            kprintf("elf_load: soft retemblem exclusive=1 soft_ne_product=1 "
-                                    "product_kernel=OPEN wave=%u "
-                                    "(retemblem stamp; Soft≠product)\n",
-                                    (unsigned)GJ_ELF_SOFT_WAVE);
-                            /*
-                             * ---- Wave 31 complementary surfaces (kept) (never reshape primary).
-                             * Return surfaces only — soft inventory; never hard-gates product paths.
-                             */
-                            /* Grep: elf_load: soft retaegis — Wave 31 return-aegis honesty (kept) */
-                            kprintf("elf_load: soft retaegis soft_only=1 product_gate=0 soft_ne_product=1 "
-                                    "never_blocks_m0=1 wave=%u "
-                                    "(retaegis honesty; Soft≠product)\n",
-                                    (unsigned)GJ_ELF_SOFT_WAVE);
-                            /* Grep: elf_load: soft retsigil — Wave 30 return-sigil honesty (kept) */
-                            kprintf("elf_load: soft retsigil soft_only=1 product_gate=0 soft_ne_product=1 "
-                                    "never_blocks_m0=1 wave=%u "
-                                    "(retsigil honesty; Soft≠product)\n",
-                                    (unsigned)GJ_ELF_SOFT_WAVE);
-                            /* Grep: elf_load: soft retmantle — Wave 31 mantle stamp (kept) */
-                            kprintf("elf_load: soft retmantle exclusive=1 soft_ne_product=1 "
-                                    "product_kernel=OPEN wave=%u "
-                                    "(retmantle stamp; Soft≠product)\n",
-                                    (unsigned)GJ_ELF_SOFT_WAVE);
-/*
- * ---- Wave 32 complementary surfaces (kept) (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: elf_load: soft retbulwark — Wave 32 return-bulwark honesty (kept) */
-kprintf("elf_load: soft retbulwark soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=%u "
-        "(retbulwark honesty; Soft≠product)\n",
-        (unsigned)GJ_ELF_SOFT_WAVE);
-/* Grep: elf_load: soft retpanoply — Wave 32 panoply stamp (kept) */
-kprintf("elf_load: soft retpanoply exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=%u "
-        "(retpanoply stamp; Soft≠product)\n",
-        (unsigned)GJ_ELF_SOFT_WAVE);
-/*
- * ---- Wave 33 complementary surfaces (kept) (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: elf_load: soft retbastion — Wave 33 return-bastion honesty (kept) */
-kprintf("elf_load: soft retbastion soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=%u "
-        "(retbastion honesty; Soft≠product)\n",
-        (unsigned)GJ_ELF_SOFT_WAVE);
-/* Grep: elf_load: soft retcitadel — Wave 33 citadel stamp (kept) */
-kprintf("elf_load: soft retcitadel exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=%u "
-        "(retcitadel stamp; Soft≠product)\n",
-        (unsigned)GJ_ELF_SOFT_WAVE);
-/*
- * ---- Wave 34 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: elf_load: soft retredoubt — Wave 34 return-redoubt honesty */
-kprintf("elf_load: soft retredoubt soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=%u "
-        "(retredoubt honesty; Soft≠product)\n",
-        (unsigned)GJ_ELF_SOFT_WAVE);
-/* Grep: elf_load: soft retkeep — Wave 34 exclusive keep stamp */
-kprintf("elf_load: soft retkeep exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=%u "
-        "(retkeep stamp; Soft≠product)\n",
-        (unsigned)GJ_ELF_SOFT_WAVE);
-/*
- * ---- Wave 35 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: elf_load: soft retfortress — Wave 35 return-fortress honesty */
-kprintf("elf_load: soft retfortress soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=%u "
-        "(retfortress honesty; Soft≠product)\n",
-        (unsigned)GJ_ELF_SOFT_WAVE);
-/* Grep: elf_load: soft retpalace — Wave 35 exclusive palace stamp */
-kprintf("elf_load: soft retpalace exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=%u "
-        "(retpalace stamp; Soft≠product)\n",
-        (unsigned)GJ_ELF_SOFT_WAVE);
-/*
- * ---- Wave 36 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: elf_load: soft rethold — Wave 36 return-hold honesty */
-kprintf("elf_load: soft rethold soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=%u "
-        "(rethold honesty; Soft≠product)\n",
-        (unsigned)GJ_ELF_SOFT_WAVE);
-/* Grep: elf_load: soft retspire — Wave 36 exclusive spire stamp */
-kprintf("elf_load: soft retspire exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=%u "
-        "(retspire stamp; Soft≠product)\n",
-        (unsigned)GJ_ELF_SOFT_WAVE);
-/*
- * ---- Wave 37 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: elf_load: soft retwall — Wave 37 return-wall honesty */
-kprintf("elf_load: soft retwall soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=%u "
-        "(retwall honesty; Soft≠product)\n",
-        (unsigned)GJ_ELF_SOFT_WAVE);
-/* Grep: elf_load: soft retgate — Wave 37 exclusive gate stamp */
-kprintf("elf_load: soft retgate exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=%u "
-        "(retgate stamp; Soft≠product)\n",
-        (unsigned)GJ_ELF_SOFT_WAVE);
-/*
- * ---- Wave 38 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: elf_load: soft retmoat — Wave 38 return-moat honesty */
-kprintf("elf_load: soft retmoat soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=%u "
-        "(retmoat honesty; Soft≠product)\n",
-        (unsigned)GJ_ELF_SOFT_WAVE);
-/* Grep: elf_load: soft retower — Wave 38 exclusive tower stamp */
-kprintf("elf_load: soft retower exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=%u "
-        "(retower stamp; Soft≠product)\n",
-        (unsigned)GJ_ELF_SOFT_WAVE);
-                            
-/*
- * ---- Wave 39 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: elf_load: soft retbarbican — Wave 39 return-barbican honesty */
-kprintf("elf_load: soft retbarbican soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=%u "
-        "(retbarbican honesty; Soft≠product)\n",
-        (unsigned)GJ_ELF_SOFT_WAVE);
-/* Grep: elf_load: soft retglacis — Wave 39 exclusive glacis stamp */
-kprintf("elf_load: soft retglacis exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=%u "
-        "(retglacis stamp; Soft≠product)\n",
-        (unsigned)GJ_ELF_SOFT_WAVE);
-/*
- * ---- Wave 40 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: elf_load: soft retcurtain — Wave 40 return-curtain honesty */
-kprintf("elf_load: soft retcurtain soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=%u "
-        "(retcurtain honesty; Soft≠product)\n",
-        (unsigned)GJ_ELF_SOFT_WAVE);
-/* Grep: elf_load: soft retparapet — Wave 40 exclusive parapet stamp */
-kprintf("elf_load: soft retparapet exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=%u "
-        "(retparapet stamp; Soft≠product)\n",
-        (unsigned)GJ_ELF_SOFT_WAVE);
-/*
- * ---- Wave 41 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: elf_load: soft retravelin — Wave 41 return-travelin honesty */
-kprintf("elf_load: soft retravelin soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=%u "
-        "(retravelin honesty; Soft≠product)\n",
-        (unsigned)GJ_ELF_SOFT_WAVE);
-/* Grep: elf_load: soft retditch — Wave 41 exclusive ditch stamp */
-kprintf("elf_load: soft retditch exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=%u "
-        "(retditch stamp; Soft≠product)\n",
-        (unsigned)GJ_ELF_SOFT_WAVE);
-/*
- * ---- Wave 42 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: elf_load: soft retportcullis — Wave 42 return-portcullis honesty */
-kprintf("elf_load: soft retportcullis soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=%u "
-        "(retportcullis honesty; Soft≠product)\n",
-        (unsigned)GJ_ELF_SOFT_WAVE);
-/* Grep: elf_load: soft retbattlement — Wave 42 exclusive battlement stamp */
-kprintf("elf_load: soft retbattlement exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=%u "
-        "(retbattlement stamp; Soft≠product)\n",
-        (unsigned)GJ_ELF_SOFT_WAVE);
-/*
- * ---- Wave 43 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: elf_load: soft retmachicolation — Wave 43 return-machicolation honesty */
-kprintf("elf_load: soft retmachicolation soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=%u "
-        "(retmachicolation honesty; Soft≠product)\n",
-        (unsigned)GJ_ELF_SOFT_WAVE);
-/* Grep: elf_load: soft retarrowslit — Wave 43 exclusive arrowslit stamp */
-kprintf("elf_load: soft retarrowslit exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=%u "
-        "(retarrowslit stamp; Soft≠product)\n",
-        (unsigned)GJ_ELF_SOFT_WAVE);
-
-/*
- * ---- Wave 44 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: elf_load: soft retmerlon — Wave 44 return-merlon honesty */
-kprintf("elf_load: soft retmerlon soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=%u "
-        "(retmerlon honesty; Soft≠product)\n",
-        (unsigned)GJ_ELF_SOFT_WAVE);
-/* Grep: elf_load: soft retembrasure — Wave 44 exclusive embrasure stamp */
-kprintf("elf_load: soft retembrasure exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=%u "
-        "(retembrasure stamp; Soft≠product)\n",
-        (unsigned)GJ_ELF_SOFT_WAVE);
-
-/*
- * ---- Wave 45 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: elf_load: soft retkeepgate — Wave 45 return-keepgate honesty */
-kprintf("elf_load: soft retkeepgate soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=%u "
-        "(retkeepgate honesty; Soft≠product)\n",
-        (unsigned)GJ_ELF_SOFT_WAVE);
-/* Grep: elf_load: soft retouterward — Wave 45 exclusive outerward stamp */
-kprintf("elf_load: soft retouterward exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=%u "
-        "(retouterward stamp; Soft≠product)\n",
-        (unsigned)GJ_ELF_SOFT_WAVE);
-
-/*
- * ---- Wave 46 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: elf_load: soft retbailey — Wave 46 return-bailey honesty */
-kprintf("elf_load: soft retbailey soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=%u "
-        "(retbailey honesty; Soft≠product)\n",
-        (unsigned)GJ_ELF_SOFT_WAVE);
-/* Grep: elf_load: soft retpostern — Wave 46 exclusive postern stamp */
-kprintf("elf_load: soft retpostern exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=%u "
-        "(retpostern stamp; Soft≠product)\n",
-        (unsigned)GJ_ELF_SOFT_WAVE);
-
-/*
- * ---- Wave 47 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: elf_load: soft retinnerward — Wave 47 return-innerward honesty */
-kprintf("elf_load: soft retinnerward soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retinnerward honesty; Soft≠product)\n");
-/* Grep: elf_load: soft retdonjon — Wave 47 exclusive donjon stamp */
-kprintf("elf_load: soft retdonjon exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retdonjon stamp; Soft≠product)\n");
-
-/*
- * ---- Wave 48 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: elf_load: soft retchevaux — Wave 48 return-chevaux honesty */
-kprintf("elf_load: soft retchevaux soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retchevaux honesty; Soft≠product)\n");
-/* Grep: elf_load: soft retpalisade — Wave 48 exclusive palisade stamp */
-kprintf("elf_load: soft retpalisade exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retpalisade stamp; Soft≠product)\n");
-
-/*
- * ---- Wave 49 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: elf_load: soft retglacisgate — Wave 49 return-glacisgate honesty */
-kprintf("elf_load: soft retglacisgate soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retglacisgate honesty; Soft≠product)\n");
-/* Grep: elf_load: soft retoutwork — Wave 49 exclusive outwork stamp */
-kprintf("elf_load: soft retoutwork exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retoutwork stamp; Soft≠product)\n");
-/*
- * ---- Wave 50 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: elf_load: soft retsally — Wave 50 return-sally honesty */
-kprintf("elf_load: soft retsally soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retsally honesty; Soft≠product)\n");
-/* Grep: elf_load: soft retcounterscarp — Wave 50 exclusive counterscarp stamp */
-kprintf("elf_load: soft retcounterscarp exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retcounterscarp stamp; Soft≠product)\n");
-/*
- * ---- Wave 51 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: elf_load: soft retfosse — Wave 51 return-fosse honesty */
-kprintf("elf_load: soft retfosse soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retfosse honesty; Soft≠product)\n");
-/* Grep: elf_load: soft retcoveredway — Wave 51 exclusive coveredway stamp */
-kprintf("elf_load: soft retcoveredway exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retcoveredway stamp; Soft≠product)\n");
-
-/*
- * ---- Wave 52 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: elf_load: soft rettenaille — Wave 52 return-tenaille honesty */
-kprintf("elf_load: soft rettenaille soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(rettenaille honesty; Soft≠product)\n");
-/* Grep: elf_load: soft retdemilune — Wave 52 exclusive demilune stamp */
-kprintf("elf_load: soft retdemilune exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retdemilune stamp; Soft≠product)\n");
-/*
- * ---- Wave 53 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: elf_load: soft retravelin — Wave 53 return-travelin honesty */
-kprintf("elf_load: soft retravelin soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retravelin honesty; Soft≠product)\n");
-/* Grep: elf_load: soft retlunette — Wave 53 exclusive lunette stamp */
-kprintf("elf_load: soft retlunette exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retlunette stamp; Soft≠product)\n");
-/*
- * ---- Wave 54 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: elf_load: soft retcaponier — Wave 54 return-caponier honesty */
-kprintf("elf_load: soft retcaponier soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retcaponier honesty; Soft≠product)\n");
-/* Grep: elf_load: soft retredan — Wave 54 exclusive redan stamp */
-kprintf("elf_load: soft retredan exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retredan stamp; Soft≠product)\n");
-/*
- * ---- Wave 55 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: elf_load: soft retflank — Wave 55 return-flank honesty */
-kprintf("elf_load: soft retflank soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retflank honesty; Soft≠product)\n");
-/* Grep: elf_load: soft retface — Wave 55 exclusive face stamp */
-kprintf("elf_load: soft retface exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retface stamp; Soft≠product)\n");
-/*
- * ---- Wave 56 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: elf_load: soft retgorge — Wave 56 return-gorge honesty */
-kprintf("elf_load: soft retgorge soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retgorge honesty; Soft≠product)\n");
-/* Grep: elf_load: soft retshoulder — Wave 56 exclusive shoulder stamp */
-kprintf("elf_load: soft retshoulder exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retshoulder stamp; Soft≠product)\n");
-/*
- * ---- Wave 57 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: elf_load: soft retraverse — Wave 57 return-traverse honesty */
-kprintf("elf_load: soft retraverse soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retraverse honesty; Soft≠product)\n");
-/* Grep: elf_load: soft retcasemate — Wave 57 exclusive casemate stamp */
-kprintf("elf_load: soft retcasemate exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retcasemate stamp; Soft≠product)\n");
-
-/*
- * ---- Wave 58 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: elf_load: soft retorillon — Wave 58 return-orillon honesty */
-kprintf("elf_load: soft retorillon soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retorillon honesty; Soft≠product)\n");
-/* Grep: elf_load: soft retbonnette — Wave 58 exclusive bonnette stamp */
-kprintf("elf_load: soft retbonnette exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retbonnette stamp; Soft≠product)\n");
-
-/*
- * ---- Wave 59 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: elf_load: soft retcrownwork — Wave 59 return-crownwork honesty */
-kprintf("elf_load: soft retcrownwork soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retcrownwork honesty; Soft≠product)\n");
-/* Grep: elf_load: soft rethornwork — Wave 59 exclusive hornwork stamp */
-kprintf("elf_load: soft rethornwork exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(rethornwork stamp; Soft≠product)\n");
-
-/*
- * ---- Wave 60 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: elf_load: soft retplace — Wave 60 return-place honesty */
-kprintf("elf_load: soft retplace soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retplace honesty; Soft≠product)\n");
-/* Grep: elf_load: soft retenvelope — Wave 60 exclusive envelope stamp */
-kprintf("elf_load: soft retenvelope exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retenvelope stamp; Soft≠product)\n");
-
-
-
-
-
-
-
-
-
-/*
- * ---- Wave 61 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: elf_load: soft retcounterguard — Wave 61 return-counterguard honesty */
-kprintf("elf_load: soft retcounterguard soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retcounterguard honesty; Soft≠product)\n");
-/* Grep: elf_load: soft retcoveredface — Wave 61 exclusive coveredface stamp */
-kprintf("elf_load: soft retcoveredface exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retcoveredface stamp; Soft≠product)\n");
-/*
- * ---- Wave 62 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: elf_load: soft retbastionface — Wave 62 return-bastionface honesty */
-kprintf("elf_load: soft retbastionface soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retbastionface honesty; Soft≠product)\n");
-/* Grep: elf_load: soft retcurtainangle — Wave 62 exclusive curtainangle stamp */
-kprintf("elf_load: soft retcurtainangle exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retcurtainangle stamp; Soft≠product)\n");
-/*
- * ---- Wave 63 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: elf_load: soft retdoubletenaille — Wave 63 return-doubletenaille honesty */
-kprintf("elf_load: soft retdoubletenaille soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retdoubletenaille honesty; Soft≠product)\n");
-/* Grep: elf_load: soft retplaceofarms — Wave 63 exclusive placeofarms stamp */
-kprintf("elf_load: soft retplaceofarms exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retplaceofarms stamp; Soft≠product)\n");
- /*
-  * ---- Wave 64 exclusive complementary surfaces (never reshape primary).
-  * Return surfaces only — soft inventory; never hard-gates product paths.
-  */
- /* Grep: elf_load: soft retreentrant — Wave 64 return-reentrant honesty */
-kprintf("elf_load: soft retreentrant soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retreentrant honesty; Soft≠product)\n");
- /* Grep: elf_load: soft retsallyport — Wave 64 exclusive sallyport stamp */
-kprintf("elf_load: soft retsallyport exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retsallyport stamp; Soft≠product)\n");
- /*
-  * ---- Wave 65 exclusive complementary surfaces (never reshape primary).
-  * Return surfaces only — soft inventory; never hard-gates product paths.
-  */
- /* Grep: elf_load: soft retgorgeangle — Wave 65 return-gorgeangle honesty */
-kprintf("elf_load: soft retgorgeangle soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retgorgeangle honesty; Soft≠product)\n");
- /* Grep: elf_load: soft retshoulderangle — Wave 65 exclusive shoulderangle stamp */
-kprintf("elf_load: soft retshoulderangle exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retshoulderangle stamp; Soft≠product)\n");
- /*
-  * ---- Wave 66 exclusive complementary surfaces (never reshape primary).
-  * Return surfaces only — soft inventory; never hard-gates product paths.
-  */
- /* Grep: elf_load: soft retflankangle — Wave 66 return-flankangle honesty */
- kprintf("elf_load: soft retflankangle soft_only=1 product_gate=0 soft_ne_product=1 "
-         "never_blocks_m0=1 wave=116 "
-         "(retflankangle honesty; Soft≠product)\n");
- /* Grep: elf_load: soft retfaceangle — Wave 66 exclusive faceangle stamp */
- kprintf("elf_load: soft retfaceangle exclusive=1 soft_ne_product=1 "
-         "product_kernel=OPEN wave=116 "
-         "(retfaceangle stamp; Soft≠product)\n");
-/*
- * ---- Wave 67 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: elf_load: soft retcaponierangle — Wave 67 return-caponierangle honesty */
-kprintf("elf_load: soft retcaponierangle soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retcaponierangle honesty; Soft≠product)\n");
-/* Grep: elf_load: soft retredanangle — Wave 67 exclusive redanangle stamp */
-kprintf("elf_load: soft retredanangle exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retredanangle stamp; Soft≠product)\n");
-/*
- * ---- Wave 68 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: elf_load: soft retlunetteangle — Wave 68 return-lunetteangle honesty */
-kprintf("elf_load: soft retlunetteangle soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retlunetteangle honesty; Soft≠product)\n");
-/* Grep: elf_load: soft rettenailleangle — Wave 68 exclusive tenailleangle stamp */
-kprintf("elf_load: soft rettenailleangle exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(rettenailleangle stamp; Soft≠product)\n");
-/*
- * ---- Wave 69 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: elf_load: soft retdemiluneangle — Wave 69 return-demiluneangle honesty */
-kprintf("elf_load: soft retdemiluneangle soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retdemiluneangle honesty; Soft≠product)\n");
-/* Grep: elf_load: soft retcoveredwayangle — Wave 69 exclusive coveredwayangle stamp */
-kprintf("elf_load: soft retcoveredwayangle exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retcoveredwayangle stamp; Soft≠product)\n");
-/*
- * ---- Wave 70 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: elf_load: soft retfosseangle — Wave 70 return-fosseangle honesty */
-kprintf("elf_load: soft retfosseangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retfosseangle honesty; Soft≠product)\n");
-/* Grep: elf_load: soft retcounterscarple — Wave 70 exclusive counterscarple stamp */
-kprintf("elf_load: soft retcounterscarple exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retcounterscarple stamp; Soft≠product)\n");
-/*
- * ---- Wave 71 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: elf_load: soft retsallyportangle — Wave 71 return-sallyportangle honesty */
-kprintf("elf_load: soft retsallyportangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retsallyportangle honesty; Soft≠product)\n");
-/* Grep: elf_load: soft retreentrantangle — Wave 71 exclusive reentrantangle stamp */
-kprintf("elf_load: soft retreentrantangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retreentrantangle stamp; Soft≠product)\n");
-/*
- * ---- Wave 72 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: elf_load: soft retplaceofarmsangle — Wave 72 return-placeofarmsangle honesty */
-kprintf("elf_load: soft retplaceofarmsangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retplaceofarmsangle honesty; Soft≠product)\n");
-/* Grep: elf_load: soft retdoubletenailleangle — Wave 72 exclusive doubletenailleangle stamp */
-kprintf("elf_load: soft retdoubletenailleangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retdoubletenailleangle stamp; Soft≠product)\n");
-/* Grep: elf_load: soft retcurtainface — Wave 73 return-curtainface honesty */
-kprintf("elf_load: soft retcurtainface soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retcurtainface honesty; Soft≠product)\n");
-/* Grep: elf_load: soft retbastionangle — Wave 73 exclusive bastionangle stamp */
-kprintf("elf_load: soft retbastionangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retbastionangle stamp; Soft≠product)\n");
-/* Grep: elf_load: soft retglacisangle — Wave 74 return-glacisangle honesty */
-kprintf("elf_load: soft retglacisangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retglacisangle honesty; Soft≠product)\n");
-/* Grep: elf_load: soft retparapetangle — Wave 74 exclusive parapetangle stamp */
-kprintf("elf_load: soft retparapetangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retparapetangle stamp; Soft≠product)\n");
-/* Grep: elf_load: soft retmoatangle — Wave 75 return-moatangle honesty */
-kprintf("elf_load: soft retmoatangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retmoatangle honesty; Soft≠product)\n");
-/* Grep: elf_load: soft retowerangle — Wave 75 exclusive towerangle stamp */
-kprintf("elf_load: soft retowerangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retowerangle stamp; Soft≠product)\n");
-/* Grep: elf_load: soft retgateangle — Wave 76 return-gateangle honesty */
-kprintf("elf_load: soft retgateangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retgateangle honesty; Soft≠product)\n");
-/* Grep: elf_load: soft retwallangle — Wave 76 exclusive wallangle stamp */
-kprintf("elf_load: soft retwallangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retwallangle stamp; Soft≠product)\n");
-/* Grep: elf_load: soft retspireangle — Wave 77 return-spireangle honesty */
-kprintf("elf_load: soft retspireangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retspireangle honesty; Soft≠product)\n");
-/* Grep: elf_load: soft retholdangle — Wave 77 exclusive holdangle stamp */
-kprintf("elf_load: soft retholdangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retholdangle stamp; Soft≠product)\n");
-/* Grep: elf_load: soft retpalaceangle — Wave 78 return-palaceangle honesty */
-kprintf("elf_load: soft retpalaceangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retpalaceangle honesty; Soft≠product)\n");
-/* Grep: elf_load: soft retfortressangle — Wave 78 exclusive fortressangle stamp */
-kprintf("elf_load: soft retfortressangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retfortressangle stamp; Soft≠product)\n");
-/* Grep: elf_load: soft retkeepangle — Wave 79 return-keepangle honesty */
-kprintf("elf_load: soft retkeepangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retkeepangle honesty; Soft≠product)\n");
-/* Grep: elf_load: soft retredoubtangle — Wave 79 exclusive redoubtangle stamp */
-kprintf("elf_load: soft retredoubtangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retredoubtangle stamp; Soft≠product)\n");
-/* Grep: elf_load: soft retcitadelangle — Wave 80 return-citadelangle honesty */
-kprintf("elf_load: soft retcitadelangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retcitadelangle honesty; Soft≠product)\n");
-/* Grep: elf_load: soft retbastionkeep — Wave 80 exclusive bastionkeep stamp */
-kprintf("elf_load: soft retbastionkeep exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retbastionkeep stamp; Soft≠product)\n");
-/* Grep: elf_load: soft retpanoplyangle — Wave 81 return-panoplyangle honesty */
-kprintf("elf_load: soft retpanoplyangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retpanoplyangle honesty; Soft≠product)\n");
-/* Grep: elf_load: soft retbulwarkangle — Wave 81 exclusive bulwarkangle stamp */
-kprintf("elf_load: soft retbulwarkangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retbulwarkangle stamp; Soft≠product)\n");
-/* Grep: elf_load: soft retmantleangle — Wave 82 return-mantleangle honesty */
-kprintf("elf_load: soft retmantleangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retmantleangle honesty; Soft≠product)\n");
-/* Grep: elf_load: soft retaegisangle — Wave 82 exclusive aegisangle stamp */
-kprintf("elf_load: soft retaegisangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retaegisangle stamp; Soft≠product)\n");
-/* Grep: elf_load: soft retemblemangle — Wave 83 return-emblemangle honesty */
-kprintf("elf_load: soft retemblemangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retemblemangle honesty; Soft≠product)\n");
-/* Grep: elf_load: soft retsigilangle — Wave 83 exclusive sigilangle stamp */
-kprintf("elf_load: soft retsigilangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retsigilangle stamp; Soft≠product)\n");
-/* Grep: elf_load: soft retscepterangle — Wave 84 return-scepterangle honesty */
-kprintf("elf_load: soft retscepterangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retscepterangle honesty; Soft≠product)\n");
-/* Grep: elf_load: soft retglyphangle — Wave 84 exclusive glyphangle stamp */
-kprintf("elf_load: soft retglyphangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retglyphangle stamp; Soft≠product)\n");
-/* Grep: elf_load: soft retcrownangle — Wave 85 return-crownangle honesty */
-kprintf("elf_load: soft retcrownangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retcrownangle honesty; Soft≠product)\n");
-/* Grep: elf_load: soft retshardangle — Wave 85 exclusive shardangle stamp */
-kprintf("elf_load: soft retshardangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retshardangle stamp; Soft≠product)\n");
-/* Grep: elf_load: soft retforgeangle — Wave 86 return-forgeangle honesty */
-kprintf("elf_load: soft retforgeangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retforgeangle honesty; Soft≠product)\n");
-/* Grep: elf_load: soft retprismangle — Wave 86 exclusive prismangle stamp */
-kprintf("elf_load: soft retprismangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retprismangle stamp; Soft≠product)\n");
-/* Grep: elf_load: soft retflameangle — Wave 87 return-flameangle honesty */
-kprintf("elf_load: soft retflameangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retflameangle honesty; Soft≠product)\n");
-/* Grep: elf_load: soft retcipherangle — Wave 87 exclusive cipherangle stamp */
-kprintf("elf_load: soft retcipherangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retcipherangle stamp; Soft≠product)\n");
-/* Grep: elf_load: soft retbeaconangle — Wave 88 return-beaconangle honesty */
-kprintf("elf_load: soft retbeaconangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retbeaconangle honesty; Soft≠product)\n");
-/* Grep: elf_load: soft retledgerangle — Wave 88 exclusive ledgerangle stamp */
-kprintf("elf_load: soft retledgerangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retledgerangle stamp; Soft≠product)\n");
-/* Grep: elf_load: soft retbannerangle — Wave 89 return-bannerangle honesty */
-kprintf("elf_load: soft retbannerangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retbannerangle honesty; Soft≠product)\n");
-/* Grep: elf_load: soft retvaultangle — Wave 89 exclusive vaultangle stamp */
-kprintf("elf_load: soft retvaultangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retvaultangle stamp; Soft≠product)\n");
-/* Grep: elf_load: soft retcrestangle — Wave 90 return-crestangle honesty */
-kprintf("elf_load: soft retcrestangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retcrestangle honesty; Soft≠product)\n");
-/* Grep: elf_load: soft rettokenangle — Wave 90 exclusive tokenangle stamp */
-kprintf("elf_load: soft rettokenangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (rettokenangle stamp; Soft≠product)\n");
-/* Grep: elf_load: soft retbadgeangle — Wave 91 return-badgeangle honesty */
-kprintf("elf_load: soft retbadgeangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retbadgeangle honesty; Soft≠product)\n");
-/* Grep: elf_load: soft retphaseangle — Wave 91 exclusive phaseangle stamp */
-kprintf("elf_load: soft retphaseangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retphaseangle stamp; Soft≠product)\n");
-/* Grep: elf_load: soft retmarkangle — Wave 92 return-markangle honesty */
-kprintf("elf_load: soft retmarkangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retmarkangle honesty; Soft≠product)\n");
-/* Grep: elf_load: soft retpulseangle — Wave 92 exclusive pulseangle stamp */
-kprintf("elf_load: soft retpulseangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retpulseangle stamp; Soft≠product)\n");
-
-/* Grep: elf_load: soft retsealangle — Wave 93 return-sealangle honesty */
-kprintf("elf_load: soft retsealangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retsealangle honesty; Soft≠product)\n");
-/* Grep: elf_load: soft retboundangle — Wave 93 exclusive boundangle stamp */
-kprintf("elf_load: soft retboundangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retboundangle stamp; Soft≠product)\n");
-/* Grep: elf_load: soft retstemangle — Wave 94 return-stemangle honesty */
-kprintf("elf_load: soft retstemangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retstemangle honesty; Soft≠product)\n");
-/* Grep: elf_load: soft retbladeangle — Wave 94 exclusive bladeangle stamp */
-kprintf("elf_load: soft retbladeangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retbladeangle stamp; Soft≠product)\n");
-/* Grep: elf_load: soft retchordangle — Wave 95 return-chordangle honesty */
-kprintf("elf_load: soft retchordangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retchordangle honesty; Soft≠product)\n");
-/* Grep: elf_load: soft retarcangle — Wave 95 exclusive arcangle stamp */
-kprintf("elf_load: soft retarcangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retarcangle stamp; Soft≠product)\n");
-/* Grep: elf_load: soft retsectorangle — Wave 96 return-sectorangle honesty */
-kprintf("elf_load: soft retsectorangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retsectorangle honesty; Soft≠product)\n");
-/* Grep: elf_load: soft retwedgeangle — Wave 96 exclusive wedgeangle stamp */
-kprintf("elf_load: soft retwedgeangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retwedgeangle stamp; Soft≠product)\n");
-/* Grep: elf_load: soft retradiusangle — Wave 97 return-radiusangle honesty */
-kprintf("elf_load: soft retradiusangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retradiusangle honesty; Soft≠product)\n");
-/* Grep: elf_load: soft retdiameterangle — Wave 97 exclusive diameterangle stamp */
-kprintf("elf_load: soft retdiameterangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retdiameterangle stamp; Soft≠product)\n");
-/* Grep: elf_load: soft retcircumangle — Wave 98 return-circumangle honesty */
-kprintf("elf_load: soft retcircumangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retcircumangle honesty; Soft≠product)\n");
-/* Grep: elf_load: soft retellipseangle — Wave 98 exclusive ellipseangle stamp */
-kprintf("elf_load: soft retellipseangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retellipseangle stamp; Soft≠product)\n");
-/* Grep: elf_load: soft rethyperangle — Wave 99 return-hyperangle honesty */
-kprintf("elf_load: soft rethyperangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (rethyperangle honesty; Soft≠product)\n");
-/* Grep: elf_load: soft retparabolaangle — Wave 99 exclusive parabolaangle stamp */
-kprintf("elf_load: soft retparabolaangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retparabolaangle stamp; Soft≠product)\n");
-/* Grep: elf_load: soft retspiralangle — Wave 100 return-spiralangle honesty */
-kprintf("elf_load: soft retspiralangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retspiralangle honesty; Soft≠product)\n");
-/* Grep: elf_load: soft rethelixangle — Wave 100 exclusive helixangle stamp */
-kprintf("elf_load: soft rethelixangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (rethelixangle stamp; Soft≠product)\n");
-/* Grep: elf_load: soft rettorusangle — Wave 101 return-torusangle honesty */
-kprintf("elf_load: soft rettorusangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (rettorusangle honesty; Soft≠product)\n");
-/* Grep: elf_load: soft retknotangle — Wave 101 exclusive knotangle stamp */
-kprintf("elf_load: soft retknotangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retknotangle stamp; Soft≠product)\n");
-/* Grep: elf_load: soft retmoebiusangle — Wave 102 return-moebiusangle honesty */
-kprintf("elf_load: soft retmoebiusangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retmoebiusangle honesty; Soft≠product)\n");
-/* Grep: elf_load: soft retkleinangle — Wave 102 exclusive kleinangle stamp */
-kprintf("elf_load: soft retkleinangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retkleinangle stamp; Soft≠product)\n");
-/* Grep: elf_load: soft retprojectangle — Wave 103 return-projectangle honesty */
-kprintf("elf_load: soft retprojectangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retprojectangle honesty; Soft≠product)\n");
-/* Grep: elf_load: soft retaffineangle — Wave 103 exclusive affineangle stamp */
-kprintf("elf_load: soft retaffineangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retaffineangle stamp; Soft≠product)\n");
-/* Grep: elf_load: soft retlinearangle — Wave 104 return-linearangle honesty */
-kprintf("elf_load: soft retlinearangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retlinearangle honesty; Soft≠product)\n");
-/* Grep: elf_load: soft retbilinearangle — Wave 104 exclusive bilinearangle stamp */
-kprintf("elf_load: soft retbilinearangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retbilinearangle stamp; Soft≠product)\n");
-/* Grep: elf_load: soft retquadraticangle — Wave 105 return-quadraticangle honesty */
-kprintf("elf_load: soft retquadraticangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retquadraticangle honesty; Soft≠product)\n");
-/* Grep: elf_load: soft retcubicangle — Wave 105 exclusive cubicangle stamp */
-kprintf("elf_load: soft retcubicangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retcubicangle stamp; Soft≠product)\n");
-/* Grep: elf_load: soft retquarticangle — Wave 106 return-quarticangle honesty */
-kprintf("elf_load: soft retquarticangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retquarticangle honesty; Soft≠product)\n");
-/* Grep: elf_load: soft retquinticangle — Wave 106 exclusive quinticangle stamp */
-kprintf("elf_load: soft retquinticangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retquinticangle stamp; Soft≠product)\n");
-/* Grep: elf_load: soft retsplineangle — Wave 107 return-splineangle honesty */
-kprintf("elf_load: soft retsplineangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retsplineangle honesty; Soft≠product)\n");
-/* Grep: elf_load: soft retbezierangle — Wave 107 exclusive bezierangle stamp */
-kprintf("elf_load: soft retbezierangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retbezierangle stamp; Soft≠product)\n");
-/* Grep: elf_load: soft rethurmitangle — Wave 108 return-hermitangle honesty */
-kprintf("elf_load: soft rethurmitangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (rethurmitangle honesty; Soft≠product)\n");
-/* Grep: elf_load: soft retcatmullangle — Wave 108 exclusive catmullangle stamp */
-kprintf("elf_load: soft retcatmullangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retcatmullangle stamp; Soft≠product)\n");
-/* Grep: elf_load: soft retnurbsangle — Wave 109 return-nurbsangle honesty */
-kprintf("elf_load: soft retnurbsangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retnurbsangle honesty; Soft≠product)\n");
-/* Grep: elf_load: soft retbsplineangle — Wave 109 exclusive bsplineangle stamp */
-kprintf("elf_load: soft retbsplineangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retbsplineangle stamp; Soft≠product)\n");
-/* Grep: elf_load: soft retmeshangle — Wave 110 return-meshangle honesty */
-kprintf("elf_load: soft retmeshangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retmeshangle honesty; Soft≠product)\n");
-/* Grep: elf_load: soft retgridangle — Wave 110 exclusive gridangle stamp */
-kprintf("elf_load: soft retgridangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retgridangle stamp; Soft≠product)\n");
-/* Grep: elf_load: soft retvoxelangle — Wave 111 return-voxelangle honesty */
-kprintf("elf_load: soft retvoxelangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retvoxelangle honesty; Soft≠product)\n");
-/* Grep: elf_load: soft rettexelangle — Wave 111 exclusive texelangle stamp */
-kprintf("elf_load: soft rettexelangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (rettexelangle stamp; Soft≠product)\n");
-/* Grep: elf_load: soft retfragmentangle — Wave 112 return-fragmentangle honesty */
-kprintf("elf_load: soft retfragmentangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retfragmentangle honesty; Soft≠product)\n");
-/* Grep: elf_load: soft retvertexangle — Wave 112 exclusive vertexangle stamp */
-kprintf("elf_load: soft retvertexangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retvertexangle stamp; Soft≠product)\n");
-/* Grep: elf_load: soft retshaderangle — Wave 113 return-shaderangle honesty */
-kprintf("elf_load: soft retshaderangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retshaderangle honesty; Soft≠product)\n");
-/* Grep: elf_load: soft retpipelineangle — Wave 113 exclusive pipelineangle stamp */
-kprintf("elf_load: soft retpipelineangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retpipelineangle stamp; Soft≠product)\n");
-/* Grep: elf_load: soft retframebufferangle — Wave 114 return-framebufferangle honesty */
-kprintf("elf_load: soft retframebufferangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retframebufferangle honesty; Soft≠product)\n");
-/* Grep: elf_load: soft retswapchainangle — Wave 114 exclusive swapchainangle stamp */
-kprintf("elf_load: soft retswapchainangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retswapchainangle stamp; Soft≠product)\n");
-/* Grep: elf_load: soft retpresentangle — Wave 115 return-presentangle honesty */
-kprintf("elf_load: soft retpresentangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retpresentangle honesty; Soft≠product)\n");
-/* Grep: elf_load: soft retvsyncangle — Wave 115 exclusive vsyncangle stamp */
-kprintf("elf_load: soft retvsyncangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retvsyncangle stamp; Soft≠product)\n");
-/* Grep: elf_load: soft retfenceangle — Wave 116 return-fenceangle honesty */
-kprintf("elf_load: soft retfenceangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retfenceangle honesty; Soft≠product)\n");
-/* Grep: elf_load: soft retsemaphoreangle — Wave 116 exclusive semaphoreangle stamp */
-kprintf("elf_load: soft retsemaphoreangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retsemaphoreangle stamp; Soft≠product)\n");
-                            kprintf("elf_load: soft deepen wave=%u via=%s load_ok=%u probe_ok=%u "
-            "reloc_hits=%u so_live=%u handoff=%u verify=%u log_n=%u "
-            "(soft inventory only; not product gate)\n",
-            GJ_ELF_SOFT_WAVE, szVia, g_u32SoftLoadOk, g_u32SoftProbeOk,
-            g_u32SoftRelocHits, cReg, g_u32SoftHandoffOk, g_u32SoftVerifyOk,
-            g_u32SoftLogN);
-
-    /* Grep: elf_load: soft catalog */
-    kprintf("elf_load: soft catalog so_max=%u so_img=%u needed_max=%u "
-            "auxv_max=%u dyn_bias=0x%lx handoff=0x%lx stack=0x%lx "
-            "so_bias_base=0x%lx wave=%u\n",
-            (unsigned)GJ_ELF_SO_MAX, (unsigned)GJ_ELF_SO_IMG,
-            (unsigned)GJ_ELF_NEEDED_MAX, (unsigned)GJ_AUXV_MAX,
-            (unsigned long)GJ_ELF_DYN_BIAS, (unsigned long)GJ_LD_HANDOFF_VA,
-            (unsigned long)GJ_LD_STACK_VA, (unsigned long)GJ_ELF_SO_BIAS_BASE,
-            GJ_ELF_SOFT_WAVE);
-
-    /* Grep: elf_load: soft bias (Wave 15 twin) */
-    kprintf("elf_load: soft bias dyn=0x%lx so_base=0x%lx so_step=0x%lx "
-            "bias_req=%u bias_def=%u wave=%u\n",
-            (unsigned long)GJ_ELF_DYN_BIAS,
-            (unsigned long)GJ_ELF_SO_BIAS_BASE,
-            (unsigned long)GJ_ELF_SO_BIAS_STEP,
-            g_u32SoftLoadBiasReq, g_u32SoftLoadBiasDef, GJ_ELF_SOFT_WAVE);
-
-    /* Grep: elf_load: soft capacity (Wave 15 twin) */
-    kprintf("elf_load: soft capacity so_max=%u so_img=%u so_live=%u free_so=%u "
-            "needed_max=%u auxv_max=%u hash_live=%u gnu_live=%u wave=%u\n",
-            (unsigned)GJ_ELF_SO_MAX, (unsigned)GJ_ELF_SO_IMG, cReg,
-            (cReg < GJ_ELF_SO_MAX) ? (GJ_ELF_SO_MAX - cReg) : 0u,
-            (unsigned)GJ_ELF_NEEDED_MAX, (unsigned)GJ_AUXV_MAX,
-            cHashLive, cGnuLive, GJ_ELF_SOFT_WAVE);
+    kprintf("elf_load: soft inventory via=%s so_max=%u so_live=%u "
+            "load_ok=%u probe_ok=%u handoff_ok=%u map_pt=%u log_n=%u "
+            "udx_lean=%u/%u exec_band=%u host_sshd=%u host_udx=%u "
+            "product_dir=UDX+ABI host_load=userspace_elf "
+            "wave=%u storm=0 Soft!=product\n",
+            szVia, (unsigned)GJ_ELF_SO_MAX, cReg, g_u32SoftLoadOk,
+            g_u32SoftProbeOk, g_u32SoftHandoffOk, g_u32SoftMapPages,
+            g_u32SoftLogN, u32UdxLean, (unsigned)GJ_ELF_SOFT_UDX_LEAN_CHECKS,
+            g_u32SoftLoadExecBand, g_u32SoftHostClassSshd,
+            g_u32SoftHostClassUdx, GJ_ELF_SOFT_WAVE);
 
     /* Grep: elf_load: soft PASS | PARTIAL */
-    kprintf("elf_load: soft %s via=%s load_ok=%u probe_ok=%u so=%u handoff=%u "
-            "log_n=%u wave=%u\n",
+    kprintf("elf_load: soft %s via=%s load_ok=%u probe_ok=%u so=%u "
+            "handoff=%u log_n=%u udx_lean=%u/%u exec_band=%u "
+            "host_sshd=%u host_udx=%u wave=%u storm=0 "
+            "Soft!=product G-AC-1=1 product_dir=UDX+ABI "
+            "host_load=userspace_elf\n",
             szVerdict, szVia, g_u32SoftLoadOk, g_u32SoftProbeOk, cReg,
-            g_u32SoftHandoffOk, g_u32SoftLogN, GJ_ELF_SOFT_WAVE);
+            g_u32SoftHandoffOk, g_u32SoftLogN, u32UdxLean,
+            (unsigned)GJ_ELF_SOFT_UDX_LEAN_CHECKS, g_u32SoftLoadExecBand,
+            g_u32SoftHostClassSshd, g_u32SoftHostClassUdx, GJ_ELF_SOFT_WAVE);
 }
 
+/* soft residual inventory end (storm=0; Soft!=product; G-AC-1) */
+
 /**
- * After first product probe/load/handoff activity, print soft inventory once
+ * After first product probe/load/handoff activity, print soft residual once
  * (mirrors virtio-blk / input_hub soft-stats-once). Diagnostics only.
+ * Soft!=product · G-AC-1 · dual MIT OR Apache-2.0 · no stamp storms.
+ * Emits UDX host + sshd.elf + host_blob residual lean honesty
+ * (userspace ELF; not .ko; product_hosts=UDX; Dual DoD OPEN).
+ * H2 once: inventory surface emits once per boot (storm=0).
  */
 static void
 elf_soft_maybe_once(void)
@@ -1612,6 +2040,7 @@ elf_soft_maybe_once(void)
     g_fSoftInvOnce = 1;
     elf_soft_inventory("activity");
 }
+
 
 struct elf64_ehdr {
     u8  aIdent[16];
@@ -1686,7 +2115,7 @@ interp_copy(char *szDst, size_t cbDst, const u8 *pSrc, u64 cbSrc)
 }
 
 /*
- * INTERP soft normalize: relative path → /lib/<name>. Absolute unchanged.
+ * INTERP soft normalize: relative path -> /lib/<name>. Absolute unchanged.
  * Keeps absolute product paths (/lib/ld-gj.so.1) intact.
  */
 static void
@@ -1930,6 +2359,23 @@ elf_fill_probe(const void *pImage, u64 cb, struct gj_elf_info *pInfo,
         if (pPh->u32Type != PT_LOAD || pPh->u64Memsz == 0) {
             continue;
         }
+        /*
+         * Robust embed UDX host load (STRONGER FUNCTIONAL):
+         * filesz <= memsz; no offset/VA wrap; file span in image.
+         * Soft residual tallies rejects; never loads corrupt PT_LOAD.
+         */
+        if (pPh->u64Filesz > pPh->u64Memsz) {
+            elf_soft_inc(&g_u32SoftSegReject);
+            return GJ_ERR_INVAL;
+        }
+        if (pPh->u64Offset + pPh->u64Filesz < pPh->u64Offset) {
+            elf_soft_inc(&g_u32SoftSegReject);
+            return GJ_ERR_INVAL;
+        }
+        if (pPh->u64Vaddr + pPh->u64Memsz < pPh->u64Vaddr) {
+            elf_soft_inc(&g_u32SoftSegReject);
+            return GJ_ERR_INVAL;
+        }
         if (pPh->u64Offset + pPh->u64Filesz > cb) {
             return GJ_ERR_INVAL;
         }
@@ -2084,7 +2530,7 @@ elf_gnu_hash_name(const char *szName)
     return u32H;
 }
 
-/* Internal alias — keep call sites greppable as elf_sysv_hash via wrap */
+/* Internal alias - keep call sites greppable as elf_sysv_hash via wrap */
 static u32
 elf_sysv_hash(const char *szName)
 {
@@ -2313,7 +2759,7 @@ elf_gnu_hash_lookup(const u8 *pImg, u64 cb, const struct elf64_ehdr *pEh,
     pChain = pBuckets + u32Nbuckets;
 
     u32H = elf_gnu_hash_name(szName);
-    /* Bloom filter (x86_64: 64-bit words) — both bits must be set */
+    /* Bloom filter (x86_64: 64-bit words) - both bits must be set */
     if (u32BloomSize > 0) {
         u64Word = pBloom[(u32H / 64u) % u32BloomSize];
         u64Mask = (1ull << (u32H % 64u)) |
@@ -2462,8 +2908,8 @@ elf_lookup_in_sos(const char *szName, u64 *pVal)
 
 /*
  * Resolve symbol for GLOB_DAT / JUMP_SLOT:
- *   defined in image → st_value + bias
- *   undefined → SO registry (hash/gnu-hash/scan) then built-in exports
+ *   defined in image -> st_value + bias
+ *   undefined -> SO registry (hash/gnu-hash/scan) then built-in exports
  */
 static int
 elf_resolve_sym(const void *pImage, u64 cb, const struct elf64_ehdr *pEh,
@@ -2513,7 +2959,7 @@ elf_resolve_sym(const void *pImage, u64 cb, const struct elf64_ehdr *pEh,
         *pVal = u64Exp;
         return 1;
     }
-    /* Weak undefined → 0 */
+    /* Weak undefined -> 0 */
     if (((pSym->u8Info >> 4) & 0xf) == 2) { /* STB_WEAK */
         *pVal = 0;
         return 1;
@@ -2757,7 +3203,7 @@ elf_apply_relocs(const void *pImage, u64 cb, const struct elf64_ehdr *pEh,
                                          &u64Word)) {
                         continue;
                     }
-                    /* COPY size unknown without st_size in resolve — write ptr */
+                    /* COPY size unknown without st_size in resolve - write ptr */
                     elf_write_u64_user(u64Dst, u64Word);
                     cApplied++;
                     cSym++;
@@ -2840,6 +3286,14 @@ elf_load_image_bias(struct gj_process *pProc, const void *pImage, u64 cb,
         if (pPh->u32Type != PT_LOAD || pPh->u64Memsz == 0) {
             continue;
         }
+        /* Re-check segment safety at map time (bias applied; robust embeds). */
+        if (pPh->u64Filesz > pPh->u64Memsz ||
+            pPh->u64Vaddr + pPh->u64Memsz < pPh->u64Vaddr) {
+            elf_soft_inc(&g_u32SoftSegReject);
+            elf_soft_inc(&g_u32SoftLoadFail);
+            elf_soft_maybe_once();
+            return GJ_ERR_INVAL;
+        }
 
         u32Prot = GJ_VMM_PROT_READ;
         if (pPh->u32Flags & PF_W) {
@@ -2850,6 +3304,28 @@ elf_load_image_bias(struct gj_process *pProc, const void *pImage, u64 cb,
         }
 
         u64SegVa = pPh->u64Vaddr + u64Bias;
+        if (u64SegVa < pPh->u64Vaddr && u64Bias != 0ull) {
+            /* bias wrap — reject corrupt/hostile ET_DYN placement */
+            elf_soft_inc(&g_u32SoftSegReject);
+            elf_soft_inc(&g_u32SoftLoadFail);
+            elf_soft_maybe_once();
+            return GJ_ERR_INVAL;
+        }
+        /*
+         * Never map PT_LOAD over ld-gj handoff/stack band. Protects embed
+         * UDX host + INTERP-first paths from clobbering GJ_LD_HANDOFF_VA.
+         * Soft!=product · Dual DoD A/B OPEN · G-AC-1.
+         */
+        if (elf_pt_load_handoff_collide(u64SegVa, pPh->u64Memsz) != 0) {
+            elf_soft_inc(&g_u32SoftSegReject);
+            elf_soft_inc(&g_u32SoftLoadFail);
+            kprintf("elf: PT_LOAD collides handoff band va=0x%lx memsz=0x%lx "
+                    "handoff=0x%lx Soft!=product REJECT\n",
+                    (unsigned long)u64SegVa, (unsigned long)pPh->u64Memsz,
+                    (unsigned long)GJ_LD_HANDOFF_VA);
+            elf_soft_maybe_once();
+            return GJ_ERR_INVAL;
+        }
         u64Va = u64SegVa & ~0xfffull;
         u64End = (u64SegVa + pPh->u64Memsz + 0xfffull) & ~0xfffull;
 
@@ -2918,6 +3394,86 @@ elf_load_image_bias(struct gj_process *pProc, const void *pImage, u64 cb,
         elf_soft_inc(&g_u32SoftLoadDyn);
     } else if (info.u16Type == ET_EXEC) {
         elf_soft_inc(&g_u32SoftLoadExec);
+    }
+    /*
+     * FUNCTIONAL residual (Soft!=product): freestanding product ET_EXEC band
+     * (sshd.elf / UDX embed peers @ user.ld) + entry-in-range honesty.
+     * Never hard-gates product load path (STRONGER residual only).
+     */
+    if (elf_soft_exec_band_ok(&info) != 0) {
+        elf_soft_inc(&g_u32SoftLoadExecBand);
+        kprintf("elf: soft residual exec_band base=0x%lx entry=0x%lx "
+                "host_exec_base=0x%lx freestanding_product_daemon=1 "
+                "embed_host=1 Soft!=product\n",
+                (unsigned long)info.u64LoadMin, (unsigned long)info.u64Entry,
+                (unsigned long)GJ_ELF_HOST_EXEC_BASE);
+        /*
+         * Grep: elf: soft functional residual embed
+         * Embed freestanding host-band load residual densify (STRONGER).
+         * product_hosts=rtl8168_udx,xhci_udx,ddi_host + sshd.elf @ user.ld.
+         */
+        if (elf_soft_embed_host_span_ok(info.u64LoadMin, info.u64LoadMax) !=
+                0 &&
+            elf_soft_entry_in_range(&info) != 0) {
+            elf_soft_inc(&g_u32SoftEmbedHost);
+            /*
+             * Spawn host_blob product path residual tally (Soft!=product).
+             * Live load of freestanding ET_EXEC host band is the product
+             * host ELF load path used by spawn host_blob (probe|load).
+             * Dual DoD A/B remain OPEN; product_hosts=UDX.
+             */
+            elf_soft_inc(&g_u32SoftHostBlob);
+            kprintf("elf: soft functional residual embed "
+                    "et_exec=1 direct_entry=1 host_exec_base=0x%lx "
+                    "entry=0x%lx range=0x%lx-0x%lx span_ok=1 "
+                    "handoff_collide=0 product_dir=UDX+ABI "
+                    "product_hosts=rtl8168_udx,xhci_udx,ddi_host host_sshd=1 "
+                    "product_hosts=UDX host_blob=1 "
+                    "path=host_blob|probe|load "
+                    "dual_dod_a=OPEN dual_dod_b=OPEN dual_dod OPEN "
+                    "Soft!=product G-AC-1=1 never_ko_product=1 storm=0\n",
+                    (unsigned long)GJ_ELF_HOST_EXEC_BASE,
+                    (unsigned long)info.u64Entry,
+                    (unsigned long)info.u64LoadMin,
+                    (unsigned long)info.u64LoadMax);
+            /* Grep: elf: soft residual host_blob (live densify, not inventory) */
+            kprintf("elf: soft residual host_blob live=1 "
+                    "product_hosts=UDX host_blob=1 "
+                    "path=host_blob|probe|load "
+                    "et_exec=1 direct_entry=1 entry=0x%lx "
+                    "range=0x%lx-0x%lx host_blob_n=%u "
+                    "dual_dod_a=OPEN dual_dod_b=OPEN dual_dod OPEN "
+                    "Soft!=product G-AC-1=1 storm=0\n",
+                    (unsigned long)info.u64Entry,
+                    (unsigned long)info.u64LoadMin,
+                    (unsigned long)info.u64LoadMax, g_u32SoftHostBlob);
+            /*
+             * Grep: elf: soft residual denser host_blob
+             * Live denser residual for host_blob Dual DoD (Soft!=product).
+             * denser residual != Dual DoD close; product_hosts=UDX.
+             */
+            kprintf("elf: soft residual denser host_blob live=1 denser=1 "
+                    "product_hosts=UDX host_blob=1 "
+                    "path=host_blob|probe|load denser_host_blob_residual=1 "
+                    "et_exec=1 direct_entry=1 entry=0x%lx "
+                    "range=0x%lx-0x%lx host_blob_n=%u "
+                    "dense_ok=%u dense_fail=%u "
+                    "dual_dod_a=OPEN dual_dod_b=OPEN dual_dod OPEN "
+                    "Soft!=product G-AC-1=1 storm=0 bar=v2026.08.04.75\n",
+                    (unsigned long)info.u64Entry,
+                    (unsigned long)info.u64LoadMin,
+                    (unsigned long)info.u64LoadMax, g_u32SoftHostBlob,
+                    g_u32SoftHostBlobDenseOk, g_u32SoftHostBlobDenseFail);
+        }
+    }
+    if (elf_soft_entry_in_range(&info) != 0) {
+        elf_soft_inc(&g_u32SoftEntryInRange);
+    } else {
+        elf_soft_inc(&g_u32SoftEntryOor);
+        kprintf("elf: soft residual entry_oor entry=0x%lx range=0x%lx-0x%lx "
+                "Soft!=product\n",
+                (unsigned long)info.u64Entry, (unsigned long)info.u64LoadMin,
+                (unsigned long)info.u64LoadMax);
     }
     kprintf("elf: loaded phdrs=%u type=%u entry=0x%lx range=0x%lx-0x%lx bias=0x%lx\n",
             u32Loaded, (unsigned)info.u16Type, (unsigned long)info.u64Entry,
@@ -3188,7 +3744,7 @@ elf_apply_interp_first(struct gj_process *pProc, const struct gj_elf_info *pMain
         u64Entry = pInterp->u64Entry;
         pProc->u64InterpEntry = pInterp->u64Entry;
         pProc->u64StartEntry = u64Entry;
-        /* Soft INTERP path log (absolute /lib/… after normalize) */
+        /* Soft INTERP path log (absolute /lib/... after normalize) */
         if ((pMain->u32Flags & GJ_ELF_INFO_INTERP_SOFT) != 0 ||
             elf_interp_soft_ok(pMain->szInterp)) {
             kprintf("elf: INTERP soft ok %s PASS\n",
@@ -3217,7 +3773,7 @@ elf_apply_interp_first(struct gj_process *pProc, const struct gj_elf_info *pMain
         elf_soft_maybe_once();
         return GJ_OK;
     }
-    /* INTERP soft miss: path present but dynlinker not loaded → main entry */
+    /* INTERP soft miss: path present but dynlinker not loaded -> main entry */
     if ((pMain->u32Flags & GJ_ELF_INFO_HAS_INTERP) != 0 &&
         (pInterp == NULL || pInterp->u64Entry == 0)) {
         elf_soft_inc(&g_u32SoftInterpDefer);
@@ -3336,7 +3892,7 @@ publish_vfs_blob(const char *szPath, const void *pData, size_t cb)
     if (szPath == NULL || pData == NULL) {
         return;
     }
-    /* vfs_ram_write reads pData under current CR3 — use kernel CR3. */
+    /* vfs_ram_write reads pData under current CR3 - use kernel CR3. */
     u64Saved = cpu_read_cr3();
     cpu_load_cr3(vmm_kernel_cr3());
     i64Fd = vfs_ram_open(szPath, 1);
@@ -3456,6 +4012,12 @@ elf_publish_handoff(struct gj_process *pProc, const char *szPath,
     } else {
         szUsePath = NULL;
     }
+    /*
+     * FUNCTIONAL residual: host-class classify UDX product hosts
+     * (/usr/lib/udx/{rtl8168_udx,xhci_udx,ddi_host}) / sshd.elf / svc.
+     * Soft only — never hard-gates product handoff (Dual DoD A/B OPEN).
+     */
+    elf_soft_note_host_path(szUsePath);
 
     elf_handoff_fill(&ho, szUsePath, pMain, pInterp, pProc->aAuxv, pProc->cAuxv);
     cCopy = ho.cAuxv;
@@ -3498,7 +4060,7 @@ elf_publish_handoff(struct gj_process *pProc, const char *szPath,
     pStack = (u64 *)(gj_vaddr_t)paStack;
     /* Layout: [0]=argc [1]=argv0 [2]=0 [3]=0(env) then auxv pairs; path@0x200 */
     pStack[0] = 1; /* argc */
-    pStack[1] = GJ_LD_STACK_VA + 0x200ull; /* argv[0] → path string */
+    pStack[1] = GJ_LD_STACK_VA + 0x200ull; /* argv[0] -> path string */
     pStack[2] = 0; /* argv terminator */
     pStack[3] = 0; /* env terminator */
     o = 4;

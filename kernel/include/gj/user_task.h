@@ -15,21 +15,35 @@
  * Both paths fail closed on soft map verify (PTE P|U, code RX / stack RW,
  * payload soft match, VA window inside user band, non-overlapping layout).
  *
+ * Dual user-AS windows = soft scaffold for UDX driver host entry
+ * (userspace DDI/UDX path: map then sysret enter). Soft!=product;
+ * G-AC-1: no Linux .ko product AC - product class hosts stay userspace.
+ *
+ * H3 companion (ASSURANCE_LITE | process death residual): maps stay live
+ * while a thr can enter; teardown is process-side thr_exit before
+ * as_destroy. This unit refuses enter when !mapped - never free maps
+ * under a live USER*_ENTRY thr (lab: pe32 clone_vm dead-AS #PF).
+ * Soft residual != product multi-server confine / != UDX product close.
+ *
  * Product VA layout
  * -----------------
  * High enough to clear kernel identity BSS / embeds; stays inside the
  * canonical user band [GJ_USER_VA_BASE, GJ_USER_VA_END):
  *
- *   GJ_USER_CODE_VA / STACK_TOP  — ring-3 Linux smoke
- *   GJ_PERS_CODE_VA / STACK_TOP  — native personality server
+ *   GJ_USER_CODE_VA / STACK_TOP  - ring-3 Linux smoke
+ *   GJ_PERS_CODE_VA / STACK_TOP  - native personality server
  *
  * Soft product surface
  * --------------------
  *   greppable: "user: soft stats"
  *   greppable: "user: ring3 map soft"
  *   greppable: "user: personality map soft"
+ *   greppable: "user: soft residual lean"
+ *   greppable: "user_task: soft residual lean"
+ *   greppable: "user: soft residual lean H3"
  *   Post-map PTE soft verify + payload soft match
  *   Cumulative map ok/fail + soft PASS/soft_bad + enter counters
+ *   Lean residual: UDX driver host entry honesty (C0; Soft!=product)
  *
  * Enter contract
  * --------------
@@ -38,7 +52,8 @@
  *
  * Related: gj/process.h, gj/thread.h (create_user), gj/syscall.h,
  *          gj/cold_ipc.h (personality server), gj/elf_load.h (full ELF path).
- * docs/PROTON_PERSONALITY.md · docs/LINUX_ABI_HYBRID.md
+ * docs/PROTON_PERSONALITY.md | docs/LINUX_ABI_HYBRID.md |
+ * docs/UDX_LINUX_PORTER.md | docs/DDI_SOFT.md | docs/ASSURANCE_LITE.md H3
  */
 #pragma once
 
@@ -63,9 +78,13 @@
 /**
  * Soft map / enter counters (observability; not a hard ABI).
  * Grep: user: soft stats
+ * Grep: user: soft residual lean (UDX driver host entry; Soft!=product)
+ * Grep: user: soft residual lean H3 (entry companion to process death H3)
  *
  * u32Ring3Mapped / u32PersMapped are live 0/1 mirrors (not cumulative).
  * Soft PASS means post-map PTE + payload verify succeeded.
+ * Soft!=product | G-AC-1 - residual lamps never claim multi-server confine
+ * or UDX product TX/RX · BOT close. H3 teardown lives in process/thread.
  */
 struct gj_user_task_stats {
     u32 u32Ring3Ok;       /* successful user_task_map_ring3 */
@@ -119,13 +138,18 @@ int user_personality_mapped(void);
 
 /**
  * Snapshot soft map/enter stats into *pOut.
- * pOut NULL → GJ_ERR_INVAL.
+ * pOut NULL -> GJ_ERR_INVAL.
  */
 gj_status_t user_task_stats(struct gj_user_task_stats *pOut);
 
 /**
- * Greppable soft stats line: "user: soft stats ..."
+ * Greppable soft stats + lean residual once-lamp.
+ * Grep: user: soft stats
+ * Grep: user: soft residual lean | user_task: soft residual lean
+ * Grep: user: soft residual lean H3
  * Returns ring3 soft PASS count (handy for smoke without parsing).
+ * Soft!=product; dual MIT OR Apache-2.0; never hard-gates map/enter.
+ * Residual = UDX driver host entry honesty (not product DoD close).
  */
 u32 user_task_stats_soft(void);
 

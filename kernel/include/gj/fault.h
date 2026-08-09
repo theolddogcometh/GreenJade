@@ -12,50 +12,50 @@
  * Mechanism for demand-fill and multi-page fault clusters without treating
  * the map cookie as a CNode capability. Objects own pages; maps are views
  * (Apple channel + CAP_ADDRESSING). One fault lock per address space so
- * concurrent faults in the same space serialize (Solaris-style L1–L4).
+ * concurrent faults in the same space serialize (Solaris-style L1-L4).
  *
  * Design anchors
  * --------------
  *   docs/CAP_ADDRESSING.md           v1.6 pager / map cookie (not a cap)
- *   docs/SOLARIS_STYLE_REMAINING.md  §7 fault serialization; C1–C2 cluster
- *   docs/APPLE_CHANNEL_REMAINING.md  §1–2 objects vs maps; default pager
+ *   docs/SOLARIS_STYLE_REMAINING.md  §7 fault serialization; C1-C2 cluster
+ *   docs/APPLE_CHANNEL_REMAINING.md  §1-2 objects vs maps; default pager
  *   docs/SECURITY_CORE_DESIGN.md     single-use secrets; fail closed; DoS
  *   docs/DESIGN_SPEC_COMPLETE.md     G-MO / G-AS fault path notes
  *
  * Protocol sketch
  * ---------------
- *   1. #PF / soft fault → region lookup → memory object (or PCB default pager)
+ *   1. #PF / soft fault -> region lookup -> memory object (or PCB default pager)
  *   2. gj_space_fault_enter (one lock per space)
  *   3. gj_fault_cluster_coalesce_soft (region-bounded, max GJ_FAULT_CLUSTER_MAX)
- *   4. gj_map_cookie_create → fill gj_fault_msg; doors-like Call to pager
- *   5. Pager fills frames / prep → reply echoes cookie
- *   6. gj_map_cookie_consume (single-use) → install maps / bind memobj soft
- *   7. On FAIL/death/timeout → gj_map_cookie_invalidate
+ *   4. gj_map_cookie_create -> fill gj_fault_msg; doors-like Call to pager
+ *   5. Pager fills frames / prep -> reply echoes cookie
+ *   6. gj_map_cookie_consume (single-use) -> install maps / bind memobj soft
+ *   7. On FAIL/death/timeout -> gj_map_cookie_invalidate
  *   8. gj_space_fault_leave
  *
  * Security properties (normative)
  * -------------------------------
  *   - Cookie is a kernel-only secret pair (lo/hi); not a CNode slot/gen.
  *     Userspace must not treat it as a capability (confused-deputy safe).
- *   - Consume is single-use: replay → fail (u64CookieReplay).
- *   - Optional mono deadline → GJ_ERR_TIMEOUT past ceiling.
+ *   - Consume is single-use: replay -> fail (u64CookieReplay).
+ *   - Optional mono deadline -> GJ_ERR_TIMEOUT past ceiling.
  *   - Cluster size capped (DoS): GJ_FAULT_CLUSTER_MAX.
  *   - Zero-access / misaligned base / empty cluster rejected at create.
  *
  * Soft product surface
  * --------------------
- *   FAULT_MAP_COOKIE            — create / consume / invalidate / live count
- *   FAULT_MAP_COOKIE_MEMOBJ_SOFT— bind object pointer on live cookie
- *   FAULT_SERIALIZATION         — enter / leave / waiter soft count
- *   FAULT_CLUSTER_COALESCE_SOFT — multi-page expand with present probe
- *   FAULT_SERIALIZATION_STATS   — global counters snapshot/reset
+ *   FAULT_MAP_COOKIE            - create / consume / invalidate / live count
+ *   FAULT_MAP_COOKIE_MEMOBJ_SOFT- bind object pointer on live cookie
+ *   FAULT_SERIALIZATION         - enter / leave / waiter soft count
+ *   FAULT_CLUSTER_COALESCE_SOFT - multi-page expand with present probe
+ *   FAULT_SERIALIZATION_STATS   - global counters snapshot/reset
  *
  * Layering
  * --------
  *   process.fault (gj_space_fault) until true gj_space exists
  *   memobj regions supply object + VA bounds for cluster
  *   vmm_map_page / COW break complete install after consume
- *   door Call carries gj_fault_msg (kernel → pager)
+ *   door Call carries gj_fault_msg (kernel -> pager)
  *
  * greppable: FAULT_MAP_COOKIE FAULT_SERIALIZATION FAULT_CLUSTER_COALESCE_SOFT
  * greppable: GJ_FAULT_CLUSTER_MAX FAULT_MSG_CLUSTER FAULT_MAP_COOKIE_MEMOBJ_SOFT
@@ -74,7 +74,7 @@
 #define GJ_FAULT_ACCESS_X (1u << 2)
 
 /*
- * Fault message kernel → pager (doors-like Call payload).
+ * Fault message kernel -> pager (doors-like Call payload).
  *
  * u64Cookie* is a kernel-only secret; pager must echo it on reply.
  * Userspace must not treat cookie as a capability.
@@ -128,7 +128,7 @@ struct gj_map_cookie {
 };
 
 /*
- * Space fault serialization: one lock per address space (L1–L4).
+ * Space fault serialization: one lock per address space (L1-L4).
  * v1: simple flag + waiter count; full impl uses mutex + CV (Solaris-style).
  * greppable: FAULT_SERIALIZATION
  */
@@ -195,7 +195,7 @@ gj_status_t gj_space_fault_enter(struct gj_space_fault *pF);
 void gj_space_fault_leave(struct gj_space_fault *pF);
 
 /**
- * Soft multi-page cluster coalesce (SOLARIS C1–C2 / CAP multi-page cluster).
+ * Soft multi-page cluster coalesce (SOLARIS C1-C2 / CAP multi-page cluster).
  *
  * Page-aligns the fault VA, then expands the contiguous cluster within the
  * optional region [u64RegionLo, u64RegionHi) (both 0 ⇒ no region bound soft),

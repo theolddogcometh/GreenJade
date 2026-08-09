@@ -20,11 +20,11 @@
  * R15 at the lowest address and SS at the highest. Do not reorder fields
  * without matching isr / common asm.
  *
- *   GPRs (R15..RAX) → u64Vector → u64Error → RIP CS RFLAGS RSP SS
+ *   GPRs (R15..RAX) -> u64Vector -> u64Error -> RIP CS RFLAGS RSP SS
  *
  * #PF COW soft pipeline (user present+write)
  * ------------------------------------------
- *   u64PfUser → u64PfCowCand → (u64PfCowCr3Sw) → u64PfCowOk | u64PfCowMiss
+ *   u64PfUser -> u64PfCowCand -> (u64PfCowCr3Sw) -> u64PfCowOk | u64PfCowMiss
  * Non-candidate user #PF: u64PfCowSkip, then except/kill fallthrough.
  * Exception port delivery stays in except.c; trap only counts outcomes.
  *
@@ -34,6 +34,23 @@
  *   u64VecLt32 / Ge32     exception vs IRQ/soft vector
  *   u64Pe32Bp / Int80     PE32 CS32 hardware-enter smoke
  *   u64Except* / u64Kill  fault-port vs kill fallthrough
+ *
+ * Lean residual - FAULT / #PF I=1 wild-RIP (Soft!=product; dual license)
+ * ----------------------------------------------------------------------
+ * Soft-only honesty in arch x86_64 trap.c (this header is the C contract):
+ *   FAULT pin = kernel-halt only (KERNEL FAULT - HALTED sticky STATUS).
+ *   User kill = thr EXITED + schedule; never sticky KERNEL FAULT pin.
+ *   #PF I=1 class: string-as-code (RIP in kernel image window) vs wild-rip
+ *   (outside image / non-canonical / null-ish; lab exemplar 0x58240013).
+ * Soft!=product: residual lamps never hard-gate halt vs kill.
+ * G-AC-1: residual never claims in-kernel .ko product AC / wire owner.
+ * No freestanding net thrash here (diagnose-only; product NIC is ABI/UDX).
+ * greppable: trap: soft residual lean
+ * greppable: trap: FAULT
+ * greppable: trap: wild-rip
+ * greppable: trap: #PF I=1
+ * greppable: trap: string-as-code
+ * greppable: trap: user kill honesty
  *
  * greppable: trap: soft stats
  * greppable: trap: #PF soft
@@ -46,7 +63,7 @@
 
 /**
  * Stack frame built by isr stubs + common (reverse push order).
- * Layout is an asm contract — keep field order stable.
+ * Layout is an asm contract - keep field order stable.
  */
 struct gj_trap_frame {
     u64 u64R15;
@@ -74,12 +91,12 @@ struct gj_trap_frame {
 };
 
 /*
- * Soft trap-dispatch counters (wrap OK; diagnostics only — never hard-gate).
+ * Soft trap-dispatch counters (wrap OK; diagnostics only - never hard-gate).
  * Grep: trap: soft stats
  * Grep: trap: #PF soft
  *
  * #PF COW path (user present+write):
- *   u64PfUser → u64PfCowCand → (u64PfCowCr3Sw) → u64PfCowOk | u64PfCowMiss
+ *   u64PfUser -> u64PfCowCand -> (u64PfCowCr3Sw) -> u64PfCowOk | u64PfCowMiss
  * Non-candidate user #PF: u64PfCowSkip, then except/kill fallthrough.
  * Exception port delivery stays in except.c; trap only counts outcomes.
  */
@@ -95,11 +112,11 @@ struct gj_trap_stats {
     u64 u64PfUser;        /* user #PF entered soft COW path */
     u64 u64PfCowCand;     /* err present+write (COW candidate) */
     u64 u64PfCowCr3Sw;    /* loaded process CR3 before break try */
-    u64 u64PfCowOk;       /* vmm_cow_break_page OK → resume */
+    u64 u64PfCowOk;       /* vmm_cow_break_page OK -> resume */
     u64 u64PfCowMiss;     /* candidate but break failed (not COW/nomem) */
     u64 u64PfCowSkip;     /* user #PF not present+write */
     u64 u64ExceptDeliver; /* except_port_deliver posted (thr blocks) */
-    u64 u64ExceptMiss;    /* no live port / no proc → kill fallthrough */
+    u64 u64ExceptMiss;    /* no live port / no proc -> kill fallthrough */
     u64 u64Kill;          /* user kill path taken */
 };
 
@@ -111,7 +128,7 @@ struct gj_trap_stats {
  */
 void trap_dispatch(struct gj_trap_frame *pFrame);
 
-/** Snapshot soft counters into *pOut (NULL → no-op). */
+/** Snapshot soft counters into *pOut (NULL -> no-op). */
 void trap_stats_get(struct gj_trap_stats *pOut);
 
 /** Clear soft trap counters. */

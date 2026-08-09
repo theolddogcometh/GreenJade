@@ -10,6 +10,49 @@ and distribution of this software.
 SPDX-License-Identifier: MIT OR Apache-2.0
 
 ------------------------------------------------------------------------------
+Jurisdiction and lawful-use notice (read with the licenses below)
+------------------------------------------------------------------------------
+
+**You are solely responsible** for ensuring that your use, distribution, and
+operation of this software are **lawful** in every jurisdiction where you
+act. **Do not use** this software where such use is illegal or prohibited.
+
+That duty includes compliance with laws and regulations that impose **age
+verification**, **user identification**, privacy, export/sanctions, or
+platform/OS developer obligations—including requirements from **California**
+and **other governmental bodies**—to the extent they apply to your facts.
+This project does **not** warrant lawful use in every jurisdiction and does
+**not** provide legal advice.
+
+Full notice: **docs/LEGAL_DISCLAIMER.md**
+
+------------------------------------------------------------------------------
+Principal author — U.S. Constitution / speech / color-of-law notice (summary)
+------------------------------------------------------------------------------
+
+The principal author is a **U.S. citizen**, governed under the **U.S.
+Constitution**, and asserts that this **source code and project expression
+are speech** protected under the First Amendment and as copyrighted
+authorship. Open-source dual licensing is a copyright license only; it is
+not a waiver of constitutional rights against government actors.
+
+The principal author asserts that any **oath-sworn officer** or **government
+body** that **violates** the principal author’s constitutional rights
+**under color of law** (related to this Software or its speech) is subject
+to the principal author’s **claimed** liability schedule in
+**docs/LEGAL_DISCLAIMER.md §0.4**, including:
+
+  • **4×** any financial penalty / monetary demand so imposed or attempted;
+  • **USD $1,000,000 per hour** of incarceration / detention so imposed.
+
+That schedule is the author’s **asserted claim and public notice**, not a
+court judgment. Full text: **docs/LEGAL_DISCLAIMER.md** §0.
+
+The warranty disclaimer and limitation of liability of the MIT License and/or
+Apache License 2.0 (whichever you elect) continue to apply in full as among
+private licensees under those licenses.
+
+------------------------------------------------------------------------------
 MIT License
 ------------------------------------------------------------------------------
 

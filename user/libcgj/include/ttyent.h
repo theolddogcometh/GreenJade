@@ -21,6 +21,16 @@
  * ---------
  * Full POSIX/Linux completeness; stubs and soft fills may return ENOSYS
  * until the hybrid ABI path is wired. See docs/GLIBC_COMPAT.md.
+ *
+ * Soft residual (C2 libcgj header; Soft!=product; G-AC-1; Dual DoD A/B OPEN):
+ *   soft path  = getttyent/getttynam/setttyent soft fill (often empty table)
+ *   product    = full /etc/ttys product registry (OPEN; not closed here)
+ *   catalog    = struct ttyent + TTY_ON/TTY_SECURE + get*/set*/end*/ttyslot
+ *   honesty    = Soft!=product; soft empty table != product multi-tty mint
+ *   Bar honesty v2026.08.04.75. NEVER bump GJ_IMAGE_VERSION from this unit.
+ * greppable: libcgj: soft residual ttyent
+ * greppable: libcgj: soft residual ttyent Soft!=product
+ * Dual MIT OR Apache-2.0. No GPL. G-AC-1. Dual DoD A/B OPEN.
  */
 #pragma once
 

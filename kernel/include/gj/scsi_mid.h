@@ -3,28 +3,34 @@
  * Copyright (c) 2026 Project GreenJade contributors
  *
  * SCSI mid-layer shapes (product: userspace scsi_mid server).
- * Clean-room public SCSI architecture — dual MIT OR Apache-2.0 pure C11
+ * Clean-room public SCSI architecture - dual MIT OR Apache-2.0 pure C11
  * freestanding, no GPL source. Kernel interim mid fills CDBs and forwards
  * to virtio-scsi; door-shaped submit is the M5 bridge used by GJ_SYS_SCSI
  * and store_door CAP/R/W fallback.
  *
  * Transport preference (scsi_mid_submit):
  *   1) virtio-scsi when ready (product interim HBA)
- *   2) soft LUN when no HBA (bring-up soft path — always armed after init;
+ *   2) soft LUN when no HBA (bring-up soft path - always armed after init;
  *      virtio preferred when ready so soft stays a fallback)
  *
  * Soft LUN geometry (interim only; product is userspace + real HBA):
- *   GJ_SCSI_SOFT_SECTORS × GJ_SCSI_SOFT_SEC_SIZE (64 × 512)
+ *   GJ_SCSI_SOFT_SECTORS x GJ_SCSI_SOFT_SEC_SIZE (64 x 512)
  *   Answers TUR / INQUIRY / READ_CAPACITY / READ10 / WRITE10 / SYNC /
  *   REQUEST SENSE so door smokes stay green without hardware.
  *
  * Door vs mid:
- *   scsi_door_req / scsi_door_submit — opcode-shaped API for userspace
+ *   scsi_door_req / scsi_door_submit - opcode-shaped API for userspace
  *   scsi_mid and store CAP (builds CDB then scsi_mid_submit)
- *   scsi_mid_submit — raw CDB path for kernel callers and soft LUN
+ *   scsi_mid_submit - raw CDB path for kernel callers and soft LUN
+ *
+ * Lean residual law (Soft!=product; dual MIT OR Apache-2.0):
+ *   Kernel mid / soft LUN is interim only - never product scsi_mid claim.
+ *   Freestanding MSC SKIP (GJ_XHCI_MSC_PROBE=0 default) - not this mid.
+ *   Product USB = xhci_udx (userspace UDX/DDI Dual DoD A) - not freestanding.
+ *   greppable: scsi_mid: soft residual lean | soft residual lean PASS
  *
  * Greppable product markers (keep stable):
- *   scsi_mid: … PASS / soft LUN / live spawn PASS
+ *   scsi_mid: ... PASS / soft LUN / live spawn PASS
  *   store_door CAP/R/W via scsi_door when blk absent
  */
 #pragma once
@@ -49,7 +55,7 @@
 #define GJ_SCSI_OP_SYNCHRONIZE_CACHE  0x35
 
 /**
- * scsi_door_req.u32Op — door-shaped submit opcodes (M5).
+ * scsi_door_req.u32Op - door-shaped submit opcodes (M5).
  * RAW carries aCdb[0..u8CdbLen); others build standard CDBs from LBA/blocks.
  */
 #define GJ_SCSI_DOOR_OP_INQUIRY    0u
@@ -89,7 +95,7 @@ struct gj_scsi_sense {
 
 /**
  * Mid-layer request: LUN + CDB + data buffer direction.
- * fDataIn=1 device→host (READ/INQUIRY/…); 0 host→device (WRITE).
+ * fDataIn=1 device->host (READ/INQUIRY/...); 0 host->device (WRITE).
  * u8Status / sense filled on return from submit.
  */
 struct gj_scsi_request {
@@ -98,7 +104,7 @@ struct gj_scsi_request {
     struct gj_scsi_cdb cdb;
     void *pData;
     u32    cbData;
-    int    fDataIn; /* 1 = device→host */
+    int    fDataIn; /* 1 = device->host */
     u8     u8Status;
     struct gj_scsi_sense sense;
 };
@@ -140,7 +146,7 @@ int scsi_sense_decode(const struct gj_scsi_sense *pSense, u8 *pKey, u8 *pAsc,
  *   1) virtio-scsi when ready (product interim HBA)
  *   2) soft LUN when no HBA (bring-up soft path)
  * Returns 0 on GOOD, -1 on error / not inited / bad args / CHECK soft fail.
- * Updates pReq→u8Status and sense on transport response.
+ * Updates pReq->u8Status and sense on transport response.
  */
 int scsi_mid_submit(struct gj_scsi_request *pReq);
 

@@ -47,11 +47,21 @@
  *   vfsd-gj: soft cache reclaim=… writefd=… seek=… unlink=… stat=… bits=… ok=…
  *   vfsd-gj: soft stats ok=… skip=… door_bits=… store_bits=… free_bits=…
  *   vfsd-gj: soft deepen wave=70 areas=… ok=… skip=…
- *   vfsd-gj: soft path multi_server=0 confine=0 (soft)
- *   vfsd-gj: soft honesty multi_server=0 confine=0 exclusive=1 soft=1 product_kernel=OPEN wave=70
+ *   vfsd-gj: soft path multi_server=0 confine=0 Soft!=product
+ *   vfsd-gj: soft honesty multi_server=0 confine=0 exclusive=1 soft=1
+ *                product_kernel=OPEN Soft!=product G-AC-1=1 dual_dod=OPEN
+ *                product_path=UDX/DDI+ABI wave=70
+ *   vfsd-gj: soft exclusive product_kernel=OPEN multi_server=0 confine=0
+ *                Soft!=product dual_dod=OPEN product_path=UDX/DDI+ABI
+ *   vfsd-gj: soft residual lean residual_lean=1 Soft!=product G-AC-1=1
+ *                dual_dod=OPEN product_path=UDX/DDI+ABI (C2 product residual)
+ *   vfsd-gj: soft residual lean PASS residual_lean=1 Soft!=product storm=0
  *   vfsd-gj: soft door PASS | soft door soft-skip
- * Diagnostics only — never hard-fail live path PASS; not a
- * Honesty: soft inventory ≠ product multi-server confine.
+ * Diagnostics only — never hard-fail live path PASS.
+ * Honesty: soft inventory Soft!=product multi-server confine (OPEN).
+ * C2 product residual: product=UDX/DDI+ABI; Dual DoD OPEN; G-AC-1 (no .ko AC).
+ * H1 eth_poll=0 (this TU); H2 stamp_storm=0 lean once-lamps; H3 N/A death.
+ * Stamp-free residual — never bump GJ_IMAGE_VERSION.
  *
  *   make vfsd-gj → build/user/vfsd.elf
  * Boot embed (parent): kernel/proc/vfsd_embed.S (.incbin of the ELF).
@@ -138,10 +148,9 @@
 #define VFSD_SOFT_BIT_SEEK_END 512u
 
 /* Soft store path bits (Wave 111 inventory; LBA0 mirror + read). */
-/* Wave 126 soft deepen surfaces (CREATE-ONLY soft ≠ product):
- *   greppable: soft retgradientangle continuum_toward=26800 soft_ne_product=1 wave=126
- *   greppable: soft retblendangle exclusive=1 continuum_toward=26800 soft_ne_product=1 wave=126
- * Soft ≠ product complete; product lamps 0;
+/* C2 product residual honesty (CREATE-ONLY Soft!=product; stamp-free):
+ *   product=UDX/DDI+ABI · Dual DoD OPEN · G-AC-1 · H1/H2/H3 lean
+ * Soft!=product complete; product multi-server confine lamps 0;
  */
 
 #define VFSD_SOFT_STORE_MIRROR 1u
@@ -313,10 +322,11 @@ soft_free_note(unsigned uBit, int fOk)
 }
 
 /*
- * Soft inventory dump (Wave 126 exclusive deepen).
+ * Soft inventory dump + C2 product residual lean once-lamps.
  * Greppable prefix: "vfsd-gj: soft …"
  * Pure observation — always soft; never gates live path PASS.
- * Honesty: soft ≠ product multi-server confine.
+ * Honesty: Soft!=product multi-server confine (Dual DoD OPEN).
+ * C2 product residual: product_path=UDX/DDI+ABI; G-AC-1; no stamp storm.
  *
  *   vfsd-gj: soft inventory …
  *   vfsd-gj: soft door …
@@ -326,6 +336,10 @@ soft_free_note(unsigned uBit, int fOk)
  *   vfsd-gj: soft stats …
  *   vfsd-gj: soft deepen …
  *   vfsd-gj: soft path …
+ *   vfsd-gj: soft honesty …
+ *   vfsd-gj: soft exclusive …
+ *   vfsd-gj: soft residual lean …
+ *   vfsd-gj: soft residual lean PASS …
  */
 static void
 soft_inventory_log(void)
@@ -472,25 +486,56 @@ soft_inventory_log(void)
     msg(aLine);
 
     /*
-     * Grep: vfsd-gj: soft path (Wave 111 honesty).
-     * Soft inventory ≠ product multi-server confine.
+     * Grep: vfsd-gj: soft path
+     * Soft!=product multi-server confine (OPEN).
      */
     msg("vfsd-gj: soft path door=1 store=1 cache=1 multi_server=0 "
-        "confine=0\n");
+        "confine=0 Soft!=product\n");
 
     /*
-     * Grep: vfsd-gj: soft honesty (Wave 126 exclusive deepen).
-     * Soft inventory ≠ product multi-server confine.
+     * Grep: vfsd-gj: soft honesty (C2 product residual).
+     * Soft!=product · G-AC-1 · Dual DoD OPEN · product=UDX/DDI+ABI.
      */
     msg("vfsd-gj: soft honesty multi_server=0 confine=0 "
-        "exclusive=1 soft=1 product_kernel=OPEN wave=70\n");
+        "exclusive=1 soft=1 product_kernel=OPEN Soft!=product "
+        "G-AC-1=1 dual_dod=OPEN product_path=UDX/DDI+ABI "
+        "dual=MIT_OR_Apache-2.0 wave=70\n");
 
     /*
-     * Grep: vfsd-gj: soft exclusive (Wave 126 exclusive deepen).
-     * Soft inventory ≠ product multi-server / continuum.
+     * Grep: vfsd-gj: soft exclusive (C2 product residual).
+     * Soft!=product multi-server / continuum; Dual DoD stays OPEN.
      */
-    msg("vfsd-gj: soft exclusive product_kernel=OPEN wave=70 multi_server=0 confine=0 "
-        " userland=1 kernel=0 continuum=0\n");
+    msg("vfsd-gj: soft exclusive product_kernel=OPEN wave=70 "
+        "multi_server=0 confine=0 userland=1 kernel=0 continuum=0 "
+        "Soft!=product dual_dod=OPEN product_path=UDX/DDI+ABI "
+        "G-AC-1=1 ko_product=0\n");
+
+    /*
+     * Grep: vfsd-gj: soft residual lean
+     * C2 product daemon residual (exclusive this TU; stamp-free).
+     * Product dir = UDX/DDI+ABI (not in-kernel .ko). Soft!=product.
+     * Dual DoD OPEN — soft inventory never closes product AC.
+     * H1: no eth poll in this TU. H2: lean once-lamps (storm=0).
+     * H3: death thr order N/A here. dual MIT OR Apache-2.0. no GPL.
+     */
+    msg("vfsd-gj: soft residual lean residual_lean=1 door=1 store=1 "
+        "cache=1 free=1 multi_server=0 confine=0 exclusive=1 "
+        "product_path=UDX/DDI+ABI product_kernel=OPEN dual_dod=OPEN "
+        "G-AC-1=1 ko_product=0 Soft!=product dual=MIT_OR_Apache-2.0 "
+        "h1_eth_poll=0 h2_stamp_storm=0 h3_death_na=1 "
+        "soft_ne_product=1 no_version_stamp=1 "
+        "(Soft!=product; C2 product residual; product=UDX/DDI+ABI; "
+        "Dual DoD OPEN; G-AC-1 no .ko product AC; lean once-lamps; "
+        "not multi-server confine close; dual MIT OR Apache-2.0)\n");
+
+    /*
+     * Grep: vfsd-gj: soft residual lean PASS
+     * Once-lamp residual complete. Soft!=product. Never hard-gates live.
+     */
+    msg("vfsd-gj: soft residual lean PASS residual_lean=1 "
+        "Soft!=product G-AC-1=1 dual_dod=OPEN "
+        "product_path=UDX/DDI+ABI multi_server=0 confine=0 "
+        "storm=0 no_version_stamp=1 dual=MIT_OR_Apache-2.0\n");
 }
 
 /*

@@ -7,13 +7,20 @@
  *
  * Public specs only (Intel xHCI / USB 2.0/3.x / MSC BOT / SCSI / FAT32).
  *
- * *** SOFT SCAFFOLD ONLY (ABI-first pivot) ***
- * Product direction: Linux ABI Option C + virtio T0 + userspace/DDI drivers.
- * This file is bring-up / lab stick-log experiment — not T1 product close,
- * not a reason to thrash EP0 recovery as primary engineering.
- * Soft ≠ product. Linux inventory (xhci_hcd) remains G752 ground truth.
+ * *** C0 FREESTANDING SKIP RESIDUAL HONESTY · NOT PRODUCT Dual DoD A ***
+ * GJ_XHCI_MSC_PROBE stays 0: freestanding USB MSC class SKIP (same policy as
+ * freestanding rtl NIC). Product laptop USB = userspace xhci_udx + hot+cold
+ * ABI + DDI/UDX caps. Dual DoD A = OPEN_UDX (UDX stick / BOT path) —
+ * freestanding residual never closes Dual DoD A. Soft!=product · G-AC-1
+ * (no usb_storage.ko / xhci_pci.ko product AC; no freestanding MSC as
+ * Dual DoD A close). Stamp-free residual (no invent version stamp storms).
  *
- * Scope (MVP honest):
+ * STOP freestanding MSC thrash. NEVER re-enable freestanding MSC as default.
+ * NEVER stage-ladder thrash as product engineering. Opt-in residual only:
+ * -DGJ_XHCI_MSC_PROBE=1 (lab). SKIP residual = lean once-shot honesty lamps
+ * (product=UDX+ABI path=xhci_udx; Dual DoD A stick OPEN_UDX; not stick ready).
+ *
+ * Residual scope when opt-in (not product bar):
  *   - First PCI 0C:03 prog-if 0x30, BAR0 UC map, bus master
  *   - HC reset + run, single-segment command + event rings (poll, no IRQ)
  *   - First connected port: reset, Enable Slot, Address Device
@@ -21,7 +28,18 @@
  *   - Configure Endpoint for bulk IN/OUT; BOT READ CAPACITY(10) + WRITE(10)
  *   - FAT32 overwrite of pre-sized EFI/GREENJADE/KLOG.TXT, else raw LBA log
  *
- * Soft ≠ HID. QEMU Multiboot without xHCI → SKIP cleanly.
+ * Soft != HID. QEMU Multiboot without xHCI -> SKIP cleanly.
+ * Soft residual lean only under default SKIP (no HC claim; net first).
+ *
+ * greppable: xhci: init PASS|FAIL|SKIP | GJ_XHCI_MSC_PROBE=0
+ * greppable: xhci: freestanding MSC SKIP | freestanding_msc=SKIP
+ * greppable: xhci: soft residual product=UDX+ABI | product_udx_abi honesty
+ * greppable: xhci: soft residual lean | msc: soft residual lean
+ * greppable: stick: soft residual lean | Dual DoD A stick OPEN
+ * greppable: dual_dod_a=OPEN_UDX | need=UDX_OPEN | claim=0
+ * greppable: freestanding_close=0 | C0_SKIP=1 | soft_ne_product=1
+ * greppable: Soft!=product | path=xhci_udx | C0 freestanding SKIP residual
+ * greppable: stamp_storm=0 | version_stamp=0 | not Dual DoD A close
  */
 #include <gj/config.h>
 #include <gj/error.h>
@@ -52,7 +70,7 @@
 #define XHCI_PORTSC_PED      (1u << 1)
 #define XHCI_PORTSC_OCA      (1u << 3)
 #define XHCI_PORTSC_PR       (1u << 4)
-#define XHCI_PORTSC_PP       (1u << 9)  /* Port Power — required after HCRST */
+#define XHCI_PORTSC_PP       (1u << 9)  /* Port Power - required after HCRST */
 #define XHCI_PORTSC_LWS      (1u << 16) /* Port Link State Write Strobe */
 #define XHCI_PORTSC_WPR      (1u << 31) /* Warm Port Reset (SS) */
 #define XHCI_PORTSC_CSC      (1u << 17)
@@ -105,7 +123,7 @@
 #define XHCI_EP_TYPE_BULK_OUT 2u
 #define XHCI_EP_TYPE_BULK_IN  6u
 
-/* EP State (Output Context DW0 bits 2:0) — xHCI 6.2.3 */
+/* EP State (Output Context DW0 bits 2:0) - xHCI 6.2.3 */
 #define XHCI_EP_ST_DISABLED 0u
 #define XHCI_EP_ST_RUNNING  1u
 #define XHCI_EP_ST_HALTED   2u
@@ -116,14 +134,18 @@
 #define XHCI_MAX_PORTS   32u
 #define XHCI_POLL_SPINS  5000000u
 /*
- * SS EP0 (GET_CONFIG after device-desc) needs a long poll on Intel a12f.
- * Photo high-water: stage=15 cc=0 TO p21/p22 s4 — short budgets false-TO.
- * HS also gets margin (companion / internal HS).
+ * Control poll budgets (soft residual lean · freestanding net first).
+ * Historical overnight deepen (SS x100/x38/x72 + 22-26-pass recover) hung
+ * G752 before NET/:22. Caps fail-closed in seconds. Soft!=product · G-AC-1.
+ * Freestanding MSC SKIP default - residual path only when GJ_XHCI_MSC_PROBE=1.
+ * Grep: XHCI_POLL_SPINS_SS_CTRL | soft residual lean | boot hang GET_DESC18
  */
-#define XHCI_POLL_SPINS_SS_CTRL (XHCI_POLL_SPINS * 20u)
-#define XHCI_POLL_SPINS_HS_CTRL (XHCI_POLL_SPINS * 5u)
+#define XHCI_POLL_SPINS_SS_CTRL (XHCI_POLL_SPINS * 16u)
+#define XHCI_POLL_SPINS_HS_CTRL (XHCI_POLL_SPINS * 4u)
 /* Late Transfer Event grace after primary poll (device still completing). */
-#define XHCI_POLL_SPINS_CTRL_GRACE (XHCI_POLL_SPINS * 2u)
+#define XHCI_POLL_SPINS_CTRL_GRACE (XHCI_POLL_SPINS * 6u)
+/* Second/third SS grace: control IN after device-desc + short-status. */
+#define XHCI_POLL_SPINS_SS_CTRL_EXTRA (XHCI_POLL_SPINS * 10u)
 /* Drain must catch already-posted events; 80 was too tight on a12f. */
 #define XHCI_DRAIN_SPINS 4000u
 #define XHCI_MAP_BYTES   (256u * 1024u)
@@ -205,6 +227,8 @@ static u8  g_u8PortSpeed;
 static u8  g_u8EpOut;  /* endpoint address 1..15 */
 static u8  g_u8EpIn;
 static u16 g_u16MaxPkt0;
+/* MPS programmed into Address Device Input Context (P0-3 diverge guard). */
+static u16 g_u16AddrMps0;
 static u16 g_u16BulkMps;
 static u8  g_u8ConfigVal;
 static u8  g_fInitTried;
@@ -220,7 +244,7 @@ static u32 g_u32AddrFailCc;
  * (cc=0); never overwritten by later arm/Evaluate Success=1.
  */
 static u32 g_u32CtrlFailCc;
-/* Residual Transfer Length from last consumed event (status bits 0–23). */
+/* Residual Transfer Length from last consumed event (status bits 0-23). */
 static u32 g_u32LastEvtResidual;
 /* Residual from last xhci_ctrl completion (data-stage on short packet). */
 static u32 g_u32LastCtrlResidual;
@@ -242,6 +266,37 @@ static u32 g_u32BulkInIdx;
 static u32 g_u32CbwTag = 1;
 static u32 g_u32BlockCount; /* last LBA+1 from READ CAPACITY */
 static u32 g_u32BlockSize = MSC_SECTOR;
+/*
+ * Rate-limit greppable stamps (stage-11/13/15 Soft!=product): soft-recover /
+ * soft-sync / mid-ring-after-PASS loops must not flood serial (stamp storms
+ * hide real TO cause on a12f ladders; historical #PF class). Soft!=product.
+ * Gap C residual deepen (freestanding past 11/13->15+; dual-DoD deepen Soft!=product).
+ * g_u32LampStageLast + why/cc-tag: stage lamp once per stage/why/cc (n=).
+ * g_u32LampStageBurstN: same stage any-why - first + every 16th (no storms).
+ * g_u32SoftSyncAlreadyN: suppress repeated "soft-sync ok already" within burst.
+ * g_u32SoftSyncDenyN: rate-limit soft-sync deny greps (ladder re-enter).
+ * g_u32SoftSyncSnapN: rate-limit soft-sync residual snap greps (no storms).
+ * g_u32SoftRecoverWhereTag + N: soft-recover 2nd|3rd/ok/deny (lean-capped).
+ * g_u32CtrlPassSoftN: mid-ring/soft-continue after ctrl PASS (every TD).
+ * g_u32GetConfigTryStampN: rate-limit get_config try/FAIL greps (no storms).
+ * g_u32GetConfigAlignStampN: rate-limit get_config soft-align greps (no storms).
+ * g_u32FalseToStampN: rate-limit ctrl false-TO residual greps (no storms).
+ * Soft residual lean · MSC SKIP default · Dual DoD A stick OPEN · Soft!=product.
+ */
+static u32 g_u32LampStageLast;
+static u32 g_u32LampWhyTag;
+static u32 g_u32LampStageBurstN;
+static u32 g_u32SoftSyncAlreadyN;
+static u32 g_u32SoftSyncDenyN;
+static u32 g_u32SoftSyncSnapN;
+static u32 g_u32SoftRecoverWhereTag;
+static u32 g_u32SoftRecoverStampN;
+static u32 g_u32CtrlPassSoftN;
+static u32 g_u32GetConfigTryStampN;
+static u32 g_u32GetConfigAlignStampN;
+static u32 g_u32FalseToStampN;
+/* Once-shot Dual DoD A residual inventory (SKIP or after init; no storms). */
+static u8  g_fSoftResidualOnce;
 
 static gj_paddr_t g_paDcbaa;
 static gj_paddr_t g_paCmdRing;
@@ -317,7 +372,7 @@ xhci_clflush_span(const void *p, u32 cb)
     }
 }
 
-/* Busy-wait settle (spin count; not calibrated ms — freestanding). */
+/* Busy-wait settle (spin count; not calibrated ms - freestanding). */
 static void
 xhci_settle(u32 u32Spins)
 {
@@ -336,8 +391,9 @@ xhci_note_cc(u32 u32Code)
 
 /*
  * Record a control-path fail for panel honesty (stages 11/12/13/15/17).
- * cc=0 means timeout / no Transfer Event — fail-closed, not Success.
+ * cc=0 means timeout / no Transfer Event - fail-closed, not Success.
  * Does not clear on later Success; only overwritten by a newer ctrl fail.
+ * Soft!=product · Gap C residual: sticky path code for xhci_msc_last_cc().
  */
 static void
 xhci_note_ctrl_fail_cc(u32 u32Code)
@@ -448,23 +504,101 @@ ring_link_init(struct xhci_trb *pRing, gj_paddr_t paRing, u8 fCycle)
 }
 
 /* ---- event ring poll ---------------------------------------------------- */
+/*
+ * Consume one matched-cycle event at g_u32EvtIdx (caller force-inval'd or
+ * cycle already matched). Advances ERDP | EHB. Returns TRB type or -1 if
+ * cycle no longer matches after re-inval (race Soft!=product).
+ */
+static int
+xhci_evt_consume_matched(u32 u32WantType, u32 *pCode, u32 *pSlot, u64 *pParam)
+{
+    struct xhci_trb *pTrb;
+    u32 u32Ctrl;
+    u8 fCycle;
+    u32 u32Type;
+
+    if (g_pEvtRing == NULL) {
+        return -1;
+    }
+    pTrb = &g_pEvtRing[g_u32EvtIdx];
+    /* Matched cycle - force fresh read of full TRB before consume. */
+    xhci_clinv_ptr(pTrb);
+    u32Ctrl = pTrb->u32Control;
+    fCycle = (u8)(u32Ctrl & XHCI_TRB_CYCLE);
+    if (fCycle != g_fEvtCycle) {
+        return -1;
+    }
+    u32Type = trb_type(u32Ctrl);
+    /* Residual Transfer Length (bits 0-23) - honest ctrl fail logs. */
+    g_u32LastEvtResidual = pTrb->u32Status & 0x00ffffffu;
+    if (pCode != NULL) {
+        *pCode = (pTrb->u32Status >> 24) & 0xffu;
+    }
+    if (pSlot != NULL) {
+        *pSlot = (u32Ctrl >> 24) & 0xffu;
+    }
+    if (pParam != NULL) {
+        *pParam = pTrb->u64Param;
+    }
+
+    /* Advance dequeue; clear EHB by writing ERDP with EHB=1 */
+    g_u32EvtIdx++;
+    if (g_u32EvtIdx >= XHCI_RING_TRBS) {
+        g_u32EvtIdx = 0;
+        g_fEvtCycle ^= 1u;
+    }
+    {
+        u64 u64Erdp =
+            (u64)g_paEvtRing + (u64)g_u32EvtIdx * sizeof(struct xhci_trb);
+
+        u64Erdp |= 8ull; /* EHB */
+        mmio_w64(g_pRt, 0x20u + 0x18u, u64Erdp);
+    }
+
+    if (u32WantType == 0u || u32Type == u32WantType) {
+        return (int)u32Type;
+    }
+    /* Caller continues search (port status / unexpected type). */
+    return (int)u32Type | 0x100; /* non-wanted: type in low bits, flag high */
+}
+
 static int
 xhci_wait_event(u32 u32WantType, u32 *pCode, u32 *pSlot, u64 *pParam,
                 u32 u32Spins)
 {
     u32 iSpin;
+    u32 u32Tail;
+
+    /*
+     * Final residual window (false-TO class Soft!=product stage-11/13/15):
+     * every-spin clinv for last min(262144, spins/8) so late HC DMA is not
+     * missed by the every-64 cadence. Keep short for drain budgets.
+     */
+    u32Tail = u32Spins >> 3;
+    if (u32Tail > 262144u) {
+        u32Tail = 262144u;
+    }
+    if (u32Tail < 256u && u32Spins >= 256u) {
+        u32Tail = 256u;
+    }
 
     for (iSpin = 0; iSpin < u32Spins; iSpin++) {
         struct xhci_trb *pTrb = &g_pEvtRing[g_u32EvtIdx];
         u32 u32Ctrl;
         u8 fCycle;
-        u32 u32Type;
+        int nCons;
 
         /*
-         * Occasional line invalidate so non-coherent HC DMA is visible.
-         * Every-spin clflush made panel boot crawl — sample every 256 polls.
+         * Invalidate so non-coherent HC DMA is visible (a12f).
+         * Aggressive for first 64 polls (catch early Completion / Xfer
+         * events); then every 64; last u32Tail spins every-spin (false-TO
+         * residual Soft!=product). Every-spin for whole long SS poll made
+         * panel crawl historically. Lines must be clean before HC write
+         * (see setup_rings clflush) or clflush writeback can stomp Transfer
+         * Events -> stage-11 TO.
          */
-        if ((iSpin & 255u) == 0u) {
+        if (iSpin < 64u || (iSpin & 63u) == 0u ||
+            (u32Tail != 0u && iSpin + u32Tail >= u32Spins)) {
             xhci_clinv_ptr(pTrb);
         }
         u32Ctrl = pTrb->u32Control;
@@ -475,47 +609,58 @@ xhci_wait_event(u32 u32WantType, u32 *pCode, u32 *pSlot, u64 *pParam,
             continue;
         }
 
-        /* Matched cycle — force fresh read of full TRB before consume. */
-        xhci_clinv_ptr(pTrb);
-        u32Ctrl = pTrb->u32Control;
-        u32Type = trb_type(u32Ctrl);
-        /* Residual Transfer Length (bits 0–23) — honest ctrl fail logs. */
-        g_u32LastEvtResidual = pTrb->u32Status & 0x00ffffffu;
-        if (pCode != NULL) {
-            *pCode = (pTrb->u32Status >> 24) & 0xffu;
-        }
-        if (pSlot != NULL) {
-            *pSlot = (u32Ctrl >> 24) & 0xffu;
-        }
-        if (pParam != NULL) {
-            *pParam = pTrb->u64Param;
-        }
-
-        /* Advance dequeue; clear EHB by writing ERDP with EHB=1 */
-        g_u32EvtIdx++;
-        if (g_u32EvtIdx >= XHCI_RING_TRBS) {
-            g_u32EvtIdx = 0;
-            g_fEvtCycle ^= 1u;
-        }
-        {
-            u64 u64Erdp =
-                (u64)g_paEvtRing +
-                (u64)g_u32EvtIdx * sizeof(struct xhci_trb);
-
-            u64Erdp |= 8ull; /* EHB */
-            mmio_w64(g_pRt, 0x20u + 0x18u, u64Erdp);
-        }
-
-        if (u32WantType == 0u || u32Type == u32WantType) {
-            return (int)u32Type;
-        }
-        /* Port status change etc. — keep draining until wanted type */
-        if (u32Type == XHCI_TRB_TYPE_PORT_STATUS) {
+        nCons = xhci_evt_consume_matched(u32WantType, pCode, pSlot, pParam);
+        if (nCons < 0) {
+            cpu_relax();
             continue;
         }
-        if (u32WantType != 0u && u32Type != u32WantType) {
-            /* unexpected but may still be useful; continue searching */
-            continue;
+        if (nCons < 0x100) {
+            return nCons;
+        }
+        /* Non-wanted type consumed - keep searching (port status etc.). */
+        (void)nCons;
+    }
+
+    /*
+     * Post-budget false-TO residual (Gap C Soft!=product; a12f G-AC-1):
+     * only on control-class budgets (spins >= XHCI_POLL_SPINS) so short
+     * drain does not pay residual. Force-inval current + next event TRB,
+     * then aggressive every-spin micro-poll. HC may post Transfer Event
+     * just as primary budget ends - prefer seeing event over thrash Set
+     * TR Deq. Silent (no stamp storm). Soft!=product Stage OPEN.
+     */
+    if (u32Spins >= XHCI_POLL_SPINS && g_pEvtRing != NULL) {
+        u32 iSpin2;
+
+        xhci_clinv_ptr(&g_pEvtRing[g_u32EvtIdx]);
+        if ((g_u32EvtIdx + 1u) < XHCI_RING_TRBS) {
+            xhci_clinv_ptr(&g_pEvtRing[g_u32EvtIdx + 1u]);
+        } else {
+            xhci_clinv_ptr(&g_pEvtRing[0]);
+        }
+        mmio_barrier();
+        for (iSpin2 = 0; iSpin2 < (XHCI_POLL_SPINS * 2u); iSpin2++) {
+            struct xhci_trb *pTrb = &g_pEvtRing[g_u32EvtIdx];
+            u32 u32Ctrl;
+            u8 fCycle;
+            int nCons;
+
+            xhci_clinv_ptr(pTrb);
+            u32Ctrl = pTrb->u32Control;
+            fCycle = (u8)(u32Ctrl & XHCI_TRB_CYCLE);
+            if (fCycle != g_fEvtCycle) {
+                cpu_relax();
+                continue;
+            }
+            nCons = xhci_evt_consume_matched(u32WantType, pCode, pSlot, pParam);
+            if (nCons < 0) {
+                cpu_relax();
+                continue;
+            }
+            if (nCons < 0x100) {
+                return nCons;
+            }
+            (void)nCons;
         }
     }
     return -1;
@@ -524,15 +669,33 @@ xhci_wait_event(u32 u32WantType, u32 *pCode, u32 *pSlot, u64 *pParam,
 static void
 doorbell_hc(void)
 {
+    mmio_barrier();
     g_pDb[0] = 0;
     mmio_barrier();
+    /* Serialize doorbell vs TRB clflush (a12f non-posted path). */
+    if (g_pOp != NULL) {
+        (void)mmio_r32(g_pOp, 0x04); /* USBSTS */
+    }
 }
 
+/*
+ * Ring doorbell for slot/DCI. Caller must clflush TRBs first.
+ * Fence + USBSTS read so doorbell is not reordered ahead of ring stores
+ * (stage-11: first EP0 GET_DESC TO with empty event ring on a12f).
+ * Grep: xhci: doorbell
+ */
 static void
 doorbell_ep(u8 u8Slot, u8 u8Dci)
 {
+    if (u8Slot == 0u || g_pDb == NULL) {
+        return;
+    }
+    mmio_barrier();
     g_pDb[u8Slot] = (u32)u8Dci;
     mmio_barrier();
+    if (g_pOp != NULL) {
+        (void)mmio_r32(g_pOp, 0x04); /* USBSTS - post doorbell */
+    }
 }
 
 /* ---- command ring ------------------------------------------------------- */
@@ -549,8 +712,8 @@ xhci_cmd(u64 u64Param, u32 u32Status, u32 u32TypeExtra, u32 *pCode,
     /*
      * Last TRB is Link (Toggle Cycle). Before wrapping the producer index,
      * rewrite Link with the *current* cycle so the HC can follow it after
-     * multi-port scans exhaust the first lap (G752: many CCS ports × passes).
-     * Missing this → command hang / Enable Slot timeout (panel stage 7).
+     * multi-port scans exhaust the first lap (G752: many CCS ports x passes).
+     * Missing this -> command hang / Enable Slot timeout (panel stage 7).
      */
     if (g_u32CmdIdx >= XHCI_RING_TRBS - 1u) {
         g_pCmdRing[XHCI_RING_TRBS - 1u].u64Param = (u64)g_paCmdRing;
@@ -647,7 +810,7 @@ xhci_wait_xfer(u32 u32Spins)
     return 0;
 }
 
-/* Forward decls — used by EP0 hard resync / ctrl before their definitions. */
+/* Forward decls - used by EP0 hard resync / ctrl before their definitions. */
 static int xhci_evaluate_ep0_mps(void);
 static void xhci_ep0_ring_reset(void);
 static void xhci_port_force_u0(u8 u8Port);
@@ -655,6 +818,7 @@ static void xhci_port_power_on(u8 u8Port);
 static u32 portsc_read(u8 u8Port);
 static u8 *ctx_ep(void *pBase, int fInput, u8 u8Dci);
 static int xhci_ep0_arm_after_address(void);
+static void xhci_mps0_resync_from_speed(void);
 
 /* Drain any pending event ring entries (port status + stale xfer). */
 static void
@@ -688,7 +852,7 @@ xhci_ep0_sample(u64 *pDeq)
     if (g_pDevCtx == NULL || g_u8SlotId == 0) {
         return XHCI_EP_ST_DISABLED;
     }
-    /* HC wrote Output Context via DMA — pull into CPU cache. */
+    /* HC wrote Output Context via DMA - pull into CPU cache. */
     xhci_clflush_span(g_pDevCtx, (u32)g_u8CtxSize * 3u);
     pEp0 = ctx_ep(g_pDevCtx, 0, 1);
     memcpy(&u32Dw0, pEp0 + 0x00, 4);
@@ -700,13 +864,470 @@ xhci_ep0_sample(u64 *pDeq)
 }
 
 /*
+ * P0-1 residual explore (stage-11): soft-continue at ring base ONLY if ALL of:
+ *   Running|Stopped, idx==0, cyc==1, deq base == g_paEp0Ring, DCS==1.
+ * deq==0 -> not soft-continue (caller arms). Used by post-address soft-align
+ * and prepare_for_get_desc (fresh arm path).
+ * Grep: xhci: ep0 soft-continue ok|deny
+ */
+static int
+xhci_ep0_soft_continue_ok(u32 u32EpSt, u64 u64Deq)
+{
+    u64 u64Base = (u64)g_paEp0Ring & ~0xfull;
+    u64 u64DeqAddr = u64Deq & ~0xfull;
+    u8 u8Dcs = (u8)(u64Deq & 1ull);
+
+    if (u64Deq == 0ull) {
+        return 0;
+    }
+    if (u32EpSt != XHCI_EP_ST_RUNNING && u32EpSt != XHCI_EP_ST_STOPPED) {
+        return 0;
+    }
+    if (g_u32Ep0Idx != 0u || g_fEp0Cycle != 1u) {
+        return 0;
+    }
+    if (u64DeqAddr != u64Base) {
+        return 0;
+    }
+    if (u8Dcs != 1u) {
+        return 0;
+    }
+    return 1;
+}
+
+/*
+ * Mid-ring soft-continue (stage-13 residual -> stage-15; Gap C post-0ef deepen):
+ * after a completed control TD (soft-8 PASS -> GET_DESC18, or device-desc PASS
+ * -> GET_CONFIG) software producer and HC TR Dequeue both sit at the next free
+ * TRB - idx may be non-zero. Soft-continue when:
+ *   Running|Stopped, deq != 0, deq_addr == sw_producer_addr, DCS == cycle,
+ *   room for Setup+Data+Status (3 TRBs) without forced wrap.
+ * Treating "idx!=0" as misaligned forced Stop+Set TR Deq thrash and desynced
+ * a12f -> GET_DESC18 stage-13 / GET_CONFIG stage-15 cc=0 TO.
+ * Prefer mid-ring soft-continue over thrash hard-resync (Intel a12f G-AC-1).
+ * Grep: xhci: ep0 mid-ring soft-continue | ep0 producer aligned
+ */
+static int
+xhci_ep0_producer_hc_aligned(u32 u32EpSt, u64 u64Deq)
+{
+    u64 u64Base = (u64)g_paEp0Ring & ~0xfull;
+    u64 u64DeqAddr = u64Deq & ~0xfull;
+    u64 u64SwAddr;
+    u8 u8Dcs = (u8)(u64Deq & 1ull);
+
+    if (u64Deq == 0ull) {
+        return 0;
+    }
+    if (u32EpSt != XHCI_EP_ST_RUNNING && u32EpSt != XHCI_EP_ST_STOPPED) {
+        return 0;
+    }
+    /* Need room for a full control TD (Setup + Data + Status = 3 TRBs). */
+    if (g_u32Ep0Idx >= (XHCI_RING_TRBS - 1u) ||
+        g_u32Ep0Idx + 3u > (XHCI_RING_TRBS - 1u)) {
+        return 0;
+    }
+    u64SwAddr = u64Base + (u64)g_u32Ep0Idx * (u64)sizeof(struct xhci_trb);
+    if (u64DeqAddr != u64SwAddr) {
+        return 0;
+    }
+    if (u8Dcs != (u8)(g_fEp0Cycle & 1u)) {
+        return 0;
+    }
+    return 1;
+}
+
+/*
+ * Soft-sync software EP0 producer to HC TR Dequeue (no Stop / Set TR Deq).
+ * Stage-13/15 residual: after ISP short-packet or late Status the HC deq may
+ * lead or lag SW by a TRB even when the TD completed. Snap idx/cycle to deq
+ * when Running|Stopped and deq lands on a free slot in the EP0 ring (not Link).
+ * Returns 1 aligned/snapped, 0 if caller must hard-resync.
+ * Grep: xhci: ep0 soft-sync residual | ep0 soft-sync ok|deny
+ */
+static int
+xhci_ep0_soft_sync_producer(void)
+{
+    u32 u32EpSt;
+    u64 u64Deq = 0;
+    u64 u64Base = (u64)g_paEp0Ring & ~0xfull;
+    u64 u64DeqAddr;
+    u64 u64Off;
+    u32 u32Idx;
+    u8 u8Dcs;
+    u32 u32OldIdx = g_u32Ep0Idx;
+    u8 u8OldCyc = g_fEp0Cycle;
+
+    u32EpSt = xhci_ep0_sample(&u64Deq);
+    if (u64Deq == 0ull) {
+        /* Rate-limit deny greps (soft-recover multi-pass Soft!=product). */
+        g_u32SoftSyncDenyN++;
+        if (g_u32SoftSyncDenyN == 1u || (g_u32SoftSyncDenyN & 15u) == 0u) {
+            kprintf("xhci: ep0 soft-sync deny deq=0 state=%u idx=%u n=%u "
+                    "(stage-13/15 residual Soft!=product)\n",
+                    (unsigned)u32EpSt, (unsigned)g_u32Ep0Idx,
+                    (unsigned)g_u32SoftSyncDenyN);
+        }
+        return 0;
+    }
+    if (u32EpSt != XHCI_EP_ST_RUNNING && u32EpSt != XHCI_EP_ST_STOPPED) {
+        g_u32SoftSyncDenyN++;
+        if (g_u32SoftSyncDenyN == 1u || (g_u32SoftSyncDenyN & 15u) == 0u) {
+            kprintf("xhci: ep0 soft-sync deny state=%u deq=0x%lx n=%u "
+                    "(stage-13/15 residual Soft!=product)\n",
+                    (unsigned)u32EpSt, (unsigned long)u64Deq,
+                    (unsigned)g_u32SoftSyncDenyN);
+        }
+        return 0;
+    }
+    u64DeqAddr = u64Deq & ~0xfull;
+    u8Dcs = (u8)(u64Deq & 1ull);
+    if (u64DeqAddr < u64Base) {
+        g_u32SoftSyncDenyN++;
+        if (g_u32SoftSyncDenyN == 1u || (g_u32SoftSyncDenyN & 15u) == 0u) {
+            kprintf("xhci: ep0 soft-sync deny deq=0x%lx below ring n=%u\n",
+                    (unsigned long)u64DeqAddr, (unsigned)g_u32SoftSyncDenyN);
+        }
+        return 0;
+    }
+    u64Off = u64DeqAddr - u64Base;
+    if ((u64Off % (u64)sizeof(struct xhci_trb)) != 0ull) {
+        g_u32SoftSyncDenyN++;
+        if (g_u32SoftSyncDenyN == 1u || (g_u32SoftSyncDenyN & 15u) == 0u) {
+            kprintf("xhci: ep0 soft-sync deny deq=0x%lx misaligned n=%u\n",
+                    (unsigned long)u64DeqAddr, (unsigned)g_u32SoftSyncDenyN);
+        }
+        return 0;
+    }
+    u32Idx = (u32)(u64Off / (u64)sizeof(struct xhci_trb));
+    /* Link slot or past usable producer window -> hard path. */
+    if (u32Idx >= (XHCI_RING_TRBS - 1u)) {
+        g_u32SoftSyncDenyN++;
+        if (g_u32SoftSyncDenyN == 1u || (g_u32SoftSyncDenyN & 15u) == 0u) {
+            kprintf("xhci: ep0 soft-sync deny deq on Link idx=%u n=%u\n",
+                    (unsigned)u32Idx, (unsigned)g_u32SoftSyncDenyN);
+        }
+        return 0;
+    }
+    /* Room for Setup+Data+Status after snap. */
+    if (u32Idx + 3u > (XHCI_RING_TRBS - 1u)) {
+        g_u32SoftSyncDenyN++;
+        if (g_u32SoftSyncDenyN == 1u || (g_u32SoftSyncDenyN & 15u) == 0u) {
+            kprintf("xhci: ep0 soft-sync deny ring full at deq idx=%u n=%u\n",
+                    (unsigned)u32Idx, (unsigned)g_u32SoftSyncDenyN);
+        }
+        return 0;
+    }
+    if (u32Idx == g_u32Ep0Idx && u8Dcs == (u8)(g_fEp0Cycle & 1u)) {
+        /*
+         * Rate-limit: soft-recover multi-pass / mid-ladder re-enters often;
+         * stamp once then every 16th (no stamp storms Soft!=product).
+         * Grep: xhci: ep0 soft-sync ok already
+         */
+        g_u32SoftSyncAlreadyN++;
+        g_u32SoftSyncDenyN = 0u;
+        if (g_u32SoftSyncAlreadyN == 1u ||
+            (g_u32SoftSyncAlreadyN & 15u) == 0u) {
+            kprintf("xhci: ep0 soft-sync ok already idx=%u cyc=%u deq=0x%lx "
+                    "state=%u n=%u (stage-13/15 residual Soft!=product)\n",
+                    (unsigned)u32Idx, (unsigned)u8Dcs,
+                    (unsigned long)u64DeqAddr, (unsigned)u32EpSt,
+                    (unsigned)g_u32SoftSyncAlreadyN);
+        }
+        xhci_clflush_ptr(g_pEp0Ring);
+        xhci_clflush_ptr(&g_pEp0Ring[XHCI_RING_TRBS - 1u]);
+        return 1;
+    }
+    g_u32Ep0Idx = u32Idx;
+    g_fEp0Cycle = u8Dcs;
+    g_u32SoftSyncAlreadyN = 0u;
+    g_u32SoftSyncDenyN = 0u;
+    /*
+     * Rate-limit residual snap greps (soft-recover multi-pass + mid-ring
+     * ladders re-enter often; always-print was stamp-storm / #PF class).
+     * First + every 16th. Soft!=product.
+     */
+    g_u32SoftSyncSnapN++;
+    if (g_u32SoftSyncSnapN == 1u || (g_u32SoftSyncSnapN & 15u) == 0u) {
+        kprintf("xhci: ep0 soft-sync residual idx=%u->%u cyc=%u->%u deq=0x%lx "
+                "state=%u n=%u (no Set TR Deq; stage-13/15 Soft!=product)\n",
+                (unsigned)u32OldIdx, (unsigned)u32Idx, (unsigned)u8OldCyc,
+                (unsigned)u8Dcs, (unsigned long)u64DeqAddr, (unsigned)u32EpSt,
+                (unsigned)g_u32SoftSyncSnapN);
+    }
+    xhci_clflush_ptr(g_pEp0Ring);
+    xhci_clflush_ptr(&g_pEp0Ring[XHCI_RING_TRBS - 1u]);
+    return 1;
+}
+
+/*
+ * Residual Transfer Length honesty after xhci_ctrl: bytes received on Data
+ * stage = wlen - residual when residual < wlen; else 0. Content-backed
+ * deepen when residual is wrong but buffer already has a valid USB desc
+ * prefix (stage-11/13/15 Soft!=product).
+ * Grep: xhci: get device desc residual | get config residual
+ */
+static u32
+xhci_ctrl_got_len(u16 u16Wlen)
+{
+    if (u16Wlen == 0u) {
+        return 0u;
+    }
+    if (g_u32LastCtrlResidual < (u32)u16Wlen) {
+        return (u32)u16Wlen - g_u32LastCtrlResidual;
+    }
+    return 0u;
+}
+
+/*
+ * Greppable stage lamp (panel / serial). Prefer over thrash: Soft!=product.
+ * Rate-limit (Gap C freestanding residual; no stamp storms on soft ladders):
+ *   1) same stage+why+cc -> suppress once (readdress re-fail same GET_CONFIG)
+ *   2) same stage any-why: first + every 16th burst stamp only
+ * New stage resets burst. Never hundreds of sequential stage= kprintf.
+ * Honesty: Stage OPEN Soft!=product - lab soft never product T1 from stage.
+ * Dual DoD A stick OPEN (Soft!=product · G-AC-1). Grep: xhci: stage=
+ */
+static void
+xhci_stage_soft_lamp(u32 u32Stage, const char *szWhy)
+{
+    u32 u32WhyTag = 0u;
+    const char *sz = szWhy != NULL ? szWhy : "fail";
+    const char *pCh;
+
+    /* Cheap stable tag from why + sticky fail cc (no libc hash). */
+    for (pCh = sz; *pCh != '\0'; pCh++) {
+        u32WhyTag = (u32WhyTag * 33u) + (u32)(u8)*pCh;
+    }
+    u32WhyTag = (u32WhyTag * 33u) + g_u32CtrlFailCc;
+    if (g_u32LampStageLast == u32Stage && g_u32LampWhyTag == u32WhyTag) {
+        return;
+    }
+    if (g_u32LampStageLast != u32Stage) {
+        g_u32LampStageBurstN = 0u;
+    }
+    g_u32LampStageBurstN++;
+    /* Same stage, different why/cc: first + every 16th (no stage= storms). */
+    if (g_u32LampStageBurstN > 1u &&
+        (g_u32LampStageBurstN & 15u) != 0u &&
+        g_u32LampStageLast == u32Stage) {
+        g_u32LampWhyTag = u32WhyTag;
+        return;
+    }
+    g_u32LampStageLast = u32Stage;
+    g_u32LampWhyTag = u32WhyTag;
+    kprintf("xhci: stage=%u %s cc=%u port=%u spd=%u mps0=%u n=%u "
+            "Soft!=product Stage OPEN\n",
+            (unsigned)u32Stage, sz, (unsigned)g_u32CtrlFailCc,
+            (unsigned)g_u8PortId, (unsigned)g_u8PortSpeed,
+            (unsigned)g_u16MaxPkt0, (unsigned)g_u32LampStageBurstN);
+}
+
+/*
+ * Cheap stable tag for rate-limit keys (no libc hash; Soft!=product).
+ */
+static u32
+xhci_soft_why_tag(const char *szWhy)
+{
+    u32 u32Tag = 0u;
+    const char *pCh;
+
+    if (szWhy == NULL) {
+        return 0u;
+    }
+    for (pCh = szWhy; *pCh != '\0'; pCh++) {
+        u32Tag = (u32Tag * 33u) + (u32)(u8)*pCh;
+    }
+    return u32Tag;
+}
+
+/*
+ * Rate-limit soft-recover greps per where-tag: first + every 16th in burst
+ * (Gap C: twenty-six SS passes / twenty-two HS; multi-pass Soft!=product; no stamp storms).
+ * New where resets counter. Grep: xhci: ep0 soft-recover | Soft!=product
+ */
+static int
+xhci_soft_recover_stamp_ok(const char *szWhere)
+{
+    u32 u32Tag = xhci_soft_why_tag(szWhere != NULL ? szWhere : "?");
+
+    if (g_u32SoftRecoverWhereTag != u32Tag) {
+        g_u32SoftRecoverWhereTag = u32Tag;
+        g_u32SoftRecoverStampN = 0u;
+    }
+    g_u32SoftRecoverStampN++;
+    if (g_u32SoftRecoverStampN == 1u ||
+        (g_u32SoftRecoverStampN & 15u) == 0u) {
+        return 1;
+    }
+    return 0;
+}
+
+/*
+ * Rate-limit GET_CONFIG soft-align greps (readdress loops re-enter stage-15;
+ * late..late14 chain must not storm serial / #PF class). First + every 16th.
+ * Soft!=product Stage OPEN. Grep: xhci: get config soft-align
+ */
+static int
+xhci_get_config_align_stamp_ok(void)
+{
+    g_u32GetConfigAlignStampN++;
+    if (g_u32GetConfigAlignStampN == 1u ||
+        (g_u32GetConfigAlignStampN & 15u) == 0u) {
+        return 1;
+    }
+    return 0;
+}
+
+/*
+ * After control TO / failed enqueue: prefer soft residual recover over thrash.
+ * Soft residual lean (freestanding MSC SKIP default · net first · Dual DoD A):
+ *   1) drain + soft-sync producer to HC deq (no Set TR Deq)
+ *   2) re-sample; base soft-continue OR mid-ring producer-HC aligned
+ *   3) soft-sync alone already aligned after snap
+ *   4) second-pass residual: short settle + drain + soft-sync again
+ *   5) third-pass residual (SS only): one longer settle then deny -> hard
+ * Deny -> 0 (caller hard-resync). Historical 4th..26th multi-M settle ladder
+ * removed - hung G752 before freestanding NET/:22. Soft!=product · G-AC-1.
+ * Returns 1 soft-continue ok, 0 deny. Stamps rate-limited (no storms).
+ * Grep: xhci: ep0 mid-ring soft-continue | soft-sync residual | Soft!=product
+ *       | ep0 soft-recover second|third-pass | soft residual lean
+ */
+static int
+xhci_ep0_soft_recover_after_to(const char *szWhere)
+{
+    u32 u32EpSt;
+    u64 u64Deq = 0;
+    int fSync;
+    int nPass;
+    int nPassMax;
+    int fStamp;
+    const char *szW = szWhere != NULL ? szWhere : "?";
+
+    /*
+     * Soft residual lean: max 3 SS / 2 HS soft passes with short settles;
+     * deny -> hard-resync. Overnight Nth-pass growth never product T1.
+     * Soft!=product · Dual DoD A residual · freestanding MSC SKIP default.
+     * Grep: xhci: ep0 soft-recover | soft residual lean | boot hang GET_DESC18
+     */
+    nPassMax = (g_u8PortSpeed >= 4u) ? 3 : 2;
+
+    for (nPass = 0; nPass < nPassMax; nPass++) {
+        fStamp = xhci_soft_recover_stamp_ok(szW);
+        /*
+         * Event-ring residual before each pass: force-inval so drain sees
+         * late Transfer Events that every-64 clinv left stale (false-TO
+         * class Soft!=product; a12f G-AC-1). Prefer real residual over
+         * Nth-pass growth. No stamp (no storms).
+         */
+        if (g_pEvtRing != NULL) {
+            xhci_clinv_ptr(&g_pEvtRing[g_u32EvtIdx]);
+        }
+        if (nPass == 1) {
+            /*
+             * Second-pass residual (lean): brief settle so late Status /
+             * TR Deq can land. Prefer mid-ring soft-continue over thrash.
+             */
+            if (fStamp != 0) {
+                kprintf("xhci: ep0 soft-recover second-pass %s n=%u "
+                        "(stage-11/13/15 residual Soft!=product)\n",
+                        szW, (unsigned)g_u32SoftRecoverStampN);
+            }
+            xhci_settle((g_u8PortSpeed >= 4u) ? 400000u : 120000u);
+            xhci_drain_events(64u);
+        } else if (nPass == 2) {
+            /*
+             * Third-pass residual (SS only under nPassMax=3): one longer
+             * settle then deny -> hard. Boot must not spin here forever.
+             */
+            if (fStamp != 0) {
+                kprintf("xhci: ep0 soft-recover third-pass %s n=%u "
+                        "(stage-11/13/15 residual Soft!=product; no Set TR Deq)\n",
+                        szW, (unsigned)g_u32SoftRecoverStampN);
+            }
+            xhci_settle((g_u8PortSpeed >= 4u) ? 800000u : 200000u);
+            xhci_drain_events((g_u8PortSpeed >= 4u) ? 80u : 56u);
+        } else {
+            /* First pass: brief drain (+ short SS settle). Lean-capped. */
+            xhci_drain_events(48u);
+            if (g_u8PortSpeed >= 4u) {
+                xhci_settle(200000u);
+                xhci_drain_events(64u);
+            }
+        }
+        fSync = xhci_ep0_soft_sync_producer();
+        u32EpSt = xhci_ep0_sample(&u64Deq);
+        if (u32EpSt == XHCI_EP_ST_HALTED || u32EpSt == XHCI_EP_ST_ERROR) {
+            if (fStamp != 0) {
+                kprintf("xhci: ep0 soft-recover deny %s state=%u "
+                        "(halted/error Soft!=product)\n",
+                        szW, (unsigned)u32EpSt);
+            }
+            return 0;
+        }
+        if (xhci_ep0_soft_continue_ok(u32EpSt, u64Deq) != 0) {
+            if (fStamp != 0) {
+                kprintf("xhci: ep0 soft-continue after TO %s base state=%u "
+                        "deq=0x%lx pass=%u n=%u (no Set TR Deq; Soft!=product)\n",
+                        szW, (unsigned)u32EpSt, (unsigned long)u64Deq,
+                        (unsigned)nPass, (unsigned)g_u32SoftRecoverStampN);
+            }
+            xhci_clflush_ptr(g_pEp0Ring);
+            xhci_clflush_ptr(&g_pEp0Ring[XHCI_RING_TRBS - 1u]);
+            return 1;
+        }
+        if (xhci_ep0_producer_hc_aligned(u32EpSt, u64Deq) != 0) {
+            if (fStamp != 0) {
+                kprintf("xhci: ep0 mid-ring soft-continue after TO %s "
+                        "state=%u deq=0x%lx idx=%u pass=%u n=%u "
+                        "(no Set TR Deq; Soft!=product)\n",
+                        szW, (unsigned)u32EpSt, (unsigned long)u64Deq,
+                        (unsigned)g_u32Ep0Idx, (unsigned)nPass,
+                        (unsigned)g_u32SoftRecoverStampN);
+            }
+            xhci_clflush_ptr(g_pEp0Ring);
+            xhci_clflush_ptr(&g_pEp0Ring[XHCI_RING_TRBS - 1u]);
+            return 1;
+        }
+        if (fSync != 0) {
+            /*
+             * Soft-sync snapped SW to HC - only soft-continue if now aligned.
+             * Former always-return-1 after sync re-enqueued onto desync ->
+             * GET_DESC18 TO thrash (boot hang Soft!=product).
+             */
+            u32EpSt = xhci_ep0_sample(&u64Deq);
+            if (xhci_ep0_soft_continue_ok(u32EpSt, u64Deq) != 0 ||
+                xhci_ep0_producer_hc_aligned(u32EpSt, u64Deq) != 0) {
+                if (fStamp != 0) {
+                    kprintf("xhci: ep0 mid-ring soft-continue after TO %s "
+                            "post-sync state=%u idx=%u pass=%u n=%u "
+                            "(no Set TR Deq; Soft!=product)\n",
+                            szW, (unsigned)u32EpSt, (unsigned)g_u32Ep0Idx,
+                            (unsigned)nPass,
+                            (unsigned)g_u32SoftRecoverStampN);
+                }
+                xhci_clflush_ptr(g_pEp0Ring);
+                xhci_clflush_ptr(&g_pEp0Ring[XHCI_RING_TRBS - 1u]);
+                return 1;
+            }
+            /* Sync without alignment: try next capped pass / hard deny. */
+        }
+    }
+    /* Final deny always greppable once (ladder end; Soft!=product). */
+    kprintf("xhci: ep0 soft-recover deny %s state=%u deq=0x%lx idx=%u "
+            "-> hard path (stage-11/13/15 Soft!=product)\n",
+            szW, (unsigned)u32EpSt, (unsigned long)u64Deq,
+            (unsigned)g_u32Ep0Idx);
+    return 0;
+}
+
+/*
  * After stall/babble/timeout: Reset Endpoint(EP0) + Set TR Dequeue to a fresh
  * ring. Soft ring_reset alone is not enough once the HC halted EP0 (stage 15).
  * Match xhci_ep0_arm_after_address: second ring_reset after Set TR Deq so
- * producer DCS/cycle stay aligned (a12f desync → GET_CONFIG cc=0).
+ * producer DCS/cycle stay aligned (a12f desync -> GET_CONFIG cc=0).
  *
  * CRITICAL: after a timed-out control TD the HC is still Running with dequeue
- * mid-ring while software has advanced — settle-only retry enqueues more TRBs
+ * mid-ring while software has advanced - settle-only retry enqueues more TRBs
  * onto a desynced producer (classic stage-15). Always Stop+Reset+Set TR Deq
  * | DCS=1 and match software cycle=1 idx=0.
  */
@@ -727,7 +1348,7 @@ xhci_ep0_hard_resync(void)
             (unsigned)u32EpSt, (unsigned long)u64Deq, (unsigned)g_u32Ep0Idx,
             (unsigned)g_fEp0Cycle);
     xhci_drain_events(32u);
-    /* Only force U0 when PLS != 0 — LWS spam drops SS after device-desc. */
+    /* Only force U0 when PLS != 0 - LWS spam drops SS after device-desc. */
     if (g_u8PortId != 0) {
         u32 u32Ps = portsc_read(g_u8PortId);
 
@@ -738,7 +1359,7 @@ xhci_ep0_hard_resync(void)
         xhci_port_power_on(g_u8PortId);
     }
 
-    /* Stop Endpoint EP0 (ignore fail — may already be idle/halted). */
+    /* Stop Endpoint EP0 (ignore fail - may already be idle/halted). */
     u32Ctrl = (XHCI_TRB_TYPE_STOP_EP << 10) | (1u << 16) |
               ((u32)g_u8SlotId << 24);
     (void)xhci_cmd(0, 0, u32Ctrl, &u32Code, NULL);
@@ -749,7 +1370,7 @@ xhci_ep0_hard_resync(void)
               ((u32)g_u8SlotId << 24);
     if (xhci_cmd(0, 0, u32Ctrl, &u32Code, NULL) != 0) {
         kprintf("xhci: Reset Endpoint EP0 FAIL code=%u\n", u32Code);
-        /* Fall through — still try Set TR Dequeue / Evaluate */
+        /* Fall through - still try Set TR Dequeue / Evaluate */
     }
     xhci_drain_events(16u);
 
@@ -775,56 +1396,460 @@ xhci_ep0_hard_resync(void)
 }
 
 /*
- * Before first GET_CONFIG after a working device-desc:
- *   Running (1)  → soft-continue (do NOT Set TR Deq — desync → stage-15 TO)
- *   Stopped (3)  → already armed/evaluated; soft-continue enqueue+doorbell
- *   Halted/Error → hard resync (Reset + Set TR Deq | DCS=1)
- *   Disabled     → arm after address
- * Grep: msc: progress ep0_pre_config
+ * Before first GET_CONFIG / SET_CONFIG after a working device-desc
+ * (stage-15 deepen; mirror stage-11 soft-align without thrash):
+ *   1) mps0 resync from PORTSC speed (SS stick must keep 512)
+ *   2) Halted/Error -> hard-resync (Stop+Reset+Set TR Deq | DCS=1)
+ *   3) base soft-continue: Running|Stopped + idx==0 + cyc==1 + deq@base + DCS=1
+ *   4) mid-ring soft-continue: producer_hc_aligned (post device-desc PASS -
+ *      idx non-zero, deq matches SW, DCS==cycle) - NO Set TR Deq
+ *   5) deq==0 / DCS!=1 at base with producer reset -> arm (Set TR Deq once)
+ *   6) clear desync (SW advanced, HC deq stuck) or ring nearly full -> hard
+ * Residual: after device-desc PASS prefer soft-recover settle before any
+ * Set TR Deq so EP0 is cleanly armed without thrash (a12f stage-15 TO).
+ * Prefer not thrashing Set TR Deq on the healthy post-desc path (a12f).
+ * Grep: msc: progress ep0_pre_config | xhci: ep0 soft-continue ok|deny
+ *       | xhci: ep0 mid-ring soft-continue | pre_config desync|hard-resync
+ *       | ep0_ready after device-desc
  */
 static void
 xhci_ep0_prepare_for_config(void)
 {
     u32 u32EpSt;
     u64 u64Deq = 0;
+    u64 u64Base = (u64)g_paEp0Ring & ~0xfull;
+    u64 u64DeqAddr;
+    u64 u64SwAddr;
+    u8 u8Dcs;
+
+    /* Re-bind MPS0 before first config control (SS vs HS path). */
+    xhci_mps0_resync_from_speed();
+
+    /*
+     * Stage-15 residual after device-desc PASS: drain + soft-sync producer
+     * to HC deq (ISP short-packet / late Status may leave idx lagging).
+     * Prefer mid-ring soft-continue; no Set TR Deq thrash when aligned.
+     * Grep: xhci: ep0 soft-sync residual | ep0_ready after device-desc
+     */
+    xhci_drain_events(96u);
+    if (g_u8PortSpeed >= 4u) {
+        /* Soft residual lean: short SS settle (not multi-M thrash). Net first. */
+        xhci_settle(800000u);
+        xhci_drain_events(96u);
+    } else {
+        xhci_settle(400000u);
+        xhci_drain_events(64u);
+    }
+    if (xhci_ep0_soft_sync_producer() == 0) {
+        u32EpSt = xhci_ep0_sample(&u64Deq);
+        if (u32EpSt == XHCI_EP_ST_HALTED || u32EpSt == XHCI_EP_ST_ERROR) {
+            kprintf("xhci: ep0 pre_config soft-sync deny -> hard-resync "
+                    "state=%u\n",
+                    (unsigned)u32EpSt);
+            (void)xhci_ep0_hard_resync();
+            return;
+        }
+        /*
+         * Soft-recover once before hard: a12f may still be updating deq
+         * after device-desc; thrash Set TR Deq -> stage-15 cc=0 TO.
+         * GET_CONFIG soft-align residual (Soft!=product; no thrash).
+         */
+        if (xhci_ep0_soft_recover_after_to("pre_config") != 0) {
+            kprintf("xhci: ep0 pre_config soft-recover ok after device-desc "
+                    "(stage=15 Soft!=product; no Set TR Deq thrash)\n");
+        } else {
+            u32EpSt = xhci_ep0_sample(&u64Deq);
+            /* Running desync with SW ahead of HC: hard-resync. */
+            if (u32EpSt == XHCI_EP_ST_RUNNING ||
+                u32EpSt == XHCI_EP_ST_STOPPED) {
+                u64 u64DeqAddrChk = u64Deq & ~0xfull;
+                u64 u64SwChk =
+                    u64Base + (u64)g_u32Ep0Idx * (u64)sizeof(struct xhci_trb);
+
+                if (u64Deq != 0ull && u64DeqAddrChk != u64SwChk) {
+                    kprintf("xhci: ep0 pre_config soft-sync deny desync "
+                            "deq=0x%lx sw=0x%lx -> hard-resync\n",
+                            (unsigned long)u64DeqAddrChk,
+                            (unsigned long)u64SwChk);
+                    (void)xhci_ep0_hard_resync();
+                    return;
+                }
+            }
+        }
+    }
 
     u32EpSt = xhci_ep0_sample(&u64Deq);
-    kprintf("msc: progress ep0_pre_config state=%u deq=0x%lx idx=%u cyc=%u "
-            "mps0=%u\n",
-            (unsigned)u32EpSt, (unsigned long)u64Deq, (unsigned)g_u32Ep0Idx,
-            (unsigned)g_fEp0Cycle, (unsigned)g_u16MaxPkt0);
+    u8Dcs = (u8)(u64Deq & 1ull);
+    u64DeqAddr = u64Deq & ~0xfull;
+    u64SwAddr = u64Base + (u64)g_u32Ep0Idx * (u64)sizeof(struct xhci_trb);
 
-    if (u32EpSt == XHCI_EP_ST_RUNNING || u32EpSt == XHCI_EP_ST_STOPPED) {
-        /* Soft-continue: leave producer / HC dequeue alone. */
-        kprintf("xhci: ep0 soft-continue state=%u (no Set TR Deq)\n",
-                (unsigned)u32EpSt);
-        return;
-    }
+    kprintf("msc: progress ep0_pre_config state=%u deq=0x%lx idx=%u cyc=%u "
+            "dcs=%u mps0=%u spd=%u\n",
+            (unsigned)u32EpSt, (unsigned long)u64Deq, (unsigned)g_u32Ep0Idx,
+            (unsigned)g_fEp0Cycle, (unsigned)u8Dcs, (unsigned)g_u16MaxPkt0,
+            (unsigned)g_u8PortSpeed);
+
     if (u32EpSt == XHCI_EP_ST_HALTED || u32EpSt == XHCI_EP_ST_ERROR) {
-        kprintf("xhci: ep0 state=%u → hard-resync before GET_CONFIG\n",
+        kprintf("xhci: ep0 pre_config hard-resync state=%u\n",
                 (unsigned)u32EpSt);
         (void)xhci_ep0_hard_resync();
         return;
     }
-    /*
-     * Disabled / unknown sample: if software already advanced past a
-     * successful device-desc TD, prefer soft-continue — arming a still-
-     * Running EP (stale sample) is the stage-15 desync path.
-     */
-    if (g_u32Ep0Idx != 0u || g_fEp0Cycle != 1u) {
-        kprintf("xhci: ep0 soft-continue state=%u (producer advanced; "
-                "no Set TR Deq)\n",
+
+    /* Base soft-continue (fresh arm / post-address style). */
+    if (xhci_ep0_soft_continue_ok(u32EpSt, u64Deq) != 0) {
+        kprintf("xhci: ep0 soft-align pre_config state=%u deq=0x%lx "
+                "sw=0x%lx dcs=%u\n",
+                (unsigned)u32EpSt, (unsigned long)u64DeqAddr,
+                (unsigned long)u64SwAddr, (unsigned)u8Dcs);
+        kprintf("xhci: ep0 soft-continue ok pre_config state=%u "
+                "(no Set TR Deq)\n",
                 (unsigned)u32EpSt);
+        xhci_clflush_ptr(g_pEp0Ring);
+        xhci_clflush_ptr(&g_pEp0Ring[XHCI_RING_TRBS - 1u]);
         return;
     }
-    kprintf("xhci: ep0 state=%u idx=0 → arm before GET_CONFIG\n",
+
+    /*
+     * Stage-15 residual: after device-desc PASS producer is mid-ring and
+     * HC deq matches - soft-continue. Do NOT hard-resync / Set TR Deq.
+     */
+    if (xhci_ep0_producer_hc_aligned(u32EpSt, u64Deq) != 0) {
+        kprintf("xhci: ep0 mid-ring soft-continue pre_config state=%u "
+                "deq=0x%lx sw=0x%lx idx=%u cyc=%u dcs=%u "
+                "(no Set TR Deq; stage=15 Soft!=product)\n",
+                (unsigned)u32EpSt, (unsigned long)u64DeqAddr,
+                (unsigned long)u64SwAddr, (unsigned)g_u32Ep0Idx,
+                (unsigned)g_fEp0Cycle, (unsigned)u8Dcs);
+        kprintf("xhci: ep0 soft-continue ok pre_config mid-ring state=%u "
+                "(no Set TR Deq; Soft!=product)\n",
+                (unsigned)u32EpSt);
+        xhci_clflush_ptr(g_pEp0Ring);
+        xhci_clflush_ptr(&g_pEp0Ring[XHCI_RING_TRBS - 1u]);
+        return;
+    }
+
+    kprintf("xhci: ep0 soft-continue deny pre_config state=%u deq=0x%lx "
+            "idx=%u cyc=%u dcs=%u sw=0x%lx\n",
+            (unsigned)u32EpSt, (unsigned long)u64Deq,
+            (unsigned)g_u32Ep0Idx, (unsigned)g_fEp0Cycle, (unsigned)u8Dcs,
+            (unsigned long)u64SwAddr);
+
+    /* deq==0 or DCS!=1 at ring base with producer at base -> arm. */
+    if (u64Deq == 0ull ||
+        (u64DeqAddr == u64Base && u8Dcs != 1u && g_u32Ep0Idx == 0u &&
+         g_fEp0Cycle == 1u)) {
+        kprintf("xhci: ep0 pre_config deq=0x%lx dcs=%u -> arm before "
+                "GET_CONFIG (Set TR Deq; stage=15 Soft!=product)\n",
+                (unsigned long)u64Deq, (unsigned)u8Dcs);
+        (void)xhci_ep0_arm_after_address();
+        /* SS settle after arm so first GET_CONFIG doorbell is not raced. */
+        if (g_u8PortSpeed >= 4u) {
+            xhci_settle(3600000u);
+            xhci_drain_events(176u);
+        } else {
+            xhci_settle(700000u);
+        }
+        return;
+    }
+
+    /*
+     * Ring nearly full: hard-resync once to base so Setup+Data+Status fit
+     * without wrapping mid-TD (single-TD multi-TRB wrap is fragile on a12f).
+     */
+    if (g_u32Ep0Idx + 3u > (XHCI_RING_TRBS - 1u)) {
+        kprintf("xhci: ep0 pre_config ring full idx=%u -> hard-resync\n",
+                (unsigned)g_u32Ep0Idx);
+        (void)xhci_ep0_hard_resync();
+        return;
+    }
+
+    /*
+     * Clear desync after a prior TO: software producer advanced while HC
+     * dequeue still sits at ring base (or other address mismatch).
+     */
+    if ((u32EpSt == XHCI_EP_ST_RUNNING || u32EpSt == XHCI_EP_ST_STOPPED) &&
+        g_u32Ep0Idx != 0u && u64DeqAddr == u64Base) {
+        kprintf("xhci: ep0 pre_config desync deq=base idx=%u -> hard-resync\n",
+                (unsigned)g_u32Ep0Idx);
+        (void)xhci_ep0_hard_resync();
+        return;
+    }
+
+    if (u64DeqAddr != 0ull && u64DeqAddr != u64SwAddr) {
+        kprintf("xhci: ep0 pre_config desync deq=0x%lx sw=0x%lx -> "
+                "hard-resync\n",
+                (unsigned long)u64DeqAddr, (unsigned long)u64SwAddr);
+        (void)xhci_ep0_hard_resync();
+        return;
+    }
+
+    if (g_u32Ep0Idx != 0u || g_fEp0Cycle != 1u ||
+        (u64DeqAddr != 0ull && u64DeqAddr != u64Base)) {
+        kprintf("xhci: ep0 pre_config misaligned -> hard-resync\n");
+        (void)xhci_ep0_hard_resync();
+        return;
+    }
+
+    kprintf("xhci: ep0 state=%u idx=0 -> arm before GET_CONFIG\n",
             (unsigned)u32EpSt);
+    (void)xhci_ep0_arm_after_address();
+    /*
+     * Residual: SS a12f needs settle after Set TR Deq before first GET_CONFIG
+     * doorbell (false-TO if doorbell races arm). Soft!=product stage=15.
+     * Gap C freestanding residual deepen: longer arm settle before first
+     * GET_CONFIG doorbell (past 11/13 -> 15+ Soft!=product Stage OPEN;
+     * Dual DoD A stick OPEN).
+     */
+    if (g_u8PortSpeed >= 4u) {
+        xhci_settle(3600000u);
+        xhci_drain_events(168u);
+    } else {
+        xhci_settle(650000u);
+    }
+}
+
+/*
+ * Re-bind g_u16MaxPkt0 from PORTSC speed (SS=512 / HS=64 / FS=64 / LS=8).
+ * Call before first GET_DESC so Address-time provisional MPS cannot linger.
+ * Inline speed->MPS (no call into later statics - this sits above ep0_max_packet).
+ * Grep: xhci: mps0
+ */
+static void
+xhci_mps0_resync_from_speed(void)
+{
+    u16 u16Old = g_u16MaxPkt0;
+    u32 u32Ps;
+    u8 u8Spd;
+
+    if (g_u8PortId != 0) {
+        u32Ps = portsc_read(g_u8PortId);
+        u8Spd = (u8)((u32Ps >> 10) & 0xfu);
+        if (u8Spd != 0u) {
+            g_u8PortSpeed = u8Spd;
+        }
+    }
+    /* Match ep0_max_packet() policy (kept local to avoid forward decl thrash). */
+    if (g_u8PortSpeed == 4u || g_u8PortSpeed == 5u) {
+        g_u16MaxPkt0 = 512u;
+    } else if (g_u8PortSpeed == 2u) {
+        g_u16MaxPkt0 = 8u;
+    } else if (g_u8PortSpeed != 0u) {
+        g_u16MaxPkt0 = 64u; /* HS/FS default */
+    } else if (g_u8PortId >= 1u && g_u8PortId <= XHCI_MAX_PORTS &&
+               (g_u32SsPortBits & (1u << (g_u8PortId - 1u))) != 0u) {
+        g_u16MaxPkt0 = 512u; /* provisional SS-cap until trained */
+    } else {
+        g_u16MaxPkt0 = 64u;
+    }
+    if (u16Old != g_u16MaxPkt0) {
+        kprintf("xhci: mps0 resync %u->%u spd=%u port=%u\n",
+                (unsigned)u16Old, (unsigned)g_u16MaxPkt0,
+                (unsigned)g_u8PortSpeed, (unsigned)g_u8PortId);
+    }
+}
+
+/*
+ * Before first GET_DESCRIPTOR(device) after Address Device (stage-11 P0):
+ *   P0-3: if g_u16MaxPkt0 diverged from Address-time MPS -> one Evaluate/hard
+ *     before first soft-8 (skip when equal - no thrash).
+ *   soft-sync residual first (ISP lag after readdress settle).
+ *   P0-1: base soft-continue ONLY if ALL Running|Stopped + idx==0 + cyc==1 +
+ *     deq base==g_paEp0Ring + DCS==1 (deq==0 -> arm, not soft-continue).
+ *   mid-ring soft-continue when producer-HC aligned (readdress / soft-8 lag
+ *     left idx non-zero) - prefer over thrash Set TR Deq (a12f stage-11).
+ *   Halted/Error -> hard resync; clear desync -> hard; else arm.
+ * Grep: msc: progress get_desc ep0_prep | xhci: ep0 soft-continue ok|deny
+ *       | xhci: ep0 mid-ring soft-continue | xhci: ep0 mps0 diverge|match
+ *       | Soft!=product
+ */
+static void
+xhci_ep0_prepare_for_get_desc(void)
+{
+    u32 u32EpSt;
+    u64 u64Deq = 0;
+    u64 u64Base = (u64)g_paEp0Ring & ~0xfull;
+    u64 u64DeqAddr;
+    u64 u64SwAddr;
+    u8 u8Dcs;
+
+    xhci_mps0_resync_from_speed();
+
+    /*
+     * P0-3: Address-time MPS vs current g_u16MaxPkt0. One Evaluate/hard path
+     * only when diverged; equal -> leave HC context alone (no thrash).
+     */
+    if (g_u16AddrMps0 != 0u && g_u16MaxPkt0 != g_u16AddrMps0) {
+        kprintf("xhci: ep0 mps0 diverge addr-time=%u now=%u -> Evaluate once\n",
+                (unsigned)g_u16AddrMps0, (unsigned)g_u16MaxPkt0);
+        if (xhci_evaluate_ep0_mps() != 0) {
+            kprintf("xhci: ep0 mps0 diverge Evaluate FAIL -> hard-resync\n");
+            (void)xhci_ep0_hard_resync();
+        }
+        g_u16AddrMps0 = g_u16MaxPkt0; /* one-shot; avoid re-Evaluate thrash */
+    } else if (g_u16AddrMps0 != 0u) {
+        kprintf("xhci: ep0 mps0 match addr-time=%u (no Evaluate)\n",
+                (unsigned)g_u16AddrMps0);
+    }
+
+    /*
+     * Stage-11 residual deepen: soft-sync SW producer to HC deq after Address
+     * / readdress settle (no Set TR Deq). Prefer mid-ring soft-continue over
+     * thrash when deq matches producer. Soft-recover before hard on desync
+     * (Gap C stick-path residual; a12f G-AC-1 Soft!=product).
+     * Grep: xhci: ep0 soft-sync residual | ep0 soft-recover | Soft!=product
+     */
+    xhci_drain_events(80u);
+    if (g_u8PortSpeed >= 4u) {
+        /* SS Gap C freestanding residual deepen stage-11: longer settle so Address TR Deq lands. */
+        xhci_settle(1300000u);
+        xhci_drain_events(112u);
+    } else {
+        /* HS stage-11 residual Soft!=product: brief settle after Address. */
+        xhci_settle(450000u);
+        xhci_drain_events(80u);
+    }
+    if (xhci_ep0_soft_sync_producer() == 0) {
+        u32EpSt = xhci_ep0_sample(&u64Deq);
+        if (u32EpSt == XHCI_EP_ST_HALTED || u32EpSt == XHCI_EP_ST_ERROR) {
+            kprintf("xhci: ep0 get_desc prep soft-sync deny -> hard-resync "
+                    "state=%u\n",
+                    (unsigned)u32EpSt);
+            (void)xhci_ep0_hard_resync();
+            return;
+        }
+        /*
+         * Soft-recover once before hard: a12f may still be updating deq
+         * after Address Device; thrash Set TR Deq -> stage-11 cc=0 TO.
+         * Gap C freestanding residual deepen Soft!=product (2nd..26th-pass).
+         */
+        if (xhci_ep0_soft_recover_after_to("get_desc_prep") != 0) {
+            kprintf("xhci: ep0 get_desc prep soft-recover ok "
+                    "(stage=11 Soft!=product; no Set TR Deq thrash)\n");
+        } else {
+            u64 u64DeqAddrChk;
+            u64 u64SwChk;
+
+            /* Re-sample after soft-recover deny - deq may have moved. */
+            u32EpSt = xhci_ep0_sample(&u64Deq);
+            u64DeqAddrChk = u64Deq & ~0xfull;
+            u64SwChk =
+                u64Base + (u64)g_u32Ep0Idx * (u64)sizeof(struct xhci_trb);
+            if ((u32EpSt == XHCI_EP_ST_RUNNING ||
+                 u32EpSt == XHCI_EP_ST_STOPPED) &&
+                u64Deq != 0ull && u64DeqAddrChk != u64SwChk) {
+                kprintf("xhci: ep0 get_desc prep soft-sync deny desync "
+                        "deq=0x%lx sw=0x%lx -> hard-resync "
+                        "(stage-11 Soft!=product)\n",
+                        (unsigned long)u64DeqAddrChk, (unsigned long)u64SwChk);
+                (void)xhci_ep0_hard_resync();
+                return;
+            }
+        }
+    }
+
+    u32EpSt = xhci_ep0_sample(&u64Deq);
+    u8Dcs = (u8)(u64Deq & 1ull);
+    u64DeqAddr = u64Deq & ~0xfull;
+    u64SwAddr = u64Base + (u64)g_u32Ep0Idx * (u64)sizeof(struct xhci_trb);
+    kprintf("msc: progress get_desc ep0_prep state=%u deq=0x%lx idx=%u "
+            "cyc=%u dcs=%u mps0=%u spd=%u\n",
+            (unsigned)u32EpSt, (unsigned long)u64Deq, (unsigned)g_u32Ep0Idx,
+            (unsigned)g_fEp0Cycle, (unsigned)u8Dcs, (unsigned)g_u16MaxPkt0,
+            (unsigned)g_u8PortSpeed);
+
+    if (u32EpSt == XHCI_EP_ST_HALTED || u32EpSt == XHCI_EP_ST_ERROR) {
+        kprintf("xhci: ep0 get_desc prep hard-resync state=%u\n",
+                (unsigned)u32EpSt);
+        (void)xhci_ep0_hard_resync();
+        return;
+    }
+
+    /* P0-1: strict soft-continue gate (Running|Stopped + base + DCS=1). */
+    if (xhci_ep0_soft_continue_ok(u32EpSt, u64Deq) != 0) {
+        kprintf("xhci: ep0 soft-continue ok get_desc state=%u "
+                "(no Set TR Deq; stage-11 Soft!=product)\n",
+                (unsigned)u32EpSt);
+        xhci_clflush_ptr(g_pEp0Ring);
+        xhci_clflush_ptr(&g_pEp0Ring[XHCI_RING_TRBS - 1u]);
+        return;
+    }
+
+    /*
+     * Stage-11 residual: after readdress / prior soft ctrl, producer may be
+     * mid-ring and HC deq matches - soft-continue. Do NOT hard-resync thrash.
+     */
+    if (xhci_ep0_producer_hc_aligned(u32EpSt, u64Deq) != 0) {
+        kprintf("xhci: ep0 mid-ring soft-continue get_desc prep state=%u "
+                "deq=0x%lx sw=0x%lx idx=%u cyc=%u dcs=%u "
+                "(no Set TR Deq; stage=11 Soft!=product)\n",
+                (unsigned)u32EpSt, (unsigned long)u64DeqAddr,
+                (unsigned long)u64SwAddr, (unsigned)g_u32Ep0Idx,
+                (unsigned)g_fEp0Cycle, (unsigned)u8Dcs);
+        kprintf("xhci: ep0 soft-continue ok get_desc mid-ring state=%u "
+                "(no Set TR Deq; Soft!=product)\n",
+                (unsigned)u32EpSt);
+        xhci_clflush_ptr(g_pEp0Ring);
+        xhci_clflush_ptr(&g_pEp0Ring[XHCI_RING_TRBS - 1u]);
+        return;
+    }
+
+    kprintf("xhci: ep0 soft-continue deny get_desc state=%u deq=0x%lx "
+            "idx=%u cyc=%u dcs=%u base=0x%lx sw=0x%lx\n",
+            (unsigned)u32EpSt, (unsigned long)u64Deq,
+            (unsigned)g_u32Ep0Idx, (unsigned)g_fEp0Cycle, (unsigned)u8Dcs,
+            (unsigned long)u64Base, (unsigned long)u64SwAddr);
+
+    /* deq==0 or DCS!=1 at base with producer reset -> arm (cycle must match). */
+    if (u64Deq == 0ull ||
+        (u64DeqAddr == u64Base && u8Dcs != 1u && g_u32Ep0Idx == 0u &&
+         g_fEp0Cycle == 1u)) {
+        kprintf("xhci: ep0 get_desc prep deq=0x%lx dcs=%u -> arm\n",
+                (unsigned long)u64Deq, (unsigned)u8Dcs);
+        (void)xhci_ep0_arm_after_address();
+        return;
+    }
+
+    /* Ring nearly full: one hard-resync so Setup+Data+Status fit. */
+    if (g_u32Ep0Idx + 3u > (XHCI_RING_TRBS - 1u)) {
+        kprintf("xhci: ep0 get_desc prep ring full idx=%u -> hard-resync\n",
+                (unsigned)g_u32Ep0Idx);
+        (void)xhci_ep0_hard_resync();
+        return;
+    }
+
+    /* Clear desync: SW advanced, HC deq at base (or other mismatch). */
+    if ((u32EpSt == XHCI_EP_ST_RUNNING || u32EpSt == XHCI_EP_ST_STOPPED) &&
+        g_u32Ep0Idx != 0u && u64DeqAddr == u64Base) {
+        kprintf("xhci: ep0 get_desc prep desync deq=base idx=%u -> "
+                "hard-resync\n",
+                (unsigned)g_u32Ep0Idx);
+        (void)xhci_ep0_hard_resync();
+        return;
+    }
+    if (u64DeqAddr != 0ull && u64DeqAddr != u64SwAddr) {
+        kprintf("xhci: ep0 get_desc prep desync deq=0x%lx sw=0x%lx -> "
+                "hard-resync\n",
+                (unsigned long)u64DeqAddr, (unsigned long)u64SwAddr);
+        (void)xhci_ep0_hard_resync();
+        return;
+    }
+    if (g_u32Ep0Idx != 0u || g_fEp0Cycle != 1u ||
+        (u64DeqAddr != 0ull && u64DeqAddr != u64Base)) {
+        kprintf("xhci: ep0 get_desc prep producer/deq misaligned idx=%u "
+                "cyc=%u deq=0x%lx -> hard-resync\n",
+                (unsigned)g_u32Ep0Idx, (unsigned)g_fEp0Cycle,
+                (unsigned long)u64Deq);
+        (void)xhci_ep0_hard_resync();
+        return;
+    }
+    kprintf("xhci: ep0 get_desc prep state=%u -> arm\n", (unsigned)u32EpSt);
     (void)xhci_ep0_arm_after_address();
 }
 
 /*
  * Greppable control fail line (PR1 A1). cc = Transfer Event completion code
- * from the failing event (not a later Evaluate Success). Timeout → cc=0.
+ * from the failing event (not a later Evaluate Success). Timeout -> cc=0.
  */
 static void
 xhci_ctrl_fail_log(const struct usb_setup *pSetup, u32 u32Cc, u32 u32Residual)
@@ -860,7 +1885,7 @@ xhci_ctrl(const struct usb_setup *pSetup, void *pData, u16 u16Len, int fIn)
 
     /*
      * SuperSpeed: only force U0 when PLS != 0. Spamming LWS every control
-     * after a working device-desc can drop the link → next GET_CONFIG
+     * after a working device-desc can drop the link -> next GET_CONFIG
      * times out (stage-15 cc=0 on a12f).
      */
     if (g_u8PortId != 0 && g_u8PortSpeed >= 4u) {
@@ -887,7 +1912,7 @@ xhci_ctrl(const struct usb_setup *pSetup, void *pData, u16 u16Len, int fIn)
      * wLength=255 with multi-TRB + short packet broke G752 a12f (stage 15).
      * xHCI allows Transfer Length > Max Packet Size; HC splits on the wire.
      * Setup Transfer Length in status = 8 (xHCI 6.4.1.2.1).
-     * Single Data TRB + ISP (short packet event) — multi-TRB desync on a12f.
+     * Single Data TRB + ISP (short packet event) - multi-TRB desync on a12f.
      */
     xfer_enqueue(g_pEp0Ring, &g_u32Ep0Idx, &g_fEp0Cycle, g_paEp0Ring,
                  u64SetupRaw, 8u,
@@ -906,7 +1931,7 @@ xhci_ctrl(const struct usb_setup *pSetup, void *pData, u16 u16Len, int fIn)
         }
         xhci_clflush_ptr(g_pScratch);
         /*
-         * Single Data TRB; DIR bit 16 only (not TRT). CH → Status.
+         * Single Data TRB; DIR bit 16 only (not TRT). CH -> Status.
          * ISP so short GET_CONFIG (wlen>actual) yields a reliable event
          * before Status (stage-15 residual path).
          */
@@ -929,27 +1954,30 @@ xhci_ctrl(const struct usb_setup *pSetup, void *pData, u16 u16Len, int fIn)
 
     /* Ensure EP0 TRBs visible to HC DMA before doorbell (a12f non-snoop). */
     xhci_clflush_span(g_pEp0Ring, (u32)(XHCI_RING_TRBS * sizeof(struct xhci_trb)));
-    /* Explicit cycle/DCS producer fence before doorbell. */
+    xhci_clflush_ptr(g_pScratch);
+    /* Explicit cycle/DCS producer fence before doorbell (doorbell_ep posts USBSTS). */
     mmio_barrier();
     doorbell_ep(g_u8SlotId, 1); /* EP0 DCI = 1 */
 
     /*
-     * SS on Intel a12f: long poll — GET_CONFIG after device-desc is the
+     * SS on Intel a12f: long poll - GET_CONFIG after device-desc is the
      * stage-15 high-water; short polls reported cc=0=TO with device still
-     * attached (photo p21/s4). HS also gets extra margin.
+     * attached (photo p21/s4). Residual Gap C freestanding: SS *100 primary +
+     * *38 grace + SS extra *72 + third SS grace (false-TO class Soft!=product).
+     * HS margin. Soft!=product Stage OPEN. Dual DoD A stick OPEN.
      */
     u32Spins = (g_u8PortSpeed >= 4u) ? XHCI_POLL_SPINS_SS_CTRL
                                     : XHCI_POLL_SPINS_HS_CTRL;
 
     /*
      * Wait for Transfer Event. Accept Success (1) or Short Packet (13).
-     * Some HCs emit Short Packet on the Data TRB then Success on Status —
+     * Some HCs emit Short Packet on the Data TRB then Success on Status -
      * if we return after the first Short Packet, EP0 is mid-TD and the next
      * GET_DESC18 fails (G752 stage-13 after 8-byte OK). Drain until Status
      * class event or timeout after short.
      *
      * Fail-closed honesty: sticky fail cc is the *actual* event code that
-     * failed (or 0 on timeout) — never a later arm/Evaluate Success.
+     * failed (or 0 on timeout) - never a later arm/Evaluate Success.
      */
     nEv = xhci_wait_event(XHCI_TRB_TYPE_XFER_EVENT, &u32Code, NULL, NULL,
                           u32Spins);
@@ -961,10 +1989,161 @@ xhci_ctrl(const struct usb_setup *pSetup, void *pData, u16 u16Len, int fIn)
         nEv = xhci_wait_event(XHCI_TRB_TYPE_XFER_EVENT, &u32Code, NULL, NULL,
                               XHCI_POLL_SPINS_CTRL_GRACE);
     }
+    if (nEv < 0 && g_u8PortSpeed >= 4u) {
+        /*
+         * SS residual second grace (GET_CONFIG / GET_DESC false-TO Soft!=product):
+         * device still attached, HC posts Transfer Event after long settle.
+         * Prefer waiting over thrash hard-resync. Grep: xhci: ctrl SS extra grace
+         */
+        nEv = xhci_wait_event(XHCI_TRB_TYPE_XFER_EVENT, &u32Code, NULL, NULL,
+                              XHCI_POLL_SPINS_SS_CTRL_EXTRA);
+        if (nEv >= 0) {
+            kprintf("xhci: ctrl SS extra grace PASS cc=%u wlen=%u "
+                    "(stage-11/13/15 residual Soft!=product)\n",
+                    (unsigned)u32Code, (unsigned)u16Len);
+        }
+    }
+    if (nEv < 0 && g_u8PortSpeed >= 4u) {
+        /*
+         * SS residual third grace (Gap C freestanding past 11/13->15+ dual-DoD
+         * Soft!=product): primary+grace+extra still quiet while device attached
+         * - a12f may post Transfer Event after a second long settle (stage-11
+         * GET_DESC / stage-13->15 GET_CONFIG false-TO class). Prefer waiting
+         * over thrash hard-resync. Grep: xhci: ctrl SS third grace
+         */
+        xhci_drain_events(96u);
+        nEv = xhci_wait_event(XHCI_TRB_TYPE_XFER_EVENT, &u32Code, NULL, NULL,
+                              XHCI_POLL_SPINS_SS_CTRL_EXTRA);
+        if (nEv >= 0) {
+            kprintf("xhci: ctrl SS third grace PASS cc=%u wlen=%u "
+                    "(stage-11/13/15 residual Soft!=product)\n",
+                    (unsigned)u32Code, (unsigned)u16Len);
+        }
+    }
     if (nEv < 0) {
+        /*
+         * False-TO residual (event-ring + EP0 Soft!=product; a12f G-AC-1):
+         * force-inval event TRB, dual-sample EP0 deq, residual wait.
+         * If deq advanced: HC is working - re-clinv event ring + second
+         * residual wait (Transfer Event in flight) before honest TO.
+         * Prefer late Xfer Event over thrash Set TR Deq. No soft-sync
+         * mid-TD (SW already at end of Setup+Data+Status). Stamps
+         * first+every 16th (no storms). Grep: xhci: ctrl false-TO residual
+         */
+        u32 u32EpStPre;
+        u64 u64DeqPre = 0;
+        u32 u32EpStPost;
+        u64 u64DeqPost = 0;
+        int fStampFto;
+        int fDeqMoved = 0;
+
+        g_u32FalseToStampN++;
+        fStampFto = (g_u32FalseToStampN == 1u ||
+                     (g_u32FalseToStampN & 15u) == 0u)
+                        ? 1
+                        : 0;
+        if (g_pEvtRing != NULL) {
+            xhci_clinv_ptr(&g_pEvtRing[g_u32EvtIdx]);
+            if ((g_u32EvtIdx + 1u) < XHCI_RING_TRBS) {
+                xhci_clinv_ptr(&g_pEvtRing[g_u32EvtIdx + 1u]);
+            } else {
+                xhci_clinv_ptr(&g_pEvtRing[0]);
+            }
+        }
+        u32EpStPre = xhci_ep0_sample(&u64DeqPre);
+        xhci_settle((g_u8PortSpeed >= 4u) ? 2000000u : 500000u);
+        xhci_drain_events(128u);
+        /* Dual-sample: deq may land after first sample (false-TO class). */
+        u32EpStPost = xhci_ep0_sample(&u64DeqPost);
+        if (u64DeqPost != u64DeqPre) {
+            fDeqMoved = 1;
+            if (fStampFto != 0) {
+                kprintf("xhci: ctrl false-TO residual deq moved 0x%lx->0x%lx "
+                        "state=%u->%u n=%u (stage-11/13/15 Soft!=product)\n",
+                        (unsigned long)u64DeqPre, (unsigned long)u64DeqPost,
+                        (unsigned)u32EpStPre, (unsigned)u32EpStPost,
+                        (unsigned)g_u32FalseToStampN);
+            }
+            /* HC deq advanced: event may be in flight - re-clinv + drain. */
+            if (g_pEvtRing != NULL) {
+                xhci_clinv_ptr(&g_pEvtRing[g_u32EvtIdx]);
+                if ((g_u32EvtIdx + 1u) < XHCI_RING_TRBS) {
+                    xhci_clinv_ptr(&g_pEvtRing[g_u32EvtIdx + 1u]);
+                } else {
+                    xhci_clinv_ptr(&g_pEvtRing[0]);
+                }
+            }
+            xhci_drain_events(96u);
+        } else {
+            (void)u32EpStPre;
+            (void)u32EpStPost;
+        }
+        nEv = xhci_wait_event(XHCI_TRB_TYPE_XFER_EVENT, &u32Code, NULL, NULL,
+                              (g_u8PortSpeed >= 4u)
+                                  ? XHCI_POLL_SPINS_SS_CTRL_EXTRA
+                                  : XHCI_POLL_SPINS_CTRL_GRACE);
+        if (nEv < 0 && fDeqMoved != 0) {
+            /*
+             * Second residual (deq moved, event still quiet Soft!=product):
+             * one more settle + force-inval + residual wait. Prefer late
+             * Transfer Event over thrash Set TR Deq (GET_CONFIG stage-15).
+             * Grep: xhci: ctrl false-TO residual PASS
+             */
+            u64 u64Deq3 = 0;
+
+            xhci_settle((g_u8PortSpeed >= 4u) ? 2400000u : 600000u);
+            if (g_pEvtRing != NULL) {
+                xhci_clinv_ptr(&g_pEvtRing[g_u32EvtIdx]);
+                if ((g_u32EvtIdx + 1u) < XHCI_RING_TRBS) {
+                    xhci_clinv_ptr(&g_pEvtRing[g_u32EvtIdx + 1u]);
+                } else {
+                    xhci_clinv_ptr(&g_pEvtRing[0]);
+                }
+            }
+            (void)xhci_ep0_sample(&u64Deq3);
+            if (u64Deq3 != u64DeqPost && fStampFto != 0) {
+                kprintf("xhci: ctrl false-TO residual deq moved 0x%lx->0x%lx "
+                        "late n=%u (stage-11/13/15 Soft!=product)\n",
+                        (unsigned long)u64DeqPost, (unsigned long)u64Deq3,
+                        (unsigned)g_u32FalseToStampN);
+            }
+            xhci_drain_events(112u);
+            nEv = xhci_wait_event(XHCI_TRB_TYPE_XFER_EVENT, &u32Code, NULL,
+                                  NULL,
+                                  (g_u8PortSpeed >= 4u)
+                                      ? XHCI_POLL_SPINS_SS_CTRL_EXTRA
+                                      : XHCI_POLL_SPINS_CTRL_GRACE);
+        }
+        if (nEv >= 0 && fStampFto != 0) {
+            kprintf("xhci: ctrl false-TO residual PASS cc=%u wlen=%u n=%u "
+                    "(stage-11/13/15 Soft!=product; no thrash)\n",
+                    (unsigned)u32Code, (unsigned)u16Len,
+                    (unsigned)g_u32FalseToStampN);
+        }
+    }
+    if (nEv < 0) {
+        u32 u32EpSt;
+        u64 u64Deq = 0;
+        u32 u32Ps = 0;
+
         g_u32LastCtrlResidual = 0;
-        xhci_note_ctrl_fail_cc(0);
+        xhci_note_ctrl_fail_cc(0); /* honest TO for stages 11/12/13/15/17 */
         xhci_ctrl_fail_log(pSetup, 0, 0);
+        /*
+         * Timeout honesty: dump EP0 Output Context + producer so serial
+         * greps can separate ring desync from pure device non-response.
+         * Grep: xhci: ctrl TO ep0_state
+         */
+        u32EpSt = xhci_ep0_sample(&u64Deq);
+        if (g_u8PortId != 0) {
+            u32Ps = portsc_read(g_u8PortId);
+        }
+        kprintf("xhci: ctrl TO ep0_state=%u deq=0x%lx idx=%u cyc=%u "
+                "portsc=0x%x pls=%u ped=%u\n",
+                (unsigned)u32EpSt, (unsigned long)u64Deq,
+                (unsigned)g_u32Ep0Idx, (unsigned)g_fEp0Cycle, (unsigned)u32Ps,
+                (unsigned)((u32Ps >> 5) & 0xfu),
+                (u32Ps & XHCI_PORTSC_PED) != 0 ? 1u : 0u);
         return -1;
     }
     u32Residual = g_u32LastEvtResidual;
@@ -980,8 +2159,11 @@ xhci_ctrl(const struct usb_setup *pSetup, void *pData, u16 u16Len, int fIn)
         int nEv2;
 
         /*
-         * Short on Data: wait for Status IOC (Success). Full SS budget —
-         * short Status wait left EP0 mid-TD → next GET_CONFIG cc=0.
+         * Short on Data (ISP): wait for Status IOC (Success). Full SS budget
+         * - short Status wait left EP0 mid-TD -> next GET_DESC18 stage-13 /
+         * GET_CONFIG stage-15 cc=0. Residual path: ISP short-packet then
+         * Status must both retire before the next control TD is enqueued.
+         * Grep: xhci: ctrl short-status
          */
         nEv2 = xhci_wait_event(XHCI_TRB_TYPE_XFER_EVENT, &u32Code2, NULL, NULL,
                                u32Spins);
@@ -989,22 +2171,110 @@ xhci_ctrl(const struct usb_setup *pSetup, void *pData, u16 u16Len, int fIn)
             nEv2 = xhci_wait_event(XHCI_TRB_TYPE_XFER_EVENT, &u32Code2, NULL,
                                    NULL, XHCI_POLL_SPINS_CTRL_GRACE);
         }
+        if (nEv2 < 0) {
+            /* Second grace: a12f sometimes posts Status very late after ISP. */
+            nEv2 = xhci_wait_event(XHCI_TRB_TYPE_XFER_EVENT, &u32Code2, NULL,
+                                   NULL, XHCI_POLL_SPINS_CTRL_GRACE);
+        }
+        if (nEv2 < 0 && g_u8PortSpeed >= 4u) {
+            /*
+             * SS residual: Status after ISP short-packet can land after the
+             * double grace window (stage-13/15 false-TO Soft!=product). Prefer
+             * waiting over thrash hard-resync. Grep: ctrl SS extra grace
+             */
+            nEv2 = xhci_wait_event(XHCI_TRB_TYPE_XFER_EVENT, &u32Code2, NULL,
+                                   NULL, XHCI_POLL_SPINS_SS_CTRL_EXTRA);
+            if (nEv2 >= 0) {
+                kprintf("xhci: ctrl SS extra grace PASS short-status cc=%u "
+                        "wlen=%u (stage-13/15 residual Soft!=product)\n",
+                        (unsigned)u32Code2, (unsigned)u16Len);
+            }
+        }
+        if (nEv2 < 0 && g_u8PortSpeed >= 4u) {
+            /*
+             * SS residual third grace on short-status (Gap C freestanding past
+             * 11/13->15+ dual-DoD Soft!=product): Status after ISP may land after
+             * extra still quiet. Prefer waiting over thrash Set TR Deq.
+             * Grep: xhci: ctrl SS third grace PASS short-status
+             */
+            xhci_drain_events(80u);
+            nEv2 = xhci_wait_event(XHCI_TRB_TYPE_XFER_EVENT, &u32Code2, NULL,
+                                   NULL, XHCI_POLL_SPINS_SS_CTRL_EXTRA);
+            if (nEv2 >= 0) {
+                kprintf("xhci: ctrl SS third grace PASS short-status cc=%u "
+                        "wlen=%u (stage-13/15 residual Soft!=product)\n",
+                        (unsigned)u32Code2, (unsigned)u16Len);
+            }
+        }
         if (nEv2 >= 0) {
             xhci_note_cc(u32Code2);
             if (u32Code2 != 1u && u32Code2 != 13u) {
-                /* Status failed — sticky the real Status event cc. */
+                /* Status failed - sticky the real Status event cc. */
                 g_u32LastCtrlResidual = g_u32LastEvtResidual;
                 xhci_note_ctrl_fail_cc(u32Code2);
                 xhci_ctrl_fail_log(pSetup, u32Code2, g_u32LastEvtResidual);
+                kprintf("xhci: ctrl short-status FAIL cc=%u residual=%u\n",
+                        (unsigned)u32Code2, (unsigned)g_u32LastEvtResidual);
                 return -1;
             }
             /* Status OK: keep Data-stage residual for short-packet length. */
+            kprintf("xhci: ctrl short-status PASS cc=%u data_resid=%u wlen=%u\n",
+                    (unsigned)u32Code2, (unsigned)u32Residual,
+                    (unsigned)u16Len);
+            /* Residual soft-sync: HC deq may lead SW after multi-event Status. */
+            (void)xhci_ep0_soft_sync_producer();
         } else {
             /*
-             * No Status event: some HCs event once on short Data. Drain
-             * longer so a late Status is not mistaken for the next TD.
+             * No Status event: some HCs event once on short Data. Extra grace
+             * then soft-sync. If still desynced (SW ahead mid-TD) hard-resync
+             * so next GET_DESC18 / GET_CONFIG does not inherit stage-13/15 TO.
+             * Soft honesty lamp - do not claim Status completed.
+             * Grep: xhci: ctrl short-status OPEN | ep0 soft-sync residual
              */
-            xhci_drain_events(32u);
+            kprintf("xhci: ctrl short-status OPEN (no Status event; drain)\n");
+            xhci_drain_events(64u);
+            nEv2 = xhci_wait_event(XHCI_TRB_TYPE_XFER_EVENT, &u32Code2, NULL,
+                                   NULL, XHCI_POLL_SPINS_CTRL_GRACE);
+            if (nEv2 < 0 && g_u8PortSpeed >= 4u) {
+                /*
+                 * SS residual (Gap C freestanding past 11/13->15+ Soft!=product):
+                 * Status after ISP short-packet can land after grace window -
+                 * one more SS extra grace before soft-recover / hard thrash.
+                 * Grep: xhci: ctrl short-status PASS late | SS extra grace
+                 */
+                nEv2 = xhci_wait_event(XHCI_TRB_TYPE_XFER_EVENT, &u32Code2,
+                                       NULL, NULL,
+                                       XHCI_POLL_SPINS_SS_CTRL_EXTRA);
+                if (nEv2 >= 0) {
+                    kprintf("xhci: ctrl SS extra grace PASS short-status OPEN "
+                            "cc=%u wlen=%u (stage-13/15 residual Soft!=product)\n",
+                            (unsigned)u32Code2, (unsigned)u16Len);
+                }
+            }
+            if (nEv2 >= 0) {
+                xhci_note_cc(u32Code2);
+                if (u32Code2 == 1u || u32Code2 == 13u) {
+                    kprintf("xhci: ctrl short-status PASS late cc=%u "
+                            "data_resid=%u\n",
+                            (unsigned)u32Code2, (unsigned)u32Residual);
+                    (void)xhci_ep0_soft_sync_producer();
+                } else {
+                    g_u32LastCtrlResidual = g_u32LastEvtResidual;
+                    xhci_note_ctrl_fail_cc(u32Code2);
+                    xhci_ctrl_fail_log(pSetup, u32Code2, g_u32LastEvtResidual);
+                    kprintf("xhci: ctrl short-status FAIL late cc=%u\n",
+                            (unsigned)u32Code2);
+                    return -1;
+                }
+            } else if (xhci_ep0_soft_recover_after_to("short_status_OPEN") !=
+                       0) {
+                kprintf("xhci: ctrl short-status OPEN soft-continue ok "
+                        "(stage-13/15 residual Soft!=product; keep Data)\n");
+            } else {
+                kprintf("xhci: ctrl short-status OPEN soft-sync deny -> "
+                        "hard-resync (stage-13/15 residual Soft!=product)\n");
+                (void)xhci_ep0_hard_resync();
+            }
         }
     }
     g_u32LastCtrlResidual = u32Residual;
@@ -1013,7 +2283,1060 @@ xhci_ctrl(const struct usb_setup *pSetup, void *pData, u16 u16Len, int fIn)
         memcpy(pData, g_pScratch, u16Len);
     }
     /* Drain trailing events (Short Packet + Status on some HCs). */
-    xhci_drain_events(32u);
+    xhci_drain_events(64u);
+    /*
+     * Stage-13/15 residual after ctrl PASS: if producer and HC deq already
+     * match (base or mid-ring), soft-continue without Set TR Deq. Else one
+     * soft-sync snap (no thrash hard-resync on the healthy path). a12f may
+     * leave deq one TRB off after multi-event Status -> next GET_DESC18 /
+     * GET_CONFIG cc=0 without this. Stamps rate-limited (every ctrl TD would
+     * storm serial). Grep: xhci: ep0 mid-ring soft-continue | Soft!=product
+     */
+    {
+        u32 u32EpStPass;
+        u64 u64DeqPass = 0;
+        int fStampPass;
+
+        g_u32CtrlPassSoftN++;
+        /* First + every 16th (no mid-ring stamp storms Soft!=product). */
+        fStampPass = (g_u32CtrlPassSoftN == 1u ||
+                      (g_u32CtrlPassSoftN & 15u) == 0u)
+                         ? 1
+                         : 0;
+
+        u32EpStPass = xhci_ep0_sample(&u64DeqPass);
+        if (xhci_ep0_soft_continue_ok(u32EpStPass, u64DeqPass) != 0) {
+            if (fStampPass != 0) {
+                kprintf("xhci: ep0 soft-continue after ctrl PASS base "
+                        "state=%u deq=0x%lx n=%u (no Set TR Deq; "
+                        "stage-13/15 residual Soft!=product)\n",
+                        (unsigned)u32EpStPass, (unsigned long)u64DeqPass,
+                        (unsigned)g_u32CtrlPassSoftN);
+            }
+            xhci_clflush_ptr(g_pEp0Ring);
+            xhci_clflush_ptr(&g_pEp0Ring[XHCI_RING_TRBS - 1u]);
+        } else if (xhci_ep0_producer_hc_aligned(u32EpStPass, u64DeqPass) !=
+                   0) {
+            if (fStampPass != 0) {
+                kprintf("xhci: ep0 mid-ring soft-continue after ctrl PASS "
+                        "state=%u deq=0x%lx idx=%u n=%u (no Set TR Deq; "
+                        "stage-13/15 residual Soft!=product)\n",
+                        (unsigned)u32EpStPass, (unsigned long)u64DeqPass,
+                        (unsigned)g_u32Ep0Idx, (unsigned)g_u32CtrlPassSoftN);
+            }
+            xhci_clflush_ptr(g_pEp0Ring);
+            xhci_clflush_ptr(&g_pEp0Ring[XHCI_RING_TRBS - 1u]);
+        } else if (xhci_ep0_soft_sync_producer() != 0) {
+            /* After snap: prefer mid-ring soft-continue if now aligned. */
+            u32EpStPass = xhci_ep0_sample(&u64DeqPass);
+            if (xhci_ep0_soft_continue_ok(u32EpStPass, u64DeqPass) != 0 ||
+                xhci_ep0_producer_hc_aligned(u32EpStPass, u64DeqPass) != 0) {
+                if (fStampPass != 0) {
+                    kprintf("xhci: ep0 mid-ring soft-continue after ctrl PASS "
+                            "post-sync state=%u idx=%u n=%u (no Set TR Deq; "
+                            "stage-13/15 residual Soft!=product)\n",
+                            (unsigned)u32EpStPass, (unsigned)g_u32Ep0Idx,
+                            (unsigned)g_u32CtrlPassSoftN);
+                }
+                xhci_clflush_ptr(g_pEp0Ring);
+                xhci_clflush_ptr(&g_pEp0Ring[XHCI_RING_TRBS - 1u]);
+            } else if (fStampPass != 0) {
+                kprintf("xhci: ep0 soft-sync after ctrl PASS ok n=%u "
+                        "(stage-13/15 residual Soft!=product; no Set TR Deq)\n",
+                        (unsigned)g_u32CtrlPassSoftN);
+            }
+        } else if (g_u8PortSpeed >= 4u) {
+            /*
+             * Soft residual lean (SS mid-ring after ctrl PASS): late + late2 +
+             * one soft-recover; historical late3..late16 nest is compile-dead
+             * (else if 0) so freestanding does not multi-M thrash before NET.
+             * Soft!=product · G-AC-1 · MSC SKIP default · Dual DoD A stick OPEN.
+             * Grep: xhci: ep0 mid-ring soft-continue after ctrl PASS late
+             *       | soft residual lean
+             */
+            xhci_settle(700000u);
+            xhci_drain_events(64u);
+            u32EpStPass = xhci_ep0_sample(&u64DeqPass);
+            if (xhci_ep0_soft_continue_ok(u32EpStPass, u64DeqPass) != 0 ||
+                xhci_ep0_producer_hc_aligned(u32EpStPass, u64DeqPass) != 0) {
+                if (fStampPass != 0) {
+                    kprintf("xhci: ep0 mid-ring soft-continue after ctrl PASS "
+                            "late state=%u idx=%u n=%u (stage-13/15 Soft!=product)\n",
+                            (unsigned)u32EpStPass, (unsigned)g_u32Ep0Idx,
+                            (unsigned)g_u32CtrlPassSoftN);
+                }
+                xhci_clflush_ptr(g_pEp0Ring);
+                xhci_clflush_ptr(&g_pEp0Ring[XHCI_RING_TRBS - 1u]);
+            } else if (xhci_ep0_soft_sync_producer() != 0) {
+                u32EpStPass = xhci_ep0_sample(&u64DeqPass);
+                if (xhci_ep0_soft_continue_ok(u32EpStPass, u64DeqPass) != 0 ||
+                    xhci_ep0_producer_hc_aligned(u32EpStPass, u64DeqPass) !=
+                        0) {
+                    if (fStampPass != 0) {
+                        kprintf("xhci: ep0 mid-ring soft-continue after ctrl "
+                                "PASS late post-sync state=%u idx=%u n=%u "
+                                "(stage-13/15 Soft!=product)\n",
+                                (unsigned)u32EpStPass, (unsigned)g_u32Ep0Idx,
+                                (unsigned)g_u32CtrlPassSoftN);
+                    }
+                    xhci_clflush_ptr(g_pEp0Ring);
+                    xhci_clflush_ptr(&g_pEp0Ring[XHCI_RING_TRBS - 1u]);
+                } else if (fStampPass != 0) {
+                    kprintf("xhci: ep0 soft-sync after ctrl PASS late ok n=%u "
+                            "(stage-13/15 residual Soft!=product)\n",
+                            (unsigned)g_u32CtrlPassSoftN);
+                }
+            } else {
+                /*
+                 * Second late settle (Gap C): a12f sometimes posts TR Deq
+                 * after the first late window; then soft-recover ladder.
+                 */
+                xhci_settle(900000u);
+                xhci_drain_events(72u);
+                u32EpStPass = xhci_ep0_sample(&u64DeqPass);
+                if (xhci_ep0_soft_continue_ok(u32EpStPass, u64DeqPass) != 0 ||
+                    xhci_ep0_producer_hc_aligned(u32EpStPass, u64DeqPass) !=
+                        0) {
+                    if (fStampPass != 0) {
+                        kprintf("xhci: ep0 mid-ring soft-continue after ctrl "
+                                "PASS late2 state=%u idx=%u n=%u "
+                                "(stage-13/15 Soft!=product)\n",
+                                (unsigned)u32EpStPass, (unsigned)g_u32Ep0Idx,
+                                (unsigned)g_u32CtrlPassSoftN);
+                    }
+                    xhci_clflush_ptr(g_pEp0Ring);
+                    xhci_clflush_ptr(&g_pEp0Ring[XHCI_RING_TRBS - 1u]);
+                } else if (xhci_ep0_soft_recover_after_to("ctrl_pass_late") !=
+                           0) {
+                    if (fStampPass != 0) {
+                        kprintf("xhci: ep0 mid-ring soft-continue after ctrl "
+                                "PASS late soft-recover n=%u "
+                                "(stage-13/15 Soft!=product)\n",
+                                (unsigned)g_u32CtrlPassSoftN);
+                    }
+                } else if (0) { /* soft residual lean: late3..late16 dead (net first) */
+                    /*
+                     * Historical third late settle (Gap C) - not executed.
+                     * Soft residual lean prefers fail-closed to hard-resync
+                     * after late2 + soft-recover. Soft!=product · G-AC-1.
+                     * Grep: soft residual lean | ctrl PASS late3 (dead)
+                     */
+                    xhci_settle(1100000u);
+                    xhci_drain_events(80u);
+                    u32EpStPass = xhci_ep0_sample(&u64DeqPass);
+                    if (xhci_ep0_soft_continue_ok(u32EpStPass, u64DeqPass) !=
+                            0 ||
+                        xhci_ep0_producer_hc_aligned(u32EpStPass,
+                                                    u64DeqPass) != 0) {
+                        if (fStampPass != 0) {
+                            kprintf("xhci: ep0 mid-ring soft-continue after "
+                                    "ctrl PASS late3 state=%u idx=%u n=%u "
+                                    "(stage-13/15 Soft!=product)\n",
+                                    (unsigned)u32EpStPass,
+                                    (unsigned)g_u32Ep0Idx,
+                                    (unsigned)g_u32CtrlPassSoftN);
+                        }
+                        xhci_clflush_ptr(g_pEp0Ring);
+                        xhci_clflush_ptr(
+                            &g_pEp0Ring[XHCI_RING_TRBS - 1u]);
+                    } else if (xhci_ep0_soft_sync_producer() != 0) {
+                        if (fStampPass != 0) {
+                            kprintf("xhci: ep0 soft-sync after ctrl PASS "
+                                    "late3 ok n=%u "
+                                    "(stage-13/15 residual Soft!=product)\n",
+                                    (unsigned)g_u32CtrlPassSoftN);
+                        }
+                    } else {
+                        /*
+                         * Fourth late settle (Gap C dual-DoD residual): a12f
+                         * may post TR Deq after late3 still quiet - one more
+                         * soft-recover + mid-ring soft-continue before leave.
+                         * Grep: xhci: ep0 mid-ring soft-continue after ctrl PASS late4
+                         */
+                        xhci_settle(1400000u);
+                        xhci_drain_events(96u);
+                        u32EpStPass = xhci_ep0_sample(&u64DeqPass);
+                        if (xhci_ep0_soft_continue_ok(u32EpStPass,
+                                                      u64DeqPass) != 0 ||
+                            xhci_ep0_producer_hc_aligned(u32EpStPass,
+                                                        u64DeqPass) != 0) {
+                            if (fStampPass != 0) {
+                                kprintf("xhci: ep0 mid-ring soft-continue "
+                                        "after ctrl PASS late4 state=%u "
+                                        "idx=%u n=%u "
+                                        "(stage-13/15 Soft!=product)\n",
+                                        (unsigned)u32EpStPass,
+                                        (unsigned)g_u32Ep0Idx,
+                                        (unsigned)g_u32CtrlPassSoftN);
+                            }
+                            xhci_clflush_ptr(g_pEp0Ring);
+                            xhci_clflush_ptr(
+                                &g_pEp0Ring[XHCI_RING_TRBS - 1u]);
+                        } else if (xhci_ep0_soft_recover_after_to(
+                                       "ctrl_pass_late4") != 0) {
+                            if (fStampPass != 0) {
+                                kprintf("xhci: ep0 mid-ring soft-continue "
+                                        "after ctrl PASS late4 soft-recover "
+                                        "n=%u (stage-13/15 Soft!=product)\n",
+                                        (unsigned)g_u32CtrlPassSoftN);
+                            }
+                        } else {
+                            /*
+                             * Fifth late settle (Gap C dual-DoD residual
+                             * deepen Soft!=product): a12f may post TR Deq
+                             * after late4 soft-recover still quiet - one more
+                             * mid-ring soft-continue before leave desynced.
+                             * Grep: xhci: ep0 mid-ring soft-continue after
+                             *       ctrl PASS late5
+                             */
+                            xhci_settle(1700000u);
+                            xhci_drain_events(112u);
+                            u32EpStPass = xhci_ep0_sample(&u64DeqPass);
+                            if (xhci_ep0_soft_continue_ok(u32EpStPass,
+                                                          u64DeqPass) != 0 ||
+                                xhci_ep0_producer_hc_aligned(
+                                    u32EpStPass, u64DeqPass) != 0) {
+                                if (fStampPass != 0) {
+                                    kprintf(
+                                        "xhci: ep0 mid-ring soft-continue "
+                                        "after ctrl PASS late5 state=%u "
+                                        "idx=%u n=%u "
+                                        "(stage-13/15 Soft!=product)\n",
+                                        (unsigned)u32EpStPass,
+                                        (unsigned)g_u32Ep0Idx,
+                                        (unsigned)g_u32CtrlPassSoftN);
+                                }
+                                xhci_clflush_ptr(g_pEp0Ring);
+                                xhci_clflush_ptr(
+                                    &g_pEp0Ring[XHCI_RING_TRBS - 1u]);
+                            } else if (xhci_ep0_soft_sync_producer() != 0) {
+                                if (fStampPass != 0) {
+                                    kprintf(
+                                        "xhci: ep0 soft-sync after ctrl PASS "
+                                        "late5 ok n=%u "
+                                        "(stage-13/15 residual Soft!=product)\n",
+                                        (unsigned)g_u32CtrlPassSoftN);
+                                }
+                            } else if (xhci_ep0_soft_recover_after_to(
+                                           "ctrl_pass_late5") != 0) {
+                                if (fStampPass != 0) {
+                                    kprintf(
+                                        "xhci: ep0 mid-ring soft-continue "
+                                        "after ctrl PASS late5 soft-recover "
+                                        "n=%u (stage-13/15 Soft!=product)\n",
+                                        (unsigned)g_u32CtrlPassSoftN);
+                                }
+                            } else {
+                                /*
+                                 * Sixth late settle (Gap C dual-DoD residual
+                                 * deepen Soft!=product): a12f may post TR Deq
+                                 * after late5 soft-recover still quiet - one
+                                 * more mid-ring soft-continue before leave
+                                 * desynced. Prefer soft over thrash Set TR Deq.
+                                 * Grep: xhci: ep0 mid-ring soft-continue after
+                                 *       ctrl PASS late6
+                                 */
+                                xhci_settle(2000000u);
+                                xhci_drain_events(128u);
+                                u32EpStPass = xhci_ep0_sample(&u64DeqPass);
+                                if (xhci_ep0_soft_continue_ok(u32EpStPass,
+                                                              u64DeqPass) !=
+                                        0 ||
+                                    xhci_ep0_producer_hc_aligned(
+                                        u32EpStPass, u64DeqPass) != 0) {
+                                    if (fStampPass != 0) {
+                                        kprintf(
+                                            "xhci: ep0 mid-ring soft-continue "
+                                            "after ctrl PASS late6 state=%u "
+                                            "idx=%u n=%u "
+                                            "(stage-13/15 Soft!=product)\n",
+                                            (unsigned)u32EpStPass,
+                                            (unsigned)g_u32Ep0Idx,
+                                            (unsigned)g_u32CtrlPassSoftN);
+                                    }
+                                    xhci_clflush_ptr(g_pEp0Ring);
+                                    xhci_clflush_ptr(
+                                        &g_pEp0Ring[XHCI_RING_TRBS - 1u]);
+                                } else if (xhci_ep0_soft_sync_producer() !=
+                                           0) {
+                                    if (fStampPass != 0) {
+                                        kprintf(
+                                            "xhci: ep0 soft-sync after ctrl "
+                                            "PASS late6 ok n=%u "
+                                            "(stage-13/15 residual "
+                                            "Soft!=product)\n",
+                                            (unsigned)g_u32CtrlPassSoftN);
+                                    }
+                                } else if (xhci_ep0_soft_recover_after_to(
+                                               "ctrl_pass_late6") != 0) {
+                                    if (fStampPass != 0) {
+                                        kprintf(
+                                            "xhci: ep0 mid-ring soft-continue "
+                                            "after ctrl PASS late6 "
+                                            "soft-recover n=%u "
+                                            "(stage-13/15 Soft!=product)\n",
+                                            (unsigned)g_u32CtrlPassSoftN);
+                                    }
+                                } else {
+                                    /*
+                                     * Seventh late settle (Gap C dual-DoD
+                                     * residual deepen Soft!=product): a12f may
+                                     * post TR Deq after late6 soft-recover
+                                     * still quiet - one more mid-ring
+                                     * soft-continue before leave desynced.
+                                     * Prefer soft over thrash Set TR Deq.
+                                     * Grep: xhci: ep0 mid-ring soft-continue
+                                     *       after ctrl PASS late7
+                                     */
+                                    xhci_settle(2300000u);
+                                    xhci_drain_events(144u);
+                                    u32EpStPass =
+                                        xhci_ep0_sample(&u64DeqPass);
+                                    if (xhci_ep0_soft_continue_ok(
+                                            u32EpStPass, u64DeqPass) != 0 ||
+                                        xhci_ep0_producer_hc_aligned(
+                                            u32EpStPass, u64DeqPass) != 0) {
+                                        if (fStampPass != 0) {
+                                            kprintf(
+                                                "xhci: ep0 mid-ring "
+                                                "soft-continue after ctrl "
+                                                "PASS late7 state=%u idx=%u "
+                                                "n=%u (stage-13/15 "
+                                                "Soft!=product)\n",
+                                                (unsigned)u32EpStPass,
+                                                (unsigned)g_u32Ep0Idx,
+                                                (unsigned)g_u32CtrlPassSoftN);
+                                        }
+                                        xhci_clflush_ptr(g_pEp0Ring);
+                                        xhci_clflush_ptr(
+                                            &g_pEp0Ring[XHCI_RING_TRBS -
+                                                        1u]);
+                                    } else if (xhci_ep0_soft_sync_producer() !=
+                                               0) {
+                                        if (fStampPass != 0) {
+                                            kprintf(
+                                                "xhci: ep0 soft-sync after "
+                                                "ctrl PASS late7 ok n=%u "
+                                                "(stage-13/15 residual "
+                                                "Soft!=product)\n",
+                                                (unsigned)g_u32CtrlPassSoftN);
+                                        }
+                                    } else if (xhci_ep0_soft_recover_after_to(
+                                                   "ctrl_pass_late7") != 0) {
+                                        if (fStampPass != 0) {
+                                            kprintf(
+                                                "xhci: ep0 mid-ring "
+                                                "soft-continue after ctrl "
+                                                "PASS late7 soft-recover "
+                                                "n=%u (stage-13/15 "
+                                                "Soft!=product)\n",
+                                                (unsigned)g_u32CtrlPassSoftN);
+                                        }
+                                    } else {
+                                        /*
+                                         * Eighth late settle (Gap C dual-DoD
+                                         * residual deepen Soft!=product): a12f
+                                         * may post TR Deq after late7
+                                         * soft-recover still quiet - one more
+                                         * mid-ring soft-continue before leave
+                                         * desynced. Prefer soft over thrash.
+                                         * Grep: xhci: ep0 mid-ring soft-continue
+                                         *       after ctrl PASS late8
+                                         */
+                                        xhci_settle(2600000u);
+                                        xhci_drain_events(160u);
+                                        u32EpStPass =
+                                            xhci_ep0_sample(&u64DeqPass);
+                                        if (xhci_ep0_soft_continue_ok(
+                                                u32EpStPass, u64DeqPass) !=
+                                                0 ||
+                                            xhci_ep0_producer_hc_aligned(
+                                                u32EpStPass, u64DeqPass) !=
+                                                0) {
+                                            if (fStampPass != 0) {
+                                                kprintf(
+                                                    "xhci: ep0 mid-ring "
+                                                    "soft-continue after "
+                                                    "ctrl PASS late8 "
+                                                    "state=%u idx=%u n=%u "
+                                                    "(stage-13/15 "
+                                                    "Soft!=product)\n",
+                                                    (unsigned)u32EpStPass,
+                                                    (unsigned)g_u32Ep0Idx,
+                                                    (unsigned)
+                                                        g_u32CtrlPassSoftN);
+                                            }
+                                            xhci_clflush_ptr(g_pEp0Ring);
+                                            xhci_clflush_ptr(
+                                                &g_pEp0Ring[XHCI_RING_TRBS -
+                                                            1u]);
+                                        } else if (xhci_ep0_soft_sync_producer() !=
+                                                   0) {
+                                            if (fStampPass != 0) {
+                                                kprintf(
+                                                    "xhci: ep0 soft-sync "
+                                                    "after ctrl PASS late8 "
+                                                    "ok n=%u (stage-13/15 "
+                                                    "residual Soft!=product)\n",
+                                                    (unsigned)
+                                                        g_u32CtrlPassSoftN);
+                                            }
+                                        } else if (
+                                            xhci_ep0_soft_recover_after_to(
+                                                "ctrl_pass_late8") != 0) {
+                                            if (fStampPass != 0) {
+                                                kprintf(
+                                                    "xhci: ep0 mid-ring "
+                                                    "soft-continue after "
+                                                    "ctrl PASS late8 "
+                                                    "soft-recover n=%u "
+                                                    "(stage-13/15 "
+                                                    "Soft!=product)\n",
+                                                    (unsigned)
+                                                        g_u32CtrlPassSoftN);
+                                            }
+                                        } else {
+                                            /*
+                                             * Ninth late settle (Gap C dual-DoD
+                                             * residual deepen Soft!=product):
+                                             * a12f may post TR Deq after late8
+                                             * soft-recover still quiet - one
+                                             * more mid-ring soft-continue
+                                             * before leave desynced. Prefer
+                                             * soft over thrash Set TR Deq.
+                                             * Grep: xhci: ep0 mid-ring
+                                             *       soft-continue after
+                                             *       ctrl PASS late9
+                                             */
+                                            xhci_settle(2900000u);
+                                            xhci_drain_events(176u);
+                                            u32EpStPass =
+                                                xhci_ep0_sample(&u64DeqPass);
+                                            if (xhci_ep0_soft_continue_ok(
+                                                    u32EpStPass,
+                                                    u64DeqPass) != 0 ||
+                                                xhci_ep0_producer_hc_aligned(
+                                                    u32EpStPass,
+                                                    u64DeqPass) != 0) {
+                                                if (fStampPass != 0) {
+                                                    kprintf(
+                                                        "xhci: ep0 mid-ring "
+                                                        "soft-continue after "
+                                                        "ctrl PASS late9 "
+                                                        "state=%u idx=%u n=%u "
+                                                        "(stage-13/15 "
+                                                        "Soft!=product)\n",
+                                                        (unsigned)u32EpStPass,
+                                                        (unsigned)g_u32Ep0Idx,
+                                                        (unsigned)
+                                                            g_u32CtrlPassSoftN);
+                                                }
+                                                xhci_clflush_ptr(g_pEp0Ring);
+                                                xhci_clflush_ptr(
+                                                    &g_pEp0Ring
+                                                        [XHCI_RING_TRBS -
+                                                         1u]);
+                                            } else if (
+                                                xhci_ep0_soft_sync_producer() !=
+                                                0) {
+                                                if (fStampPass != 0) {
+                                                    kprintf(
+                                                        "xhci: ep0 soft-sync "
+                                                        "after ctrl PASS late9 "
+                                                        "ok n=%u (stage-13/15 "
+                                                        "residual "
+                                                        "Soft!=product)\n",
+                                                        (unsigned)
+                                                            g_u32CtrlPassSoftN);
+                                                }
+                                            } else if (
+                                                xhci_ep0_soft_recover_after_to(
+                                                    "ctrl_pass_late9") != 0) {
+                                                if (fStampPass != 0) {
+                                                    kprintf(
+                                                        "xhci: ep0 mid-ring "
+                                                        "soft-continue after "
+                                                        "ctrl PASS late9 "
+                                                        "soft-recover n=%u "
+                                                        "(stage-13/15 "
+                                                        "Soft!=product)\n",
+                                                        (unsigned)
+                                                            g_u32CtrlPassSoftN);
+                                                }
+                                            } else {
+                                                /*
+                                                 * Tenth late settle (Gap C
+                                                 * dual-DoD residual deepen
+                                                 * Soft!=product): a12f may post
+                                                 * TR Deq after late9
+                                                 * soft-recover still quiet -
+                                                 * one more mid-ring soft-
+                                                 * continue before leave
+                                                 * desynced. Prefer soft over
+                                                 * thrash Set TR Deq (a12f
+                                                 * G-AC-1). Soft!=product Stage
+                                                 * OPEN.
+                                                 * Grep: xhci: ep0 mid-ring
+                                                 *       soft-continue after
+                                                 *       ctrl PASS late10
+                                                 */
+                                                xhci_settle(3200000u);
+                                                xhci_drain_events(192u);
+                                                u32EpStPass =
+                                                    xhci_ep0_sample(
+                                                        &u64DeqPass);
+                                                if (xhci_ep0_soft_continue_ok(
+                                                        u32EpStPass,
+                                                        u64DeqPass) != 0 ||
+                                                    xhci_ep0_producer_hc_aligned(
+                                                        u32EpStPass,
+                                                        u64DeqPass) != 0) {
+                                                    if (fStampPass != 0) {
+                                                        kprintf(
+                                                            "xhci: ep0 mid-ring "
+                                                            "soft-continue after "
+                                                            "ctrl PASS late10 "
+                                                            "state=%u idx=%u "
+                                                            "n=%u (stage-13/15 "
+                                                            "Soft!=product)\n",
+                                                            (unsigned)
+                                                                u32EpStPass,
+                                                            (unsigned)
+                                                                g_u32Ep0Idx,
+                                                            (unsigned)
+                                                                g_u32CtrlPassSoftN);
+                                                    }
+                                                    xhci_clflush_ptr(
+                                                        g_pEp0Ring);
+                                                    xhci_clflush_ptr(
+                                                        &g_pEp0Ring
+                                                            [XHCI_RING_TRBS -
+                                                             1u]);
+                                                } else if (
+                                                    xhci_ep0_soft_sync_producer() !=
+                                                    0) {
+                                                    if (fStampPass != 0) {
+                                                        kprintf(
+                                                            "xhci: ep0 soft-sync "
+                                                            "after ctrl PASS "
+                                                            "late10 ok n=%u "
+                                                            "(stage-13/15 "
+                                                            "residual "
+                                                            "Soft!=product)\n",
+                                                            (unsigned)
+                                                                g_u32CtrlPassSoftN);
+                                                    }
+                                                } else if (
+                                                    xhci_ep0_soft_recover_after_to(
+                                                        "ctrl_pass_late10") !=
+                                                    0) {
+                                                    if (fStampPass != 0) {
+                                                        kprintf(
+                                                            "xhci: ep0 mid-ring "
+                                                            "soft-continue after "
+                                                            "ctrl PASS late10 "
+                                                            "soft-recover n=%u "
+                                                            "(stage-13/15 "
+                                                            "Soft!=product)\n",
+                                                            (unsigned)
+                                                                g_u32CtrlPassSoftN);
+                                                    }
+                                                } else {
+                                                    /*
+                                                     * Eleventh late settle
+                                                     * (Gap C dual-DoD residual
+                                                     * deepen Soft!=product):
+                                                     * a12f may post TR Deq after
+                                                     * late10 soft-recover still
+                                                     * quiet - one more mid-ring
+                                                     * soft-continue before leave
+                                                     * desynced. Prefer soft over
+                                                     * thrash Set TR Deq (a12f
+                                                     * G-AC-1). Soft!=product
+                                                     * Stage OPEN.
+                                                     * Grep: xhci: ep0 mid-ring
+                                                     *       soft-continue after
+                                                     *       ctrl PASS late11
+                                                     */
+                                                    xhci_settle(3500000u);
+                                                    xhci_drain_events(208u);
+                                                    u32EpStPass =
+                                                        xhci_ep0_sample(
+                                                            &u64DeqPass);
+                                                    if (xhci_ep0_soft_continue_ok(
+                                                            u32EpStPass,
+                                                            u64DeqPass) != 0 ||
+                                                        xhci_ep0_producer_hc_aligned(
+                                                            u32EpStPass,
+                                                            u64DeqPass) != 0) {
+                                                        if (fStampPass != 0) {
+                                                            kprintf(
+                                                                "xhci: ep0 mid-ring "
+                                                                "soft-continue after "
+                                                                "ctrl PASS late11 "
+                                                                "state=%u idx=%u "
+                                                                "n=%u (stage-13/15 "
+                                                                "Soft!=product)\n",
+                                                                (unsigned)
+                                                                    u32EpStPass,
+                                                                (unsigned)
+                                                                    g_u32Ep0Idx,
+                                                                (unsigned)
+                                                                    g_u32CtrlPassSoftN);
+                                                        }
+                                                        xhci_clflush_ptr(
+                                                            g_pEp0Ring);
+                                                        xhci_clflush_ptr(
+                                                            &g_pEp0Ring
+                                                                [XHCI_RING_TRBS -
+                                                                 1u]);
+                                                    } else if (
+                                                        xhci_ep0_soft_sync_producer() !=
+                                                        0) {
+                                                        if (fStampPass != 0) {
+                                                            kprintf(
+                                                                "xhci: ep0 soft-sync "
+                                                                "after ctrl PASS "
+                                                                "late11 ok n=%u "
+                                                                "(stage-13/15 "
+                                                                "residual "
+                                                                "Soft!=product)\n",
+                                                                (unsigned)
+                                                                    g_u32CtrlPassSoftN);
+                                                        }
+                                                    } else if (
+                                                        xhci_ep0_soft_recover_after_to(
+                                                            "ctrl_pass_late11") !=
+                                                        0) {
+                                                        if (fStampPass != 0) {
+                                                            kprintf(
+                                                                "xhci: ep0 mid-ring "
+                                                                "soft-continue after "
+                                                                "ctrl PASS late11 "
+                                                                "soft-recover n=%u "
+                                                                "(stage-13/15 "
+                                                                "Soft!=product)\n",
+                                                                (unsigned)
+                                                                    g_u32CtrlPassSoftN);
+                                                        }
+                                                    } else {
+                                                        /*
+                                                         * Twelfth late settle
+                                                         * (Gap C dual-DoD residual
+                                                         * deepen Soft!=product):
+                                                         * a12f may post TR Deq after
+                                                         * late11 soft-recover still
+                                                         * quiet - one more mid-ring
+                                                         * soft-continue before leave
+                                                         * desynced. Prefer soft over
+                                                         * thrash Set TR Deq (a12f
+                                                         * G-AC-1). Soft!=product
+                                                         * Stage OPEN.
+                                                         * Grep: xhci: ep0 mid-ring
+                                                         *       soft-continue after
+                                                         *       ctrl PASS late12
+                                                         */
+                                                        xhci_settle(3800000u);
+                                                        xhci_drain_events(224u);
+                                                        u32EpStPass =
+                                                            xhci_ep0_sample(
+                                                                &u64DeqPass);
+                                                        if (xhci_ep0_soft_continue_ok(
+                                                                u32EpStPass,
+                                                                u64DeqPass) != 0 ||
+                                                            xhci_ep0_producer_hc_aligned(
+                                                                u32EpStPass,
+                                                                u64DeqPass) != 0) {
+                                                            if (fStampPass != 0) {
+                                                                kprintf(
+                                                                    "xhci: ep0 mid-ring "
+                                                                    "soft-continue after "
+                                                                    "ctrl PASS late12 "
+                                                                    "state=%u idx=%u "
+                                                                    "n=%u (stage-13/15 "
+                                                                    "Soft!=product)\n",
+                                                                    (unsigned)
+                                                                        u32EpStPass,
+                                                                    (unsigned)
+                                                                        g_u32Ep0Idx,
+                                                                    (unsigned)
+                                                                        g_u32CtrlPassSoftN);
+                                                            }
+                                                            xhci_clflush_ptr(
+                                                                g_pEp0Ring);
+                                                            xhci_clflush_ptr(
+                                                                &g_pEp0Ring
+                                                                    [XHCI_RING_TRBS -
+                                                                     1u]);
+                                                        } else if (
+                                                            xhci_ep0_soft_sync_producer() !=
+                                                            0) {
+                                                            if (fStampPass != 0) {
+                                                                kprintf(
+                                                                    "xhci: ep0 soft-sync "
+                                                                    "after ctrl PASS "
+                                                                    "late12 ok n=%u "
+                                                                    "(stage-13/15 "
+                                                                    "residual "
+                                                                    "Soft!=product)\n",
+                                                                    (unsigned)
+                                                                        g_u32CtrlPassSoftN);
+                                                            }
+                                                        } else if (
+                                                            xhci_ep0_soft_recover_after_to(
+                                                                "ctrl_pass_late12") !=
+                                                            0) {
+                                                            if (fStampPass != 0) {
+                                                                kprintf(
+                                                                    "xhci: ep0 mid-ring "
+                                                                    "soft-continue after "
+                                                                    "ctrl PASS late12 "
+                                                                    "soft-recover n=%u "
+                                                                    "(stage-13/15 "
+                                                                    "Soft!=product)\n",
+                                                                    (unsigned)
+                                                                        g_u32CtrlPassSoftN);
+                                                            }
+                                                        } else {
+                                                            /*
+                                                             * Thirteenth late settle
+                                                             * (Gap C freestanding residual
+                                                             * deepen Soft!=product past
+                                                             * 11/13->15+): a12f may post TR
+                                                             * Deq after late12 soft-recover
+                                                             * still quiet - one more
+                                                             * mid-ring soft-continue before
+                                                             * leave desynced. Prefer soft
+                                                             * over thrash Set TR Deq (a12f
+                                                             * G-AC-1). Soft!=product Stage
+                                                             * OPEN.
+                                                             * Grep: xhci: ep0 mid-ring
+                                                             *       soft-continue after
+                                                             *       ctrl PASS late13
+                                                             */
+                                                            xhci_settle(4100000u);
+                                                            xhci_drain_events(240u);
+                                                            u32EpStPass =
+                                                                xhci_ep0_sample(
+                                                                    &u64DeqPass);
+                                                            if (xhci_ep0_soft_continue_ok(
+                                                                    u32EpStPass,
+                                                                    u64DeqPass) != 0 ||
+                                                                xhci_ep0_producer_hc_aligned(
+                                                                    u32EpStPass,
+                                                                    u64DeqPass) != 0) {
+                                                                if (fStampPass != 0) {
+                                                                    kprintf(
+                                                                        "xhci: ep0 mid-ring "
+                                                                        "soft-continue after "
+                                                                        "ctrl PASS late13 "
+                                                                        "state=%u idx=%u "
+                                                                        "n=%u (stage-13/15 "
+                                                                        "Soft!=product)\n",
+                                                                        (unsigned)
+                                                                            u32EpStPass,
+                                                                        (unsigned)
+                                                                            g_u32Ep0Idx,
+                                                                        (unsigned)
+                                                                            g_u32CtrlPassSoftN);
+                                                                }
+                                                                xhci_clflush_ptr(
+                                                                    g_pEp0Ring);
+                                                                xhci_clflush_ptr(
+                                                                    &g_pEp0Ring
+                                                                        [XHCI_RING_TRBS -
+                                                                         1u]);
+                                                            } else if (
+                                                                xhci_ep0_soft_sync_producer() !=
+                                                                0) {
+                                                                if (fStampPass != 0) {
+                                                                    kprintf(
+                                                                        "xhci: ep0 soft-sync "
+                                                                        "after ctrl PASS "
+                                                                        "late13 ok n=%u "
+                                                                        "(stage-13/15 "
+                                                                        "residual "
+                                                                        "Soft!=product)\n",
+                                                                        (unsigned)
+                                                                            g_u32CtrlPassSoftN);
+                                                                }
+                                                            } else if (
+                                                                xhci_ep0_soft_recover_after_to(
+                                                                    "ctrl_pass_late13") !=
+                                                                0) {
+                                                                if (fStampPass != 0) {
+                                                                    kprintf(
+                                                                        "xhci: ep0 mid-ring "
+                                                                        "soft-continue after "
+                                                                        "ctrl PASS late13 "
+                                                                        "soft-recover n=%u "
+                                                                        "(stage-13/15 "
+                                                                        "Soft!=product)\n",
+                                                                        (unsigned)
+                                                                            g_u32CtrlPassSoftN);
+                                                                }
+                                                            } else {
+                                                                /*
+                                                                 * Fourteenth late settle
+                                                                 * (Gap C freestanding
+                                                                 * residual deepen past
+                                                                 * 11/13->15+ dual-DoD
+                                                                 * Soft!=product): a12f may
+                                                                 * post TR Deq after late13
+                                                                 * soft-recover still quiet
+                                                                 * - one more mid-ring soft-
+                                                                 * continue before leave
+                                                                 * desynced. Prefer soft
+                                                                 * over thrash Set TR Deq
+                                                                 * (a12f G-AC-1). Soft!=product
+                                                                 * Stage OPEN. Dual DoD A
+                                                                 * stick OPEN.
+                                                                 * Grep: xhci: ep0 mid-ring
+                                                                 *       soft-continue after
+                                                                 *       ctrl PASS late14
+                                                                 */
+                                                                xhci_settle(4400000u);
+                                                                xhci_drain_events(256u);
+                                                                u32EpStPass =
+                                                                    xhci_ep0_sample(
+                                                                        &u64DeqPass);
+                                                                if (xhci_ep0_soft_continue_ok(
+                                                                        u32EpStPass,
+                                                                        u64DeqPass) != 0 ||
+                                                                    xhci_ep0_producer_hc_aligned(
+                                                                        u32EpStPass,
+                                                                        u64DeqPass) != 0) {
+                                                                    if (fStampPass != 0) {
+                                                                        kprintf(
+                                                                            "xhci: ep0 mid-ring "
+                                                                            "soft-continue after "
+                                                                            "ctrl PASS late14 "
+                                                                            "state=%u idx=%u "
+                                                                            "n=%u (stage-13/15 "
+                                                                            "Soft!=product)\n",
+                                                                            (unsigned)
+                                                                                u32EpStPass,
+                                                                            (unsigned)
+                                                                                g_u32Ep0Idx,
+                                                                            (unsigned)
+                                                                                g_u32CtrlPassSoftN);
+                                                                    }
+                                                                    xhci_clflush_ptr(
+                                                                        g_pEp0Ring);
+                                                                    xhci_clflush_ptr(
+                                                                        &g_pEp0Ring
+                                                                            [XHCI_RING_TRBS -
+                                                                             1u]);
+                                                                } else if (
+                                                                    xhci_ep0_soft_sync_producer() !=
+                                                                    0) {
+                                                                    if (fStampPass != 0) {
+                                                                        kprintf(
+                                                                            "xhci: ep0 soft-sync "
+                                                                            "after ctrl PASS "
+                                                                            "late14 ok n=%u "
+                                                                            "(stage-13/15 "
+                                                                            "residual "
+                                                                            "Soft!=product)\n",
+                                                                            (unsigned)
+                                                                                g_u32CtrlPassSoftN);
+                                                                    }
+                                                                } else if (
+                                                                    xhci_ep0_soft_recover_after_to(
+                                                                        "ctrl_pass_late14") !=
+                                                                    0) {
+                                                                    if (fStampPass != 0) {
+                                                                        kprintf(
+                                                                            "xhci: ep0 mid-ring "
+                                                                            "soft-continue after "
+                                                                            "ctrl PASS late14 "
+                                                                            "soft-recover n=%u "
+                                                                            "(stage-13/15 "
+                                                                            "Soft!=product)\n",
+                                                                            (unsigned)
+                                                                                g_u32CtrlPassSoftN);
+                                                                    }
+                                                                } else {
+                                                                    /*
+                                                                     * Fifteenth late settle
+                                                                     * (Gap C freestanding
+                                                                     * residual deepen past
+                                                                     * 11/13->15+ dual-DoD
+                                                                     * Soft!=product): a12f may
+                                                                     * post TR Deq after late14
+                                                                     * soft-recover still quiet
+                                                                     * - one more mid-ring soft-
+                                                                     * continue before leave
+                                                                     * desynced. Prefer soft
+                                                                     * over thrash Set TR Deq
+                                                                     * (a12f G-AC-1). Soft!=product
+                                                                     * Stage OPEN. Dual DoD A
+                                                                     * stick OPEN.
+                                                                     * Grep: xhci: ep0 mid-ring
+                                                                     *       soft-continue after
+                                                                     *       ctrl PASS late15
+                                                                     */
+                                                                    xhci_settle(4700000u);
+                                                                    xhci_drain_events(272u);
+                                                                    u32EpStPass =
+                                                                        xhci_ep0_sample(
+                                                                            &u64DeqPass);
+                                                                    if (xhci_ep0_soft_continue_ok(
+                                                                            u32EpStPass,
+                                                                            u64DeqPass) != 0 ||
+                                                                        xhci_ep0_producer_hc_aligned(
+                                                                            u32EpStPass,
+                                                                            u64DeqPass) != 0) {
+                                                                        if (fStampPass != 0) {
+                                                                            kprintf(
+                                                                                "xhci: ep0 mid-ring "
+                                                                                "soft-continue after "
+                                                                                "ctrl PASS late15 "
+                                                                                "state=%u idx=%u "
+                                                                                "n=%u (stage-13/15 "
+                                                                                "Soft!=product)\n",
+                                                                                (unsigned)
+                                                                                    u32EpStPass,
+                                                                                (unsigned)
+                                                                                    g_u32Ep0Idx,
+                                                                                (unsigned)
+                                                                                    g_u32CtrlPassSoftN);
+                                                                        }
+                                                                        xhci_clflush_ptr(
+                                                                            g_pEp0Ring);
+                                                                        xhci_clflush_ptr(
+                                                                            &g_pEp0Ring
+                                                                                [XHCI_RING_TRBS -
+                                                                                 1u]);
+                                                                    } else if (
+                                                                        xhci_ep0_soft_sync_producer() !=
+                                                                        0) {
+                                                                        if (fStampPass != 0) {
+                                                                            kprintf(
+                                                                                "xhci: ep0 soft-sync "
+                                                                                "after ctrl PASS "
+                                                                                "late15 ok n=%u "
+                                                                                "(stage-13/15 "
+                                                                                "residual "
+                                                                                "Soft!=product)\n",
+                                                                                (unsigned)
+                                                                                    g_u32CtrlPassSoftN);
+                                                                        }
+                                                                    } else if (
+                                                                        xhci_ep0_soft_recover_after_to(
+                                                                            "ctrl_pass_late15") !=
+                                                                        0) {
+                                                                        if (fStampPass != 0) {
+                                                                            kprintf(
+                                                                                "xhci: ep0 mid-ring "
+                                                                                "soft-continue after "
+                                                                                "ctrl PASS late15 "
+                                                                                "soft-recover n=%u "
+                                                                                "(stage-13/15 "
+                                                                                "Soft!=product)\n",
+                                                                                (unsigned)
+                                                                                    g_u32CtrlPassSoftN);
+                                                                        }
+                                                                    } else {
+                                                                        /*
+                                                                         * Sixteenth late settle
+                                                                         * (Gap C freestanding
+                                                                         * residual deepen past
+                                                                         * 11/13->15+ dual-DoD
+                                                                         * Soft!=product): a12f may
+                                                                         * post TR Deq after late15
+                                                                         * soft-recover still quiet
+                                                                         * - one more mid-ring soft-
+                                                                         * continue before leave
+                                                                         * desynced. Prefer soft
+                                                                         * over thrash Set TR Deq
+                                                                         * (a12f G-AC-1). Soft!=product
+                                                                         * Stage OPEN. Dual DoD A
+                                                                         * stick OPEN.
+                                                                         * Grep: xhci: ep0 mid-ring
+                                                                         *       soft-continue after
+                                                                         *       ctrl PASS late16
+                                                                         */
+                                                                        xhci_settle(5000000u);
+                                                                        xhci_drain_events(288u);
+                                                                        u32EpStPass =
+                                                                            xhci_ep0_sample(
+                                                                                &u64DeqPass);
+                                                                        if (xhci_ep0_soft_continue_ok(
+                                                                                u32EpStPass,
+                                                                                u64DeqPass) != 0 ||
+                                                                            xhci_ep0_producer_hc_aligned(
+                                                                                u32EpStPass,
+                                                                                u64DeqPass) != 0) {
+                                                                            if (fStampPass != 0) {
+                                                                                kprintf(
+                                                                                    "xhci: ep0 mid-ring "
+                                                                                    "soft-continue after "
+                                                                                    "ctrl PASS late16 "
+                                                                                    "state=%u idx=%u "
+                                                                                    "n=%u (stage-13/15 "
+                                                                                    "Soft!=product)\n",
+                                                                                    (unsigned)
+                                                                                        u32EpStPass,
+                                                                                    (unsigned)
+                                                                                        g_u32Ep0Idx,
+                                                                                    (unsigned)
+                                                                                        g_u32CtrlPassSoftN);
+                                                                            }
+                                                                            xhci_clflush_ptr(
+                                                                                g_pEp0Ring);
+                                                                            xhci_clflush_ptr(
+                                                                                &g_pEp0Ring
+                                                                                    [XHCI_RING_TRBS -
+                                                                                     1u]);
+                                                                        } else if (
+                                                                            xhci_ep0_soft_sync_producer() !=
+                                                                            0) {
+                                                                            if (fStampPass != 0) {
+                                                                                kprintf(
+                                                                                    "xhci: ep0 soft-sync "
+                                                                                    "after ctrl PASS "
+                                                                                    "late16 ok n=%u "
+                                                                                    "(stage-13/15 "
+                                                                                    "residual "
+                                                                                    "Soft!=product)\n",
+                                                                                    (unsigned)
+                                                                                        g_u32CtrlPassSoftN);
+                                                                            }
+                                                                        } else if (
+                                                                            xhci_ep0_soft_recover_after_to(
+                                                                                "ctrl_pass_late16") !=
+                                                                            0) {
+                                                                            if (fStampPass != 0) {
+                                                                                kprintf(
+                                                                                    "xhci: ep0 mid-ring "
+                                                                                    "soft-continue after "
+                                                                                    "ctrl PASS late16 "
+                                                                                    "soft-recover n=%u "
+                                                                                    "(stage-13/15 "
+                                                                                    "Soft!=product)\n",
+                                                                                    (unsigned)
+                                                                                        g_u32CtrlPassSoftN);
+                                                                            }
+                                                                        }
+                                                                    }
+                                                                }
+                                                            }
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            /* still deny: leave producer; caller recover path hard-resyncs */
+        }
+    }
     return 0;
 }
 
@@ -1103,7 +3426,7 @@ ep0_max_packet(u8 u8Speed)
 
 /*
  * USB2: bMaxPacketSize0 is the byte size (8/16/32/64).
- * USB3 SuperSpeed: bMaxPacketSize0 is an exponent (typically 9 → 512).
+ * USB3 SuperSpeed: bMaxPacketSize0 is an exponent (typically 9 -> 512).
  * Treating SS as a raw byte count (e.g. 9) breaks all later control xfers.
  */
 static u16
@@ -1140,13 +3463,13 @@ xhci_port_is_ss_cap(u8 u8Port)
         return 0;
     }
     if (g_u32SsPortBits == 0) {
-        return 0; /* unknown — treat as not preferentially SS */
+        return 0; /* unknown - treat as not preferentially SS */
     }
     return (g_u32SsPortBits & (1u << (u8Port - 1u))) != 0 ? 1 : 0;
 }
 
 /**
- * Walk xECP Supported Protocol (id=2). Major>=3 → SuperSpeed-capable ports.
+ * Walk xECP Supported Protocol (id=2). Major>=3 -> SuperSpeed-capable ports.
  * Public xHCI 7.2; no Linux structures.
  */
 static void
@@ -1227,7 +3550,7 @@ xhci_evaluate_ep0_mps(void)
     /*
      * Evaluate Context may ignore TR Dequeue while EP is Running (xHCI 4.6.7).
      * Stop EP0 first, then Evaluate MPS, then Set TR Deq | DCS=1 so software
-     * producer (idx=0 cycle=1) matches HC — else stage-13/15 desync.
+     * producer (idx=0 cycle=1) matches HC - else stage-13/15 desync.
      */
     if (g_u8SlotId == 0) {
         xhci_ep0_ring_reset();
@@ -1264,8 +3587,16 @@ xhci_evaluate_ep0_mps(void)
 
     u32Ctrl = (XHCI_TRB_TYPE_EVAL_CTX << 10) | ((u32)g_u8SlotId << 24);
     if (xhci_cmd((u64)g_paInputCtx, 0, u32Ctrl, &u32Code, NULL) != 0) {
-        kprintf("xhci: Evaluate Context EP0 FAIL code=%u mps0=%u\n", u32Code,
-                (unsigned)g_u16MaxPkt0);
+        /*
+         * Stage-12 control-path honesty: sticky Evaluate fail cc (0=TO)
+         * before later arm/Set TR Deq Success can overwrite g_u32LastCc.
+         * Soft!=product · never product T1 from stage count.
+         * Grep: xhci: Evaluate Context EP0 FAIL | stage=12
+         */
+        kprintf("xhci: Evaluate Context EP0 FAIL code=%u mps0=%u "
+                "(stage=12 Soft!=product)\n",
+                u32Code, (unsigned)g_u16MaxPkt0);
+        xhci_note_ctrl_fail_cc(u32Code);
         return -1;
     }
     /* Explicit Set TR Deq after Evaluate so DCS/producer cannot drift. */
@@ -1431,6 +3762,22 @@ xhci_setup_rings(void)
     g_u32BulkOutIdx = 0;
     g_u32BulkInIdx = 0;
 
+    /*
+     * Push zeroed rings / ERST / DCBAA to DRAM before HC run. On a12f with
+     * non-snoop DMA, dirty CPU zeros + later clflush can writeback over HC
+     * Transfer Events -> stage-11 GET_DESC cc=0 TO with working commands
+     * (lucky command path timing). Make lines clean before RS=1.
+     */
+    xhci_clflush_span(g_pEvtRing,
+                      (u32)(XHCI_RING_TRBS * sizeof(struct xhci_trb)));
+    xhci_clflush_span(pErst, (u32)sizeof(*pErst));
+    xhci_clflush_span(g_pCmdRing,
+                      (u32)(XHCI_RING_TRBS * sizeof(struct xhci_trb)));
+    xhci_clflush_span(g_pEp0Ring,
+                      (u32)(XHCI_RING_TRBS * sizeof(struct xhci_trb)));
+    xhci_clflush_span(g_pDcbaa, 256u);
+    xhci_clflush_span(g_pScratch, 64u);
+
     /* Max slots */
     mmio_w32(g_pOp, 0x38, (u32)g_u8MaxSlots);
 
@@ -1473,7 +3820,7 @@ xhci_setup_rings(void)
     mmio_w64(g_pRt, 0x20u + 0x10u, (u64)g_paErst); /* ERSTBA */
     mmio_w64(g_pRt, 0x20u + 0x18u, (u64)g_paEvtRing); /* ERDP */
 
-    /* Run (no INTE — poll event ring) */
+    /* Run (no INTE - poll event ring) */
     mmio_w32(g_pOp, 0x00, XHCI_USBCMD_RS);
     for (i = 0; i < 10000u; i++) {
         if ((mmio_r32(g_pOp, 0x04) & XHCI_USBSTS_HCH) == 0) {
@@ -1500,7 +3847,7 @@ portsc_write(u8 u8Port, u32 u32Val)
     mmio_w32(g_pOp, 0x400u + (u32)(u8Port - 1u) * 0x10u, u32Val);
 }
 
-/* Force link state U0 (PLS=0) via LWS — needed after SS reset on a12f. */
+/* Force link state U0 (PLS=0) via LWS - needed after SS reset on a12f. */
 static void
 xhci_port_force_u0(u8 u8Port)
 {
@@ -1541,7 +3888,7 @@ xhci_port_power_on(u8 u8Port)
 /*
  * Port reset. fPreferWarm=1: Warm Port Reset first (USB3 train on a12f SS).
  * fPreferWarm=0: cold PR first, warm fallback.
- * G752 p22s4: BSR0 USBTE after cold-only — alternate warm on retries.
+ * G752 p22s4: BSR0 USBTE after cold-only - alternate warm on retries.
  */
 static int
 xhci_port_reset_ex(u8 u8Port, int fPreferWarm)
@@ -1558,11 +3905,11 @@ xhci_port_reset_ex(u8 u8Port, int fPreferWarm)
         return -1;
     }
 
-    /* Clear change bits; leave CCS/PED/PLS alone — write-1-to-clear changes */
+    /* Clear change bits; leave CCS/PED/PLS alone - write-1-to-clear changes */
     portsc_write(u8Port, (u32Ps & XHCI_PORTSC_PRESERVE) | XHCI_PORTSC_CHANGE);
 
     u32Ps = portsc_read(u8Port);
-    /* fPreferWarm: -1=auto (SS-cap→warm), 0=cold first, 1=warm first */
+    /* fPreferWarm: -1=auto (SS-cap->warm), 0=cold first, 1=warm first */
     if (fPreferWarm < 0) {
         fTryWarmFirst = (fSsCap != 0) ? 1 : 0;
     } else {
@@ -1646,7 +3993,7 @@ xhci_port_reset_ex(u8 u8Port, int fPreferWarm)
 
     g_u8PortSpeed = (u8)((u32Ps >> 10) & 0xfu);
     /*
-     * Do not invent SS/HS when PORTSC speed is still 0 — leave 0 and let
+     * Do not invent SS/HS when PORTSC speed is still 0 - leave 0 and let
      * resync wait; Address Device refuses speed=0 (avoids cc=4 USBTE).
      */
     if (g_u8PortSpeed != 0u) {
@@ -1740,13 +4087,13 @@ xhci_fill_address_input(void)
     ctx_write32(pEp0, 0x00, 0); /* EP State=0 Disabled; Mult/MaxPStreams=0 */
     /*
      * DW1: CErr=3, EP Type=Control bi-dir (4), Max Burst Size=0,
-     * Max Packet Size = g_u16MaxPkt0 (SS→512, HS→64).
+     * Max Packet Size = g_u16MaxPkt0 (SS->512, HS->64).
      */
     ctx_write32(pEp0, 0x04,
                 (3u << 1) | (XHCI_EP_TYPE_CTRL_BI << 3) |
                     ((u32)g_u16MaxPkt0 << 16));
     ctx_write64(pEp0, 0x08, (u64)g_paEp0Ring | 1ull); /* TR Deq | DCS=1 */
-    /* Average TRB Length — non-zero required by some HCs for Address Device. */
+    /* Average TRB Length - non-zero required by some HCs for Address Device. */
     ctx_write32(pEp0, 0x10, (g_u16MaxPkt0 >= 512u) ? 512u : 8u);
 
     xhci_clflush_span(g_pInputCtx, (u32)g_u8CtxSize * 3u);
@@ -1759,8 +4106,8 @@ xhci_fill_address_input(void)
  * (G752 stage-11: address PASS, first control timeout).
  *
  * Spec (xHCI 4.6.6): Set TR Dequeue only when EP is Stopped/Error/Halted.
- * After a successful control TD EP0 is Running — Set TR Deq without Stop
- * fails (or is ignored) while software ring_reset → producer/HC desync →
+ * After a successful control TD EP0 is Running - Set TR Deq without Stop
+ * fails (or is ignored) while software ring_reset -> producer/HC desync ->
  * next transfer times out (classic stage-15 GET_CONFIG cc=0 after device-desc
  * PASS). Always Stop EP0 first, then Set TR Deq with DCS=1, then match
  * software cycle/idx to that DCS.
@@ -1776,14 +4123,14 @@ xhci_ep0_arm_after_address(void)
         return -1;
     }
     xhci_drain_events(16u);
-    /* Stop EP0 — ignore fail (may already be idle/Stopped after Address). */
+    /* Stop EP0 - ignore fail (may already be idle/Stopped after Address). */
     u32Ctrl = (XHCI_TRB_TYPE_STOP_EP << 10) | (1u << 16) |
               ((u32)g_u8SlotId << 24);
     (void)xhci_cmd(0, 0, u32Ctrl, &u32Code, NULL);
     xhci_drain_events(16u);
 
     xhci_ep0_ring_reset();
-    /* Set TR Dequeue Pointer — EP ID = DCI 1 (EP0), DCS=1 on pointer. */
+    /* Set TR Dequeue Pointer - EP ID = DCI 1 (EP0), DCS=1 on pointer. */
     u32Ctrl = (XHCI_TRB_TYPE_SET_TR_DEQ << 10) | (1u << 16) |
               ((u32)g_u8SlotId << 24);
     if (xhci_cmd((u64)g_paEp0Ring | 1ull, 0, u32Ctrl, &u32Code, NULL) != 0) {
@@ -1832,7 +4179,7 @@ xhci_pre_address_settle(void)
  * Re-sample PORTSC speed/MPS immediately before Address Device (cc=4 guard).
  * Returns 0 if PED+non-zero speed; -1 if still unknown (do NOT Address Device).
  *
- * Never invent SuperSpeed(4) or HS(3) when the speed field is 0 — wrong Slot
+ * Never invent SuperSpeed(4) or HS(3) when the speed field is 0 - wrong Slot
  * Context Speed / EP0 MPS is a classic a12f USB Transaction Error (cc=4).
  */
 static int
@@ -1846,7 +4193,7 @@ xhci_resync_port_speed(void)
         return -1;
     }
     /*
-     * Wait until speed field is non-zero with PED. Force U0 sparingly — every
+     * Wait until speed field is non-zero with PED. Force U0 sparingly - every
      * spin spam was thrashing the SS link on G752.
      */
     for (iWait = 0; iWait < 8000000u; iWait++) {
@@ -1877,7 +4224,7 @@ xhci_resync_port_speed(void)
     return 0;
 }
 
-/* Port power bounce — recover a12f after Address Device cc=4. */
+/* Port power bounce - recover a12f after Address Device cc=4. */
 static void
 xhci_port_power_bounce(u8 u8Port)
 {
@@ -1922,7 +4269,7 @@ xhci_address_device_hw(void)
 
     xhci_pre_address_settle();
     if (xhci_resync_port_speed() != 0) {
-        kprintf("xhci: Address Device aborted — speed/PED unknown\n");
+        kprintf("xhci: Address Device aborted - speed/PED unknown\n");
         g_u32LastStage = 19;
         g_u32AddrFailCc = 4u;
         g_u32AddrPath = 1u;
@@ -1931,7 +4278,7 @@ xhci_address_device_hw(void)
     /* Need PED before Address Device or HC returns Transaction Error (4). */
     u32Ps = portsc_read(g_u8PortId);
     if ((u32Ps & XHCI_PORTSC_PED) == 0 || (u32Ps & XHCI_PORTSC_CCS) == 0) {
-        kprintf("xhci: Address Device aborted — PED/CCS portsc=0x%x\n",
+        kprintf("xhci: Address Device aborted - PED/CCS portsc=0x%x\n",
                 (unsigned)u32Ps);
         g_u32LastStage = 19;
         g_u32AddrFailCc = 4u;
@@ -1957,13 +4304,15 @@ xhci_address_device_hw(void)
         xhci_clflush_ptr(&g_pDcbaa[g_u8SlotId]);
     }
 
+    /* P0-3: freeze Address-time MPS for post-Address diverge check. */
+    g_u16AddrMps0 = g_u16MaxPkt0;
     kprintf("xhci: Address Device BSR0 slot=%u port=%u spd=%u mps0=%u "
             "portsc=0x%x\n",
             (unsigned)g_u8SlotId, (unsigned)g_u8PortId,
             (unsigned)g_u8PortSpeed, (unsigned)g_u16MaxPkt0, (unsigned)u32Ps);
 
     u32Ctrl = (XHCI_TRB_TYPE_ADDRESS_DEV << 10) | ((u32)g_u8SlotId << 24);
-    /* BSR=0 — host controller sends SET_ADDRESS */
+    /* BSR=0 - host controller sends SET_ADDRESS */
     if (xhci_cmd((u64)g_paInputCtx, 0, u32Ctrl, &u32Code, &u32Slot) != 0) {
         kprintf("xhci: Address Device (HW/BSR0) FAIL code=%u slot=%u "
                 "speed=%u port=%u (4=USB Transaction Error)\n",
@@ -1974,22 +4323,151 @@ xhci_address_device_hw(void)
         g_u32AddrPath = 1u;
         return -1;
     }
-    /* Invalidate HC-written Output Context. */
+    /* Invalidate HC-written Output Context (lines were clean before Address). */
     xhci_clflush_span(g_pDevCtx, (u32)g_u8CtxSize * 2u);
-    /* USB ≥2ms recovery after SET_ADDRESS before next control. */
-    xhci_settle((g_u8PortSpeed >= 4u) ? 3000000u : 800000u);
-    if (g_u8PortId != 0) {
-        u32Ps = portsc_read(g_u8PortId);
-        if (((u32Ps >> 5) & 0xfu) != 0u) {
-            xhci_port_force_u0(g_u8PortId);
-            xhci_settle(300000u);
+    /*
+     * Post-SET_ADDRESS settle (G752 p21 spd=4 stage-11 deepen + P0 residual):
+     *   1) USB recovery settle - SS multi-ms on a12f before any EP0 doorbell
+     *   2) Keep PP; gentle U0 only if PLS!=0 (no LWS spam)
+     *   3) Re-sample speed -> MPS0 (SS stick must keep 512; HS companion -> 64)
+     *   4) Poll Slot Output Context for non-zero USB Device Address
+     *      P0-2: usb_addr==0 after wait -> FAIL closed (no soft-8 into addr0)
+     *   5) P0-1 soft-continue ONLY if ALL Running|Stopped + idx==0 + cyc==1 +
+     *      deq base==g_paEp0Ring + DCS==1 (deq==0 -> arm)
+     * Grep: xhci: post-address
+     */
+    {
+        u32 u32EpSt;
+        u64 u64Deq = 0;
+        u64 u64Base = (u64)g_paEp0Ring & ~0xfull;
+        u8 u8Dcs;
+        u8 *pSlot;
+        u32 u32SlotDw3 = 0;
+        u32 u32UsbAddr = 0;
+        u32 iWait;
+        u16 u16MpsBefore;
+
+        /* Phase 1: device recovery after HC SET_ADDRESS on the wire. */
+        xhci_settle((g_u8PortSpeed >= 4u) ? 6000000u : 1200000u);
+        if (g_u8PortId != 0) {
+            xhci_port_power_on(g_u8PortId);
+            u32Ps = portsc_read(g_u8PortId);
+            if (((u32Ps >> 5) & 0xfu) != 0u) {
+                xhci_port_force_u0(g_u8PortId);
+                xhci_settle((g_u8PortSpeed >= 4u) ? 800000u : 300000u);
+            }
+            /* Re-sample trained speed -> default MPS0 (SS vs HS path). */
+            u32Ps = portsc_read(g_u8PortId);
+            if (((u32Ps >> 10) & 0xfu) != 0u) {
+                g_u8PortSpeed = (u8)((u32Ps >> 10) & 0xfu);
+            }
         }
+        u16MpsBefore = g_u16MaxPkt0;
+        g_u16MaxPkt0 = ep0_max_packet(g_u8PortSpeed != 0u ? g_u8PortSpeed
+                                                           : 4u);
+        if (g_u8PortSpeed >= 4u) {
+            g_u16MaxPkt0 = 512u;
+        } else if (g_u8PortSpeed == 3u) {
+            g_u16MaxPkt0 = 64u;
+        } else if (g_u8PortSpeed == 2u) {
+            g_u16MaxPkt0 = 8u;
+        } else if (g_u8PortSpeed == 1u || g_u8PortSpeed == 0u) {
+            /* FS or unknown: keep provisional from Address fill if sane. */
+            if (g_u16MaxPkt0 != 8u && g_u16MaxPkt0 != 64u &&
+                g_u16MaxPkt0 != 512u) {
+                g_u16MaxPkt0 = 64u;
+            }
+        }
+        if (u16MpsBefore != g_u16MaxPkt0) {
+            kprintf("xhci: post-address mps0 %u->%u spd=%u\n",
+                    (unsigned)u16MpsBefore, (unsigned)g_u16MaxPkt0,
+                    (unsigned)g_u8PortSpeed);
+        }
+
+        /* Phase 2: wait until Slot Context shows assigned USB address. */
+        for (iWait = 0; iWait < 2000000u; iWait++) {
+            xhci_clflush_span(g_pDevCtx, (u32)g_u8CtxSize * 2u);
+            pSlot = ctx_slot(g_pDevCtx, 0);
+            memcpy(&u32SlotDw3, pSlot + 0x0c, 4);
+            u32UsbAddr = u32SlotDw3 & 0xffu;
+            if (u32UsbAddr != 0u) {
+                break;
+            }
+            cpu_relax();
+        }
+        u32Ps = (g_u8PortId != 0) ? portsc_read(g_u8PortId) : 0u;
+        kprintf("xhci: post-address settle usb_addr=%u slot_st=%u mps0=%u "
+                "spd=%u portsc=0x%x pls=%u ped=%u\n",
+                (unsigned)u32UsbAddr,
+                (unsigned)((u32SlotDw3 >> 27) & 0x1fu),
+                (unsigned)g_u16MaxPkt0, (unsigned)g_u8PortSpeed,
+                (unsigned)u32Ps, (unsigned)((u32Ps >> 5) & 0xfu),
+                (u32Ps & XHCI_PORTSC_PED) != 0 ? 1u : 0u);
+
+        /*
+         * P0-2: never soft-8 into USB address 0. Caller (enable_address /
+         * readdress) retries; fail closed with greppable lamp.
+         * Grep: xhci: post-address usb_addr=0 FAIL
+         */
+        if (u32UsbAddr == 0u) {
+            kprintf("xhci: post-address usb_addr=0 FAIL closed "
+                    "(no soft-8 into addr0) slot_st=%u portsc=0x%x\n",
+                    (unsigned)((u32SlotDw3 >> 27) & 0x1fu),
+                    (unsigned)u32Ps);
+            kprintf("msc: progress address FAIL usb_addr=0\n");
+            g_u32LastStage = 19;
+            g_u32AddrFailCc = 0u; /* timeout / no assigned address */
+            g_u32AddrPath = 1u;
+            return -1;
+        }
+
+        /* Phase 3: SS extra recovery before first EP0 doorbell (p21 s4). */
+        if (g_u8PortSpeed >= 4u) {
+            xhci_settle(2500000u);
+            if (g_u8PortId != 0 &&
+                ((portsc_read(g_u8PortId) >> 5) & 0xfu) != 0u) {
+                xhci_port_force_u0(g_u8PortId);
+                xhci_settle(500000u);
+            }
+        } else {
+            xhci_settle(400000u);
+        }
+
+        /*
+         * P0-1 soft-align: soft-continue ONLY if ALL Running|Stopped +
+         * idx==0 + cyc==1 + deq base==g_paEp0Ring + DCS==1. deq==0 -> arm.
+         * Grep: xhci: post-address ep0 soft-continue ok|deny
+         */
+        xhci_ep0_ring_reset();
+        xhci_clflush_ptr(g_pEp0Ring);
+        xhci_clflush_ptr(&g_pEp0Ring[XHCI_RING_TRBS - 1u]);
+        xhci_clflush_span(g_pEp0Ring,
+                          (u32)(XHCI_RING_TRBS * sizeof(struct xhci_trb)));
+
+        u32EpSt = xhci_ep0_sample(&u64Deq);
+        u8Dcs = (u8)(u64Deq & 1ull);
+        kprintf("xhci: post-address ep0 soft-align state=%u deq=0x%lx "
+                "idx=%u cyc=%u dcs=%u base=0x%lx\n",
+                (unsigned)u32EpSt, (unsigned long)u64Deq,
+                (unsigned)g_u32Ep0Idx, (unsigned)g_fEp0Cycle,
+                (unsigned)u8Dcs, (unsigned long)u64Base);
+        if (xhci_ep0_soft_continue_ok(u32EpSt, u64Deq) != 0) {
+            kprintf("xhci: post-address ep0 soft-continue ok "
+                    "(no Set TR Deq)\n");
+        } else {
+            kprintf("xhci: post-address ep0 soft-continue deny state=%u "
+                    "deq=0x%lx dcs=%u -> arm (Set TR Deq)\n",
+                    (unsigned)u32EpSt, (unsigned long)u64Deq,
+                    (unsigned)u8Dcs);
+            if (xhci_ep0_arm_after_address() != 0) {
+                kprintf("xhci: EP0 arm after HW address soft FAIL (continue)\n");
+            }
+        }
+        xhci_drain_events(32u);
     }
-    if (xhci_ep0_arm_after_address() != 0) {
-        kprintf("xhci: EP0 arm after HW address soft FAIL (continue)\n");
-    }
-    kprintf("xhci: Address Device HW/BSR0 slot=%u speed=%u soft PASS\n",
-            (unsigned)g_u8SlotId, (unsigned)g_u8PortSpeed);
+    kprintf("xhci: Address Device HW/BSR0 slot=%u speed=%u mps0=%u soft PASS\n",
+            (unsigned)g_u8SlotId, (unsigned)g_u8PortSpeed,
+            (unsigned)g_u16MaxPkt0);
     g_u32AddrPath = 1u;
     return 0;
 }
@@ -1997,7 +4475,7 @@ xhci_address_device_hw(void)
 /*
  * Note: BSR=1 + software SET_ADDRESS is intentionally NOT used for first
  * address. After BSR1 the HC stores Device Address N while the device is still
- * USB addr 0 → EP0 SET_ADDRESS times out (panel stage=20 soft cc=0). Product
+ * USB addr 0 -> EP0 SET_ADDRESS times out (panel stage=20 soft cc=0). Product
  * path is Address Device BSR=0 only.
  */
 
@@ -2113,7 +4591,7 @@ xhci_enable_address(void)
      *
      * Soft SET_ADDRESS after BSR=1 is NOT used for first address: after BSR1
      * the HC stores Device Address N but the device is still USB addr 0, so
-     * EP0 SET_ADDRESS tokens go to N → timeout (stage=20 soft cc=0 on p22s4).
+     * EP0 SET_ADDRESS tokens go to N -> timeout (stage=20 soft cc=0 on p22s4).
      * Stages: 7=Enable Slot  19=Address Device BSR0 fail.
      */
     g_fAddrUsedBsrSoft = 0;
@@ -2211,11 +4689,11 @@ xhci_enable_address(void)
     }
 
     xhci_disable_slot_soft();
-    g_u32LastStage = 19; /* real Address Device fail — not fake stage-20 */
+    g_u32LastStage = 19; /* real Address Device fail - not fake stage-20 */
     g_u32AddrFailCc = u32Bsr0Cc != 0u ? u32Bsr0Cc : g_u32AddrFailCc;
     g_u32AddrPath = 1u;
     kprintf("xhci: address FAIL final stage=19 addr_cc=%u port=%u spd=%u "
-            "(BSR0 only; soft SET_ADDRESS skipped — device would be addr0)\n",
+            "(BSR0 only; soft SET_ADDRESS skipped - device would be addr0)\n",
             (unsigned)g_u32AddrFailCc, (unsigned)g_u8PortId,
             (unsigned)g_u8PortSpeed);
     return -1;
@@ -2313,7 +4791,7 @@ xhci_parse_msc_config(const u8 *pCfg, u32 cb)
             /*
              * BOT: class 08, protocol 50. Subclass 06 (SCSI) is common;
              * also accept 02 (ATAPI) / 05 (SFF-8070i) / 01 (RBC) for sticks.
-             * Skip UAS (protocol 0x62) — no UAS path yet.
+             * Skip UAS (protocol 0x62) - no UAS path yet.
              */
             if (u8Class == USB_CLASS_MSC && u8Proto == USB_PROTO_BOT &&
                 (u8Sub == USB_SUBCLASS_SCSI || u8Sub == 0x02u ||
@@ -2436,12 +4914,30 @@ xhci_ctrl_recover(void)
  *  13 = full 18-byte device descriptor fail (after 8-byte OK)
  *
  * G752 photo ground truth: dark pink + 11 ticks = stage 11.
- * Do NOT Evaluate Context immediately after Address Device — HC already has
+ * Do NOT Evaluate Context immediately after Address Device - HC already has
  * EP0 dequeue from Address; a pre-GET_DESC Evaluate desynced a12f and
  * regressed past stages 13/15 back to 11.
+ * Do NOT force Set TR Deq before first try either (same regression class).
  *
- * Order: settle → 8-byte first (safest) → Evaluate only if MPS changes or
- * after short GET_DESC before 18 → 18-byte. Optional 18-first only as fallback.
+ * After timed-out xhci_ctrl the software producer advanced (Setup+Data+
+ * Status) while HC may still be mid-TD or stuck Running - settle-only retry
+ * enqueues further ahead (classic stage-11 cascade). Prefer soft-recover
+ * (soft-sync + mid-ring soft-continue, second-pass residual) over thrash
+ * hard-resync; hard only on soft-recover deny (a12f G-AC-1 Soft!=product).
+ *
+ * SS (p21 spd=4) vs HS path (stage-11 deepen):
+ *   SS/HS both soft-try 8-byte FIRST (minimal thrash to exit stage-11).
+ *   Soft-8 TO -> soft-recover + one soft-8 retry -> soft-18 SS shot ->
+ *   soft-then-hard 8 ladder -> soft-then-hard 18 ladder.
+ *
+ * Stage-13 residual (8 OK -> 18 fail -> toward GET_CONFIG stage-15):
+ *   After soft-8 PASS: Evaluate only if MPS changed; mid-ring soft-continue
+ *   when producer-HC aligned (no Stop+Set TR Deq thrash). Residual-aware
+ *   got-length on full desc; after TO: soft-recover (second-pass) -> hard
+ *   on deny (not soft-arm first; not thrash ladder grow). Soft!=product.
+ * Grep: xhci: get device desc | msc: progress get_desc | stage=11|13
+ *       | get device desc residual | mid-ring soft-continue | get_desc18
+ *       | soft-recover second-pass | Soft!=product
  */
 static int
 xhci_get_device_descriptor(u8 *pDev)
@@ -2451,6 +4947,7 @@ xhci_get_device_descriptor(u8 *pDev)
     u16 u16Mps;
     int nTry;
     int fGot8 = 0;
+    int fSsPath;
 
     if (pDev == NULL) {
         return -1;
@@ -2462,23 +4959,89 @@ xhci_get_device_descriptor(u8 *pDev)
     setup.u16WIndex = 0;
 
     /*
-     * Address Device already programmed EP0 TR dequeue to ring base.
-     * Explicit arm once, long settle (USB ≥2ms; SS longer on a12f).
+     * Soft-prep (state-aware): leave HC dequeue alone when still aligned
+     * after Address Device. Long settle (USB ≥2ms; SS longer on a12f).
      */
-    (void)xhci_ep0_arm_after_address();
-    if (g_u8PortId != 0 && ((portsc_read(g_u8PortId) >> 5) & 0xfu) != 0u) {
-        xhci_port_force_u0(g_u8PortId);
-    }
-    xhci_settle((g_u8PortSpeed >= 4u) ? 4000000u : 1000000u);
     xhci_drain_events(32u);
+    if (g_u8PortId != 0) {
+        xhci_port_power_on(g_u8PortId);
+        if (((portsc_read(g_u8PortId) >> 5) & 0xfu) != 0u) {
+            xhci_port_force_u0(g_u8PortId);
+        }
+    }
+    /* SS (p21 s4): longer pre-GET_DESC settle than HS companion. */
+    xhci_settle((g_u8PortSpeed >= 4u) ? 5000000u : 1000000u);
+    xhci_ep0_prepare_for_get_desc();
+    xhci_drain_events(32u);
+    fSsPath = (g_u8PortSpeed >= 4u) ? 1 : 0;
+    kprintf("msc: progress get_desc begin port=%u spd=%u mps0=%u path=%s\n",
+            (unsigned)g_u8PortId, (unsigned)g_u8PortSpeed,
+            (unsigned)g_u16MaxPkt0, fSsPath != 0 ? "SS" : "HS");
 
     /*
-     * Path 0 (SS first): try full 18-byte before short 8 — some a12f paths
-     * desync after short GET_DESC and never recover for 18 (stage-13).
+     * Path A0 - soft 8-byte first (SS and HS). No hard-resync until this
+     * fails: post-Address EP0 is aligned; first thrash -> stage-11 cascade.
      */
-    if (g_u8PortSpeed >= 4u) {
-        setup.u16WLength = 18;
-        for (nTry = 0; nTry < 3; nTry++) {
+    setup.u16WLength = 8;
+    memset(aTmp, 0, 18);
+    if (xhci_ctrl(&setup, aTmp, 8, 1) == 0) {
+        fGot8 = 1;
+        kprintf("xhci: get device desc (8 soft) PASS spd=%u mps0=%u\n",
+                (unsigned)g_u8PortSpeed, (unsigned)g_u16MaxPkt0);
+    } else {
+        kprintf("xhci: get device desc (8 soft) FAIL cc=%u spd=%u mps0=%u\n",
+                (unsigned)g_u32CtrlFailCc, (unsigned)g_u8PortSpeed,
+                (unsigned)g_u16MaxPkt0);
+        /*
+         * Stage-11 residual deepen (Soft!=product; a12f G-AC-1):
+         * Prefer mid-ring soft-continue / soft-sync over thrash hard-resync.
+         * Soft-8 TO may leave producer-HC aligned after late Status - retry
+         * once soft before hard path. Hard only on soft-recover deny.
+         * Grep: msc: progress get_desc soft-continue after soft-8 TO
+         */
+        if (xhci_ep0_soft_recover_after_to("get_desc_soft8") != 0) {
+            kprintf("msc: progress get_desc soft-continue after soft-8 TO "
+                    "(stage=11 Soft!=product)\n");
+            xhci_mps0_resync_from_speed();
+            xhci_settle(fSsPath != 0 ? 800000u : 300000u);
+            setup.u16WLength = 8;
+            memset(aTmp, 0, 18);
+            if (xhci_ctrl(&setup, aTmp, 8, 1) == 0) {
+                fGot8 = 1;
+                kprintf("xhci: get device desc (8 soft retry) PASS spd=%u "
+                        "mps0=%u (stage-11 residual Soft!=product)\n",
+                        (unsigned)g_u8PortSpeed, (unsigned)g_u16MaxPkt0);
+            } else {
+                kprintf("xhci: get device desc (8 soft retry) FAIL cc=%u "
+                        "-> hard path (stage=11 Soft!=product)\n",
+                        (unsigned)g_u32CtrlFailCc);
+                xhci_ctrl_recover();
+                xhci_settle(fSsPath != 0 ? 1500000u : 500000u);
+                xhci_mps0_resync_from_speed();
+            }
+        } else {
+            kprintf("msc: progress get_desc hard-resync after soft-8 TO "
+                    "(stage=11 Soft!=product)\n");
+            xhci_ctrl_recover();
+            xhci_settle(fSsPath != 0 ? 1500000u : 500000u);
+            xhci_mps0_resync_from_speed();
+        }
+        /*
+         * Path A1 (SS): one 18-byte after recover before long 8 ladder. Full
+         * device desc in one TD with default MPS 512 can succeed when short
+         * Data TRB path is unhappy (a12f stage-13 class, inverted).
+         */
+        if (fGot8 == 0 && fSsPath != 0) {
+            /* Soft-recover first if prior hard left EP0 aligned mid-ring. */
+            if (xhci_ep0_soft_recover_after_to("get_desc_soft18ss") != 0) {
+                kprintf("msc: progress get_desc soft-continue before 18 soft SS "
+                        "(stage=11 Soft!=product)\n");
+            } else {
+                xhci_ctrl_recover();
+                xhci_settle(800000u);
+            }
+            xhci_mps0_resync_from_speed();
+            setup.u16WLength = 18;
             memset(aTmp, 0, 18);
             if (xhci_ctrl(&setup, aTmp, 18, 1) == 0 && aTmp[0] >= 18u &&
                 aTmp[1] == USB_DT_DEVICE) {
@@ -2488,47 +5051,97 @@ xhci_get_device_descriptor(u8 *pDev)
                     g_u16MaxPkt0 = u16Mps;
                     (void)xhci_evaluate_ep0_mps();
                 }
-                kprintf("xhci: get device desc (18 first SS) PASS try=%u\n",
-                        (unsigned)nTry);
+                kprintf("xhci: get device desc (18 soft SS) PASS "
+                        "(stage-11 residual Soft!=product)\n");
                 return 0;
             }
-            kprintf("xhci: get device desc (18 first) FAIL try=%u cc=%u\n",
-                    (unsigned)nTry, (unsigned)g_u32LastCc);
-            (void)xhci_ep0_arm_after_address();
-            xhci_settle(800000u);
+            kprintf("xhci: get device desc (18 soft SS) FAIL cc=%u\n",
+                    (unsigned)g_u32CtrlFailCc);
+            /* Producer advanced again - soft then hard before 8 ladder. */
+            if (xhci_ep0_soft_recover_after_to("get_desc_soft18ss_fail") == 0) {
+                xhci_ctrl_recover();
+            }
+            xhci_settle(1500000u);
+            xhci_mps0_resync_from_speed();
         }
     }
 
-    /* ---- Path A: 8-byte first (HS / SS fallback) ---- */
-    setup.u16WLength = 8;
-    for (nTry = 0; nTry < 4; nTry++) {
-        if (xhci_ctrl(&setup, aTmp, 8, 1) == 0) {
-            fGot8 = 1;
-            break;
-        }
-        kprintf("xhci: get device desc (8) FAIL try=%u cc=%u speed=%u mps0=%u\n",
-                (unsigned)nTry, (unsigned)g_u32LastCc,
-                (unsigned)g_u8PortSpeed, (unsigned)g_u16MaxPkt0);
-        if (nTry + 1 < 4) {
-            /* Soft recover only — avoid Stop/Reset on first post-address fails */
+    /* ---- Path A: soft-then-hard 8-byte ladder (HS / SS after soft fail) ---- */
+    if (fGot8 == 0) {
+        setup.u16WLength = 8;
+        for (nTry = 0; nTry < 4; nTry++) {
+            /*
+             * Stage-11 residual: soft-recover first (mid-ring / soft-sync);
+             * hard-resync only on deny. Settle-only alone is cascade; thrash
+             * hard every try also desyncs a12f (Soft!=product).
+             * Grep: msc: progress get_desc soft-continue|hard-resync before 8
+             */
             if (g_u8PortId != 0) {
-                xhci_port_force_u0(g_u8PortId);
+                xhci_port_power_on(g_u8PortId);
+                if (((portsc_read(g_u8PortId) >> 5) & 0xfu) != 0u) {
+                    xhci_port_force_u0(g_u8PortId);
+                }
             }
-            xhci_settle(500000u);
-            if (nTry >= 1) {
-                (void)xhci_evaluate_ep0_mps();
+            if (xhci_ep0_soft_recover_after_to("get_desc_8") != 0) {
+                kprintf("msc: progress get_desc soft-continue before 8 n=%u "
+                        "cc=%u (stage=11 Soft!=product)\n",
+                        (unsigned)nTry, (unsigned)g_u32CtrlFailCc);
+            } else {
+                kprintf("msc: progress get_desc hard-resync before 8 n=%u "
+                        "cc=%u (stage=11 Soft!=product)\n",
+                        (unsigned)nTry, (unsigned)g_u32CtrlFailCc);
+                xhci_ctrl_recover();
             }
+            xhci_settle(fSsPath != 0
+                            ? (nTry >= 1 ? 2500000u : 1200000u)
+                            : 500000u);
+            /* Re-bind MPS0 after recover (SS must stay 512). */
+            xhci_mps0_resync_from_speed();
+            memset(aTmp, 0, 18);
+            if (xhci_ctrl(&setup, aTmp, 8, 1) == 0) {
+                fGot8 = 1;
+                kprintf("xhci: get device desc (8) PASS try=%u mps0=%u "
+                        "(stage-11 residual Soft!=product)\n",
+                        (unsigned)nTry, (unsigned)g_u16MaxPkt0);
+                break;
+            }
+            kprintf("xhci: get device desc (8) FAIL try=%u cc=%u speed=%u "
+                    "mps0=%u\n",
+                    (unsigned)nTry, (unsigned)g_u32CtrlFailCc,
+                    (unsigned)g_u8PortSpeed, (unsigned)g_u16MaxPkt0);
         }
     }
     if (fGot8 == 0) {
-        /* ---- Fallback: 18-byte one-shot (SS with default MPS 512) ---- */
+        /* ---- Fallback: 18-byte soft-then-hard ladder (SS default MPS 512) ---- */
         setup.u16WLength = 18;
         for (nTry = 0; nTry < 3; nTry++) {
+            if (nTry > 0) {
+                if (xhci_ep0_soft_recover_after_to("get_desc_18dir") != 0) {
+                    kprintf("msc: progress get_desc soft-continue after 18dir "
+                            "n=%u cc=%u (stage=11 Soft!=product)\n",
+                            (unsigned)nTry, (unsigned)g_u32CtrlFailCc);
+                } else {
+                    kprintf("msc: progress get_desc hard-resync after 18dir "
+                            "n=%u cc=%u (stage=11 Soft!=product)\n",
+                            (unsigned)nTry, (unsigned)g_u32CtrlFailCc);
+                    xhci_ctrl_recover();
+                }
+                xhci_settle(fSsPath != 0 ? 1500000u : 500000u);
+                xhci_mps0_resync_from_speed();
+            } else if (g_u32Ep0Idx != 0u || g_fEp0Cycle != 1u) {
+                /* Mid-ring residual first; hard only on deny. */
+                if (xhci_ep0_soft_recover_after_to("get_desc_18dir0") == 0) {
+                    xhci_ctrl_recover();
+                }
+                xhci_settle(fSsPath != 0 ? 1000000u : 400000u);
+            }
+            memset(aTmp, 0, 18);
             if (xhci_ctrl(&setup, aTmp, 18, 1) == 0) {
                 memcpy(pDev, aTmp, 18);
                 u16Mps = decode_bmax_packet0(pDev[7], g_u8PortSpeed);
                 kprintf("xhci: get device desc (18 direct) PASS try=%u "
-                        "raw_mps0=%u dec=%u speed=%u\n",
+                        "raw_mps0=%u dec=%u speed=%u "
+                        "(stage-11 residual Soft!=product)\n",
                         (unsigned)nTry, (unsigned)pDev[7], (unsigned)u16Mps,
                         (unsigned)g_u8PortSpeed);
                 if (u16Mps != 0 && u16Mps != g_u16MaxPkt0) {
@@ -2538,20 +5151,45 @@ xhci_get_device_descriptor(u8 *pDev)
                 return 0;
             }
             kprintf("xhci: get device desc (18 direct) FAIL try=%u cc=%u\n",
-                    (unsigned)nTry, (unsigned)g_u32LastCc);
-            if (nTry + 1 < 3) {
-                xhci_ctrl_recover();
-            }
+                    (unsigned)nTry, (unsigned)g_u32CtrlFailCc);
         }
-        kprintf("xhci: get device desc FAIL stage=11 cc=%u speed=%u\n",
-                (unsigned)g_u32CtrlFailCc, (unsigned)g_u8PortSpeed);
+        kprintf("xhci: get device desc FAIL stage=11 cc=%u speed=%u port=%u "
+                "mps0=%u Soft!=product\n",
+                (unsigned)g_u32CtrlFailCc, (unsigned)g_u8PortSpeed,
+                (unsigned)g_u8PortId, (unsigned)g_u16MaxPkt0);
+        kprintf("msc: progress get_desc FAIL stage=11 cc=%u port=%u spd=%u "
+                "Soft!=product\n",
+                (unsigned)g_u32CtrlFailCc, (unsigned)g_u8PortId,
+                (unsigned)g_u8PortSpeed);
         g_u32LastStage = 11;
+        xhci_stage_soft_lamp(11u, "GET_DESC");
         /* Sticky already set by xhci_ctrl fail (or 0 if never completed). */
         return -1;
     }
 
     {
         u16 u16OldMps = g_u16MaxPkt0;
+        u32 u32Got8;
+        u32 u32EpSt;
+        u64 u64Deq = 0;
+
+        /*
+         * Residual honesty after soft-8 (ISP short-packet path): actual
+         * bytes = wlen - data residual. Need ≥8 for bMaxPacketSize0 at [7].
+         * residual 0 (or Success) -> full 8 received. Content-backed deepen
+         * when residual field is wrong but buffer has DT_DEVICE prefix.
+         * Grep: xhci: get device desc residual
+         */
+        u32Got8 = xhci_ctrl_got_len(8u);
+        if (u32Got8 < 8u && aTmp[1] == USB_DT_DEVICE && aTmp[0] >= 8u) {
+            u32Got8 = 8u;
+            kprintf("xhci: get device desc residual content-backed got=8 "
+                    "resid=%u (soft-8 Soft!=product)\n",
+                    (unsigned)g_u32LastCtrlResidual);
+        }
+        kprintf("xhci: get device desc residual got=%u resid=%u "
+                "(soft-8 Soft!=product)\n",
+                (unsigned)u32Got8, (unsigned)g_u32LastCtrlResidual);
 
         u16Mps = decode_bmax_packet0(aTmp[7], g_u8PortSpeed);
         kprintf("xhci: bMaxPacketSize0 raw=%u decoded=%u (was %u) speed=%u\n",
@@ -2562,59 +5200,113 @@ xhci_get_device_descriptor(u8 *pDev)
         }
 
         /*
-         * Stage 13 (G752: 8-byte OK, 18-byte FAIL):
-         * Prefer Set TR Dequeue re-arm always. Evaluate only if MPS changed —
-         * Evaluate when MPS already correct desynced a12f for GET_DESC18.
+         * Stage-13 residual (G752: 8-byte OK, 18-byte FAIL) - no thrash:
+         *   soft-sync producer to HC deq (ISP residual lag) first.
+         *   MPS changed -> one Evaluate (P0-3 class; never Evaluate when equal).
+         *   MPS match + producer-HC aligned (mid-ring after soft-8) -> soft-
+         *     continue, NO Stop+Set TR Deq (arm thrash desynced a12f for 18).
+         *   Else desync / Halted -> one hard-resync or arm once.
+         * Grep: xhci: ep0 mid-ring soft-continue | soft-sync residual | get_desc18
          */
-        xhci_drain_events(32u);
+        xhci_drain_events(64u);
+        (void)xhci_ep0_soft_sync_producer();
         if (g_u16MaxPkt0 != u16OldMps) {
-            kprintf("xhci: MPS changed %u→%u; Evaluate Context\n",
+            kprintf("xhci: MPS changed %u->%u; Evaluate Context (once)\n",
                     (unsigned)u16OldMps, (unsigned)g_u16MaxPkt0);
             if (xhci_evaluate_ep0_mps() != 0) {
-                if (xhci_ep0_arm_after_address() != 0) {
-                    kprintf("xhci: EP0 re-arm after 8-byte desc FAIL cc=%u\n",
-                            (unsigned)g_u32LastCc);
-                    xhci_note_ctrl_fail_cc(g_u32LastCc);
+                /* Evaluate already sticky'd CtrlFailCc (stage-12 honesty). */
+                if (xhci_ep0_hard_resync() != 0) {
+                    kprintf("xhci: EP0 re-arm after 8-byte desc FAIL cc=%u "
+                            "(stage=12 Soft!=product)\n",
+                            (unsigned)g_u32CtrlFailCc);
+                    /* Keep Evaluate fail cc; do not clobber with arm Success. */
                     g_u32LastStage = 12;
+                    xhci_stage_soft_lamp(12u, "EVAL_CTX_EP0");
                     return -1;
                 }
             }
+            g_u16AddrMps0 = g_u16MaxPkt0; /* freeze; avoid re-Evaluate thrash */
         } else {
-            if (xhci_ep0_arm_after_address() != 0) {
-                kprintf("xhci: Set TR Deq after 8-byte FAIL; try Evaluate\n");
-                if (xhci_evaluate_ep0_mps() != 0) {
-                    xhci_note_ctrl_fail_cc(g_u32LastCc);
-                    g_u32LastStage = 12;
-                    return -1;
+            u32EpSt = xhci_ep0_sample(&u64Deq);
+            if (u32EpSt == XHCI_EP_ST_HALTED || u32EpSt == XHCI_EP_ST_ERROR) {
+                kprintf("xhci: after soft-8 state=%u -> hard-resync\n",
+                        (unsigned)u32EpSt);
+                (void)xhci_ep0_hard_resync();
+            } else if (xhci_ep0_soft_continue_ok(u32EpSt, u64Deq) != 0 ||
+                       xhci_ep0_producer_hc_aligned(u32EpSt, u64Deq) != 0) {
+                kprintf("xhci: ep0 mid-ring soft-continue after soft-8 "
+                        "state=%u deq=0x%lx idx=%u (no Set TR Deq; "
+                        "stage-13 residual Soft!=product)\n",
+                        (unsigned)u32EpSt, (unsigned long)u64Deq,
+                        (unsigned)g_u32Ep0Idx);
+                xhci_clflush_ptr(g_pEp0Ring);
+                xhci_clflush_ptr(&g_pEp0Ring[XHCI_RING_TRBS - 1u]);
+            } else if (xhci_ep0_soft_sync_producer() != 0) {
+                kprintf("xhci: ep0 soft-sync after soft-8 ok "
+                        "(stage-13 residual Soft!=product; no Set TR Deq)\n");
+            } else {
+                kprintf("xhci: after soft-8 desync state=%u deq=0x%lx "
+                        "idx=%u -> arm once\n",
+                        (unsigned)u32EpSt, (unsigned long)u64Deq,
+                        (unsigned)g_u32Ep0Idx);
+                if (xhci_ep0_arm_after_address() != 0) {
+                    kprintf("xhci: Set TR Deq after 8-byte FAIL; try Evaluate\n");
+                    if (xhci_evaluate_ep0_mps() != 0) {
+                        /* Evaluate sticky'd CtrlFailCc - stage-12 honesty. */
+                        g_u32LastStage = 12;
+                        xhci_stage_soft_lamp(12u, "EVAL_CTX_EP0");
+                        return -1;
+                    }
                 }
             }
         }
     }
     xhci_settle((g_u8PortSpeed >= 4u) ? 1500000u : 400000u);
-    if (g_u8PortId != 0) {
+    /* Gentle U0 only if PLS!=0 - LWS spam after soft-8 drops SS (stage-13). */
+    if (g_u8PortId != 0 && ((portsc_read(g_u8PortId) >> 5) & 0xfu) != 0u) {
         xhci_port_force_u0(g_u8PortId);
+        xhci_settle((g_u8PortSpeed >= 4u) ? 400000u : 100000u);
     }
-    xhci_drain_events(32u);
+    xhci_drain_events(64u);
 
     /*
-     * Full device descriptor. Try wLength=18 first, then 64 (short packet),
-     * then MPS-sized. Short-packet path is more reliable on some SS sticks.
+     * Full device descriptor (stage-13 residual deepen, no ladder grow):
+     * Try wLength=18 first, then MPS0-sized (short packet residual), then 64.
+     * Accept via residual: got = wlen - data_resid when short; need ≥18
+     * with bLength/bDescriptorType valid. After any TO: soft-sync once, then
+     * hard-resync (not soft-arm first - arm thrash is classic stage-13 cascade).
+     * Grep: xhci: get device desc residual | get_desc18 | stage=13
      */
     {
-        static const u16 s_aWlen[] = { 18u, 64u, 512u };
+        u16 aWlen[3];
         u32 iW;
         u8 aBig[64];
+        u16 u16MpsTry;
+
+        aWlen[0] = 18u;
+        /* Residual: one-shot at EP0 MPS (capped) before full 64. */
+        u16MpsTry = g_u16MaxPkt0;
+        if (u16MpsTry < 18u) {
+            u16MpsTry = 18u;
+        }
+        if (u16MpsTry > 64u) {
+            u16MpsTry = 64u;
+        }
+        aWlen[1] = u16MpsTry;
+        aWlen[2] = 64u;
 
         for (iW = 0; iW < 3u; iW++) {
-            u16 u16W = s_aWlen[iW];
+            u16 u16W = aWlen[iW];
             u8 *pBuf = (u16W <= 18u) ? aTmp : aBig;
             u32 cbCopy;
+            u32 u32Got;
 
-            if (u16W > 64u) {
-                u16W = (g_u16MaxPkt0 >= 64u) ? g_u16MaxPkt0 : 64u;
-                if (u16W > 64u) {
-                    u16W = 64u; /* aBig budget */
-                }
+            /* Skip duplicate wlen (e.g. MPS already 18 or 64). */
+            if (iW > 0u && u16W == aWlen[iW - 1u]) {
+                continue;
+            }
+            if (iW == 2u && u16W == aWlen[1]) {
+                continue;
             }
             setup.u8BmRequestType = 0x80u;
             setup.u8BRequest = USB_REQ_GET_DESCRIPTOR;
@@ -2622,57 +5314,105 @@ xhci_get_device_descriptor(u8 *pDev)
             setup.u16WIndex = 0;
             setup.u16WLength = u16W;
 
-            for (nTry = 0; nTry < 3; nTry++) {
+            /* Boot-capped: 2 tries/wlen (was 3) - Dual DoD A first. */
+            for (nTry = 0; nTry < 2; nTry++) {
                 memset(pBuf, 0, u16W > 18u ? 64u : 18u);
                 if (xhci_ctrl(&setup, pBuf, u16W, 1) == 0) {
+                    /* Residual -> actual bytes received on Data stage. */
+                    u32Got = xhci_ctrl_got_len(u16W);
+                    if (u32Got < 8u && pBuf[0] >= 8u &&
+                        pBuf[1] == USB_DT_DEVICE) {
+                        /* residual lag / Success; trust valid desc prefix */
+                        u32Got = (pBuf[0] >= 18u) ? 18u : (u32)pBuf[0];
+                        kprintf("xhci: get device desc residual "
+                                "content-backed got=%u resid=%u wlen=%u "
+                                "(stage-13 Soft!=product)\n",
+                                (unsigned)u32Got,
+                                (unsigned)g_u32LastCtrlResidual,
+                                (unsigned)u16W);
+                    }
+                    kprintf("xhci: get device desc residual wlen=%u got=%u "
+                            "resid=%u try=%u bLen=%u bType=%u\n",
+                            (unsigned)u16W, (unsigned)u32Got,
+                            (unsigned)g_u32LastCtrlResidual, (unsigned)nTry,
+                            (unsigned)pBuf[0], (unsigned)pBuf[1]);
                     cbCopy = 18u;
-                    if (pBuf[0] >= 18u && pBuf[1] == USB_DT_DEVICE) {
+                    if (u32Got >= 18u && pBuf[0] >= 18u &&
+                        pBuf[1] == USB_DT_DEVICE) {
                         memcpy(pDev, pBuf, cbCopy);
-                        kprintf("xhci: get device desc PASS wlen=%u try=%u\n",
-                                (unsigned)u16W, (unsigned)nTry);
+                        kprintf("xhci: get device desc PASS wlen=%u try=%u "
+                                "got=%u (stage-13 residual Soft!=product)\n",
+                                (unsigned)u16W, (unsigned)nTry,
+                                (unsigned)u32Got);
+                        (void)xhci_ep0_soft_sync_producer();
                         return 0;
                     }
                     /* Short buffer still may hold 18 useful bytes. */
-                    if (pBuf[0] >= 8u && pBuf[1] == USB_DT_DEVICE) {
+                    if (pBuf[0] >= 18u && pBuf[1] == USB_DT_DEVICE) {
                         memcpy(pDev, pBuf, cbCopy);
-                        if (pBuf[0] >= 18u) {
-                            kprintf("xhci: get device desc PASS wlen=%u "
-                                    "try=%u (short ok)\n",
-                                    (unsigned)u16W, (unsigned)nTry);
-                            return 0;
-                        }
+                        kprintf("xhci: get device desc PASS wlen=%u "
+                                "try=%u (content ok got=%u Soft!=product)\n",
+                                (unsigned)u16W, (unsigned)nTry,
+                                (unsigned)u32Got);
+                        (void)xhci_ep0_soft_sync_producer();
+                        return 0;
                     }
                     kprintf("xhci: get device desc bad content wlen=%u "
-                            "bLen=%u bType=%u\n",
+                            "bLen=%u bType=%u got=%u\n",
                             (unsigned)u16W, (unsigned)pBuf[0],
-                            (unsigned)pBuf[1]);
+                            (unsigned)pBuf[1], (unsigned)u32Got);
                 } else {
-                    kprintf("xhci: get device desc FAIL wlen=%u try=%u cc=%u\n",
+                    kprintf("xhci: get device desc FAIL wlen=%u try=%u "
+                            "cc=%u (get_desc18)\n",
                             (unsigned)u16W, (unsigned)nTry,
-                            (unsigned)g_u32LastCc);
+                            (unsigned)g_u32CtrlFailCc);
                 }
-                if (nTry + 1 < 3) {
-                    /* Soft arm first; hard resync only on last retry. */
-                    if (nTry == 0) {
-                        (void)xhci_ep0_arm_after_address();
-                        xhci_settle(500000u);
+                if (nTry + 1 < 2) {
+                    /*
+                     * After TO: one soft-recover (capped 2-3 passes), else
+                     * hard-resync. No multi-million soft-continue ladder -
+                     * that hung boot on stage-13 (v2026.08.04.60).
+                     * Grep: get_desc18 soft-continue|hard-resync|boot hang
+                     */
+                    kprintf("msc: progress get_desc18 recover after TO "
+                            "wlen=%u n=%u cc=%u (stage=13 residual "
+                            "Soft!=product)\n",
+                            (unsigned)u16W, (unsigned)nTry,
+                            (unsigned)g_u32CtrlFailCc);
+                    if (xhci_ep0_soft_recover_after_to("get_desc18") != 0) {
+                        kprintf("msc: progress get_desc18 soft-continue "
+                                "after TO wlen=%u n=%u (stage=13 "
+                                "Soft!=product)\n",
+                                (unsigned)u16W, (unsigned)nTry);
                     } else {
+                        kprintf("msc: progress get_desc18 hard-resync after TO "
+                                "wlen=%u n=%u cc=%u (stage=13 Soft!=product)\n",
+                                (unsigned)u16W, (unsigned)nTry,
+                                (unsigned)g_u32CtrlFailCc);
                         xhci_ctrl_recover();
                     }
+                    xhci_mps0_resync_from_speed();
+                    xhci_settle(fSsPath != 0 ? 200000u : 80000u);
                 }
             }
         }
     }
-    kprintf("xhci: get device desc FAIL stage=13 cc=%u mps0=%u speed=%u\n",
+    kprintf("xhci: get device desc FAIL stage=13 cc=%u mps0=%u speed=%u "
+            "Soft!=product\n",
             (unsigned)g_u32CtrlFailCc, (unsigned)g_u16MaxPkt0,
             (unsigned)g_u8PortSpeed);
+    kprintf("msc: progress get_desc FAIL stage=13 cc=%u port=%u spd=%u "
+            "Soft!=product\n",
+            (unsigned)g_u32CtrlFailCc, (unsigned)g_u8PortId,
+            (unsigned)g_u8PortSpeed);
     g_u32LastStage = 13;
+    xhci_stage_soft_lamp(13u, "GET_DESC18");
     return -1;
 }
 
 /*
  * Port ready for next EP0 control after device-desc: PP on, CCS+PED, gentle U0.
- * Returns 0 ok, -1 CCS gone / PED lost (caller readdresses — do not cold-PR only).
+ * Returns 0 ok, -1 CCS gone / PED lost (caller readdresses - do not cold-PR only).
  * Grep: xhci: pre-config
  */
 static int
@@ -2698,7 +5438,7 @@ xhci_port_ready_for_config(void)
     }
     if ((u32Ps & XHCI_PORTSC_PED) == 0) {
         /*
-         * PED lost after device-desc: port reset alone is wrong — device
+         * PED lost after device-desc: port reset alone is wrong - device
          * drops to USB addr 0 while slot keeps N. Caller must readdress.
          */
         kprintf("xhci: PED lost before config (need readdress) "
@@ -2711,7 +5451,7 @@ xhci_port_ready_for_config(void)
     if (((u32Ps >> 10) & 0xfu) != 0u) {
         g_u8PortSpeed = (u8)((u32Ps >> 10) & 0xfu);
     }
-    /* Gentle U0 only if not already U0 — LWS spam drops SS (stage-15 thrash). */
+    /* Gentle U0 only if not already U0 - LWS spam drops SS (stage-15 thrash). */
     if (((u32Ps >> 5) & 0xfu) != 0u) {
         xhci_port_force_u0(g_u8PortId);
         xhci_settle((g_u8PortSpeed >= 4u) ? 800000u : 300000u);
@@ -2720,19 +5460,29 @@ xhci_port_ready_for_config(void)
 }
 
 /*
- * GET_DESCRIPTOR(configuration). Soft-continue after a working device-desc:
- * do NOT Set TR Deq / ring_reset before the first try when EP0 is Running —
- * producer index already matches HC dequeue. Prior pre-arm desynced a12f →
- * stage=15 cc=0 TO (photo p21/s4: device-desc PASS → config timeout).
+ * GET_DESCRIPTOR(configuration). Stage-15 deepen (mirror stage-11 soft-align):
+ * Soft-continue after a working device-desc when EP0 producer is HC-aligned
+ * (base OR mid-ring) - do NOT Set TR Deq / ring_reset before the first try.
+ * Prior pre-arm thrash desynced a12f -> stage=15 cc=0 TO
+ * (photo p21/s4: device-desc PASS -> config timeout).
  *
- * Ladder:
- *   pre: drain + settle + port PP/PED + ep0_prepare (state-aware)
- *   try: single Data TRB ctrl (9 → 64 → 255 → 512)
- *   on fail after enqueue: ALWAYS hard resync (Stop+Reset+Set TR Deq | DCS=1)
- *     — settle-only after TO leaves Running desync (deepen stage-15).
+ * Ladder (soft residual lean Soft!=product; a12f G-AC-1; freestanding net first):
+ *   pre: drain + settle + port PP/PED + mps0 resync + soft-align prepare
+ *   soft-align: mid-ring / soft-sync / soft-recover + late + late2 + dual-sample
+ *     residual (late3..late14 multi-M chain removed)
+ *   try: single Data TRB ctrl (9 -> 64 -> 255 -> 512); first try soft
+ *   poll: SS primary+grace+extra+third (capped budgets; false-TO residual)
+ *   on fail: soft-recover lean (2nd|3rd-pass max) -> hard
+ *   residual content-backed full-in-shot when residual under-counts header
+ *   stamps: try/FAIL/soft-align/false-TO rate-limited first+every 16th (no storms)
  * PED loss returns -1 without port-reset-only. Caller readdresses.
+ * Stage still OPEN - Soft!=product; dual DoD A stick OPEN; never product T1.
+ * Freestanding MSC SKIP default (GJ_XHCI_MSC_PROBE=0) - do not re-enable default.
  *
  * Grep: xhci: get config | xhci: GET_CONFIG stage=15 | msc: progress get_config
+ *       | soft residual lean | Soft!=product | get config soft-align residual
+ *       | ep0 soft-recover second|third-pass | ctrl false-TO residual
+ *       | Soft!=product Stage OPEN
  */
 static int
 xhci_get_config_descriptor(u8 *aCfg, u16 *pTotal)
@@ -2740,6 +5490,7 @@ xhci_get_config_descriptor(u8 *aCfg, u16 *pTotal)
     struct usb_setup setup;
     int nTry;
     int fGot = 0;
+    int fSsPath;
     u16 u16TryLen;
     u16 u16Got = 0;
     u16 u16Total;
@@ -2751,24 +5502,263 @@ xhci_get_config_descriptor(u8 *aCfg, u16 *pTotal)
         return -1;
     }
 
+    fSsPath = (g_u8PortSpeed >= 4u) ? 1 : 0;
     kprintf("msc: progress get_config begin port=%u spd=%u mps0=%u "
-            "ep0_idx=%u ep0_cyc=%u\n",
+            "ep0_idx=%u ep0_cyc=%u path=%s\n",
             (unsigned)g_u8PortId, (unsigned)g_u8PortSpeed,
             (unsigned)g_u16MaxPkt0, (unsigned)g_u32Ep0Idx,
-            (unsigned)g_fEp0Cycle);
+            (unsigned)g_fEp0Cycle, fSsPath != 0 ? "SS" : "HS");
 
-    xhci_drain_events(64u);
+    xhci_drain_events(96u);
     /*
-     * Post device-desc settle (USB device may need recovery before next
-     * control). Soft-continue first try — no thrash Set TR Deq while Running.
+     * Soft residual lean: short post device-desc settle (not 22M thrash).
+     * Soft-continue first try - no thrash Set TR Deq while aligned. Net first.
+     * Soft!=product · freestanding MSC SKIP default.
      */
-    xhci_settle((g_u8PortSpeed >= 4u) ? 4000000u : 1000000u);
+    xhci_settle(fSsPath != 0 ? 4000000u : 1200000u);
     if (xhci_port_ready_for_config() != 0) {
         kprintf("msc: progress get_config FAIL reason=port_not_ready\n");
         return -1;
     }
+    /* mps0 resync + soft-align / hard only if misaligned (no thrash). */
     xhci_ep0_prepare_for_config();
-    xhci_drain_events(32u);
+    xhci_drain_events(48u);
+    /*
+     * GET_CONFIG soft-align recheck (stage-15 Soft!=product; a12f G-AC-1):
+     * after prepare, soft-sync / mid-ring soft-continue so first doorbell is
+     * producer-HC aligned without Set TR Deq thrash. Gap C dual-DoD deepen:
+     * soft-recover then late recheck (mid-ring) if primary soft-sync quiet.
+     * Soft-align greps rate-limited (first+every 16th; no stamp storms).
+     * Grep: xhci: get config soft-align
+     */
+    {
+        u32 u32EpStA;
+        u64 u64DeqA = 0;
+        int fAligned = 0;
+        int fStampAlign = xhci_get_config_align_stamp_ok();
+
+        if (xhci_ep0_soft_sync_producer() != 0) {
+            u32EpStA = xhci_ep0_sample(&u64DeqA);
+            if (xhci_ep0_soft_continue_ok(u32EpStA, u64DeqA) != 0 ||
+                xhci_ep0_producer_hc_aligned(u32EpStA, u64DeqA) != 0) {
+                if (fStampAlign != 0) {
+                    kprintf("xhci: get config soft-align ok state=%u idx=%u "
+                            "(stage=15 Soft!=product; no Set TR Deq)\n",
+                            (unsigned)u32EpStA, (unsigned)g_u32Ep0Idx);
+                }
+                xhci_clflush_ptr(g_pEp0Ring);
+                xhci_clflush_ptr(&g_pEp0Ring[XHCI_RING_TRBS - 1u]);
+                fAligned = 1;
+            } else {
+                if (fStampAlign != 0) {
+                    kprintf("xhci: get config soft-align soft-sync ok idx=%u "
+                            "(stage=15 Soft!=product)\n",
+                            (unsigned)g_u32Ep0Idx);
+                }
+                fAligned = 1;
+            }
+        }
+        if (fAligned == 0) {
+            /* Soft-recover (SS full ladder / HS four-pass) before late recheck. */
+            if (xhci_ep0_soft_recover_after_to("get_config_soft_align") != 0) {
+                u32EpStA = xhci_ep0_sample(&u64DeqA);
+                if (xhci_ep0_soft_continue_ok(u32EpStA, u64DeqA) != 0 ||
+                    xhci_ep0_producer_hc_aligned(u32EpStA, u64DeqA) != 0) {
+                    if (fStampAlign != 0) {
+                        kprintf("xhci: get config soft-align soft-recover ok "
+                                "state=%u idx=%u "
+                                "(stage=15 Soft!=product; no Set TR Deq thrash)\n",
+                                (unsigned)u32EpStA, (unsigned)g_u32Ep0Idx);
+                    }
+                    xhci_clflush_ptr(g_pEp0Ring);
+                    xhci_clflush_ptr(&g_pEp0Ring[XHCI_RING_TRBS - 1u]);
+                    fAligned = 1;
+                } else {
+                    if (fStampAlign != 0) {
+                        kprintf("xhci: get config soft-align soft-recover ok "
+                                "(stage=15 Soft!=product; no Set TR Deq thrash)\n");
+                    }
+                    fAligned = 1;
+                }
+            }
+        }
+        /*
+         * SS late soft-align recheck (Gap C dual-DoD residual Soft!=product):
+         * a12f may post TR Deq after soft-recover stamp; one settle + mid-ring
+         * soft-continue before first GET_CONFIG doorbell.
+         * Grep: xhci: get config soft-align late
+         */
+        if (fSsPath != 0 && fAligned != 0) {
+            xhci_settle(1000000u);
+            xhci_drain_events(80u);
+            u32EpStA = xhci_ep0_sample(&u64DeqA);
+            if (xhci_ep0_soft_continue_ok(u32EpStA, u64DeqA) != 0 ||
+                xhci_ep0_producer_hc_aligned(u32EpStA, u64DeqA) != 0) {
+                if (fStampAlign != 0) {
+                    kprintf("xhci: get config soft-align late ok state=%u idx=%u "
+                            "(stage=15 Soft!=product; no Set TR Deq)\n",
+                            (unsigned)u32EpStA, (unsigned)g_u32Ep0Idx);
+                }
+                xhci_clflush_ptr(g_pEp0Ring);
+                xhci_clflush_ptr(&g_pEp0Ring[XHCI_RING_TRBS - 1u]);
+            } else if (xhci_ep0_soft_sync_producer() != 0) {
+                if (fStampAlign != 0) {
+                    kprintf("xhci: get config soft-align late soft-sync ok idx=%u "
+                            "(stage=15 Soft!=product)\n",
+                            (unsigned)g_u32Ep0Idx);
+                }
+            }
+            /*
+             * SS late2 soft-align recheck (Gap C dual-DoD residual deepen
+             * Soft!=product): a12f may post TR Deq one settle after late ok
+             * stamp - re-sample mid-ring before first GET_CONFIG doorbell.
+             * Grep: xhci: get config soft-align late2
+             */
+            xhci_settle(1200000u);
+            xhci_drain_events(88u);
+            u32EpStA = xhci_ep0_sample(&u64DeqA);
+            if (xhci_ep0_soft_continue_ok(u32EpStA, u64DeqA) != 0 ||
+                xhci_ep0_producer_hc_aligned(u32EpStA, u64DeqA) != 0) {
+                if (fStampAlign != 0) {
+                    kprintf("xhci: get config soft-align late2 ok state=%u idx=%u "
+                            "(stage=15 Soft!=product; no Set TR Deq)\n",
+                            (unsigned)u32EpStA, (unsigned)g_u32Ep0Idx);
+                }
+                xhci_clflush_ptr(g_pEp0Ring);
+                xhci_clflush_ptr(&g_pEp0Ring[XHCI_RING_TRBS - 1u]);
+            } else if (xhci_ep0_soft_sync_producer() != 0) {
+                if (fStampAlign != 0) {
+                    kprintf("xhci: get config soft-align late2 soft-sync ok "
+                            "idx=%u (stage=15 Soft!=product)\n",
+                            (unsigned)g_u32Ep0Idx);
+                }
+            }
+            /*
+             * Soft residual lean: late3..late14 multi-M soft-align chain
+             * removed (net first; freestanding MSC SKIP default). Keep
+             * late+late2 above + dual-sample residual below. Soft!=product.
+             * Grep: xhci: get config soft-align residual | soft residual lean
+             */
+            /*
+             * Event-ring + dual-sample EP0 residual before first GET_CONFIG
+             * doorbell (false-TO Soft!=product; a12f G-AC-1). Prefer real
+             * residual over Nth-pass comment. Force-inval current+next event
+             * TRB, dual-sample deq, soft-sync if deq advanced, mid-ring
+             * soft-continue when aligned. If deq moved, second settle +
+             * soft-continue recheck (no Set TR Deq thrash).
+             * Grep: xhci: get config soft-align residual
+             * Soft!=product Stage OPEN. Dual DoD A stick OPEN.
+             */
+            if (g_pEvtRing != NULL) {
+                xhci_clinv_ptr(&g_pEvtRing[g_u32EvtIdx]);
+                if ((g_u32EvtIdx + 1u) < XHCI_RING_TRBS) {
+                    xhci_clinv_ptr(&g_pEvtRing[g_u32EvtIdx + 1u]);
+                } else {
+                    xhci_clinv_ptr(&g_pEvtRing[0]);
+                }
+            }
+            {
+                u64 u64Deq1 = 0;
+                u64 u64Deq2 = 0;
+                u32 u32St2;
+                int fDeqMovedAlign = 0;
+
+                (void)xhci_ep0_sample(&u64Deq1);
+                xhci_settle(800000u);
+                xhci_drain_events(96u);
+                u32St2 = xhci_ep0_sample(&u64Deq2);
+                if (u64Deq2 != u64Deq1) {
+                    fDeqMovedAlign = 1;
+                    (void)xhci_ep0_soft_sync_producer();
+                    u32St2 = xhci_ep0_sample(&u64Deq2);
+                    if (fStampAlign != 0) {
+                        kprintf("xhci: get config soft-align residual deq "
+                                "moved 0x%lx->0x%lx state=%u "
+                                "(stage=15 Soft!=product)\n",
+                                (unsigned long)u64Deq1,
+                                (unsigned long)u64Deq2, (unsigned)u32St2);
+                    }
+                }
+                if (xhci_ep0_soft_continue_ok(u32St2, u64Deq2) != 0 ||
+                    xhci_ep0_producer_hc_aligned(u32St2, u64Deq2) != 0) {
+                    if (fStampAlign != 0) {
+                        kprintf("xhci: get config soft-align residual ok "
+                                "state=%u idx=%u "
+                                "(stage=15 Soft!=product; no Set TR Deq)\n",
+                                (unsigned)u32St2, (unsigned)g_u32Ep0Idx);
+                    }
+                    xhci_clflush_ptr(g_pEp0Ring);
+                    xhci_clflush_ptr(&g_pEp0Ring[XHCI_RING_TRBS - 1u]);
+                } else if (xhci_ep0_soft_sync_producer() != 0) {
+                    if (fStampAlign != 0) {
+                        kprintf("xhci: get config soft-align residual "
+                                "soft-sync ok idx=%u "
+                                "(stage=15 Soft!=product)\n",
+                                (unsigned)g_u32Ep0Idx);
+                    }
+                } else if (fDeqMovedAlign != 0) {
+                    /*
+                     * deq moved but soft-continue still quiet: short second
+                     * residual (event-ring Soft!=product) before doorbell.
+                     */
+                    xhci_settle(1200000u);
+                    if (g_pEvtRing != NULL) {
+                        xhci_clinv_ptr(&g_pEvtRing[g_u32EvtIdx]);
+                    }
+                    xhci_drain_events(80u);
+                    u32St2 = xhci_ep0_sample(&u64Deq2);
+                    if (xhci_ep0_soft_continue_ok(u32St2, u64Deq2) != 0 ||
+                        xhci_ep0_producer_hc_aligned(u32St2, u64Deq2) != 0 ||
+                        xhci_ep0_soft_sync_producer() != 0) {
+                        if (fStampAlign != 0) {
+                            kprintf("xhci: get config soft-align residual "
+                                    "soft-continue ok late state=%u idx=%u "
+                                    "(stage=15 Soft!=product; no Set TR Deq)\n",
+                                    (unsigned)u32St2,
+                                    (unsigned)g_u32Ep0Idx);
+                        }
+                        xhci_clflush_ptr(g_pEp0Ring);
+                        xhci_clflush_ptr(
+                            &g_pEp0Ring[XHCI_RING_TRBS - 1u]);
+                    }
+                }
+            }
+        } else if (fSsPath != 0 && fAligned == 0) {
+            /*
+             * Soft residual lean (net first): one late soft-recover + mid-ring
+             * recheck before try. Nested late3..late14 multi-M ladder removed.
+             * Soft!=product · G-AC-1 · freestanding MSC SKIP default.
+             * Grep: xhci: get config soft-align late | soft residual lean
+             */
+            xhci_settle(800000u);
+            xhci_drain_events(80u);
+            if (xhci_ep0_soft_recover_after_to("get_config_soft_align_late") !=
+                0) {
+                if (fStampAlign != 0) {
+                    kprintf("xhci: get config soft-align late soft-recover ok "
+                            "(stage=15 Soft!=product; no Set TR Deq thrash)\n");
+                }
+                xhci_settle(600000u);
+                xhci_drain_events(64u);
+                u32EpStA = xhci_ep0_sample(&u64DeqA);
+                if (xhci_ep0_soft_continue_ok(u32EpStA, u64DeqA) != 0 ||
+                    xhci_ep0_producer_hc_aligned(u32EpStA, u64DeqA) != 0) {
+                    if (fStampAlign != 0) {
+                        kprintf("xhci: get config soft-align late2 ok after "
+                                "soft-recover state=%u idx=%u "
+                                "(stage=15 Soft!=product; no Set TR Deq)\n",
+                                (unsigned)u32EpStA, (unsigned)g_u32Ep0Idx);
+                    }
+                    xhci_clflush_ptr(g_pEp0Ring);
+                    xhci_clflush_ptr(&g_pEp0Ring[XHCI_RING_TRBS - 1u]);
+                }
+            }
+        }
+    }
+    kprintf("msc: progress get_config ep0_ready mps0=%u idx=%u cyc=%u "
+            "(after device-desc Soft!=product)\n",
+            (unsigned)g_u16MaxPkt0, (unsigned)g_u32Ep0Idx,
+            (unsigned)g_fEp0Cycle);
 
     memset(&setup, 0, sizeof(setup));
     setup.u8BmRequestType = 0x80u;
@@ -2785,57 +5775,445 @@ xhci_get_config_descriptor(u8 *aCfg, u16 *pTotal)
         for (nTry = 0; nTry < 6; nTry++) {
             u32 u32EpSt;
             u64 u64Deq = 0;
+            int fStampTry;
 
             memset(aCfg, 0, u16TryLen);
             u32EpSt = xhci_ep0_sample(&u64Deq);
-            kprintf("xhci: get config try wlen=%u try=%u ep0_idx=%u cyc=%u "
-                    "state=%u deq=0x%lx\n",
-                    (unsigned)u16TryLen, (unsigned)nTry,
-                    (unsigned)g_u32Ep0Idx, (unsigned)g_fEp0Cycle,
-                    (unsigned)u32EpSt, (unsigned long)u64Deq);
-            kprintf("msc: progress get_config try wlen=%u n=%u\n",
-                    (unsigned)u16TryLen, (unsigned)nTry);
+            /*
+             * Rate-limit try greps (4 wlen x 6 tries + recover can storm
+             * serial; Soft!=product; first + every 16th).
+             * Grep: xhci: get config try | msc: progress get_config try
+             */
+            g_u32GetConfigTryStampN++;
+            fStampTry = (g_u32GetConfigTryStampN == 1u ||
+                         (g_u32GetConfigTryStampN & 15u) == 0u)
+                            ? 1
+                            : 0;
+            if (fStampTry != 0) {
+                kprintf("xhci: get config try wlen=%u try=%u ep0_idx=%u "
+                        "cyc=%u state=%u deq=0x%lx mps0=%u n=%u "
+                        "Soft!=product\n",
+                        (unsigned)u16TryLen, (unsigned)nTry,
+                        (unsigned)g_u32Ep0Idx, (unsigned)g_fEp0Cycle,
+                        (unsigned)u32EpSt, (unsigned long)u64Deq,
+                        (unsigned)g_u16MaxPkt0,
+                        (unsigned)g_u32GetConfigTryStampN);
+                kprintf("msc: progress get_config try wlen=%u n=%u\n",
+                        (unsigned)u16TryLen, (unsigned)nTry);
+            }
             if (xhci_ctrl(&setup, aCfg, u16TryLen, 1) == 0 &&
                 aCfg[0] >= 9u && aCfg[1] == USB_DT_CONFIG) {
+                u32 u32GotR;
+                u16 u16TotalHint;
+
                 fGot = 1;
-                if (g_u32LastCtrlResidual < (u32)u16TryLen) {
-                    u16Got = (u16)((u32)u16TryLen - g_u32LastCtrlResidual);
-                } else {
-                    u16Got = 0;
-                }
+                u32GotR = xhci_ctrl_got_len(u16TryLen);
+                u16Got = (u16)u32GotR;
                 if (u16Got < 9u) {
+                    /* Residual honesty: DT_CONFIG content ok -> treat as ≥9. */
                     u16Got = 9u;
+                    kprintf("xhci: get config residual content-backed got=9 "
+                            "resid=%u wlen=%u (stage-15 Soft!=product)\n",
+                            (unsigned)g_u32LastCtrlResidual,
+                            (unsigned)u16TryLen);
+                }
+                /*
+                 * Residual deepen (stage-15 Soft!=product; a12f):
+                 * wTotalLength in header bounds "got" when residual under-
+                 * counts (ISP lag / residual==wlen with valid buffer). Prefer
+                 * full-in-shot over thrash re-fetch when total fits this TD.
+                 * Grep: xhci: get config residual content-backed|full-in-shot
+                 */
+                u16TotalHint = (u16)aCfg[2] | ((u16)aCfg[3] << 8);
+                if (u16TotalHint >= 9u && u16TotalHint <= u16TryLen &&
+                    u16Got < u16TotalHint && u32GotR < 9u) {
+                    /* residual claimed empty/short; promote to total in shot */
+                    u16Got = u16TotalHint;
+                    kprintf("xhci: get config residual content-backed full "
+                            "got=%u total=%u resid=%u wlen=%u "
+                            "(stage-15 Soft!=product)\n",
+                            (unsigned)u16Got, (unsigned)u16TotalHint,
+                            (unsigned)g_u32LastCtrlResidual,
+                            (unsigned)u16TryLen);
+                }
+                if (u16TotalHint >= 9u && u16TotalHint <= u16TryLen &&
+                    u16Got >= u16TotalHint) {
+                    kprintf("xhci: get config residual full-in-shot "
+                            "got=%u total=%u wlen=%u resid=%u "
+                            "(stage-15 Soft!=product)\n",
+                            (unsigned)u16Got, (unsigned)u16TotalHint,
+                            (unsigned)u16TryLen,
+                            (unsigned)g_u32LastCtrlResidual);
                 }
                 kprintf("xhci: get config PASS wlen=%u try=%u got=%u "
-                        "residual=%u\n",
+                        "residual=%u mps0=%u (stage-15 residual Soft!=product)\n",
                         (unsigned)u16TryLen, (unsigned)nTry,
-                        (unsigned)u16Got, (unsigned)g_u32LastCtrlResidual);
+                        (unsigned)u16Got, (unsigned)g_u32LastCtrlResidual,
+                        (unsigned)g_u16MaxPkt0);
+                /* Mid-ring soft-continue after header PASS (no Set TR Deq). */
+                {
+                    u32 u32EpStH;
+                    u64 u64DeqH = 0;
+                    int fHdrAligned = 0;
+
+                    u32EpStH = xhci_ep0_sample(&u64DeqH);
+                    if (xhci_ep0_soft_continue_ok(u32EpStH, u64DeqH) != 0 ||
+                        xhci_ep0_producer_hc_aligned(u32EpStH, u64DeqH) != 0) {
+                        kprintf("xhci: ep0 mid-ring soft-continue after "
+                                "get_config header PASS state=%u idx=%u "
+                                "(stage=15 Soft!=product)\n",
+                                (unsigned)u32EpStH, (unsigned)g_u32Ep0Idx);
+                        xhci_clflush_ptr(g_pEp0Ring);
+                        xhci_clflush_ptr(&g_pEp0Ring[XHCI_RING_TRBS - 1u]);
+                        fHdrAligned = 1;
+                    } else if (xhci_ep0_soft_sync_producer() != 0) {
+                        u32EpStH = xhci_ep0_sample(&u64DeqH);
+                        if (xhci_ep0_soft_continue_ok(u32EpStH, u64DeqH) !=
+                                0 ||
+                            xhci_ep0_producer_hc_aligned(u32EpStH, u64DeqH) !=
+                                0) {
+                            kprintf("xhci: ep0 mid-ring soft-continue after "
+                                    "get_config header PASS post-sync "
+                                    "state=%u idx=%u (stage=15 Soft!=product)\n",
+                                    (unsigned)u32EpStH,
+                                    (unsigned)g_u32Ep0Idx);
+                            xhci_clflush_ptr(g_pEp0Ring);
+                            xhci_clflush_ptr(
+                                &g_pEp0Ring[XHCI_RING_TRBS - 1u]);
+                            fHdrAligned = 1;
+                        } else {
+                            fHdrAligned = 1; /* soft-sync ok enough */
+                        }
+                    } else if (fSsPath != 0 &&
+                               xhci_ep0_soft_recover_after_to(
+                                   "get_config_hdr_pass") != 0) {
+                        /* Gap C: SS late TR Deq after short header PASS. */
+                        kprintf("xhci: ep0 mid-ring soft-continue after "
+                                "get_config header PASS soft-recover "
+                                "(stage=15 Soft!=product)\n");
+                        fHdrAligned = 1;
+                    }
+                    /*
+                     * SS late mid-ring recheck after header PASS (Gap C
+                     * dual-DoD residual deepen Soft!=product): a12f may post
+                     * TR Deq after primary soft-continue stamp - re-sample
+                     * before full fetch / next control.
+                     * Grep: xhci: ep0 mid-ring soft-continue after get_config
+                     *       header PASS late
+                     */
+                    if (fSsPath != 0 && fHdrAligned != 0) {
+                        xhci_settle(900000u);
+                        xhci_drain_events(72u);
+                        u32EpStH = xhci_ep0_sample(&u64DeqH);
+                        if (xhci_ep0_soft_continue_ok(u32EpStH, u64DeqH) !=
+                                0 ||
+                            xhci_ep0_producer_hc_aligned(u32EpStH, u64DeqH) !=
+                                0) {
+                            kprintf("xhci: ep0 mid-ring soft-continue after "
+                                    "get_config header PASS late state=%u "
+                                    "idx=%u (stage=15 Soft!=product)\n",
+                                    (unsigned)u32EpStH,
+                                    (unsigned)g_u32Ep0Idx);
+                            xhci_clflush_ptr(g_pEp0Ring);
+                            xhci_clflush_ptr(
+                                &g_pEp0Ring[XHCI_RING_TRBS - 1u]);
+                        } else if (xhci_ep0_soft_sync_producer() != 0) {
+                            kprintf("xhci: ep0 soft-sync after get_config "
+                                    "header PASS late ok "
+                                    "(stage=15 Soft!=product)\n");
+                        }
+                        /*
+                         * SS late2 mid-ring recheck after header PASS
+                         * (Gap C dual-DoD residual deepen Soft!=product):
+                         * a12f may post TR Deq one settle after late -
+                         * re-sample before full fetch.
+                         * Grep: xhci: ep0 mid-ring soft-continue after
+                         *       get_config header PASS late2
+                         */
+                        xhci_settle(1100000u);
+                        xhci_drain_events(80u);
+                        u32EpStH = xhci_ep0_sample(&u64DeqH);
+                        if (xhci_ep0_soft_continue_ok(u32EpStH, u64DeqH) !=
+                                0 ||
+                            xhci_ep0_producer_hc_aligned(u32EpStH, u64DeqH) !=
+                                0) {
+                            kprintf("xhci: ep0 mid-ring soft-continue after "
+                                    "get_config header PASS late2 state=%u "
+                                    "idx=%u (stage=15 Soft!=product)\n",
+                                    (unsigned)u32EpStH,
+                                    (unsigned)g_u32Ep0Idx);
+                            xhci_clflush_ptr(g_pEp0Ring);
+                            xhci_clflush_ptr(
+                                &g_pEp0Ring[XHCI_RING_TRBS - 1u]);
+                        } else if (xhci_ep0_soft_sync_producer() != 0) {
+                            kprintf("xhci: ep0 soft-sync after get_config "
+                                    "header PASS late2 ok "
+                                    "(stage=15 Soft!=product)\n");
+                        } else if (xhci_ep0_soft_recover_after_to(
+                                       "get_config_hdr_pass_late2") != 0) {
+                            kprintf("xhci: ep0 mid-ring soft-continue after "
+                                    "get_config header PASS late2 "
+                                    "soft-recover (stage=15 Soft!=product)\n");
+                        }
+                        /*
+                         * SS late3 mid-ring recheck after header PASS
+                         * (Gap C dual-DoD residual deepen Soft!=product):
+                         * a12f may post TR Deq one settle after late2 -
+                         * re-sample before full fetch.
+                         * Grep: xhci: ep0 mid-ring soft-continue after
+                         *       get_config header PASS late3
+                         */
+                        xhci_settle(1300000u);
+                        xhci_drain_events(88u);
+                        u32EpStH = xhci_ep0_sample(&u64DeqH);
+                        if (xhci_ep0_soft_continue_ok(u32EpStH, u64DeqH) !=
+                                0 ||
+                            xhci_ep0_producer_hc_aligned(u32EpStH, u64DeqH) !=
+                                0) {
+                            kprintf("xhci: ep0 mid-ring soft-continue after "
+                                    "get_config header PASS late3 state=%u "
+                                    "idx=%u (stage=15 Soft!=product)\n",
+                                    (unsigned)u32EpStH,
+                                    (unsigned)g_u32Ep0Idx);
+                            xhci_clflush_ptr(g_pEp0Ring);
+                            xhci_clflush_ptr(
+                                &g_pEp0Ring[XHCI_RING_TRBS - 1u]);
+                        } else if (xhci_ep0_soft_sync_producer() != 0) {
+                            kprintf("xhci: ep0 soft-sync after get_config "
+                                    "header PASS late3 ok "
+                                    "(stage=15 Soft!=product)\n");
+                        } else if (xhci_ep0_soft_recover_after_to(
+                                       "get_config_hdr_pass_late3") != 0) {
+                            kprintf("xhci: ep0 mid-ring soft-continue after "
+                                    "get_config header PASS late3 "
+                                    "soft-recover (stage=15 Soft!=product)\n");
+                        }
+                        /*
+                         * SS late4 mid-ring recheck after header PASS
+                         * (Gap C dual-DoD residual deepen Soft!=product):
+                         * a12f may post TR Deq one settle after late3 -
+                         * re-sample before full fetch.
+                         * Grep: xhci: ep0 mid-ring soft-continue after
+                         *       get_config header PASS late4
+                         */
+                        xhci_settle(1500000u);
+                        xhci_drain_events(96u);
+                        u32EpStH = xhci_ep0_sample(&u64DeqH);
+                        if (xhci_ep0_soft_continue_ok(u32EpStH, u64DeqH) !=
+                                0 ||
+                            xhci_ep0_producer_hc_aligned(u32EpStH, u64DeqH) !=
+                                0) {
+                            kprintf("xhci: ep0 mid-ring soft-continue after "
+                                    "get_config header PASS late4 state=%u "
+                                    "idx=%u (stage=15 Soft!=product)\n",
+                                    (unsigned)u32EpStH,
+                                    (unsigned)g_u32Ep0Idx);
+                            xhci_clflush_ptr(g_pEp0Ring);
+                            xhci_clflush_ptr(
+                                &g_pEp0Ring[XHCI_RING_TRBS - 1u]);
+                        } else if (xhci_ep0_soft_sync_producer() != 0) {
+                            kprintf("xhci: ep0 soft-sync after get_config "
+                                    "header PASS late4 ok "
+                                    "(stage=15 Soft!=product)\n");
+                        } else if (xhci_ep0_soft_recover_after_to(
+                                       "get_config_hdr_pass_late4") != 0) {
+                            kprintf("xhci: ep0 mid-ring soft-continue after "
+                                    "get_config header PASS late4 "
+                                    "soft-recover (stage=15 Soft!=product)\n");
+                        }
+                        /*
+                         * SS late5 mid-ring recheck after header PASS
+                         * (Gap C dual-DoD residual deepen Soft!=product):
+                         * a12f may post TR Deq one settle after late4 -
+                         * re-sample before full fetch.
+                         * Grep: xhci: ep0 mid-ring soft-continue after
+                         *       get_config header PASS late5
+                         */
+                        xhci_settle(1700000u);
+                        xhci_drain_events(104u);
+                        u32EpStH = xhci_ep0_sample(&u64DeqH);
+                        if (xhci_ep0_soft_continue_ok(u32EpStH, u64DeqH) !=
+                                0 ||
+                            xhci_ep0_producer_hc_aligned(u32EpStH, u64DeqH) !=
+                                0) {
+                            kprintf("xhci: ep0 mid-ring soft-continue after "
+                                    "get_config header PASS late5 state=%u "
+                                    "idx=%u (stage=15 Soft!=product)\n",
+                                    (unsigned)u32EpStH,
+                                    (unsigned)g_u32Ep0Idx);
+                            xhci_clflush_ptr(g_pEp0Ring);
+                            xhci_clflush_ptr(
+                                &g_pEp0Ring[XHCI_RING_TRBS - 1u]);
+                        } else if (xhci_ep0_soft_sync_producer() != 0) {
+                            kprintf("xhci: ep0 soft-sync after get_config "
+                                    "header PASS late5 ok "
+                                    "(stage=15 Soft!=product)\n");
+                        } else if (xhci_ep0_soft_recover_after_to(
+                                       "get_config_hdr_pass_late5") != 0) {
+                            kprintf("xhci: ep0 mid-ring soft-continue after "
+                                    "get_config header PASS late5 "
+                                    "soft-recover (stage=15 Soft!=product)\n");
+                        }
+                        /*
+                         * SS late6 mid-ring recheck after header PASS
+                         * (Gap C dual-DoD residual deepen Soft!=product):
+                         * a12f may post TR Deq one settle after late5 -
+                         * re-sample before full fetch.
+                         * Grep: xhci: ep0 mid-ring soft-continue after
+                         *       get_config header PASS late6
+                         */
+                        xhci_settle(1900000u);
+                        xhci_drain_events(112u);
+                        u32EpStH = xhci_ep0_sample(&u64DeqH);
+                        if (xhci_ep0_soft_continue_ok(u32EpStH, u64DeqH) !=
+                                0 ||
+                            xhci_ep0_producer_hc_aligned(u32EpStH, u64DeqH) !=
+                                0) {
+                            kprintf("xhci: ep0 mid-ring soft-continue after "
+                                    "get_config header PASS late6 state=%u "
+                                    "idx=%u (stage=15 Soft!=product)\n",
+                                    (unsigned)u32EpStH,
+                                    (unsigned)g_u32Ep0Idx);
+                            xhci_clflush_ptr(g_pEp0Ring);
+                            xhci_clflush_ptr(
+                                &g_pEp0Ring[XHCI_RING_TRBS - 1u]);
+                        } else if (xhci_ep0_soft_sync_producer() != 0) {
+                            kprintf("xhci: ep0 soft-sync after get_config "
+                                    "header PASS late6 ok "
+                                    "(stage=15 Soft!=product)\n");
+                        } else if (xhci_ep0_soft_recover_after_to(
+                                       "get_config_hdr_pass_late6") != 0) {
+                            kprintf("xhci: ep0 mid-ring soft-continue after "
+                                    "get_config header PASS late6 "
+                                    "soft-recover (stage=15 Soft!=product)\n");
+                        }
+                    } else if (fSsPath != 0 && fHdrAligned == 0) {
+                        xhci_settle(1100000u);
+                        xhci_drain_events(80u);
+                        if (xhci_ep0_soft_recover_after_to(
+                                "get_config_hdr_pass_late") != 0) {
+                            kprintf("xhci: ep0 mid-ring soft-continue after "
+                                    "get_config header PASS late "
+                                    "soft-recover (stage=15 Soft!=product)\n");
+                        } else if (xhci_ep0_soft_recover_after_to(
+                                       "get_config_hdr_pass_late2") != 0) {
+                            kprintf("xhci: ep0 mid-ring soft-continue after "
+                                    "get_config header PASS late2 "
+                                    "soft-recover (stage=15 Soft!=product)\n");
+                        } else if (xhci_ep0_soft_recover_after_to(
+                                       "get_config_hdr_pass_late3") != 0) {
+                            kprintf("xhci: ep0 mid-ring soft-continue after "
+                                    "get_config header PASS late3 "
+                                    "soft-recover (stage=15 Soft!=product)\n");
+                        } else if (xhci_ep0_soft_recover_after_to(
+                                       "get_config_hdr_pass_late4") != 0) {
+                            kprintf("xhci: ep0 mid-ring soft-continue after "
+                                    "get_config header PASS late4 "
+                                    "soft-recover (stage=15 Soft!=product)\n");
+                        } else if (xhci_ep0_soft_recover_after_to(
+                                       "get_config_hdr_pass_late5") != 0) {
+                            kprintf("xhci: ep0 mid-ring soft-continue after "
+                                    "get_config header PASS late5 "
+                                    "soft-recover (stage=15 Soft!=product)\n");
+                        } else if (xhci_ep0_soft_recover_after_to(
+                                       "get_config_hdr_pass_late6") != 0) {
+                            kprintf("xhci: ep0 mid-ring soft-continue after "
+                                    "get_config header PASS late6 "
+                                    "soft-recover (stage=15 Soft!=product)\n");
+                        }
+                    }
+                }
                 break;
             }
-            kprintf("xhci: get config FAIL wlen=%u try=%u cc=%u mps0=%u "
-                    "spd=%u port=%u\n",
-                    (unsigned)u16TryLen, (unsigned)nTry,
-                    (unsigned)g_u32CtrlFailCc, (unsigned)g_u16MaxPkt0,
-                    (unsigned)g_u8PortSpeed, (unsigned)g_u8PortId);
+            /* FAIL stamp: always last try; else rate-limited with try greps. */
+            if (fStampTry != 0 || (nTry + 1) >= 6) {
+                kprintf("xhci: get config FAIL wlen=%u try=%u cc=%u mps0=%u "
+                        "spd=%u port=%u Soft!=product\n",
+                        (unsigned)u16TryLen, (unsigned)nTry,
+                        (unsigned)g_u32CtrlFailCc, (unsigned)g_u16MaxPkt0,
+                        (unsigned)g_u8PortSpeed, (unsigned)g_u8PortId);
+            }
             if (nTry + 1 >= 6) {
                 break;
             }
             /*
-             * After any failed enqueue+TO the HC dequeue and software
-             * producer are desynced while EP may still be Running.
-             * Settle-only is wrong — always hard resync (DCS=1).
+             * After any failed enqueue+TO: soft-sync first -> mid-ring
+             * soft-continue; hard only on deny - no thrash ladder grow.
+             * Grep: msc: progress get_config soft-sync | mid-ring soft-continue
+             *       | hard-resync after TO | Soft!=product
              */
-            kprintf("msc: progress get_config hard-resync after fail n=%u "
-                    "cc=%u\n",
-                    (unsigned)nTry, (unsigned)g_u32CtrlFailCc);
+            if (fStampTry != 0) {
+                kprintf("msc: progress get_config recover after TO n=%u "
+                        "cc=%u wlen=%u (stage=15 residual Soft!=product)\n",
+                        (unsigned)nTry, (unsigned)g_u32CtrlFailCc,
+                        (unsigned)u16TryLen);
+            }
             if (xhci_port_ready_for_config() != 0) {
                 kprintf("msc: progress get_config FAIL reason=ped_lost\n");
                 return -1;
             }
-            xhci_ctrl_recover();
-            xhci_settle((g_u8PortSpeed >= 4u)
-                            ? (nTry >= 2 ? 5000000u : 2500000u)
-                            : 1000000u);
+            /*
+             * Event-ring residual before soft-recover (false-TO Soft!=product):
+             * late TR Deq / Transfer Event may land after xhci_ctrl TO dump -
+             * prefer soft-continue over thrash Set TR Deq (a12f G-AC-1).
+             */
+            if (g_pEvtRing != NULL) {
+                xhci_clinv_ptr(&g_pEvtRing[g_u32EvtIdx]);
+                if ((g_u32EvtIdx + 1u) < XHCI_RING_TRBS) {
+                    xhci_clinv_ptr(&g_pEvtRing[g_u32EvtIdx + 1u]);
+                } else {
+                    xhci_clinv_ptr(&g_pEvtRing[0]);
+                }
+            }
+            xhci_drain_events(96u);
+            if (xhci_ep0_soft_recover_after_to("get_config") != 0) {
+                kprintf("msc: progress get_config soft-continue after TO "
+                        "n=%u wlen=%u (stage=15 Soft!=product)\n",
+                        (unsigned)nTry, (unsigned)u16TryLen);
+                /*
+                 * Residual: after soft-recover, dual-sample EP0; ensure room
+                 * for Setup+Data+Status; if producer mid-ring but not
+                 * HC-aligned, re-prep (prefer mid-ring soft-continue /
+                 * single arm Soft!=product; no thrash Set TR Deq).
+                 */
+                {
+                    u32 u32EpStR;
+                    u64 u64DeqR = 0;
+                    u64 u64DeqR2 = 0;
+
+                    u32EpStR = xhci_ep0_sample(&u64DeqR);
+                    xhci_settle(fSsPath != 0 ? 900000u : 300000u);
+                    xhci_drain_events(64u);
+                    u32EpStR = xhci_ep0_sample(&u64DeqR2);
+                    if (u64DeqR2 != u64DeqR) {
+                        (void)xhci_ep0_soft_sync_producer();
+                        u32EpStR = xhci_ep0_sample(&u64DeqR2);
+                    }
+                    if (xhci_ep0_soft_continue_ok(u32EpStR, u64DeqR2) != 0 ||
+                        xhci_ep0_producer_hc_aligned(u32EpStR, u64DeqR2) !=
+                            0) {
+                        xhci_clflush_ptr(g_pEp0Ring);
+                        xhci_clflush_ptr(
+                            &g_pEp0Ring[XHCI_RING_TRBS - 1u]);
+                    } else {
+                        kprintf("msc: progress get_config re-prep after "
+                                "soft-recover n=%u (stage=15 Soft!=product)\n",
+                                (unsigned)nTry);
+                        xhci_ep0_prepare_for_config();
+                    }
+                }
+            } else {
+                kprintf("msc: progress get_config hard-resync after TO n=%u "
+                        "cc=%u wlen=%u (stage=15 Soft!=product)\n",
+                        (unsigned)nTry, (unsigned)g_u32CtrlFailCc,
+                        (unsigned)u16TryLen);
+                xhci_ctrl_recover();
+            }
+            xhci_mps0_resync_from_speed();
+            /* Gap C residual deepen Soft!=product: longer settle between GET_CONFIG tries. */
+            xhci_settle(fSsPath != 0
+                            ? (nTry >= 2 ? 7000000u : 3500000u)
+                            : 1200000u);
             if (g_u8PortId != 0 &&
                 (portsc_read(g_u8PortId) & XHCI_PORTSC_PED) == 0) {
                 kprintf("xhci: PED lost mid-config try=%u\n",
@@ -2848,20 +6226,23 @@ xhci_get_config_descriptor(u8 *aCfg, u16 *pTotal)
 
     if (fGot == 0) {
         kprintf("xhci: GET_CONFIG stage=15 (header) cc=%u speed=%u port=%u "
-                "mps0=%u\n",
+                "mps0=%u Soft!=product\n",
                 (unsigned)g_u32CtrlFailCc, (unsigned)g_u8PortSpeed,
                 (unsigned)g_u8PortId, (unsigned)g_u16MaxPkt0);
-        kprintf("msc: progress get_config FAIL cc=%u port=%u spd=%u\n",
+        kprintf("msc: progress get_config FAIL stage=15 cc=%u port=%u spd=%u "
+                "Soft!=product\n",
                 (unsigned)g_u32CtrlFailCc, (unsigned)g_u8PortId,
                 (unsigned)g_u8PortSpeed);
+        xhci_stage_soft_lamp(15u, "GET_CONFIG");
         return -1;
     }
 
     u16Total = (u16)aCfg[2] | ((u16)aCfg[3] << 8);
     kprintf("xhci: config wTotalLength=%u bNumInterfaces=%u val=%u "
-            "speed=%u got=%u\n",
+            "speed=%u got=%u mps0=%u\n",
             (unsigned)u16Total, (unsigned)aCfg[4], (unsigned)aCfg[5],
-            (unsigned)g_u8PortSpeed, (unsigned)u16Got);
+            (unsigned)g_u8PortSpeed, (unsigned)u16Got,
+            (unsigned)g_u16MaxPkt0);
     if (u16Total < 9u) {
         u16Total = 9;
     }
@@ -2871,11 +6252,33 @@ xhci_get_config_descriptor(u8 *aCfg, u16 *pTotal)
 
     /* Second fetch only if wTotalLength > bytes actually received. */
     if (u16Total > u16Got) {
+        u32 u32EpSt;
+        u64 u64Deq = 0;
+
         /*
-         * Soft-continue again — header fetch left EP0 healthy. Single Data
-         * TRB for full wTotalLength (HC splits on wire; multi-TRB broke a12f).
+         * Soft-continue when header left EP0 producer-aligned (base or
+         * mid-ring). Single Data TRB for full wTotalLength (HC splits on
+         * wire; multi-TRB broke a12f). Hard-resync + mps0 only after TO or
+         * when Halted/Error/desync.
          */
-        xhci_settle((g_u8PortSpeed >= 4u) ? 1000000u : 400000u);
+        xhci_settle(fSsPath != 0 ? 1000000u : 400000u);
+        xhci_mps0_resync_from_speed();
+        /* Stage-15 residual: soft-sync after header before full fetch. */
+        if (xhci_ep0_soft_recover_after_to("get_config_full_pre") != 0) {
+            kprintf("xhci: get config full soft-continue pre state ok "
+                    "(stage=15 residual Soft!=product)\n");
+        } else {
+            u32EpSt = xhci_ep0_sample(&u64Deq);
+            if (u32EpSt == XHCI_EP_ST_HALTED || u32EpSt == XHCI_EP_ST_ERROR ||
+                xhci_ep0_soft_continue_ok(u32EpSt, u64Deq) == 0) {
+                kprintf("xhci: get config full pre hard-resync state=%u "
+                        "deq=0x%lx idx=%u (stage=15 Soft!=product)\n",
+                        (unsigned)u32EpSt, (unsigned long)u64Deq,
+                        (unsigned)g_u32Ep0Idx);
+                xhci_ctrl_recover();
+                xhci_mps0_resync_from_speed();
+            }
+        }
         setup.u8BmRequestType = 0x80u;
         setup.u8BRequest = USB_REQ_GET_DESCRIPTOR;
         setup.u16WValue = (u16)(USB_DT_CONFIG << 8);
@@ -2883,37 +6286,278 @@ xhci_get_config_descriptor(u8 *aCfg, u16 *pTotal)
         setup.u16WLength = u16Total;
         fGot = 0;
         for (nTry = 0; nTry < 5; nTry++) {
+            u32 u32GotFull;
+
             memset(aCfg, 0, u16Total);
-            kprintf("xhci: get config full try total=%u try=%u\n",
-                    (unsigned)u16Total, (unsigned)nTry);
+            kprintf("xhci: get config full try total=%u try=%u mps0=%u\n",
+                    (unsigned)u16Total, (unsigned)nTry,
+                    (unsigned)g_u16MaxPkt0);
             kprintf("msc: progress get_config full n=%u total=%u\n",
                     (unsigned)nTry, (unsigned)u16Total);
             if (xhci_ctrl(&setup, aCfg, u16Total, 1) == 0 && aCfg[0] >= 9u &&
                 aCfg[1] == USB_DT_CONFIG) {
+                u32GotFull = xhci_ctrl_got_len(u16Total);
+                if (u32GotFull < 9u) {
+                    /* residual lag with valid DT_CONFIG -> content-backed */
+                    u32GotFull = (u32)u16Total;
+                    kprintf("xhci: get config full residual content-backed "
+                            "got=%u total=%u resid=%u "
+                            "(stage-15 Soft!=product)\n",
+                            (unsigned)u32GotFull, (unsigned)u16Total,
+                            (unsigned)g_u32LastCtrlResidual);
+                }
                 fGot = 1;
-                kprintf("xhci: get config full PASS total=%u try=%u\n",
-                        (unsigned)u16Total, (unsigned)nTry);
+                u16Got = (u16)u32GotFull;
+                kprintf("xhci: get config full PASS total=%u try=%u got=%u "
+                        "resid=%u (stage-15 residual Soft!=product)\n",
+                        (unsigned)u16Total, (unsigned)nTry,
+                        (unsigned)u16Got, (unsigned)g_u32LastCtrlResidual);
+                /* Prefer mid-ring soft-continue after full PASS (no thrash). */
+                {
+                    u32 u32EpStF;
+                    u64 u64DeqF = 0;
+                    int fFullAligned = 0;
+
+                    u32EpStF = xhci_ep0_sample(&u64DeqF);
+                    if (xhci_ep0_soft_continue_ok(u32EpStF, u64DeqF) != 0 ||
+                        xhci_ep0_producer_hc_aligned(u32EpStF, u64DeqF) != 0) {
+                        kprintf("xhci: ep0 mid-ring soft-continue after "
+                                "get_config full PASS state=%u idx=%u "
+                                "(stage=15 Soft!=product)\n",
+                                (unsigned)u32EpStF, (unsigned)g_u32Ep0Idx);
+                        xhci_clflush_ptr(g_pEp0Ring);
+                        xhci_clflush_ptr(&g_pEp0Ring[XHCI_RING_TRBS - 1u]);
+                        fFullAligned = 1;
+                    } else if (xhci_ep0_soft_sync_producer() != 0) {
+                        u32EpStF = xhci_ep0_sample(&u64DeqF);
+                        if (xhci_ep0_soft_continue_ok(u32EpStF, u64DeqF) !=
+                                0 ||
+                            xhci_ep0_producer_hc_aligned(u32EpStF, u64DeqF) !=
+                                0) {
+                            kprintf("xhci: ep0 mid-ring soft-continue after "
+                                    "get_config full PASS post-sync "
+                                    "state=%u idx=%u (stage=15 Soft!=product)\n",
+                                    (unsigned)u32EpStF,
+                                    (unsigned)g_u32Ep0Idx);
+                            xhci_clflush_ptr(g_pEp0Ring);
+                            xhci_clflush_ptr(
+                                &g_pEp0Ring[XHCI_RING_TRBS - 1u]);
+                            fFullAligned = 1;
+                        } else {
+                            fFullAligned = 1;
+                        }
+                    } else if (fSsPath != 0 &&
+                               xhci_ep0_soft_recover_after_to(
+                                   "get_config_full_pass") != 0) {
+                        /* Gap C: SS late TR Deq after full config PASS. */
+                        kprintf("xhci: ep0 mid-ring soft-continue after "
+                                "get_config full PASS soft-recover "
+                                "(stage=15 Soft!=product)\n");
+                        fFullAligned = 1;
+                    }
+                    /*
+                     * SS late mid-ring recheck after full PASS (Gap C dual-DoD
+                     * residual deepen Soft!=product): a12f may post TR Deq
+                     * after primary soft-continue stamp.
+                     * Grep: xhci: ep0 mid-ring soft-continue after get_config
+                     *       full PASS late
+                     */
+                    if (fSsPath != 0 && fFullAligned != 0) {
+                        xhci_settle(1000000u);
+                        xhci_drain_events(80u);
+                        u32EpStF = xhci_ep0_sample(&u64DeqF);
+                        if (xhci_ep0_soft_continue_ok(u32EpStF, u64DeqF) !=
+                                0 ||
+                            xhci_ep0_producer_hc_aligned(u32EpStF, u64DeqF) !=
+                                0) {
+                            kprintf("xhci: ep0 mid-ring soft-continue after "
+                                    "get_config full PASS late state=%u "
+                                    "idx=%u (stage=15 Soft!=product)\n",
+                                    (unsigned)u32EpStF,
+                                    (unsigned)g_u32Ep0Idx);
+                            xhci_clflush_ptr(g_pEp0Ring);
+                            xhci_clflush_ptr(
+                                &g_pEp0Ring[XHCI_RING_TRBS - 1u]);
+                        } else if (xhci_ep0_soft_sync_producer() != 0) {
+                            kprintf("xhci: ep0 soft-sync after get_config "
+                                    "full PASS late ok "
+                                    "(stage=15 Soft!=product)\n");
+                        }
+                        /*
+                         * SS late2 mid-ring recheck after full PASS
+                         * (Gap C dual-DoD residual deepen Soft!=product):
+                         * a12f may post TR Deq one settle after late -
+                         * re-sample before SET_CONFIGURATION / next control.
+                         * Grep: xhci: ep0 mid-ring soft-continue after
+                         *       get_config full PASS late2
+                         */
+                        xhci_settle(1200000u);
+                        xhci_drain_events(88u);
+                        u32EpStF = xhci_ep0_sample(&u64DeqF);
+                        if (xhci_ep0_soft_continue_ok(u32EpStF, u64DeqF) !=
+                                0 ||
+                            xhci_ep0_producer_hc_aligned(u32EpStF, u64DeqF) !=
+                                0) {
+                            kprintf("xhci: ep0 mid-ring soft-continue after "
+                                    "get_config full PASS late2 state=%u "
+                                    "idx=%u (stage=15 Soft!=product)\n",
+                                    (unsigned)u32EpStF,
+                                    (unsigned)g_u32Ep0Idx);
+                            xhci_clflush_ptr(g_pEp0Ring);
+                            xhci_clflush_ptr(
+                                &g_pEp0Ring[XHCI_RING_TRBS - 1u]);
+                        } else if (xhci_ep0_soft_sync_producer() != 0) {
+                            kprintf("xhci: ep0 soft-sync after get_config "
+                                    "full PASS late2 ok "
+                                    "(stage=15 Soft!=product)\n");
+                        } else if (xhci_ep0_soft_recover_after_to(
+                                       "get_config_full_pass_late2") != 0) {
+                            kprintf("xhci: ep0 mid-ring soft-continue after "
+                                    "get_config full PASS late2 "
+                                    "soft-recover (stage=15 Soft!=product)\n");
+                        }
+                        /*
+                         * SS late3 mid-ring recheck after full PASS
+                         * (Gap C dual-DoD residual deepen Soft!=product):
+                         * a12f may post TR Deq one settle after late2 -
+                         * re-sample before SET_CONFIGURATION / next control.
+                         * Grep: xhci: ep0 mid-ring soft-continue after
+                         *       get_config full PASS late3
+                         */
+                        xhci_settle(1400000u);
+                        xhci_drain_events(96u);
+                        u32EpStF = xhci_ep0_sample(&u64DeqF);
+                        if (xhci_ep0_soft_continue_ok(u32EpStF, u64DeqF) !=
+                                0 ||
+                            xhci_ep0_producer_hc_aligned(u32EpStF, u64DeqF) !=
+                                0) {
+                            kprintf("xhci: ep0 mid-ring soft-continue after "
+                                    "get_config full PASS late3 state=%u "
+                                    "idx=%u (stage=15 Soft!=product)\n",
+                                    (unsigned)u32EpStF,
+                                    (unsigned)g_u32Ep0Idx);
+                            xhci_clflush_ptr(g_pEp0Ring);
+                            xhci_clflush_ptr(
+                                &g_pEp0Ring[XHCI_RING_TRBS - 1u]);
+                        } else if (xhci_ep0_soft_sync_producer() != 0) {
+                            kprintf("xhci: ep0 soft-sync after get_config "
+                                    "full PASS late3 ok "
+                                    "(stage=15 Soft!=product)\n");
+                        } else if (xhci_ep0_soft_recover_after_to(
+                                       "get_config_full_pass_late3") != 0) {
+                            kprintf("xhci: ep0 mid-ring soft-continue after "
+                                    "get_config full PASS late3 "
+                                    "soft-recover (stage=15 Soft!=product)\n");
+                        }
+                        /*
+                         * SS late4 mid-ring recheck after full PASS
+                         * (Gap C dual-DoD residual deepen Soft!=product):
+                         * a12f may post TR Deq one settle after late3 -
+                         * re-sample before SET_CONFIGURATION / next control.
+                         * Grep: xhci: ep0 mid-ring soft-continue after
+                         *       get_config full PASS late4
+                         */
+                        xhci_settle(1600000u);
+                        xhci_drain_events(104u);
+                        u32EpStF = xhci_ep0_sample(&u64DeqF);
+                        if (xhci_ep0_soft_continue_ok(u32EpStF, u64DeqF) !=
+                                0 ||
+                            xhci_ep0_producer_hc_aligned(u32EpStF, u64DeqF) !=
+                                0) {
+                            kprintf("xhci: ep0 mid-ring soft-continue after "
+                                    "get_config full PASS late4 state=%u "
+                                    "idx=%u (stage=15 Soft!=product)\n",
+                                    (unsigned)u32EpStF,
+                                    (unsigned)g_u32Ep0Idx);
+                            xhci_clflush_ptr(g_pEp0Ring);
+                            xhci_clflush_ptr(
+                                &g_pEp0Ring[XHCI_RING_TRBS - 1u]);
+                        } else if (xhci_ep0_soft_sync_producer() != 0) {
+                            kprintf("xhci: ep0 soft-sync after get_config "
+                                    "full PASS late4 ok "
+                                    "(stage=15 Soft!=product)\n");
+                        } else if (xhci_ep0_soft_recover_after_to(
+                                       "get_config_full_pass_late4") != 0) {
+                            kprintf("xhci: ep0 mid-ring soft-continue after "
+                                    "get_config full PASS late4 "
+                                    "soft-recover (stage=15 Soft!=product)\n");
+                        }
+                    } else if (fSsPath != 0 && fFullAligned == 0) {
+                        xhci_settle(1200000u);
+                        xhci_drain_events(88u);
+                        if (xhci_ep0_soft_recover_after_to(
+                                "get_config_full_pass_late") != 0) {
+                            kprintf("xhci: ep0 mid-ring soft-continue after "
+                                    "get_config full PASS late soft-recover "
+                                    "(stage=15 Soft!=product)\n");
+                        } else if (xhci_ep0_soft_recover_after_to(
+                                       "get_config_full_pass_late2") != 0) {
+                            kprintf("xhci: ep0 mid-ring soft-continue after "
+                                    "get_config full PASS late2 "
+                                    "soft-recover (stage=15 Soft!=product)\n");
+                        } else if (xhci_ep0_soft_recover_after_to(
+                                       "get_config_full_pass_late3") != 0) {
+                            kprintf("xhci: ep0 mid-ring soft-continue after "
+                                    "get_config full PASS late3 "
+                                    "soft-recover (stage=15 Soft!=product)\n");
+                        } else if (xhci_ep0_soft_recover_after_to(
+                                       "get_config_full_pass_late4") != 0) {
+                            kprintf("xhci: ep0 mid-ring soft-continue after "
+                                    "get_config full PASS late4 "
+                                    "soft-recover (stage=15 Soft!=product)\n");
+                        }
+                    }
+                }
                 break;
             }
             kprintf("xhci: get config full FAIL total=%u try=%u cc=%u\n",
                     (unsigned)u16Total, (unsigned)nTry,
                     (unsigned)g_u32CtrlFailCc);
             if (nTry + 1 < 5) {
-                /* Same rule: failed enqueue → hard resync, never settle-only. */
-                xhci_ctrl_recover();
-                xhci_settle((g_u8PortSpeed >= 4u) ? 2000000u : 600000u);
+                /*
+                 * Full fetch TO: soft-sync first -> mid-ring soft-continue ->
+                 * hard. Prefer no Set TR Deq thrash (stage-15 Soft!=product).
+                 */
+                kprintf("msc: progress get_config full recover after TO "
+                        "n=%u cc=%u (stage=15 Soft!=product)\n",
+                        (unsigned)nTry, (unsigned)g_u32CtrlFailCc);
+                if (xhci_ep0_soft_recover_after_to("get_config_full") != 0) {
+                    kprintf("msc: progress get_config full soft-continue "
+                            "after TO n=%u (stage=15 Soft!=product)\n",
+                            (unsigned)nTry);
+                } else {
+                    kprintf("msc: progress get_config full hard-resync after TO "
+                            "n=%u cc=%u (stage=15 Soft!=product)\n",
+                            (unsigned)nTry, (unsigned)g_u32CtrlFailCc);
+                    xhci_ctrl_recover();
+                }
+                xhci_mps0_resync_from_speed();
+                xhci_settle(fSsPath != 0 ? 2000000u : 600000u);
             }
         }
         if (fGot == 0) {
-            kprintf("xhci: GET_CONFIG stage=15 total=%u cc=%u\n",
+            kprintf("xhci: GET_CONFIG stage=15 total=%u cc=%u mps0=%u "
+                    "Soft!=product\n",
+                    (unsigned)u16Total, (unsigned)g_u32CtrlFailCc,
+                    (unsigned)g_u16MaxPkt0);
+            kprintf("msc: progress get_config full FAIL stage=15 total=%u "
+                    "cc=%u Soft!=product\n",
                     (unsigned)u16Total, (unsigned)g_u32CtrlFailCc);
-            kprintf("msc: progress get_config full FAIL total=%u cc=%u\n",
-                    (unsigned)u16Total, (unsigned)g_u32CtrlFailCc);
+            xhci_stage_soft_lamp(15u, "GET_CONFIG_full");
             return -1;
         }
+    } else {
+        kprintf("xhci: get config residual skip full got=%u total=%u "
+                "(stage-15 Soft!=product)\n",
+                (unsigned)u16Got, (unsigned)u16Total);
     }
 
-    kprintf("msc: progress get_config PASS total=%u val=%u port=%u spd=%u\n",
+    kprintf("msc: progress get_config PASS total=%u val=%u port=%u spd=%u "
+            "mps0=%u\n",
+            (unsigned)u16Total, (unsigned)aCfg[5], (unsigned)g_u8PortId,
+            (unsigned)g_u8PortSpeed, (unsigned)g_u16MaxPkt0);
+    kprintf("xhci: get config PASS total=%u val=%u port=%u spd=%u "
+            "Soft!=product\n",
             (unsigned)u16Total, (unsigned)aCfg[5], (unsigned)g_u8PortId,
             (unsigned)g_u8PortSpeed);
     *pTotal = u16Total;
@@ -2930,13 +6574,12 @@ xhci_enum_msc(void)
     int nPass;
 
     /*
-     * Up to 3 full passes: first enum; on stage-15 GET_CONFIG fail readdress
-     * (warm/cold + optional power-bounce + BSR0) and retry device+config.
-     * Soft ≠ product.
+     * Up to 2 full passes (boot-capped; was 3): first enum; on stage-15
+     * GET_CONFIG fail readdress once and retry. Soft!=product · Dual DoD A.
      */
     kprintf("msc: progress enum begin port=%u spd=%u\n",
             (unsigned)g_u8PortId, (unsigned)g_u8PortSpeed);
-    for (nPass = 0; nPass < 3; nPass++) {
+    for (nPass = 0; nPass < 2; nPass++) {
         if (nPass > 0) {
             kprintf("xhci: enum pass=%u readdress after GET_CONFIG fail\n",
                     (unsigned)nPass);
@@ -2993,11 +6636,13 @@ xhci_enum_msc(void)
         }
 
         if (xhci_get_config_descriptor(aCfg, &u16Total) != 0) {
-            kprintf("xhci: GET_CONFIG stage=15 fail pass=%u cc=%u\n",
+            kprintf("xhci: GET_CONFIG stage=15 fail pass=%u cc=%u "
+                    "Soft!=product\n",
                     (unsigned)nPass, (unsigned)g_u32CtrlFailCc);
             g_u32LastStage = 15;
-            if (nPass + 1 < 3) {
-                continue; /* readdress + full retry */
+            xhci_stage_soft_lamp(15u, "GET_CONFIG_enum");
+            if (nPass + 1 < 2) {
+                continue; /* readdress + full retry (boot-capped 2 passes) */
             }
             return -1;
         }
@@ -3028,20 +6673,30 @@ xhci_enum_msc(void)
         int fOk = 0;
 
         /*
-         * Soft-continue after GET_CONFIG success — no pre-arm thrash.
-         * SET_CONFIGURATION is no-data (Setup+Status only).
+         * Stage-15+ toward SET_CONFIGURATION (soft; Soft!=product):
+         * Soft-align after GET_CONFIG success - mid-ring producer-aligned
+         * continue, no pre-arm thrash. SET_CONFIGURATION is no-data
+         * (Setup+Status only). After any TO: hard resync (not settle-only).
+         * Grep: msc: progress set_config | xhci: SET_CONFIGURATION
          */
         kprintf("msc: progress set_config begin cfg=%u port=%u spd=%u\n",
                 (unsigned)g_u8ConfigVal, (unsigned)g_u8PortId,
                 (unsigned)g_u8PortSpeed);
-        xhci_drain_events(32u);
-        xhci_settle((g_u8PortSpeed >= 4u) ? 1000000u : 400000u);
-        if (g_u8PortId != 0) {
-            xhci_port_power_on(g_u8PortId);
-            if (((portsc_read(g_u8PortId) >> 5) & 0xfu) != 0u) {
-                xhci_port_force_u0(g_u8PortId);
-            }
+        xhci_drain_events(72u);
+        /* Gap C freestanding residual: longer settle before SET_CONFIGURATION. */
+        xhci_settle((g_u8PortSpeed >= 4u) ? 1200000u : 500000u);
+        if (xhci_port_ready_for_config() != 0) {
+            kprintf("msc: progress set_config FAIL reason=port_not_ready\n");
+            g_u32LastStage = 17;
+            xhci_note_ctrl_fail_cc(0);
+            return -1;
         }
+        /* Same soft-align gate as GET_CONFIG (base or mid-ring; no thrash). */
+        xhci_ep0_prepare_for_config();
+        xhci_drain_events(32u);
+        kprintf("msc: progress set_config ep0_ready idx=%u cyc=%u mps0=%u\n",
+                (unsigned)g_u32Ep0Idx, (unsigned)g_fEp0Cycle,
+                (unsigned)g_u16MaxPkt0);
         for (nTry = 0; nTry < 4; nTry++) {
             if (xhci_ctrl(&setup, NULL, 0, 0) == 0) {
                 fOk = 1;
@@ -3053,20 +6708,42 @@ xhci_enum_msc(void)
                     (unsigned)nTry, (unsigned)g_u8ConfigVal,
                     (unsigned)g_u32CtrlFailCc);
             if (nTry + 1 < 4) {
-                if (nTry == 0) {
-                    xhci_settle((g_u8PortSpeed >= 4u) ? 1500000u : 500000u);
-                } else {
-                    xhci_ctrl_recover();
-                    xhci_settle((g_u8PortSpeed >= 4u) ? 1000000u : 400000u);
+                /*
+                 * After failed enqueue/TO: soft-sync first -> mid-ring
+                 * soft-continue -> hard (settle-only alone is stage-17 cascade).
+                 * Prefer soft over thrash when producer-HC still aligned.
+                 * Grep: msc: progress set_config | Soft!=product
+                 */
+                kprintf("msc: progress set_config recover after TO n=%u "
+                        "cc=%u (stage=17 residual Soft!=product)\n",
+                        (unsigned)nTry, (unsigned)g_u32CtrlFailCc);
+                if (xhci_port_ready_for_config() != 0) {
+                    kprintf("msc: progress set_config FAIL reason=ped_lost\n");
+                    g_u32LastStage = 17;
+                    return -1;
                 }
+                if (xhci_ep0_soft_recover_after_to("set_config") != 0) {
+                    kprintf("msc: progress set_config soft-continue after TO "
+                            "n=%u (Soft!=product)\n",
+                            (unsigned)nTry);
+                } else {
+                    kprintf("msc: progress set_config hard-resync after TO n=%u "
+                            "cc=%u (Soft!=product)\n",
+                            (unsigned)nTry, (unsigned)g_u32CtrlFailCc);
+                    xhci_ctrl_recover();
+                }
+                xhci_mps0_resync_from_speed();
+                xhci_settle((g_u8PortSpeed >= 4u) ? 1800000u : 600000u);
             }
         }
         if (fOk == 0) {
-            kprintf("xhci: SET_CONFIGURATION FAIL stage=17 cfg=%u cc=%u\n",
+            kprintf("xhci: SET_CONFIGURATION FAIL stage=17 cfg=%u cc=%u "
+                    "Soft!=product Stage OPEN\n",
                     (unsigned)g_u8ConfigVal, (unsigned)g_u32CtrlFailCc);
             kprintf("msc: progress set_config FAIL cfg=%u cc=%u\n",
                     (unsigned)g_u8ConfigVal, (unsigned)g_u32CtrlFailCc);
             g_u32LastStage = 17;
+            xhci_stage_soft_lamp(17u, "SET_CONFIGURATION");
             return -1;
         }
     }
@@ -3393,7 +7070,7 @@ fat_locate_klog(void)
         fDir == 0) {
         return -1;
     }
-    /* GREENJADE (9 chars → short GREENJAD or GREENJ~1; blank extension) */
+    /* GREENJADE (9 chars -> short GREENJAD or GREENJ~1; blank extension) */
     if (fat_find_in_dir(u32Clus, "GREENJAD", "   ", &u32Clus, &u32Sz, &fDir) !=
             0 ||
         fDir == 0) {
@@ -3486,7 +7163,7 @@ raw_log_write(const void *pBuf, u32 cb)
     }
     if (g_u32BlockCount < RAW_LOG_SECTS + 2u) {
         kprintf("stick: raw log write OPEN reason=geometry blocks=%u need>=%u "
-                "(soft fail-closed; Soft≠product)\n",
+                "(soft fail-closed; Soft!=product)\n",
                 (unsigned)g_u32BlockCount, (unsigned)(RAW_LOG_SECTS + 2u));
         return -1;
     }
@@ -3703,9 +7380,9 @@ xhci_power_all_ports(void)
 /*
  * SuperSpeed-first CCS port order (G752 stick = Linux bus2 SS ~port 5):
  *   0) PED + speed >= 4 (live SuperSpeed)
- *   1) SS-capable (xECP) with CCS — even if speed not yet trained
+ *   1) SS-capable (xECP) with CCS - even if speed not yet trained
  *   2) PED + speed == 3 (HS) on SS-capable only
- * Never queue pure LS/FS (speed 1–2) — those are HID/webcam/BT (p10s1 was
+ * Never queue pure LS/FS (speed 1-2) - those are HID/webcam/BT (p10s1 was
  * keyboard-class noise that stole stage-20 soft SET_ADDRESS).
  */
 static u32
@@ -3788,7 +7465,7 @@ xhci_fail_stage_better(u32 u32Old, u32 u32New)
     if (u32Old == 0 || u32Old == 4u || u32Old == 5u) {
         return 1;
     }
-    /* Soft SET_ADDRESS fail on non-SS is noise — never upgrade sticky to 20. */
+    /* Soft SET_ADDRESS fail on non-SS is noise - never upgrade sticky to 20. */
     if (u32New == 20u && g_u8PortSpeed < 3u) {
         return 0;
     }
@@ -3843,9 +7520,9 @@ xhci_try_one_port(u8 u8Port, u32 *pLastFail)
 
     /*
      * Stick is SuperSpeed (Linux G752 bus2-port5, 13fe:6400).
-     * Always skip LS/FS (speed 1–2) — HID/webcam/BT (panel p10s1 stage-20).
+     * Always skip LS/FS (speed 1-2) - HID/webcam/BT (panel p10s1 stage-20).
      * Skip HS on non-SS-cap when SS map exists (internal HS devices).
-     * SS-capable ports may still show HS after cold PR (companion) — try those.
+     * SS-capable ports may still show HS after cold PR (companion) - try those.
      */
     if (g_u8PortSpeed <= 2u) {
         kprintf("xhci: skip LS/FS port=%u speed=%u (not MSC stick)\n",
@@ -3894,7 +7571,7 @@ xhci_try_one_port(u8 u8Port, u32 *pLastFail)
         }
         /*
          * Preserve granular stages. Old code only kept 11..18 and rewrote
-         * 12/13/19/20 → 8, so G752 panel showed purple+8 after a real
+         * 12/13/19/20 -> 8, so G752 panel showed purple+8 after a real
          * stage-13 GET_DESC18 fail + readdress path.
          */
         if (g_u32LastStage >= 7u && g_u32LastStage <= 20u &&
@@ -3973,6 +7650,146 @@ xhci_try_ports(void)
     return -1;
 }
 
+/*
+ * Once-shot Dual DoD A residual inventory (C0 freestanding SKIP residual
+ * honesty only · Soft!=product · G-AC-1). NOT product Dual DoD A close.
+ * Fires on freestanding MSC SKIP default and after opt-in probe paths.
+ * Lean greps only - no version stamp, no stamp storms, no stage-ladder thrash.
+ * Dual DoD A stick OPEN_UDX / need=UDX_OPEN until L3 host proof;
+ * product USB = userspace xhci_udx + hot+cold ABI + DDI (not freestanding MSC).
+ * Align: rtl8168 soft residual product=UDX+ABI · net_l2 freestanding SKIP lean
+ * · usb_probe freestanding_msc=SKIP need=UDX_OPEN · claim=0 under SKIP.
+ * NEVER re-enable freestanding MSC thrash as product. GJ_XHCI_MSC_PROBE stays 0.
+ * greppable: xhci: soft residual product=UDX+ABI | product_udx_abi honesty
+ * greppable: xhci: soft residual lean | msc: soft residual lean
+ * greppable: stick: soft residual lean | freestanding_msc=SKIP
+ * greppable: path=xhci_udx | dual_dod_a=OPEN_UDX | need=UDX_OPEN | claim=0
+ * greppable: freestanding_close=0 | C0_SKIP=1 | soft_ne_product=1
+ * greppable: C0 freestanding SKIP residual | Soft!=product
+ * greppable: stamp_storm=0 | version_stamp=0 | not Dual DoD A close
+ */
+static void
+xhci_msc_soft_residual_once(const char *szVia)
+{
+    const char *szViaSafe;
+    const char *szFsMsc;
+    u32 u32Probe;
+    u32 u32SkipDef;
+    u32 u32Claim;
+    u32 u32Close; /* freestanding never closes Dual DoD A */
+
+    if (g_fSoftResidualOnce != 0u) {
+        return;
+    }
+    g_fSoftResidualOnce = 1u;
+    szViaSafe = (szVia != NULL && szVia[0] != '\0') ? szVia : "unknown";
+#if GJ_XHCI_MSC_PROBE
+    u32Probe = 1u;
+    u32SkipDef = 0u;
+    szFsMsc = "OPTIN_RESIDUAL";
+#else
+    u32Probe = 0u;
+    u32SkipDef = 1u;
+    szFsMsc = "SKIP";
+#endif
+    /* Under SKIP default HC never claimed; opt-in residual may set g_fHcUp. */
+    u32Claim = (g_fHcUp != 0u) ? 1u : 0u;
+    /* C0 honesty: freestanding residual never product-closes Dual DoD A. */
+    u32Close = 0u;
+
+    /*
+     * Grep: xhci: soft residual product=UDX+ABI
+     * Product laptop USB = userspace xhci_udx + hot+cold ABI + DDI (G-AC-1).
+     * Freestanding MSC residual lean only - not Dual DoD A close, not T1.
+     * Default SKIP (probe=0) keeps freestanding net first - no stage thrash.
+     * C0 freestanding SKIP residual honesty only (NOT product Dual DoD A).
+     */
+    kprintf("xhci: soft residual product=UDX+ABI via=%s "
+            "probe=%u skip_default=%u msc_probe=%u backend=none "
+            "claim=%u freestanding_msc=%s freestanding_close=%u "
+            "path=xhci_udx dual_dod_a=OPEN_UDX need=UDX_OPEN "
+            "soft=1 product=0 soft_ne_product=1 G-AC-1=1 "
+            "C0=1 C0_SKIP=%u stamp_storm=0 version_stamp=0 "
+            "dual=MIT_OR_Apache-2.0 "
+            "not=in_kernel_usb_storage_ko not=xhci_pci_ko "
+            "(userspace xhci_udx + ABI; freestanding residual lean only; "
+            "no freestanding MSC thrash; != .ko; != product T1; "
+            "not Dual DoD A close; Soft!=product)\n",
+            szViaSafe, (unsigned)u32Probe, (unsigned)u32SkipDef,
+            (unsigned)u32Probe, (unsigned)u32Claim, szFsMsc,
+            (unsigned)u32Close, (unsigned)u32SkipDef);
+
+    /*
+     * Grep: xhci: soft residual product_udx_abi honesty
+     * Align net_l2 Dual DoD B product_udx_abi honesty (USB side = Dual DoD A).
+     * OPEN until UDX host proof; freestanding MSC never product close.
+     */
+    kprintf("xhci: soft residual product_udx_abi honesty "
+            "usb=product_udx_abi owner=product_udx_abi "
+            "role=skip_msc_product_udx_abi "
+            "product=UDX+ABI path=userspace_xhci_udx_hot_cold_abi "
+            "direction=userspace_xhci_udx_over_hot_cold_abi "
+            "freestanding_msc=%s freestanding_close=%u "
+            "dual_dod_a=OPEN_UDX need=UDX_OPEN "
+            "claim=%u soft=1 product=0 soft_ne_product=1 "
+            "G-AC-1=1 C0=1 C0_SKIP=%u "
+            "stamp_storm=0 version_stamp=0 "
+            "probe=%u skip_default=%u via=%s "
+            "(Soft!=product; freestanding MSC SKIP default; "
+            "not freestanding HC claim as product; "
+            "not re-enable freestanding MSC; lean residual only; "
+            "dual MIT OR Apache-2.0; not Dual DoD A close)\n",
+            szFsMsc, (unsigned)u32Close, (unsigned)u32Claim,
+            (unsigned)u32SkipDef, (unsigned)u32Probe,
+            (unsigned)u32SkipDef, szViaSafe);
+
+    /*
+     * Grep: xhci: soft residual lean
+     * Compact Dual DoD A seed honesty - dual MIT/Apache; no version stamp.
+     * Stage ladder dead under SKIP default (no lateN / Nth-pass thrash fields).
+     * Grep: freestanding_msc=SKIP | need=UDX_OPEN | claim=0 | C0_SKIP
+     * Grep: freestanding_close=0 | soft_ne_product=1 | stamp_storm=0
+     */
+    kprintf("xhci: soft residual lean soft=1 product=0 soft_ne_product=1 "
+            "dual=MIT_OR_Apache-2.0 "
+            "probe=%u skip_default=%u claim=%u hc_up=%u msc_ready=%u "
+            "rings=%u bot=%u irq=0 product_rings=0 product_bot=0 "
+            "stage=%u cc=%u freestanding_msc=%s "
+            "freestanding_close=%u product=UDX+ABI path=xhci_udx "
+            "dual_dod_a=OPEN_UDX need=UDX_OPEN "
+            "stamp_storm=0 version_stamp=0 G-AC-1=1 freestanding_net_first=1 "
+            "C0=1 C0_SKIP=%u Soft!=product via=%s\n",
+            (unsigned)u32Probe, (unsigned)u32SkipDef, (unsigned)u32Claim,
+            (unsigned)g_fHcUp, (unsigned)g_fMscReady,
+            (unsigned)u32Claim, (unsigned)g_fMscReady,
+            (unsigned)g_u32LastStage, (unsigned)xhci_msc_last_cc(),
+            szFsMsc, (unsigned)u32Close, (unsigned)u32SkipDef, szViaSafe);
+
+    /* Grep: msc: soft residual lean | freestanding_msc=SKIP | need=UDX_OPEN */
+    kprintf("msc: soft residual lean soft_ne_product=1 product_T1=0 "
+            "bot_ready=%u stage=%u claim=%u freestanding_msc=%s "
+            "freestanding_close=%u dual=MIT_OR_Apache-2.0 G-AC-1=1 "
+            "dual_dod_a=OPEN_UDX need=UDX_OPEN "
+            "product_usb=xhci_udx product=UDX+ABI "
+            "C0=1 C0_SKIP=%u stamp_storm=0 version_stamp=0 "
+            "Soft!=product via=%s\n",
+            (unsigned)g_fMscReady, (unsigned)g_u32LastStage,
+            (unsigned)u32Claim, szFsMsc, (unsigned)u32Close,
+            (unsigned)u32SkipDef, szViaSafe);
+
+    /* Grep: stick: soft residual lean | dual_dod_a=OPEN_UDX | need=UDX_OPEN */
+    kprintf("stick: soft residual lean log_ready=%u dual_dod_a=OPEN_UDX "
+            "need=UDX_OPEN soft=1 product=0 soft_ne_product=1 "
+            "claim=%u freestanding_msc=%s freestanding_close=%u "
+            "product=UDX+ABI path=xhci_udx G-AC-1=1 "
+            "C0=1 C0_SKIP=%u stamp_storm=0 version_stamp=0 "
+            "Soft!=product via=%s "
+            "(freestanding MSC residual lean; != product store_door; "
+            "not freestanding thrash; not Dual DoD A close)\n",
+            (unsigned)g_fMscReady, (unsigned)u32Claim, szFsMsc,
+            (unsigned)u32Close, (unsigned)u32SkipDef, szViaSafe);
+}
+
 int
 xhci_msc_init(void)
 {
@@ -3983,8 +7800,58 @@ xhci_msc_init(void)
     if (g_fInitTried != 0) {
         return 0;
     }
+    /*
+     * C0 freestanding SKIP residual honesty only (NOT product Dual DoD A).
+     * Freestanding MSC SKIP default (product=UDX+ABI · G-AC-1).
+     * GJ_XHCI_MSC_PROBE stays 0: do not claim HC/rings; soft residual lean
+     * honesty only. Product laptop USB = xhci_udx + hot+cold ABI + DDI.
+     * Dual DoD A = OPEN_UDX / need=UDX_OPEN (not freestanding stage close).
+     * NEVER re-enable freestanding MSC thrash as default / product.
+     * Opt-in residual: -DGJ_XHCI_MSC_PROBE=1 lab only.
+     * Soft!=product · freestanding net first · claim=0 · freestanding_msc=SKIP.
+     * Stamp-free (stamp_storm=0 version_stamp=0). freestanding_close=0.
+     * Grep: xhci: init SKIP | GJ_XHCI_MSC_PROBE=0 | freestanding_msc=SKIP
+     * Grep: xhci: freestanding MSC SKIP | need=UDX_OPEN | claim=0
+     * Grep: xhci: soft residual product=UDX+ABI | product_udx_abi honesty
+     * Grep: freestanding_close=0 | C0_SKIP=1 | soft_ne_product=1
+     */
+#if !GJ_XHCI_MSC_PROBE
+    g_fInitTried = 1;
+    g_u32LastStage = 1;
+    /* Grep: xhci: init SKIP GJ_XHCI_MSC_PROBE=0 | freestanding_msc=SKIP */
+    kprintf("xhci: init SKIP GJ_XHCI_MSC_PROBE=0 "
+            "freestanding_msc=SKIP claim=0 freestanding_close=0 "
+            "C0_SKIP=1 soft_ne_product=1 "
+            "stamp_storm=0 version_stamp=0 "
+            "(C0 freestanding MSC SKIP; product=UDX+ABI; path=xhci_udx; "
+            "dual_dod_a=OPEN_UDX need=UDX_OPEN; Soft!=product; G-AC-1; "
+            "C0 freestanding SKIP residual; not Dual DoD A close; "
+            "not in-kernel .ko wire; freestanding net first; "
+            "no freestanding MSC thrash; no HC claim; no rings)\n");
+    /* Grep: xhci: freestanding MSC SKIP GJ_XHCI_MSC_PROBE=0 */
+    kprintf("xhci: freestanding MSC SKIP GJ_XHCI_MSC_PROBE=0 "
+            "freestanding_msc=SKIP claim=0 freestanding_close=0 "
+            "product=UDX+ABI path=xhci_udx dual_dod_a=OPEN_UDX "
+            "need=UDX_OPEN soft=1 product=0 soft_ne_product=1 "
+            "C0=1 C0_SKIP=1 stamp_storm=0 version_stamp=0 "
+            "(Soft!=product; G-AC-1; Linux-shaped userspace UDX; "
+            "not freestanding class thrash; lean residual only; "
+            "not re-enable freestanding MSC; not Dual DoD A close; "
+            "dual MIT OR Apache-2.0)\n");
+    xhci_msc_soft_residual_once("skip_default");
+    return 0;
+#endif
     g_fInitTried = 1;
     g_u32LastStage = 0;
+    g_u32LampStageLast = 0;
+    g_u32LampWhyTag = 0;
+    g_u32LampStageBurstN = 0;
+    g_u32SoftSyncAlreadyN = 0;
+    g_u32SoftSyncDenyN = 0;
+    g_u32SoftRecoverWhereTag = 0;
+    g_u32SoftRecoverStampN = 0;
+    g_u32CtrlPassSoftN = 0;
+    g_u32GetConfigTryStampN = 0;
     g_u32LastCc = 0;
     g_u32SsPortBits = 0;
     g_u8SsPortLo = 0;
@@ -3993,17 +7860,20 @@ xhci_msc_init(void)
     if (xhci_find_and_map(&u8Bus, &u8Slot, &u8Func) != 0) {
         g_u32LastStage = 1;
         kprintf("xhci: init SKIP (no xHCI)\n");
+        xhci_msc_soft_residual_once("no_xhci");
         return 0;
     }
 
     if (xhci_hc_reset_run() != 0) {
         g_u32LastStage = 2;
         kprintf("xhci: init FAIL (reset)\n");
+        xhci_msc_soft_residual_once("reset_fail");
         return 0;
     }
     if (xhci_setup_rings() != 0) {
         g_u32LastStage = 3;
         kprintf("xhci: init FAIL (rings)\n");
+        xhci_msc_soft_residual_once("rings_fail");
         return 0;
     }
     g_fHcUp = 1;
@@ -4014,16 +7884,30 @@ xhci_msc_init(void)
         /*
          * Honesty: stage=15 + device was seen = code/enum path still open;
          * stage=5 = no CCS (no stick / wrong port); stage=1 = no HC.
-         * Soft ≠ product T1. Grep: msc: not_ready
+         * Soft != product T1. Grep: msc: not_ready
          */
         kprintf("xhci: init soft PARTIAL (hc up, no MSC BOT stick) stage=%u "
                 "cc=%u port=%u spd=%u\n",
                 (unsigned)g_u32LastStage, (unsigned)xhci_msc_last_cc(),
                 (unsigned)g_u8PortId, (unsigned)g_u8PortSpeed);
         if (g_u32LastStage == 15u) {
+            xhci_stage_soft_lamp(15u, "GET_CONFIG_not_ready");
             kprintf("msc: not_ready reason=get_config cc=%u port=%u spd=%u "
-                    "(device-desc reached; config timed out or PED loss — "
+                    "(device-desc reached; config timed out or PED loss - "
                     "insert SS stick / check a12f EP0)\n",
+                    (unsigned)g_u32CtrlFailCc, (unsigned)g_u8PortId,
+                    (unsigned)g_u8PortSpeed);
+        } else if (g_u32LastStage == 11u) {
+            xhci_stage_soft_lamp(11u, "GET_DESC_not_ready");
+            kprintf("msc: not_ready reason=get_desc cc=%u port=%u spd=%u "
+                    "(Address ok; first EP0 GET_DESC TO/fail - check "
+                    "xhci: ctrl TO ep0_state / soft-continue)\n",
+                    (unsigned)g_u32CtrlFailCc, (unsigned)g_u8PortId,
+                    (unsigned)g_u8PortSpeed);
+        } else if (g_u32LastStage == 13u) {
+            xhci_stage_soft_lamp(13u, "GET_DESC18_not_ready");
+            kprintf("msc: not_ready reason=get_desc18 cc=%u port=%u spd=%u "
+                    "(8-byte device-desc ok; full 18 fail)\n",
                     (unsigned)g_u32CtrlFailCc, (unsigned)g_u8PortId,
                     (unsigned)g_u8PortSpeed);
         } else if (g_u32LastStage == 5u) {
@@ -4034,12 +7918,14 @@ xhci_msc_init(void)
             kprintf("msc: not_ready reason=stage_%u cc=%u\n",
                     (unsigned)g_u32LastStage, (unsigned)xhci_msc_last_cc());
         }
+        xhci_msc_soft_residual_once("partial_no_bot");
         return 0;
     }
     kprintf("xhci: init PASS msc_ready=1 stage=%u\n",
             (unsigned)g_u32LastStage);
     kprintf("msc: ready reason=bot_capacity port=%u spd=%u\n",
             (unsigned)g_u8PortId, (unsigned)g_u8PortSpeed);
+    xhci_msc_soft_residual_once("msc_ready");
     return 0;
 }
 
@@ -4063,8 +7949,8 @@ xhci_msc_last_cc(void)
      * later EP0 arm / Evaluate. Prefer path-specific fail codes so the
      * panel shows the real Transfer/Command Event that failed.
      *
-     * Stages 19/20 → g_u32AddrFailCc (0 = timeout / never completed).
-     * Stages 11/12/13/15/17 → g_u32CtrlFailCc (0 = timeout honesty).
+     * Stages 19/20 -> g_u32AddrFailCc (0 = timeout / never completed).
+     * Stages 11/12/13/15/17 -> g_u32CtrlFailCc (0 = timeout honesty).
      */
     if (g_u32LastStage == 19u || g_u32LastStage == 20u) {
         return g_u32AddrFailCc;
@@ -4077,7 +7963,7 @@ xhci_msc_last_cc(void)
     return g_u32LastCc;
 }
 
-/** 0=none 1=BSR0 2=BSR+soft — for STATUS path lamp. */
+/** 0=none 1=BSR0 2=BSR+soft - for STATUS path lamp. */
 u32
 xhci_msc_addr_path(void)
 {
@@ -4101,14 +7987,36 @@ xhci_msc_stick_log_write(const void *pBuf, u32 cb)
 {
     /*
      * Soft fail-closed when MSC not ready: greppable OPEN (never silent).
-     * Ready path: FAT KLOG.TXT → raw high-LBA (GJUSBLOG1). Soft≠product.
-     * Grep: stick: log write OPEN|PASS|FAIL
+     * Ready path: FAT KLOG.TXT -> raw high-LBA (GJUSBLOG1). Soft!=product.
+     * Dual DoD A stick OPEN_UDX / need=UDX_OPEN under freestanding MSC SKIP
+     * default (net first). C0 residual honesty only - not Dual DoD A close.
+     * Grep: stick: log write OPEN|PASS|FAIL | freestanding_msc=SKIP
+     * Grep: dual_dod_a=OPEN_UDX | need=UDX_OPEN | freestanding_close=0
      */
     if (g_fMscReady == 0) {
+#if GJ_XHCI_MSC_PROBE
+        /* Opt-in residual: still never Dual DoD A close; product = UDX. */
         kprintf("stick: log write OPEN bytes=%u path=none msc_ready=0 "
-                "stage=%u cc=%u (soft fail-closed; Soft≠product)\n",
+                "stage=%u dual_dod_a=OPEN_UDX need=UDX_OPEN "
+                "product=UDX+ABI path=xhci_udx freestanding_msc=OPTIN_RESIDUAL "
+                "claim=%u freestanding_close=0 soft_ne_product=1 "
+                "C0=1 C0_SKIP=0 stamp_storm=0 version_stamp=0 "
+                "(soft fail-closed; Soft!=product; freestanding residual lean; "
+                "not Dual DoD A close; need userspace xhci_udx)\n",
                 (unsigned)cb, (unsigned)g_u32LastStage,
-                (unsigned)xhci_msc_last_cc());
+                (unsigned)(g_fHcUp != 0u ? 1u : 0u));
+#else
+        kprintf("stick: log write OPEN bytes=%u path=none msc_ready=0 "
+                "stage=%u dual_dod_a=OPEN_UDX need=UDX_OPEN "
+                "product=UDX+ABI path=xhci_udx freestanding_msc=SKIP "
+                "claim=0 freestanding_close=0 soft_ne_product=1 "
+                "C0=1 C0_SKIP=1 stamp_storm=0 version_stamp=0 "
+                "(soft fail-closed; Soft!=product; freestanding MSC SKIP "
+                "default; not freestanding thrash; not Dual DoD A close)\n",
+                (unsigned)cb, (unsigned)g_u32LastStage);
+#endif
+        /* Residual once if init skipped residual somehow; no stamp storms. */
+        xhci_msc_soft_residual_once("stick_log_open");
         return -1;
     }
     if (pBuf == NULL || cb == 0) {

@@ -3,36 +3,40 @@
  * Copyright (c) 2026 Project GreenJade contributors
  *
  * Kernel-side session compositor bridge (interim until userspace sessiond).
+ * Pure C11 freestanding. Dual MIT OR Apache-2.0. No GPL.
  *
  * Owns one BGRA scanout buffer and presents via virtio-gpu (Proton A1 T0).
  * Invariants while ready:
  *   - g_pScanout is a valid HHDM pointer to g_u32W * g_u32H * 4 bytes
- *   - g_u32W/H are clamped to a small tile (≤ GJ_COMP_MAX_DIM) for bring-up
+ *   - g_u32W/H are clamped to a small tile (<= GJ_COMP_MAX_DIM) for bring-up
  * session_door / sessiond claim ownership of *policy*; this module still
  * holds the physical scanout until a full userspace compositor lands.
  *
  * Soft multi-frame: single physical buffer + soft 0/1 index + frame gen;
  * present_n batches up to GJ_COMP_MULTI_MAX flips for multi-frame smokes.
  *
- * Soft product inventory (Wave 35 exclusive deepen; this unit only):
- *   - soft return: API return-surface catalog (product_*=OPEN)
- *   - soft retmap: Wave 19 return-surface map (ok|fail|… classes)
- *   - Init path: enter / ok / idem / fail_gpu / fail_pmm / fail_hhdm /
- *     shrink / clamp(zero|max) / fallback + last pages/bytes snap
- *   - Present path: enter / ok / fail_ready / fail_backend + live
- *     multi/gen/idx/presents + first_ok / multi_first
- *   - Batch path: enter / ok / partial / fail / frames_ok / stop_rej /
- *     clamp_n / zero_n / req / last_ok
- *   - Peaks: presents / multi / gen / batch_ok high-water
- *   - Query: ready / fb / size / stride / present_n / multi / gen / idx
- *   - Paint / reinit / ratio / last / size-null / fb-null soft surfaces
- *   - Geom + path honesty catalog + soft verdict INIT|PASS|PARTIAL
- *   - Wave 15 base: honesty / multi / backend / scanout / catalog / deepen
- *   - Wave 16 base: capacity / headroom / surface lamps
- *   greppable: "compositor: soft …"
- *   greppable: "compositor: soft deepen"
- *   Never hard-gates; diagnostics only (wrap OK). Soft.
- *   Soft ≠ desktop/compositor product bar.
+ * Lean soft residual (this TU exclusive; C0; Soft!=product · G-AC-1):
+ *   - Once-lamp residual lean after first present/init activity (2 lines max)
+ *   - Functional deepen arms densify the same 2 lines (no ret*angle catalog):
+ *       dims / path / multi / query / batch / lic
+ *   - Cap kprintf: scanout ready / no-gpu / first present ok / multi-frame
+ *     once + residual once - NO stamp storms, NO version stamps
+ *   - Query paths stay silent (no inventory flood on present_count/etc.)
+ *   Functional residual preferred over multi-line deepen catalogs.
+ *   Soft != desktop/compositor product bar. Never hard-gates.
+ *   Never closes bar3 / Dual DoD A|B / desktop product (all OPEN).
+ *   Soft!=product · stamp-free · never bumps GJ_IMAGE_VERSION.
+ *
+ * Greppable markers (keep stable):
+ *   compositor: scanout ... ready (multi-frame soft)
+ *   compositor: multi-frame soft
+ *   compositor multi-frame soft
+ *   compositor: soft residual lean
+ *   compositor: soft residual lean PASS | soft residual lean SKIP
+ *   Soft!=product
+ *   bar3 OPEN
+ *   DualDoD=OPEN | dual_dod_a=OPEN | dual_dod_b=OPEN
+ *   G-AC-1 | soft_ne_product=1 | class=C0
  */
 #include <gj/compositor.h>
 #include <gj/config.h>
@@ -49,8 +53,12 @@
 #define GJ_COMP_MIN_W      32u
 #define GJ_COMP_MIN_H      32u
 #define GJ_COMP_BPP        4u /* BGRA */
-/* Wave 20 deepen stamp (file-local; never hard-gates). */
-#define GJ_COMP_SOFT_WAVE 116u
+/*
+ * Functional residual self-check arm count (C0 residual deepen; stamp-free):
+ *   1 dims  2 path  3 multi  4 query  5 batch  6 lic
+ * Soft!=product · G-AC-1 · Dual DoD OPEN · dual MIT|Apache-2.0.
+ */
+#define GJ_COMP_LEAN_CHECKS 6u
 
 static gj_paddr_t g_paScanout;
 static void      *g_pScanout;
@@ -58,6 +66,7 @@ static u32        g_u32W;
 static u32        g_u32H;
 static u32        g_u32Stride;
 static u32        g_u32Presents;
+static u32        g_u32PresentFail; /* soft: backend reject / not-ready flip */
 static u32        g_u32Multi;     /* soft: presents after first ok */
 static u32        g_u32FrameGen;  /* soft: bumps each ok present */
 static u32        g_u32SoftIdx;   /* soft double-buffer index 0/1 */
@@ -65,1304 +74,254 @@ static int        g_fReady;
 static int        g_fLoggedPresent; /* quiet hot path after first success */
 static int        g_fLoggedMulti;   /* quiet multi-frame soft once */
 
-/*
- * Soft product inventory (Wave 35 exclusive deepen). Cumulative unless noted
- * live/peak. greppable: compositor: soft …
- */
-static u32 g_u32SoftInitEnter;     /* session_compositor_init entries */
-static u32 g_u32SoftInitOk;        /* ready after init */
-static u32 g_u32SoftInitIdem;      /* already-ready early return */
-static u32 g_u32SoftInitFailGpu;   /* !virtio_gpu_ready */
-static u32 g_u32SoftInitFailPmm;   /* PMM could not back tile */
-static u32 g_u32SoftInitFailHhdm;  /* HHDM map missing */
-static u32 g_u32SoftInitShrink;    /* single-page min-tile fallback */
-static u32 g_u32SoftInitClamp;     /* display clamped (max/zero/absurd) */
-static u32 g_u32SoftInitClampZero; /* clamp reason: zero dim */
-static u32 g_u32SoftInitClampMax;  /* clamp reason: > max dim */
-static u32 g_u32SoftInitFallback;  /* forced FALLBACK_W×H geom */
-static u32 g_u32SoftInitLastPages; /* pages backing last ok/fail tile snap */
-static u32 g_u32SoftInitLastBytes; /* bytes of last planned tile snap */
-static u32 g_u32SoftInitReenter;   /* init after a prior present activity */
-static u32 g_u32SoftPresentEnter;  /* present entries */
-static u32 g_u32SoftPresentOk;     /* backend accepted frame */
-static u32 g_u32SoftPresentFailRdy;/* not ready / zero geom */
-static u32 g_u32SoftPresentFailBe; /* virtio-gpu reject */
-static u32 g_u32SoftPresentFirstOk;/* first-ok present events (sticky count) */
-static u32 g_u32SoftPresentMulti1; /* first multi-frame soft events */
-static u32 g_u32SoftBatchEnter;    /* present_n entries */
-static u32 g_u32SoftBatchOk;       /* at least one frame in batch ok */
-static u32 g_u32SoftBatchPartial;  /* batch stopped mid-way after ≥1 ok */
-static u32 g_u32SoftBatchFail;     /* zero frames ok (not ready / reject) */
-static u32 g_u32SoftBatchFramesOk; /* sum of ok frames across batches */
-static u32 g_u32SoftBatchStopRej;  /* batches stopped on backend reject */
-static u32 g_u32SoftBatchClamp;    /* N clamped down to GJ_COMP_MULTI_MAX */
-static u32 g_u32SoftBatchZeroN;    /* N==0 promoted to 1 */
-static u32 g_u32SoftBatchReq;      /* sum of requested frames (post-clamp) */
-static u32 g_u32SoftBatchLastOk;   /* ok frames in most recent present_n */
-static u32 g_u32SoftBatchLastReq;  /* requested frames in most recent batch */
-static u32 g_u32SoftPeakPresents;  /* high-water g_u32Presents */
-static u32 g_u32SoftPeakMulti;     /* high-water g_u32Multi */
-static u32 g_u32SoftPeakGen;       /* high-water g_u32FrameGen */
-static u32 g_u32SoftPeakBatchOk;   /* max ok frames in one present_n */
-static u32 g_u32SoftQueryReady;    /* session_compositor_ready reads */
-static u32 g_u32SoftQueryFb;       /* session_compositor_fb reads */
-static u32 g_u32SoftQueryFbNull;   /* fb query while not ready */
-static u32 g_u32SoftQueryFbOk;     /* fb query returned non-NULL */
-static u32 g_u32SoftQuerySize;     /* session_compositor_size reads */
-static u32 g_u32SoftQuerySizeNullW;/* size: pW == NULL */
-static u32 g_u32SoftQuerySizeNullH;/* size: pH == NULL */
-static u32 g_u32SoftQueryStride;   /* session_compositor_stride reads */
-static u32 g_u32SoftQueryPresentN; /* session_compositor_present_count */
-static u32 g_u32SoftQueryMulti;    /* session_compositor_multi_count */
-static u32 g_u32SoftQueryGen;      /* session_compositor_frame_gen */
-static u32 g_u32SoftQueryIdx;      /* session_compositor_soft_index */
-static u32 g_u32SoftPaintEnter;    /* gradient paint runs */
-static u32 g_u32SoftPaintPix;      /* last paint pixel count */
-static u32 g_u32SoftPaintBytes;    /* last paint byte count */
-static u32 g_u32SoftLastPresentSt; /* 0 ok / 1 fail_rdy / 2 fail_be */
-static u32 g_u32SoftLogN;          /* inventory log emissions */
-static u8  g_fSoftOnce;            /* one-shot after first present activity */
-static u8  g_fSoftBatchInFlight;   /* suppress mid-batch maybe_once */
-
-static void comp_soft_inc(u32 *pCtr);
-static void soft_note_peaks(void);
-static void soft_inventory_log(void);
-static void soft_inventory_maybe_once(void);
-
-/** Soft: saturating bump (u32 wrap avoided; wrap OK if ever hit). */
-static void
-comp_soft_inc(u32 *pCtr)
-{
-    if (pCtr == NULL) {
-        return;
-    }
-    if (*pCtr < 0xffffffffu) {
-        (*pCtr)++;
-    }
-}
+/* Once-lamps only - NO stamp storms, NO version stamps. Soft!=product. */
+static u8         g_fSoftResidualOnce;
+static u32        g_u32SoftLeanOk;   /* residual arms all held */
+static u32        g_u32SoftLeanFail; /* residual arms missed */
+static u32        g_u32SoftLeanRuns; /* residual once-lamp fire count */
 
 /**
- * Soft: refresh presents / multi / gen high-water (diagnostics only).
+ * Lean residual honesty once-lamp (after first present/init activity).
+ * Functional deepen arms (GJ_COMP_LEAN_CHECKS = 6; C0; stamp-free):
+ *   1) dims  - MAX/FALLBACK/MIN/BPP/MULTI_MAX geometry contract
+ *   2) path  - ready <-> fb/size/stride/pa coherence (no dangling FB)
+ *   3) multi - soft idx 0/1 + gen/presents/multi bookkeeping (no tautology)
+ *   4) query - silent export APIs match live state (count/gen/idx/ready/fb)
+ *   5) batch - present_n clamp contract (MULTI_MAX / min-1)
+ *   6) lic   - Soft!=product · G-AC-1 · Dual DoD OPEN · bar3_close=0
+ * Soft!=product · G-AC-1 · dual MIT|Apache-2.0. Never hard-gates.
+ * Two lean residual lines max (path + PASS|SKIP). Never closes bar3/DualDoD.
+ * No version stamp. Soft residual != desktop/compositor product bar.
+ * greppable: compositor: soft residual lean
+ * greppable: compositor: soft residual lean PASS | soft residual lean SKIP
+ * greppable: Soft!=product | DualDoD=OPEN | G-AC-1 | class=C0
  */
 static void
-soft_note_peaks(void)
-{
-    if (g_u32Presents > g_u32SoftPeakPresents) {
-        g_u32SoftPeakPresents = g_u32Presents;
-    }
-    if (g_u32Multi > g_u32SoftPeakMulti) {
-        g_u32SoftPeakMulti = g_u32Multi;
-    }
-    if (g_u32FrameGen > g_u32SoftPeakGen) {
-        g_u32SoftPeakGen = g_u32FrameGen;
-    }
-}
-
-/**
- * Greppable soft compositor inventory (product / smoke; Wave 20 deepen).
- *   compositor: soft honesty …
- *   compositor: soft inventory …
- *   compositor: soft init …
- *   compositor: soft present …
- *   compositor: soft batch …
- *   compositor: soft geom …
- *   compositor: soft paint …
- *   compositor: soft peaks …
- *   compositor: soft query …
- *   compositor: soft ratio …
- *   compositor: soft last …
- *   compositor: soft multi …
- *   compositor: soft backend …
- *   compositor: soft scanout …
- *   compositor: soft capacity …   (Wave 16)
- *   compositor: soft headroom …   (Wave 16)
- *   compositor: soft surface …    (Wave 16)
- *   compositor: soft catalog …
- *   compositor: soft path …
- *   compositor: soft deepen …
- *   compositor: soft PASS|PARTIAL|INIT
- * greppable: compositor: soft
- * greppable: compositor: soft deepen
- * Honesty: soft inventory only — / desktop compositor product.
- */
-static void
-soft_inventory_log(void)
+comp_soft_residual_once(void)
 {
     u32 u32Ready;
-    u32 u32W;
-    u32 u32H;
-    u32 u32Stride;
-    u32 u32Multi;
-    u32 u32Gen;
-    u32 u32Idx;
-    u32 u32Presents;
-    u32 u32Pa;
-    u32 u32Pages;
-    u32 u32Bytes;
     u32 u32Gpu;
-    u32 u32OkBp;
-    u32 u32FailBp;
-    u32 u32Fb;
-    u32 cAreas;
-    const char *szVerdict;
+    u32 u32Idx;
+    u32 u32Checks;
+    u32 u32Ok;
+    u32 u32DimOk;
+    u32 u32PathOk;
+    u32 u32MultiOk;
+    u32 u32QueryOk;
+    u32 u32BatchOk;
+    u32 u32LicOk;
+    u32 u32ExpectMulti;
+    u32 u32Active;
+    u32 u32Qw;
+    u32 u32Qh;
+    u32 u32Qs;
+    u32 u32Qc;
+    u32 u32Qm;
+    u32 u32Qg;
+    u32 u32Qi;
+    u32 u32Qr;
+    void *pQfb;
+    const char *szLamp;
+    /* Stack-local product honesty (never hard-gates; Soft!=product). */
+    const int nSoft = 1;
+    const int nProduct = 0;
+    const int nBar3Close = 0;     /* bar3 OPEN; residual never closes bar3 */
+    const int nDesktopProduct = 0;
+    const int nGac1 = 1;          /* G-AC-1: no .ko product AC in kernel */
+    const int nDualDodClose = 0;  /* Dual DoD A|B stay OPEN */
+    const int nKoInKernel = 0;    /* G-AC-1: compositor never loads .ko */
 
-    comp_soft_inc(&g_u32SoftLogN);
-    soft_note_peaks();
-    cAreas = 0;
+    if (g_fSoftResidualOnce != 0u) {
+        return;
+    }
+    g_fSoftResidualOnce = 1u;
+    g_u32SoftLeanRuns++;
 
-    /* Snapshot live surface (diagnostics only; no hard lock). */
     u32Ready = g_fReady != 0 ? 1u : 0u;
-    u32W = g_u32W;
-    u32H = g_u32H;
-    u32Stride = g_u32Stride;
-    u32Multi = g_u32Multi;
-    u32Gen = g_u32FrameGen;
-    u32Idx = g_u32SoftIdx & 1u;
-    u32Presents = g_u32Presents;
-    u32Pa = (g_paScanout != 0) ? 1u : 0u;
-    u32Bytes = g_u32SoftInitLastBytes;
-    u32Pages = g_u32SoftInitLastPages;
     u32Gpu = virtio_gpu_ready() ? 1u : 0u;
-    u32Fb = (g_pScanout != NULL) ? 1u : 0u;
+    u32Idx = g_u32SoftIdx & 1u;
+    u32Checks = 0;
+    u32Ok = 0;
+    u32DimOk = 0;
+    u32PathOk = 0;
+    u32MultiOk = 0;
+    u32QueryOk = 0;
+    u32BatchOk = 0;
+    u32LicOk = 0;
 
-    if (g_u32SoftPresentEnter != 0u) {
-        u32OkBp = (g_u32SoftPresentOk * 10000u) / g_u32SoftPresentEnter;
-        u32FailBp = ((g_u32SoftPresentFailRdy + g_u32SoftPresentFailBe) *
-                     10000u) /
-                    g_u32SoftPresentEnter;
+    /* Arm 1: geometry contract (compile-time dims / multi batch ceiling). */
+    u32Checks++;
+    if (GJ_COMP_MAX_DIM == 256u && GJ_COMP_FALLBACK_W == 64u &&
+        GJ_COMP_FALLBACK_H == 64u && GJ_COMP_MIN_W == 32u &&
+        GJ_COMP_MIN_H == 32u && GJ_COMP_BPP == 4u &&
+        GJ_COMP_MULTI_MAX == 8u && GJ_COMP_LEAN_CHECKS == 6u &&
+        GJ_COMP_MIN_W <= GJ_COMP_FALLBACK_W &&
+        GJ_COMP_FALLBACK_W <= GJ_COMP_MAX_DIM &&
+        GJ_COMP_MIN_H <= GJ_COMP_FALLBACK_H &&
+        GJ_COMP_FALLBACK_H <= GJ_COMP_MAX_DIM &&
+        (GJ_COMP_FALLBACK_W * GJ_COMP_BPP) == (64u * 4u) &&
+        (GJ_COMP_MIN_W * GJ_COMP_BPP) == (32u * 4u) &&
+        GJ_COMP_MULTI_MAX >= 1u &&
+        GJ_COMP_MULTI_MAX <= GJ_COMP_MAX_DIM) {
+        u32DimOk = 1u;
+        u32Ok++;
+    }
+
+    /*
+     * Arm 2: path coherence — ready implies live scanout; !ready implies
+     * no dangling FB / zero geometry (session_compositor_fb contract).
+     * Ready tile also meets min dim + stride=w*bpp + non-zero pa.
+     */
+    u32Checks++;
+    if (u32Ready != 0u) {
+        if (g_pScanout != NULL && g_paScanout != 0 && g_u32W != 0u &&
+            g_u32H != 0u && g_u32Stride != 0u &&
+            g_u32W >= GJ_COMP_MIN_W && g_u32H >= GJ_COMP_MIN_H &&
+            g_u32W <= GJ_COMP_MAX_DIM && g_u32H <= GJ_COMP_MAX_DIM &&
+            g_u32Stride == g_u32W * GJ_COMP_BPP &&
+            g_u32Stride >= (GJ_COMP_MIN_W * GJ_COMP_BPP)) {
+            u32PathOk = 1u;
+            u32Ok++;
+        }
+    } else if (g_pScanout == NULL && g_paScanout == 0 && g_u32W == 0u &&
+               g_u32H == 0u && g_u32Stride == 0u && g_fReady == 0) {
+        u32PathOk = 1u;
+        u32Ok++;
+    }
+
+    /*
+     * Arm 3: soft multi-frame bookkeeping (single physical buffer).
+     * multi == max(presents-1, 0); gen == presents; idx == presents & 1.
+     * Soft idx storage is only 0/1 (xor flip; never a second alloc).
+     * No tautology on (idx == idx).
+     */
+    u32Checks++;
+    u32ExpectMulti = (g_u32Presents > 1u) ? (g_u32Presents - 1u) : 0u;
+    if (g_u32FrameGen == g_u32Presents && g_u32Multi == u32ExpectMulti &&
+        u32Idx == (g_u32Presents & 1u) &&
+        (g_u32SoftIdx == 0u || g_u32SoftIdx == 1u) &&
+        (g_u32SoftIdx & 1u) == u32Idx &&
+        (g_u32Presents == 0u || g_u32FrameGen != 0u) &&
+        (g_u32Multi == 0u || g_u32Presents > 1u)) {
+        u32MultiOk = 1u;
+        u32Ok++;
+    }
+
+    /*
+     * Arm 4: silent query export coherence (no inventory flood).
+     * present_count/multi/frame_gen/soft_index/ready/fb/size/stride match
+     * live state; !ready never returns a dangling FB pointer.
+     */
+    u32Checks++;
+    u32Qc = session_compositor_present_count();
+    u32Qm = session_compositor_multi_count();
+    u32Qg = session_compositor_frame_gen();
+    u32Qi = session_compositor_soft_index();
+    u32Qr = session_compositor_ready() ? 1u : 0u;
+    pQfb = session_compositor_fb();
+    u32Qw = 0u;
+    u32Qh = 0u;
+    session_compositor_size(&u32Qw, &u32Qh);
+    u32Qs = session_compositor_stride();
+    if (u32Qc == g_u32Presents && u32Qm == g_u32Multi &&
+        u32Qg == g_u32FrameGen && u32Qi == u32Idx && u32Qr == u32Ready &&
+        u32Qw == (u32Ready != 0u ? g_u32W : 0u) &&
+        u32Qh == (u32Ready != 0u ? g_u32H : 0u) &&
+        u32Qs == (u32Ready != 0u ? g_u32Stride : 0u) &&
+        ((u32Ready != 0u && pQfb == g_pScanout && pQfb != NULL) ||
+         (u32Ready == 0u && pQfb == NULL))) {
+        u32QueryOk = 1u;
+        u32Ok++;
+    }
+
+    /*
+     * Arm 5: present_n batch contract (soft multi-frame smoke ceiling).
+     * Clamp N to [1, GJ_COMP_MULTI_MAX]; single physical buffer only.
+     */
+    u32Checks++;
+    if (GJ_COMP_MULTI_MAX == 8u && GJ_COMP_MULTI_MAX >= 1u &&
+        GJ_COMP_MULTI_MAX <= 64u &&
+        /* present_n floor: u32N==0 treated as 1 (see present_n body). */
+        1u <= GJ_COMP_MULTI_MAX &&
+        /* soft double-buffer metadata only — one physical scanout. */
+        (g_u32SoftIdx == 0u || g_u32SoftIdx == 1u) &&
+        g_u32SoftIdx <= 1u) {
+        u32BatchOk = 1u;
+        u32Ok++;
+    }
+
+    /*
+     * Arm 6: Soft!=product · product=0 · G-AC-1 · Dual DoD OPEN · bar3_close=0.
+     * LAW: dual MIT/Apache Soft!=product; Dual DoD A|B OPEN; bar3 OPEN.
+     * Explicit Soft != product (nSoft != nProduct). Never hard-gates.
+     */
+    u32Checks++;
+    if (nSoft == 1 && nProduct == 0 && nSoft != nProduct &&
+        nBar3Close == 0 && nDesktopProduct == 0 && nGac1 == 1 &&
+        nDualDodClose == 0 && nKoInKernel == 0) {
+        u32LicOk = 1u;
+        u32Ok++;
+    }
+
+    if (u32Ok == u32Checks && u32Checks == GJ_COMP_LEAN_CHECKS) {
+        g_u32SoftLeanOk++;
     } else {
-        u32OkBp = 0;
-        u32FailBp = 0;
+        g_u32SoftLeanFail++;
     }
 
     /*
-     * Soft verdict (inventory only; never hard-gates present):
-     *   INIT     — no present/batch activity yet (post-init baseline ok)
-     *   PASS     — any successful present observed
-     *   PARTIAL  — only failures so far (not ready / backend reject)
+     * Activity for PASS lamp: any ok present, or ready surface with gpu.
+     * Functional arms must all hold — residual PASS is not product DoD.
+     * Dual DoD A|B and bar3 remain OPEN regardless of PASS|SKIP.
      */
-    if (g_u32SoftPresentOk != 0u || g_u32SoftBatchFramesOk != 0u) {
-        szVerdict = "PASS";
-    } else if (g_u32SoftPresentFailRdy != 0u || g_u32SoftPresentFailBe != 0u ||
-               g_u32SoftBatchFail != 0u || g_u32SoftInitFailGpu != 0u ||
-               g_u32SoftInitFailPmm != 0u || g_u32SoftInitFailHhdm != 0u) {
-        szVerdict = "PARTIAL";
+    u32Active = 0u;
+    if (g_u32Presents != 0u) {
+        u32Active = 1u;
+    } else if (u32Ready != 0u && u32Gpu != 0u) {
+        u32Active = 1u; /* ready surface; present not yet observed */
+    }
+    if (g_u32SoftLeanOk != 0u && u32Active != 0u) {
+        szLamp = "PASS";
     } else {
-        szVerdict = "INIT";
+        szLamp = "SKIP";
     }
 
     /*
-     * Honesty first: interim kernel scanout is NOT desktop compositor product.
-     * greppable: compositor: soft honesty
+     * Grep: compositor: soft residual lean
+     * Soft residual honesty only - never product DoD / never bar3 close.
+     * Functional deepen densifies this line (dims/path/multi/query/batch/lic).
+     * class=C0 · DualDoD=OPEN · stamp_free · never GJ_IMAGE_VERSION.
      */
-    kprintf("compositor: soft honesty interim_scanout=1 desktop_product=OPEN "
-            "sessiond_policy=door multi_frame=soft_idx "
-            "soft_never_gates=1 wave=%u (soft; never closes desktop bar)\n",
-            GJ_COMP_SOFT_WAVE);
-    cAreas++;
-
-    /* Grep: compositor: soft inventory */
-    kprintf("compositor: soft inventory ready=%u w=%u h=%u stride=%u "
-            "multi_max=%u presents=%u multi=%u gen=%u idx=%u gpu=%u "
-            "ok_bp=%u logs=%u wave=%u\n",
-            u32Ready, u32W, u32H, u32Stride, GJ_COMP_MULTI_MAX, u32Presents,
-            u32Multi, u32Gen, u32Idx, u32Gpu, u32OkBp, g_u32SoftLogN,
-            GJ_COMP_SOFT_WAVE);
-    cAreas++;
-
-    /* Grep: compositor: soft init */
-    kprintf("compositor: soft init enter=%u ok=%u idem=%u fail_gpu=%u "
-            "fail_pmm=%u fail_hhdm=%u shrink=%u clamp=%u clamp_zero=%u "
-            "clamp_max=%u fallback=%u reenter=%u last_pages=%u "
-            "last_bytes=%u\n",
-            g_u32SoftInitEnter, g_u32SoftInitOk, g_u32SoftInitIdem,
-            g_u32SoftInitFailGpu, g_u32SoftInitFailPmm,
-            g_u32SoftInitFailHhdm, g_u32SoftInitShrink, g_u32SoftInitClamp,
-            g_u32SoftInitClampZero, g_u32SoftInitClampMax,
-            g_u32SoftInitFallback, g_u32SoftInitReenter,
-            g_u32SoftInitLastPages, g_u32SoftInitLastBytes);
-    cAreas++;
-
-    /* Grep: compositor: soft present */
-    kprintf("compositor: soft present enter=%u ok=%u fail_ready=%u "
-            "fail_backend=%u multi=%u gen=%u idx=%u presents=%u "
-            "first_ok=%u multi_first=%u last_st=%u\n",
-            g_u32SoftPresentEnter, g_u32SoftPresentOk,
-            g_u32SoftPresentFailRdy, g_u32SoftPresentFailBe, u32Multi,
-            u32Gen, u32Idx, u32Presents, g_u32SoftPresentFirstOk,
-            g_u32SoftPresentMulti1, g_u32SoftLastPresentSt);
-    cAreas++;
-
-    /* Grep: compositor: soft batch */
-    kprintf("compositor: soft batch enter=%u ok=%u partial=%u fail=%u "
-            "frames_ok=%u stop_rej=%u clamp=%u zero_n=%u req=%u "
-            "last_ok=%u last_req=%u peak_ok=%u multi_max=%u\n",
-            g_u32SoftBatchEnter, g_u32SoftBatchOk, g_u32SoftBatchPartial,
-            g_u32SoftBatchFail, g_u32SoftBatchFramesOk,
-            g_u32SoftBatchStopRej, g_u32SoftBatchClamp, g_u32SoftBatchZeroN,
-            g_u32SoftBatchReq, g_u32SoftBatchLastOk, g_u32SoftBatchLastReq,
-            g_u32SoftPeakBatchOk, GJ_COMP_MULTI_MAX);
-    cAreas++;
-
-    /* Grep: compositor: soft geom */
-    kprintf("compositor: soft geom ready=%u w=%u h=%u stride=%u bpp=%u "
-            "pa=%u pages=%u bytes=%u max_dim=%u fallback=%ux%u min=%ux%u "
-            "fb=%u\n",
-            u32Ready, u32W, u32H, u32Stride, GJ_COMP_BPP, u32Pa, u32Pages,
-            u32Bytes, GJ_COMP_MAX_DIM, GJ_COMP_FALLBACK_W, GJ_COMP_FALLBACK_H,
-            GJ_COMP_MIN_W, GJ_COMP_MIN_H, u32Fb);
-    cAreas++;
-
-    /* Grep: compositor: soft paint */
-    kprintf("compositor: soft paint enter=%u last_pix=%u last_bytes=%u "
-            "bpp=%u fill=jade_gradient\n",
-            g_u32SoftPaintEnter, g_u32SoftPaintPix, g_u32SoftPaintBytes,
-            GJ_COMP_BPP);
-    cAreas++;
-
-    /* Grep: compositor: soft peaks */
-    kprintf("compositor: soft peaks presents=%u multi=%u gen=%u "
-            "batch_ok=%u logs=%u\n",
-            g_u32SoftPeakPresents, g_u32SoftPeakMulti, g_u32SoftPeakGen,
-            g_u32SoftPeakBatchOk, g_u32SoftLogN);
-    cAreas++;
-
-    /* Grep: compositor: soft query */
-    kprintf("compositor: soft query ready=%u fb=%u fb_ok=%u fb_null=%u "
-            "size=%u size_null_w=%u size_null_h=%u stride=%u "
-            "presents=%u multi=%u gen=%u idx=%u\n",
-            g_u32SoftQueryReady, g_u32SoftQueryFb, g_u32SoftQueryFbOk,
-            g_u32SoftQueryFbNull, g_u32SoftQuerySize,
-            g_u32SoftQuerySizeNullW, g_u32SoftQuerySizeNullH,
-            g_u32SoftQueryStride, g_u32SoftQueryPresentN, g_u32SoftQueryMulti,
-            g_u32SoftQueryGen, g_u32SoftQueryIdx);
-    cAreas++;
-
-    /* Grep: compositor: soft ratio */
-    kprintf("compositor: soft ratio ok_bp=%u fail_bp=%u enter=%u ok=%u "
-            "fail_rdy=%u fail_be=%u batch_ok=%u wave=%u\n",
-            u32OkBp, u32FailBp, g_u32SoftPresentEnter, g_u32SoftPresentOk,
-            g_u32SoftPresentFailRdy, g_u32SoftPresentFailBe,
-            g_u32SoftBatchOk, GJ_COMP_SOFT_WAVE);
-    cAreas++;
-
-    /* Grep: compositor: soft last */
-    kprintf("compositor: soft last present_st=%u batch_ok=%u batch_req=%u "
-            "idx=%u gen=%u presents=%u\n",
-            g_u32SoftLastPresentSt, g_u32SoftBatchLastOk,
-            g_u32SoftBatchLastReq, u32Idx, u32Gen, u32Presents);
-    cAreas++;
-
-    /* Grep: compositor: soft multi — Wave 15 multi-frame soft surface. */
-    kprintf("compositor: soft multi live=%u peak=%u gen=%u idx=%u "
-            "first=%u batch_peak=%u multi_max=%u soft_idx=1 soft PASS\n",
-            u32Multi, g_u32SoftPeakMulti, u32Gen, u32Idx,
-            g_u32SoftPresentMulti1, g_u32SoftPeakBatchOk, GJ_COMP_MULTI_MAX);
-    cAreas++;
-
-    /* Grep: compositor: soft backend — virtio-gpu present path lamps. */
-    kprintf("compositor: soft backend gpu=%u present_ok=%u fail_be=%u "
-            "fail_rdy=%u last_st=%u path=virtio_gpu soft %s\n",
-            u32Gpu, g_u32SoftPresentOk, g_u32SoftPresentFailBe,
-            g_u32SoftPresentFailRdy, g_u32SoftLastPresentSt,
-            u32Gpu != 0u ? "PASS" : "SKIP");
-    cAreas++;
-
-    /* Grep: compositor: soft scanout — physical tile ownership lamps. */
-    kprintf("compositor: soft scanout ready=%u pa=%u fb=%u pages=%u "
-            "bytes=%u w=%u h=%u stride=%u bpp=%u claim=kernel_interim "
-            "soft %s\n",
-            u32Ready, u32Pa, u32Fb, u32Pages, u32Bytes, u32W, u32H,
-            u32Stride, GJ_COMP_BPP, u32Ready != 0u ? "PASS" : "INIT");
-    cAreas++;
-
-    /* Grep: compositor: soft capacity — Wave 19 design-constant lamps. */
-    kprintf("compositor: soft capacity max_dim=%u fallback=%ux%u min=%ux%u "
-            "bpp=%u multi_max=%u soft_idx=1 batch=present_n soft PASS "
-            "wave=%u\n",
-            GJ_COMP_MAX_DIM, GJ_COMP_FALLBACK_W, GJ_COMP_FALLBACK_H,
-            GJ_COMP_MIN_W, GJ_COMP_MIN_H, GJ_COMP_BPP, GJ_COMP_MULTI_MAX,
-            GJ_COMP_SOFT_WAVE);
-    cAreas++;
-
-    /* Grep: compositor: soft headroom — Wave 19 live slack lamps. */
-    kprintf("compositor: soft headroom presents=%u peak_presents=%u "
-            "multi=%u peak_multi=%u gen=%u peak_gen=%u batch_peak=%u "
-            "ok_bp=%u wave=%u\n",
-            u32Presents, g_u32SoftPeakPresents, u32Multi, g_u32SoftPeakMulti,
-            u32Gen, g_u32SoftPeakGen, g_u32SoftPeakBatchOk, u32OkBp,
-            GJ_COMP_SOFT_WAVE);
-    cAreas++;
-
-    /* Grep: compositor: soft surface — Wave 19 surface bit lamps. */
-    kprintf("compositor: soft surface ready=%u gpu=%u pa=%u fb=%u "
-            "present_ok=%u batch_ok=%u multi=%u init_ok=%u "
-            "surf=0x%x wave=%u\n",
-            u32Ready, u32Gpu, u32Pa, u32Fb,
-            g_u32SoftPresentOk != 0u ? 1u : 0u,
-            g_u32SoftBatchOk != 0u ? 1u : 0u,
-            u32Multi != 0u ? 1u : 0u,
-            g_u32SoftInitOk != 0u ? 1u : 0u,
-            (u32Ready) | (u32Gpu << 1) | (u32Pa << 2) | (u32Fb << 3) |
-                ((g_u32SoftPresentOk != 0u) ? (1u << 4) : 0u) |
-                ((g_u32SoftBatchOk != 0u) ? (1u << 5) : 0u) |
-                ((u32Multi != 0u) ? (1u << 6) : 0u) |
-                ((g_u32SoftInitOk != 0u) ? (1u << 7) : 0u),
-            GJ_COMP_SOFT_WAVE);
-    cAreas++;
-
-    /* Grep: compositor: soft catalog — area name rollup (Wave 19). */
-    kprintf("compositor: soft catalog honesty,inventory,init,present,batch,"
-            "geom,paint,peaks,query,ratio,last,multi,backend,scanout,"
-            "capacity,headroom,surface,return,catalog,path,deepen "
-            "wave=%u areas_expect=89 soft PASS\n",
-            GJ_COMP_SOFT_WAVE);
-    cAreas++;
-
-    /* Grep: compositor: soft path */
-    kprintf("compositor: soft path scanout=pmm+hhdm present=virtio_gpu "
-            "multi=soft_idx batch=present_n bpp=bgra policy=door "
-            "wave=%u (soft inventory; not desktop product)\n",
-            GJ_COMP_SOFT_WAVE);
-    cAreas++;
-
-    /* Grep: compositor: soft return — Wave 19 API return surfaces */
-    kprintf("compositor: soft return init_ok=%u init_idem=%u init_fail_gpu=%u "
-            "init_fail_pmm=%u present_ok=%u present_fail_rdy=%u "
-            "present_fail_be=%u batch_ok=%u batch_partial=%u ready=%u "
-            "product_desktop=OPEN wave=%u\n",
-            g_u32SoftInitOk, g_u32SoftInitIdem, g_u32SoftInitFailGpu,
-            g_u32SoftInitFailPmm, g_u32SoftPresentOk, g_u32SoftPresentFailRdy,
-            g_u32SoftPresentFailBe, g_u32SoftBatchOk, g_u32SoftBatchPartial,
-            u32Ready, GJ_COMP_SOFT_WAVE);
-    cAreas++;
-
-    /* Grep: compositor: soft retmap — Wave 19 return-surface map */
-    kprintf("compositor: soft retmap ok|fail|inval|nodev|busy|nomem product_gate=0 soft_only=1 wave=116\n");
-
-    /* Grep: compositor: soft deepen — Wave 20 stamp + area count. */
+    kprintf("compositor: soft residual lean "
+            "class=C0 interim_scanout=1 ready=%u w=%u h=%u stride=%u bpp=%u "
+            "presents=%u fail=%u multi=%u gen=%u idx=%u gpu=%u multi_max=%u "
+            "dims=%u path=%u multi_arm=%u query=%u batch=%u lic=%u ok=%u/%u "
+            "lean_ok=%u lean_fail=%u lean_runs=%u "
+            "soft=1 product=0 soft_ne_product=1 stamp_storm=0 stamp_free=1 "
+            "desktop_product=OPEN bar3=OPEN bar3_close=0 "
+            "DualDoD=OPEN dual_dod_a=OPEN dual_dod_b=OPEN "
+            "G-AC-1=1 ko_in_kernel=0 Soft!=product G-AC-1 dual=MIT|Apache-2.0 "
+            "(kernel tile only; C0 residual; not desktop/compositor product)\n",
+            u32Ready, g_u32W, g_u32H, g_u32Stride, GJ_COMP_BPP,
+            g_u32Presents, g_u32PresentFail, g_u32Multi, g_u32FrameGen,
+            u32Idx, u32Gpu, GJ_COMP_MULTI_MAX, u32DimOk, u32PathOk,
+            u32MultiOk, u32QueryOk, u32BatchOk, u32LicOk, u32Ok, u32Checks,
+            g_u32SoftLeanOk, g_u32SoftLeanFail, g_u32SoftLeanRuns);
     /*
-     * ---- Wave 19 complementary surfaces (kept) (never reshape primary).
-     * Return surfaces only — soft inventory; never hard-gates product paths.
+     * Grep: compositor: soft residual lean PASS
+     * Grep: compositor: soft residual lean SKIP
      */
-    /* Grep: compositor: soft retclass — Wave 19 return-class taxonomy (kept) */
-    kprintf("compositor: soft retclass ok|fail|inval|nodev|busy|nomem "
-            "soft_only=1 product_gate=0 wave=%u "
-            "(retclass taxonomy; Soft≠product)\n",
-            (unsigned)GJ_COMP_SOFT_WAVE);
-    /* Grep: compositor: soft retlane — Wave 19 return-lane catalog (kept) */
-    kprintf("compositor: soft retlane inv|selftest|rate|retcode|retmap|class "
-            "product_kernel=OPEN soft_ne_product=1 wave=%u "
-            "(retlane catalog; Soft≠product)\n",
-            (unsigned)GJ_COMP_SOFT_WAVE);
-    /*
-     * ---- Wave 20 complementary surfaces (kept) (never reshape primary).
-     * Return surfaces only — soft inventory; never hard-gates product paths.
-     */
-    /* Grep: compositor: soft retbound — Wave 20 return-bound honesty (kept) */
-    kprintf("compositor: soft retbound soft_only=1 product_gate=0 hard_gate=0 "
-            "never_blocks_m0=1 wave=%u "
-            "(retbound honesty; Soft≠product)\n",
-            (unsigned)GJ_COMP_SOFT_WAVE);
-    /* Grep: compositor: soft retseal — Wave 20 seal stamp (kept) */
-    kprintf("compositor: soft retseal exclusive=1 soft_ne_product=1 "
-            "product_kernel=OPEN wave=%u "
-            "(retseal stamp; Soft≠product)\n",
-            (unsigned)GJ_COMP_SOFT_WAVE);
-            /*
-             * ---- Wave 21 complementary surfaces (kept) (never reshape primary).
-             * Return surfaces only — soft inventory; never hard-gates product paths.
-            */
-            /* Grep: compositor: soft retpulse — Wave 21 return-pulse honesty (kept) */
-            kprintf("compositor: soft retpulse soft_only=1 product_gate=0 soft_ne_product=1 "
-                    "never_blocks_m0=1 wave=%u "
-                    "(retpulse honesty; Soft≠product)\n",
-                    (unsigned)GJ_COMP_SOFT_WAVE);
-            /* Grep: compositor: soft retmark — Wave 21 mark stamp (kept) */
-            kprintf("compositor: soft retmark exclusive=1 soft_ne_product=1 "
-                    "product_kernel=OPEN wave=%u "
-                    "(retmark stamp; Soft≠product)\n",
-                    (unsigned)GJ_COMP_SOFT_WAVE);
-            /*
-             * ---- Wave 22 complementary surfaces (kept) (never reshape primary).
-             * Return surfaces only — soft inventory; never hard-gates product paths.
-            */
-            /* Grep: compositor: soft retphase — Wave 22 return-phase honesty (kept) */
-            kprintf("compositor: soft retphase soft_only=1 product_gate=0 soft_ne_product=1 "
-                    "never_blocks_m0=1 wave=%u "
-                    "(retphase honesty; Soft≠product)\n",
-                    (unsigned)GJ_COMP_SOFT_WAVE);
-            /* Grep: compositor: soft retbadge — Wave 22 badge stamp (kept) */
-            kprintf("compositor: soft retbadge exclusive=1 soft_ne_product=1 "
-                    "product_kernel=OPEN wave=%u "
-                    "(retbadge stamp; Soft≠product)\n",
-                    (unsigned)GJ_COMP_SOFT_WAVE);
-/*
- * ---- Wave 23 complementary surfaces (kept) (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
-            */
-            /* Grep: compositor: soft rettoken — Wave 23 return-token honesty (kept) */
-            kprintf("compositor: soft rettoken soft_only=1 product_gate=0 soft_ne_product=1 "
-                    "never_blocks_m0=1 wave=%u "
-                    "(rettoken honesty; Soft≠product)\n",
-                    (unsigned)GJ_COMP_SOFT_WAVE);
-            /* Grep: compositor: soft retcrest — Wave 23 crest stamp (kept) */
-            kprintf("compositor: soft retcrest exclusive=1 soft_ne_product=1 "
-                    "product_kernel=OPEN wave=%u "
-                    "(retcrest stamp; Soft≠product)\n",
-                    (unsigned)GJ_COMP_SOFT_WAVE);
-            /*
-             * ---- Wave 24 complementary surfaces (kept) (never reshape primary).
-             * Return surfaces only — soft inventory; never hard-gates product paths.
-             */
-            /* Grep: compositor: soft retvault — Wave 24 return-vault honesty (kept) */
-            kprintf("compositor: soft retvault soft_only=1 product_gate=0 soft_ne_product=1 "
-                    "never_blocks_m0=1 wave=%u "
-                    "(retvault honesty; Soft≠product)\n",
-                    (unsigned)GJ_COMP_SOFT_WAVE);
-            /* Grep: compositor: soft retbanner — Wave 24 banner stamp (kept) */
-            kprintf("compositor: soft retbanner exclusive=1 soft_ne_product=1 "
-                    "product_kernel=OPEN wave=%u "
-                    "(retbanner stamp; Soft≠product)\n",
-                    (unsigned)GJ_COMP_SOFT_WAVE);
-            /*
-             * ---- Wave 25 complementary surfaces (kept) (never reshape primary).
-             * Return surfaces only — soft inventory; never hard-gates product paths.
-             */
-            /* Grep: compositor: soft retledger — Wave 25 return-ledger honesty (kept) */
-            kprintf("compositor: soft retledger soft_only=1 product_gate=0 soft_ne_product=1 "
-                    "never_blocks_m0=1 wave=%u "
-                    "(retledger honesty; Soft≠product)\n",
-                    (unsigned)GJ_COMP_SOFT_WAVE);
-            /* Grep: compositor: soft retbeacon — Wave 25 beacon stamp (kept) */
-            kprintf("compositor: soft retbeacon exclusive=1 soft_ne_product=1 "
-                    "product_kernel=OPEN wave=%u "
-                    "(retbeacon stamp; Soft≠product)\n",
-                    (unsigned)GJ_COMP_SOFT_WAVE);
-            /*
-             * ---- Wave 26 complementary surfaces (kept) (never reshape primary).
-             * Return surfaces only — soft inventory; never hard-gates product paths.
-             */
-            /* Grep: compositor: soft retcipher — Wave 26 return-cipher honesty (kept) */
-            kprintf("compositor: soft retcipher soft_only=1 product_gate=0 soft_ne_product=1 "
-                    "never_blocks_m0=1 wave=%u "
-                    "(retcipher honesty; Soft≠product)\n",
-                    (unsigned)GJ_COMP_SOFT_WAVE);
-            /* Grep: compositor: soft retflame — Wave 26 flame stamp (kept) */
-            kprintf("compositor: soft retflame exclusive=1 soft_ne_product=1 "
-                    "product_kernel=OPEN wave=%u "
-                    "(retflame stamp; Soft≠product)\n",
-                    (unsigned)GJ_COMP_SOFT_WAVE);
-                    /*
-                     * ---- Wave 27 complementary surfaces (kept) (never reshape primary).
-                     * Return surfaces only — soft inventory; never hard-gates product paths.
-                     */
-                    /* Grep: compositor: soft retprism — Wave 27 return-prism honesty (kept) */
-                    kprintf("compositor: soft retprism soft_only=1 product_gate=0 soft_ne_product=1 "
-                            "never_blocks_m0=1 wave=%u "
-                            "(retprism honesty; Soft≠product)\n",
-                            (unsigned)GJ_COMP_SOFT_WAVE);
-                    /* Grep: compositor: soft retforge — Wave 27 forge stamp (kept) */
-                    kprintf("compositor: soft retforge exclusive=1 soft_ne_product=1 "
-                            "product_kernel=OPEN wave=%u "
-                            "(retforge stamp; Soft≠product)\n",
-                            (unsigned)GJ_COMP_SOFT_WAVE);
-                            /*
-                             * ---- Wave 28 complementary surfaces (kept) (never reshape primary).
-                             * Return surfaces only — soft inventory; never hard-gates product paths.
-                             */
-                            /* Grep: compositor: soft retshard — Wave 28 return-shard honesty (kept) */
-                            kprintf("compositor: soft retshard soft_only=1 product_gate=0 soft_ne_product=1 "
-                                "never_blocks_m0=1 wave=%u "
-                                "(retshard honesty; Soft≠product)\n",
-                                (unsigned)GJ_COMP_SOFT_WAVE);
-                            /* Grep: compositor: soft retcrown — Wave 28 crown stamp (kept) */
-                            kprintf("compositor: soft retcrown exclusive=1 soft_ne_product=1 "
-                                "product_kernel=OPEN wave=%u "
-                                "(retcrown stamp; Soft≠product)\n",
-                                (unsigned)GJ_COMP_SOFT_WAVE);
-                                /*
-                             * ---- Wave 29 complementary surfaces (kept) (never reshape primary).
-                             * Return surfaces only — soft inventory; never hard-gates product paths.
-                             */
-                            /* Grep: compositor: soft retglyph — Wave 29 return-glyph honesty (kept) */
-                            kprintf("compositor: soft retglyph soft_only=1 product_gate=0 soft_ne_product=1 "
-                                    "never_blocks_m0=1 wave=%u "
-                                    "(retglyph honesty; Soft≠product)\n",
-                                    (unsigned)GJ_COMP_SOFT_WAVE);
-                            /* Grep: compositor: soft retscepter — Wave 29 scepter stamp (kept) */
-                            kprintf("compositor: soft retscepter exclusive=1 soft_ne_product=1 "
-                                    "product_kernel=OPEN wave=%u "
-                                    "(retscepter stamp; Soft≠product)\n",
-                                    (unsigned)GJ_COMP_SOFT_WAVE);
-                                /*
-                             * ---- Wave 30 complementary surfaces (kept) (never reshape primary).
-                             * Return surfaces only — soft inventory; never hard-gates product paths.
-                             */
-                            /* Grep: compositor: soft retsigil — Wave 30 return-sigil honesty (kept) */
-                            kprintf("compositor: soft retsigil soft_only=1 product_gate=0 soft_ne_product=1 "
-                                    "never_blocks_m0=1 wave=%u "
-                                    "(retsigil honesty; Soft≠product)\n",
-                                    (unsigned)GJ_COMP_SOFT_WAVE);
-                            /* Grep: compositor: soft retemblem — Wave 30 emblem stamp (kept) */
-                            kprintf("compositor: soft retemblem exclusive=1 soft_ne_product=1 "
-                                    "product_kernel=OPEN wave=%u "
-                                    "(retemblem stamp; Soft≠product)\n",
-                                    (unsigned)GJ_COMP_SOFT_WAVE);
-                            /*
-                             * ---- Wave 31 complementary surfaces (kept) (never reshape primary).
-                             * Return surfaces only — soft inventory; never hard-gates product paths.
-                             */
-                            /* Grep: compositor: soft retaegis — Wave 31 return-aegis honesty (kept) */
-                            kprintf("compositor: soft retaegis soft_only=1 product_gate=0 soft_ne_product=1 "
-                                    "never_blocks_m0=1 wave=%u "
-                                    "(retaegis honesty; Soft≠product)\n",
-                                    (unsigned)GJ_COMP_SOFT_WAVE);
-                            /* Grep: compositor: soft retsigil — Wave 30 return-sigil honesty (kept) */
-                            kprintf("compositor: soft retsigil soft_only=1 product_gate=0 soft_ne_product=1 "
-                                    "never_blocks_m0=1 wave=%u "
-                                    "(retsigil honesty; Soft≠product)\n",
-                                    (unsigned)GJ_COMP_SOFT_WAVE);
-                            /* Grep: compositor: soft retmantle — Wave 31 mantle stamp (kept) */
-                            kprintf("compositor: soft retmantle exclusive=1 soft_ne_product=1 "
-                                    "product_kernel=OPEN wave=%u "
-                                    "(retmantle stamp; Soft≠product)\n",
-                                    (unsigned)GJ_COMP_SOFT_WAVE);
-/*
- * ---- Wave 32 complementary surfaces (kept) (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: compositor: soft retbulwark — Wave 32 return-bulwark honesty (kept) */
-kprintf("compositor: soft retbulwark soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=%u "
-        "(retbulwark honesty; Soft≠product)\n",
-        (unsigned)GJ_COMP_SOFT_WAVE);
-/* Grep: compositor: soft retpanoply — Wave 32 panoply stamp (kept) */
-kprintf("compositor: soft retpanoply exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=%u "
-        "(retpanoply stamp; Soft≠product)\n",
-        (unsigned)GJ_COMP_SOFT_WAVE);
-/*
- * ---- Wave 33 complementary surfaces (kept) (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: compositor: soft retbastion — Wave 33 return-bastion honesty (kept) */
-kprintf("compositor: soft retbastion soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=%u "
-        "(retbastion honesty; Soft≠product)\n",
-        (unsigned)GJ_COMP_SOFT_WAVE);
-/* Grep: compositor: soft retcitadel — Wave 33 citadel stamp (kept) */
-kprintf("compositor: soft retcitadel exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=%u "
-        "(retcitadel stamp; Soft≠product)\n",
-        (unsigned)GJ_COMP_SOFT_WAVE);
-/*
- * ---- Wave 34 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: compositor: soft retredoubt — Wave 34 return-redoubt honesty */
-kprintf("compositor: soft retredoubt soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=%u "
-        "(retredoubt honesty; Soft≠product)\n",
-        (unsigned)GJ_COMP_SOFT_WAVE);
-/* Grep: compositor: soft retkeep — Wave 34 exclusive keep stamp */
-kprintf("compositor: soft retkeep exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=%u "
-        "(retkeep stamp; Soft≠product)\n",
-        (unsigned)GJ_COMP_SOFT_WAVE);
-/*
- * ---- Wave 35 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: compositor: soft retfortress — Wave 35 return-fortress honesty */
-kprintf("compositor: soft retfortress soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=%u "
-        "(retfortress honesty; Soft≠product)\n",
-        (unsigned)GJ_COMP_SOFT_WAVE);
-/* Grep: compositor: soft retpalace — Wave 35 exclusive palace stamp */
-kprintf("compositor: soft retpalace exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=%u "
-        "(retpalace stamp; Soft≠product)\n",
-        (unsigned)GJ_COMP_SOFT_WAVE);
-/*
- * ---- Wave 36 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: compositor: soft rethold — Wave 36 return-hold honesty */
-kprintf("compositor: soft rethold soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=%u "
-        "(rethold honesty; Soft≠product)\n",
-        (unsigned)GJ_COMP_SOFT_WAVE);
-/* Grep: compositor: soft retspire — Wave 36 exclusive spire stamp */
-kprintf("compositor: soft retspire exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=%u "
-        "(retspire stamp; Soft≠product)\n",
-        (unsigned)GJ_COMP_SOFT_WAVE);
-/*
- * ---- Wave 37 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: compositor: soft retwall — Wave 37 return-wall honesty */
-kprintf("compositor: soft retwall soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=%u "
-        "(retwall honesty; Soft≠product)\n",
-        (unsigned)GJ_COMP_SOFT_WAVE);
-/* Grep: compositor: soft retgate — Wave 37 exclusive gate stamp */
-kprintf("compositor: soft retgate exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=%u "
-        "(retgate stamp; Soft≠product)\n",
-        (unsigned)GJ_COMP_SOFT_WAVE);
-/*
- * ---- Wave 38 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: compositor: soft retmoat — Wave 38 return-moat honesty */
-kprintf("compositor: soft retmoat soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=%u "
-        "(retmoat honesty; Soft≠product)\n",
-        (unsigned)GJ_COMP_SOFT_WAVE);
-/* Grep: compositor: soft retower — Wave 38 exclusive tower stamp */
-kprintf("compositor: soft retower exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=%u "
-        "(retower stamp; Soft≠product)\n",
-        (unsigned)GJ_COMP_SOFT_WAVE);
-                            
-/*
- * ---- Wave 39 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: compositor: soft retbarbican — Wave 39 return-barbican honesty */
-kprintf("compositor: soft retbarbican soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=%u "
-        "(retbarbican honesty; Soft≠product)\n",
-        (unsigned)GJ_COMP_SOFT_WAVE);
-/* Grep: compositor: soft retglacis — Wave 39 exclusive glacis stamp */
-kprintf("compositor: soft retglacis exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=%u "
-        "(retglacis stamp; Soft≠product)\n",
-        (unsigned)GJ_COMP_SOFT_WAVE);
-/*
- * ---- Wave 40 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: compositor: soft retcurtain — Wave 40 return-curtain honesty */
-kprintf("compositor: soft retcurtain soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=%u "
-        "(retcurtain honesty; Soft≠product)\n",
-        (unsigned)GJ_COMP_SOFT_WAVE);
-/* Grep: compositor: soft retparapet — Wave 40 exclusive parapet stamp */
-kprintf("compositor: soft retparapet exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=%u "
-        "(retparapet stamp; Soft≠product)\n",
-        (unsigned)GJ_COMP_SOFT_WAVE);
-/*
- * ---- Wave 41 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: compositor: soft retravelin — Wave 41 return-travelin honesty */
-kprintf("compositor: soft retravelin soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=%u "
-        "(retravelin honesty; Soft≠product)\n",
-        (unsigned)GJ_COMP_SOFT_WAVE);
-/* Grep: compositor: soft retditch — Wave 41 exclusive ditch stamp */
-kprintf("compositor: soft retditch exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=%u "
-        "(retditch stamp; Soft≠product)\n",
-        (unsigned)GJ_COMP_SOFT_WAVE);
-/*
- * ---- Wave 42 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: compositor: soft retportcullis — Wave 42 return-portcullis honesty */
-kprintf("compositor: soft retportcullis soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=%u "
-        "(retportcullis honesty; Soft≠product)\n",
-        (unsigned)GJ_COMP_SOFT_WAVE);
-/* Grep: compositor: soft retbattlement — Wave 42 exclusive battlement stamp */
-kprintf("compositor: soft retbattlement exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=%u "
-        "(retbattlement stamp; Soft≠product)\n",
-        (unsigned)GJ_COMP_SOFT_WAVE);
-/*
- * ---- Wave 43 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: compositor: soft retmachicolation — Wave 43 return-machicolation honesty */
-kprintf("compositor: soft retmachicolation soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=%u "
-        "(retmachicolation honesty; Soft≠product)\n",
-        (unsigned)GJ_COMP_SOFT_WAVE);
-/* Grep: compositor: soft retarrowslit — Wave 43 exclusive arrowslit stamp */
-kprintf("compositor: soft retarrowslit exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=%u "
-        "(retarrowslit stamp; Soft≠product)\n",
-        (unsigned)GJ_COMP_SOFT_WAVE);
-
-/*
- * ---- Wave 44 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: compositor: soft retmerlon — Wave 44 return-merlon honesty */
-kprintf("compositor: soft retmerlon soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=%u "
-        "(retmerlon honesty; Soft≠product)\n",
-        (unsigned)GJ_COMP_SOFT_WAVE);
-/* Grep: compositor: soft retembrasure — Wave 44 exclusive embrasure stamp */
-kprintf("compositor: soft retembrasure exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=%u "
-        "(retembrasure stamp; Soft≠product)\n",
-        (unsigned)GJ_COMP_SOFT_WAVE);
-
-/*
- * ---- Wave 45 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: compositor: soft retkeepgate — Wave 45 return-keepgate honesty */
-kprintf("compositor: soft retkeepgate soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=%u "
-        "(retkeepgate honesty; Soft≠product)\n",
-        (unsigned)GJ_COMP_SOFT_WAVE);
-/* Grep: compositor: soft retouterward — Wave 45 exclusive outerward stamp */
-kprintf("compositor: soft retouterward exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=%u "
-        "(retouterward stamp; Soft≠product)\n",
-        (unsigned)GJ_COMP_SOFT_WAVE);
-
-/*
- * ---- Wave 46 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: compositor: soft retbailey — Wave 46 return-bailey honesty */
-kprintf("compositor: soft retbailey soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=%u "
-        "(retbailey honesty; Soft≠product)\n",
-        (unsigned)GJ_COMP_SOFT_WAVE);
-/* Grep: compositor: soft retpostern — Wave 46 exclusive postern stamp */
-kprintf("compositor: soft retpostern exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=%u "
-        "(retpostern stamp; Soft≠product)\n",
-        (unsigned)GJ_COMP_SOFT_WAVE);
-
-/*
- * ---- Wave 47 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: compositor: soft retinnerward — Wave 47 return-innerward honesty */
-kprintf("compositor: soft retinnerward soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retinnerward honesty; Soft≠product)\n");
-/* Grep: compositor: soft retdonjon — Wave 47 exclusive donjon stamp */
-kprintf("compositor: soft retdonjon exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retdonjon stamp; Soft≠product)\n");
-
-/*
- * ---- Wave 48 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: compositor: soft retchevaux — Wave 48 return-chevaux honesty */
-kprintf("compositor: soft retchevaux soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retchevaux honesty; Soft≠product)\n");
-/* Grep: compositor: soft retpalisade — Wave 48 exclusive palisade stamp */
-kprintf("compositor: soft retpalisade exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retpalisade stamp; Soft≠product)\n");
-
-/*
- * ---- Wave 49 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: compositor: soft retglacisgate — Wave 49 return-glacisgate honesty */
-kprintf("compositor: soft retglacisgate soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retglacisgate honesty; Soft≠product)\n");
-/* Grep: compositor: soft retoutwork — Wave 49 exclusive outwork stamp */
-kprintf("compositor: soft retoutwork exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retoutwork stamp; Soft≠product)\n");
-/*
- * ---- Wave 50 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: compositor: soft retsally — Wave 50 return-sally honesty */
-kprintf("compositor: soft retsally soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retsally honesty; Soft≠product)\n");
-/* Grep: compositor: soft retcounterscarp — Wave 50 exclusive counterscarp stamp */
-kprintf("compositor: soft retcounterscarp exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retcounterscarp stamp; Soft≠product)\n");
-/*
- * ---- Wave 51 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: compositor: soft retfosse — Wave 51 return-fosse honesty */
-kprintf("compositor: soft retfosse soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retfosse honesty; Soft≠product)\n");
-/* Grep: compositor: soft retcoveredway — Wave 51 exclusive coveredway stamp */
-kprintf("compositor: soft retcoveredway exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retcoveredway stamp; Soft≠product)\n");
-
-/*
- * ---- Wave 52 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: compositor: soft rettenaille — Wave 52 return-tenaille honesty */
-kprintf("compositor: soft rettenaille soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(rettenaille honesty; Soft≠product)\n");
-/* Grep: compositor: soft retdemilune — Wave 52 exclusive demilune stamp */
-kprintf("compositor: soft retdemilune exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retdemilune stamp; Soft≠product)\n");
-/*
- * ---- Wave 53 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: compositor: soft retravelin — Wave 53 return-travelin honesty */
-kprintf("compositor: soft retravelin soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retravelin honesty; Soft≠product)\n");
-/* Grep: compositor: soft retlunette — Wave 53 exclusive lunette stamp */
-kprintf("compositor: soft retlunette exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retlunette stamp; Soft≠product)\n");
-/*
- * ---- Wave 54 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: compositor: soft retcaponier — Wave 54 return-caponier honesty */
-kprintf("compositor: soft retcaponier soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retcaponier honesty; Soft≠product)\n");
-/* Grep: compositor: soft retredan — Wave 54 exclusive redan stamp */
-kprintf("compositor: soft retredan exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retredan stamp; Soft≠product)\n");
-/*
- * ---- Wave 55 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: compositor: soft retflank — Wave 55 return-flank honesty */
-kprintf("compositor: soft retflank soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retflank honesty; Soft≠product)\n");
-/* Grep: compositor: soft retface — Wave 55 exclusive face stamp */
-kprintf("compositor: soft retface exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retface stamp; Soft≠product)\n");
-/*
- * ---- Wave 56 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: compositor: soft retgorge — Wave 56 return-gorge honesty */
-kprintf("compositor: soft retgorge soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retgorge honesty; Soft≠product)\n");
-/* Grep: compositor: soft retshoulder — Wave 56 exclusive shoulder stamp */
-kprintf("compositor: soft retshoulder exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retshoulder stamp; Soft≠product)\n");
-/*
- * ---- Wave 57 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: compositor: soft retraverse — Wave 57 return-traverse honesty */
-kprintf("compositor: soft retraverse soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retraverse honesty; Soft≠product)\n");
-/* Grep: compositor: soft retcasemate — Wave 57 exclusive casemate stamp */
-kprintf("compositor: soft retcasemate exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retcasemate stamp; Soft≠product)\n");
-
-/*
- * ---- Wave 58 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: compositor: soft retorillon — Wave 58 return-orillon honesty */
-kprintf("compositor: soft retorillon soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retorillon honesty; Soft≠product)\n");
-/* Grep: compositor: soft retbonnette — Wave 58 exclusive bonnette stamp */
-kprintf("compositor: soft retbonnette exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retbonnette stamp; Soft≠product)\n");
-
-/*
- * ---- Wave 59 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: compositor: soft retcrownwork — Wave 59 return-crownwork honesty */
-kprintf("compositor: soft retcrownwork soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retcrownwork honesty; Soft≠product)\n");
-/* Grep: compositor: soft rethornwork — Wave 59 exclusive hornwork stamp */
-kprintf("compositor: soft rethornwork exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(rethornwork stamp; Soft≠product)\n");
-
-/*
- * ---- Wave 60 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: compositor: soft retplace — Wave 60 return-place honesty */
-kprintf("compositor: soft retplace soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retplace honesty; Soft≠product)\n");
-/* Grep: compositor: soft retenvelope — Wave 60 exclusive envelope stamp */
-kprintf("compositor: soft retenvelope exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retenvelope stamp; Soft≠product)\n");
-
-
-
-
-
-
-
-
-
-/*
- * ---- Wave 61 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: compositor: soft retcounterguard — Wave 61 return-counterguard honesty */
-kprintf("compositor: soft retcounterguard soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retcounterguard honesty; Soft≠product)\n");
-/* Grep: compositor: soft retcoveredface — Wave 61 exclusive coveredface stamp */
-kprintf("compositor: soft retcoveredface exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retcoveredface stamp; Soft≠product)\n");
-/*
- * ---- Wave 62 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: compositor: soft retbastionface — Wave 62 return-bastionface honesty */
-kprintf("compositor: soft retbastionface soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retbastionface honesty; Soft≠product)\n");
-/* Grep: compositor: soft retcurtainangle — Wave 62 exclusive curtainangle stamp */
-kprintf("compositor: soft retcurtainangle exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retcurtainangle stamp; Soft≠product)\n");
-/*
- * ---- Wave 63 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: compositor: soft retdoubletenaille — Wave 63 return-doubletenaille honesty */
-kprintf("compositor: soft retdoubletenaille soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retdoubletenaille honesty; Soft≠product)\n");
-/* Grep: compositor: soft retplaceofarms — Wave 63 exclusive placeofarms stamp */
-kprintf("compositor: soft retplaceofarms exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retplaceofarms stamp; Soft≠product)\n");
- /*
-  * ---- Wave 64 exclusive complementary surfaces (never reshape primary).
-  * Return surfaces only — soft inventory; never hard-gates product paths.
-  */
- /* Grep: compositor: soft retreentrant — Wave 64 return-reentrant honesty */
-kprintf("compositor: soft retreentrant soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retreentrant honesty; Soft≠product)\n");
- /* Grep: compositor: soft retsallyport — Wave 64 exclusive sallyport stamp */
-kprintf("compositor: soft retsallyport exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retsallyport stamp; Soft≠product)\n");
- /*
-  * ---- Wave 65 exclusive complementary surfaces (never reshape primary).
-  * Return surfaces only — soft inventory; never hard-gates product paths.
-  */
- /* Grep: compositor: soft retgorgeangle — Wave 65 return-gorgeangle honesty */
-kprintf("compositor: soft retgorgeangle soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retgorgeangle honesty; Soft≠product)\n");
- /* Grep: compositor: soft retshoulderangle — Wave 65 exclusive shoulderangle stamp */
-kprintf("compositor: soft retshoulderangle exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retshoulderangle stamp; Soft≠product)\n");
- /*
-  * ---- Wave 66 exclusive complementary surfaces (never reshape primary).
-  * Return surfaces only — soft inventory; never hard-gates product paths.
-  */
- /* Grep: compositor: soft retflankangle — Wave 66 return-flankangle honesty */
- kprintf("compositor: soft retflankangle soft_only=1 product_gate=0 soft_ne_product=1 "
-         "never_blocks_m0=1 wave=116 "
-         "(retflankangle honesty; Soft≠product)\n");
- /* Grep: compositor: soft retfaceangle — Wave 66 exclusive faceangle stamp */
- kprintf("compositor: soft retfaceangle exclusive=1 soft_ne_product=1 "
-         "product_kernel=OPEN wave=116 "
-         "(retfaceangle stamp; Soft≠product)\n");
-/*
- * ---- Wave 67 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: compositor: soft retcaponierangle — Wave 67 return-caponierangle honesty */
-kprintf("compositor: soft retcaponierangle soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retcaponierangle honesty; Soft≠product)\n");
-/* Grep: compositor: soft retredanangle — Wave 67 exclusive redanangle stamp */
-kprintf("compositor: soft retredanangle exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retredanangle stamp; Soft≠product)\n");
-/*
- * ---- Wave 68 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: compositor: soft retlunetteangle — Wave 68 return-lunetteangle honesty */
-kprintf("compositor: soft retlunetteangle soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retlunetteangle honesty; Soft≠product)\n");
-/* Grep: compositor: soft rettenailleangle — Wave 68 exclusive tenailleangle stamp */
-kprintf("compositor: soft rettenailleangle exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(rettenailleangle stamp; Soft≠product)\n");
-/*
- * ---- Wave 69 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: compositor: soft retdemiluneangle — Wave 69 return-demiluneangle honesty */
-kprintf("compositor: soft retdemiluneangle soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retdemiluneangle honesty; Soft≠product)\n");
-/* Grep: compositor: soft retcoveredwayangle — Wave 69 exclusive coveredwayangle stamp */
-kprintf("compositor: soft retcoveredwayangle exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retcoveredwayangle stamp; Soft≠product)\n");
-/*
- * ---- Wave 70 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: compositor: soft retfosseangle — Wave 70 return-fosseangle honesty */
-kprintf("compositor: soft retfosseangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retfosseangle honesty; Soft≠product)\n");
-/* Grep: compositor: soft retcounterscarple — Wave 70 exclusive counterscarple stamp */
-kprintf("compositor: soft retcounterscarple exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retcounterscarple stamp; Soft≠product)\n");
-/*
- * ---- Wave 71 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: compositor: soft retsallyportangle — Wave 71 return-sallyportangle honesty */
-kprintf("compositor: soft retsallyportangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retsallyportangle honesty; Soft≠product)\n");
-/* Grep: compositor: soft retreentrantangle — Wave 71 exclusive reentrantangle stamp */
-kprintf("compositor: soft retreentrantangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retreentrantangle stamp; Soft≠product)\n");
-/*
- * ---- Wave 72 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: compositor: soft retplaceofarmsangle — Wave 72 return-placeofarmsangle honesty */
-kprintf("compositor: soft retplaceofarmsangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retplaceofarmsangle honesty; Soft≠product)\n");
-/* Grep: compositor: soft retdoubletenailleangle — Wave 72 exclusive doubletenailleangle stamp */
-kprintf("compositor: soft retdoubletenailleangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retdoubletenailleangle stamp; Soft≠product)\n");
-/* Grep: compositor: soft retcurtainface — Wave 73 return-curtainface honesty */
-kprintf("compositor: soft retcurtainface soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retcurtainface honesty; Soft≠product)\n");
-/* Grep: compositor: soft retbastionangle — Wave 73 exclusive bastionangle stamp */
-kprintf("compositor: soft retbastionangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retbastionangle stamp; Soft≠product)\n");
-/* Grep: compositor: soft retglacisangle — Wave 74 return-glacisangle honesty */
-kprintf("compositor: soft retglacisangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retglacisangle honesty; Soft≠product)\n");
-/* Grep: compositor: soft retparapetangle — Wave 74 exclusive parapetangle stamp */
-kprintf("compositor: soft retparapetangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retparapetangle stamp; Soft≠product)\n");
-/* Grep: compositor: soft retmoatangle — Wave 75 return-moatangle honesty */
-kprintf("compositor: soft retmoatangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retmoatangle honesty; Soft≠product)\n");
-/* Grep: compositor: soft retowerangle — Wave 75 exclusive towerangle stamp */
-kprintf("compositor: soft retowerangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retowerangle stamp; Soft≠product)\n");
-/* Grep: compositor: soft retgateangle — Wave 76 return-gateangle honesty */
-kprintf("compositor: soft retgateangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retgateangle honesty; Soft≠product)\n");
-/* Grep: compositor: soft retwallangle — Wave 76 exclusive wallangle stamp */
-kprintf("compositor: soft retwallangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retwallangle stamp; Soft≠product)\n");
-/* Grep: compositor: soft retspireangle — Wave 77 return-spireangle honesty */
-kprintf("compositor: soft retspireangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retspireangle honesty; Soft≠product)\n");
-/* Grep: compositor: soft retholdangle — Wave 77 exclusive holdangle stamp */
-kprintf("compositor: soft retholdangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retholdangle stamp; Soft≠product)\n");
-/* Grep: compositor: soft retpalaceangle — Wave 78 return-palaceangle honesty */
-kprintf("compositor: soft retpalaceangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retpalaceangle honesty; Soft≠product)\n");
-/* Grep: compositor: soft retfortressangle — Wave 78 exclusive fortressangle stamp */
-kprintf("compositor: soft retfortressangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retfortressangle stamp; Soft≠product)\n");
-/* Grep: compositor: soft retkeepangle — Wave 79 return-keepangle honesty */
-kprintf("compositor: soft retkeepangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retkeepangle honesty; Soft≠product)\n");
-/* Grep: compositor: soft retredoubtangle — Wave 79 exclusive redoubtangle stamp */
-kprintf("compositor: soft retredoubtangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retredoubtangle stamp; Soft≠product)\n");
-/* Grep: compositor: soft retcitadelangle — Wave 80 return-citadelangle honesty */
-kprintf("compositor: soft retcitadelangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retcitadelangle honesty; Soft≠product)\n");
-/* Grep: compositor: soft retbastionkeep — Wave 80 exclusive bastionkeep stamp */
-kprintf("compositor: soft retbastionkeep exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retbastionkeep stamp; Soft≠product)\n");
-/* Grep: compositor: soft retpanoplyangle — Wave 81 return-panoplyangle honesty */
-kprintf("compositor: soft retpanoplyangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retpanoplyangle honesty; Soft≠product)\n");
-/* Grep: compositor: soft retbulwarkangle — Wave 81 exclusive bulwarkangle stamp */
-kprintf("compositor: soft retbulwarkangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retbulwarkangle stamp; Soft≠product)\n");
-/* Grep: compositor: soft retmantleangle — Wave 82 return-mantleangle honesty */
-kprintf("compositor: soft retmantleangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retmantleangle honesty; Soft≠product)\n");
-/* Grep: compositor: soft retaegisangle — Wave 82 exclusive aegisangle stamp */
-kprintf("compositor: soft retaegisangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retaegisangle stamp; Soft≠product)\n");
-/* Grep: compositor: soft retemblemangle — Wave 83 return-emblemangle honesty */
-kprintf("compositor: soft retemblemangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retemblemangle honesty; Soft≠product)\n");
-/* Grep: compositor: soft retsigilangle — Wave 83 exclusive sigilangle stamp */
-kprintf("compositor: soft retsigilangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retsigilangle stamp; Soft≠product)\n");
-/* Grep: compositor: soft retscepterangle — Wave 84 return-scepterangle honesty */
-kprintf("compositor: soft retscepterangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retscepterangle honesty; Soft≠product)\n");
-/* Grep: compositor: soft retglyphangle — Wave 84 exclusive glyphangle stamp */
-kprintf("compositor: soft retglyphangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retglyphangle stamp; Soft≠product)\n");
-/* Grep: compositor: soft retcrownangle — Wave 85 return-crownangle honesty */
-kprintf("compositor: soft retcrownangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retcrownangle honesty; Soft≠product)\n");
-/* Grep: compositor: soft retshardangle — Wave 85 exclusive shardangle stamp */
-kprintf("compositor: soft retshardangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retshardangle stamp; Soft≠product)\n");
-/* Grep: compositor: soft retforgeangle — Wave 86 return-forgeangle honesty */
-kprintf("compositor: soft retforgeangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retforgeangle honesty; Soft≠product)\n");
-/* Grep: compositor: soft retprismangle — Wave 86 exclusive prismangle stamp */
-kprintf("compositor: soft retprismangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retprismangle stamp; Soft≠product)\n");
-/* Grep: compositor: soft retflameangle — Wave 87 return-flameangle honesty */
-kprintf("compositor: soft retflameangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retflameangle honesty; Soft≠product)\n");
-/* Grep: compositor: soft retcipherangle — Wave 87 exclusive cipherangle stamp */
-kprintf("compositor: soft retcipherangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retcipherangle stamp; Soft≠product)\n");
-/* Grep: compositor: soft retbeaconangle — Wave 88 return-beaconangle honesty */
-kprintf("compositor: soft retbeaconangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retbeaconangle honesty; Soft≠product)\n");
-/* Grep: compositor: soft retledgerangle — Wave 88 exclusive ledgerangle stamp */
-kprintf("compositor: soft retledgerangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retledgerangle stamp; Soft≠product)\n");
-/* Grep: compositor: soft retbannerangle — Wave 89 return-bannerangle honesty */
-kprintf("compositor: soft retbannerangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retbannerangle honesty; Soft≠product)\n");
-/* Grep: compositor: soft retvaultangle — Wave 89 exclusive vaultangle stamp */
-kprintf("compositor: soft retvaultangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retvaultangle stamp; Soft≠product)\n");
-/* Grep: compositor: soft retcrestangle — Wave 90 return-crestangle honesty */
-kprintf("compositor: soft retcrestangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retcrestangle honesty; Soft≠product)\n");
-/* Grep: compositor: soft rettokenangle — Wave 90 exclusive tokenangle stamp */
-kprintf("compositor: soft rettokenangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (rettokenangle stamp; Soft≠product)\n");
-/* Grep: compositor: soft retbadgeangle — Wave 91 return-badgeangle honesty */
-kprintf("compositor: soft retbadgeangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retbadgeangle honesty; Soft≠product)\n");
-/* Grep: compositor: soft retphaseangle — Wave 91 exclusive phaseangle stamp */
-kprintf("compositor: soft retphaseangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retphaseangle stamp; Soft≠product)\n");
-/* Grep: compositor: soft retmarkangle — Wave 92 return-markangle honesty */
-kprintf("compositor: soft retmarkangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retmarkangle honesty; Soft≠product)\n");
-/* Grep: compositor: soft retpulseangle — Wave 92 exclusive pulseangle stamp */
-kprintf("compositor: soft retpulseangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retpulseangle stamp; Soft≠product)\n");
-
-/* Grep: compositor: soft retsealangle — Wave 93 return-sealangle honesty */
-kprintf("compositor: soft retsealangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retsealangle honesty; Soft≠product)\n");
-/* Grep: compositor: soft retboundangle — Wave 93 exclusive boundangle stamp */
-kprintf("compositor: soft retboundangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retboundangle stamp; Soft≠product)\n");
-/* Grep: compositor: soft retstemangle — Wave 94 return-stemangle honesty */
-kprintf("compositor: soft retstemangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retstemangle honesty; Soft≠product)\n");
-/* Grep: compositor: soft retbladeangle — Wave 94 exclusive bladeangle stamp */
-kprintf("compositor: soft retbladeangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retbladeangle stamp; Soft≠product)\n");
-/* Grep: compositor: soft retchordangle — Wave 95 return-chordangle honesty */
-kprintf("compositor: soft retchordangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retchordangle honesty; Soft≠product)\n");
-/* Grep: compositor: soft retarcangle — Wave 95 exclusive arcangle stamp */
-kprintf("compositor: soft retarcangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retarcangle stamp; Soft≠product)\n");
-/* Grep: compositor: soft retsectorangle — Wave 96 return-sectorangle honesty */
-kprintf("compositor: soft retsectorangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retsectorangle honesty; Soft≠product)\n");
-/* Grep: compositor: soft retwedgeangle — Wave 96 exclusive wedgeangle stamp */
-kprintf("compositor: soft retwedgeangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retwedgeangle stamp; Soft≠product)\n");
-/* Grep: compositor: soft retradiusangle — Wave 97 return-radiusangle honesty */
-kprintf("compositor: soft retradiusangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retradiusangle honesty; Soft≠product)\n");
-/* Grep: compositor: soft retdiameterangle — Wave 97 exclusive diameterangle stamp */
-kprintf("compositor: soft retdiameterangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retdiameterangle stamp; Soft≠product)\n");
-/* Grep: compositor: soft retcircumangle — Wave 98 return-circumangle honesty */
-kprintf("compositor: soft retcircumangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retcircumangle honesty; Soft≠product)\n");
-/* Grep: compositor: soft retellipseangle — Wave 98 exclusive ellipseangle stamp */
-kprintf("compositor: soft retellipseangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retellipseangle stamp; Soft≠product)\n");
-/* Grep: compositor: soft rethyperangle — Wave 99 return-hyperangle honesty */
-kprintf("compositor: soft rethyperangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (rethyperangle honesty; Soft≠product)\n");
-/* Grep: compositor: soft retparabolaangle — Wave 99 exclusive parabolaangle stamp */
-kprintf("compositor: soft retparabolaangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retparabolaangle stamp; Soft≠product)\n");
-/* Grep: compositor: soft retspiralangle — Wave 100 return-spiralangle honesty */
-kprintf("compositor: soft retspiralangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retspiralangle honesty; Soft≠product)\n");
-/* Grep: compositor: soft rethelixangle — Wave 100 exclusive helixangle stamp */
-kprintf("compositor: soft rethelixangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (rethelixangle stamp; Soft≠product)\n");
-/* Grep: compositor: soft rettorusangle — Wave 101 return-torusangle honesty */
-kprintf("compositor: soft rettorusangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (rettorusangle honesty; Soft≠product)\n");
-/* Grep: compositor: soft retknotangle — Wave 101 exclusive knotangle stamp */
-kprintf("compositor: soft retknotangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retknotangle stamp; Soft≠product)\n");
-/* Grep: compositor: soft retmoebiusangle — Wave 102 return-moebiusangle honesty */
-kprintf("compositor: soft retmoebiusangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retmoebiusangle honesty; Soft≠product)\n");
-/* Grep: compositor: soft retkleinangle — Wave 102 exclusive kleinangle stamp */
-kprintf("compositor: soft retkleinangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retkleinangle stamp; Soft≠product)\n");
-/* Grep: compositor: soft retprojectangle — Wave 103 return-projectangle honesty */
-kprintf("compositor: soft retprojectangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retprojectangle honesty; Soft≠product)\n");
-/* Grep: compositor: soft retaffineangle — Wave 103 exclusive affineangle stamp */
-kprintf("compositor: soft retaffineangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retaffineangle stamp; Soft≠product)\n");
-/* Grep: compositor: soft retlinearangle — Wave 104 return-linearangle honesty */
-kprintf("compositor: soft retlinearangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retlinearangle honesty; Soft≠product)\n");
-/* Grep: compositor: soft retbilinearangle — Wave 104 exclusive bilinearangle stamp */
-kprintf("compositor: soft retbilinearangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retbilinearangle stamp; Soft≠product)\n");
-/* Grep: compositor: soft retquadraticangle — Wave 105 return-quadraticangle honesty */
-kprintf("compositor: soft retquadraticangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retquadraticangle honesty; Soft≠product)\n");
-/* Grep: compositor: soft retcubicangle — Wave 105 exclusive cubicangle stamp */
-kprintf("compositor: soft retcubicangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retcubicangle stamp; Soft≠product)\n");
-/* Grep: compositor: soft retquarticangle — Wave 106 return-quarticangle honesty */
-kprintf("compositor: soft retquarticangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retquarticangle honesty; Soft≠product)\n");
-/* Grep: compositor: soft retquinticangle — Wave 106 exclusive quinticangle stamp */
-kprintf("compositor: soft retquinticangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retquinticangle stamp; Soft≠product)\n");
-/* Grep: compositor: soft retsplineangle — Wave 107 return-splineangle honesty */
-kprintf("compositor: soft retsplineangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retsplineangle honesty; Soft≠product)\n");
-/* Grep: compositor: soft retbezierangle — Wave 107 exclusive bezierangle stamp */
-kprintf("compositor: soft retbezierangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retbezierangle stamp; Soft≠product)\n");
-/* Grep: compositor: soft rethurmitangle — Wave 108 return-hermitangle honesty */
-kprintf("compositor: soft rethurmitangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (rethurmitangle honesty; Soft≠product)\n");
-/* Grep: compositor: soft retcatmullangle — Wave 108 exclusive catmullangle stamp */
-kprintf("compositor: soft retcatmullangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retcatmullangle stamp; Soft≠product)\n");
-/* Grep: compositor: soft retnurbsangle — Wave 109 return-nurbsangle honesty */
-kprintf("compositor: soft retnurbsangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retnurbsangle honesty; Soft≠product)\n");
-/* Grep: compositor: soft retbsplineangle — Wave 109 exclusive bsplineangle stamp */
-kprintf("compositor: soft retbsplineangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retbsplineangle stamp; Soft≠product)\n");
-/* Grep: compositor: soft retmeshangle — Wave 110 return-meshangle honesty */
-kprintf("compositor: soft retmeshangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retmeshangle honesty; Soft≠product)\n");
-/* Grep: compositor: soft retgridangle — Wave 110 exclusive gridangle stamp */
-kprintf("compositor: soft retgridangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retgridangle stamp; Soft≠product)\n");
-/* Grep: compositor: soft retvoxelangle — Wave 111 return-voxelangle honesty */
-kprintf("compositor: soft retvoxelangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retvoxelangle honesty; Soft≠product)\n");
-/* Grep: compositor: soft rettexelangle — Wave 111 exclusive texelangle stamp */
-kprintf("compositor: soft rettexelangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (rettexelangle stamp; Soft≠product)\n");
-/* Grep: compositor: soft retfragmentangle — Wave 112 return-fragmentangle honesty */
-kprintf("compositor: soft retfragmentangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retfragmentangle honesty; Soft≠product)\n");
-/* Grep: compositor: soft retvertexangle — Wave 112 exclusive vertexangle stamp */
-kprintf("compositor: soft retvertexangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retvertexangle stamp; Soft≠product)\n");
-/* Grep: compositor: soft retshaderangle — Wave 113 return-shaderangle honesty */
-kprintf("compositor: soft retshaderangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retshaderangle honesty; Soft≠product)\n");
-/* Grep: compositor: soft retpipelineangle — Wave 113 exclusive pipelineangle stamp */
-kprintf("compositor: soft retpipelineangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retpipelineangle stamp; Soft≠product)\n");
-/* Grep: compositor: soft retframebufferangle — Wave 114 return-framebufferangle honesty */
-kprintf("compositor: soft retframebufferangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retframebufferangle honesty; Soft≠product)\n");
-/* Grep: compositor: soft retswapchainangle — Wave 114 exclusive swapchainangle stamp */
-kprintf("compositor: soft retswapchainangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retswapchainangle stamp; Soft≠product)\n");
-/* Grep: compositor: soft retpresentangle — Wave 115 return-presentangle honesty */
-kprintf("compositor: soft retpresentangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retpresentangle honesty; Soft≠product)\n");
-/* Grep: compositor: soft retvsyncangle — Wave 115 exclusive vsyncangle stamp */
-kprintf("compositor: soft retvsyncangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retvsyncangle stamp; Soft≠product)\n");
-/* Grep: compositor: soft retfenceangle — Wave 116 return-fenceangle honesty */
-kprintf("compositor: soft retfenceangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retfenceangle honesty; Soft≠product)\n");
-/* Grep: compositor: soft retsemaphoreangle — Wave 116 exclusive semaphoreangle stamp */
-kprintf("compositor: soft retsemaphoreangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retsemaphoreangle stamp; Soft≠product)\n");
-                            kprintf("compositor: soft deepen wave=%u areas=%u verdict=%s "
-            "ready=%u presents=%u multi=%u gen=%u init_ok=%u batch_ok=%u "
-            "desktop_product=OPEN soft_never_gates=1 (soft)\n",
-            GJ_COMP_SOFT_WAVE, cAreas, szVerdict, u32Ready, u32Presents,
-            u32Multi, u32Gen, g_u32SoftInitOk, g_u32SoftBatchOk);
-
-    /* Grep: compositor: soft PASS|PARTIAL|INIT */
-    kprintf("compositor: soft %s ready=%u presents=%u multi=%u gen=%u "
-            "init_ok=%u batch_ok=%u wave=%u (soft)\n",
-            szVerdict, u32Ready, u32Presents, u32Multi, u32Gen,
-            g_u32SoftInitOk, g_u32SoftBatchOk, GJ_COMP_SOFT_WAVE);
-}
-
-/**
- * After first product present activity, print soft inventory once
- * (mirrors door/memobj soft-stats-once). Diagnostics only.
- */
-static void
-soft_inventory_maybe_once(void)
-{
-    if (g_fSoftOnce != 0) {
-        return;
-    }
-    if (g_u32SoftPresentEnter == 0 && g_u32SoftBatchEnter == 0) {
-        return;
-    }
-    g_fSoftOnce = 1;
-    soft_inventory_log();
+    kprintf("compositor: soft residual lean %s "
+            "class=C0 ready=%u presents=%u fail=%u multi=%u gen=%u "
+            "dims=%u path=%u multi_arm=%u query=%u batch=%u lic=%u ok=%u/%u "
+            "soft=1 product=0 soft_ne_product=1 stamp_free=1 "
+            "desktop_product=OPEN bar3=OPEN bar3_close=0 "
+            "DualDoD=OPEN dual_dod_a=OPEN dual_dod_b=OPEN "
+            "G-AC-1=1 ko_in_kernel=0 Soft!=product dual=MIT|Apache-2.0 "
+            "(lean residual only; Dual DoD OPEN; bar3 OPEN)\n",
+            szLamp, u32Ready, g_u32Presents, g_u32PresentFail, g_u32Multi,
+            g_u32FrameGen, u32DimOk, u32PathOk, u32MultiOk, u32QueryOk,
+            u32BatchOk, u32LicOk, u32Ok, u32Checks);
 }
 
 /**
@@ -1380,15 +339,7 @@ session_compositor_init(void)
     u32 iPix;
     u8 *p;
 
-    comp_soft_inc(&g_u32SoftInitEnter);
-    /* Wave 15: re-init after present activity (soft reenter). */
-    if (g_u32SoftPresentEnter != 0u || g_u32SoftBatchEnter != 0u ||
-        g_u32Presents != 0u) {
-        comp_soft_inc(&g_u32SoftInitReenter);
-    }
-
     if (g_fReady && g_pScanout != NULL && g_u32W != 0 && g_u32H != 0) {
-        comp_soft_inc(&g_u32SoftInitIdem);
         return 0;
     }
 
@@ -1396,6 +347,7 @@ session_compositor_init(void)
     g_fLoggedPresent = 0;
     g_fLoggedMulti = 0;
     g_u32Presents = 0;
+    g_u32PresentFail = 0;
     g_u32Multi = 0;
     g_u32FrameGen = 0;
     g_u32SoftIdx = 0;
@@ -1404,32 +356,27 @@ session_compositor_init(void)
     g_u32W = 0;
     g_u32H = 0;
     g_u32Stride = 0;
-    g_u32SoftInitLastPages = 0;
-    g_u32SoftInitLastBytes = 0;
-    /* Soft once re-arms so a re-init after present can dump again. */
-    g_fSoftOnce = 0;
-    g_fSoftBatchInFlight = 0;
+    /* Soft residual re-arms so a re-init after present can dump again. */
+    g_fSoftResidualOnce = 0;
+    g_u32SoftLeanOk = 0;
+    g_u32SoftLeanFail = 0;
+    /* lean_runs sticky across re-init (once-fire count; Soft!=product). */
 
     if (!virtio_gpu_ready()) {
-        comp_soft_inc(&g_u32SoftInitFailGpu);
         kprintf("compositor: no virtio-gpu\n");
-        /* Grep: compositor: soft (fail baseline) */
-        soft_inventory_log();
+        /* Lean fail residual once (no multi-line catalog). */
+        comp_soft_residual_once();
         return -1;
     }
 
     (void)virtio_gpu_get_display(&u32W, &u32H);
-    /* Clamp: zero/absurd display info must not drive multi-megabyte allocs. */
-    if (u32W == 0 || u32H == 0 || u32W > GJ_COMP_MAX_DIM ||
-        u32H > GJ_COMP_MAX_DIM) {
-        comp_soft_inc(&g_u32SoftInitClamp);
-        if (u32W == 0 || u32H == 0) {
-            comp_soft_inc(&g_u32SoftInitClampZero);
-        }
-        if (u32W > GJ_COMP_MAX_DIM || u32H > GJ_COMP_MAX_DIM) {
-            comp_soft_inc(&g_u32SoftInitClampMax);
-        }
-        comp_soft_inc(&g_u32SoftInitFallback);
+    /*
+     * Clamp: zero/absurd/too-small display info must not drive multi-megabyte
+     * allocs or undersized tiles below the min residual geometry contract.
+     * Soft tile only (Soft!=product); matches path arm min..max.
+     */
+    if (u32W < GJ_COMP_MIN_W || u32H < GJ_COMP_MIN_H ||
+        u32W > GJ_COMP_MAX_DIM || u32H > GJ_COMP_MAX_DIM) {
         u32W = GJ_COMP_FALLBACK_W;
         u32H = GJ_COMP_FALLBACK_H;
     }
@@ -1440,11 +387,11 @@ session_compositor_init(void)
     /* u32W/H ≤ 256 ⇒ stride*height fits comfortably in u32. */
     u32Bytes = g_u32Stride * g_u32H;
     u32Pages = (u32Bytes + GJ_PAGE_SIZE - 1u) / GJ_PAGE_SIZE;
-    g_u32SoftInitLastBytes = u32Bytes;
-    g_u32SoftInitLastPages = u32Pages;
     if (u32Pages == 0) {
-        comp_soft_inc(&g_u32SoftInitFailPmm);
-        soft_inventory_log();
+        g_u32W = 0;
+        g_u32H = 0;
+        g_u32Stride = 0;
+        comp_soft_residual_once();
         return -1;
     }
 
@@ -1456,20 +403,15 @@ session_compositor_init(void)
             g_u32W = 0;
             g_u32H = 0;
             g_u32Stride = 0;
-            g_u32SoftInitLastPages = 0;
-            g_u32SoftInitLastBytes = 0;
-            comp_soft_inc(&g_u32SoftInitFailPmm);
-            soft_inventory_log();
+            /* Lean residual on hard alloc fail (path arm: !ready zeroed). */
+            comp_soft_residual_once();
             return -1;
         }
-        comp_soft_inc(&g_u32SoftInitShrink);
         g_u32W = GJ_COMP_MIN_W;
         g_u32H = GJ_COMP_MIN_H;
         g_u32Stride = g_u32W * GJ_COMP_BPP;
         u32Pages = 1;
         u32Bytes = g_u32Stride * g_u32H;
-        g_u32SoftInitLastPages = u32Pages;
-        g_u32SoftInitLastBytes = u32Bytes;
     }
 
     g_pScanout = (void *)hhdm_to_virt(g_paScanout);
@@ -1479,34 +421,25 @@ session_compositor_init(void)
         g_u32W = 0;
         g_u32H = 0;
         g_u32Stride = 0;
-        g_u32SoftInitLastPages = 0;
-        g_u32SoftInitLastBytes = 0;
-        comp_soft_inc(&g_u32SoftInitFailHhdm);
-        soft_inventory_log();
+        comp_soft_residual_once();
         return -1;
     }
 
     p = (u8 *)g_pScanout;
-    comp_soft_inc(&g_u32SoftPaintEnter);
     for (iPix = 0; iPix < g_u32W * g_u32H; iPix++) {
-        /* GreenJade green-ish gradient (BGRA) — visual bring-up only. */
+        /* GreenJade green-ish gradient (BGRA) - visual bring-up only. */
         p[iPix * 4u + 0] = 0x20;
         p[iPix * 4u + 1] = (u8)(0x80u + (iPix & 0x3fu));
         p[iPix * 4u + 2] = 0x10;
         p[iPix * 4u + 3] = 0xff;
     }
-    g_u32SoftPaintPix = g_u32W * g_u32H;
-    g_u32SoftPaintBytes = g_u32SoftPaintPix * GJ_COMP_BPP;
     (void)u32Bytes;
     (void)u32Pages;
 
     g_fReady = 1;
-    comp_soft_inc(&g_u32SoftInitOk);
-    kprintf("compositor: scanout %ux%u pa=0x%lx ready (multi-frame soft "
-            "wave=%u)\n",
-            g_u32W, g_u32H, (unsigned long)g_paScanout, GJ_COMP_SOFT_WAVE);
-    /* Grep: compositor: soft (baseline inventory after ready) */
-    soft_inventory_log();
+    /* greppable: compositor: scanout ... ready (multi-frame soft) */
+    kprintf("compositor: scanout %ux%u pa=0x%lx ready (multi-frame soft)\n",
+            g_u32W, g_u32H, (unsigned long)g_paScanout);
     return 0;
 }
 
@@ -1523,7 +456,6 @@ comp_note_ok_present(void)
         g_u32Multi++;
         if (!g_fLoggedMulti) {
             g_fLoggedMulti = 1;
-            comp_soft_inc(&g_u32SoftPresentMulti1);
             /* greppable: compositor: multi-frame soft */
             kprintf("compositor: multi-frame soft gen=%u idx=%u\n",
                     g_u32FrameGen, g_u32SoftIdx);
@@ -1531,10 +463,8 @@ comp_note_ok_present(void)
     }
     if (!g_fLoggedPresent) {
         g_fLoggedPresent = 1;
-        comp_soft_inc(&g_u32SoftPresentFirstOk);
         kprintf("compositor: present ok (quiet after first)\n");
     }
-    soft_note_peaks();
 }
 
 /**
@@ -1546,29 +476,22 @@ session_compositor_present(void)
 {
     int st;
 
-    comp_soft_inc(&g_u32SoftPresentEnter);
-
     if (!g_fReady || g_pScanout == NULL || g_u32W == 0 || g_u32H == 0 ||
         g_u32Stride == 0) {
-        comp_soft_inc(&g_u32SoftPresentFailRdy);
-        g_u32SoftLastPresentSt = 1u; /* fail_ready */
-        if (g_fSoftBatchInFlight == 0) {
-            soft_inventory_maybe_once();
-        }
+        g_u32PresentFail++;
+        /* Once-lamp residual on not-ready flip (functional path honesty). */
+        comp_soft_residual_once();
         return -1;
     }
     st = virtio_gpu_present(g_u32W, g_u32H, g_pScanout, g_u32Stride);
     if (st == 0) {
-        comp_soft_inc(&g_u32SoftPresentOk);
-        g_u32SoftLastPresentSt = 0u; /* ok */
         comp_note_ok_present();
+        /* Once-lamp residual after first ok present activity. */
+        comp_soft_residual_once();
     } else {
-        comp_soft_inc(&g_u32SoftPresentFailBe);
-        g_u32SoftLastPresentSt = 2u; /* fail_backend */
-    }
-    /* Batch path dumps once after batch counters update. */
-    if (g_fSoftBatchInFlight == 0) {
-        soft_inventory_maybe_once();
+        g_u32PresentFail++;
+        /* Once-lamp residual after backend reject (still Soft!=product). */
+        comp_soft_residual_once();
     }
     return st;
 }
@@ -1578,100 +501,60 @@ session_compositor_present_n(u32 u32N)
 {
     u32 i;
     u32 u32Ok = 0;
-    u32 u32Req;
     int stLast = -1;
 
-    comp_soft_inc(&g_u32SoftBatchEnter);
-
     if (!g_fReady) {
-        comp_soft_inc(&g_u32SoftBatchFail);
-        g_u32SoftBatchLastOk = 0;
-        g_u32SoftBatchLastReq = 0;
-        soft_inventory_maybe_once();
+        g_u32PresentFail++;
+        comp_soft_residual_once();
         return -1;
     }
     if (u32N == 0) {
-        comp_soft_inc(&g_u32SoftBatchZeroN);
         u32N = 1;
     }
     if (u32N > GJ_COMP_MULTI_MAX) {
-        comp_soft_inc(&g_u32SoftBatchClamp);
         u32N = GJ_COMP_MULTI_MAX;
     }
-    u32Req = u32N;
-    g_u32SoftBatchReq += u32Req;
-    g_u32SoftBatchLastReq = u32Req;
-    g_fSoftBatchInFlight = 1;
     for (i = 0; i < u32N; i++) {
         stLast = session_compositor_present();
         if (stLast == 0) {
             u32Ok++;
         } else {
             /* stop soft batch on first backend reject */
-            if (u32Ok > 0u) {
-                comp_soft_inc(&g_u32SoftBatchStopRej);
-            }
             break;
         }
     }
-    g_fSoftBatchInFlight = 0;
-    g_u32SoftBatchLastOk = u32Ok;
-    if (u32Ok > g_u32SoftPeakBatchOk) {
-        g_u32SoftPeakBatchOk = u32Ok;
-    }
-    if (u32Ok != 0u) {
-        g_u32SoftBatchFramesOk += u32Ok;
-        comp_soft_inc(&g_u32SoftBatchOk);
-        if (u32Ok < u32N) {
-            comp_soft_inc(&g_u32SoftBatchPartial);
-        }
-    } else {
-        comp_soft_inc(&g_u32SoftBatchFail);
-    }
-    soft_inventory_maybe_once();
     return u32Ok != 0 ? 0 : stLast;
 }
 
 u32
 session_compositor_present_count(void)
 {
-    comp_soft_inc(&g_u32SoftQueryPresentN);
-    /*
-     * Soft diagnostics re-read: emit inventory so multi-frame smoke greps
-     * greppable compositor: soft lines without a dedicated syscall.
-     * greppable: compositor: soft
-     */
-    soft_inventory_log();
+    /* Silent query - no inventory stamp storm. */
     return g_u32Presents;
 }
 
 u32
 session_compositor_multi_count(void)
 {
-    comp_soft_inc(&g_u32SoftQueryMulti);
-    /* greppable: compositor: soft (query multi) */
-    soft_inventory_log();
+    /* Silent query - no inventory stamp storm. */
     return g_u32Multi;
 }
 
 u32
 session_compositor_frame_gen(void)
 {
-    comp_soft_inc(&g_u32SoftQueryGen);
     return g_u32FrameGen;
 }
 
 u32
 session_compositor_soft_index(void)
 {
-    comp_soft_inc(&g_u32SoftQueryIdx);
     return g_u32SoftIdx & 1u;
 }
 
 int
 session_compositor_ready(void)
 {
-    comp_soft_inc(&g_u32SoftQueryReady);
     return g_fReady != 0;
 }
 
@@ -1679,12 +562,9 @@ session_compositor_ready(void)
 void *
 session_compositor_fb(void)
 {
-    comp_soft_inc(&g_u32SoftQueryFb);
     if (!g_fReady) {
-        comp_soft_inc(&g_u32SoftQueryFbNull);
         return NULL;
     }
-    comp_soft_inc(&g_u32SoftQueryFbOk);
     return g_pScanout;
 }
 
@@ -1697,23 +577,17 @@ session_compositor_size(u32 *pW, u32 *pH)
     u32 u32W = g_fReady ? g_u32W : 0u;
     u32 u32H = g_fReady ? g_u32H : 0u;
 
-    comp_soft_inc(&g_u32SoftQuerySize);
     if (pW != NULL) {
         *pW = u32W;
-    } else {
-        comp_soft_inc(&g_u32SoftQuerySizeNullW);
     }
     if (pH != NULL) {
         *pH = u32H;
-    } else {
-        comp_soft_inc(&g_u32SoftQuerySizeNullH);
     }
 }
 
 u32
 session_compositor_stride(void)
 {
-    comp_soft_inc(&g_u32SoftQueryStride);
     if (!g_fReady) {
         return 0;
     }

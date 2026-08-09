@@ -3,32 +3,41 @@
  * Copyright (c) 2026 Project GreenJade contributors
  *
  * Shared freestanding kprintf (x86_64 + aarch64 product). Console via
- * console_putchar / console_write (arch provides).
+ * console_putchar / console_write (arch provides). Dual license MIT OR
+ * Apache-2.0 only. No GPL.
  *
- * Format soft (deepened carefully, pure C, no string.c):
+ * Format soft (pure C, no string.c):
  *   %% %c %s %d %i %u %x %p
  *   length: l / ll  (e.g. %ld %lu %lx %lld %llu %llx)
  *   optional 0-flag + decimal width (e.g. %04x %08lx %016llx)
  *
- * Soft kprintf inventory (Wave 9 exclusive; Wave 20 deepen; this unit only):
- *   Lifetime conversion / flag / null-arg counters; never hard-gate format.
- *   Greppable prefix-stable serial markers (rate-limited; never flood):
- *     kprintf: soft inventory …
- *     kprintf: soft conv …
- *     kprintf: soft flags …
- *     kprintf: soft null …
- *     kprintf: soft path …
- *     kprintf: soft stats …
- *     kprintf: soft deepen wave=116 …
- *     kprintf: soft budget …     (log_max/areas/milestone lamps)
- *     kprintf: soft honesty|surfaces|catalog|note|return|retmap …  (Wave 19)
- *     stdio_k: soft inventory|path|stats|deepen|fmt|budget|honesty|
- *              surfaces|catalog|note …
- *   Emissions only at power-of-two call milestones, hard-capped at
- *   KPF_SOFT_LOG_MAX. Soft dump uses console_* + print_u64 only (no nested
- *   kprintf) so inventory never re-enters the formatter.
+ * -------------------------------------------------------------------------
+ * H2 residual - reentrancy / depth + rate caps (FAULT stack safety)
+ * -------------------------------------------------------------------------
+ * Prior FAULT class (H2 stamp storm -> #PF I=1 string-as-code): multi-line
+ * soft-deepen floods + nested formatter frames on residual stack.
+ * Permanent rules in this unit only (Soft!=product; C0 residual deepen):
+ *   - KPF_DEPTH_MAX bounds nested kprintf frames; excess dropped (counter)
+ *   - Soft inventory emits only at depth==1 (never from nested frames)
+ *   - Soft dump uses console_* + print_u64 only (no nested kprintf)
+ *   - LEAN dump: few greppable lines; never ret*angle / multi-kprintf storms
+ *   - KPF_SOFT_LOG_MAX hard-caps full multi-line dumps (pow2 milestones)
+ *   - Post-cap lean rate residual: densified kprintf/stdio_k soft rate pair
+ *     on pow2 of cap_skip, hard-capped at KPF_SOFT_RATE_LOG_MAX (never
+ *     silent forever, never stamp-storm)
+ *   - rate_cap_skip tallies pow2 cap_skip arrivals past rate residual hard-cap
+ *   - quiet / mile_hit tallies (non-milestone silent + pre-cap milestones)
+ *   - KPF_NUM_BUF / KPF_WIDTH_MAX tiny; %s hard-capped at KPF_STR_MAX
+ *   - No product version stamp; stamp-free residual; never bump GJ_IMAGE_VERSION
+ *   - Soft!=product; G-AC-1 (no .ko product AC in this unit); Dual DoD OPEN
+ *
  * greppable: kprintf: soft
+ * greppable: kprintf: soft residual lean
+ * greppable: kprintf: soft rate
  * greppable: stdio_k: soft
+ * greppable: stdio_k: soft residual lean
+ * greppable: stdio_k: soft rate
+ * greppable: Soft!=product | G-AC-1 | dual_dod=OPEN | stamp_storm=0
  */
 #include <gj/console.h>
 #include <gj/klog.h>
@@ -42,37 +51,59 @@ enum {
     KPF_LEN_LL   = 2
 };
 
-/* max digit/pad capacity for u64 (binary worst-case) + margin */
-enum { KPF_NUM_BUF = 80, KPF_WIDTH_MAX = 64 };
+/*
+ * Digit/pad capacity for u64: decimal needs <=20 digits, hex <=16; width for
+ * %016llx / %p is 16. Keep tiny - large on-stack buffers on deep call stacks
+ * contributed to FAULT class (#PF I=1). Soft!=product inventory uses same path.
+ */
+enum { KPF_NUM_BUF = 24, KPF_WIDTH_MAX = 20 };
 
 /*
- * Soft inventory serial budget (Wave 9 / Wave 19). Absolute cap of greppable
- * dumps; milestones are power-of-two kprintf call counts (1,2,4,…).
- * greppable: kprintf: soft / stdio_k: soft
+ * Nested kprintf bound (product path). Depth 0 idle; each kprintf entry
+ * increments. Beyond KPF_DEPTH_MAX the call is dropped (counter only) so
+ * console/fb soft hooks cannot stack-smash via reentrancy. Soft!=product.
  */
-#define KPF_SOFT_LOG_MAX 8u
+#define KPF_DEPTH_MAX 2
 
-/* Wave 62 soft inventory stamp (file-local; never product gate). */
-#define KPF_SOFT_WAVE 116u
+/* Bound %s emit length (chars); prevents multi-KiB floods on residual stack. */
+#define KPF_STR_MAX 512u
 
 /*
- * Soft inventory area count (fixed greppable categories for deepen stamp):
- *   inventory | conv | flags | null | path | stats | deepen | stdio |
- *   budget | honesty | surfaces | catalog | note | return | retmap |
- *   retclass | retlane
+ * Soft inventory serial budget (H2 residual lean). Absolute cap of greppable
+ * full multi-line dumps; milestones are power-of-two kprintf call counts
+ * (1,2,4,...). Tight cap: stamp storms worsen stack (FAULT class H2).
+ * Soft!=product. greppable: kprintf: soft / stdio_k: soft
  */
-#define KPF_SOFT_AREAS 206u
+#define KPF_SOFT_LOG_MAX 4u
+
+/*
+ * Post-cap lean rate residual budget (H2 rate caps residual deepen).
+ * After KPF_SOFT_LOG_MAX full dumps, still emit densified rate residual pair
+ * on power-of-two of cap_skip so residual is never silent forever -
+ * hard-capped so long-running boots cannot stamp-storm. Soft!=product.
+ * greppable: kprintf: soft rate / stdio_k: soft rate
+ */
+#define KPF_SOFT_RATE_LOG_MAX 4u
+
+/*
+ * Soft inventory area count (fixed greppable categories; Soft!=product lean):
+ *   inventory | path | stats | depth | residual | stdio | rate
+ * Honest count only - never inflate with stamp-storm dummies (H2 residual).
+ * "rate" covers full-dump densified fields + post-cap lean rate residual.
+ */
+#define KPF_SOFT_AREAS 7u
 
 /*
  * Soft product counters (wrap OK; diagnostics only).
  * greppable: kprintf: soft inventory
- * greppable: kprintf: soft conv
- * greppable: kprintf: soft flags
- * greppable: kprintf: soft null
  * greppable: kprintf: soft path
  * greppable: kprintf: soft stats
- * greppable: kprintf: soft deepen
+ * greppable: kprintf: soft depth
+ * greppable: kprintf: soft residual lean
+ * greppable: kprintf: soft rate
  * greppable: stdio_k: soft
+ * greppable: stdio_k: soft residual lean
+ * greppable: stdio_k: soft rate
  */
 static u64 g_u64SoftCalls;     /* kprintf entries */
 static u64 g_u64SoftPanic;     /* panic entries */
@@ -91,20 +122,34 @@ static u64 g_u64SoftWidth;     /* conversions with width > 0 */
 static u64 g_u64SoftZeroPad;   /* conversions with '0' pad flag */
 static u64 g_u64SoftLenL;      /* length 'l' */
 static u64 g_u64SoftLenLl;     /* length 'll' */
-static u64 g_u64SoftNullFmt;   /* kprintf(NULL, …) */
+static u64 g_u64SoftNullFmt;   /* kprintf(NULL, ...) */
 static u64 g_u64SoftEmptyFmt;  /* kprintf("") empty format */
-static u64 g_u64SoftNullS;     /* %s with NULL arg → "(null)" */
+static u64 g_u64SoftNullS;     /* %s with NULL arg -> "(null)" */
 static u64 g_u64SoftTrunc;     /* format ended mid-conversion */
 static u64 g_u64SoftSkip;      /* soft log suppressed (cap / busy / reenter) */
 static u64 g_u64SoftCapSkip;   /* soft log suppressed: hit KPF_SOFT_LOG_MAX */
 static u64 g_u64SoftBusySkip;  /* soft log suppressed: reentrancy guard */
-static u64 g_u64SoftLastMile;  /* last power-of-two milestone that logged */
-static u32 g_u32SoftLogged;    /* greppable dump emissions */
+static u64 g_u64SoftDepthSkip; /* kprintf nested beyond KPF_DEPTH_MAX */
+static u64 g_u64SoftNestSkip;  /* soft log skipped: not outermost frame */
+static u64 g_u64SoftStrCap;    /* %s hit KPF_STR_MAX (truncated) */
+static u64 g_u64SoftQuiet;     /* non-milestone silent (rate residual honesty) */
+static u64 g_u64SoftMileHit;   /* pow2 milestone arrivals (pre-cap / pre-skip) */
+static u64 g_u64SoftLastMile;  /* last power-of-two milestone that full-logged */
+static u64 g_u64SoftRateLast;  /* last cap_skip value that rate-logged */
+static u64 g_u64SoftRateCapSkip; /* pow2 cap_skip past KPF_SOFT_RATE_LOG_MAX */
+static u64 g_u64SoftDepthNeg;  /* defensive clamp when depth corrupted < 0 */
+static u64 g_u64SoftWidthClamp;/* width parse hit KPF_WIDTH_MAX */
+static u64 g_u64SoftPanicReset;/* panic cleared depth/busy (H2 stack safety) */
+static u32 g_u32SoftLogged;    /* full multi-line dump emissions */
+static u32 g_u32SoftRateLogged;/* post-cap lean rate residual emissions */
 static int g_fSoftBusy;        /* reentrancy guard for soft dump */
+static int g_nKpfDepth;        /* nested kprintf depth (product bound) */
+static int g_nKpfDepthHi;      /* soft high-water of nested depth */
 
 static void
 print_u64(u64 u64Val, unsigned uBase, int nWidth, char chPad)
 {
+    /* Tiny stack frame only - see KPF_NUM_BUF comment (FAULT harden). */
     char szBuf[KPF_NUM_BUF];
     const char *szDigits = "0123456789abcdef";
     int nLen = 0;
@@ -201,11 +246,100 @@ kpf_soft_kv(const char *szKey, u64 u64Val)
 }
 
 /**
- * Greppable soft kprintf inventory (product / smoke; Wave 20 deepen).
- * Must not call kprintf — console_write + print_u64 only.
+ * H2 rate residual - one dense greppable line (console_* only; no kprintf).
+ * Used inside full multi-line dump and as the sole post-cap residual lamp.
+ * greppable: kprintf: soft rate / stdio_k: soft rate
+ * Soft!=product; G-AC-1; dual_dod=OPEN; never hard-gates product path.
+ */
+static void
+kprintf_soft_rate_line(void)
+{
+    u32 u32AtCap;
+    u32 u32RateAtCap;
+
+    u32AtCap = (g_u32SoftLogged >= KPF_SOFT_LOG_MAX) ? 1u : 0u;
+    u32RateAtCap = (g_u32SoftRateLogged >= KPF_SOFT_RATE_LOG_MAX) ? 1u : 0u;
+
+    /* Grep: kprintf: soft rate - H2 rate caps residual (pow2+hard_cap). */
+    console_write("kprintf: soft rate");
+    kpf_soft_kv(" calls=", g_u64SoftCalls);
+    kpf_soft_kv(" mile_hit=", g_u64SoftMileHit);
+    kpf_soft_kv(" mile_last=", g_u64SoftLastMile);
+    kpf_soft_kv(" quiet=", g_u64SoftQuiet);
+    kpf_soft_kv(" logs=", (u64)g_u32SoftLogged);
+    kpf_soft_kv(" log_max=", (u64)KPF_SOFT_LOG_MAX);
+    kpf_soft_kv(" rate_logs=", (u64)g_u32SoftRateLogged);
+    kpf_soft_kv(" rate_max=", (u64)KPF_SOFT_RATE_LOG_MAX);
+    kpf_soft_kv(" rate_last=", g_u64SoftRateLast);
+    kpf_soft_kv(" rate_cap_skip=", g_u64SoftRateCapSkip);
+    kpf_soft_kv(" skip=", g_u64SoftSkip);
+    kpf_soft_kv(" cap_skip=", g_u64SoftCapSkip);
+    kpf_soft_kv(" nest_skip=", g_u64SoftNestSkip);
+    kpf_soft_kv(" busy_skip=", g_u64SoftBusySkip);
+    kpf_soft_kv(" depth_skip=", g_u64SoftDepthSkip);
+    kpf_soft_kv(" depth_max=", (u64)KPF_DEPTH_MAX);
+    kpf_soft_kv(" depth_hi=", (u64)g_nKpfDepthHi);
+    kpf_soft_kv(" at_cap=", (u64)u32AtCap);
+    kpf_soft_kv(" rate_at_cap=", (u64)u32RateAtCap);
+    kpf_soft_kv(" h2=", 1ull);
+    kpf_soft_kv(" soft_ne_product=", 1ull);
+    kpf_soft_kv(" g_ac1=", 1ull);
+    kpf_soft_kv(" dual_dod_open=", 1ull);
+    console_write(" policy=pow2+hard_cap outer_only=1 stamp_storm=0 "
+                  "version_stamp=0 Soft!=product\n");
+
+    /* Grep: stdio_k: soft rate - twin lean rate residual (unit name). */
+    console_write("stdio_k: soft rate");
+    kpf_soft_kv(" calls=", g_u64SoftCalls);
+    kpf_soft_kv(" mile_hit=", g_u64SoftMileHit);
+    kpf_soft_kv(" quiet=", g_u64SoftQuiet);
+    kpf_soft_kv(" logs=", (u64)g_u32SoftLogged);
+    kpf_soft_kv(" log_max=", (u64)KPF_SOFT_LOG_MAX);
+    kpf_soft_kv(" rate_logs=", (u64)g_u32SoftRateLogged);
+    kpf_soft_kv(" rate_max=", (u64)KPF_SOFT_RATE_LOG_MAX);
+    kpf_soft_kv(" rate_cap_skip=", g_u64SoftRateCapSkip);
+    kpf_soft_kv(" cap_skip=", g_u64SoftCapSkip);
+    kpf_soft_kv(" nest_skip=", g_u64SoftNestSkip);
+    kpf_soft_kv(" depth_skip=", g_u64SoftDepthSkip);
+    kpf_soft_kv(" at_cap=", (u64)u32AtCap);
+    kpf_soft_kv(" rate_at_cap=", (u64)u32RateAtCap);
+    kpf_soft_kv(" h2=", 1ull);
+    kpf_soft_kv(" soft_ne_product=", 1ull);
+    kpf_soft_kv(" g_ac1=", 1ull);
+    kpf_soft_kv(" dual_dod_open=", 1ull);
+    console_write(" policy=pow2+hard_cap outer_only=1 stamp_storm=0 "
+                  "version_stamp=0 Soft!=product\n");
+}
+
+/**
+ * Post-cap lean rate residual (H2 rate caps residual deepen).
+ * One densified rate pair only - never the full multi-line inventory.
+ * Must not call kprintf. Soft!=product; dual MIT OR Apache-2.0.
+ */
+static void
+kprintf_soft_rate_log(void)
+{
+    if (g_fSoftBusy != 0) {
+        kpf_soft_inc(&g_u64SoftSkip);
+        kpf_soft_inc(&g_u64SoftBusySkip);
+        return;
+    }
+    g_fSoftBusy = 1;
+    if (g_u32SoftRateLogged < 0xffffffffu) {
+        g_u32SoftRateLogged++;
+    }
+    g_u64SoftRateLast = g_u64SoftCapSkip;
+    kprintf_soft_rate_line();
+    g_fSoftBusy = 0;
+}
+
+/**
+ * Greppable soft kprintf inventory (H2 residual lean; Soft!=product).
+ * Must not call kprintf - console_write + print_u64 only.
+ * Few lines only - no ret*angle / multi-line stamp storms (FAULT class H2).
  *
- *   kprintf: soft inventory|conv|flags|null|path|stats|deepen|…
- *   stdio_k: soft inventory|path|stats|deepen|fmt|…
+ *   kprintf: soft inventory|path|stats|depth|residual lean|rate
+ *   stdio_k: soft inventory|residual lean|rate
  */
 static void
 kprintf_soft_log(void)
@@ -227,21 +361,47 @@ kprintf_soft_log(void)
                  g_u64SoftConvD + g_u64SoftConvU + g_u64SoftConvX +
                  g_u64SoftConvP + g_u64SoftConvUnk;
 
-    /* Grep: kprintf: soft inventory */
+    /*
+     * Grep: kprintf: soft inventory - one dense rollup (H2 lean).
+     * Depth / reentrancy / rate residual counters primary; Soft!=product.
+     */
     console_write("kprintf: soft inventory");
     kpf_soft_kv(" calls=", g_u64SoftCalls);
     kpf_soft_kv(" lit=", g_u64SoftLit);
     kpf_soft_kv(" pct=", g_u64SoftPct);
-    kpf_soft_kv(" panic=", g_u64SoftPanic);
-    kpf_soft_kv(" trunc=", g_u64SoftTrunc);
-    kpf_soft_kv(" empty=", g_u64SoftEmptyFmt);
     kpf_soft_kv(" conv_all=", u64ConvAll);
+    kpf_soft_kv(" panic=", g_u64SoftPanic);
     kpf_soft_kv(" log_n=", (u64)g_u32SoftLogged);
-    kpf_soft_kv(" wave=", (u64)KPF_SOFT_WAVE);
-    console_write("\n");
+    kpf_soft_kv(" skip=", g_u64SoftSkip);
+    kpf_soft_kv(" quiet=", g_u64SoftQuiet);
+    kpf_soft_kv(" mile_hit=", g_u64SoftMileHit);
+    kpf_soft_kv(" depth_skip=", g_u64SoftDepthSkip);
+    kpf_soft_kv(" nest_skip=", g_u64SoftNestSkip);
+    kpf_soft_kv(" busy_skip=", g_u64SoftBusySkip);
+    kpf_soft_kv(" cap_skip=", g_u64SoftCapSkip);
+    kpf_soft_kv(" depth_max=", (u64)KPF_DEPTH_MAX);
+    kpf_soft_kv(" depth_cur=", (u64)g_nKpfDepth);
+    kpf_soft_kv(" depth_hi=", (u64)g_nKpfDepthHi);
+    console_write(" Soft!=product\n");
 
-    /* Grep: kprintf: soft conv */
-    console_write("kprintf: soft conv");
+    /* Grep: kprintf: soft path - contracts, no nested kprintf */
+    console_write("kprintf: soft path claim=console_putchar,console_write "
+                  "fmt=%%,%c,%s,%d,%i,%u,%x,%p len=l,ll flag=0-width "
+                  "reenter_safe=1 nested_kprintf=0 string_c=0 "
+                  "depth_max=");
+    print_u64((u64)KPF_DEPTH_MAX, 10u, 0, ' ');
+    console_write(" num_buf=");
+    print_u64((u64)KPF_NUM_BUF, 10u, 0, ' ');
+    console_write(" str_max=");
+    print_u64((u64)KPF_STR_MAX, 10u, 0, ' ');
+    console_write(" milestone=pow2 cap=");
+    print_u64((u64)KPF_SOFT_LOG_MAX, 10u, 0, ' ');
+    console_write(" rate_cap=");
+    print_u64((u64)KPF_SOFT_RATE_LOG_MAX, 10u, 0, ' ');
+    console_write(" outer_only=1 stamp_storm=0 Soft!=product\n");
+
+    /* Grep: kprintf: soft stats - conversion + null/trunc densified */
+    console_write("kprintf: soft stats");
     kpf_soft_kv(" esc=", g_u64SoftConvEsc);
     kpf_soft_kv(" c=", g_u64SoftConvC);
     kpf_soft_kv(" s=", g_u64SoftConvS);
@@ -250,1227 +410,185 @@ kprintf_soft_log(void)
     kpf_soft_kv(" x=", g_u64SoftConvX);
     kpf_soft_kv(" p=", g_u64SoftConvP);
     kpf_soft_kv(" unk=", g_u64SoftConvUnk);
-    kpf_soft_kv(" all=", u64ConvAll);
-    console_write("\n");
-
-    /* Grep: kprintf: soft flags */
-    console_write("kprintf: soft flags");
+    kpf_soft_kv(" null_fmt=", g_u64SoftNullFmt);
+    kpf_soft_kv(" null_s=", g_u64SoftNullS);
+    kpf_soft_kv(" empty=", g_u64SoftEmptyFmt);
+    kpf_soft_kv(" panic_null=", g_u64SoftPanicNull);
+    kpf_soft_kv(" trunc=", g_u64SoftTrunc);
+    kpf_soft_kv(" str_cap=", g_u64SoftStrCap);
     kpf_soft_kv(" width=", g_u64SoftWidth);
     kpf_soft_kv(" zero=", g_u64SoftZeroPad);
     kpf_soft_kv(" len_l=", g_u64SoftLenL);
     kpf_soft_kv(" len_ll=", g_u64SoftLenLl);
-    kpf_soft_kv(" width_max=", (u64)KPF_WIDTH_MAX);
-    console_write("\n");
-
-    /* Grep: kprintf: soft null */
-    console_write("kprintf: soft null");
-    kpf_soft_kv(" null_fmt=", g_u64SoftNullFmt);
-    kpf_soft_kv(" null_s=", g_u64SoftNullS);
-    kpf_soft_kv(" empty_fmt=", g_u64SoftEmptyFmt);
-    kpf_soft_kv(" panic_null=", g_u64SoftPanicNull);
-    kpf_soft_kv(" trunc=", g_u64SoftTrunc);
-    console_write("\n");
-
-    /* Grep: kprintf: soft path */
-    console_write("kprintf: soft path claim=console_putchar,console_write "
-                  "fmt=%%,%c,%s,%d,%i,%u,%x,%p len=l,ll flag=0-width "
-                  "reenter_safe=1 nested_kprintf=0 string_c=0 "
-                  "milestone=pow2 cap=");
-    print_u64((u64)KPF_SOFT_LOG_MAX, 10u, 0, ' ');
-    console_write(" wave=");
-    print_u64((u64)KPF_SOFT_WAVE, 10u, 0, ' ');
-    console_write(" (soft inventory; not libc printf)\n");
-
-    /* Grep: kprintf: soft stats */
-    console_write("kprintf: soft stats");
-    kpf_soft_kv(" calls=", g_u64SoftCalls);
-    kpf_soft_kv(" lit=", g_u64SoftLit);
-    kpf_soft_kv(" pct=", g_u64SoftPct);
-    kpf_soft_kv(" conv_all=", u64ConvAll);
-    kpf_soft_kv(" panic=", g_u64SoftPanic);
-    kpf_soft_kv(" log_n=", (u64)g_u32SoftLogged);
-    kpf_soft_kv(" skip=", g_u64SoftSkip);
-    kpf_soft_kv(" cap_skip=", g_u64SoftCapSkip);
-    kpf_soft_kv(" busy_skip=", g_u64SoftBusySkip);
-    kpf_soft_kv(" max=", (u64)KPF_SOFT_LOG_MAX);
     kpf_soft_kv(" last_mile=", g_u64SoftLastMile);
+    kpf_soft_kv(" quiet=", g_u64SoftQuiet);
+    kpf_soft_kv(" mile_hit=", g_u64SoftMileHit);
     kpf_soft_kv(" areas=", (u64)KPF_SOFT_AREAS);
-    kpf_soft_kv(" wave=", (u64)KPF_SOFT_WAVE);
-    console_write("\n");
+    console_write(" Soft!=product\n");
 
     /*
-     * ---- Wave 19 complementary surfaces (kept) (never reshape primary).
-     * Return surfaces only — soft inventory; never hard-gates product paths.
+     * Grep: kprintf: soft depth - H2 reentrancy residual (primary surface).
+     * depth_max / depth_hi / skip taxonomy only; never multi-line floods.
      */
-    /* Grep: kprintf: soft retclass — Wave 19 return-class taxonomy (kept) */
-    console_write("kprintf: soft retclass ok|fail|inval|nodev|busy|nomem "
-                  "soft_only=1 product_gate=0 wave=");
-    print_u64((u64)KPF_SOFT_WAVE, 10u, 0, ' ');
-    console_write(" (retclass taxonomy; Soft!=product)\n");
-    /* Grep: kprintf: soft retlane — Wave 19 return-lane catalog (kept) */
-    console_write("kprintf: soft retlane inv|selftest|rate|retcode|retmap|class "
-                  "product_kernel=OPEN soft_ne_product=1 wave=");
-    print_u64((u64)KPF_SOFT_WAVE, 10u, 0, ' ');
-    console_write(" (retlane catalog; Soft!=product)\n");
-    /*
-     * ---- Wave 20 complementary surfaces (kept) (never reshape primary).
-     * Return surfaces only — soft inventory; never hard-gates product paths.
-     * Soft!=product.
-     */
-    /* Grep: kprintf: soft retbound — Wave 20 return-bound honesty (kept) */
-    console_write("kprintf: soft retbound soft_only=1 product_gate=0 hard_gate=0 "
-                  "never_blocks_m0=1 wave=");
-    print_u64((u64)KPF_SOFT_WAVE, 10u, 0, ' ');
-    console_write(" (retbound honesty; Soft!=product)\n");
-    /* Grep: kprintf: soft retseal — Wave 20 seal stamp (kept) */
-    console_write("kprintf: soft retseal exclusive=1 soft_ne_product=1 "
-                  "product_kernel=OPEN wave=");
-    print_u64((u64)KPF_SOFT_WAVE, 10u, 0, ' ');
-    console_write(" (retseal stamp; Soft!=product)\n");
-    /*
-     * ---- Wave 21 complementary surfaces (kept) (never reshape primary).
-     * Return surfaces only — soft inventory; never hard-gates product paths.
-     * Soft!=product.
-     */
-    /* Grep: kprintf: soft retpulse — Wave 21 return-pulse honesty (kept) */
-    console_write("kprintf: soft retpulse soft_only=1 product_gate=0 soft_ne_product=1 "
-                  "never_blocks_m0=1 wave=");
-    print_u64((u64)KPF_SOFT_WAVE, 10u, 0, ' ');
-    console_write(" (retpulse honesty; Soft!=product)\n");
-    /* Grep: kprintf: soft retmark — Wave 21 mark stamp (kept) */
-    console_write("kprintf: soft retmark exclusive=1 soft_ne_product=1 "
-                  "product_kernel=OPEN wave=");
-    print_u64((u64)KPF_SOFT_WAVE, 10u, 0, ' ');
-    console_write(" (retmark stamp; Soft!=product)\n");
-
-    
-/*
- * ---- Wave 22 complementary surfaces (kept) (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- * Soft!=product.
- */
-/* Grep: kprintf: soft retphase — Wave 22 return-phase honesty (kept) */
-console_write("kprintf: soft retphase soft_only=1 product_gate=0 soft_ne_product=1 "
-              "never_blocks_m0=1 wave=");
-print_u64((u64)KPF_SOFT_WAVE, 10u, 0, ' ');
-console_write(" (retphase honesty; Soft!=product)\n");
-/* Grep: kprintf: soft retbadge — Wave 22 badge stamp (kept) */
-console_write("kprintf: soft retbadge exclusive=1 soft_ne_product=1 "
-              "product_kernel=OPEN wave=");
-print_u64((u64)KPF_SOFT_WAVE, 10u, 0, ' ');
-console_write(" (retbadge stamp; Soft!=product)\n");
-/*
- * ---- Wave 23 complementary surfaces (kept) (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- * Soft!=product.
- */
-/* Grep: kprintf: soft rettoken — Wave 23 return-token honesty (kept) */
-console_write("kprintf: soft rettoken soft_only=1 product_gate=0 soft_ne_product=1 "
-              "never_blocks_m0=1 wave=");
-print_u64((u64)KPF_SOFT_WAVE, 10u, 0, ' ');
-console_write(" (rettoken honesty; Soft!=product)\n");
-/* Grep: kprintf: soft retcrest — Wave 23 crest stamp (kept) */
-console_write("kprintf: soft retcrest exclusive=1 soft_ne_product=1 "
-              "product_kernel=OPEN wave=");
-print_u64((u64)KPF_SOFT_WAVE, 10u, 0, ' ');
-console_write(" (retcrest stamp; Soft!=product)\n");
-/*
- * ---- Wave 24 complementary surfaces (kept) (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- * Soft!=product.
- */
-/* Grep: kprintf: soft retvault — Wave 24 return-vault honesty (kept) */
-console_write("kprintf: soft retvault soft_only=1 product_gate=0 soft_ne_product=1 "
-              "never_blocks_m0=1 wave=");
-print_u64((u64)KPF_SOFT_WAVE, 10u, 0, ' ');
-console_write(" (retvault honesty; Soft!=product)\n");
-/* Grep: kprintf: soft retbanner — Wave 24 banner stamp (kept) */
-console_write("kprintf: soft retbanner exclusive=1 soft_ne_product=1 "
-              "product_kernel=OPEN wave=");
-print_u64((u64)KPF_SOFT_WAVE, 10u, 0, ' ');
-console_write(" (retbanner stamp; Soft!=product)\n");
-/*
- * ---- Wave 25 complementary surfaces (kept) (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- * Soft!=product.
- */
-/* Grep: kprintf: soft retledger — Wave 25 return-ledger honesty (kept) */
-console_write("kprintf: soft retledger soft_only=1 product_gate=0 soft_ne_product=1 "
-              "never_blocks_m0=1 wave=");
-print_u64((u64)KPF_SOFT_WAVE, 10u, 0, ' ');
-console_write(" (retledger honesty; Soft!=product)\n");
-/* Grep: kprintf: soft retbeacon — Wave 25 beacon stamp (kept) */
-console_write("kprintf: soft retbeacon exclusive=1 soft_ne_product=1 "
-              "product_kernel=OPEN wave=");
-print_u64((u64)KPF_SOFT_WAVE, 10u, 0, ' ');
-console_write(" (retbeacon stamp; Soft!=product)\n");
-/*
- * ---- Wave 26 complementary surfaces (kept) (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- * Soft!=product.
- */
-/* Grep: kprintf: soft retcipher — Wave 26 return-cipher honesty (kept) */
-console_write("kprintf: soft retcipher soft_only=1 product_gate=0 soft_ne_product=1 "
-              "never_blocks_m0=1 wave=");
-print_u64((u64)KPF_SOFT_WAVE, 10u, 0, ' ');
-console_write(" (retcipher honesty; Soft!=product)\n");
-/* Grep: kprintf: soft retflame — Wave 26 flame stamp (kept) */
-console_write("kprintf: soft retflame exclusive=1 soft_ne_product=1 "
-              "product_kernel=OPEN wave=");
-print_u64((u64)KPF_SOFT_WAVE, 10u, 0, ' ');
-console_write(" (retflame stamp; Soft!=product)\n");
-/*
- * ---- Wave 27 complementary surfaces (kept) (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: kprintf: soft retprism — Wave 27 return-prism honesty (kept) */
-console_write("kprintf: soft retprism soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retprism honesty; Soft!=product)\n");
-/* Grep: kprintf: soft retforge — Wave 27 forge stamp (kept) */
-console_write("kprintf: soft retforge exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retforge stamp; Soft!=product)\n");
-/*
- * ---- Wave 28 complementary surfaces (kept) (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- * Soft!=product.
- */
-/* Grep: kprintf: soft retshard — Wave 28 return-shard honesty (kept) */
-console_write("kprintf: soft retshard soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retshard honesty; Soft!=product)\n");
-/* Grep: kprintf: soft retcrown — Wave 28 crown stamp (kept) */
-console_write("kprintf: soft retcrown exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retcrown stamp; Soft!=product)\n");
-/*
- * ---- Wave 29 complementary surfaces (kept) (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- * Soft!=product.
- */
-/* Grep: kprintf: soft retglyph — Wave 29 return-glyph honesty (kept) */
-console_write("kprintf: soft retglyph soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retglyph honesty; Soft!=product)\n");
-/* Grep: kprintf: soft retscepter — Wave 29 scepter stamp (kept) */
-console_write("kprintf: soft retscepter exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retscepter stamp; Soft!=product)\n");
-/*
- * ---- Wave 30 complementary surfaces (kept) (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- * Soft!=product.
- */
-/* Grep: kprintf: soft retsigil — Wave 30 return-sigil honesty (kept) */
-console_write("kprintf: soft retsigil soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retsigil honesty; Soft!=product)\n");
-/* Grep: kprintf: soft retemblem — Wave 30 emblem stamp (kept) */
-console_write("kprintf: soft retemblem exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retemblem stamp; Soft!=product)\n");
-/*
- * ---- Wave 31 complementary surfaces (kept) (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- * Soft!=product.
- */
-/* Grep: kprintf: soft retaegis — Wave 31 return-aegis honesty (kept) */
-console_write("kprintf: soft retaegis soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retaegis honesty; Soft!=product)\n");
-/* Grep: kprintf: soft retmantle — Wave 31 mantle stamp (kept) */
-console_write("kprintf: soft retmantle exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retmantle stamp; Soft!=product)\n");
-/*
- * ---- Wave 32 complementary surfaces (kept) (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- * Soft!=product.
- */
-/* Grep: kprintf: soft retbulwark — Wave 32 return-bulwark honesty (kept) */
-console_write("kprintf: soft retbulwark soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retbulwark honesty; Soft!=product)\n");
-/* Grep: kprintf: soft retpanoply — Wave 32 panoply stamp (kept) */
-console_write("kprintf: soft retpanoply exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retpanoply stamp; Soft!=product)\n");
-/*
- * ---- Wave 33 complementary surfaces (kept) (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: kprintf: soft retbastion — Wave 33 return-bastion honesty (kept) */
-console_write("kprintf: soft retbastion soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retbastion honesty; Soft!=product)\n");
-/* Grep: kprintf: soft retcitadel — Wave 33 citadel stamp (kept) */
-console_write("kprintf: soft retcitadel exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retcitadel stamp; Soft!=product)\n");
-/*
- * ---- Wave 34 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: kprintf: soft retredoubt — Wave 34 return-redoubt honesty */
-console_write("kprintf: soft retredoubt soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retredoubt honesty; Soft!=product)\n");
-/* Grep: kprintf: soft retkeep — Wave 34 exclusive keep stamp */
-console_write("kprintf: soft retkeep exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retkeep stamp; Soft!=product)\n");
-/*
- * ---- Wave 35 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: kprintf: soft retfortress — Wave 35 return-fortress honesty */
-console_write("kprintf: soft retfortress soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retfortress honesty; Soft!=product)\n");
-/* Grep: kprintf: soft retpalace — Wave 35 exclusive palace stamp */
-console_write("kprintf: soft retpalace exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retpalace stamp; Soft!=product)\n");
-/*
- * ---- Wave 36 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: kprintf: soft rethold — Wave 36 return-hold honesty */
-console_write("kprintf: soft rethold soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(rethold honesty; Soft!=product)\n");
-/* Grep: kprintf: soft retspire — Wave 36 exclusive spire stamp */
-console_write("kprintf: soft retspire exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retspire stamp; Soft!=product)\n");
-/*
- * ---- Wave 37 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: kprintf: soft retwall — Wave 37 return-wall honesty */
-console_write("kprintf: soft retwall soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retwall honesty; Soft!=product)\n");
-/* Grep: kprintf: soft retgate — Wave 37 exclusive gate stamp */
-console_write("kprintf: soft retgate exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retgate stamp; Soft!=product)\n");
-/*
- * ---- Wave 38 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: kprintf: soft retmoat — Wave 38 return-moat honesty */
-console_write("kprintf: soft retmoat soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retmoat honesty; Soft!=product)\n");
-/* Grep: kprintf: soft retower — Wave 38 exclusive tower stamp */
-console_write("kprintf: soft retower exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retower stamp; Soft!=product)\n");
-/*
- * ---- Wave 39 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: kprintf: soft retbarbican — Wave 39 return-barbican honesty */
-console_write("kprintf: soft retbarbican soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retbarbican honesty; Soft!=product)\n");
-/* Grep: kprintf: soft retglacis — Wave 39 exclusive glacis stamp */
-console_write("kprintf: soft retglacis exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retglacis stamp; Soft!=product)\n");
-/*
- * ---- Wave 40 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: kprintf: soft retcurtain — Wave 40 return-curtain honesty */
-console_write("kprintf: soft retcurtain soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retcurtain honesty; Soft!=product)\n");
-/* Grep: kprintf: soft retparapet — Wave 40 exclusive parapet stamp */
-console_write("kprintf: soft retparapet exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retparapet stamp; Soft!=product)\n");
-/*
- * ---- Wave 41 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: kprintf: soft retravelin — Wave 41 return-travelin honesty */
-console_write("kprintf: soft retravelin soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retravelin honesty; Soft!=product)\n");
-/* Grep: kprintf: soft retditch — Wave 41 exclusive ditch stamp */
-console_write("kprintf: soft retditch exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retditch stamp; Soft!=product)\n");
-/*
- * ---- Wave 42 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: kprintf: soft retportcullis — Wave 42 return-portcullis honesty */
-console_write("kprintf: soft retportcullis soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retportcullis honesty; Soft!=product)\n");
-/* Grep: kprintf: soft retbattlement — Wave 42 exclusive battlement stamp */
-console_write("kprintf: soft retbattlement exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retbattlement stamp; Soft!=product)\n");
-/*
- * ---- Wave 43 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: kprintf: soft retmachicolation — Wave 43 return-machicolation honesty */
-console_write("kprintf: soft retmachicolation soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retmachicolation honesty; Soft!=product)\n");
-/* Grep: kprintf: soft retarrowslit — Wave 43 exclusive arrowslit stamp */
-console_write("kprintf: soft retarrowslit exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retarrowslit stamp; Soft!=product)\n");
-
-/*
- * ---- Wave 44 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: kprintf: soft retmerlon — Wave 44 return-merlon honesty */
-console_write("kprintf: soft retmerlon soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retmerlon honesty; Soft!=product)\n");
-/* Grep: kprintf: soft retembrasure — Wave 44 exclusive embrasure stamp */
-console_write("kprintf: soft retembrasure exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retembrasure stamp; Soft!=product)\n");
-
-/*
- * ---- Wave 45 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: kprintf: soft retkeepgate — Wave 45 return-keepgate honesty */
-kprintf("kprintf: soft retkeepgate soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retkeepgate honesty; Soft≠product)\n");
-/* Grep: kprintf: soft retouterward — Wave 45 exclusive outerward stamp */
-kprintf("kprintf: soft retouterward exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retouterward stamp; Soft≠product)\n");
-
-/*
- * ---- Wave 46 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: kprintf: soft retbailey — Wave 46 return-bailey honesty */
-kprintf("kprintf: soft retbailey soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retbailey honesty; Soft≠product)\n");
-/* Grep: kprintf: soft retpostern — Wave 46 exclusive postern stamp */
-kprintf("kprintf: soft retpostern exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retpostern stamp; Soft≠product)\n");
-
-/*
- * ---- Wave 47 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: kprintf: soft retinnerward — Wave 47 return-innerward honesty */
-kprintf("kprintf: soft retinnerward soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retinnerward honesty; Soft≠product)\n");
-/* Grep: kprintf: soft retdonjon — Wave 47 exclusive donjon stamp */
-kprintf("kprintf: soft retdonjon exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retdonjon stamp; Soft≠product)\n");
-
-/*
- * ---- Wave 48 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: kprintf: soft retchevaux — Wave 48 return-chevaux honesty */
-kprintf("kprintf: soft retchevaux soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retchevaux honesty; Soft≠product)\n");
-/* Grep: kprintf: soft retpalisade — Wave 48 exclusive palisade stamp */
-kprintf("kprintf: soft retpalisade exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retpalisade stamp; Soft≠product)\n");
-
-/*
- * ---- Wave 49 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: kprintf: soft retglacisgate — Wave 49 return-glacisgate honesty */
-kprintf("kprintf: soft retglacisgate soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retglacisgate honesty; Soft≠product)\n");
-/* Grep: kprintf: soft retoutwork — Wave 49 exclusive outwork stamp */
-kprintf("kprintf: soft retoutwork exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retoutwork stamp; Soft≠product)\n");
-/*
- * ---- Wave 50 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: kprintf: soft retsally — Wave 50 return-sally honesty */
-kprintf("kprintf: soft retsally soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retsally honesty; Soft≠product)\n");
-/* Grep: kprintf: soft retcounterscarp — Wave 50 exclusive counterscarp stamp */
-kprintf("kprintf: soft retcounterscarp exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retcounterscarp stamp; Soft≠product)\n");
-/*
- * ---- Wave 51 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: kprintf: soft retfosse — Wave 51 return-fosse honesty */
-kprintf("kprintf: soft retfosse soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retfosse honesty; Soft≠product)\n");
-/* Grep: kprintf: soft retcoveredway — Wave 51 exclusive coveredway stamp */
-kprintf("kprintf: soft retcoveredway exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retcoveredway stamp; Soft≠product)\n");
-
-/*
- * ---- Wave 52 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: kprintf: soft rettenaille — Wave 52 return-tenaille honesty */
-kprintf("kprintf: soft rettenaille soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(rettenaille honesty; Soft≠product)\n");
-/* Grep: kprintf: soft retdemilune — Wave 52 exclusive demilune stamp */
-kprintf("kprintf: soft retdemilune exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retdemilune stamp; Soft≠product)\n");
-/*
- * ---- Wave 53 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: kprintf: soft retravelin — Wave 53 return-travelin honesty */
-kprintf("kprintf: soft retravelin soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retravelin honesty; Soft≠product)\n");
-/* Grep: kprintf: soft retlunette — Wave 53 exclusive lunette stamp */
-kprintf("kprintf: soft retlunette exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retlunette stamp; Soft≠product)\n");
-/*
- * ---- Wave 54 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: kprintf: soft retcaponier — Wave 54 return-caponier honesty */
-kprintf("kprintf: soft retcaponier soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retcaponier honesty; Soft≠product)\n");
-/* Grep: kprintf: soft retredan — Wave 54 exclusive redan stamp */
-kprintf("kprintf: soft retredan exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retredan stamp; Soft≠product)\n");
-/*
- * ---- Wave 55 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: kprintf: soft retflank — Wave 55 return-flank honesty */
-kprintf("kprintf: soft retflank soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retflank honesty; Soft≠product)\n");
-/* Grep: kprintf: soft retface — Wave 55 exclusive face stamp */
-kprintf("kprintf: soft retface exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retface stamp; Soft≠product)\n");
-/*
- * ---- Wave 56 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: kprintf: soft retgorge — Wave 56 return-gorge honesty */
-kprintf("kprintf: soft retgorge soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retgorge honesty; Soft≠product)\n");
-/* Grep: kprintf: soft retshoulder — Wave 56 exclusive shoulder stamp */
-kprintf("kprintf: soft retshoulder exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retshoulder stamp; Soft≠product)\n");
-/*
- * ---- Wave 57 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: kprintf: soft retraverse — Wave 57 return-traverse honesty */
-kprintf("kprintf: soft retraverse soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retraverse honesty; Soft≠product)\n");
-/* Grep: kprintf: soft retcasemate — Wave 57 exclusive casemate stamp */
-kprintf("kprintf: soft retcasemate exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retcasemate stamp; Soft≠product)\n");
-
-/*
- * ---- Wave 58 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: kprintf: soft retorillon — Wave 58 return-orillon honesty */
-kprintf("kprintf: soft retorillon soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retorillon honesty; Soft≠product)\n");
-/* Grep: kprintf: soft retbonnette — Wave 58 exclusive bonnette stamp */
-kprintf("kprintf: soft retbonnette exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retbonnette stamp; Soft≠product)\n");
-
-/*
- * ---- Wave 59 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: kprintf: soft retcrownwork — Wave 59 return-crownwork honesty */
-kprintf("kprintf: soft retcrownwork soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retcrownwork honesty; Soft≠product)\n");
-/* Grep: kprintf: soft rethornwork — Wave 59 exclusive hornwork stamp */
-kprintf("kprintf: soft rethornwork exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(rethornwork stamp; Soft≠product)\n");
-
-/*
- * ---- Wave 60 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: kprintf: soft retplace — Wave 60 return-place honesty */
-kprintf("kprintf: soft retplace soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retplace honesty; Soft≠product)\n");
-/* Grep: kprintf: soft retenvelope — Wave 60 exclusive envelope stamp */
-kprintf("kprintf: soft retenvelope exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retenvelope stamp; Soft≠product)\n");
-
-
-
-
-
-
-
-
-/*
- * ---- Wave 61 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: kprintf: soft retcounterguard — Wave 61 return-counterguard honesty */
-kprintf("kprintf: soft retcounterguard soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retcounterguard honesty; Soft≠product)\n");
-/* Grep: kprintf: soft retcoveredface — Wave 61 exclusive coveredface stamp */
-kprintf("kprintf: soft retcoveredface exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retcoveredface stamp; Soft≠product)\n");
-/*
- * ---- Wave 62 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: kprintf: soft retbastionface — Wave 62 return-bastionface honesty */
-kprintf("kprintf: soft retbastionface soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retbastionface honesty; Soft≠product)\n");
-/* Grep: kprintf: soft retcurtainangle — Wave 62 exclusive curtainangle stamp */
-kprintf("kprintf: soft retcurtainangle exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retcurtainangle stamp; Soft≠product)\n");
-/*
- * ---- Wave 63 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: kprintf: soft retdoubletenaille — Wave 63 return-doubletenaille honesty */
-kprintf("kprintf: soft retdoubletenaille soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retdoubletenaille honesty; Soft≠product)\n");
-/* Grep: kprintf: soft retplaceofarms — Wave 63 exclusive placeofarms stamp */
-kprintf("kprintf: soft retplaceofarms exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retplaceofarms stamp; Soft≠product)\n");
- /*
-  * ---- Wave 64 exclusive complementary surfaces (never reshape primary).
-  * Return surfaces only — soft inventory; never hard-gates product paths.
-  */
- /* Grep: kprintf: soft retreentrant — Wave 64 return-reentrant honesty */
-kprintf("kprintf: soft retreentrant soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retreentrant honesty; Soft≠product)\n");
- /* Grep: kprintf: soft retsallyport — Wave 64 exclusive sallyport stamp */
-kprintf("kprintf: soft retsallyport exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retsallyport stamp; Soft≠product)\n");
- /*
-  * ---- Wave 65 exclusive complementary surfaces (never reshape primary).
-  * Return surfaces only — soft inventory; never hard-gates product paths.
-  */
- /* Grep: kprintf: soft retgorgeangle — Wave 65 return-gorgeangle honesty */
-kprintf("kprintf: soft retgorgeangle soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retgorgeangle honesty; Soft≠product)\n");
- /* Grep: kprintf: soft retshoulderangle — Wave 65 exclusive shoulderangle stamp */
-kprintf("kprintf: soft retshoulderangle exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retshoulderangle stamp; Soft≠product)\n");
- /*
-  * ---- Wave 66 exclusive complementary surfaces (never reshape primary).
-  * Return surfaces only — soft inventory; never hard-gates product paths.
-  */
- /* Grep: kprintf: soft retflankangle — Wave 66 return-flankangle honesty */
- kprintf("kprintf: soft retflankangle soft_only=1 product_gate=0 soft_ne_product=1 "
-         "never_blocks_m0=1 wave=116 "
-         "(retflankangle honesty; Soft≠product)\n");
- /* Grep: kprintf: soft retfaceangle — Wave 66 exclusive faceangle stamp */
- kprintf("kprintf: soft retfaceangle exclusive=1 soft_ne_product=1 "
-         "product_kernel=OPEN wave=116 "
-         "(retfaceangle stamp; Soft≠product)\n");
-/*
- * ---- Wave 67 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: kprintf: soft retcaponierangle — Wave 67 return-caponierangle honesty */
-kprintf("kprintf: soft retcaponierangle soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retcaponierangle honesty; Soft≠product)\n");
-/* Grep: kprintf: soft retredanangle — Wave 67 exclusive redanangle stamp */
-kprintf("kprintf: soft retredanangle exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retredanangle stamp; Soft≠product)\n");
-/*
- * ---- Wave 68 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: kprintf: soft retlunetteangle — Wave 68 return-lunetteangle honesty */
-kprintf("kprintf: soft retlunetteangle soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retlunetteangle honesty; Soft≠product)\n");
-/* Grep: kprintf: soft rettenailleangle — Wave 68 exclusive tenailleangle stamp */
-kprintf("kprintf: soft rettenailleangle exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(rettenailleangle stamp; Soft≠product)\n");
-/*
- * ---- Wave 69 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: kprintf: soft retdemiluneangle — Wave 69 return-demiluneangle honesty */
-kprintf("kprintf: soft retdemiluneangle soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retdemiluneangle honesty; Soft≠product)\n");
-/* Grep: kprintf: soft retcoveredwayangle — Wave 69 exclusive coveredwayangle stamp */
-kprintf("kprintf: soft retcoveredwayangle exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retcoveredwayangle stamp; Soft≠product)\n");
-/*
- * ---- Wave 70 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: kprintf: soft retfosseangle — Wave 70 return-fosseangle honesty */
-kprintf("kprintf: soft retfosseangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retfosseangle honesty; Soft≠product)\n");
-/* Grep: kprintf: soft retcounterscarple — Wave 70 exclusive counterscarple stamp */
-kprintf("kprintf: soft retcounterscarple exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retcounterscarple stamp; Soft≠product)\n");
-/*
- * ---- Wave 71 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: kprintf: soft retsallyportangle — Wave 71 return-sallyportangle honesty */
-kprintf("kprintf: soft retsallyportangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retsallyportangle honesty; Soft≠product)\n");
-/* Grep: kprintf: soft retreentrantangle — Wave 71 exclusive reentrantangle stamp */
-kprintf("kprintf: soft retreentrantangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retreentrantangle stamp; Soft≠product)\n");
-/*
- * ---- Wave 72 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: kprintf: soft retplaceofarmsangle — Wave 72 return-placeofarmsangle honesty */
-kprintf("kprintf: soft retplaceofarmsangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retplaceofarmsangle honesty; Soft≠product)\n");
-/* Grep: kprintf: soft retdoubletenailleangle — Wave 72 exclusive doubletenailleangle stamp */
-kprintf("kprintf: soft retdoubletenailleangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retdoubletenailleangle stamp; Soft≠product)\n");
-/* Grep: kprintf: soft retcurtainface — Wave 73 return-curtainface honesty */
-kprintf("kprintf: soft retcurtainface soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retcurtainface honesty; Soft≠product)\n");
-/* Grep: kprintf: soft retbastionangle — Wave 73 exclusive bastionangle stamp */
-kprintf("kprintf: soft retbastionangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retbastionangle stamp; Soft≠product)\n");
-/* Grep: kprintf: soft retglacisangle — Wave 74 return-glacisangle honesty */
-kprintf("kprintf: soft retglacisangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retglacisangle honesty; Soft≠product)\n");
-/* Grep: kprintf: soft retparapetangle — Wave 74 exclusive parapetangle stamp */
-kprintf("kprintf: soft retparapetangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retparapetangle stamp; Soft≠product)\n");
-/* Grep: kprintf: soft retmoatangle — Wave 75 return-moatangle honesty */
-kprintf("kprintf: soft retmoatangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retmoatangle honesty; Soft≠product)\n");
-/* Grep: kprintf: soft retowerangle — Wave 75 exclusive towerangle stamp */
-kprintf("kprintf: soft retowerangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retowerangle stamp; Soft≠product)\n");
-/* Grep: kprintf: soft retgateangle — Wave 76 return-gateangle honesty */
-kprintf("kprintf: soft retgateangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retgateangle honesty; Soft≠product)\n");
-/* Grep: kprintf: soft retwallangle — Wave 76 exclusive wallangle stamp */
-kprintf("kprintf: soft retwallangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retwallangle stamp; Soft≠product)\n");
-/* Grep: kprintf: soft retspireangle — Wave 77 return-spireangle honesty */
-kprintf("kprintf: soft retspireangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retspireangle honesty; Soft≠product)\n");
-/* Grep: kprintf: soft retholdangle — Wave 77 exclusive holdangle stamp */
-kprintf("kprintf: soft retholdangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retholdangle stamp; Soft≠product)\n");
-/* Grep: kprintf: soft retpalaceangle — Wave 78 return-palaceangle honesty */
-kprintf("kprintf: soft retpalaceangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retpalaceangle honesty; Soft≠product)\n");
-/* Grep: kprintf: soft retfortressangle — Wave 78 exclusive fortressangle stamp */
-kprintf("kprintf: soft retfortressangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retfortressangle stamp; Soft≠product)\n");
-/* Grep: kprintf: soft retkeepangle — Wave 79 return-keepangle honesty */
-kprintf("kprintf: soft retkeepangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retkeepangle honesty; Soft≠product)\n");
-/* Grep: kprintf: soft retredoubtangle — Wave 79 exclusive redoubtangle stamp */
-kprintf("kprintf: soft retredoubtangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retredoubtangle stamp; Soft≠product)\n");
-/* Grep: kprintf: soft retcitadelangle — Wave 80 return-citadelangle honesty */
-kprintf("kprintf: soft retcitadelangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retcitadelangle honesty; Soft≠product)\n");
-/* Grep: kprintf: soft retbastionkeep — Wave 80 exclusive bastionkeep stamp */
-kprintf("kprintf: soft retbastionkeep exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retbastionkeep stamp; Soft≠product)\n");
-/* Grep: kprintf: soft retpanoplyangle — Wave 81 return-panoplyangle honesty */
-kprintf("kprintf: soft retpanoplyangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retpanoplyangle honesty; Soft≠product)\n");
-/* Grep: kprintf: soft retbulwarkangle — Wave 81 exclusive bulwarkangle stamp */
-kprintf("kprintf: soft retbulwarkangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retbulwarkangle stamp; Soft≠product)\n");
-/* Grep: kprintf: soft retmantleangle — Wave 82 return-mantleangle honesty */
-kprintf("kprintf: soft retmantleangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retmantleangle honesty; Soft≠product)\n");
-/* Grep: kprintf: soft retaegisangle — Wave 82 exclusive aegisangle stamp */
-kprintf("kprintf: soft retaegisangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retaegisangle stamp; Soft≠product)\n");
-/* Grep: kprintf: soft retemblemangle — Wave 83 return-emblemangle honesty */
-kprintf("kprintf: soft retemblemangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retemblemangle honesty; Soft≠product)\n");
-/* Grep: kprintf: soft retsigilangle — Wave 83 exclusive sigilangle stamp */
-kprintf("kprintf: soft retsigilangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retsigilangle stamp; Soft≠product)\n");
-/* Grep: kprintf: soft retscepterangle — Wave 84 return-scepterangle honesty */
-kprintf("kprintf: soft retscepterangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retscepterangle honesty; Soft≠product)\n");
-/* Grep: kprintf: soft retglyphangle — Wave 84 exclusive glyphangle stamp */
-kprintf("kprintf: soft retglyphangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retglyphangle stamp; Soft≠product)\n");
-/* Grep: kprintf: soft retcrownangle — Wave 85 return-crownangle honesty */
-kprintf("kprintf: soft retcrownangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retcrownangle honesty; Soft≠product)\n");
-/* Grep: kprintf: soft retshardangle — Wave 85 exclusive shardangle stamp */
-kprintf("kprintf: soft retshardangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retshardangle stamp; Soft≠product)\n");
-/* Grep: kprintf: soft retforgeangle — Wave 86 return-forgeangle honesty */
-kprintf("kprintf: soft retforgeangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retforgeangle honesty; Soft≠product)\n");
-/* Grep: kprintf: soft retprismangle — Wave 86 exclusive prismangle stamp */
-kprintf("kprintf: soft retprismangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retprismangle stamp; Soft≠product)\n");
-/* Grep: kprintf: soft retflameangle — Wave 87 return-flameangle honesty */
-kprintf("kprintf: soft retflameangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retflameangle honesty; Soft≠product)\n");
-/* Grep: kprintf: soft retcipherangle — Wave 87 exclusive cipherangle stamp */
-kprintf("kprintf: soft retcipherangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retcipherangle stamp; Soft≠product)\n");
-/* Grep: kprintf: soft retbeaconangle — Wave 88 return-beaconangle honesty */
-kprintf("kprintf: soft retbeaconangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retbeaconangle honesty; Soft≠product)\n");
-/* Grep: kprintf: soft retledgerangle — Wave 88 exclusive ledgerangle stamp */
-kprintf("kprintf: soft retledgerangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retledgerangle stamp; Soft≠product)\n");
-/* Grep: kprintf: soft retbannerangle — Wave 89 return-bannerangle honesty */
-kprintf("kprintf: soft retbannerangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retbannerangle honesty; Soft≠product)\n");
-/* Grep: kprintf: soft retvaultangle — Wave 89 exclusive vaultangle stamp */
-kprintf("kprintf: soft retvaultangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retvaultangle stamp; Soft≠product)\n");
-/* Grep: kprintf: soft retcrestangle — Wave 90 return-crestangle honesty */
-kprintf("kprintf: soft retcrestangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retcrestangle honesty; Soft≠product)\n");
-/* Grep: kprintf: soft rettokenangle — Wave 90 exclusive tokenangle stamp */
-kprintf("kprintf: soft rettokenangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (rettokenangle stamp; Soft≠product)\n");
-/* Grep: kprintf: soft retbadgeangle — Wave 91 return-badgeangle honesty */
-kprintf("kprintf: soft retbadgeangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retbadgeangle honesty; Soft≠product)\n");
-/* Grep: kprintf: soft retphaseangle — Wave 91 exclusive phaseangle stamp */
-kprintf("kprintf: soft retphaseangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retphaseangle stamp; Soft≠product)\n");
-/* Grep: kprintf: soft retmarkangle — Wave 92 return-markangle honesty */
-kprintf("kprintf: soft retmarkangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retmarkangle honesty; Soft≠product)\n");
-/* Grep: kprintf: soft retpulseangle — Wave 92 exclusive pulseangle stamp */
-kprintf("kprintf: soft retpulseangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retpulseangle stamp; Soft≠product)\n");
-
-/* Grep: kprintf: soft retsealangle — Wave 93 return-sealangle honesty */
-kprintf("kprintf: soft retsealangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retsealangle honesty; Soft≠product)\n");
-/* Grep: kprintf: soft retboundangle — Wave 93 exclusive boundangle stamp */
-kprintf("kprintf: soft retboundangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retboundangle stamp; Soft≠product)\n");
-/* Grep: kprintf: soft retstemangle — Wave 94 return-stemangle honesty */
-kprintf("kprintf: soft retstemangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retstemangle honesty; Soft≠product)\n");
-/* Grep: kprintf: soft retbladeangle — Wave 94 exclusive bladeangle stamp */
-kprintf("kprintf: soft retbladeangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retbladeangle stamp; Soft≠product)\n");
-/* Grep: kprintf: soft retchordangle — Wave 95 return-chordangle honesty */
-kprintf("kprintf: soft retchordangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retchordangle honesty; Soft≠product)\n");
-/* Grep: kprintf: soft retarcangle — Wave 95 exclusive arcangle stamp */
-kprintf("kprintf: soft retarcangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retarcangle stamp; Soft≠product)\n");
-/* Grep: kprintf: soft retsectorangle — Wave 96 return-sectorangle honesty */
-kprintf("kprintf: soft retsectorangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retsectorangle honesty; Soft≠product)\n");
-/* Grep: kprintf: soft retwedgeangle — Wave 96 exclusive wedgeangle stamp */
-kprintf("kprintf: soft retwedgeangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retwedgeangle stamp; Soft≠product)\n");
-/* Grep: kprintf: soft retradiusangle — Wave 97 return-radiusangle honesty */
-kprintf("kprintf: soft retradiusangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retradiusangle honesty; Soft≠product)\n");
-/* Grep: kprintf: soft retdiameterangle — Wave 97 exclusive diameterangle stamp */
-kprintf("kprintf: soft retdiameterangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retdiameterangle stamp; Soft≠product)\n");
-/* Grep: kprintf: soft retcircumangle — Wave 98 return-circumangle honesty */
-kprintf("kprintf: soft retcircumangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retcircumangle honesty; Soft≠product)\n");
-/* Grep: kprintf: soft retellipseangle — Wave 98 exclusive ellipseangle stamp */
-kprintf("kprintf: soft retellipseangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retellipseangle stamp; Soft≠product)\n");
-/* Grep: kprintf: soft rethyperangle — Wave 99 return-hyperangle honesty */
-kprintf("kprintf: soft rethyperangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (rethyperangle honesty; Soft≠product)\n");
-/* Grep: kprintf: soft retparabolaangle — Wave 99 exclusive parabolaangle stamp */
-kprintf("kprintf: soft retparabolaangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retparabolaangle stamp; Soft≠product)\n");
-/* Grep: kprintf: soft retspiralangle — Wave 100 return-spiralangle honesty */
-kprintf("kprintf: soft retspiralangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retspiralangle honesty; Soft≠product)\n");
-/* Grep: kprintf: soft rethelixangle — Wave 100 exclusive helixangle stamp */
-kprintf("kprintf: soft rethelixangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (rethelixangle stamp; Soft≠product)\n");
-/* Grep: kprintf: soft rettorusangle — Wave 101 return-torusangle honesty */
-kprintf("kprintf: soft rettorusangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (rettorusangle honesty; Soft≠product)\n");
-/* Grep: kprintf: soft retknotangle — Wave 101 exclusive knotangle stamp */
-kprintf("kprintf: soft retknotangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retknotangle stamp; Soft≠product)\n");
-/* Grep: kprintf: soft retmoebiusangle — Wave 102 return-moebiusangle honesty */
-kprintf("kprintf: soft retmoebiusangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retmoebiusangle honesty; Soft≠product)\n");
-/* Grep: kprintf: soft retkleinangle — Wave 102 exclusive kleinangle stamp */
-kprintf("kprintf: soft retkleinangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retkleinangle stamp; Soft≠product)\n");
-/* Grep: kprintf: soft retprojectangle — Wave 103 return-projectangle honesty */
-kprintf("kprintf: soft retprojectangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retprojectangle honesty; Soft≠product)\n");
-/* Grep: kprintf: soft retaffineangle — Wave 103 exclusive affineangle stamp */
-kprintf("kprintf: soft retaffineangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retaffineangle stamp; Soft≠product)\n");
-/* Grep: kprintf: soft retlinearangle — Wave 104 return-linearangle honesty */
-kprintf("kprintf: soft retlinearangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retlinearangle honesty; Soft≠product)\n");
-/* Grep: kprintf: soft retbilinearangle — Wave 104 exclusive bilinearangle stamp */
-kprintf("kprintf: soft retbilinearangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retbilinearangle stamp; Soft≠product)\n");
-/* Grep: kprintf: soft retquadraticangle — Wave 105 return-quadraticangle honesty */
-kprintf("kprintf: soft retquadraticangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retquadraticangle honesty; Soft≠product)\n");
-/* Grep: kprintf: soft retcubicangle — Wave 105 exclusive cubicangle stamp */
-kprintf("kprintf: soft retcubicangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retcubicangle stamp; Soft≠product)\n");
-/* Grep: kprintf: soft retquarticangle — Wave 106 return-quarticangle honesty */
-kprintf("kprintf: soft retquarticangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retquarticangle honesty; Soft≠product)\n");
-/* Grep: kprintf: soft retquinticangle — Wave 106 exclusive quinticangle stamp */
-kprintf("kprintf: soft retquinticangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retquinticangle stamp; Soft≠product)\n");
-/* Grep: kprintf: soft retsplineangle — Wave 107 return-splineangle honesty */
-kprintf("kprintf: soft retsplineangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retsplineangle honesty; Soft≠product)\n");
-/* Grep: kprintf: soft retbezierangle — Wave 107 exclusive bezierangle stamp */
-kprintf("kprintf: soft retbezierangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retbezierangle stamp; Soft≠product)\n");
-/* Grep: kprintf: soft rethurmitangle — Wave 108 return-hermitangle honesty */
-kprintf("kprintf: soft rethurmitangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (rethurmitangle honesty; Soft≠product)\n");
-/* Grep: kprintf: soft retcatmullangle — Wave 108 exclusive catmullangle stamp */
-kprintf("kprintf: soft retcatmullangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retcatmullangle stamp; Soft≠product)\n");
-/* Grep: kprintf: soft retnurbsangle — Wave 109 return-nurbsangle honesty */
-kprintf("kprintf: soft retnurbsangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retnurbsangle honesty; Soft≠product)\n");
-/* Grep: kprintf: soft retbsplineangle — Wave 109 exclusive bsplineangle stamp */
-kprintf("kprintf: soft retbsplineangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retbsplineangle stamp; Soft≠product)\n");
-/* Grep: kprintf: soft retmeshangle — Wave 110 return-meshangle honesty */
-kprintf("kprintf: soft retmeshangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retmeshangle honesty; Soft≠product)\n");
-/* Grep: kprintf: soft retgridangle — Wave 110 exclusive gridangle stamp */
-kprintf("kprintf: soft retgridangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retgridangle stamp; Soft≠product)\n");
-/* Grep: kprintf: soft retvoxelangle — Wave 111 return-voxelangle honesty */
-kprintf("kprintf: soft retvoxelangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retvoxelangle honesty; Soft≠product)\n");
-/* Grep: kprintf: soft rettexelangle — Wave 111 exclusive texelangle stamp */
-kprintf("kprintf: soft rettexelangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (rettexelangle stamp; Soft≠product)\n");
-/* Grep: kprintf: soft retfragmentangle — Wave 112 return-fragmentangle honesty */
-kprintf("kprintf: soft retfragmentangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retfragmentangle honesty; Soft≠product)\n");
-/* Grep: kprintf: soft retvertexangle — Wave 112 exclusive vertexangle stamp */
-kprintf("kprintf: soft retvertexangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retvertexangle stamp; Soft≠product)\n");
-/* Grep: kprintf: soft retshaderangle — Wave 113 return-shaderangle honesty */
-kprintf("kprintf: soft retshaderangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retshaderangle honesty; Soft≠product)\n");
-/* Grep: kprintf: soft retpipelineangle — Wave 113 exclusive pipelineangle stamp */
-kprintf("kprintf: soft retpipelineangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retpipelineangle stamp; Soft≠product)\n");
-/* Grep: kprintf: soft retframebufferangle — Wave 114 return-framebufferangle honesty */
-kprintf("kprintf: soft retframebufferangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retframebufferangle honesty; Soft≠product)\n");
-/* Grep: kprintf: soft retswapchainangle — Wave 114 exclusive swapchainangle stamp */
-kprintf("kprintf: soft retswapchainangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retswapchainangle stamp; Soft≠product)\n");
-/* Grep: kprintf: soft retpresentangle — Wave 115 return-presentangle honesty */
-kprintf("kprintf: soft retpresentangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retpresentangle honesty; Soft≠product)\n");
-/* Grep: kprintf: soft retvsyncangle — Wave 115 exclusive vsyncangle stamp */
-kprintf("kprintf: soft retvsyncangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retvsyncangle stamp; Soft≠product)\n");
-/* Grep: kprintf: soft retfenceangle — Wave 116 return-fenceangle honesty */
-kprintf("kprintf: soft retfenceangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retfenceangle honesty; Soft≠product)\n");
-/* Grep: kprintf: soft retsemaphoreangle — Wave 116 exclusive semaphoreangle stamp */
-kprintf("kprintf: soft retsemaphoreangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retsemaphoreangle stamp; Soft≠product)\n");
-/* Grep: kprintf: soft deepen wave */
-    console_write("kprintf: soft deepen wave=");
-    print_u64((u64)KPF_SOFT_WAVE, 10u, 0, ' ');
-    kpf_soft_kv(" areas=", (u64)KPF_SOFT_AREAS);
-    kpf_soft_kv(" calls=", g_u64SoftCalls);
-    kpf_soft_kv(" logs=", (u64)g_u32SoftLogged);
-    kpf_soft_kv(" skip=", g_u64SoftSkip);
-    console_write(" (Wave 45 exclusive; soft only; not libc)\n");
-
-    /* Grep: kprintf: soft budget (emission geometry) */
-    console_write("kprintf: soft budget");
+    console_write("kprintf: soft depth");
+    kpf_soft_kv(" depth_max=", (u64)KPF_DEPTH_MAX);
+    kpf_soft_kv(" depth_cur=", (u64)g_nKpfDepth);
+    kpf_soft_kv(" depth_hi=", (u64)g_nKpfDepthHi);
+    kpf_soft_kv(" depth_skip=", g_u64SoftDepthSkip);
+    kpf_soft_kv(" depth_neg=", g_u64SoftDepthNeg);
+    kpf_soft_kv(" nest_skip=", g_u64SoftNestSkip);
+    kpf_soft_kv(" busy_skip=", g_u64SoftBusySkip);
+    kpf_soft_kv(" cap_skip=", g_u64SoftCapSkip);
+    kpf_soft_kv(" rate_cap_skip=", g_u64SoftRateCapSkip);
+    kpf_soft_kv(" str_cap=", g_u64SoftStrCap);
+    kpf_soft_kv(" width_clamp=", g_u64SoftWidthClamp);
+    kpf_soft_kv(" num_buf=", (u64)KPF_NUM_BUF);
+    kpf_soft_kv(" str_max=", (u64)KPF_STR_MAX);
     kpf_soft_kv(" log_max=", (u64)KPF_SOFT_LOG_MAX);
-    kpf_soft_kv(" areas=", (u64)KPF_SOFT_AREAS);
-    kpf_soft_kv(" logs=", (u64)g_u32SoftLogged);
-    kpf_soft_kv(" last_mile=", g_u64SoftLastMile);
-    kpf_soft_kv(" cap_skip=", g_u64SoftCapSkip);
+    kpf_soft_kv(" rate_max=", (u64)KPF_SOFT_RATE_LOG_MAX);
+    kpf_soft_kv(" h2=", 1ull);
+    kpf_soft_kv(" soft_ne_product=", 1ull);
+    console_write(" taxonomy=depth,nest,busy,cap,rate_cap,quiet,mile "
+                  "outer_only=1 stamp_storm=0 Soft!=product\n");
+
+    /*
+     * Grep: kprintf: soft residual lean
+     * Single honesty lamp for H2 stamp-storm guard + stack-safe + rate residual.
+     * C0 residual deepen: Soft!=product; dual MIT OR Apache-2.0; G-AC-1;
+     * Dual DoD OPEN; no version stamp; never hard-gates product path.
+     */
+    console_write("kprintf: soft residual lean");
+    kpf_soft_kv(" soft_ne_product=", 1ull);
+    kpf_soft_kv(" h2=", 1ull);
+    kpf_soft_kv(" g_ac1=", 1ull);
+    kpf_soft_kv(" dual_dod_open=", 1ull);
+    kpf_soft_kv(" depth_max=", (u64)KPF_DEPTH_MAX);
+    kpf_soft_kv(" depth_hi=", (u64)g_nKpfDepthHi);
+    kpf_soft_kv(" depth_skip=", g_u64SoftDepthSkip);
+    kpf_soft_kv(" depth_neg=", g_u64SoftDepthNeg);
+    kpf_soft_kv(" nest_skip=", g_u64SoftNestSkip);
     kpf_soft_kv(" busy_skip=", g_u64SoftBusySkip);
-    kpf_soft_kv(" wave=", (u64)KPF_SOFT_WAVE);
-    console_write(" milestone=pow2\n");
-
-    /* Grep: kprintf: soft honesty (Wave 20 deepen) */
-    console_write("kprintf: soft honesty freestanding=1 pure_c=1 "
-                  "nested_kprintf=0 string_c=0 not_libc=1 soft_only=1 "
-                  "wave=");
-    print_u64((u64)KPF_SOFT_WAVE, 10u, 0, ' ');
-    console_write(" (soft inventory)\n");
-
-    /* Grep: kprintf: soft surfaces (Wave 20 deepen) */
-    console_write("kprintf: soft surfaces count=");
-    print_u64((u64)KPF_SOFT_AREAS, 10u, 0, ' ');
-    console_write(" names=inventory,conv,flags,null,path,stats,deepen,"
-                  "stdio,budget,honesty,surfaces,catalog,note,return,retmap wave=");
-    print_u64((u64)KPF_SOFT_WAVE, 10u, 0, ' ');
-    console_write("\n");
-
-    /* Grep: kprintf: soft catalog (Wave 20 deepen) */
-    console_write("kprintf: soft catalog wave=");
-    print_u64((u64)KPF_SOFT_WAVE, 10u, 0, ' ');
+    kpf_soft_kv(" cap_skip=", g_u64SoftCapSkip);
+    kpf_soft_kv(" rate_cap_skip=", g_u64SoftRateCapSkip);
+    kpf_soft_kv(" quiet=", g_u64SoftQuiet);
+    kpf_soft_kv(" mile_hit=", g_u64SoftMileHit);
+    kpf_soft_kv(" log_cap=", (u64)KPF_SOFT_LOG_MAX);
+    kpf_soft_kv(" logs=", (u64)g_u32SoftLogged);
+    kpf_soft_kv(" rate_cap=", (u64)KPF_SOFT_RATE_LOG_MAX);
+    kpf_soft_kv(" rate_logs=", (u64)g_u32SoftRateLogged);
+    kpf_soft_kv(" str_cap=", g_u64SoftStrCap);
+    kpf_soft_kv(" width_clamp=", g_u64SoftWidthClamp);
+    kpf_soft_kv(" panic_reset=", g_u64SoftPanicReset);
+    kpf_soft_kv(" num_buf=", (u64)KPF_NUM_BUF);
+    kpf_soft_kv(" str_max=", (u64)KPF_STR_MAX);
     kpf_soft_kv(" areas=", (u64)KPF_SOFT_AREAS);
-    console_write(" surfaces=inventory,conv,flags,null,path,stats,"
-                  "deepen,stdio,budget,honesty,surfaces,catalog,note,return,retmap\n");
+    kpf_soft_kv(" version_stamp=", 0ull);
+    kpf_soft_kv(" stamp_storm=", 0ull);
+    console_write(" dual=MIT_OR_Apache-2.0 outer_only=1 reenter_safe=1 "
+                  "stack_safe=1 rate_safe=1 no_gpl=1 Soft!=product\n");
 
-    /* Grep: kprintf: soft note (Wave 20 deepen) */
-    console_write("kprintf: soft note milestone=wave98 exclusive=1 "
-                  "soft_only=1 reenter_safe=1 cap=");
-    print_u64((u64)KPF_SOFT_LOG_MAX, 10u, 0, ' ');
-    console_write(" wave=");
-    print_u64((u64)KPF_SOFT_WAVE, 10u, 0, ' ');
-    console_write("\n");
+    /* Grep: kprintf: soft rate + stdio_k: soft rate (densified in dump). */
+    kprintf_soft_rate_line();
 
-    /* Grep: kprintf: soft return (Wave 20 deepen) */
-    console_write("kprintf: soft return calls=");
-    print_u64(g_u64SoftCalls, 10u, 0, ' ');
-    console_write(" logs=");
-    print_u64((u64)g_u32SoftLogged, 10u, 0, ' ');
-    console_write(" skip=");
-    print_u64(g_u64SoftSkip, 10u, 0, ' ');
-    console_write(" product_gate=0 nested_kprintf=0 wave=");
-    print_u64((u64)KPF_SOFT_WAVE, 10u, 0, ' ');
-    console_write("\n");
-
-    /* Grep: kprintf: soft retmap — Wave 19 return-surface map */
-    console_write("kprintf: soft retmap calls|logs|skip|cap_skip|busy_skip "
-                  "product_gate=0 soft_only=1 wave=");
-    print_u64((u64)KPF_SOFT_WAVE, 10u, 0, ' ');
-    console_write("\n");
-
-    /* Grep: stdio_k: soft inventory */
+    /* Grep: stdio_k: soft inventory - twin lean rollup */
     console_write("stdio_k: soft inventory");
     kpf_soft_kv(" calls=", g_u64SoftCalls);
-    kpf_soft_kv(" lit=", g_u64SoftLit);
-    kpf_soft_kv(" pct=", g_u64SoftPct);
-    kpf_soft_kv(" panic=", g_u64SoftPanic);
-    kpf_soft_kv(" trunc=", g_u64SoftTrunc);
-    kpf_soft_kv(" empty=", g_u64SoftEmptyFmt);
-    kpf_soft_kv(" log_n=", (u64)g_u32SoftLogged);
-    kpf_soft_kv(" wave=", (u64)KPF_SOFT_WAVE);
-    console_write("\n");
-
-    /* Grep: stdio_k: soft path */
-    console_write("stdio_k: soft path claim=console_putchar,console_write "
-                  "fmt=%%,%c,%s,%d,%i,%u,%x,%p len=l,ll flag=0-width "
-                  "reenter_safe=1 nested_kprintf=0 string_c=0 "
-                  "wave=");
-    print_u64((u64)KPF_SOFT_WAVE, 10u, 0, ' ');
-    console_write(" (soft inventory)\n");
-
-    /* Grep: stdio_k: soft stats */
-    console_write("stdio_k: soft stats");
     kpf_soft_kv(" log_n=", (u64)g_u32SoftLogged);
     kpf_soft_kv(" skip=", g_u64SoftSkip);
-    kpf_soft_kv(" cap_skip=", g_u64SoftCapSkip);
+    kpf_soft_kv(" quiet=", g_u64SoftQuiet);
+    kpf_soft_kv(" mile_hit=", g_u64SoftMileHit);
+    kpf_soft_kv(" depth_skip=", g_u64SoftDepthSkip);
+    kpf_soft_kv(" nest_skip=", g_u64SoftNestSkip);
     kpf_soft_kv(" busy_skip=", g_u64SoftBusySkip);
+    kpf_soft_kv(" cap_skip=", g_u64SoftCapSkip);
+    kpf_soft_kv(" rate_cap_skip=", g_u64SoftRateCapSkip);
+    kpf_soft_kv(" depth_max=", (u64)KPF_DEPTH_MAX);
+    kpf_soft_kv(" depth_hi=", (u64)g_nKpfDepthHi);
     kpf_soft_kv(" max=", (u64)KPF_SOFT_LOG_MAX);
-    kpf_soft_kv(" last_mile=", g_u64SoftLastMile);
+    kpf_soft_kv(" rate_max=", (u64)KPF_SOFT_RATE_LOG_MAX);
     kpf_soft_kv(" areas=", (u64)KPF_SOFT_AREAS);
-    kpf_soft_kv(" wave=", (u64)KPF_SOFT_WAVE);
-    console_write("\n");
+    kpf_soft_kv(" soft_ne_product=", 1ull);
+    kpf_soft_kv(" g_ac1=", 1ull);
+    kpf_soft_kv(" dual_dod_open=", 1ull);
+    console_write(" fmt=%%,%c,%s,%d,%i,%u,%x,%p,l,ll,0-width "
+                  "reenter_safe=1 stamp_storm=0 Soft!=product\n");
 
-    /* Grep: stdio_k: soft retclass — Wave 19 return-class taxonomy (kept) */
-    console_write("stdio_k: soft retclass ok|fail|inval|nodev|busy|nomem "
-                  "soft_only=1 product_gate=0 wave=");
-    print_u64((u64)KPF_SOFT_WAVE, 10u, 0, ' ');
-    console_write(" (retclass taxonomy; Soft!=product)\n");
-    /* Grep: stdio_k: soft retlane — Wave 19 return-lane catalog (kept) */
-    console_write("stdio_k: soft retlane inv|selftest|rate|retcode|retmap|class "
-                  "product_kernel=OPEN soft_ne_product=1 wave=");
-    print_u64((u64)KPF_SOFT_WAVE, 10u, 0, ' ');
-    console_write(" (retlane catalog; Soft!=product)\n");
     /*
-     * ---- Wave 20 complementary surfaces (kept) (never reshape primary).
-     * Return surfaces only — soft inventory; never hard-gates product paths.
-     * Soft!=product.
+     * Grep: stdio_k: soft residual lean
+     * Twin residual lean lamp (unit name); Soft!=product dual license.
+     * C0 residual deepen: full skip taxonomy + rate residual + H2 honesty.
+     * Dual DoD OPEN; G-AC-1; never product close / never version stamp.
      */
-    /* Grep: stdio_k: soft retbound — Wave 20 return-bound honesty (kept) */
-    console_write("stdio_k: soft retbound soft_only=1 product_gate=0 hard_gate=0 "
-                  "never_blocks_m0=1 wave=");
-    print_u64((u64)KPF_SOFT_WAVE, 10u, 0, ' ');
-    console_write(" (retbound honesty; Soft!=product)\n");
-    /* Grep: stdio_k: soft retseal — Wave 20 seal stamp (kept) */
-    console_write("stdio_k: soft retseal exclusive=1 soft_ne_product=1 "
-                  "product_kernel=OPEN wave=");
-    print_u64((u64)KPF_SOFT_WAVE, 10u, 0, ' ');
-    console_write(" (retseal stamp; Soft!=product)\n");
-    /*
-     * ---- Wave 21 complementary surfaces (kept) (never reshape primary).
-     * Return surfaces only — soft inventory; never hard-gates product paths.
-     * Soft!=product.
-     */
-    /* Grep: stdio_k: soft retpulse — Wave 21 return-pulse honesty (kept) */
-    console_write("stdio_k: soft retpulse soft_only=1 product_gate=0 soft_ne_product=1 "
-                  "never_blocks_m0=1 wave=");
-    print_u64((u64)KPF_SOFT_WAVE, 10u, 0, ' ');
-    console_write(" (retpulse honesty; Soft!=product)\n");
-    /* Grep: stdio_k: soft retmark — Wave 21 mark stamp (kept) */
-    console_write("stdio_k: soft retmark exclusive=1 soft_ne_product=1 "
-                  "product_kernel=OPEN wave=");
-    print_u64((u64)KPF_SOFT_WAVE, 10u, 0, ' ');
-    console_write(" (retmark stamp; Soft!=product)\n");
-
-    
-/*
- * ---- Wave 22 complementary surfaces (kept) (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- * Soft!=product.
- */
-/* Grep: stdio_k: soft retphase — Wave 22 return-phase honesty (kept) */
-console_write("stdio_k: soft retphase soft_only=1 product_gate=0 soft_ne_product=1 "
-              "never_blocks_m0=1 wave=");
-print_u64((u64)KPF_SOFT_WAVE, 10u, 0, ' ');
-console_write(" (retphase honesty; Soft!=product)\n");
-/* Grep: stdio_k: soft retbadge — Wave 22 badge stamp (kept) */
-console_write("stdio_k: soft retbadge exclusive=1 soft_ne_product=1 "
-              "product_kernel=OPEN wave=");
-print_u64((u64)KPF_SOFT_WAVE, 10u, 0, ' ');
-console_write(" (retbadge stamp; Soft!=product)\n");
-/*
- * ---- Wave 23 complementary surfaces (kept) (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- * Soft!=product.
- */
-/* Grep: stdio_k: soft rettoken — Wave 23 return-token honesty (kept) */
-console_write("stdio_k: soft rettoken soft_only=1 product_gate=0 soft_ne_product=1 "
-              "never_blocks_m0=1 wave=");
-print_u64((u64)KPF_SOFT_WAVE, 10u, 0, ' ');
-console_write(" (rettoken honesty; Soft!=product)\n");
-/* Grep: stdio_k: soft retcrest — Wave 23 crest stamp (kept) */
-console_write("stdio_k: soft retcrest exclusive=1 soft_ne_product=1 "
-              "product_kernel=OPEN wave=");
-print_u64((u64)KPF_SOFT_WAVE, 10u, 0, ' ');
-console_write(" (retcrest stamp; Soft!=product)\n");
-/*
- * ---- Wave 24 complementary surfaces (kept) (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- * Soft!=product.
- */
-/* Grep: stdio_k: soft retvault — Wave 24 return-vault honesty (kept) */
-console_write("stdio_k: soft retvault soft_only=1 product_gate=0 soft_ne_product=1 "
-              "never_blocks_m0=1 wave=");
-print_u64((u64)KPF_SOFT_WAVE, 10u, 0, ' ');
-console_write(" (retvault honesty; Soft!=product)\n");
-/* Grep: stdio_k: soft retbanner — Wave 24 banner stamp (kept) */
-console_write("stdio_k: soft retbanner exclusive=1 soft_ne_product=1 "
-              "product_kernel=OPEN wave=");
-print_u64((u64)KPF_SOFT_WAVE, 10u, 0, ' ');
-console_write(" (retbanner stamp; Soft!=product)\n");
-/*
- * ---- Wave 25 complementary surfaces (kept) (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- * Soft!=product.
- */
-/* Grep: stdio_k: soft retledger — Wave 25 return-ledger honesty (kept) */
-console_write("stdio_k: soft retledger soft_only=1 product_gate=0 soft_ne_product=1 "
-              "never_blocks_m0=1 wave=");
-print_u64((u64)KPF_SOFT_WAVE, 10u, 0, ' ');
-console_write(" (retledger honesty; Soft!=product)\n");
-/* Grep: stdio_k: soft retbeacon — Wave 25 beacon stamp (kept) */
-console_write("stdio_k: soft retbeacon exclusive=1 soft_ne_product=1 "
-              "product_kernel=OPEN wave=");
-print_u64((u64)KPF_SOFT_WAVE, 10u, 0, ' ');
-console_write(" (retbeacon stamp; Soft!=product)\n");
-/*
- * ---- Wave 26 complementary surfaces (kept) (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- * Soft!=product.
- */
-/* Grep: stdio_k: soft retcipher — Wave 26 return-cipher honesty (kept) */
-console_write("stdio_k: soft retcipher soft_only=1 product_gate=0 soft_ne_product=1 "
-              "never_blocks_m0=1 wave=");
-print_u64((u64)KPF_SOFT_WAVE, 10u, 0, ' ');
-console_write(" (retcipher honesty; Soft!=product)\n");
-/* Grep: stdio_k: soft retflame — Wave 26 flame stamp (kept) */
-console_write("stdio_k: soft retflame exclusive=1 soft_ne_product=1 "
-              "product_kernel=OPEN wave=");
-print_u64((u64)KPF_SOFT_WAVE, 10u, 0, ' ');
-console_write(" (retflame stamp; Soft!=product)\n");
-/*
- * ---- Wave 27 complementary surfaces (kept) (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: stdio_k: soft retprism — Wave 27 return-prism honesty (kept) */
-console_write("stdio_k: soft retprism soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retprism honesty; Soft!=product)\n");
-/* Grep: stdio_k: soft retforge — Wave 27 forge stamp (kept) */
-console_write("stdio_k: soft retforge exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retforge stamp; Soft!=product)\n");
-/* Grep: stdio_k: soft deepen */
-    console_write("stdio_k: soft deepen wave=");
-    print_u64((u64)KPF_SOFT_WAVE, 10u, 0, ' ');
-    kpf_soft_kv(" areas=", (u64)KPF_SOFT_AREAS);
-    kpf_soft_kv(" calls=", g_u64SoftCalls);
+    console_write("stdio_k: soft residual lean");
+    kpf_soft_kv(" soft_ne_product=", 1ull);
+    kpf_soft_kv(" h2=", 1ull);
+    kpf_soft_kv(" g_ac1=", 1ull);
+    kpf_soft_kv(" dual_dod_open=", 1ull);
+    kpf_soft_kv(" depth_max=", (u64)KPF_DEPTH_MAX);
+    kpf_soft_kv(" depth_hi=", (u64)g_nKpfDepthHi);
+    kpf_soft_kv(" depth_skip=", g_u64SoftDepthSkip);
+    kpf_soft_kv(" depth_neg=", g_u64SoftDepthNeg);
+    kpf_soft_kv(" nest_skip=", g_u64SoftNestSkip);
+    kpf_soft_kv(" busy_skip=", g_u64SoftBusySkip);
+    kpf_soft_kv(" cap_skip=", g_u64SoftCapSkip);
+    kpf_soft_kv(" rate_cap_skip=", g_u64SoftRateCapSkip);
+    kpf_soft_kv(" log_cap=", (u64)KPF_SOFT_LOG_MAX);
     kpf_soft_kv(" logs=", (u64)g_u32SoftLogged);
-    console_write(" (Wave 71 exclusive; soft only)\n");
-
-    /* Grep: stdio_k: soft budget (twin) */
-    console_write("stdio_k: soft budget");
-    kpf_soft_kv(" log_max=", (u64)KPF_SOFT_LOG_MAX);
+    kpf_soft_kv(" rate_cap=", (u64)KPF_SOFT_RATE_LOG_MAX);
+    kpf_soft_kv(" rate_logs=", (u64)g_u32SoftRateLogged);
+    kpf_soft_kv(" quiet=", g_u64SoftQuiet);
+    kpf_soft_kv(" mile_hit=", g_u64SoftMileHit);
+    kpf_soft_kv(" str_cap=", g_u64SoftStrCap);
+    kpf_soft_kv(" width_clamp=", g_u64SoftWidthClamp);
+    kpf_soft_kv(" panic_reset=", g_u64SoftPanicReset);
+    kpf_soft_kv(" num_buf=", (u64)KPF_NUM_BUF);
+    kpf_soft_kv(" str_max=", (u64)KPF_STR_MAX);
     kpf_soft_kv(" areas=", (u64)KPF_SOFT_AREAS);
-    kpf_soft_kv(" logs=", (u64)g_u32SoftLogged);
-    kpf_soft_kv(" last_mile=", g_u64SoftLastMile);
-    kpf_soft_kv(" wave=", (u64)KPF_SOFT_WAVE);
-    console_write(" milestone=pow2\n");
-
-    /* Grep: stdio_k: soft honesty (Wave 19 twin) */
-    console_write("stdio_k: soft honesty freestanding=1 pure_c=1 "
-                  "nested_kprintf=0 not_libc=1 soft_only=1 wave=");
-    print_u64((u64)KPF_SOFT_WAVE, 10u, 0, ' ');
-    console_write(" (soft inventory)\n");
-
-    /* Grep: stdio_k: soft surfaces (Wave 19 twin) */
-    console_write("stdio_k: soft surfaces count=");
-    print_u64((u64)KPF_SOFT_AREAS, 10u, 0, ' ');
-    console_write(" names=inventory,path,stats,deepen,budget,honesty,"
-                  "surfaces,catalog,note,return,retmap,fmt wave=");
-    print_u64((u64)KPF_SOFT_WAVE, 10u, 0, ' ');
-    console_write("\n");
-
-    /* Grep: stdio_k: soft catalog (Wave 19 twin) */
-    console_write("stdio_k: soft catalog wave=");
-    print_u64((u64)KPF_SOFT_WAVE, 10u, 0, ' ');
-    kpf_soft_kv(" areas=", (u64)KPF_SOFT_AREAS);
-    console_write(" surfaces=inventory,path,stats,deepen,budget,"
-                  "honesty,surfaces,catalog,note,return,retmap,fmt\n");
-
-    /* Grep: stdio_k: soft note (Wave 19 twin) */
-    console_write("stdio_k: soft note milestone=wave98 exclusive=1 "
-                  "soft_only=1 wave=");
-    print_u64((u64)KPF_SOFT_WAVE, 10u, 0, ' ');
-    console_write("\n");
-
-    /* Grep: stdio_k: soft return (Wave 19 twin) */
-    console_write("stdio_k: soft return calls=");
-    print_u64(g_u64SoftCalls, 10u, 0, ' ');
-    console_write(" logs=");
-    print_u64((u64)g_u32SoftLogged, 10u, 0, ' ');
-    console_write(" product_gate=0 wave=");
-    print_u64((u64)KPF_SOFT_WAVE, 10u, 0, ' ');
-    console_write("\n");
-
-    /* Grep: stdio_k: soft retmap — Wave 19 return-surface map */
-    console_write("stdio_k: soft retmap calls|logs|skip|cap_skip|busy_skip "
-                  "product_gate=0 soft_only=1 wave=");
-    print_u64((u64)KPF_SOFT_WAVE, 10u, 0, ' ');
-    console_write("\n");
-
-    /* Grep: stdio_k: soft (fmt surface) */
-    console_write("stdio_k: soft");
-    kpf_soft_kv(" log_n=", (u64)g_u32SoftLogged);
-    kpf_soft_kv(" skip=", g_u64SoftSkip);
-    kpf_soft_kv(" max=", (u64)KPF_SOFT_LOG_MAX);
-    kpf_soft_kv(" wave=", (u64)KPF_SOFT_WAVE);
-    console_write(" fmt=%%,%c,%s,%d,%i,%u,%x,%p,l,ll,0-width PASS\n");
+    kpf_soft_kv(" version_stamp=", 0ull);
+    kpf_soft_kv(" stamp_storm=", 0ull);
+    console_write(" dual=MIT_OR_Apache-2.0 outer_only=1 reenter_safe=1 "
+                  "stack_safe=1 rate_safe=1 no_gpl=1 Soft!=product\n");
 
     g_fSoftBusy = 0;
 }
 
 /**
- * Rate-limit soft inventory: power-of-two call milestones, hard-capped.
- * Never floods serial. soft skip tallies only suppressed milestones (cap
- * or reentrancy); non-milestone calls are silent without a skip bump.
- * greppable: kprintf: soft / stdio_k: soft
+ * Rate-limit soft inventory: power-of-two call milestones, hard-capped,
+ * outermost frame only (depth==1). Nested frames never run the soft dump
+ * (H2 residual: soft dump + nested formatter frames -> stack pressure).
+ *
+ * H2 rate caps residual deepen (C0 Soft!=product):
+ *   - non-milestone calls tally quiet (silent honesty; no serial)
+ *   - milestone arrivals tally mile_hit before skip taxonomy
+ *   - past KPF_SOFT_LOG_MAX: full dump stays silent; lean rate residual on
+ *     pow2 of cap_skip, hard-capped at KPF_SOFT_RATE_LOG_MAX
+ *   - past rate hard-cap: rate_cap_skip tallies (serial stays silent)
+ *
+ * Never floods serial. soft skip tallies only suppressed milestones (cap,
+ * busy, or nest). greppable: kprintf: soft / stdio_k: soft / soft rate
  */
 static void
 kprintf_soft_maybe_log(void)
 {
     u64 u64N;
+    u64 u64CapSkip;
 
     u64N = g_u64SoftCalls;
     /* Milestone: first call and subsequent powers of two only. */
     if (u64N == 0ull || (u64N & (u64N - 1ull)) != 0ull) {
+        kpf_soft_inc(&g_u64SoftQuiet);
+        return;
+    }
+
+    kpf_soft_inc(&g_u64SoftMileHit);
+
+    /*
+     * Outer frame only. After kprintf entry depth is already incremented;
+     * nested reentry must not fire the soft dump on residual stack (H2).
+     */
+    if (g_nKpfDepth != 1) {
+        kpf_soft_inc(&g_u64SoftSkip);
+        kpf_soft_inc(&g_u64SoftNestSkip);
         return;
     }
 
@@ -1482,6 +600,21 @@ kprintf_soft_maybe_log(void)
     if (g_u32SoftLogged >= KPF_SOFT_LOG_MAX) {
         kpf_soft_inc(&g_u64SoftSkip);
         kpf_soft_inc(&g_u64SoftCapSkip);
+        /*
+         * Full multi-line inventory hard-capped (H2). Lean rate residual
+         * still greppable on pow2 of cap_skip - never silent forever, never
+         * stamp-storm (KPF_SOFT_RATE_LOG_MAX). Past rate cap: rate_cap_skip
+         * honesty only (no serial). Soft!=product.
+         */
+        u64CapSkip = g_u64SoftCapSkip;
+        if (u64CapSkip != 0ull &&
+            (u64CapSkip & (u64CapSkip - 1ull)) == 0ull) {
+            if (g_u32SoftRateLogged < KPF_SOFT_RATE_LOG_MAX) {
+                kprintf_soft_rate_log();
+            } else {
+                kpf_soft_inc(&g_u64SoftRateCapSkip);
+            }
+        }
         return;
     }
 
@@ -1496,15 +629,35 @@ kprintf(const char *szFmt, ...)
 
     kpf_soft_inc(&g_u64SoftCalls);
 
+    /*
+     * Bound nested frames: deep call stacks + reentrant kprintf (console /
+     * soft hooks) contributed to FAULT class H2. Drop beyond KPF_DEPTH_MAX.
+     * Soft: defensive clamp if depth ever corrupted negative (C0 residual).
+     */
+    if (g_nKpfDepth < 0) {
+        kpf_soft_inc(&g_u64SoftDepthNeg);
+        g_nKpfDepth = 0;
+    }
+    if (g_nKpfDepth >= (int)KPF_DEPTH_MAX) {
+        kpf_soft_inc(&g_u64SoftDepthSkip);
+        return;
+    }
+    g_nKpfDepth++;
+    if (g_nKpfDepth > g_nKpfDepthHi) {
+        g_nKpfDepthHi = g_nKpfDepth;
+    }
+
     if (szFmt == NULL) {
         kpf_soft_inc(&g_u64SoftNullFmt);
         kprintf_soft_maybe_log();
+        g_nKpfDepth--;
         return;
     }
 
     if (*szFmt == '\0') {
         kpf_soft_inc(&g_u64SoftEmptyFmt);
         kprintf_soft_maybe_log();
+        g_nKpfDepth--;
         return;
     }
 
@@ -1540,7 +693,7 @@ kprintf(const char *szFmt, ...)
             kpf_soft_inc(&g_u64SoftZeroPad);
         }
 
-        /* width */
+        /* width (soft clamp at KPF_WIDTH_MAX - residual stack safety) */
         nWidth = 0;
         while (*szCursor >= '0' && *szCursor <= '9') {
             int nDigit = (int)(*szCursor - '0');
@@ -1548,6 +701,9 @@ kprintf(const char *szFmt, ...)
             if (nWidth <= (KPF_WIDTH_MAX - nDigit) / 10) {
                 nWidth = nWidth * 10 + nDigit;
             } else {
+                if (nWidth != KPF_WIDTH_MAX) {
+                    kpf_soft_inc(&g_u64SoftWidthClamp);
+                }
                 nWidth = KPF_WIDTH_MAX;
             }
             szCursor++;
@@ -1587,13 +743,21 @@ kprintf(const char *szFmt, ...)
             break;
         case 's': {
             const char *szArg = va_arg(vaArgs, const char *);
+            u32 u32N = 0;
 
             kpf_soft_inc(&g_u64SoftConvS);
             if (szArg == NULL) {
                 kpf_soft_inc(&g_u64SoftNullS);
                 szArg = "(null)";
             }
-            console_write(szArg);
+            /* Hard-cap %s length - unbounded strings flood residual stack. */
+            while (szArg[u32N] != '\0' && u32N < KPF_STR_MAX) {
+                console_putchar(szArg[u32N]);
+                u32N++;
+            }
+            if (szArg[u32N] != '\0') {
+                kpf_soft_inc(&g_u64SoftStrCap);
+            }
             break;
         }
         case 'd':
@@ -1632,6 +796,7 @@ kprintf(const char *szFmt, ...)
     va_end(vaArgs);
 
     kprintf_soft_maybe_log();
+    g_nKpfDepth--;
 }
 
 void
@@ -1640,8 +805,21 @@ panic(const char *szMsg)
     kpf_soft_inc(&g_u64SoftPanic);
     if (szMsg == NULL) {
         kpf_soft_inc(&g_u64SoftPanicNull);
+        szMsg = "(null)";
     }
-    kprintf("PANIC: %s\n", szMsg ? szMsg : "(null)");
+    /*
+     * Direct console path - never nest kprintf from panic. Deep call stacks
+     * + formatter frames contributed to FAULT class H2; Soft!=product.
+     * Soft: clear depth so a stuck counter cannot compound if recovery ever
+     * reaches here mid-format (panic itself does not return).
+     * No soft inventory dump from panic (H2: no stamp storms on FAULT path).
+     */
+    kpf_soft_inc(&g_u64SoftPanicReset);
+    g_nKpfDepth = 0;
+    g_fSoftBusy = 0;
+    console_write("PANIC: ");
+    console_write(szMsg);
+    console_write("\n");
     for (;;) {
 #if defined(GJ_ARCH_AARCH64)
         __asm__ volatile("wfe");

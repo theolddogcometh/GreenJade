@@ -94,6 +94,8 @@
  *   - Optional: fold these soft gates into cgj_dyn_smoke.c /
  *     cgj_smoke.c continuum soft blocks (same skip-if-missing rule).
  *   - Soft gates; bar3 still open (gj_bar3_ready_21100 == 0).
+ *   - Residual: Soft!=product (ASCII); Dual DoD A/B OPEN (agent PASS != close DoD);
+ *     G-AC-1 no in-kernel .ko product AC; soft lamp PASS is continuum honesty only.
  */
 
 #define _GNU_SOURCE
@@ -264,7 +266,8 @@ main(void)
 		        "libcgj: soft m21100 DIRECT FAIL fails=%d\n", nFail);
 		return 1;
 	}
-	printf("libcgj: soft m21100 DIRECT PASS (all 11 lamps + markers)\n");
+	printf("libcgj: soft m21100 DIRECT PASS (all 11 lamps + markers; "
+	       "Soft!=product; Dual DoD OPEN agent!=close; G-AC-1)\n");
 	return 0;
 #else
 	void *h = NULL;
@@ -335,7 +338,8 @@ main(void)
 	}
 
 	printf("libcgj: soft m21100 PASS path=%s checked=%d "
-	       "(soft-skip unexported/missing; bar3 still open)\n",
+	       "(soft-skip unexported/missing; Soft!=product; bar3 still open; "
+	       "Dual DoD OPEN agent!=close; G-AC-1)\n",
 	       szPath, nChecked);
 	(void)dlclose(h);
 	return 0;

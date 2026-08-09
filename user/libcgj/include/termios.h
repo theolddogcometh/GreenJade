@@ -18,6 +18,20 @@
  * Non-goals
  * ---------
  * Full hardware flow-control matrix for every UART.
+ *
+ * Soft residual (C2 libcgj header; Soft!=product; G-AC-1; Dual DoD A/B OPEN):
+ *   soft path  = TCGETS/TCSETS ioctl fill + cfmakeraw/cf* speed catalog;
+ *                pipes/ENOTTY soft fail is OK (not product tty mint)
+ *   product    = UDX/DDI + hot/cold Linux ABI hosts; sshd/shell TTY product
+ *                path remains OPEN (agent PASS != close Dual DoD)
+ *   catalog    = c_cc indices + iflag/oflag/cflag/lflag + baud + tc* ops
+ *   honesty    = Soft!=product; freestanding class SKIP; no .ko product AC
+ *   hazard     = H1 no net_eth_poll from IRQ (N/A here); H2 once-lamp spirit;
+ *                H3 thr_exit before as_destroy (process law; not closed here)
+ *   Bar honesty v2026.08.04.75. NEVER bump GJ_IMAGE_VERSION from this unit.
+ * greppable: libcgj: soft residual termios
+ * greppable: libcgj: soft residual termios Soft!=product
+ * Dual MIT OR Apache-2.0. No GPL. G-AC-1. Dual DoD A/B OPEN.
  */
 #pragma once
 
@@ -78,9 +92,15 @@ struct termios {
 #define IXANY  0004000
 #define IXOFF  0010000
 
-/* oflag */
+/* oflag (Linux soft residual catalog; Soft!=product) */
 #define OPOST  0000001
+#define OLCUC  0000002
 #define ONLCR  0000004
+#define OCRNL  0000010
+#define ONOCR  0000020
+#define ONLRET 0000040
+#define OFILL  0000100
+#define OFDEL  0000200
 
 /* cflag */
 #define CSIZE  0000060
@@ -112,17 +132,37 @@ struct termios {
 #define B38400 0000017
 #define B57600 0010001
 #define B115200 0010002
+#define B230400 0010003
+#define B460800 0010004
+#define B500000 0010005
+#define B576000 0010006
+#define B921600 0010007
+#define B1000000 0010010
+#define B1152000 0010011
+#define B1500000 0010012
+#define B2000000 0010013
+#define B2500000 0010014
+#define B3000000 0010015
+#define B3500000 0010016
+#define B4000000 0010017
 
-/* lflag */
+/* lflag (Linux soft residual catalog; Soft!=product) */
 #define ISIG   0000001
 #define ICANON 0000002
+#define XCASE  0000004
 #define ECHO   0000010
 #define ECHOE  0000020
 #define ECHOK  0000040
 #define ECHONL 0000100
 #define NOFLSH 0000200
 #define TOSTOP 0000400
-#define IEXTEN 0100000
+#define ECHOCTL 0001000
+#define ECHOPRT 0002000
+#define ECHOKE  0004000
+#define FLUSHO  0010000
+#define PENDIN  0040000
+#define IEXTEN  0100000
+#define EXTPROC 0200000
 
 /* tcsetattr optional_actions */
 #define TCSANOW   0

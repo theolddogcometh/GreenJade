@@ -5,7 +5,7 @@
  * Process (task): shared CNode, root meta (slot 0), default pager on PCB,
  * wait4 reaper, G-PROC-5 death (CNode wipe + private AS for wait children).
  *
- * Rules (docs/DESIGN_SPEC_COMPLETE.md §6 · CAP_ADDRESSING · SOLARIS_STYLE):
+ * Rules (docs/DESIGN_SPEC_COMPLETE.md s6 | CAP_ADDRESSING | SOLARIS_STYLE):
  *   G-PROC-1  spawn: PROCESS + AS + CNode + root meta + first thread
  *   G-PROC-2  parent receives PROCESS task cap (not root meta)
  *   G-PROC-4  no ambient full-CNode fork (security core)
@@ -14,23 +14,40 @@
  *
  * Soft deepen (this surface / kernel/proc/process.c):
  *   pager   ep ref hold + badge snap + optional slot-1 mirror; LIVE refresh
- *   wait    reparent orphans → init(1); WNOWAIT peek; live/zombie counts
- *   death   quota+CDT-aware CNode clear; exec/auxv scrub; fault-lock force
+ *   wait    reparent orphans -> init(1); WNOWAIT peek; live/zombie counts
+ *   death   thr_exit siblings before private AS destroy (clone_vm FAULT H3);
+ *           early + pre-as_destroy barrier; quota+CDT CNode clear; scrub
  *   confine OpenBSD-shaped promise bits (ambient until confined)
- *   fork-wait product-min: PCB parent → child pid + wait4/waitid reaper
+ *   fork-wait product-min: PCB parent -> child pid + wait4/waitid reaper
+ *
+ * Permanent death order (ASSURANCE H3 | Soft!=product | residual lean):
+ *   u32Alive=0 -> thr_exit non-current siblings -> ... -> thr_exit barrier ->
+ *   private as_destroy. Never free maps while a USER*_ENTRY sibling can
+ *   iretq (lab: pe32 clone_vm RIP~0x58240013 #PF I=1).
+ *   Dual belt: early drain after alive=0, re-drain immediately before
+ *   as_destroy (catches thr bound mid-pager/region/cnode work).
+ *   Same order for multi-thr UDX host processes (work/IRQ soft thr sharing
+ *   AS; Soft!=product - not product UDX close / not Linux .ko / G-AC-1).
+ *   fork_stub_as_teardown mirrors early thr_exit + pre-as_destroy barrier.
+ *   Companion: thread_exit_process + trampoline refuse-enter (thread.c).
+ *   greppable: thr_exit_before_as_destroy=1 | H3=death_residual
+ *              udx_host_teardown=1 | udx_host_multi_thr=1 | soft_ne_product=1
  *
  * Grep markers:
  *   process:pager ref | process:pager slot1 | process: set_pager
  *   process: wait register | process: zombie | process: wait reparent
  *   process:death cnode | process: cnode_clear | process: as_destroy
- *   process: death exit= (G-PROC-5)
- *   process: soft fork-wait product-min
+ *   process: death thr_exit | process: death thr_exit barrier | process: death exit=
+ *   process: soft death residual lean | process: soft fork-wait product-min
+ *   process: soft residual lean H3 | thr_exit_before_as_destroy=1
+ *   process: death H3 order | process: death thr_exit early
  *
  * Product spawn / kill / wait-by-cap live in <gj/spawn.h> (G-PROC-*).
  * This header is PCB + bootstrap + pager policy + Linux wait4 interim.
  *
- * docs/CAP_ADDRESSING.md · docs/APPLE_CHANNEL_REMAINING.md ·
- * docs/SOLARIS_STYLE_REMAINING.md §6 · §9 · docs/LINUX_ABI_HYBRID.md
+ * docs/CAP_ADDRESSING.md | docs/APPLE_CHANNEL_REMAINING.md |
+ * docs/SOLARIS_STYLE_REMAINING.md s6 | s9 | docs/LINUX_ABI_HYBRID.md |
+ * docs/ASSURANCE_LITE.md H3
  */
 #pragma once
 
@@ -42,7 +59,7 @@
 /*
  * Optional user-visible pager mirror (CAP_ADDRESSING optional slot 1).
  * Canonical pager remains PCB refPager / pPagerEpObj; slot is introspection
- * soft only (READ|IDENTIFY, +GRANT if source had it — not ambient MAP).
+ * soft only (READ|IDENTIFY, +GRANT if source had it - not ambient MAP).
  * Cleared with pager; install fails soft if CNode too small.
  */
 #ifndef GJ_CAP_SLOT_PAGER
@@ -85,7 +102,7 @@
 /*
  * Soft clone flag bits (Linux sched.h values; process_linux_clone only).
  * Full set lives in linux_abi.h; duplicated here so process.h stays free of
- * linux_abi. Product incomplete — 0 flags / plain fork-like only for shell.
+ * linux_abi. Product incomplete - 0 flags / plain fork-like only for shell.
  */
 #define GJ_CLONE_CSIGNAL              0x000000ffull
 #define GJ_CLONE_VM                   0x00000100ull
@@ -109,8 +126,8 @@
 /*
  * Root meta object installed in CNode slot 0 after bootstrap.
  * Kernel-internal links: self process + this process CNode (not the pager).
- * User-facing: KERNEL OPS ONLY — Identify / kernel-mediated queries.
- * Not a factory for transferable PROCESS/CNODE caps (CAP_ADDRESSING K1–K6).
+ * User-facing: KERNEL OPS ONLY - Identify / kernel-mediated queries.
+ * Not a factory for transferable PROCESS/CNODE caps (CAP_ADDRESSING K1-K6).
  * Transferable task handle = GJ_CAP_PROCESS minted to parent on spawn
  * (see process_spawn / GJ_SPAWN_PROCESS_RIGHTS_* in spawn.h).
  */
@@ -125,10 +142,10 @@ struct gj_root_meta {
  *
  * Threads of this process share pCnode (Scheme A handles).
  * refPager = default pager fallback; regions/objects (Apple channel) own the
- * primary map path. Exception port is separate from pager (Apple §12) —
- * fields live in excPort (Proton A0–A1 SEH/signal-shaped).
+ * primary map path. Exception port is separate from pager (Apple s12) -
+ * fields live in excPort (Proton A0-A1 SEH/signal-shaped).
  *
- * u64Cr3 == 0 ⇒ inherit BSP/boot CR3 until process_as_ensure (G-AS-1).
+ * u64Cr3 == 0 -> inherit BSP/boot CR3 until process_as_ensure (G-AS-1).
  * Wait-registered children get private AS destroyed on process_death;
  * boot/init long-lived PCBs keep their AS.
  */
@@ -136,7 +153,7 @@ struct gj_process {
     struct gj_obj_hdr    hdr;           /* first: PROCESS / task object */
     struct gj_cnode     *pCnode;
     struct gj_root_meta *pRootMeta;     /* NULL until bootstrap fills slot 0 */
-    struct gj_cap_ref    refPager;      /* Scheme A handle; gen==0 ⇒ none */
+    struct gj_cap_ref    refPager;      /* Scheme A handle; gen==0 -> none */
     struct gj_obj_hdr   *pPagerEpObj;   /* soft kernel hold while named */
     u32                  u32PagerBadge; /* door badge snap or explicit */
     /*
@@ -145,12 +162,12 @@ struct gj_process {
      * process_death force-clears so death cannot leave AS locked.
      */
     struct gj_space_fault fault;
-    /* Linux personality / JIT (docs/LINUX_ABI_HYBRID.md · PROTON) */
+    /* Linux personality / JIT (docs/LINUX_ABI_HYBRID.md | PROTON) */
     u32                  u32Personality; /* 0 native, 1 linux (init default) */
     u32                  u32Jit;         /* CapJit cache: allow W|X mprotect */
     /*
      * Soft multi-server confine (OpenBSD promises-shaped bitmask).
-     * u32Confined=0 ⇒ ambient authority (bring-up). When set, gates call
+     * u32Confined=0 -> ambient authority (bring-up). When set, gates call
      * gj_process_promise_ok() before ambient-style ops.
      * Grep: confine soft
      */
@@ -158,7 +175,7 @@ struct gj_process {
     u32                  u32Promises;   /* allowed bits when confined */
     u64                  u64Cr3;         /* 0 = use BSP/boot CR3 (G-AS-1) */
     u64                  u64AnonNext;    /* per-AS mmap cursor (default 1G) */
-    /* Last execve image facts (auxv / dynlinker handoff — G-ELF) */
+    /* Last execve image facts (auxv / dynlinker handoff - G-ELF) */
     u64                  u64ExecEntry;   /* main binary entry (post-bias) */
     u64                  u64InterpEntry; /* PT_INTERP entry or 0 */
     u64                  u64LoadBias;    /* main ET_DYN bias */
@@ -171,7 +188,7 @@ struct gj_process {
 #define GJ_PROC_AUXV_MAX 24u
     u64                  aAuxv[GJ_PROC_AUXV_MAX * 2u]; /* key,value,... */
     char                 szExecPath[128]; /* last execve path (AT_EXECFN) */
-    /* Regions: views onto memory objects (G-MO) — fixed table for bring-up */
+    /* Regions: views onto memory objects (G-MO) - fixed table for bring-up */
 #define GJ_PROC_REGION_MAX 32u
     struct {
         u8               u8Used;
@@ -185,7 +202,7 @@ struct gj_process {
     struct gj_process   *pParent;       /* soft link from wait table parent */
     u32                  u32ExitCode;
     u32                  u32Alive;      /* 1 live, 0 after note_exit/death */
-    /* Exception port (Proton A0–A1 SEH/signal-shaped; see except.h) */
+    /* Exception port (Proton A0-A1 SEH/signal-shaped; see except.h) */
     struct {
         u8  u8Live;
         u8  u8Pending;
@@ -225,8 +242,8 @@ gj_status_t gj_process_bootstrap_root_meta(struct gj_process *pProc,
 /**
  * Canonical pager registration (PCB). Does not require a well-known CNode slot.
  * Endpoint is named by Scheme A handle in *this* process CNode
- * (u32EpGen==0 clears). Soft (SOLARIS_STYLE §9):
- *   ENDPOINT type + GRANT rights, LIVE check (fail closed → GJ_ERR_DEAD),
+ * (u32EpGen==0 clears). Soft (SOLARIS_STYLE s9):
+ *   ENDPOINT type + GRANT rights, LIVE check (fail closed -> GJ_ERR_DEAD),
  *   kernel u32Ref hold on ep object, badge snap via door_get_badge(),
  *   optional slot-1 mirror; replace drops prior hold after new hold.
  * Grep: process: set_pager | process:pager ref
@@ -236,7 +253,7 @@ gj_status_t gj_process_set_pager(struct gj_process *pProc, u64 u64EpSlot,
 
 /**
  * Soft: set pager with explicit badge.
- * u32Badge==0 ⇒ snap door_get_badge() from the resolved endpoint;
+ * u32Badge==0 -> snap door_get_badge() from the resolved endpoint;
  * non-zero stores the caller badge on the PCB (msg.u32Flags stamp later).
  * Same resolve / rights / LIVE rules as gj_process_set_pager.
  */
@@ -252,7 +269,7 @@ void gj_process_clear_pager(struct gj_process *pProc);
 /**
  * Non-zero if pager registered (gen != 0) and endpoint still LIVE when
  * pPagerEpObj is known. Const path does not clear; use pager_refresh to drop
- * dead endpoints. NULL process ⇒ 0.
+ * dead endpoints. NULL process -> 0.
  */
 int gj_process_has_pager(const struct gj_process *pProc);
 
@@ -267,14 +284,14 @@ u32 gj_process_pager_badge(const struct gj_process *pProc);
 void gj_process_pager_refresh(struct gj_process *pProc);
 
 /**
- * Page-fault policy entry (CAP_ADDRESSING fault path · SOLARIS_STYLE §7).
+ * Page-fault policy entry (CAP_ADDRESSING fault path | SOLARIS_STYLE s7).
  * Serializes on pProc->fault. Soft-refreshes pager first.
  *
- *   no pager  → GJ_ERR_FAULT (caller kills thread) — fail closed
- *   has pager → builds 1-page fault cluster + map cookie, stamps badge into
+ *   no pager  -> GJ_ERR_FAULT (caller kills thread) - fail closed
+ *   has pager -> builds 1-page fault cluster + map cookie, stamps badge into
  *               msg flags, invalidates cookie, returns GJ_ERR_AGAIN until
  *               IPC Call to pager is implemented (full path: mono timeout)
- *   W|X both  → GJ_ERR_PERM at policy layer (W^X)
+ *   W|X both  -> GJ_ERR_PERM at policy layer (W^X)
  *
  * u64FaultVa / fWrite / fExec describe the fault for future pager payload.
  */
@@ -304,17 +321,17 @@ void gj_process_set_jit(struct gj_process *pProc, int fEnable);
  */
 void gj_process_confine(struct gj_process *pProc, u32 u32Promises);
 
-/** 1 if not confined or promise bit present. NULL process ⇒ 0. */
+/** 1 if not confined or promise bit present. NULL process -> 0. */
 int  gj_process_promise_ok(const struct gj_process *pProc, u32 u32Promise);
 
 /**
  * Soft gate for ambient-style ops: 0 if ambient or promise present;
- * -13 (LINUX_EACCES shape) else. NULL process ⇒ 0 (no confine subject;
+ * -13 (LINUX_EACCES shape) else. NULL process -> 0 (no confine subject;
  * product ambient smokes treat null as unrestricted).
  */
 int  gj_process_promise_require(const struct gj_process *pProc, u32 u32Promise);
 
-/** CapJit cache non-zero? NULL ⇒ 0. */
+/** CapJit cache non-zero? NULL -> 0. */
 int  gj_process_has_jit(const struct gj_process *pProc);
 
 /* ---- Linux wait4 reaper (interim; product: PROCESS caps G-PROC-5) -------- */
@@ -325,7 +342,7 @@ int  gj_process_has_jit(const struct gj_process *pProc);
  */
 
 /**
- * Register a child for wait4. Assigns Linux-shaped pid (≥100).
+ * Register a child for wait4. Assigns Linux-shaped pid (>=100).
  * Soft-links pChild->pParent when parent PCB is still in the table.
  * Returns pid, or 0 if table full (caller may continue without wait4).
  * Idempotent: re-register of same child returns existing pid.
@@ -342,7 +359,7 @@ void process_wait_note_exit(struct gj_process *pChild, u32 u32Code);
 
 /**
  * Drop wait-table entry for pProc (cap wait / spawn slot recycle).
- * Does not run process_death — only frees the reaper slot.
+ * Does not run process_death - only frees the reaper slot.
  */
 void process_wait_forget(struct gj_process *pProc);
 
@@ -353,9 +370,9 @@ void process_wait_forget(struct gj_process *pProc);
  * *pStatus gets exit status (code << 8) when non-NULL.
  *
  * Soft product (ABI-first for shell/sshd later):
- *   - WNOHANG + live child → 0 (poll-friendly; waitid maps here)
- *   - WNOHANG + zombie → pid + status, slot reaped
- *   - Blocking: yields until zombie or soft poll budget; live after budget → 0
+ *   - WNOHANG + live child -> 0 (poll-friendly; waitid maps here)
+ *   - WNOHANG + zombie -> pid + status, slot reaped
+ *   - Blocking: yields until zombie or soft poll budget; live after budget -> 0
  *     (never false ECHILD while children still registered)
  * greppable: process: soft wait
  */
@@ -363,13 +380,27 @@ i64  process_wait4(i64 i64Pid, i32 *pStatus, int nOptions);
 
 /**
  * G-PROC-5 death: mark zombie, clear pager/exception port, drop region views.
- * Soft deepen:
- *   - orphan reparent unreaped children → init (ppid 1)
+ * Soft deepen (Soft!=product; dual license MIT OR Apache-2.0):
+ *   - H3 residual lean order (permanent, C3 hazard):
+ *       u32Alive=0 -> thr_exit early (non-current siblings) -> pager/region/
+ *       cnode work -> thr_exit barrier -> private as_destroy.
+ *     Covers CLONE_VM / pe32 lab class and multi-thr UDX hosts (work/IRQ
+ *     soft thr sharing private AS). Current thr left for exit path.
+ *     R0-adjacent FAULT class: RUNNABLE USER*_ENTRY sibling can iretq into
+ *     freed maps (#PF I=1; pe32 clone_vm lab RIP~0x58240013).
+ *   - Dual belt residual lean: barrier re-drains thr that became bound
+ *     mid-death (soft race belt). Idempotent re-entry still drains.
+ *   - orphan reparent unreaped children -> init (ppid 1)
  *   - wait-registered only: quota+CDT CNode wipe + revoke walk + exec scrub
  *   - private AS destroy when CR3 is non-kernel (save/restore caller CR3)
  * Never destroys boot/init AS. Idempotent when already fully torn down
- * (second call only re-notes zombie code).
- * Grep: process: death exit= | process: cnode_clear | process: as_destroy
+ * (second call re-notes zombie code + residual thr_exit).
+ * Soft!=product: not product UDX host close; not Linux .ko product AC (G-AC-1).
+ * Grep: process: death thr_exit | process: death thr_exit barrier
+ *       | process: death thr_exit early | process: death H3 order
+ *       | process: death exit= | process: cnode_clear | process: as_destroy
+ *       | process: soft residual lean H3 | process: soft death residual lean
+ *       | thr_exit_before_as_destroy=1 | udx_host_teardown=1
  */
 void process_death(struct gj_process *pProc, u32 u32ExitCode);
 
@@ -377,7 +408,7 @@ void process_death(struct gj_process *pProc, u32 u32ExitCode);
  * Linux fork/vfork-shaped: create stub child PCB, register wait4 pid.
  * fExitNow: immediately process_death (vfork). Else schedule deferred exit
  * worker (yields) so parent wait4 / waitid WNOHANG can see live then zombie.
- * Returns usable child pid (≥100) or -EAGAIN (-11) / -ENOMEM (-12).
+ * Returns usable child pid (>=100) or -EAGAIN (-11) / -ENOMEM (-12).
  * Not a full AS/CNode clone (G-PROC-4); product path is process_spawn.
  * Soft incomplete: child does not run user code; shell/sshd later need spawn.
  * greppable: process: soft fork
@@ -385,11 +416,11 @@ void process_death(struct gj_process *pProc, u32 u32ExitCode);
 i64 process_linux_fork(u32 u32Ppid, int fExitNow);
 
 /**
- * Soft clone(2)-shaped flag decode → fork-like wait child.
- *   flags 0 / share bits only → process_linux_fork(ppid, 0)  [usable pid]
- *   CLONE_VFORK               → process_linux_fork(ppid, 1)
- *   CLONE_THREAD             → -EINVAL (needs stack/entry; cold path)
- *   NEW* namespace bits       → -EINVAL (not product multi-ns)
+ * Soft clone(2)-shaped flag decode -> fork-like wait child.
+ *   flags 0 / share bits only -> process_linux_fork(ppid, 0)  [usable pid]
+ *   CLONE_VFORK               -> process_linux_fork(ppid, 1)
+ *   CLONE_THREAD             -> -EINVAL (needs stack/entry; cold path)
+ *   NEW* namespace bits       -> -EINVAL (not product multi-ns)
  * Parent reaps with process_wait4 / waitid + WNOHANG.
  * greppable: process: soft fork
  */
@@ -399,7 +430,7 @@ i64 process_linux_clone(u32 u32Ppid, u64 u64Flags);
 u32 process_wait_pid_of(struct gj_process *pProc);
 
 /**
- * wait4 filtered by parent pid (u32Ppid==0 → any parent, legacy).
+ * wait4 filtered by parent pid (u32Ppid==0 -> any parent, legacy).
  * Same return contract as process_wait4. Prefer this when caller knows
  * its Linux-shaped pid (shell/sshd later; PE32 already).
  * greppable: process: soft wait
@@ -414,7 +445,7 @@ i64 process_linux_exit_pid(u32 u32Pid, u32 u32Code);
 
 /**
  * Soft wait-table observability (reaper deepen).
- * u32Ppid==0 → any parent. Counts unreaped used slots matching filter.
+ * u32Ppid==0 -> any parent. Counts unreaped used slots matching filter.
  * live = not zombie; zombie = unreaped zombies.
  */
 u32 process_wait_live_count(u32 u32Ppid);
@@ -431,14 +462,14 @@ u32 process_wait_reparent(u32 u32OldPpid, u32 u32NewPpid);
 /* ---- process: soft fork-wait product-min (PCB parent surface) ------------ */
 /*
  * Cold personality / shell later: parent PCB in, child Linux-shaped pid out.
- * Soft ≠ product full AS/CNode clone (G-PROC-4); product create is process_spawn.
+ * Soft != product full AS/CNode clone (G-PROC-4); product create is process_spawn.
  * Zombie list: fixed wait table (process_wait_register / note_exit / wait4).
  * Status bits: Linux-ish (code<<8) so GJ_WIFEXITED / GJ_WEXITSTATUS work.
  * greppable: process: soft fork-wait product-min
  */
 
 /**
- * Soft fork from parent PCB: reliable child pid (≥100) return.
+ * Soft fork from parent PCB: reliable child pid (>=100) return.
  * Ensures soft parent identity (wait-table pid or soft parent map 2..99) so
  * process_wait_soft can filter children without requiring parent death-wipe
  * registration. Links child->pParent. Deferred exit worker (usable WNOHANG).
@@ -449,7 +480,7 @@ i64 process_fork_soft(struct gj_process *pParent);
 
 /**
  * Soft clone from parent PCB (flag map same as process_linux_clone).
- * CLONE_VFORK → immediate zombie; share bits → fork-like; THREAD/NS → -EINVAL.
+ * CLONE_VFORK -> immediate zombie; share bits -> fork-like; THREAD/NS -> -EINVAL.
  * greppable: process: soft fork-wait product-min
  */
 i64 process_clone_soft(struct gj_process *pParent, u64 u64Flags);
@@ -466,7 +497,7 @@ i64 process_wait_soft(struct gj_process *pParent, i64 i64Pid, int *pStatus,
 
 /**
  * waitid-shaped soft reaper (product-min).
- * u32IdType: GJ_P_ALL (any child), GJ_P_PID (exact id), GJ_P_PGID → -EINVAL.
+ * u32IdType: GJ_P_ALL (any child), GJ_P_PID (exact id), GJ_P_PGID -> -EINVAL.
  * nOptions: GJ_WAIT_WNOHANG / GJ_WAIT_WNOWAIT (+ catalog stop bits ignored).
  * *pStatus: wait status bits; *pSiCode: GJ_CLD_EXITED on normal exit (opt).
  * Returns child pid, 0, or -errno.
@@ -479,7 +510,7 @@ i64 process_waitid_soft(struct gj_process *pParent, u32 u32IdType, i64 i64Id,
  * Soft smoke: vfork-like child + wait (immediate zombie path).
  * On first success prints greppable:
  *   "process: soft fork-wait product-min PASS"
- * No main.c hook required — cold personality may call later.
+ * No main.c hook required - cold personality may call later.
  * Returns reaped pid or negative errno.
  */
 i64 process_fork_wait_soft_smoke(struct gj_process *pParent);

@@ -2,16 +2,60 @@
  * SPDX-License-Identifier: MIT OR Apache-2.0
  * Copyright (c) 2026 Project GreenJade contributors
  *
- * Bridge: cold_ipc service → vfs_ram + protonrt_cold_linux.
+ * Bridge: cold_ipc service -> vfs_ram + linux_cold_net + protonrt_cold_linux.
  * Soft multi-server confine deepen: expose path policy, promise-denial
  * ledger, death-cleanup soft note (product multi-server confine OPEN).
  * Grep: confine: expose soft | confine: ledger soft | confine: death soft
  *
- * Soft inventory (Wave 14 base + Wave 35 exclusive deepen; this unit only):
+ * Soft inventory (bring-up diagnostics; this unit only):
  *   protonrt: soft inventory|enter|fs|net|proc|time|mem|other|confine|
- *             attach|path|rates|honesty|catalog|deepen|PASS …
- *   cold_link: soft … (twin prefix)
+ *             attach|path|rates|honesty|catalog|deepen|PASS ...
+ *   cold_link: soft ... (twin prefix)
  *   Never hard-gates; diagnostics only (wrap OK). Soft.
+ *
+ * Lean soft residual (Soft!=product dual license; no version stamp; no stamp
+ * storms): sparse once-lamps only - fold fs|net|proc|time|mem|other +
+ * confine/expose + attach + cold_net/cold_ipc userspace-driver reach into
+ * two greppable lines. storm=0. Does not close multi-server confine, bar3,
+ * or Deck Top 50. Dual MIT OR Apache-2.0. Soft!=product. G-AC-1:
+ *   product drivers = userspace Linux-shaped (UDX/DDI) over hot+cold ABI;
+ *   not in-kernel .ko product AC. Cold NR link residual lean so ProtonRT /
+ *   Linux personality can reach cold net/ipc for userspace driver hosts.
+ *
+ * Residual lean deepen (bar3-adjacent ABI surface only; Soft!=product):
+ *   Proton/game-shaped cold NR reach for userspace hosts - socket family,
+ *   poll/ppoll/select readiness, close lifecycle, read/write-on-socket.
+ *   Linux-shaped apps / Proton neighborhood residual deepen (this unit):
+ *   socketpair (AF_UNIX wine-class), pipe/pipe2, epoll family soft-spin,
+ *   eventfd, memfd_create - tallied into residual lean once-lamp only.
+ *   C2 Dual DoD residual (this unit; Soft!=product; agent never closes):
+ *   ioctl FIONREAD/FIONBIO/TIOCGWINSZ for ram+lo+tcp fds (UDX host devctl
+ *   shape); sendfile/splice/tee/copy_file_range ram-in -> cold_net out
+ *   (sshd/file residual); fcntl F_GETFL/F_SETFL + soft O_NONBLOCK table
+ *   for ram+lo+tcp (parity with ioctl FIONBIO; prior fcntl lo-only rejected
+ *   tcp with -EBADF). Honesty lamps dual_dod_a=OPEN dual_dod_b=OPEN
+ *   freestanding_skip=1 product_path=UDX_DDI+hot_cold_ABI. Dual DoD A/B
+ *   stay OPEN until DUT proof.
+ *   "bar3-adjacent" means ABI neighborhood games/Proton need - never a bar3
+ *   claim, never Deck Top 50 PASS, never product DoD close. Comment law:
+ *   Soft!=product (ASCII != only; never Softneq unicode); pure C block
+ *   comments only - never slash-star footguns that split block comments
+ *   (no star-slash-slash mid-comment; no C++ line comments in this unit).
+ *   Transfer family in comments: send_star/recv_star (never send-star or
+ *   wildcard forms that break block comments). Dual MIT OR Apache-2.0.
+ * greppable: protonrt: soft residual lean
+ * greppable: cold_link: soft residual lean
+ * greppable: protonrt: soft cold_net bridge PASS
+ * greppable: protonrt: soft cold_ipc attach
+ * greppable: protonrt: soft select residual lean
+ * greppable: protonrt: soft epoll residual lean
+ * greppable: protonrt: soft neighborhood residual lean
+ * greppable: protonrt: soft ioctl residual lean
+ * greppable: protonrt: soft sendfile residual lean
+ * greppable: protonrt: soft fcntl residual lean
+ * greppable: protonrt: soft copy_file residual lean
+ * greppable: protonrt: soft dual_dod OPEN
+ *
  * greppable: protonrt: soft
  * greppable: cold_link: soft
  * greppable: protonrt: soft fork-wait wire PASS
@@ -20,12 +64,26 @@
  * greppable: protonrt: soft finit_module PASS|FAIL
  * greppable: protonrt: soft delete_module PASS|FAIL
  *
- * Daemon-grade cold: fork/clone/wait → process_*_soft when parent PCB is
- * available; poll/ppoll soft-spin on timeout>0 (soft≠product blocking).
+ * Daemon-grade cold: fork/clone/wait -> process_*_soft when parent PCB is
+ * available; poll/ppoll/select/epoll soft-spin on timeout>0 (Soft!=product).
+ *
+ * Cold net/ipc NR residual (userspace driver host reach - Soft!=product):
+ *   socket/bind/listen/accept/connect/send_star/recv_star/shutdown/sockopt/name
+ *     -> gj_linux_cold_* (linux_cold_net bridge)
+ *   close / close_range -> gj_linux_cold_close then vfs_ram
+ *   poll/ppoll -> gj_linux_cold_poll_mask then vfs_ram_poll_mask
+ *   select/pselect6 -> cold_net/vfs poll_mask residual lean (fd bitsets)
+ *   epoll_wait family -> vfs_ram_epoll_wait + soft-spin residual lean
+ *   read/write on net fds -> gj_linux_cold_recv / gj_linux_cold_send
+ *   ioctl FIONREAD/FIONBIO on ram+lo+tcp -> soft readiness / nonblock accept
+ *   fcntl F_GETFL/F_SETFL on ram+lo+tcp -> soft O_NONBLOCK table residual
+ *   sendfile/splice/tee/copy_file_range ram-in + net-out -> bounce + cold send
+ *   socketpair/pipe/eventfd/memfd -> vfs_ram residual (Proton neighborhood)
+ *   attach -> cold_ipc_set_service(protonrt_service) (cold_ipc path)
  *
  * Soft module path (init_module / finit_module / delete_module):
- *   bounce → linux_module_load_mem + init_call; delete → exit_call if loaded.
- * Soft≠product .ko AC (G-AC-1). Cold-classified NRs 175 / 176 / 313.
+ *   bounce -> linux_module_load_mem + init_call; delete -> exit_call if loaded.
+ * Soft!=product .ko AC (G-AC-1). Cold-classified NRs 175 / 176 / 313.
  */
 #include <gj/cold_ipc.h>
 #include <gj/config.h>
@@ -40,6 +98,7 @@
 #include <gj/linux_module.h>
 #include <gj/memobj.h>
 #include <gj/net_lo.h>
+#include <gj/net_tcp.h>
 #include <gj/linux_cold_net.h>
 #include <gj/pmm.h>
 #include <gj/process.h>
@@ -98,17 +157,27 @@ static u8  g_u8DeathSoftOnce;
 static struct gj_expose_soft_ent g_aExposeSoft[GJ_EXPOSE_SOFT_MAX];
 
 /* Wave 15 soft inventory stamp (file-local; never product gate). */
-#define GJ_PROTONRT_SOFT_WAVE 116u
-/* Soft inventory area count (fixed greppable categories for deepen stamp). */
-#define GJ_PROTONRT_SOFT_AREAS 211u
+#define GJ_PROTONRT_SOFT_WAVE 117u
+/*
+ * Soft inventory area count (fixed greppable categories for deepen stamp).
+ * Residual lean deepen adds: lean_hit tallies, select residual, abi_adj map,
+ * Proton neighborhood (socketpair/pipe/epoll/eventfd/memfd) lean hits,
+ * C2 Dual DoD residual (ioctl/sendfile/fcntl/copy_file_range soft tables).
+ * Soft!=product - areas are diagnostics only. Never a bar3 claim.
+ */
+#define GJ_PROTONRT_SOFT_AREAS 226u
+
+/* select/pselect residual lean: cap covers ram + net_lo + net_tcp soft fds. */
+#define PRT_SELECT_SOFT_NFDS_MAX 128u
+#define PRT_SELECT_SOFT_FDSET_BYTES ((PRT_SELECT_SOFT_NFDS_MAX + 7u) / 8u)
 
 /*
  * Soft NR group buckets for cold personality enter tallies (Wave 15).
- * Diagnostics only — never hard-gates protonrt_service returns.
+ * Diagnostics only - never hard-gates protonrt_service returns.
  */
 enum {
     PRT_SOFT_GRP_FS = 0,   /* open/read/write/stat/path/dir/fd */
-    PRT_SOFT_GRP_NET,      /* socket/connect/send/recv/… */
+    PRT_SOFT_GRP_NET,      /* socket/connect/send_star/recv_star/... */
     PRT_SOFT_GRP_PROC,     /* kill/wait/pidfd/exec-shaped */
     PRT_SOFT_GRP_TIME,     /* clock/timer/nanosleep-shaped */
     PRT_SOFT_GRP_MEM,      /* mmap/mprotect/brk-shaped cold */
@@ -118,7 +187,7 @@ enum {
 
 /*
  * Soft product inventory (Wave 35 exclusive deepen).
- * greppable: protonrt: soft … / cold_link: soft …
+ * greppable: protonrt: soft ... / cold_link: soft ...
  */
 static u64 g_u64PrtSoftEnter;                 /* protonrt_service entries */
 static u64 g_u64PrtSoftNull;                  /* pRegs == NULL */
@@ -134,13 +203,67 @@ static u8  g_fPrtSoftOnce;                    /* one-shot deep dump */
 static u8  g_fPrtSoftColdNetOnce;             /* one-shot cold_net bridge */
 static u8  g_fPrtSoftForkWaitWireOnce;        /* fork-wait soft wire PASS */
 static u8  g_fPrtSoftPollBlockOnce;           /* poll soft-spin PASS */
+static u8  g_fPrtSoftResidualLeanOnce;        /* lean residual once-lamp */
+static u64 g_u64PrtSoftResidualLean;          /* residual lean emit count */
+/*
+ * Residual lean hit tallies (Soft!=product; storm=0 companion counters).
+ * Folded into residual lean once-lamp only - never stamp storms.
+ * Bar3-adjacent ABI reach for userspace hosts (not a bar3 claim).
+ * Proton neighborhood deepen: socketpair/pipe/epoll/eventfd/memfd lean hits
+ * for Linux-shaped apps (wine-class IPC + readiness) - Soft!=product G-AC-1.
+ */
+static u64 g_u64PrtLeanSocket;                /* socket bind listen accept connect */
+static u64 g_u64PrtLeanXfer;                  /* send_star recv_star shutdown sockopt name */
+static u64 g_u64PrtLeanPoll;                  /* poll ppoll cold_net first */
+static u64 g_u64PrtLeanSelect;                /* select pselect residual lean */
+static u64 g_u64PrtLeanClose;                 /* close close_range cold_net first */
+static u64 g_u64PrtLeanRwNet;                 /* read write on net fds */
+static u64 g_u64PrtLeanSockpair;              /* socketpair AF_UNIX residual */
+static u64 g_u64PrtLeanPipe;                  /* pipe pipe2 residual */
+static u64 g_u64PrtLeanEpoll;                 /* epoll create/ctl/wait residual */
+static u64 g_u64PrtLeanEventfd;               /* eventfd eventfd2 residual */
+static u64 g_u64PrtLeanMemfd;                 /* memfd_create residual */
+static u64 g_u64PrtLeanIoctl;                 /* ioctl FIONREAD/FIONBIO/TTY residual */
+static u64 g_u64PrtLeanSendfile;              /* sendfile/splice/tee residual */
+static u64 g_u64PrtLeanFcntl;                 /* fcntl F_GETFL/F_SETFL residual */
+static u64 g_u64PrtLeanCopyFr;                /* copy_file_range residual */
+static u8  g_fPrtSoftSelectOnce;              /* select residual once-lamp */
+static u8  g_fPrtSoftEpollOnce;               /* epoll residual once-lamp */
+static u8  g_fPrtSoftNeighborhoodOnce;        /* neighborhood residual once-lamp */
+static u8  g_fPrtSoftIoctlOnce;               /* ioctl residual once-lamp */
+static u8  g_fPrtSoftSendfileOnce;            /* sendfile residual once-lamp */
+static u8  g_fPrtSoftFcntlOnce;               /* fcntl residual once-lamp */
+static u8  g_fPrtSoftCopyFrOnce;              /* copy_file_range residual once-lamp */
+static u8  g_fPrtSoftDualDodOnce;             /* dual DoD honesty once-lamp */
+
+/*
+ * Soft fd open-flags residual (C2 Dual DoD residual deepen; Soft!=product).
+ * F_SETFL / FIONBIO O_NONBLOCK soft honesty for ram+lo+tcp UDX host probes.
+ * F_GETFL returns last soft flags (net default O_RDWR). Never product
+ * O_NONBLOCK table. close clears entry. storm=0. Dual DoD A/B OPEN.
+ */
+#define PRT_SOFT_FDFL_MAX 32u
+
+struct prt_soft_fdfl_ent {
+    i64 i64Fd;
+    u32 u32Flags;
+    u8  u8Used;
+    u8  u8Pad[3];
+};
+
+static struct prt_soft_fdfl_ent g_aPrtSoftFdFl[PRT_SOFT_FDFL_MAX];
 
 static void protonrt_soft_inc(u64 *pCtr);
 static void protonrt_soft_note_enter(u64 u64Nr);
 static void protonrt_soft_inventory_log(void);
 static void protonrt_soft_inventory_maybe_once(void);
+static void protonrt_soft_residual_lean_once(void);
 static struct gj_process *protonrt_soft_parent(void);
 static void protonrt_soft_fork_wait_wire_pass_once(void);
+static u32 protonrt_soft_fd_ready_mask(i64 i64Fd, u32 u32Want);
+static u32 protonrt_soft_fdfl_get(i64 i64Fd, u32 u32Default);
+static void protonrt_soft_fdfl_set(i64 i64Fd, u32 u32Flags);
+static void protonrt_soft_fdfl_clear(i64 i64Fd);
 
 /** Soft: saturating-ish bump (u64 wrap is fine for telemetry). */
 static void
@@ -150,6 +273,98 @@ protonrt_soft_inc(u64 *pCtr)
         return;
     }
     (*pCtr)++;
+}
+
+/**
+ * Soft fd open-flags get (C2 residual; Soft!=product).
+ * Returns last F_SETFL/FIONBIO soft flags or u32Default when unset.
+ */
+static u32
+protonrt_soft_fdfl_get(i64 i64Fd, u32 u32Default)
+{
+    u32 i;
+
+    if (i64Fd < 0) {
+        return u32Default;
+    }
+    for (i = 0; i < PRT_SOFT_FDFL_MAX; i++) {
+        if (g_aPrtSoftFdFl[i].u8Used != 0 &&
+            g_aPrtSoftFdFl[i].i64Fd == i64Fd) {
+            return g_aPrtSoftFdFl[i].u32Flags;
+        }
+    }
+    return u32Default;
+}
+
+/**
+ * Soft fd open-flags set (C2 residual; Soft!=product).
+ * Overwrites existing entry or claims free slot; full table is soft drop.
+ */
+static void
+protonrt_soft_fdfl_set(i64 i64Fd, u32 u32Flags)
+{
+    u32 i;
+    u32 u32Free;
+
+    if (i64Fd < 0) {
+        return;
+    }
+    u32Free = PRT_SOFT_FDFL_MAX;
+    for (i = 0; i < PRT_SOFT_FDFL_MAX; i++) {
+        if (g_aPrtSoftFdFl[i].u8Used != 0 &&
+            g_aPrtSoftFdFl[i].i64Fd == i64Fd) {
+            g_aPrtSoftFdFl[i].u32Flags = u32Flags;
+            return;
+        }
+        if (g_aPrtSoftFdFl[i].u8Used == 0 && u32Free == PRT_SOFT_FDFL_MAX) {
+            u32Free = i;
+        }
+    }
+    if (u32Free < PRT_SOFT_FDFL_MAX) {
+        g_aPrtSoftFdFl[u32Free].u8Used = 1;
+        g_aPrtSoftFdFl[u32Free].i64Fd = i64Fd;
+        g_aPrtSoftFdFl[u32Free].u32Flags = u32Flags;
+    }
+}
+
+/** Soft fd open-flags clear on close residual (Soft!=product). */
+static void
+protonrt_soft_fdfl_clear(i64 i64Fd)
+{
+    u32 i;
+
+    if (i64Fd < 0) {
+        return;
+    }
+    for (i = 0; i < PRT_SOFT_FDFL_MAX; i++) {
+        if (g_aPrtSoftFdFl[i].u8Used != 0 &&
+            g_aPrtSoftFdFl[i].i64Fd == i64Fd) {
+            g_aPrtSoftFdFl[i].u8Used = 0;
+            g_aPrtSoftFdFl[i].i64Fd = -1;
+            g_aPrtSoftFdFl[i].u32Flags = 0;
+            return;
+        }
+    }
+}
+
+/**
+ * Residual lean readiness for one fd (Soft!=product).
+ * cold_net poll_mask first (SO_ERROR / half-close honesty), then vfs_ram.
+ * Never always-ready. G-AC-1 userspace host reach - not .ko product AC.
+ */
+static u32
+protonrt_soft_fd_ready_mask(i64 i64Fd, u32 u32Want)
+{
+    u32 u32Got;
+
+    if (i64Fd < 0) {
+        return 0;
+    }
+    u32Got = gj_linux_cold_poll_mask(i64Fd, u32Want);
+    if (u32Got == 0) {
+        u32Got = vfs_ram_poll_mask(i64Fd, u32Want);
+    }
+    return u32Got;
 }
 
 /**
@@ -202,10 +417,20 @@ protonrt_soft_grp_of(u64 u64Nr)
     case LINUX_NR_lseek:
     case LINUX_NR_access:
     case LINUX_NR_pipe:
+    case LINUX_NR_pipe2:
     case LINUX_NR_select:
+    case LINUX_NR_pselect6:
+    case LINUX_NR_ppoll:
     case LINUX_NR_dup:
     case LINUX_NR_dup2:
+    case LINUX_NR_dup3:
     case LINUX_NR_fcntl:
+    case LINUX_NR_ioctl:
+    case LINUX_NR_sendfile:
+    case LINUX_NR_splice:
+    case LINUX_NR_tee:
+    case LINUX_NR_vmsplice:
+    case LINUX_NR_copy_file_range:
     case LINUX_NR_flock:
     case LINUX_NR_fsync:
     case LINUX_NR_fdatasync:
@@ -259,6 +484,16 @@ protonrt_soft_grp_of(u64 u64Nr)
     case LINUX_NR_openat2:
     case LINUX_NR_faccessat2:
     case LINUX_NR_close_range:
+    case LINUX_NR_eventfd:
+    case LINUX_NR_eventfd2:
+    case LINUX_NR_signalfd4:
+    case LINUX_NR_memfd_create:
+    case LINUX_NR_epoll_create:
+    case LINUX_NR_epoll_create1:
+    case LINUX_NR_epoll_ctl:
+    case LINUX_NR_epoll_wait:
+    case LINUX_NR_epoll_pwait:
+    case LINUX_NR_epoll_pwait2:
         return (u32)PRT_SOFT_GRP_FS;
     case LINUX_NR_socket:
     case LINUX_NR_connect:
@@ -340,7 +575,7 @@ protonrt_soft_grp_of(u64 u64Nr)
 }
 
 /**
- * Soft enter note — never alters service return. Diagnostics only.
+ * Soft enter note - never alters service return. Diagnostics only.
  * greppable: protonrt: soft enter
  */
 static void
@@ -358,7 +593,7 @@ protonrt_soft_note_enter(u64 u64Nr)
 
 /**
  * Greppable soft cold personality inventory (Wave 35 exclusive deepen).
- * Twin prefixes: protonrt: soft … / cold_link: soft …
+ * Twin prefixes: protonrt: soft ... / cold_link: soft ...
  * greppable: protonrt: soft
  * greppable: cold_link: soft
  */
@@ -408,13 +643,20 @@ protonrt_soft_inventory_log(void)
 
     /* Grep: protonrt: soft fs */
     kprintf("protonrt: soft fs enter=%llu surface=openat,read,write,stat,"
-            "path,dir,fd,io_uring_min wave=%u\n",
+            "path,dir,fd,io_uring_min,pipe,epoll,eventfd,memfd,ioctl,"
+            "sendfile,fcntl,copy_file_range "
+            "wave=%u "
+            "(Proton neighborhood residual; Soft!=product; not bar3)\n",
             (unsigned long long)g_u64PrtSoftGrp[PRT_SOFT_GRP_FS],
             (unsigned)GJ_PROTONRT_SOFT_WAVE);
 
     /* Grep: protonrt: soft net */
-    kprintf("protonrt: soft net enter=%llu surface=socket,connect,send,recv,"
-            "bind,listen wave=%u\n",
+    kprintf("protonrt: soft net enter=%llu surface=socket,connect,"
+            "send_star,recv_star,bind,listen,accept,close,poll,select,"
+            "socketpair,ioctl,fcntl,sendfile_net,copy_file_net cold_net=1 "
+            "wave=%u "
+            "(Soft!=product userspace driver reach; abi_adj=proton_p0; "
+            "dual_dod_a=OPEN dual_dod_b=OPEN; not bar3)\n",
             (unsigned long long)g_u64PrtSoftGrp[PRT_SOFT_GRP_NET],
             (unsigned)GJ_PROTONRT_SOFT_WAVE);
 
@@ -499,187 +741,36 @@ protonrt_soft_inventory_log(void)
                 (unsigned)GJ_PROTONRT_SOFT_WAVE);
     }
 
-    /* Grep: protonrt: soft honesty (Wave 20 deepen) */
+    /* Grep: protonrt: soft honesty (Wave 20 deepen + Dual DoD residual) */
     kprintf("protonrt: soft honesty hybrid=OptionC open=1 "
             "product_linux_abi=open soft_only=1 multi_server=OPEN "
-            "wave=%u (cold personality soft; never closes hybrid)\n",
+            "dual_dod_a=OPEN dual_dod_b=OPEN freestanding_skip=1 "
+            "product_path=UDX_DDI+hot_cold_ABI g_ac_1=1 "
+            "wave=%u (cold personality soft; never closes hybrid or Dual DoD)\n",
             (unsigned)GJ_PROTONRT_SOFT_WAVE);
 
-    /* Grep: protonrt: soft surfaces (Wave 20 deepen) */
+    /* Grep: protonrt: soft surfaces (Wave 20 deepen + Dual DoD residual) */
     kprintf("protonrt: soft surfaces count=%u wave=%u "
             "names=inventory,path,rates,honesty,catalog,surfaces,note,"
-            "deepen,PASS\n",
+            "deepen,ioctl,sendfile,fcntl,copy_file,dual_dod,PASS\n",
             (unsigned)GJ_PROTONRT_SOFT_AREAS,
             (unsigned)GJ_PROTONRT_SOFT_WAVE);
 
     /* Grep: protonrt: soft note (Wave 20 deepen) */
-    kprintf("protonrt: soft note milestone=wave98 exclusive=1 "
-            "soft_only=1 wave=%u\n",
+    kprintf("protonrt: soft note milestone=wave98 exclusive=1 wave=%u\n",
             (unsigned)GJ_PROTONRT_SOFT_WAVE);
 
-    /* Grep: protonrt: soft catalog (Wave 20 deepen) */
+    /* Grep: protonrt: soft catalog (Wave 20 deepen + Dual DoD residual) */
     kprintf("protonrt: soft catalog wave=%u areas=%u "
             "surfaces=inventory,enter,fs,net,proc,time,mem,other,"
-            "confine,attach,path,rates,honesty,catalog,return,retmap,deepen,PASS\n",
+            "confine,attach,path,rates,honesty,catalog,return,retmap,deepen,"
+            "ioctl,sendfile,fcntl,copy_file,dual_dod,PASS\n",
             (unsigned)GJ_PROTONRT_SOFT_WAVE,
             (unsigned)GJ_PROTONRT_SOFT_AREAS);
 
-    /* Grep: protonrt: soft return (Wave 20 deepen) */
-    kprintf("protonrt: soft return enter=%llu null=%llu attach=%llu "
-            "confine_deny=%u expose_full=%u path_deny=%llu "
-            "product_gate=0 wave=%u\n",
-            (unsigned long long)g_u64PrtSoftEnter,
-            (unsigned long long)g_u64PrtSoftNull,
-            (unsigned long long)g_u64PrtSoftAttach,
-            g_u32ConfinePromiseDeny + g_u32ConfineExposeDeny,
-            (unsigned)g_u64PrtSoftExposeFull,
-            (unsigned long long)g_u64PrtSoftPathDeny,
-            (unsigned)GJ_PROTONRT_SOFT_WAVE);
 
-    /* Grep: protonrt: soft retmap — Wave 19 return-surface map */
-    kprintf("protonrt: soft retmap ok|fail|inval|nodev|busy|nomem product_gate=0 soft_only=1 wave=116\n");
 
     /* Grep: protonrt: soft deepen wave (Wave 24 stamp) */
-    /*
-     * ---- Wave 19 complementary surfaces (kept) (never reshape primary).
-     * Return surfaces only — soft inventory; never hard-gates product paths.
-     */
-    /* Grep: protonrt: soft retclass — Wave 19 return-class taxonomy (kept) */
-    kprintf("protonrt: soft retclass ok|fail|inval|nodev|busy|nomem "
-            "soft_only=1 product_gate=0 wave=%u "
-            "(retclass taxonomy; Soft≠product)\n",
-            (unsigned)GJ_PROTONRT_SOFT_WAVE);
-    /* Grep: protonrt: soft retlane — Wave 19 return-lane catalog (kept) */
-    kprintf("protonrt: soft retlane inv|selftest|rate|retcode|retmap|class "
-            "product_kernel=OPEN soft_ne_product=1 wave=%u "
-            "(retlane catalog; Soft≠product)\n",
-            (unsigned)GJ_PROTONRT_SOFT_WAVE);
-    /*
-     * ---- Wave 20 complementary surfaces (kept) (never reshape primary).
-     * Return surfaces only — soft inventory; never hard-gates product paths.
-     */
-    /* Grep: protonrt: soft retbound — Wave 20 return-bound honesty (kept) */
-    kprintf("protonrt: soft retbound soft_only=1 product_gate=0 hard_gate=0 "
-            "never_blocks_m0=1 wave=%u "
-            "(retbound honesty; Soft≠product)\n",
-            (unsigned)GJ_PROTONRT_SOFT_WAVE);
-    /* Grep: protonrt: soft retseal — Wave 20 seal stamp (kept) */
-    kprintf("protonrt: soft retseal exclusive=1 soft_ne_product=1 "
-            "product_kernel=OPEN wave=%u "
-            "(retseal stamp; Soft≠product)\n",
-            (unsigned)GJ_PROTONRT_SOFT_WAVE);
-            /*
-             * ---- Wave 21 complementary surfaces (kept) (never reshape primary).
-             * Return surfaces only — soft inventory; never hard-gates product paths.
-            */
-            /* Grep: protonrt: soft retpulse — Wave 21 return-pulse honesty (kept) */
-            kprintf("protonrt: soft retpulse soft_only=1 product_gate=0 soft_ne_product=1 "
-                    "never_blocks_m0=1 wave=%u "
-                    "(retpulse honesty; Soft≠product)\n",
-                    (unsigned)GJ_PROTONRT_SOFT_WAVE);
-            /* Grep: protonrt: soft retmark — Wave 21 mark stamp (kept) */
-            kprintf("protonrt: soft retmark exclusive=1 soft_ne_product=1 "
-                    "product_kernel=OPEN wave=%u "
-                    "(retmark stamp; Soft≠product)\n",
-                    (unsigned)GJ_PROTONRT_SOFT_WAVE);
-            /*
-             * ---- Wave 22 complementary surfaces (kept) (never reshape primary).
-             * Return surfaces only — soft inventory; never hard-gates product paths.
-            */
-            /* Grep: protonrt: soft retphase — Wave 22 return-phase honesty (kept) */
-            kprintf("protonrt: soft retphase soft_only=1 product_gate=0 soft_ne_product=1 "
-                    "never_blocks_m0=1 wave=%u "
-                    "(retphase honesty; Soft≠product)\n",
-                    (unsigned)GJ_PROTONRT_SOFT_WAVE);
-            /* Grep: protonrt: soft retbadge — Wave 22 badge stamp (kept) */
-            kprintf("protonrt: soft retbadge exclusive=1 soft_ne_product=1 "
-                    "product_kernel=OPEN wave=%u "
-                    "(retbadge stamp; Soft≠product)\n",
-                    (unsigned)GJ_PROTONRT_SOFT_WAVE);
-/*
- * ---- Wave 23 complementary surfaces (kept) (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
-            */
-            /* Grep: protonrt: soft rettoken — Wave 23 return-token honesty (kept) */
-            kprintf("protonrt: soft rettoken soft_only=1 product_gate=0 soft_ne_product=1 "
-                    "never_blocks_m0=1 wave=%u "
-                    "(rettoken honesty; Soft≠product)\n",
-                    (unsigned)GJ_PROTONRT_SOFT_WAVE);
-            /* Grep: protonrt: soft retcrest — Wave 23 crest stamp (kept) */
-            kprintf("protonrt: soft retcrest exclusive=1 soft_ne_product=1 "
-                    "product_kernel=OPEN wave=%u "
-                    "(retcrest stamp; Soft≠product)\n",
-                    (unsigned)GJ_PROTONRT_SOFT_WAVE);
-            /*
-             * ---- Wave 24 complementary surfaces (kept) (never reshape primary).
-             * Return surfaces only — soft inventory; never hard-gates product paths.
-             */
-            /* Grep: protonrt: soft retvault — Wave 24 return-vault honesty (kept) */
-            kprintf("protonrt: soft retvault soft_only=1 product_gate=0 soft_ne_product=1 "
-                    "never_blocks_m0=1 wave=%u "
-                    "(retvault honesty; Soft≠product)\n",
-                    (unsigned)GJ_PROTONRT_SOFT_WAVE);
-            /* Grep: protonrt: soft retbanner — Wave 24 banner stamp (kept) */
-            kprintf("protonrt: soft retbanner exclusive=1 soft_ne_product=1 "
-                    "product_kernel=OPEN wave=%u "
-                    "(retbanner stamp; Soft≠product)\n",
-                    (unsigned)GJ_PROTONRT_SOFT_WAVE);
-            /*
-             * ---- Wave 25 complementary surfaces (kept) (never reshape primary).
-             * Return surfaces only — soft inventory; never hard-gates product paths.
-             */
-            /* Grep: protonrt: soft retledger — Wave 25 return-ledger honesty (kept) */
-            kprintf("protonrt: soft retledger soft_only=1 product_gate=0 soft_ne_product=1 "
-                    "never_blocks_m0=1 wave=%u "
-                    "(retledger honesty; Soft≠product)\n",
-                    (unsigned)GJ_PROTONRT_SOFT_WAVE);
-            /* Grep: protonrt: soft retbeacon — Wave 25 beacon stamp (kept) */
-            kprintf("protonrt: soft retbeacon exclusive=1 soft_ne_product=1 "
-                    "product_kernel=OPEN wave=%u "
-                    "(retbeacon stamp; Soft≠product)\n",
-                    (unsigned)GJ_PROTONRT_SOFT_WAVE);
-            /*
-             * ---- Wave 26 complementary surfaces (kept) (never reshape primary).
-             * Return surfaces only — soft inventory; never hard-gates product paths.
-             */
-            /* Grep: protonrt: soft retcipher — Wave 26 return-cipher honesty (kept) */
-            kprintf("protonrt: soft retcipher soft_only=1 product_gate=0 soft_ne_product=1 "
-                    "never_blocks_m0=1 wave=%u "
-                    "(retcipher honesty; Soft≠product)\n",
-                    (unsigned)GJ_PROTONRT_SOFT_WAVE);
-            /* Grep: protonrt: soft retflame — Wave 26 flame stamp (kept) */
-            kprintf("protonrt: soft retflame exclusive=1 soft_ne_product=1 "
-                    "product_kernel=OPEN wave=%u "
-                    "(retflame stamp; Soft≠product)\n",
-                    (unsigned)GJ_PROTONRT_SOFT_WAVE);
-                    /*
-                     * ---- Wave 27 complementary surfaces (kept) (never reshape primary).
-                     * Return surfaces only — soft inventory; never hard-gates product paths.
-                     */
-                    /* Grep: protonrt: soft retprism — Wave 27 return-prism honesty (kept) */
-                    kprintf("protonrt: soft retprism soft_only=1 product_gate=0 soft_ne_product=1 "
-                            "never_blocks_m0=1 wave=%u "
-                            "(retprism honesty; Soft≠product)\n",
-                            (unsigned)GJ_PROTONRT_SOFT_WAVE);
-                    /* Grep: protonrt: soft retforge — Wave 27 forge stamp (kept) */
-                    kprintf("protonrt: soft retforge exclusive=1 soft_ne_product=1 "
-                            "product_kernel=OPEN wave=%u "
-                            "(retforge stamp; Soft≠product)\n",
-                            (unsigned)GJ_PROTONRT_SOFT_WAVE);
-                            /*
-                             * ---- Wave 28 complementary surfaces (kept) (never reshape primary).
-                             * Return surfaces only — soft inventory; never hard-gates product paths.
-                             */
-                            /* Grep: protonrt: soft retshard — Wave 28 return-shard honesty (kept) */
-                            kprintf("protonrt: soft retshard soft_only=1 product_gate=0 soft_ne_product=1 "
-                                "never_blocks_m0=1 wave=%u "
-                                "(retshard honesty; Soft≠product)\n",
-                                (unsigned)GJ_PROTONRT_SOFT_WAVE);
-                            /* Grep: protonrt: soft retcrown — Wave 28 crown stamp (kept) */
-                            kprintf("protonrt: soft retcrown exclusive=1 soft_ne_product=1 "
-                                "product_kernel=OPEN wave=%u "
-                                "(retcrown stamp; Soft≠product)\n",
-                                (unsigned)GJ_PROTONRT_SOFT_WAVE);
     kprintf("protonrt: soft deepen wave=%u areas=%u logs=%llu enter=%llu "
             "fs=%llu net=%llu proc=%llu confine_deny=%u "
             "(Wave 35 exclusive; cold link soft)\n",
@@ -704,7 +795,7 @@ protonrt_soft_inventory_log(void)
             (unsigned long long)g_u64PrtSoftLogN);
 
     /*
-     * Twin prefix: cold_link: soft … (agent-friendly alias).
+     * Twin prefix: cold_link: soft ... (agent-friendly alias).
      */
     /* Grep: cold_link: soft inventory */
     kprintf("cold_link: soft inventory wave=%u areas=%u enter=%llu null=%llu "
@@ -768,924 +859,25 @@ protonrt_soft_inventory_log(void)
                 (unsigned)GJ_PROTONRT_SOFT_WAVE);
     }
 
-    /* Grep: cold_link: soft honesty (Wave 20 deepen) */
+    /* Grep: cold_link: soft honesty (Wave 20 deepen + Dual DoD residual) */
     kprintf("cold_link: soft honesty hybrid=OptionC open=1 "
             "product_linux_abi=open soft_only=1 multi_server=OPEN "
-            "wave=%u (soft inventory; never closes hybrid)\n",
+            "dual_dod_a=OPEN dual_dod_b=OPEN freestanding_skip=1 "
+            "product_path=UDX_DDI+hot_cold_ABI g_ac_1=1 "
+            "wave=%u (soft inventory; never closes hybrid or Dual DoD)\n",
             (unsigned)GJ_PROTONRT_SOFT_WAVE);
 
-    /* Grep: cold_link: soft catalog (Wave 20 deepen) */
+    /* Grep: cold_link: soft catalog (Wave 20 deepen + Dual DoD residual) */
     kprintf("cold_link: soft catalog wave=%u areas=%u "
             "surfaces=inventory,enter,confine,path,rates,honesty,"
-            "catalog,return,retmap,deepen,PASS\n",
+            "catalog,return,retmap,deepen,ioctl,sendfile,fcntl,copy_file,"
+            "dual_dod,PASS\n",
             (unsigned)GJ_PROTONRT_SOFT_WAVE,
             (unsigned)GJ_PROTONRT_SOFT_AREAS);
 
-    /* Grep: cold_link: soft return (Wave 20 deepen) */
-    kprintf("cold_link: soft return enter=%llu null=%llu attach=%llu "
-            "confine_deny=%u product_gate=0 wave=%u\n",
-            (unsigned long long)g_u64PrtSoftEnter,
-            (unsigned long long)g_u64PrtSoftNull,
-            (unsigned long long)g_u64PrtSoftAttach,
-            g_u32ConfinePromiseDeny + g_u32ConfineExposeDeny,
-            (unsigned)GJ_PROTONRT_SOFT_WAVE);
 
     /* Grep: cold_link: soft deepen wave (Wave 24 stamp) */
-    /*
-     * ---- Wave 19 complementary surfaces (kept) (never reshape primary).
-     * Return surfaces only — soft inventory; never hard-gates product paths.
-     */
-    /* Grep: cold_link: soft retclass — Wave 19 return-class taxonomy (kept) */
-    kprintf("cold_link: soft retclass ok|fail|inval|nodev|busy|nomem "
-            "soft_only=1 product_gate=0 wave=%u "
-            "(retclass taxonomy; Soft≠product)\n",
-            (unsigned)GJ_PROTONRT_SOFT_WAVE);
-    /* Grep: cold_link: soft retlane — Wave 19 return-lane catalog (kept) */
-    kprintf("cold_link: soft retlane inv|selftest|rate|retcode|retmap|class "
-            "product_kernel=OPEN soft_ne_product=1 wave=%u "
-            "(retlane catalog; Soft≠product)\n",
-            (unsigned)GJ_PROTONRT_SOFT_WAVE);
-    /*
-     * ---- Wave 20 complementary surfaces (kept) (never reshape primary).
-     * Return surfaces only — soft inventory; never hard-gates product paths.
-     */
-    /* Grep: cold_link: soft retbound — Wave 20 return-bound honesty (kept) */
-    kprintf("cold_link: soft retbound soft_only=1 product_gate=0 hard_gate=0 "
-            "never_blocks_m0=1 wave=%u "
-            "(retbound honesty; Soft≠product)\n",
-            (unsigned)GJ_PROTONRT_SOFT_WAVE);
-    /* Grep: cold_link: soft retseal — Wave 20 seal stamp (kept) */
-    kprintf("cold_link: soft retseal exclusive=1 soft_ne_product=1 "
-            "product_kernel=OPEN wave=%u "
-            "(retseal stamp; Soft≠product)\n",
-            (unsigned)GJ_PROTONRT_SOFT_WAVE);
-            /*
-             * ---- Wave 21 complementary surfaces (kept) (never reshape primary).
-             * Return surfaces only — soft inventory; never hard-gates product paths.
-            */
-            /* Grep: cold_link: soft retpulse — Wave 21 return-pulse honesty (kept) */
-            kprintf("cold_link: soft retpulse soft_only=1 product_gate=0 soft_ne_product=1 "
-                    "never_blocks_m0=1 wave=%u "
-                    "(retpulse honesty; Soft≠product)\n",
-                    (unsigned)GJ_PROTONRT_SOFT_WAVE);
-            /* Grep: cold_link: soft retmark — Wave 21 mark stamp (kept) */
-            kprintf("cold_link: soft retmark exclusive=1 soft_ne_product=1 "
-                    "product_kernel=OPEN wave=%u "
-                    "(retmark stamp; Soft≠product)\n",
-                    (unsigned)GJ_PROTONRT_SOFT_WAVE);
-            /*
-             * ---- Wave 22 complementary surfaces (kept) (never reshape primary).
-             * Return surfaces only — soft inventory; never hard-gates product paths.
-            */
-            /* Grep: cold_link: soft retphase — Wave 22 return-phase honesty (kept) */
-            kprintf("cold_link: soft retphase soft_only=1 product_gate=0 soft_ne_product=1 "
-                    "never_blocks_m0=1 wave=%u "
-                    "(retphase honesty; Soft≠product)\n",
-                    (unsigned)GJ_PROTONRT_SOFT_WAVE);
-            /* Grep: cold_link: soft retbadge — Wave 22 badge stamp (kept) */
-            kprintf("cold_link: soft retbadge exclusive=1 soft_ne_product=1 "
-                    "product_kernel=OPEN wave=%u "
-                    "(retbadge stamp; Soft≠product)\n",
-                    (unsigned)GJ_PROTONRT_SOFT_WAVE);
-/*
- * ---- Wave 23 complementary surfaces (kept) (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
-            */
-            /* Grep: cold_link: soft rettoken — Wave 23 return-token honesty (kept) */
-            kprintf("cold_link: soft rettoken soft_only=1 product_gate=0 soft_ne_product=1 "
-                    "never_blocks_m0=1 wave=%u "
-                    "(rettoken honesty; Soft≠product)\n",
-                    (unsigned)GJ_PROTONRT_SOFT_WAVE);
-            /* Grep: cold_link: soft retcrest — Wave 23 crest stamp (kept) */
-            kprintf("cold_link: soft retcrest exclusive=1 soft_ne_product=1 "
-                    "product_kernel=OPEN wave=%u "
-                    "(retcrest stamp; Soft≠product)\n",
-                    (unsigned)GJ_PROTONRT_SOFT_WAVE);
-            /*
-             * ---- Wave 24 complementary surfaces (kept) (never reshape primary).
-             * Return surfaces only — soft inventory; never hard-gates product paths.
-             */
-            /* Grep: cold_link: soft retvault — Wave 24 return-vault honesty (kept) */
-            kprintf("cold_link: soft retvault soft_only=1 product_gate=0 soft_ne_product=1 "
-                    "never_blocks_m0=1 wave=%u "
-                    "(retvault honesty; Soft≠product)\n",
-                    (unsigned)GJ_PROTONRT_SOFT_WAVE);
-            /* Grep: cold_link: soft retbanner — Wave 24 banner stamp (kept) */
-            kprintf("cold_link: soft retbanner exclusive=1 soft_ne_product=1 "
-                    "product_kernel=OPEN wave=%u "
-                    "(retbanner stamp; Soft≠product)\n",
-                    (unsigned)GJ_PROTONRT_SOFT_WAVE);
-            /*
-             * ---- Wave 25 complementary surfaces (kept) (never reshape primary).
-             * Return surfaces only — soft inventory; never hard-gates product paths.
-             */
-            /* Grep: cold_link: soft retledger — Wave 25 return-ledger honesty (kept) */
-            kprintf("cold_link: soft retledger soft_only=1 product_gate=0 soft_ne_product=1 "
-                    "never_blocks_m0=1 wave=%u "
-                    "(retledger honesty; Soft≠product)\n",
-                    (unsigned)GJ_PROTONRT_SOFT_WAVE);
-            /* Grep: cold_link: soft retbeacon — Wave 25 beacon stamp (kept) */
-            kprintf("cold_link: soft retbeacon exclusive=1 soft_ne_product=1 "
-                    "product_kernel=OPEN wave=%u "
-                    "(retbeacon stamp; Soft≠product)\n",
-                    (unsigned)GJ_PROTONRT_SOFT_WAVE);
-            /*
-             * ---- Wave 26 complementary surfaces (kept) (never reshape primary).
-             * Return surfaces only — soft inventory; never hard-gates product paths.
-             */
-            /* Grep: cold_link: soft retcipher — Wave 26 return-cipher honesty (kept) */
-            kprintf("cold_link: soft retcipher soft_only=1 product_gate=0 soft_ne_product=1 "
-                    "never_blocks_m0=1 wave=%u "
-                    "(retcipher honesty; Soft≠product)\n",
-                    (unsigned)GJ_PROTONRT_SOFT_WAVE);
-            /* Grep: cold_link: soft retflame — Wave 26 flame stamp (kept) */
-            kprintf("cold_link: soft retflame exclusive=1 soft_ne_product=1 "
-                    "product_kernel=OPEN wave=%u "
-                    "(retflame stamp; Soft≠product)\n",
-                    (unsigned)GJ_PROTONRT_SOFT_WAVE);
-                    /*
-                     * ---- Wave 27 complementary surfaces (kept) (never reshape primary).
-                     * Return surfaces only — soft inventory; never hard-gates product paths.
-                     */
-                    /* Grep: cold_link: soft retprism — Wave 27 return-prism honesty (kept) */
-                    kprintf("cold_link: soft retprism soft_only=1 product_gate=0 soft_ne_product=1 "
-                            "never_blocks_m0=1 wave=%u "
-                            "(retprism honesty; Soft≠product)\n",
-                            (unsigned)GJ_PROTONRT_SOFT_WAVE);
-                    /* Grep: cold_link: soft retforge — Wave 27 forge stamp (kept) */
-                    kprintf("cold_link: soft retforge exclusive=1 soft_ne_product=1 "
-                            "product_kernel=OPEN wave=%u "
-                            "(retforge stamp; Soft≠product)\n",
-                            (unsigned)GJ_PROTONRT_SOFT_WAVE);
-                            /*
-                             * ---- Wave 28 complementary surfaces (kept) (never reshape primary).
-                             * Return surfaces only — soft inventory; never hard-gates product paths.
-                             */
-                            /* Grep: cold_link: soft retshard — Wave 28 return-shard honesty (kept) */
-                            kprintf("cold_link: soft retshard soft_only=1 product_gate=0 soft_ne_product=1 "
-                                "never_blocks_m0=1 wave=%u "
-                                "(retshard honesty; Soft≠product)\n",
-                                (unsigned)GJ_PROTONRT_SOFT_WAVE);
-                            /* Grep: cold_link: soft retcrown — Wave 28 crown stamp (kept) */
-                            kprintf("cold_link: soft retcrown exclusive=1 soft_ne_product=1 "
-                                "product_kernel=OPEN wave=%u "
-                                "(retcrown stamp; Soft≠product)\n",
-                                (unsigned)GJ_PROTONRT_SOFT_WAVE);
-                                /*
-                             * ---- Wave 29 complementary surfaces (kept) (never reshape primary).
-                             * Return surfaces only — soft inventory; never hard-gates product paths.
-                             */
-                            /* Grep: cold_link: soft retglyph — Wave 29 return-glyph honesty (kept) */
-                            kprintf("cold_link: soft retglyph soft_only=1 product_gate=0 soft_ne_product=1 "
-                                    "never_blocks_m0=1 wave=%u "
-                                    "(retglyph honesty; Soft≠product)\n",
-                                    (unsigned)GJ_PROTONRT_SOFT_WAVE);
-                            /* Grep: cold_link: soft retscepter — Wave 29 scepter stamp (kept) */
-                            kprintf("cold_link: soft retscepter exclusive=1 soft_ne_product=1 "
-                                    "product_kernel=OPEN wave=%u "
-                                    "(retscepter stamp; Soft≠product)\n",
-                                    (unsigned)GJ_PROTONRT_SOFT_WAVE);
-                                /*
-                             * ---- Wave 30 complementary surfaces (kept) (never reshape primary).
-                             * Return surfaces only — soft inventory; never hard-gates product paths.
-                             */
-                            /* Grep: cold_link: soft retsigil — Wave 30 return-sigil honesty (kept) */
-                            kprintf("cold_link: soft retsigil soft_only=1 product_gate=0 soft_ne_product=1 "
-                                    "never_blocks_m0=1 wave=%u "
-                                    "(retsigil honesty; Soft≠product)\n",
-                                    (unsigned)GJ_PROTONRT_SOFT_WAVE);
-                            /* Grep: cold_link: soft retemblem — Wave 30 emblem stamp (kept) */
-                            kprintf("cold_link: soft retemblem exclusive=1 soft_ne_product=1 "
-                                    "product_kernel=OPEN wave=%u "
-                                    "(retemblem stamp; Soft≠product)\n",
-                                    (unsigned)GJ_PROTONRT_SOFT_WAVE);
-                            /*
-                             * ---- Wave 31 complementary surfaces (kept) (never reshape primary).
-                             * Return surfaces only — soft inventory; never hard-gates product paths.
-                             */
-                            /* Grep: cold_link: soft retaegis — Wave 31 return-aegis honesty (kept) */
-                            kprintf("cold_link: soft retaegis soft_only=1 product_gate=0 soft_ne_product=1 "
-                                    "never_blocks_m0=1 wave=%u "
-                                    "(retaegis honesty; Soft≠product)\n",
-                                    (unsigned)GJ_PROTONRT_SOFT_WAVE);
-                            /* Grep: cold_link: soft retsigil — Wave 30 return-sigil honesty (kept) */
-                            kprintf("cold_link: soft retsigil soft_only=1 product_gate=0 soft_ne_product=1 "
-                                    "never_blocks_m0=1 wave=%u "
-                                    "(retsigil honesty; Soft≠product)\n",
-                                    (unsigned)GJ_PROTONRT_SOFT_WAVE);
-                            /* Grep: cold_link: soft retmantle — Wave 31 mantle stamp (kept) */
-                            kprintf("cold_link: soft retmantle exclusive=1 soft_ne_product=1 "
-                                    "product_kernel=OPEN wave=%u "
-                                    "(retmantle stamp; Soft≠product)\n",
-                                    (unsigned)GJ_PROTONRT_SOFT_WAVE);
-/*
- * ---- Wave 32 complementary surfaces (kept) (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: cold_link: soft retbulwark — Wave 32 return-bulwark honesty (kept) */
-kprintf("cold_link: soft retbulwark soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=%u "
-        "(retbulwark honesty; Soft≠product)\n",
-        (unsigned)GJ_PROTONRT_SOFT_WAVE);
-/* Grep: cold_link: soft retpanoply — Wave 32 panoply stamp (kept) */
-kprintf("cold_link: soft retpanoply exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=%u "
-        "(retpanoply stamp; Soft≠product)\n",
-        (unsigned)GJ_PROTONRT_SOFT_WAVE);
-/*
- * ---- Wave 33 complementary surfaces (kept) (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: cold_link: soft retbastion — Wave 33 return-bastion honesty (kept) */
-kprintf("cold_link: soft retbastion soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=%u "
-        "(retbastion honesty; Soft≠product)\n",
-        (unsigned)GJ_PROTONRT_SOFT_WAVE);
-/* Grep: cold_link: soft retcitadel — Wave 33 citadel stamp (kept) */
-kprintf("cold_link: soft retcitadel exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=%u "
-        "(retcitadel stamp; Soft≠product)\n",
-        (unsigned)GJ_PROTONRT_SOFT_WAVE);
-/*
- * ---- Wave 34 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: cold_link: soft retredoubt — Wave 34 return-redoubt honesty */
-kprintf("cold_link: soft retredoubt soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=%u "
-        "(retredoubt honesty; Soft≠product)\n",
-        (unsigned)GJ_PROTONRT_SOFT_WAVE);
-/* Grep: cold_link: soft retkeep — Wave 34 exclusive keep stamp */
-kprintf("cold_link: soft retkeep exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=%u "
-        "(retkeep stamp; Soft≠product)\n",
-        (unsigned)GJ_PROTONRT_SOFT_WAVE);
-/*
- * ---- Wave 35 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: cold_link: soft retfortress — Wave 35 return-fortress honesty */
-kprintf("cold_link: soft retfortress soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=%u "
-        "(retfortress honesty; Soft≠product)\n",
-        (unsigned)GJ_PROTONRT_SOFT_WAVE);
-/* Grep: cold_link: soft retpalace — Wave 35 exclusive palace stamp */
-kprintf("cold_link: soft retpalace exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=%u "
-        "(retpalace stamp; Soft≠product)\n",
-        (unsigned)GJ_PROTONRT_SOFT_WAVE);
-/*
- * ---- Wave 36 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: cold_link: soft rethold — Wave 36 return-hold honesty */
-kprintf("cold_link: soft rethold soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=%u "
-        "(rethold honesty; Soft≠product)\n",
-        (unsigned)GJ_PROTONRT_SOFT_WAVE);
-/* Grep: cold_link: soft retspire — Wave 36 exclusive spire stamp */
-kprintf("cold_link: soft retspire exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=%u "
-        "(retspire stamp; Soft≠product)\n",
-        (unsigned)GJ_PROTONRT_SOFT_WAVE);
-/*
- * ---- Wave 37 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: cold_link: soft retwall — Wave 37 return-wall honesty */
-kprintf("cold_link: soft retwall soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=%u "
-        "(retwall honesty; Soft≠product)\n",
-        (unsigned)GJ_PROTONRT_SOFT_WAVE);
-/* Grep: cold_link: soft retgate — Wave 37 exclusive gate stamp */
-kprintf("cold_link: soft retgate exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=%u "
-        "(retgate stamp; Soft≠product)\n",
-        (unsigned)GJ_PROTONRT_SOFT_WAVE);
-/*
- * ---- Wave 38 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: cold_link: soft retmoat — Wave 38 return-moat honesty */
-kprintf("cold_link: soft retmoat soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=%u "
-        "(retmoat honesty; Soft≠product)\n",
-        (unsigned)GJ_PROTONRT_SOFT_WAVE);
-/* Grep: cold_link: soft retower — Wave 38 exclusive tower stamp */
-kprintf("cold_link: soft retower exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=%u "
-        "(retower stamp; Soft≠product)\n",
-        (unsigned)GJ_PROTONRT_SOFT_WAVE);
-                            
-/*
- * ---- Wave 39 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: cold_link: soft retbarbican — Wave 39 return-barbican honesty */
-kprintf("cold_link: soft retbarbican soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=%u "
-        "(retbarbican honesty; Soft≠product)\n",
-        (unsigned)GJ_PROTONRT_SOFT_WAVE);
-/* Grep: cold_link: soft retglacis — Wave 39 exclusive glacis stamp */
-kprintf("cold_link: soft retglacis exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=%u "
-        "(retglacis stamp; Soft≠product)\n",
-        (unsigned)GJ_PROTONRT_SOFT_WAVE);
-/*
- * ---- Wave 40 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: cold_link: soft retcurtain — Wave 40 return-curtain honesty */
-kprintf("cold_link: soft retcurtain soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=%u "
-        "(retcurtain honesty; Soft≠product)\n",
-        (unsigned)GJ_PROTONRT_SOFT_WAVE);
-/* Grep: cold_link: soft retparapet — Wave 40 exclusive parapet stamp */
-kprintf("cold_link: soft retparapet exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=%u "
-        "(retparapet stamp; Soft≠product)\n",
-        (unsigned)GJ_PROTONRT_SOFT_WAVE);
-/*
- * ---- Wave 41 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: cold_link: soft retravelin — Wave 41 return-travelin honesty */
-kprintf("cold_link: soft retravelin soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=%u "
-        "(retravelin honesty; Soft≠product)\n",
-        (unsigned)GJ_PROTONRT_SOFT_WAVE);
-/* Grep: cold_link: soft retditch — Wave 41 exclusive ditch stamp */
-kprintf("cold_link: soft retditch exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=%u "
-        "(retditch stamp; Soft≠product)\n",
-        (unsigned)GJ_PROTONRT_SOFT_WAVE);
-/*
- * ---- Wave 42 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: cold_link: soft retportcullis — Wave 42 return-portcullis honesty */
-kprintf("cold_link: soft retportcullis soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=%u "
-        "(retportcullis honesty; Soft≠product)\n",
-        (unsigned)GJ_PROTONRT_SOFT_WAVE);
-/* Grep: cold_link: soft retbattlement — Wave 42 exclusive battlement stamp */
-kprintf("cold_link: soft retbattlement exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=%u "
-        "(retbattlement stamp; Soft≠product)\n",
-        (unsigned)GJ_PROTONRT_SOFT_WAVE);
-/*
- * ---- Wave 43 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: cold_link: soft retmachicolation — Wave 43 return-machicolation honesty */
-kprintf("cold_link: soft retmachicolation soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=%u "
-        "(retmachicolation honesty; Soft≠product)\n",
-        (unsigned)GJ_PROTONRT_SOFT_WAVE);
-/* Grep: cold_link: soft retarrowslit — Wave 43 exclusive arrowslit stamp */
-kprintf("cold_link: soft retarrowslit exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=%u "
-        "(retarrowslit stamp; Soft≠product)\n",
-        (unsigned)GJ_PROTONRT_SOFT_WAVE);
-
-/*
- * ---- Wave 44 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: cold_link: soft retmerlon — Wave 44 return-merlon honesty */
-kprintf("cold_link: soft retmerlon soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=%u "
-        "(retmerlon honesty; Soft≠product)\n",
-        (unsigned)GJ_PROTONRT_SOFT_WAVE);
-/* Grep: cold_link: soft retembrasure — Wave 44 exclusive embrasure stamp */
-kprintf("cold_link: soft retembrasure exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=%u "
-        "(retembrasure stamp; Soft≠product)\n",
-        (unsigned)GJ_PROTONRT_SOFT_WAVE);
-
-/*
- * ---- Wave 45 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: cold_link: soft retkeepgate — Wave 45 return-keepgate honesty */
-kprintf("cold_link: soft retkeepgate soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=%u "
-        "(retkeepgate honesty; Soft≠product)\n",
-        (unsigned)GJ_PROTONRT_SOFT_WAVE);
-/* Grep: cold_link: soft retouterward — Wave 45 exclusive outerward stamp */
-kprintf("cold_link: soft retouterward exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=%u "
-        "(retouterward stamp; Soft≠product)\n",
-        (unsigned)GJ_PROTONRT_SOFT_WAVE);
-
-/*
- * ---- Wave 46 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: cold_link: soft retbailey — Wave 46 return-bailey honesty */
-kprintf("cold_link: soft retbailey soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=%u "
-        "(retbailey honesty; Soft≠product)\n",
-        (unsigned)GJ_PROTONRT_SOFT_WAVE);
-/* Grep: cold_link: soft retpostern — Wave 46 exclusive postern stamp */
-kprintf("cold_link: soft retpostern exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=%u "
-        "(retpostern stamp; Soft≠product)\n",
-        (unsigned)GJ_PROTONRT_SOFT_WAVE);
-
-/*
- * ---- Wave 47 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: cold_link: soft retinnerward — Wave 47 return-innerward honesty */
-kprintf("cold_link: soft retinnerward soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retinnerward honesty; Soft≠product)\n");
-/* Grep: cold_link: soft retdonjon — Wave 47 exclusive donjon stamp */
-kprintf("cold_link: soft retdonjon exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retdonjon stamp; Soft≠product)\n");
-
-/*
- * ---- Wave 48 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: cold_link: soft retchevaux — Wave 48 return-chevaux honesty */
-kprintf("cold_link: soft retchevaux soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retchevaux honesty; Soft≠product)\n");
-/* Grep: cold_link: soft retpalisade — Wave 48 exclusive palisade stamp */
-kprintf("cold_link: soft retpalisade exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retpalisade stamp; Soft≠product)\n");
-
-/*
- * ---- Wave 49 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: cold_link: soft retglacisgate — Wave 49 return-glacisgate honesty */
-kprintf("cold_link: soft retglacisgate soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retglacisgate honesty; Soft≠product)\n");
-/* Grep: cold_link: soft retoutwork — Wave 49 exclusive outwork stamp */
-kprintf("cold_link: soft retoutwork exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retoutwork stamp; Soft≠product)\n");
-/*
- * ---- Wave 50 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: cold_link: soft retsally — Wave 50 return-sally honesty */
-kprintf("cold_link: soft retsally soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retsally honesty; Soft≠product)\n");
-/* Grep: cold_link: soft retcounterscarp — Wave 50 exclusive counterscarp stamp */
-kprintf("cold_link: soft retcounterscarp exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retcounterscarp stamp; Soft≠product)\n");
-/*
- * ---- Wave 51 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: cold_link: soft retfosse — Wave 51 return-fosse honesty */
-kprintf("cold_link: soft retfosse soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retfosse honesty; Soft≠product)\n");
-/* Grep: cold_link: soft retcoveredway — Wave 51 exclusive coveredway stamp */
-kprintf("cold_link: soft retcoveredway exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retcoveredway stamp; Soft≠product)\n");
-
-/*
- * ---- Wave 52 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: cold_link: soft rettenaille — Wave 52 return-tenaille honesty */
-kprintf("cold_link: soft rettenaille soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(rettenaille honesty; Soft≠product)\n");
-/* Grep: cold_link: soft retdemilune — Wave 52 exclusive demilune stamp */
-kprintf("cold_link: soft retdemilune exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retdemilune stamp; Soft≠product)\n");
-/*
- * ---- Wave 53 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: cold_link: soft retravelin — Wave 53 return-travelin honesty */
-kprintf("cold_link: soft retravelin soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retravelin honesty; Soft≠product)\n");
-/* Grep: cold_link: soft retlunette — Wave 53 exclusive lunette stamp */
-kprintf("cold_link: soft retlunette exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retlunette stamp; Soft≠product)\n");
-/*
- * ---- Wave 54 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: cold_link: soft retcaponier — Wave 54 return-caponier honesty */
-kprintf("cold_link: soft retcaponier soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retcaponier honesty; Soft≠product)\n");
-/* Grep: cold_link: soft retredan — Wave 54 exclusive redan stamp */
-kprintf("cold_link: soft retredan exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retredan stamp; Soft≠product)\n");
-/*
- * ---- Wave 55 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: cold_link: soft retflank — Wave 55 return-flank honesty */
-kprintf("cold_link: soft retflank soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retflank honesty; Soft≠product)\n");
-/* Grep: cold_link: soft retface — Wave 55 exclusive face stamp */
-kprintf("cold_link: soft retface exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retface stamp; Soft≠product)\n");
-/*
- * ---- Wave 56 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: cold_link: soft retgorge — Wave 56 return-gorge honesty */
-kprintf("cold_link: soft retgorge soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retgorge honesty; Soft≠product)\n");
-/* Grep: cold_link: soft retshoulder — Wave 56 exclusive shoulder stamp */
-kprintf("cold_link: soft retshoulder exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retshoulder stamp; Soft≠product)\n");
-/*
- * ---- Wave 57 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: cold_link: soft retraverse — Wave 57 return-traverse honesty */
-kprintf("cold_link: soft retraverse soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retraverse honesty; Soft≠product)\n");
-/* Grep: cold_link: soft retcasemate — Wave 57 exclusive casemate stamp */
-kprintf("cold_link: soft retcasemate exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retcasemate stamp; Soft≠product)\n");
-
-/*
- * ---- Wave 58 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: cold_link: soft retorillon — Wave 58 return-orillon honesty */
-kprintf("cold_link: soft retorillon soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retorillon honesty; Soft≠product)\n");
-/* Grep: cold_link: soft retbonnette — Wave 58 exclusive bonnette stamp */
-kprintf("cold_link: soft retbonnette exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retbonnette stamp; Soft≠product)\n");
-
-/*
- * ---- Wave 59 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: cold_link: soft retcrownwork — Wave 59 return-crownwork honesty */
-kprintf("cold_link: soft retcrownwork soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retcrownwork honesty; Soft≠product)\n");
-/* Grep: cold_link: soft rethornwork — Wave 59 exclusive hornwork stamp */
-kprintf("cold_link: soft rethornwork exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(rethornwork stamp; Soft≠product)\n");
-
-/*
- * ---- Wave 60 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: cold_link: soft retplace — Wave 60 return-place honesty */
-kprintf("cold_link: soft retplace soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retplace honesty; Soft≠product)\n");
-/* Grep: cold_link: soft retenvelope — Wave 60 exclusive envelope stamp */
-kprintf("cold_link: soft retenvelope exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retenvelope stamp; Soft≠product)\n");
-
-
-
-
-
-
-
-
-
-/*
- * ---- Wave 61 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: cold_link: soft retcounterguard — Wave 61 return-counterguard honesty */
-kprintf("cold_link: soft retcounterguard soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retcounterguard honesty; Soft≠product)\n");
-/* Grep: cold_link: soft retcoveredface — Wave 61 exclusive coveredface stamp */
-kprintf("cold_link: soft retcoveredface exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retcoveredface stamp; Soft≠product)\n");
-/*
- * ---- Wave 62 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: cold_link: soft retbastionface — Wave 62 return-bastionface honesty */
-kprintf("cold_link: soft retbastionface soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retbastionface honesty; Soft≠product)\n");
-/* Grep: cold_link: soft retcurtainangle — Wave 62 exclusive curtainangle stamp */
-kprintf("cold_link: soft retcurtainangle exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retcurtainangle stamp; Soft≠product)\n");
-/*
- * ---- Wave 63 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: cold_link: soft retdoubletenaille — Wave 63 return-doubletenaille honesty */
-kprintf("cold_link: soft retdoubletenaille soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retdoubletenaille honesty; Soft≠product)\n");
-/* Grep: cold_link: soft retplaceofarms — Wave 63 exclusive placeofarms stamp */
-kprintf("cold_link: soft retplaceofarms exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retplaceofarms stamp; Soft≠product)\n");
- /*
-  * ---- Wave 64 exclusive complementary surfaces (never reshape primary).
-  * Return surfaces only — soft inventory; never hard-gates product paths.
-  */
- /* Grep: cold_link: soft retreentrant — Wave 64 return-reentrant honesty */
-kprintf("cold_link: soft retreentrant soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retreentrant honesty; Soft≠product)\n");
- /* Grep: cold_link: soft retsallyport — Wave 64 exclusive sallyport stamp */
-kprintf("cold_link: soft retsallyport exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retsallyport stamp; Soft≠product)\n");
- /*
-  * ---- Wave 65 exclusive complementary surfaces (never reshape primary).
-  * Return surfaces only — soft inventory; never hard-gates product paths.
-  */
- /* Grep: cold_link: soft retgorgeangle — Wave 65 return-gorgeangle honesty */
-kprintf("cold_link: soft retgorgeangle soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retgorgeangle honesty; Soft≠product)\n");
- /* Grep: cold_link: soft retshoulderangle — Wave 65 exclusive shoulderangle stamp */
-kprintf("cold_link: soft retshoulderangle exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retshoulderangle stamp; Soft≠product)\n");
- /*
-  * ---- Wave 66 exclusive complementary surfaces (never reshape primary).
-  * Return surfaces only — soft inventory; never hard-gates product paths.
-  */
- /* Grep: cold_link: soft retflankangle — Wave 66 return-flankangle honesty */
- kprintf("cold_link: soft retflankangle soft_only=1 product_gate=0 soft_ne_product=1 "
-         "never_blocks_m0=1 wave=116 "
-         "(retflankangle honesty; Soft≠product)\n");
- /* Grep: cold_link: soft retfaceangle — Wave 66 exclusive faceangle stamp */
- kprintf("cold_link: soft retfaceangle exclusive=1 soft_ne_product=1 "
-         "product_kernel=OPEN wave=116 "
-         "(retfaceangle stamp; Soft≠product)\n");
-/*
- * ---- Wave 67 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: cold_link: soft retcaponierangle — Wave 67 return-caponierangle honesty */
-kprintf("cold_link: soft retcaponierangle soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retcaponierangle honesty; Soft≠product)\n");
-/* Grep: cold_link: soft retredanangle — Wave 67 exclusive redanangle stamp */
-kprintf("cold_link: soft retredanangle exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retredanangle stamp; Soft≠product)\n");
-/*
- * ---- Wave 68 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: cold_link: soft retlunetteangle — Wave 68 return-lunetteangle honesty */
-kprintf("cold_link: soft retlunetteangle soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retlunetteangle honesty; Soft≠product)\n");
-/* Grep: cold_link: soft rettenailleangle — Wave 68 exclusive tenailleangle stamp */
-kprintf("cold_link: soft rettenailleangle exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(rettenailleangle stamp; Soft≠product)\n");
-/*
- * ---- Wave 69 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: cold_link: soft retdemiluneangle — Wave 69 return-demiluneangle honesty */
-kprintf("cold_link: soft retdemiluneangle soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=116 "
-        "(retdemiluneangle honesty; Soft≠product)\n");
-/* Grep: cold_link: soft retcoveredwayangle — Wave 69 exclusive coveredwayangle stamp */
-kprintf("cold_link: soft retcoveredwayangle exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=116 "
-        "(retcoveredwayangle stamp; Soft≠product)\n");
-/*
- * ---- Wave 70 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: cold_link: soft retfosseangle — Wave 70 return-fosseangle honesty */
-kprintf("cold_link: soft retfosseangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retfosseangle honesty; Soft≠product)\n");
-/* Grep: cold_link: soft retcounterscarple — Wave 70 exclusive counterscarple stamp */
-kprintf("cold_link: soft retcounterscarple exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retcounterscarple stamp; Soft≠product)\n");
-/*
- * ---- Wave 71 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: cold_link: soft retsallyportangle — Wave 71 return-sallyportangle honesty */
-kprintf("cold_link: soft retsallyportangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retsallyportangle honesty; Soft≠product)\n");
-/* Grep: cold_link: soft retreentrantangle — Wave 71 exclusive reentrantangle stamp */
-kprintf("cold_link: soft retreentrantangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retreentrantangle stamp; Soft≠product)\n");
-/*
- * ---- Wave 72 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: cold_link: soft retplaceofarmsangle — Wave 72 return-placeofarmsangle honesty */
-kprintf("cold_link: soft retplaceofarmsangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retplaceofarmsangle honesty; Soft≠product)\n");
-/* Grep: cold_link: soft retdoubletenailleangle — Wave 72 exclusive doubletenailleangle stamp */
-kprintf("cold_link: soft retdoubletenailleangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retdoubletenailleangle stamp; Soft≠product)\n");
-/* Grep: cold_link: soft retcurtainface — Wave 73 return-curtainface honesty */
-kprintf("cold_link: soft retcurtainface soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retcurtainface honesty; Soft≠product)\n");
-/* Grep: cold_link: soft retbastionangle — Wave 73 exclusive bastionangle stamp */
-kprintf("cold_link: soft retbastionangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retbastionangle stamp; Soft≠product)\n");
-/* Grep: cold_link: soft retglacisangle — Wave 74 return-glacisangle honesty */
-kprintf("cold_link: soft retglacisangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retglacisangle honesty; Soft≠product)\n");
-/* Grep: cold_link: soft retparapetangle — Wave 74 exclusive parapetangle stamp */
-kprintf("cold_link: soft retparapetangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retparapetangle stamp; Soft≠product)\n");
-/* Grep: cold_link: soft retmoatangle — Wave 75 return-moatangle honesty */
-kprintf("cold_link: soft retmoatangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retmoatangle honesty; Soft≠product)\n");
-/* Grep: cold_link: soft retowerangle — Wave 75 exclusive towerangle stamp */
-kprintf("cold_link: soft retowerangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retowerangle stamp; Soft≠product)\n");
-/* Grep: cold_link: soft retgateangle — Wave 76 return-gateangle honesty */
-kprintf("cold_link: soft retgateangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retgateangle honesty; Soft≠product)\n");
-/* Grep: cold_link: soft retwallangle — Wave 76 exclusive wallangle stamp */
-kprintf("cold_link: soft retwallangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retwallangle stamp; Soft≠product)\n");
-/* Grep: cold_link: soft retspireangle — Wave 77 return-spireangle honesty */
-kprintf("cold_link: soft retspireangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retspireangle honesty; Soft≠product)\n");
-/* Grep: cold_link: soft retholdangle — Wave 77 exclusive holdangle stamp */
-kprintf("cold_link: soft retholdangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retholdangle stamp; Soft≠product)\n");
-/* Grep: cold_link: soft retpalaceangle — Wave 78 return-palaceangle honesty */
-kprintf("cold_link: soft retpalaceangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retpalaceangle honesty; Soft≠product)\n");
-/* Grep: cold_link: soft retfortressangle — Wave 78 exclusive fortressangle stamp */
-kprintf("cold_link: soft retfortressangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retfortressangle stamp; Soft≠product)\n");
-/* Grep: cold_link: soft retkeepangle — Wave 79 return-keepangle honesty */
-kprintf("cold_link: soft retkeepangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retkeepangle honesty; Soft≠product)\n");
-/* Grep: cold_link: soft retredoubtangle — Wave 79 exclusive redoubtangle stamp */
-kprintf("cold_link: soft retredoubtangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retredoubtangle stamp; Soft≠product)\n");
-/* Grep: cold_link: soft retcitadelangle — Wave 80 return-citadelangle honesty */
-kprintf("cold_link: soft retcitadelangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retcitadelangle honesty; Soft≠product)\n");
-/* Grep: cold_link: soft retbastionkeep — Wave 80 exclusive bastionkeep stamp */
-kprintf("cold_link: soft retbastionkeep exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retbastionkeep stamp; Soft≠product)\n");
-/* Grep: cold_link: soft retpanoplyangle — Wave 81 return-panoplyangle honesty */
-kprintf("cold_link: soft retpanoplyangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retpanoplyangle honesty; Soft≠product)\n");
-/* Grep: cold_link: soft retbulwarkangle — Wave 81 exclusive bulwarkangle stamp */
-kprintf("cold_link: soft retbulwarkangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retbulwarkangle stamp; Soft≠product)\n");
-/* Grep: cold_link: soft retmantleangle — Wave 82 return-mantleangle honesty */
-kprintf("cold_link: soft retmantleangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retmantleangle honesty; Soft≠product)\n");
-/* Grep: cold_link: soft retaegisangle — Wave 82 exclusive aegisangle stamp */
-kprintf("cold_link: soft retaegisangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retaegisangle stamp; Soft≠product)\n");
-/* Grep: cold_link: soft retemblemangle — Wave 83 return-emblemangle honesty */
-kprintf("cold_link: soft retemblemangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retemblemangle honesty; Soft≠product)\n");
-/* Grep: cold_link: soft retsigilangle — Wave 83 exclusive sigilangle stamp */
-kprintf("cold_link: soft retsigilangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retsigilangle stamp; Soft≠product)\n");
-/* Grep: cold_link: soft retscepterangle — Wave 84 return-scepterangle honesty */
-kprintf("cold_link: soft retscepterangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retscepterangle honesty; Soft≠product)\n");
-/* Grep: cold_link: soft retglyphangle — Wave 84 exclusive glyphangle stamp */
-kprintf("cold_link: soft retglyphangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retglyphangle stamp; Soft≠product)\n");
-/* Grep: cold_link: soft retcrownangle — Wave 85 return-crownangle honesty */
-kprintf("cold_link: soft retcrownangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retcrownangle honesty; Soft≠product)\n");
-/* Grep: cold_link: soft retshardangle — Wave 85 exclusive shardangle stamp */
-kprintf("cold_link: soft retshardangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retshardangle stamp; Soft≠product)\n");
-/* Grep: cold_link: soft retforgeangle — Wave 86 return-forgeangle honesty */
-kprintf("cold_link: soft retforgeangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retforgeangle honesty; Soft≠product)\n");
-/* Grep: cold_link: soft retprismangle — Wave 86 exclusive prismangle stamp */
-kprintf("cold_link: soft retprismangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retprismangle stamp; Soft≠product)\n");
-/* Grep: cold_link: soft retflameangle — Wave 87 return-flameangle honesty */
-kprintf("cold_link: soft retflameangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retflameangle honesty; Soft≠product)\n");
-/* Grep: cold_link: soft retcipherangle — Wave 87 exclusive cipherangle stamp */
-kprintf("cold_link: soft retcipherangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retcipherangle stamp; Soft≠product)\n");
-/* Grep: cold_link: soft retbeaconangle — Wave 88 return-beaconangle honesty */
-kprintf("cold_link: soft retbeaconangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retbeaconangle honesty; Soft≠product)\n");
-/* Grep: cold_link: soft retledgerangle — Wave 88 exclusive ledgerangle stamp */
-kprintf("cold_link: soft retledgerangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retledgerangle stamp; Soft≠product)\n");
-/* Grep: cold_link: soft retbannerangle — Wave 89 return-bannerangle honesty */
-kprintf("cold_link: soft retbannerangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retbannerangle honesty; Soft≠product)\n");
-/* Grep: cold_link: soft retvaultangle — Wave 89 exclusive vaultangle stamp */
-kprintf("cold_link: soft retvaultangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retvaultangle stamp; Soft≠product)\n");
-/* Grep: cold_link: soft retcrestangle — Wave 90 return-crestangle honesty */
-kprintf("cold_link: soft retcrestangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retcrestangle honesty; Soft≠product)\n");
-/* Grep: cold_link: soft rettokenangle — Wave 90 exclusive tokenangle stamp */
-kprintf("cold_link: soft rettokenangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (rettokenangle stamp; Soft≠product)\n");
-/* Grep: cold_link: soft retbadgeangle — Wave 91 return-badgeangle honesty */
-kprintf("cold_link: soft retbadgeangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retbadgeangle honesty; Soft≠product)\n");
-/* Grep: cold_link: soft retphaseangle — Wave 91 exclusive phaseangle stamp */
-kprintf("cold_link: soft retphaseangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retphaseangle stamp; Soft≠product)\n");
-/* Grep: cold_link: soft retmarkangle — Wave 92 return-markangle honesty */
-kprintf("cold_link: soft retmarkangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retmarkangle honesty; Soft≠product)\n");
-/* Grep: cold_link: soft retpulseangle — Wave 92 exclusive pulseangle stamp */
-kprintf("cold_link: soft retpulseangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retpulseangle stamp; Soft≠product)\n");
-
-/* Grep: cold_link: soft retsealangle — Wave 93 return-sealangle honesty */
-kprintf("cold_link: soft retsealangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retsealangle honesty; Soft≠product)\n");
-/* Grep: cold_link: soft retboundangle — Wave 93 exclusive boundangle stamp */
-kprintf("cold_link: soft retboundangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retboundangle stamp; Soft≠product)\n");
-/* Grep: cold_link: soft retstemangle — Wave 94 return-stemangle honesty */
-kprintf("cold_link: soft retstemangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retstemangle honesty; Soft≠product)\n");
-/* Grep: cold_link: soft retbladeangle — Wave 94 exclusive bladeangle stamp */
-kprintf("cold_link: soft retbladeangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retbladeangle stamp; Soft≠product)\n");
-/* Grep: cold_link: soft retchordangle — Wave 95 return-chordangle honesty */
-kprintf("cold_link: soft retchordangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retchordangle honesty; Soft≠product)\n");
-/* Grep: cold_link: soft retarcangle — Wave 95 exclusive arcangle stamp */
-kprintf("cold_link: soft retarcangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retarcangle stamp; Soft≠product)\n");
-/* Grep: cold_link: soft retsectorangle — Wave 96 return-sectorangle honesty */
-kprintf("cold_link: soft retsectorangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retsectorangle honesty; Soft≠product)\n");
-/* Grep: cold_link: soft retwedgeangle — Wave 96 exclusive wedgeangle stamp */
-kprintf("cold_link: soft retwedgeangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retwedgeangle stamp; Soft≠product)\n");
-/* Grep: cold_link: soft retradiusangle — Wave 97 return-radiusangle honesty */
-kprintf("cold_link: soft retradiusangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retradiusangle honesty; Soft≠product)\n");
-/* Grep: cold_link: soft retdiameterangle — Wave 97 exclusive diameterangle stamp */
-kprintf("cold_link: soft retdiameterangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retdiameterangle stamp; Soft≠product)\n");
-/* Grep: cold_link: soft retcircumangle — Wave 98 return-circumangle honesty */
-kprintf("cold_link: soft retcircumangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retcircumangle honesty; Soft≠product)\n");
-/* Grep: cold_link: soft retellipseangle — Wave 98 exclusive ellipseangle stamp */
-kprintf("cold_link: soft retellipseangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retellipseangle stamp; Soft≠product)\n");
-/* Grep: cold_link: soft rethyperangle — Wave 99 return-hyperangle honesty */
-kprintf("cold_link: soft rethyperangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (rethyperangle honesty; Soft≠product)\n");
-/* Grep: cold_link: soft retparabolaangle — Wave 99 exclusive parabolaangle stamp */
-kprintf("cold_link: soft retparabolaangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retparabolaangle stamp; Soft≠product)\n");
-/* Grep: cold_link: soft retspiralangle — Wave 100 return-spiralangle honesty */
-kprintf("cold_link: soft retspiralangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retspiralangle honesty; Soft≠product)\n");
-/* Grep: cold_link: soft rethelixangle — Wave 100 exclusive helixangle stamp */
-kprintf("cold_link: soft rethelixangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (rethelixangle stamp; Soft≠product)\n");
-/* Grep: cold_link: soft rettorusangle — Wave 101 return-torusangle honesty */
-kprintf("cold_link: soft rettorusangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (rettorusangle honesty; Soft≠product)\n");
-/* Grep: cold_link: soft retknotangle — Wave 101 exclusive knotangle stamp */
-kprintf("cold_link: soft retknotangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retknotangle stamp; Soft≠product)\n");
-/* Grep: cold_link: soft retmoebiusangle — Wave 102 return-moebiusangle honesty */
-kprintf("cold_link: soft retmoebiusangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retmoebiusangle honesty; Soft≠product)\n");
-/* Grep: cold_link: soft retkleinangle — Wave 102 exclusive kleinangle stamp */
-kprintf("cold_link: soft retkleinangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retkleinangle stamp; Soft≠product)\n");
-/* Grep: cold_link: soft retprojectangle — Wave 103 return-projectangle honesty */
-kprintf("cold_link: soft retprojectangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retprojectangle honesty; Soft≠product)\n");
-/* Grep: cold_link: soft retaffineangle — Wave 103 exclusive affineangle stamp */
-kprintf("cold_link: soft retaffineangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retaffineangle stamp; Soft≠product)\n");
-/* Grep: cold_link: soft retlinearangle — Wave 104 return-linearangle honesty */
-kprintf("cold_link: soft retlinearangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retlinearangle honesty; Soft≠product)\n");
-/* Grep: cold_link: soft retbilinearangle — Wave 104 exclusive bilinearangle stamp */
-kprintf("cold_link: soft retbilinearangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retbilinearangle stamp; Soft≠product)\n");
-/* Grep: cold_link: soft retquadraticangle — Wave 105 return-quadraticangle honesty */
-kprintf("cold_link: soft retquadraticangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retquadraticangle honesty; Soft≠product)\n");
-/* Grep: cold_link: soft retcubicangle — Wave 105 exclusive cubicangle stamp */
-kprintf("cold_link: soft retcubicangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retcubicangle stamp; Soft≠product)\n");
-/* Grep: cold_link: soft retquarticangle — Wave 106 return-quarticangle honesty */
-kprintf("cold_link: soft retquarticangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retquarticangle honesty; Soft≠product)\n");
-/* Grep: cold_link: soft retquinticangle — Wave 106 exclusive quinticangle stamp */
-kprintf("cold_link: soft retquinticangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retquinticangle stamp; Soft≠product)\n");
-/* Grep: cold_link: soft retsplineangle — Wave 107 return-splineangle honesty */
-kprintf("cold_link: soft retsplineangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retsplineangle honesty; Soft≠product)\n");
-/* Grep: cold_link: soft retbezierangle — Wave 107 exclusive bezierangle stamp */
-kprintf("cold_link: soft retbezierangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retbezierangle stamp; Soft≠product)\n");
-/* Grep: cold_link: soft rethurmitangle — Wave 108 return-hermitangle honesty */
-kprintf("cold_link: soft rethurmitangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (rethurmitangle honesty; Soft≠product)\n");
-/* Grep: cold_link: soft retcatmullangle — Wave 108 exclusive catmullangle stamp */
-kprintf("cold_link: soft retcatmullangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retcatmullangle stamp; Soft≠product)\n");
-/* Grep: cold_link: soft retnurbsangle — Wave 109 return-nurbsangle honesty */
-kprintf("cold_link: soft retnurbsangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retnurbsangle honesty; Soft≠product)\n");
-/* Grep: cold_link: soft retbsplineangle — Wave 109 exclusive bsplineangle stamp */
-kprintf("cold_link: soft retbsplineangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retbsplineangle stamp; Soft≠product)\n");
-/* Grep: cold_link: soft retmeshangle — Wave 110 return-meshangle honesty */
-kprintf("cold_link: soft retmeshangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retmeshangle honesty; Soft≠product)\n");
-/* Grep: cold_link: soft retgridangle — Wave 110 exclusive gridangle stamp */
-kprintf("cold_link: soft retgridangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retgridangle stamp; Soft≠product)\n");
-/* Grep: cold_link: soft retvoxelangle — Wave 111 return-voxelangle honesty */
-kprintf("cold_link: soft retvoxelangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retvoxelangle honesty; Soft≠product)\n");
-/* Grep: cold_link: soft rettexelangle — Wave 111 exclusive texelangle stamp */
-kprintf("cold_link: soft rettexelangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (rettexelangle stamp; Soft≠product)\n");
-/* Grep: cold_link: soft retfragmentangle — Wave 112 return-fragmentangle honesty */
-kprintf("cold_link: soft retfragmentangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retfragmentangle honesty; Soft≠product)\n");
-/* Grep: cold_link: soft retvertexangle — Wave 112 exclusive vertexangle stamp */
-kprintf("cold_link: soft retvertexangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retvertexangle stamp; Soft≠product)\n");
-/* Grep: cold_link: soft retshaderangle — Wave 113 return-shaderangle honesty */
-kprintf("cold_link: soft retshaderangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retshaderangle honesty; Soft≠product)\n");
-/* Grep: cold_link: soft retpipelineangle — Wave 113 exclusive pipelineangle stamp */
-kprintf("cold_link: soft retpipelineangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retpipelineangle stamp; Soft≠product)\n");
-/* Grep: cold_link: soft retframebufferangle — Wave 114 return-framebufferangle honesty */
-kprintf("cold_link: soft retframebufferangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retframebufferangle honesty; Soft≠product)\n");
-/* Grep: cold_link: soft retswapchainangle — Wave 114 exclusive swapchainangle stamp */
-kprintf("cold_link: soft retswapchainangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retswapchainangle stamp; Soft≠product)\n");
-/* Grep: cold_link: soft retpresentangle — Wave 115 return-presentangle honesty */
-kprintf("cold_link: soft retpresentangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retpresentangle honesty; Soft≠product)\n");
-/* Grep: cold_link: soft retvsyncangle — Wave 115 exclusive vsyncangle stamp */
-kprintf("cold_link: soft retvsyncangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retvsyncangle stamp; Soft≠product)\n");
-/* Grep: cold_link: soft retfenceangle — Wave 116 return-fenceangle honesty */
-kprintf("cold_link: soft retfenceangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retfenceangle honesty; Soft≠product)\n");
-/* Grep: cold_link: soft retsemaphoreangle — Wave 116 exclusive semaphoreangle stamp */
-kprintf("cold_link: soft retsemaphoreangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retsemaphoreangle stamp; Soft≠product)\n");
-                            kprintf("cold_link: soft deepen wave=%u areas=%u logs=%llu enter=%llu "
+    kprintf("cold_link: soft deepen wave=%u areas=%u logs=%llu enter=%llu "
             "(Wave 35 exclusive; cold link soft)\n",
             (unsigned)GJ_PROTONRT_SOFT_WAVE,
             (unsigned)GJ_PROTONRT_SOFT_AREAS,
@@ -1703,8 +895,218 @@ kprintf("cold_link: soft retsemaphoreangle exclusive=1 soft_ne_product=1 product
 }
 
 /**
+ * Lean soft residual - sparse once-lamp only (no version stamp, storm=0).
+ * Fold group enters + confine/expose + attach + cold_net/cold_ipc userspace
+ * driver reach + residual lean hit tallies + Proton neighborhood hits +
+ * ioctl/sendfile/fcntl/copy_file Dual DoD residual into greppable lines.
+ * Soft!=product dual license (MIT OR Apache-2.0). G-AC-1: not in-kernel .ko
+ * product AC. Never hard-gates. Dual DoD A/B OPEN (agent never closes).
+ * Freestanding SKIP. Product path = UDX/DDI + hot+cold ABI. Bar3-adjacent
+ * ABI surface only - never a bar3 claim. Comment law: Soft!=product ASCII
+ * only (no Softneq unicode); pure block comments only; send_star/recv_star
+ * (never wildcard forms that split block comments).
+ * greppable: protonrt: soft residual lean
+ * greppable: cold_link: soft residual lean
+ * greppable: protonrt: soft neighborhood residual lean
+ * greppable: protonrt: soft fcntl residual lean
+ * greppable: protonrt: soft copy_file residual lean
+ * greppable: protonrt: soft dual_dod OPEN
+ */
+static void
+protonrt_soft_residual_lean_once(void)
+{
+    u32 u32HasProc;
+    u32 u32Confined;
+    u32 u32Alive;
+    u32 u32Promises;
+    u32 u32ColdIpcAttached;
+
+    if (g_fPrtSoftResidualLeanOnce != 0) {
+        return;
+    }
+    g_fPrtSoftResidualLeanOnce = 1;
+    protonrt_soft_inc(&g_u64PrtSoftResidualLean);
+
+    u32HasProc = (g_pLinuxProc != NULL) ? 1u : 0u;
+    u32Confined = 0u;
+    u32Alive = 0u;
+    u32Promises = 0u;
+    if (g_pLinuxProc != NULL) {
+        u32Confined = g_pLinuxProc->u32Confined;
+        u32Alive = g_pLinuxProc->u32Alive;
+        u32Promises = g_pLinuxProc->u32Promises;
+    }
+    u32ColdIpcAttached = cold_ipc_personality_attached() ? 1u : 0u;
+
+    /* Grep: protonrt: soft residual lean */
+    kprintf("protonrt: soft residual lean "
+            "enter=%llu fs=%llu net=%llu proc=%llu time=%llu mem=%llu "
+            "other=%llu attach=%llu null=%llu "
+            "promise_deny=%u expose_deny=%u death=%u expose_ents=%u "
+            "path_deny=%llu fork_wait_wire=%u poll_block=%u select_once=%u "
+            "epoll_once=%u neighborhood_once=%u "
+            "ioctl_once=%u sendfile_once=%u fcntl_once=%u copyfr_once=%u "
+            "cold_net_bridge=%u cold_ipc_attached=%u "
+            "lean_socket=%llu lean_xfer=%llu lean_poll=%llu lean_select=%llu "
+            "lean_close=%llu lean_rw_net=%llu "
+            "lean_sockpair=%llu lean_pipe=%llu lean_epoll=%llu "
+            "lean_eventfd=%llu lean_memfd=%llu "
+            "lean_ioctl=%llu lean_sendfile=%llu "
+            "lean_fcntl=%llu lean_copyfr=%llu "
+            "proc=%u confined=%u alive=%u promises=0x%x multi_server=OPEN "
+            "dual_dod_a=OPEN dual_dod_b=OPEN freestanding_skip=1 "
+            "product_path=UDX_DDI+hot_cold_ABI "
+            "userspace_drivers=reach g_ac_1=1 lean_runs=%llu "
+            "abi_adj=proton_p0 soft_ne_product=1 dual=MIT_OR_Apache-2.0 "
+            "storm=0 not_bar3=1 "
+            "(Soft!=product; dual MIT OR Apache-2.0; G-AC-1; "
+            "no version stamp; cold net/ipc residual for UDX hosts; "
+            "Linux-shaped apps / Proton neighborhood residual deepen; "
+            "C2 Dual DoD residual ioctl+sendfile+fcntl+copy_file; "
+            "Dual DoD A/B OPEN; "
+            "bar3-adjacent ABI surface only; not .ko product AC; not bar3)\n",
+            (unsigned long long)g_u64PrtSoftEnter,
+            (unsigned long long)g_u64PrtSoftGrp[PRT_SOFT_GRP_FS],
+            (unsigned long long)g_u64PrtSoftGrp[PRT_SOFT_GRP_NET],
+            (unsigned long long)g_u64PrtSoftGrp[PRT_SOFT_GRP_PROC],
+            (unsigned long long)g_u64PrtSoftGrp[PRT_SOFT_GRP_TIME],
+            (unsigned long long)g_u64PrtSoftGrp[PRT_SOFT_GRP_MEM],
+            (unsigned long long)g_u64PrtSoftGrp[PRT_SOFT_GRP_OTHER],
+            (unsigned long long)g_u64PrtSoftAttach,
+            (unsigned long long)g_u64PrtSoftNull,
+            g_u32ConfinePromiseDeny, g_u32ConfineExposeDeny,
+            g_u32ConfineDeathCleanup, g_u32ExposeSoftCount,
+            (unsigned long long)g_u64PrtSoftPathDeny,
+            g_fPrtSoftForkWaitWireOnce ? 1u : 0u,
+            g_fPrtSoftPollBlockOnce ? 1u : 0u,
+            g_fPrtSoftSelectOnce ? 1u : 0u,
+            g_fPrtSoftEpollOnce ? 1u : 0u,
+            g_fPrtSoftNeighborhoodOnce ? 1u : 0u,
+            g_fPrtSoftIoctlOnce ? 1u : 0u,
+            g_fPrtSoftSendfileOnce ? 1u : 0u,
+            g_fPrtSoftFcntlOnce ? 1u : 0u,
+            g_fPrtSoftCopyFrOnce ? 1u : 0u,
+            g_fPrtSoftColdNetOnce ? 1u : 0u,
+            u32ColdIpcAttached,
+            (unsigned long long)g_u64PrtLeanSocket,
+            (unsigned long long)g_u64PrtLeanXfer,
+            (unsigned long long)g_u64PrtLeanPoll,
+            (unsigned long long)g_u64PrtLeanSelect,
+            (unsigned long long)g_u64PrtLeanClose,
+            (unsigned long long)g_u64PrtLeanRwNet,
+            (unsigned long long)g_u64PrtLeanSockpair,
+            (unsigned long long)g_u64PrtLeanPipe,
+            (unsigned long long)g_u64PrtLeanEpoll,
+            (unsigned long long)g_u64PrtLeanEventfd,
+            (unsigned long long)g_u64PrtLeanMemfd,
+            (unsigned long long)g_u64PrtLeanIoctl,
+            (unsigned long long)g_u64PrtLeanSendfile,
+            (unsigned long long)g_u64PrtLeanFcntl,
+            (unsigned long long)g_u64PrtLeanCopyFr,
+            u32HasProc, u32Confined, u32Alive, u32Promises,
+            (unsigned long long)g_u64PrtSoftResidualLean);
+
+    /* Grep: cold_link: soft residual lean (twin prefix; one line) */
+    kprintf("cold_link: soft residual lean "
+            "service=protonrt_service "
+            "backend=vfs_ram+linux_cold_net+protonrt_cold_linux "
+            "cold_ipc=1 cold_net=1 "
+            "surface=socket+bind+listen+accept+connect+"
+            "send_star+recv_star+close+poll+select+epoll+"
+            "socketpair+pipe+eventfd+memfd+ioctl+sendfile+"
+            "fcntl+copy_file_range "
+            "lean_socket=%llu lean_xfer=%llu lean_poll=%llu lean_select=%llu "
+            "lean_close=%llu lean_rw_net=%llu "
+            "lean_sockpair=%llu lean_pipe=%llu lean_epoll=%llu "
+            "lean_eventfd=%llu lean_memfd=%llu "
+            "lean_ioctl=%llu lean_sendfile=%llu "
+            "lean_fcntl=%llu lean_copyfr=%llu "
+            "enter=%llu attach=%llu logs=%llu confine_ents=%u "
+            "path_deny=%llu multi_server=OPEN hybrid=OptionC "
+            "dual_dod_a=OPEN dual_dod_b=OPEN freestanding_skip=1 "
+            "product_path=UDX_DDI+hot_cold_ABI "
+            "userspace_drivers=reach g_ac_1=1 abi_adj=proton_p0 "
+            "soft_ne_product=1 dual=MIT_OR_Apache-2.0 storm=0 not_bar3=1 "
+            "(Soft!=product; dual MIT OR Apache-2.0; G-AC-1; "
+            "no version stamp; Linux-shaped apps / Proton neighborhood; "
+            "C2 Dual DoD residual ioctl+sendfile+fcntl+copy_file; "
+            "Dual DoD A/B OPEN; "
+            "bar3-adjacent ABI surface only; "
+            "not bar3 / not Deck Top 50; not in-kernel .ko product AC)\n",
+            (unsigned long long)g_u64PrtLeanSocket,
+            (unsigned long long)g_u64PrtLeanXfer,
+            (unsigned long long)g_u64PrtLeanPoll,
+            (unsigned long long)g_u64PrtLeanSelect,
+            (unsigned long long)g_u64PrtLeanClose,
+            (unsigned long long)g_u64PrtLeanRwNet,
+            (unsigned long long)g_u64PrtLeanSockpair,
+            (unsigned long long)g_u64PrtLeanPipe,
+            (unsigned long long)g_u64PrtLeanEpoll,
+            (unsigned long long)g_u64PrtLeanEventfd,
+            (unsigned long long)g_u64PrtLeanMemfd,
+            (unsigned long long)g_u64PrtLeanIoctl,
+            (unsigned long long)g_u64PrtLeanSendfile,
+            (unsigned long long)g_u64PrtLeanFcntl,
+            (unsigned long long)g_u64PrtLeanCopyFr,
+            (unsigned long long)g_u64PrtSoftEnter,
+            (unsigned long long)g_u64PrtSoftAttach,
+            (unsigned long long)g_u64PrtSoftLogN,
+            g_u32ExposeSoftCount,
+            (unsigned long long)g_u64PrtSoftPathDeny);
+
+    /* Grep: protonrt: soft neighborhood residual lean (once companion) */
+    if (g_fPrtSoftNeighborhoodOnce == 0) {
+        g_fPrtSoftNeighborhoodOnce = 1;
+        kprintf("protonrt: soft neighborhood residual lean "
+                "sockpair=%llu pipe=%llu epoll=%llu eventfd=%llu memfd=%llu "
+                "socket=%llu xfer=%llu poll=%llu select=%llu "
+                "close=%llu rw_net=%llu ioctl=%llu sendfile=%llu "
+                "fcntl=%llu copyfr=%llu "
+                "abi_adj=proton_p0 Soft!=product g_ac_1=1 dual=MIT_OR_Apache-2.0 "
+                "not_bar3=1 not_deck_top50=1 "
+                "(Linux-shaped apps / Proton neighborhood cold NR residual; "
+                "never bar3 claim; Soft!=product)\n",
+                (unsigned long long)g_u64PrtLeanSockpair,
+                (unsigned long long)g_u64PrtLeanPipe,
+                (unsigned long long)g_u64PrtLeanEpoll,
+                (unsigned long long)g_u64PrtLeanEventfd,
+                (unsigned long long)g_u64PrtLeanMemfd,
+                (unsigned long long)g_u64PrtLeanSocket,
+                (unsigned long long)g_u64PrtLeanXfer,
+                (unsigned long long)g_u64PrtLeanPoll,
+                (unsigned long long)g_u64PrtLeanSelect,
+                (unsigned long long)g_u64PrtLeanClose,
+                (unsigned long long)g_u64PrtLeanRwNet,
+                (unsigned long long)g_u64PrtLeanIoctl,
+                (unsigned long long)g_u64PrtLeanSendfile,
+                (unsigned long long)g_u64PrtLeanFcntl,
+                (unsigned long long)g_u64PrtLeanCopyFr);
+    }
+
+    /*
+     * Dual DoD honesty once-lamp (Soft!=product; agent never closes A/B).
+     * greppable: protonrt: soft dual_dod OPEN
+     * Product = UDX/DDI + hot+cold ABI. Freestanding rtl/USB SKIP.
+     * G-AC-1: not in-kernel .ko product AC. storm=0.
+     */
+    if (g_fPrtSoftDualDodOnce == 0) {
+        g_fPrtSoftDualDodOnce = 1;
+        kprintf("protonrt: soft dual_dod OPEN "
+                "dual_dod_a=OPEN dual_dod_b=OPEN "
+                "product_path=UDX_DDI+hot_cold_ABI freestanding_skip=1 "
+                "g_ac_1=1 Soft!=product dual=MIT_OR_Apache-2.0 "
+                "cold_net=1 cold_ipc=1 ioctl_devctl=1 sendfile_net=1 "
+                "fcntl_nonblock=1 copy_file_net=1 "
+                "storm=0 not_bar3=1 "
+                "(C2 Dual DoD residual honesty; agent never closes A/B; "
+                "not freestanding wire; not .ko product AC)\n");
+    }
+}
+
+/**
  * After first product service activity, print soft inventory once.
- * Diagnostics only — never gates cold attach or confine soft PASS.
+ * Diagnostics only - never gates cold attach or confine soft PASS.
+ * Also emits lean residual once (storm=0 companion; no version stamp).
  */
 static void
 protonrt_soft_inventory_maybe_once(void)
@@ -1717,6 +1119,7 @@ protonrt_soft_inventory_maybe_once(void)
     }
     g_fPrtSoftOnce = 1;
     protonrt_soft_inventory_log();
+    protonrt_soft_residual_lean_once();
 }
 
 /**
@@ -1781,7 +1184,7 @@ confine_soft_expose_match(const char *szPath, u32 u32Need)
 
 /**
  * Soft expose path policy (OpenBSD expose-shaped; product: vfsd).
- * Deny ambient expose when confined — confined subjects cannot expand
+ * Deny ambient expose when confined - confined subjects cannot expand
  * path reveal set. Ambient may soft-register a prefix.
  * Grep: confine: expose soft
  * Returns 0 or -LINUX_EACCES / -LINUX_EINVAL / -LINUX_ENOSPC.
@@ -1840,8 +1243,8 @@ confine_soft_expose(const char *szPath, u32 u32Rights)
 
 /**
  * Soft path open policy after promise gates.
- * Confined + non-empty expose table ⇒ path must match (soft unveil spirit).
- * Empty table ⇒ promise-only (preserves confine soft PASS / RPATH smokes).
+ * Confined + non-empty expose table => path must match (soft unveil spirit).
+ * Empty table => promise-only (preserves confine soft PASS / RPATH smokes).
  * Grep: confine: expose soft path
  */
 static i64
@@ -1851,7 +1254,7 @@ confine_soft_path_policy(const char *szPath, u32 u32Need)
         return 0; /* ambient */
     }
     if (g_u32ExposeSoftCount == 0u) {
-        return 0; /* soft: no expose set yet → promise gates only */
+        return 0; /* soft: no expose set yet -> promise gates only */
     }
     if (confine_soft_expose_match(szPath, u32Need)) {
         return 0;
@@ -1865,7 +1268,7 @@ confine_soft_path_policy(const char *szPath, u32 u32Need)
 
 /**
  * Soft death cleanup hook for cold personality.
- * Product process_death is hot-path (linux_hot → process_death G-PROC-5).
+ * Product process_death is hot-path (linux_hot -> process_death G-PROC-5).
  * If death paths call into cold (dead PCB, teardown-shaped cold ops), scrub
  * soft expose ledger for the subject and note greppably.
  * Grep: confine: death soft
@@ -1958,7 +1361,7 @@ confine_soft_selfprobe(void)
 
 /**
  * Soft path promise gate for open/openat/creat/openat2.
- * RDONLY → RPATH; WRONLY → WPATH; RDWR → RPATH|WPATH; O_CREAT → +CPATH.
+ * RDONLY -> RPATH; WRONLY -> WPATH; RDWR -> RPATH|WPATH; O_CREAT -> +CPATH.
  * Returns 0 or -LINUX_EACCES.
  */
 static i64
@@ -1989,7 +1392,7 @@ promise_gate_open_flags(u32 u32Flags, int fCreatForce)
     return confine_soft_promise_require(GJ_PROMISE_WPATH);
 }
 
-/* Soft path promise helpers (ambient / NULL proc ⇒ 0). */
+/* Soft path promise helpers (ambient / NULL proc => 0). */
 static i64
 promise_gate_rpath(void)
 {
@@ -2010,13 +1413,13 @@ promise_gate_cpath(void)
 
 /*
  * Soft Linux .ko load via finit/init/delete_module (cold NRs 175/176/313).
- * Bounce cap 2 MiB; vfs_ram regular-file fds for finit_module.
+ * Bounce cap 2 MiB; vfs_ram regular-file fds for finit_module.
  * greppable: protonrt: soft init_module|finit_module|delete_module PASS|FAIL
  */
 #define GJ_SOFT_MODULE_BOUNCE_MAX (2u * 1024u * 1024u)
 #define GJ_SOFT_MODULE_NAME_MAX   64u
 
-/** Map GJ_ERR_* (and soft init errno-class) → Linux -errno for cold edge. */
+/** Map GJ_ERR_* (and soft init errno-class) -> Linux -errno for cold edge. */
 static i64
 soft_mod_st_to_linux(i64 i64St)
 {
@@ -2054,7 +1457,7 @@ soft_mod_st_to_linux(i64 i64St)
     return -LINUX_EINVAL;
 }
 
-/** Soft basename + strip trailing .ko → module name (default softmod). */
+/** Soft basename + strip trailing .ko -> module name (default softmod). */
 static void
 soft_mod_name_from_path(char *szOut, size_t cbOut, const char *szPath)
 {
@@ -2115,7 +1518,7 @@ soft_mod_bounce_alloc(size_t cb, gj_paddr_t *pPa, u32 *pcPages)
     if (cPages == 0u) {
         cPages = 1u;
     }
-    /* Prefer power-of-two for hierarchical freelist (≤512). */
+    /* Prefer power-of-two for hierarchical freelist (<=512). */
     cPo2 = 1u;
     while (cPo2 < cPages && cPo2 < 512u) {
         cPo2 <<= 1;
@@ -2288,50 +1691,85 @@ protonrt_service(struct gj_linux_regs *pRegs, void *pCtx)
     }
 
     case LINUX_NR_read:
-        if (!vfs_ram_fd_ok((i64)pRegs->u64Arg0)) {
-            break; /* fall through to stub */
-        }
-        cb = (size_t)pRegs->u64Arg2;
-        if (cb > sizeof(aBuf)) {
-            cb = sizeof(aBuf);
-        }
-        if (cb > 0 && pRegs->u64Arg1 == 0) {
-            return -LINUX_EFAULT;
-        }
-        i64R = vfs_ram_read((i64)pRegs->u64Arg0, aBuf, cb);
-        if (i64R <= 0) {
+        if (vfs_ram_fd_ok((i64)pRegs->u64Arg0)) {
+            cb = (size_t)pRegs->u64Arg2;
+            if (cb > sizeof(aBuf)) {
+                cb = sizeof(aBuf);
+            }
+            if (cb > 0 && pRegs->u64Arg1 == 0) {
+                return -LINUX_EFAULT;
+            }
+            i64R = vfs_ram_read((i64)pRegs->u64Arg0, aBuf, cb);
+            if (i64R <= 0) {
+                return i64R;
+            }
+            if (user_range_ok(pRegs->u64Arg1, (u64)i64R)) {
+                st = copy_to_user(pRegs->u64Arg1, aBuf, (size_t)i64R);
+                if (st != GJ_OK) {
+                    return -LINUX_EFAULT;
+                }
+            } else {
+                memcpy((void *)(gj_vaddr_t)pRegs->u64Arg1, aBuf, (size_t)i64R);
+            }
             return i64R;
         }
-        if (user_range_ok(pRegs->u64Arg1, (u64)i64R)) {
-            st = copy_to_user(pRegs->u64Arg1, aBuf, (size_t)i64R);
-            if (st != GJ_OK) {
-                return -LINUX_EFAULT;
-            }
-        } else {
-            memcpy((void *)(gj_vaddr_t)pRegs->u64Arg1, aBuf, (size_t)i64R);
+        /*
+         * Soft residual lean: STREAM/DGRAM read -> cold_net recv.
+         * Userspace driver / sshd-shaped hosts often use read(2) on sockets.
+         * Soft!=product. G-AC-1: UDX path not .ko product AC.
+         */
+        if (net_tcp_fd_ok((i64)pRegs->u64Arg0) ||
+            net_lo_fd_ok((i64)pRegs->u64Arg0)) {
+            struct gj_linux_regs sub;
+
+            protonrt_soft_inc(&g_u64PrtLeanRwNet);
+            memset(&sub, 0, sizeof(sub));
+            sub.u64Nr = LINUX_NR_recvfrom;
+            sub.u64Arg0 = pRegs->u64Arg0;
+            sub.u64Arg1 = pRegs->u64Arg1;
+            sub.u64Arg2 = pRegs->u64Arg2;
+            sub.u64Arg3 = 0; /* flags */
+            return gj_linux_cold_recv(&sub);
         }
-        return i64R;
+        break; /* fall through to stub */
 
     case LINUX_NR_write:
-        if (!vfs_ram_fd_ok((i64)pRegs->u64Arg0)) {
-            break;
-        }
-        cb = (size_t)pRegs->u64Arg2;
-        if (cb > sizeof(aBuf)) {
-            cb = sizeof(aBuf);
-        }
-        if (cb > 0 && pRegs->u64Arg1 == 0) {
-            return -LINUX_EFAULT;
-        }
-        if (user_range_ok(pRegs->u64Arg1, cb)) {
-            st = copy_from_user(aBuf, pRegs->u64Arg1, cb);
-            if (st != GJ_OK) {
+        if (vfs_ram_fd_ok((i64)pRegs->u64Arg0)) {
+            cb = (size_t)pRegs->u64Arg2;
+            if (cb > sizeof(aBuf)) {
+                cb = sizeof(aBuf);
+            }
+            if (cb > 0 && pRegs->u64Arg1 == 0) {
                 return -LINUX_EFAULT;
             }
-        } else {
-            memcpy(aBuf, (const void *)(gj_vaddr_t)pRegs->u64Arg1, cb);
+            if (user_range_ok(pRegs->u64Arg1, cb)) {
+                st = copy_from_user(aBuf, pRegs->u64Arg1, cb);
+                if (st != GJ_OK) {
+                    return -LINUX_EFAULT;
+                }
+            } else {
+                memcpy(aBuf, (const void *)(gj_vaddr_t)pRegs->u64Arg1, cb);
+            }
+            return vfs_ram_write((i64)pRegs->u64Arg0, aBuf, cb);
         }
-        return vfs_ram_write((i64)pRegs->u64Arg0, aBuf, cb);
+        /*
+         * Soft residual lean: STREAM/DGRAM write -> cold_net send.
+         * Soft!=product. G-AC-1 userspace host reach.
+         */
+        if (net_tcp_fd_ok((i64)pRegs->u64Arg0) ||
+            net_lo_fd_ok((i64)pRegs->u64Arg0)) {
+            struct gj_linux_regs sub;
+
+            protonrt_soft_inc(&g_u64PrtLeanRwNet);
+            memset(&sub, 0, sizeof(sub));
+            sub.u64Nr = LINUX_NR_sendto;
+            sub.u64Arg0 = pRegs->u64Arg0;
+            sub.u64Arg1 = pRegs->u64Arg1;
+            sub.u64Arg2 = pRegs->u64Arg2;
+            sub.u64Arg3 = 0; /* flags */
+            return gj_linux_cold_send(&sub);
+        }
+        break;
 
     case LINUX_NR_lseek:
         if (vfs_ram_fd_ok((i64)pRegs->u64Arg0)) {
@@ -2341,9 +1779,12 @@ protonrt_service(struct gj_linux_regs *pRegs, void *pCtx)
         break;
 
     case LINUX_NR_eventfd2:
+        /* Proton neighborhood residual: eventfd readiness IPC. Soft!=product. */
+        protonrt_soft_inc(&g_u64PrtLeanEventfd);
         return vfs_ram_eventfd2((u32)pRegs->u64Arg0, (int)pRegs->u64Arg1);
     case LINUX_NR_eventfd:
-        /* eventfd(init, flags) — same as eventfd2 */
+        /* eventfd(init, flags) - same as eventfd2; neighborhood lean tally */
+        protonrt_soft_inc(&g_u64PrtLeanEventfd);
         return vfs_ram_eventfd2((u32)pRegs->u64Arg0, (int)pRegs->u64Arg1);
 
     case LINUX_NR_timerfd_create:
@@ -2406,7 +1847,7 @@ protonrt_service(struct gj_linux_regs *pRegs, void *pCtx)
         u64 u64Mask = 0;
 
         if (pRegs->u64Arg1 != 0) {
-            /* sigset_t — take first 8 bytes */
+            /* sigset_t - take first 8 bytes */
             if (user_range_ok(pRegs->u64Arg1, 8)) {
                 (void)copy_from_user(&u64Mask, pRegs->u64Arg1, 8);
             } else {
@@ -2419,9 +1860,14 @@ protonrt_service(struct gj_linux_regs *pRegs, void *pCtx)
 
     case LINUX_NR_fsync:
     case LINUX_NR_fdatasync:
-        /* Ramdisk/block: always durable for bring-up; product: storaged barrier */
+        /*
+         * Ramdisk/block: always durable for bring-up; product: storaged
+         * barrier. Soft residual: accept net_lo + net_tcp fds too
+         * (UDX host fsync-on-socket probes). Soft!=product.
+         */
         if (vfs_ram_fd_ok((i64)pRegs->u64Arg0) ||
-            net_lo_fd_ok((i64)pRegs->u64Arg0)) {
+            net_lo_fd_ok((i64)pRegs->u64Arg0) ||
+            net_tcp_fd_ok((i64)pRegs->u64Arg0)) {
             return 0;
         }
         return -LINUX_EBADF;
@@ -2433,18 +1879,22 @@ protonrt_service(struct gj_linux_regs *pRegs, void *pCtx)
     case LINUX_NR_syncfs:
         if (vfs_ram_fd_ok((i64)pRegs->u64Arg0) ||
             net_lo_fd_ok((i64)pRegs->u64Arg0) ||
+            net_tcp_fd_ok((i64)pRegs->u64Arg0) ||
             (i64)pRegs->u64Arg0 >= 0) {
             return 0;
         }
         return -LINUX_EBADF;
 
     case LINUX_NR_madvise:
-        /* Advise only — no-op success (A1+). */
+        /* Advise only - no-op success (A1+). */
         return 0;
 
     case LINUX_NR_epoll_create:
+        /* Proton neighborhood residual: epoll create. Soft!=product. */
+        protonrt_soft_inc(&g_u64PrtLeanEpoll);
         return vfs_ram_epoll_create1(0);
     case LINUX_NR_epoll_create1:
+        protonrt_soft_inc(&g_u64PrtLeanEpoll);
         return vfs_ram_epoll_create1((int)pRegs->u64Arg0);
 
     case LINUX_NR_io_setup: {
@@ -2475,13 +1925,15 @@ protonrt_service(struct gj_linux_regs *pRegs, void *pCtx)
          * poll(struct pollfd *fds, nfds_t nfds, timeout_ms)
          * ppoll(..., const struct timespec *tmo_p, ...)
          *
-         * All fds via vfs_ram_poll_mask (ram + net_tcp + net_lo route).
-         * No always-ready shortcuts. Soft≠product blocking:
-         *   timeout==0  → single readiness pass
-         *   timeout>0   → soft-spin with thread_yield + timer_jiffies budget
-         *   timeout<0 / ppoll NULL → treat as non-block single pass here
+         * Residual lean: gj_linux_cold_poll_mask first (SO_ERROR/POLLERR
+         * honesty for cold STREAM), then vfs_ram_poll_mask (ram + net route).
+         * No always-ready shortcuts. Soft!=product blocking:
+         *   timeout==0  -> single readiness pass
+         *   timeout>0   -> soft-spin with thread_yield + timer_jiffies budget
+         *   timeout<0 / ppoll NULL -> treat as non-block single pass here
          *     (product infinite wait remains OPEN)
          * greppable: protonrt: soft poll block PASS
+         * Soft!=product. G-AC-1 userspace host poll reach.
          */
         u32 nfds = (u32)pRegs->u64Arg1;
         u32 i;
@@ -2491,6 +1943,7 @@ protonrt_service(struct gj_linux_regs *pRegs, void *pCtx)
         u64 u64J0;
         u32 u32Pass;
 
+        protonrt_soft_inc(&g_u64PrtLeanPoll);
         if (nfds == 0) {
             return 0;
         }
@@ -2527,7 +1980,7 @@ protonrt_service(struct gj_linux_regs *pRegs, void *pCtx)
             } else {
                 i64TimeoutMs = i64Sec * 1000 + i64Nsec / 1000000;
                 if (i64TimeoutMs <= 0) {
-                    i64TimeoutMs = 1; /* sub-ms → one soft tick */
+                    i64TimeoutMs = 1; /* sub-ms -> one soft tick */
                 }
             }
         } else {
@@ -2538,7 +1991,7 @@ protonrt_service(struct gj_linux_regs *pRegs, void *pCtx)
         /*
          * Soft spin budget when timeout > 0 (daemon poll loops).
          * Cap attempts + jiffies so soft never hangs product bring-up.
-         * soft≠product blocking.
+         * soft!=product blocking.
          */
         if (i64TimeoutMs > 0) {
             u32SpinLeft = (u32)i64TimeoutMs;
@@ -2554,7 +2007,7 @@ protonrt_service(struct gj_linux_regs *pRegs, void *pCtx)
         for (u32Pass = 0;; u32Pass++) {
             ready = 0;
             for (i = 0; i < nfds; i++) {
-                /* pollfd: int fd; short events; short revents — 8B x86_64 */
+                /* pollfd: int fd; short events; short revents - 8B x86_64 */
                 i32 fd = 0;
                 u16 events = 0;
                 u16 revents = 0;
@@ -2575,7 +2028,7 @@ protonrt_service(struct gj_linux_regs *pRegs, void *pCtx)
                     fd = p[0];
                     events = ((u16 *)(gj_vaddr_t)base)[2];
                 }
-                /* POLLIN=1 POLLOUT=4 — same numbers as EPOLLIN/OUT */
+                /* POLLIN=1 POLLOUT=4 - same numbers as EPOLLIN/OUT */
                 want = (u32)events;
                 if (want == 0) {
                     want = (u32)(LINUX_POLLIN | LINUX_POLLOUT);
@@ -2584,18 +2037,16 @@ protonrt_service(struct gj_linux_regs *pRegs, void *pCtx)
                     revents = 0;
                 } else {
                     /*
-                     * Route ram + net_tcp + net_lo via vfs_ram_poll_mask
-                     * (A2 net route). Soft≠product; no always-ready.
+                     * Residual lean: cold_net poll_mask first (SO_ERROR /
+                     * half-close honesty), then vfs_ram (ram + net route).
+                     * Soft!=product; no always-ready. Userspace driver host.
                      */
-                    got = vfs_ram_poll_mask((i64)fd, want);
+                    got = protonrt_soft_fd_ready_mask((i64)fd, want);
                     if (got == 0 && !vfs_ram_fd_ok((i64)fd) &&
-                        !net_lo_fd_ok((i64)fd)) {
-                        extern int net_tcp_fd_ok(i64 i64Fd);
-
-                        if (!net_tcp_fd_ok((i64)fd)) {
-                            revents = (u16)LINUX_POLLERR;
-                            goto prt_poll_store;
-                        }
+                        !net_lo_fd_ok((i64)fd) &&
+                        !net_tcp_fd_ok((i64)fd)) {
+                        revents = (u16)LINUX_POLLERR;
+                        goto prt_poll_store;
                     }
                     revents = (u16)(got & want);
                     if (got & (u32)LINUX_POLLERR) {
@@ -2626,7 +2077,7 @@ protonrt_service(struct gj_linux_regs *pRegs, void *pCtx)
             if (u32SpinLeft > 0) {
                 u32SpinLeft--;
             }
-            /* Hard soft cap ~320ms @ GJ_TIMER_HZ=100 (soft≠product block). */
+            /* Hard soft cap ~320ms @ GJ_TIMER_HZ=100 (Soft!=product block). */
             if ((timer_jiffies() - u64J0) > 32ull) {
                 break;
             }
@@ -2643,14 +2094,26 @@ protonrt_service(struct gj_linux_regs *pRegs, void *pCtx)
         return (i64)ready;
     }
     case LINUX_NR_ioctl: {
-        /* FIONREAD-shaped and TIOCGWINSZ stubs for wine tty probe */
+        /*
+         * C2 Dual DoD residual: ioctl for UDX host / Linux-shaped apps.
+         * Accept vfs_ram + net_lo + net_tcp (STREAM sockets used FIONREAD/
+         * FIONBIO before cold_net was owner-checked; prior lo-only rejected
+         * tcp fds with -EBADF). Soft!=product. G-AC-1. Dual DoD A/B OPEN.
+         * greppable: protonrt: soft ioctl residual lean
+         */
+        i64 i64Fd = (i64)pRegs->u64Arg0;
         u32 cmd = (u32)pRegs->u64Arg1;
+        int fRam;
+        int fNet;
 
-        if (!vfs_ram_fd_ok((i64)pRegs->u64Arg0) &&
-            !net_lo_fd_ok((i64)pRegs->u64Arg0)) {
+        fRam = vfs_ram_fd_ok(i64Fd) ? 1 : 0;
+        fNet = (net_lo_fd_ok(i64Fd) || net_tcp_fd_ok(i64Fd)) ? 1 : 0;
+        if (fRam == 0 && fNet == 0) {
             return -LINUX_EBADF;
         }
-        if (cmd == 0x5413u /* TIOCGWINSZ */) {
+        protonrt_soft_inc(&g_u64PrtLeanIoctl);
+
+        if (cmd == (u32)LINUX_TIOCGWINSZ) {
             u16 aWs[4] = { 24, 80, 0, 0 };
 
             if (pRegs->u64Arg2 != 0) {
@@ -2661,27 +2124,108 @@ protonrt_service(struct gj_linux_regs *pRegs, void *pCtx)
                            sizeof(aWs));
                 }
             }
-            return 0;
+            goto ioctl_residual_once;
         }
-        if (cmd == 0x541Bu /* FIONREAD */) {
-            u32 zero = 0;
+        if (cmd == (u32)LINUX_FIONREAD) {
+            /*
+             * FIONREAD: ram -> vfs_ram_bytes_readable; net -> soft POLLIN
+             * honesty (1 when ready, 0 else; exact RX byte count product
+             * OPEN). Soft!=product Dual DoD residual.
+             */
+            u32 u32Avail = 0;
 
-            if (pRegs->u64Arg2 != 0) {
-                if (user_range_ok(pRegs->u64Arg2, 4)) {
-                    (void)copy_to_user(pRegs->u64Arg2, &zero, 4);
-                } else {
-                    *(u32 *)(gj_vaddr_t)pRegs->u64Arg2 = 0;
+            if (fRam != 0) {
+                i64 i64Avail = vfs_ram_bytes_readable(i64Fd);
+
+                if (i64Avail > 0) {
+                    if (i64Avail > (i64)0x7fffffffu) {
+                        u32Avail = 0x7fffffffu;
+                    } else {
+                        u32Avail = (u32)i64Avail;
+                    }
+                }
+            } else {
+                u32 u32Got;
+
+                u32Got = protonrt_soft_fd_ready_mask(i64Fd,
+                                                    (u32)LINUX_POLLIN);
+                if ((u32Got & (u32)LINUX_POLLIN) != 0) {
+                    u32Avail = 1u; /* soft residual; exact count OPEN */
                 }
             }
-            return 0;
+            if (pRegs->u64Arg2 != 0) {
+                if (user_range_ok(pRegs->u64Arg2, 4)) {
+                    (void)copy_to_user(pRegs->u64Arg2, &u32Avail, 4);
+                } else {
+                    *(u32 *)(gj_vaddr_t)pRegs->u64Arg2 = u32Avail;
+                }
+            }
+            goto ioctl_residual_once;
         }
-        return 0; /* unknown ioctl: succeed for probe */
+        if (cmd == (u32)LINUX_FIONBIO) {
+            /*
+             * FIONBIO: soft accept nonblock flag set/clear for UDX hosts
+             * and glibc socket probes. Stores soft fd flags table so
+             * F_GETFL residual reports O_NONBLOCK honestly. Product
+             * O_NONBLOCK path OPEN. Soft!=product. storm=0.
+             */
+            if (pRegs->u64Arg2 != 0) {
+                i32 i32Nb = 0;
+                u32 u32Def;
+                u32 u32Cur;
+
+                if (user_range_ok(pRegs->u64Arg2, 4)) {
+                    (void)copy_from_user(&i32Nb, pRegs->u64Arg2, 4);
+                } else {
+                    i32Nb = *(const i32 *)(gj_vaddr_t)pRegs->u64Arg2;
+                }
+                u32Def = (fNet != 0) ? (u32)LINUX_O_RDWR : 0u;
+                u32Cur = protonrt_soft_fdfl_get(i64Fd, u32Def);
+                if (i32Nb != 0) {
+                    u32Cur |= (u32)LINUX_O_NONBLOCK;
+                } else {
+                    u32Cur &= ~(u32)LINUX_O_NONBLOCK;
+                }
+                protonrt_soft_fdfl_set(i64Fd, u32Cur);
+            }
+            goto ioctl_residual_once;
+        }
+        if (cmd == (u32)LINUX_FIONCLEX || cmd == (u32)LINUX_FIOCLEX) {
+            goto ioctl_residual_once;
+        }
+        if (cmd == (u32)LINUX_TCGETS || cmd == (u32)LINUX_TCSETS ||
+            cmd == (u32)LINUX_TCSETSW || cmd == (u32)LINUX_TCSETSF ||
+            cmd == (u32)LINUX_TIOCGPGRP || cmd == (u32)LINUX_TIOCSPGRP ||
+            cmd == (u32)LINUX_TIOCSCTTY || cmd == (u32)LINUX_TIOCNOTTY ||
+            cmd == (u32)LINUX_TIOCSWINSZ) {
+            /* Soft TTY probe success for wine/libc; product termios OPEN. */
+            goto ioctl_residual_once;
+        }
+        /* Unknown ioctl: soft succeed for UDX/wine/libc probes. */
+    ioctl_residual_once:
+        if (g_fPrtSoftIoctlOnce == 0) {
+            g_fPrtSoftIoctlOnce = 1;
+            /* Grep: protonrt: soft ioctl residual lean */
+            kprintf("protonrt: soft ioctl residual lean "
+                    "cmd=0x%x ram=%u net=%u lean=%llu "
+                    "Soft!=product g_ac_1=1 dual_dod_a=OPEN dual_dod_b=OPEN "
+                    "product_path=UDX_DDI+hot_cold_ABI not_bar3=1\n",
+                    cmd, (unsigned)fRam, (unsigned)fNet,
+                    (unsigned long long)g_u64PrtLeanIoctl);
+        }
+        return 0;
     }
     case LINUX_NR_epoll_ctl: {
         /* arg0=epfd arg1=op arg2=fd arg3=struct epoll_event* */
         u32 u32Events = 0x001u;
         u64 u64Data = 0;
 
+        /*
+         * Proton neighborhood residual: epoll_ctl ADD/MOD/DEL for mixed
+         * ram + net_lo + net_tcp watch sets (Linux-shaped daemon loops).
+         * Soft!=product. G-AC-1. not bar3.
+         */
+        protonrt_soft_inc(&g_u64PrtLeanEpoll);
         if (pRegs->u64Arg3 != 0) {
             if (user_range_ok(pRegs->u64Arg3, 12)) {
                 (void)copy_from_user(&u32Events, pRegs->u64Arg3, 4);
@@ -2697,31 +2241,118 @@ protonrt_service(struct gj_linux_regs *pRegs, void *pCtx)
     case LINUX_NR_epoll_wait:
     case LINUX_NR_epoll_pwait:
     case LINUX_NR_epoll_pwait2: {
-        /* epoll_pwait2: arg3 is timespec*; use 0 timeout (non-blocking) */
+        /*
+         * Residual lean epoll_wait family (bar3-adjacent ABI surface).
+         * Proton/game-shaped readiness demux over registered watches.
+         * Soft!=product blocking:
+         *   timeout==0 / pwait2 timespec soft 0 -> single readiness pass
+         *   timeout>0  -> soft-spin yield + jiffies budget (poll-shaped)
+         *   timeout<0  -> soft single pass (product infinite OPEN)
+         * greppable: protonrt: soft epoll residual lean
+         * Never claims bar3 / Deck Top 50 / product DoD. G-AC-1.
+         */
         u8 aEv[16 * 12];
         int nMax = (int)pRegs->u64Arg2;
-        int nTimeout = (pRegs->u64Nr == LINUX_NR_epoll_pwait2)
-                           ? 0
-                           : (int)pRegs->u64Arg3;
-        i64 n;
+        i64 i64TimeoutMs = 0;
+        u32 u32SpinLeft = 0;
+        u32 u32Pass;
+        u64 u64J0;
+        i64 n = 0;
 
+        protonrt_soft_inc(&g_u64PrtLeanEpoll);
         if (nMax <= 0) {
             return 0;
         }
         if (nMax > 16) {
             nMax = 16;
         }
-        n = vfs_ram_epoll_wait((i64)pRegs->u64Arg0, aEv, nMax, nTimeout);
-        if (n > 0 && pRegs->u64Arg1 != 0) {
-            size_t cb = (size_t)n * 12u;
 
-            if (user_range_ok(pRegs->u64Arg1, cb)) {
-                if (copy_to_user(pRegs->u64Arg1, aEv, cb) != GJ_OK) {
+        /* Decode timeout: epoll_wait/pwait int ms; pwait2 timespec* soft 0. */
+        if (pRegs->u64Nr == LINUX_NR_epoll_pwait2) {
+            if (pRegs->u64Arg3 != 0) {
+                i64 i64Sec = 0;
+                i64 i64Nsec = 0;
+
+                if (user_range_ok(pRegs->u64Arg3, 16)) {
+                    if (copy_from_user(&i64Sec, pRegs->u64Arg3, 8) != GJ_OK) {
+                        return -LINUX_EFAULT;
+                    }
+                    if (copy_from_user(&i64Nsec, pRegs->u64Arg3 + 8, 8) !=
+                        GJ_OK) {
+                        return -LINUX_EFAULT;
+                    }
+                } else {
+                    i64Sec = *(const i64 *)(gj_vaddr_t)pRegs->u64Arg3;
+                    i64Nsec = *(const i64 *)(gj_vaddr_t)(pRegs->u64Arg3 + 8);
+                }
+                if (i64Sec < 0 || i64Nsec < 0) {
+                    i64TimeoutMs = 0;
+                } else if (i64Sec == 0 && i64Nsec == 0) {
+                    i64TimeoutMs = 0;
+                } else {
+                    i64TimeoutMs = i64Sec * 1000 + i64Nsec / 1000000;
+                    if (i64TimeoutMs <= 0) {
+                        i64TimeoutMs = 1;
+                    }
+                }
+            } else {
+                i64TimeoutMs = 0; /* product infinite OPEN; soft single pass */
+            }
+        } else {
+            i64TimeoutMs = (i64)(i32)pRegs->u64Arg3;
+            if (i64TimeoutMs < 0) {
+                i64TimeoutMs = 0; /* product infinite OPEN; soft single pass */
+            }
+        }
+
+        if (i64TimeoutMs > 0) {
+            u32SpinLeft = (u32)i64TimeoutMs;
+            if (u32SpinLeft > 128u) {
+                u32SpinLeft = 128u;
+            }
+            if (u32SpinLeft < 1u) {
+                u32SpinLeft = 1u;
+            }
+        }
+
+        u64J0 = timer_jiffies();
+        for (u32Pass = 0;; u32Pass++) {
+            n = vfs_ram_epoll_wait((i64)pRegs->u64Arg0, aEv, nMax,
+                                   (int)i64TimeoutMs);
+            if (n != 0 || i64TimeoutMs <= 0 || u32SpinLeft == 0) {
+                break;
+            }
+            thread_yield();
+            if (u32SpinLeft > 0) {
+                u32SpinLeft--;
+            }
+            /* Hard soft cap ~320ms @ GJ_TIMER_HZ=100 (Soft!=product block). */
+            if ((timer_jiffies() - u64J0) > 32ull) {
+                break;
+            }
+            (void)u32Pass;
+        }
+
+        if (n > 0 && pRegs->u64Arg1 != 0) {
+            size_t cbCopy = (size_t)n * 12u;
+
+            if (user_range_ok(pRegs->u64Arg1, cbCopy)) {
+                if (copy_to_user(pRegs->u64Arg1, aEv, cbCopy) != GJ_OK) {
                     return -LINUX_EFAULT;
                 }
             } else {
-                memcpy((void *)(gj_vaddr_t)pRegs->u64Arg1, aEv, cb);
+                memcpy((void *)(gj_vaddr_t)pRegs->u64Arg1, aEv, cbCopy);
             }
+        }
+
+        if (g_fPrtSoftEpollOnce == 0) {
+            g_fPrtSoftEpollOnce = 1;
+            /* Grep: protonrt: soft epoll residual lean */
+            kprintf("protonrt: soft epoll residual lean "
+                    "ready=%ld timeout_ms=%ld Soft!=product g_ac_1=1 "
+                    "abi_adj=proton_p0 not_bar3=1 "
+                    "(Linux-shaped apps / Proton neighborhood; not product)\n",
+                    (long)n, (long)i64TimeoutMs);
         }
         return n;
     }
@@ -2757,6 +2388,8 @@ protonrt_service(struct gj_linux_regs *pRegs, void *pCtx)
         /*
          * Named anon memobj + unique ramfs fd (shareable object path).
          * Name prefix "mfd:" + user name (or counter) for uniqueness.
+         * Proton neighborhood residual: wine-class shareable objects.
+         * Soft!=product. G-AC-1. not bar3.
          */
         char szName[GJ_MEMOBJ_NAME_MAX];
         char szPath[40];
@@ -2765,6 +2398,7 @@ protonrt_service(struct gj_linux_regs *pRegs, void *pCtx)
         u32 n = 0;
         i64 i64Fd;
 
+        protonrt_soft_inc(&g_u64PrtLeanMemfd);
         memset(szName, 0, sizeof(szName));
         szName[0] = 'm';
         szName[1] = 'f';
@@ -2830,32 +2464,90 @@ protonrt_service(struct gj_linux_regs *pRegs, void *pCtx)
 
     case LINUX_NR_fcntl: {
         /*
-         * F_GETFL/F_SETFL no-op; real F_SETLK/F_GETLK/F_SETLKW via file_lock.
-         * flock arg: user ptr to struct {i16 type, whence; i64 start,len; u32 pid}
-         * (gj_flock layout; may differ from host glibc — Proton maps via cold).
+         * C2 Dual DoD residual deepen: fcntl for UDX host / Linux-shaped apps.
+         * Accept vfs_ram + net_lo + net_tcp (prior lo-only rejected tcp with
+         * -EBADF, same class as historical ioctl lo-only hole). Soft!=product.
+         * F_GETFL/F_SETFL soft O_NONBLOCK table residual (parity FIONBIO).
+         * F_SETLK/F_GETLK/F_SETLKW via file_lock (ram only).
+         * greppable: protonrt: soft fcntl residual lean
+         * Dual DoD A/B OPEN; G-AC-1; not bar3.
          */
         u32 u32Cmd = (u32)pRegs->u64Arg1;
         i64 i64Fd = (i64)pRegs->u64Arg0;
+        int fRam;
+        int fNet;
 
-        if (!vfs_ram_fd_ok(i64Fd) && !net_lo_fd_ok(i64Fd)) {
+        fRam = vfs_ram_fd_ok(i64Fd) ? 1 : 0;
+        fNet = (net_lo_fd_ok(i64Fd) || net_tcp_fd_ok(i64Fd)) ? 1 : 0;
+        if (fRam == 0 && fNet == 0) {
             return -LINUX_EBADF;
         }
+        protonrt_soft_inc(&g_u64PrtLeanFcntl);
+
         if (u32Cmd == 0 /* F_DUPFD */ || u32Cmd == 1030 /* F_DUPFD_CLOEXEC */) {
-            if (!vfs_ram_fd_ok(i64Fd)) {
+            if (fRam == 0) {
                 return -LINUX_EBADF;
             }
             return vfs_ram_dup_from(i64Fd, (i64)pRegs->u64Arg2);
         }
         if (u32Cmd == 1 /* F_GETFD */) {
-            return 0; /* FD_CLOEXEC off */
+            goto fcntl_residual_once; /* FD_CLOEXEC off soft */
         }
         if (u32Cmd == 2 /* F_SETFD */) {
-            return 0;
+            goto fcntl_residual_once;
         }
-        if (u32Cmd == 3 /* F_GETFL */) {
-            return 0;
+        if (u32Cmd == (u32)LINUX_F_GETFL || u32Cmd == 3u /* F_GETFL */) {
+            /*
+             * Soft open-flags: net default O_RDWR; ram default 0; overlay
+             * last F_SETFL/FIONBIO soft nonblock bits. Product table OPEN.
+             */
+            u32 u32Def = (fNet != 0) ? (u32)LINUX_O_RDWR : 0u;
+            u32 u32Fl = protonrt_soft_fdfl_get(i64Fd, u32Def);
+
+            if (g_fPrtSoftFcntlOnce == 0) {
+                g_fPrtSoftFcntlOnce = 1;
+                /* Grep: protonrt: soft fcntl residual lean */
+                kprintf("protonrt: soft fcntl residual lean "
+                        "cmd=F_GETFL fl=0x%x ram=%u net=%u lean=%llu "
+                        "Soft!=product g_ac_1=1 dual_dod_a=OPEN dual_dod_b=OPEN "
+                        "product_path=UDX_DDI+hot_cold_ABI not_bar3=1\n",
+                        u32Fl, (unsigned)fRam, (unsigned)fNet,
+                        (unsigned long long)g_u64PrtLeanFcntl);
+            }
+            return (i64)u32Fl;
         }
-        if (u32Cmd == 4 /* F_SETFL */) {
+        if (u32Cmd == (u32)LINUX_F_SETFL || u32Cmd == 4u /* F_SETFL */) {
+            /*
+             * Soft accept O_NONBLOCK (and ACCMODE bits) for UDX/glibc socket
+             * probes. Stores soft table only - never product O_NONBLOCK path.
+             * Soft!=product. storm=0.
+             */
+            u32 u32New = (u32)pRegs->u64Arg2;
+            u32 u32Def = (fNet != 0) ? (u32)LINUX_O_RDWR : 0u;
+            u32 u32Cur = protonrt_soft_fdfl_get(i64Fd, u32Def);
+            u32 u32Keep = u32Cur & ~(u32)LINUX_O_NONBLOCK;
+            u32 u32Acc = u32New & (u32)LINUX_O_ACCMODE;
+
+            if (u32Acc != 0u) {
+                u32Keep = (u32Keep & ~(u32)LINUX_O_ACCMODE) | u32Acc;
+            } else if (fNet != 0) {
+                u32Keep = (u32Keep & ~(u32)LINUX_O_ACCMODE) |
+                          (u32)LINUX_O_RDWR;
+            }
+            if ((u32New & (u32)LINUX_O_NONBLOCK) != 0u) {
+                u32Keep |= (u32)LINUX_O_NONBLOCK;
+            }
+            protonrt_soft_fdfl_set(i64Fd, u32Keep);
+            if (g_fPrtSoftFcntlOnce == 0) {
+                g_fPrtSoftFcntlOnce = 1;
+                /* Grep: protonrt: soft fcntl residual lean */
+                kprintf("protonrt: soft fcntl residual lean "
+                        "cmd=F_SETFL fl=0x%x ram=%u net=%u lean=%llu "
+                        "Soft!=product g_ac_1=1 dual_dod_a=OPEN dual_dod_b=OPEN "
+                        "product_path=UDX_DDI+hot_cold_ABI not_bar3=1\n",
+                        u32Keep, (unsigned)fRam, (unsigned)fNet,
+                        (unsigned long long)g_u64PrtLeanFcntl);
+            }
             return 0;
         }
         if (u32Cmd == 6 /* F_SETLK */ || u32Cmd == 7 /* F_SETLKW */ ||
@@ -2863,6 +2555,9 @@ protonrt_service(struct gj_linux_regs *pRegs, void *pCtx)
             struct gj_flock fl;
             i64 st;
 
+            if (fRam == 0) {
+                return -LINUX_EBADF;
+            }
             if (pRegs->u64Arg2 == 0) {
                 return -LINUX_EFAULT;
             }
@@ -2891,6 +2586,17 @@ protonrt_service(struct gj_linux_regs *pRegs, void *pCtx)
             }
             return file_lock_set(i64Fd, &fl, u32Cmd == 7 /* SETLKW */);
         }
+    fcntl_residual_once:
+        if (g_fPrtSoftFcntlOnce == 0) {
+            g_fPrtSoftFcntlOnce = 1;
+            /* Grep: protonrt: soft fcntl residual lean */
+            kprintf("protonrt: soft fcntl residual lean "
+                    "cmd=0x%x ram=%u net=%u lean=%llu "
+                    "Soft!=product g_ac_1=1 dual_dod_a=OPEN dual_dod_b=OPEN "
+                    "product_path=UDX_DDI+hot_cold_ABI not_bar3=1\n",
+                    u32Cmd, (unsigned)fRam, (unsigned)fNet,
+                    (unsigned long long)g_u64PrtLeanFcntl);
+        }
         return 0;
     }
 
@@ -2902,10 +2608,11 @@ protonrt_service(struct gj_linux_regs *pRegs, void *pCtx)
         if (i64Gate != 0) {
             return i64Gate;
         }
-        /* ABI-first: STREAM → net_tcp, else net_lo (linux_cold_net bridge). */
+        /* ABI-first: STREAM -> net_tcp, else net_lo (linux_cold_net bridge). */
+        protonrt_soft_inc(&g_u64PrtLeanSocket);
         if (g_fPrtSoftColdNetOnce == 0) {
             g_fPrtSoftColdNetOnce = 1;
-            /* Grep: protonrt: soft cold_net bridge PASS (soft ≠ product). */
+            /* Grep: protonrt: soft cold_net bridge PASS (Soft!=product). */
             kprintf("protonrt: soft cold_net bridge PASS\n");
         }
         return gj_linux_cold_socket(pRegs);
@@ -2918,6 +2625,7 @@ protonrt_service(struct gj_linux_regs *pRegs, void *pCtx)
         if (i64Gate != 0) {
             return i64Gate;
         }
+        protonrt_soft_inc(&g_u64PrtLeanXfer);
         return gj_linux_cold_sendto(pRegs);
     }
 
@@ -2929,6 +2637,7 @@ protonrt_service(struct gj_linux_regs *pRegs, void *pCtx)
         if (i64Gate != 0) {
             return i64Gate;
         }
+        protonrt_soft_inc(&g_u64PrtLeanXfer);
         return gj_linux_cold_sendmsg(pRegs);
     }
 
@@ -2939,6 +2648,7 @@ protonrt_service(struct gj_linux_regs *pRegs, void *pCtx)
         if (i64Gate != 0) {
             return i64Gate;
         }
+        protonrt_soft_inc(&g_u64PrtLeanXfer);
         return gj_linux_cold_recvfrom(pRegs);
     }
 
@@ -2950,14 +2660,16 @@ protonrt_service(struct gj_linux_regs *pRegs, void *pCtx)
         if (i64Gate != 0) {
             return i64Gate;
         }
+        protonrt_soft_inc(&g_u64PrtLeanXfer);
         return gj_linux_cold_recvmsg(pRegs);
     }
 
     case LINUX_NR_sendmmsg: {
         /*
          * sendmmsg(fd, mmsghdr *msgvec, vlen, flags)
-         * Each mmsghdr is msghdr (56) + u32 msg_len + pad → 64 bytes typical.
+         * Each mmsghdr is msghdr (56) + u32 msg_len + pad -> 64 bytes typical.
          * For bring-up: process first message only via sendmsg path, report 1.
+         * Residual lean: send_star family tally (Soft!=product; G-AC-1).
          */
         struct gj_linux_regs sub;
 
@@ -2967,6 +2679,7 @@ protonrt_service(struct gj_linux_regs *pRegs, void *pCtx)
         if (pRegs->u64Arg1 == 0) {
             return -LINUX_EFAULT;
         }
+        protonrt_soft_inc(&g_u64PrtLeanXfer);
         memset(&sub, 0, sizeof(sub));
         sub.u64Nr = LINUX_NR_sendmsg;
         sub.u64Arg0 = pRegs->u64Arg0;
@@ -2991,6 +2704,10 @@ protonrt_service(struct gj_linux_regs *pRegs, void *pCtx)
     }
 
     case LINUX_NR_recvmmsg: {
+        /*
+         * recvmmsg residual lean: recv_star family tally.
+         * Soft!=product. G-AC-1. First message only via recvmsg path.
+         */
         struct gj_linux_regs sub;
 
         if (pRegs->u64Arg2 == 0) {
@@ -2999,6 +2716,7 @@ protonrt_service(struct gj_linux_regs *pRegs, void *pCtx)
         if (pRegs->u64Arg1 == 0) {
             return -LINUX_EFAULT;
         }
+        protonrt_soft_inc(&g_u64PrtLeanXfer);
         memset(&sub, 0, sizeof(sub));
         sub.u64Nr = LINUX_NR_recvmsg;
         sub.u64Arg0 = pRegs->u64Arg0;
@@ -3028,6 +2746,7 @@ protonrt_service(struct gj_linux_regs *pRegs, void *pCtx)
         if (i64Gate != 0) {
             return i64Gate;
         }
+        protonrt_soft_inc(&g_u64PrtLeanXfer);
         return gj_linux_cold_shutdown(pRegs);
     }
 
@@ -3038,6 +2757,7 @@ protonrt_service(struct gj_linux_regs *pRegs, void *pCtx)
         if (i64Gate != 0) {
             return i64Gate;
         }
+        protonrt_soft_inc(&g_u64PrtLeanXfer);
         return gj_linux_cold_setsockopt(pRegs);
     }
 
@@ -3048,6 +2768,7 @@ protonrt_service(struct gj_linux_regs *pRegs, void *pCtx)
         if (i64Gate != 0) {
             return i64Gate;
         }
+        protonrt_soft_inc(&g_u64PrtLeanXfer);
         return gj_linux_cold_getsockopt(pRegs);
     }
 
@@ -3058,6 +2779,7 @@ protonrt_service(struct gj_linux_regs *pRegs, void *pCtx)
         if (i64Gate != 0) {
             return i64Gate;
         }
+        protonrt_soft_inc(&g_u64PrtLeanXfer);
         return gj_linux_cold_getsockname(pRegs);
     }
 
@@ -3068,15 +2790,21 @@ protonrt_service(struct gj_linux_regs *pRegs, void *pCtx)
         if (i64Gate != 0) {
             return i64Gate;
         }
+        protonrt_soft_inc(&g_u64PrtLeanXfer);
         return gj_linux_cold_getpeername(pRegs);
     }
 
     case LINUX_NR_pipe:
     case LINUX_NR_pipe2: {
+        /*
+         * Proton neighborhood residual: pipe/pipe2 (wine-class IPC).
+         * Soft!=product. G-AC-1. not bar3.
+         */
         i32 aFds[2];
         i64 i64St;
         int nFlags = (pRegs->u64Nr == LINUX_NR_pipe2) ? (int)pRegs->u64Arg1 : 0;
 
+        protonrt_soft_inc(&g_u64PrtLeanPipe);
         if (pRegs->u64Arg0 == 0) {
             return -LINUX_EFAULT;
         }
@@ -3097,9 +2825,14 @@ protonrt_service(struct gj_linux_regs *pRegs, void *pCtx)
     }
 
     case LINUX_NR_socketpair: {
+        /*
+         * Proton neighborhood residual: socketpair AF_UNIX-shaped
+         * (wine-server two-process IPC). Soft!=product. G-AC-1. not bar3.
+         */
         i32 aFds[2];
         i64 i64St;
 
+        protonrt_soft_inc(&g_u64PrtLeanSockpair);
         if (pRegs->u64Arg3 == 0) {
             return -LINUX_EFAULT;
         }
@@ -3127,6 +2860,7 @@ protonrt_service(struct gj_linux_regs *pRegs, void *pCtx)
         if (i64Gate != 0) {
             return i64Gate;
         }
+        protonrt_soft_inc(&g_u64PrtLeanSocket);
         return gj_linux_cold_bind(pRegs);
     }
 
@@ -3137,6 +2871,7 @@ protonrt_service(struct gj_linux_regs *pRegs, void *pCtx)
         if (i64Gate != 0) {
             return i64Gate;
         }
+        protonrt_soft_inc(&g_u64PrtLeanSocket);
         return gj_linux_cold_listen(pRegs);
     }
 
@@ -3149,6 +2884,7 @@ protonrt_service(struct gj_linux_regs *pRegs, void *pCtx)
             return i64Gate;
         }
         /* flags ignored for bring-up (CLOEXEC/NONBLOCK) inside cold_net */
+        protonrt_soft_inc(&g_u64PrtLeanSocket);
         return gj_linux_cold_accept(pRegs);
     }
 
@@ -3157,10 +2893,22 @@ protonrt_service(struct gj_linux_regs *pRegs, void *pCtx)
                                  (i64)pRegs->u64Arg3);
 
     case LINUX_NR_sendfile: {
+        /*
+         * sendfile(out, in, *off, count) residual lean (Soft!=product).
+         * ram->ram via vfs_ram_sendfile; ram->net via bounce + cold_net
+         * send (sshd/file residual for Dual DoD cold ABI reach). G-AC-1.
+         * greppable: protonrt: soft sendfile residual lean
+         * Dual DoD A/B OPEN; not freestanding wire; not bar3.
+         */
+        i64 i64Out = (i64)pRegs->u64Arg0;
+        i64 i64In = (i64)pRegs->u64Arg1;
         u64 off = 0;
         u64 *pOff = NULL;
+        size_t cbWant;
         i64 n;
+        i64 i64Gate;
 
+        protonrt_soft_inc(&g_u64PrtLeanSendfile);
         if (pRegs->u64Arg2 != 0) {
             if (user_range_ok(pRegs->u64Arg2, 8)) {
                 (void)copy_from_user(&off, pRegs->u64Arg2, 8);
@@ -3169,39 +2917,161 @@ protonrt_service(struct gj_linux_regs *pRegs, void *pCtx)
             }
             pOff = &off;
         }
-        n = vfs_ram_sendfile((i64)pRegs->u64Arg0, (i64)pRegs->u64Arg1, pOff,
-                             (size_t)pRegs->u64Arg3);
-        if (n >= 0 && pRegs->u64Arg2 != 0) {
-            if (user_range_ok(pRegs->u64Arg2, 8)) {
-                (void)copy_to_user(pRegs->u64Arg2, &off, 8);
-            } else {
-                *(u64 *)(gj_vaddr_t)pRegs->u64Arg2 = off;
+        cbWant = (size_t)pRegs->u64Arg3;
+
+        /* ram -> ram (existing path) */
+        if (vfs_ram_fd_ok(i64Out) && vfs_ram_fd_ok(i64In)) {
+            n = vfs_ram_sendfile(i64Out, i64In, pOff, cbWant);
+            if (n >= 0 && pRegs->u64Arg2 != 0) {
+                if (user_range_ok(pRegs->u64Arg2, 8)) {
+                    (void)copy_to_user(pRegs->u64Arg2, &off, 8);
+                } else {
+                    *(u64 *)(gj_vaddr_t)pRegs->u64Arg2 = off;
+                }
             }
+            if (g_fPrtSoftSendfileOnce == 0) {
+                g_fPrtSoftSendfileOnce = 1;
+                /* Grep: protonrt: soft sendfile residual lean */
+                kprintf("protonrt: soft sendfile residual lean "
+                        "path=ram_ram n=%lld Soft!=product g_ac_1=1 "
+                        "dual_dod_a=OPEN dual_dod_b=OPEN not_bar3=1\n",
+                        (long long)n);
+            }
+            return n;
         }
-        return n;
+
+        /*
+         * ram-in -> net-out residual: bounce through aBuf + cold send.
+         * Userspace UDX/sshd-shaped hosts use sendfile to STREAM peers.
+         * Soft!=product. Product zero-copy OPEN.
+         */
+        if (vfs_ram_fd_ok(i64In) &&
+            (net_tcp_fd_ok(i64Out) || net_lo_fd_ok(i64Out))) {
+            size_t done = 0;
+            u64 u64Off = pOff ? *pOff : 0;
+
+            i64Gate = confine_soft_promise_require(GJ_PROMISE_INET);
+            if (i64Gate != 0) {
+                return i64Gate;
+            }
+            if (cbWant == 0) {
+                return 0;
+            }
+            if (cbWant > 4096u) {
+                cbWant = 4096u; /* soft cap; product bulk OPEN */
+            }
+            while (done < cbWant) {
+                size_t chunk = cbWant - done;
+                i64 i64R;
+                i64 i64W;
+                struct gj_linux_regs sub;
+
+                if (chunk > sizeof(aBuf)) {
+                    chunk = sizeof(aBuf);
+                }
+                i64R = vfs_ram_pread(i64In, aBuf, chunk, u64Off);
+                if (i64R < 0) {
+                    return done ? (i64)done : i64R;
+                }
+                if (i64R == 0) {
+                    break;
+                }
+                memset(&sub, 0, sizeof(sub));
+                sub.u64Nr = LINUX_NR_sendto;
+                sub.u64Arg0 = (u64)i64Out;
+                sub.u64Arg1 = (u64)(gj_vaddr_t)aBuf;
+                sub.u64Arg2 = (u64)i64R;
+                sub.u64Arg3 = 0;
+                i64W = gj_linux_cold_send(&sub);
+                if (i64W < 0) {
+                    return done ? (i64)done : i64W;
+                }
+                if (i64W == 0) {
+                    break;
+                }
+                done += (size_t)i64W;
+                u64Off += (u64)i64W;
+                if ((size_t)i64W < (size_t)i64R) {
+                    break;
+                }
+            }
+            if (pOff != NULL) {
+                *pOff = u64Off;
+            }
+            if (pRegs->u64Arg2 != 0) {
+                if (user_range_ok(pRegs->u64Arg2, 8)) {
+                    (void)copy_to_user(pRegs->u64Arg2, &u64Off, 8);
+                } else {
+                    *(u64 *)(gj_vaddr_t)pRegs->u64Arg2 = u64Off;
+                }
+            }
+            protonrt_soft_inc(&g_u64PrtLeanRwNet);
+            if (g_fPrtSoftSendfileOnce == 0) {
+                g_fPrtSoftSendfileOnce = 1;
+                /* Grep: protonrt: soft sendfile residual lean */
+                kprintf("protonrt: soft sendfile residual lean "
+                        "path=ram_net n=%llu Soft!=product g_ac_1=1 "
+                        "dual_dod_a=OPEN dual_dod_b=OPEN "
+                        "product_path=UDX_DDI+hot_cold_ABI not_bar3=1\n",
+                        (unsigned long long)done);
+            }
+            return (i64)done;
+        }
+        return -LINUX_EBADF;
     }
 
-    case LINUX_NR_splice:
+    case LINUX_NR_splice: {
         /*
          * splice(fd_in, *off_in, fd_out, *off_out, len, flags)
-         * Map to sendfile(out, in, NULL, len); offsets ignored in bring-up.
+         * C2 residual: ram->ram sendfile; ram-in/net-out via sendfile residual.
+         * Soft!=product. offsets soft-ignored on net path.
          */
-        return vfs_ram_sendfile((i64)pRegs->u64Arg2, (i64)pRegs->u64Arg0, NULL,
-                                (size_t)pRegs->u64Arg4);
+        struct gj_linux_regs sub;
 
-    case LINUX_NR_tee:
-        /* tee(fd_in, fd_out, len, flags) — copy via sendfile path */
-        return vfs_ram_sendfile((i64)pRegs->u64Arg1, (i64)pRegs->u64Arg0, NULL,
-                                (size_t)pRegs->u64Arg2);
+        protonrt_soft_inc(&g_u64PrtLeanSendfile);
+        memset(&sub, 0, sizeof(sub));
+        sub.u64Nr = LINUX_NR_sendfile;
+        sub.u64Arg0 = pRegs->u64Arg2; /* out */
+        sub.u64Arg1 = pRegs->u64Arg0; /* in */
+        sub.u64Arg2 = 0;              /* *off soft NULL */
+        sub.u64Arg3 = pRegs->u64Arg4; /* len */
+        return protonrt_service(&sub, NULL);
+    }
+
+    case LINUX_NR_tee: {
+        /* tee(fd_in, fd_out, len, flags) - C2 residual via sendfile path */
+        struct gj_linux_regs sub;
+
+        protonrt_soft_inc(&g_u64PrtLeanSendfile);
+        memset(&sub, 0, sizeof(sub));
+        sub.u64Nr = LINUX_NR_sendfile;
+        sub.u64Arg0 = pRegs->u64Arg1; /* out */
+        sub.u64Arg1 = pRegs->u64Arg0; /* in */
+        sub.u64Arg2 = 0;
+        sub.u64Arg3 = pRegs->u64Arg2; /* len */
+        return protonrt_service(&sub, NULL);
+    }
 
     case LINUX_NR_copy_file_range: {
-        /* arg0=fd_in arg1=*off_in arg2=fd_out arg3=*off_out arg4=len */
+        /*
+         * C2 Dual DoD residual deepen: copy_file_range (Soft!=product).
+         * arg0=fd_in arg1=*off_in arg2=fd_out arg3=*off_out arg4=len
+         * ram->ram via vfs_ram_copy_file_range; ram-in -> net-out via bounce
+         * + cold send (sendfile-shaped sshd/file residual). G-AC-1.
+         * greppable: protonrt: soft copy_file residual lean
+         * Dual DoD A/B OPEN; not freestanding wire; not bar3.
+         */
         u64 offIn = 0;
         u64 offOut = 0;
         u64 *pIn = NULL;
         u64 *pOut = NULL;
+        i64 i64In = (i64)pRegs->u64Arg0;
+        i64 i64Out = (i64)pRegs->u64Arg2;
+        size_t cbWant;
         i64 n;
+        i64 i64Gate;
 
+        protonrt_soft_inc(&g_u64PrtLeanCopyFr);
         if (pRegs->u64Arg1 != 0) {
             if (user_range_ok(pRegs->u64Arg1, 8)) {
                 (void)copy_from_user(&offIn, pRegs->u64Arg1, 8);
@@ -3218,26 +3088,129 @@ protonrt_service(struct gj_linux_regs *pRegs, void *pCtx)
             }
             pOut = &offOut;
         }
-        n = vfs_ram_copy_file_range((i64)pRegs->u64Arg0, pIn,
-                                    (i64)pRegs->u64Arg2, pOut,
-                                    (size_t)pRegs->u64Arg4);
-        if (n >= 0) {
+        cbWant = (size_t)pRegs->u64Arg4;
+
+        /* ram -> ram (existing path) */
+        if (vfs_ram_fd_ok(i64In) && vfs_ram_fd_ok(i64Out)) {
+            n = vfs_ram_copy_file_range(i64In, pIn, i64Out, pOut, cbWant);
+            if (n >= 0) {
+                if (pRegs->u64Arg1 != 0) {
+                    if (user_range_ok(pRegs->u64Arg1, 8)) {
+                        (void)copy_to_user(pRegs->u64Arg1, &offIn, 8);
+                    } else {
+                        *(u64 *)(gj_vaddr_t)pRegs->u64Arg1 = offIn;
+                    }
+                }
+                if (pRegs->u64Arg3 != 0) {
+                    if (user_range_ok(pRegs->u64Arg3, 8)) {
+                        (void)copy_to_user(pRegs->u64Arg3, &offOut, 8);
+                    } else {
+                        *(u64 *)(gj_vaddr_t)pRegs->u64Arg3 = offOut;
+                    }
+                }
+            }
+            if (g_fPrtSoftCopyFrOnce == 0) {
+                g_fPrtSoftCopyFrOnce = 1;
+                /* Grep: protonrt: soft copy_file residual lean */
+                kprintf("protonrt: soft copy_file residual lean "
+                        "path=ram_ram n=%lld Soft!=product g_ac_1=1 "
+                        "dual_dod_a=OPEN dual_dod_b=OPEN not_bar3=1\n",
+                        (long long)n);
+            }
+            return n;
+        }
+
+        /*
+         * ram-in -> net-out residual: bounce through aBuf + cold send.
+         * Same shape as sendfile residual for Dual DoD cold ABI reach.
+         * Soft!=product. Product zero-copy OPEN.
+         */
+        if (vfs_ram_fd_ok(i64In) &&
+            (net_tcp_fd_ok(i64Out) || net_lo_fd_ok(i64Out))) {
+            size_t done = 0;
+            u64 u64Off = pIn ? *pIn : 0;
+
+            i64Gate = confine_soft_promise_require(GJ_PROMISE_INET);
+            if (i64Gate != 0) {
+                return i64Gate;
+            }
+            if (cbWant == 0) {
+                return 0;
+            }
+            if (cbWant > 4096u) {
+                cbWant = 4096u; /* soft cap; product bulk OPEN */
+            }
+            while (done < cbWant) {
+                size_t chunk = cbWant - done;
+                i64 i64R;
+                i64 i64W;
+                struct gj_linux_regs sub;
+
+                if (chunk > sizeof(aBuf)) {
+                    chunk = sizeof(aBuf);
+                }
+                i64R = vfs_ram_pread(i64In, aBuf, chunk, u64Off);
+                if (i64R < 0) {
+                    return done ? (i64)done : i64R;
+                }
+                if (i64R == 0) {
+                    break;
+                }
+                memset(&sub, 0, sizeof(sub));
+                sub.u64Nr = LINUX_NR_sendto;
+                sub.u64Arg0 = (u64)i64Out;
+                sub.u64Arg1 = (u64)(gj_vaddr_t)aBuf;
+                sub.u64Arg2 = (u64)i64R;
+                sub.u64Arg3 = 0;
+                i64W = gj_linux_cold_send(&sub);
+                if (i64W < 0) {
+                    return done ? (i64)done : i64W;
+                }
+                if (i64W == 0) {
+                    break;
+                }
+                done += (size_t)i64W;
+                u64Off += (u64)i64W;
+                if ((size_t)i64W < (size_t)i64R) {
+                    break;
+                }
+            }
+            if (pIn != NULL) {
+                *pIn = u64Off;
+            }
             if (pRegs->u64Arg1 != 0) {
                 if (user_range_ok(pRegs->u64Arg1, 8)) {
-                    (void)copy_to_user(pRegs->u64Arg1, &offIn, 8);
+                    (void)copy_to_user(pRegs->u64Arg1, &u64Off, 8);
                 } else {
-                    *(u64 *)(gj_vaddr_t)pRegs->u64Arg1 = offIn;
+                    *(u64 *)(gj_vaddr_t)pRegs->u64Arg1 = u64Off;
                 }
+            }
+            /* out offset soft advance (net has no file pos; honesty only) */
+            if (pOut != NULL) {
+                *pOut += (u64)done;
             }
             if (pRegs->u64Arg3 != 0) {
+                u64 u64Out = pOut ? *pOut : (u64)done;
+
                 if (user_range_ok(pRegs->u64Arg3, 8)) {
-                    (void)copy_to_user(pRegs->u64Arg3, &offOut, 8);
+                    (void)copy_to_user(pRegs->u64Arg3, &u64Out, 8);
                 } else {
-                    *(u64 *)(gj_vaddr_t)pRegs->u64Arg3 = offOut;
+                    *(u64 *)(gj_vaddr_t)pRegs->u64Arg3 = u64Out;
                 }
             }
+            protonrt_soft_inc(&g_u64PrtLeanRwNet);
+            if (g_fPrtSoftCopyFrOnce == 0) {
+                g_fPrtSoftCopyFrOnce = 1;
+                /* Grep: protonrt: soft copy_file residual lean */
+                kprintf("protonrt: soft copy_file residual lean "
+                        "path=ram_net n=%llu Soft!=product g_ac_1=1 "
+                        "dual_dod_a=OPEN dual_dod_b=OPEN "
+                        "product_path=UDX_DDI+hot_cold_ABI not_bar3=1\n",
+                        (unsigned long long)done);
+            }
+            return (i64)done;
         }
-        return n;
+        return -LINUX_EBADF;
     }
 
     case LINUX_NR_inotify_init1:
@@ -3264,7 +3237,7 @@ protonrt_service(struct gj_linux_regs *pRegs, void *pCtx)
 
     case LINUX_NR_renameat:
     case LINUX_NR_renameat2: {
-        /* renameat/renameat2(olddirfd, old, newdirfd, new[, flags]) — paths */
+        /* renameat/renameat2(olddirfd, old, newdirfd, new[, flags]) - paths */
         char szNew[96];
         u64 u64Old = pRegs->u64Arg1;
         u64 u64New = pRegs->u64Arg3;
@@ -3324,7 +3297,7 @@ protonrt_service(struct gj_linux_regs *pRegs, void *pCtx)
         return -LINUX_ENOSYS;
 
     case LINUX_NR_seccomp:
-        /* SECCOMP_SET_MODE_STRICT etc. — accept no-op for wine probe */
+        /* SECCOMP_SET_MODE_STRICT etc. - accept no-op for wine probe */
         return 0;
 
     case LINUX_NR_bpf:
@@ -3363,7 +3336,7 @@ protonrt_service(struct gj_linux_regs *pRegs, void *pCtx)
 
     case LINUX_NR_pidfd_getfd: {
         /*
-         * pidfd_getfd(pidfd, targetfd, flags) — same-pid only.
+         * pidfd_getfd(pidfd, targetfd, flags) - same-pid only.
          * Validate pidfd kind; dup targetfd into a new slot.
          */
         i64 i64PidFd = (i64)pRegs->u64Arg0;
@@ -3410,7 +3383,7 @@ protonrt_service(struct gj_linux_regs *pRegs, void *pCtx)
         return 0;
 
     case LINUX_NR_kcmp:
-        /* kcmp(pid1,pid2,type,...) — same-pid equal */
+        /* kcmp(pid1,pid2,type,...) - same-pid equal */
         if (pRegs->u64Arg0 == pRegs->u64Arg1) {
             return 0;
         }
@@ -3473,17 +3446,33 @@ protonrt_service(struct gj_linux_regs *pRegs, void *pCtx)
         if (i64Gate != 0) {
             return i64Gate;
         }
+        protonrt_soft_inc(&g_u64PrtLeanSocket);
         return gj_linux_cold_connect(pRegs);
     }
 
-    case LINUX_NR_close:
-        if (net_lo_fd_ok((i64)pRegs->u64Arg0)) {
-            return net_lo_close((i64)pRegs->u64Arg0);
+    case LINUX_NR_close: {
+        i64 i64St;
+        i64 i64Fd = (i64)pRegs->u64Arg0;
+
+        /*
+         * Residual lean: cold_net close first (tcp soft clear + lo).
+         * Then vfs_ram. Soft fd flags table cleared on either path.
+         * Soft!=product. G-AC-1: UDX host fd lifecycle.
+         * greppable: protonrt: soft residual lean close
+         */
+        protonrt_soft_inc(&g_u64PrtLeanClose);
+        i64St = gj_linux_cold_close(pRegs);
+        if (i64St != -(i64)LINUX_EBADF) {
+            protonrt_soft_fdfl_clear(i64Fd);
+            return i64St;
         }
-        if (vfs_ram_fd_ok((i64)pRegs->u64Arg0)) {
-            return vfs_ram_close((i64)pRegs->u64Arg0);
+        if (vfs_ram_fd_ok(i64Fd)) {
+            i64St = vfs_ram_close(i64Fd);
+            protonrt_soft_fdfl_clear(i64Fd);
+            return i64St;
         }
         break;
+    }
 
     case LINUX_NR_getcwd: {
         u64 u64Buf = pRegs->u64Arg0;
@@ -3607,7 +3596,7 @@ protonrt_service(struct gj_linux_regs *pRegs, void *pCtx)
         return 0;
 
     case LINUX_NR_futex_waitv:
-        /* Multi-wait: not implemented — return 0 (no waiters woken) */
+        /* Multi-wait: not implemented - return 0 (no waiters woken) */
         return 0;
 
     case LINUX_NR_set_mempolicy_home_node:
@@ -3708,7 +3697,7 @@ protonrt_service(struct gj_linux_regs *pRegs, void *pCtx)
 
     case LINUX_NR_waitid: {
         /*
-         * waitid(idtype, id, *infop, options) — soft reaper for driver hosts.
+         * waitid(idtype, id, *infop, options) - soft reaper for driver hosts.
          * Prefer process_waitid_soft when parent PCB is available.
          * greppable: protonrt: soft fork-wait wire PASS
          */
@@ -3780,7 +3769,7 @@ protonrt_service(struct gj_linux_regs *pRegs, void *pCtx)
         if (i64Gate != 0) {
             return i64Gate;
         }
-        /* Self-kill of pid 1/self → allow as no-op for smoke */
+        /* Self-kill of pid 1/self -> allow as no-op for smoke */
         if ((i64)pRegs->u64Arg0 <= 1) {
             return 0;
         }
@@ -3920,7 +3909,7 @@ protonrt_service(struct gj_linux_regs *pRegs, void *pCtx)
          * Soft: confined processes have no mount privilege (no promise bit).
          * Ambient (u32Confined==0) still soft-succeeds for probe.
          * Ambient expose-shaped mount is also denied when confined
-         * (grep: confine: expose soft — product: vfsd path policy).
+         * (grep: confine: expose soft - product: vfsd path policy).
          */
         if (g_pLinuxProc != NULL && g_pLinuxProc->u32Confined != 0u) {
             g_u32ConfinePromiseDeny++;
@@ -3928,7 +3917,7 @@ protonrt_service(struct gj_linux_regs *pRegs, void *pCtx)
             kprintf("confine: expose soft mount deny (confined)\n");
             return -LINUX_EACCES;
         }
-        /* No real VFS mounts — success for probe (product: vfsd) */
+        /* No real VFS mounts - success for probe (product: vfsd) */
         return 0;
 
     case LINUX_NR_swapon:
@@ -3964,7 +3953,7 @@ protonrt_service(struct gj_linux_regs *pRegs, void *pCtx)
         return (i64)pRegs->u64Arg2;
 
     case LINUX_NR_getdents:
-        /* Legacy getdents → getdents64 cold path */
+        /* Legacy getdents -> getdents64 cold path */
         pRegs->u64Nr = LINUX_NR_getdents64;
         return protonrt_service(pRegs, pCtx);
 
@@ -4018,7 +4007,7 @@ protonrt_service(struct gj_linux_regs *pRegs, void *pCtx)
             u64Old = 0;
         }
 
-        lim.rlim_cur = 1024ull * 1024ull * 1024ull; /* 1 GiB class */
+        lim.rlim_cur = 1024ull * 1024ull * 1024ull; /* 1 GiB class */
         lim.rlim_max = lim.rlim_cur;
         if (u64Old != 0) {
             if (user_range_ok(u64Old, sizeof(lim))) {
@@ -4118,32 +4107,239 @@ protonrt_service(struct gj_linux_regs *pRegs, void *pCtx)
     case LINUX_NR_select:
     case LINUX_NR_pselect6: {
         /*
-         * select(nfds, *readfds, *writefds, *exceptfds, *timeout)
-         * Bring-up: report 0 ready (timeout immediate) unless nfds==0.
+         * Residual lean select/pselect6 (bar3-adjacent ABI surface).
+         * Readiness via cold_net poll_mask then vfs_ram_poll_mask - same
+         * residual as poll. Soft!=product. G-AC-1 userspace host reach.
+         * Product multi-fd demux / infinite wait remains OPEN.
+         *   timeout==0 / NULL -> single readiness pass
+         *   timeout>0         -> soft-spin yield + jiffies budget
+         * greppable: protonrt: soft select residual lean
+         * Never claims bar3 / Deck Top 50 / product DoD.
          */
-        u64 nfds = pRegs->u64Arg0;
+        u32 u32Nfds;
+        u32 u32Fd;
+        u32 u32Ready;
+        u32 u32CbSet;
+        u32 u32SpinLeft = 0;
+        u32 u32Pass;
+        i64 i64TimeoutMs = 0;
+        u64 u64J0;
+        u8 aInR[PRT_SELECT_SOFT_FDSET_BYTES];
+        u8 aInW[PRT_SELECT_SOFT_FDSET_BYTES];
+        u8 aInE[PRT_SELECT_SOFT_FDSET_BYTES];
+        u8 aOutR[PRT_SELECT_SOFT_FDSET_BYTES];
+        u8 aOutW[PRT_SELECT_SOFT_FDSET_BYTES];
+        u8 aOutE[PRT_SELECT_SOFT_FDSET_BYTES];
+        int fHaveR;
+        int fHaveW;
+        int fHaveE;
 
-        if (nfds > 1024) {
+        protonrt_soft_inc(&g_u64PrtLeanSelect);
+        if (pRegs->u64Arg0 > 1024ull) {
             return -LINUX_EINVAL;
         }
-        /* Zero fd sets if provided (no ready fds) */
-        if (pRegs->u64Arg1 != 0 && nfds > 0) {
-            u64 bytes = ((nfds + 63) / 64) * 8;
+        u32Nfds = (u32)pRegs->u64Arg0;
+        if (u32Nfds == 0u) {
+            return 0;
+        }
+        if (u32Nfds > PRT_SELECT_SOFT_NFDS_MAX) {
+            u32Nfds = PRT_SELECT_SOFT_NFDS_MAX;
+        }
+        u32CbSet = (u32Nfds + 7u) / 8u;
+        if (u32CbSet > PRT_SELECT_SOFT_FDSET_BYTES) {
+            u32CbSet = PRT_SELECT_SOFT_FDSET_BYTES;
+        }
+        memset(aInR, 0, sizeof(aInR));
+        memset(aInW, 0, sizeof(aInW));
+        memset(aInE, 0, sizeof(aInE));
+        memset(aOutR, 0, sizeof(aOutR));
+        memset(aOutW, 0, sizeof(aOutW));
+        memset(aOutE, 0, sizeof(aOutE));
+        fHaveR = (pRegs->u64Arg1 != 0) ? 1 : 0;
+        fHaveW = (pRegs->u64Arg2 != 0) ? 1 : 0;
+        fHaveE = (pRegs->u64Arg3 != 0) ? 1 : 0;
 
-            if (bytes > 128) {
-                bytes = 128;
-            }
-            if (user_range_ok(pRegs->u64Arg1, bytes)) {
-                u8 z[128];
-                u32 i;
-
-                for (i = 0; i < (u32)bytes; i++) {
-                    z[i] = 0;
+        if (fHaveR) {
+            if (user_range_ok(pRegs->u64Arg1, u32CbSet)) {
+                if (copy_from_user(aInR, pRegs->u64Arg1, u32CbSet) !=
+                    GJ_OK) {
+                    return -LINUX_EFAULT;
                 }
-                (void)copy_to_user(pRegs->u64Arg1, z, (size_t)bytes);
+            } else {
+                memcpy(aInR, (const void *)(gj_vaddr_t)pRegs->u64Arg1,
+                       u32CbSet);
             }
         }
-        return 0; /* timeout, no fds ready */
+        if (fHaveW) {
+            if (user_range_ok(pRegs->u64Arg2, u32CbSet)) {
+                if (copy_from_user(aInW, pRegs->u64Arg2, u32CbSet) !=
+                    GJ_OK) {
+                    return -LINUX_EFAULT;
+                }
+            } else {
+                memcpy(aInW, (const void *)(gj_vaddr_t)pRegs->u64Arg2,
+                       u32CbSet);
+            }
+        }
+        if (fHaveE) {
+            if (user_range_ok(pRegs->u64Arg3, u32CbSet)) {
+                if (copy_from_user(aInE, pRegs->u64Arg3, u32CbSet) !=
+                    GJ_OK) {
+                    return -LINUX_EFAULT;
+                }
+            } else {
+                memcpy(aInE, (const void *)(gj_vaddr_t)pRegs->u64Arg3,
+                       u32CbSet);
+            }
+        }
+
+        /*
+         * Timeout: select timeval {sec,usec}; pselect6 timespec {sec,nsec}.
+         * Soft!=product: NULL / zero -> single pass; >0 soft-spin budget.
+         */
+        if (pRegs->u64Arg4 != 0) {
+            i64 i64Sec = 0;
+            i64 i64Frac = 0;
+
+            if (user_range_ok(pRegs->u64Arg4, 16)) {
+                if (copy_from_user(&i64Sec, pRegs->u64Arg4, 8) != GJ_OK) {
+                    return -LINUX_EFAULT;
+                }
+                if (copy_from_user(&i64Frac, pRegs->u64Arg4 + 8, 8) !=
+                    GJ_OK) {
+                    return -LINUX_EFAULT;
+                }
+            } else {
+                i64Sec = *(const i64 *)(gj_vaddr_t)pRegs->u64Arg4;
+                i64Frac = *(const i64 *)(gj_vaddr_t)(pRegs->u64Arg4 + 8);
+            }
+            if (i64Sec < 0 || i64Frac < 0) {
+                i64TimeoutMs = 0;
+            } else if (i64Sec == 0 && i64Frac == 0) {
+                i64TimeoutMs = 0;
+            } else if (pRegs->u64Nr == LINUX_NR_pselect6) {
+                i64TimeoutMs = i64Sec * 1000 + i64Frac / 1000000;
+                if (i64TimeoutMs <= 0) {
+                    i64TimeoutMs = 1;
+                }
+            } else {
+                /* timeval usec */
+                i64TimeoutMs = i64Sec * 1000 + i64Frac / 1000;
+                if (i64TimeoutMs <= 0) {
+                    i64TimeoutMs = 1;
+                }
+            }
+        }
+
+        if (i64TimeoutMs > 0) {
+            u32SpinLeft = (u32)i64TimeoutMs;
+            if (u32SpinLeft > 128u) {
+                u32SpinLeft = 128u;
+            }
+            if (u32SpinLeft < 1u) {
+                u32SpinLeft = 1u;
+            }
+        }
+
+        u64J0 = timer_jiffies();
+        for (u32Pass = 0;; u32Pass++) {
+            u32Ready = 0;
+            memset(aOutR, 0, sizeof(aOutR));
+            memset(aOutW, 0, sizeof(aOutW));
+            memset(aOutE, 0, sizeof(aOutE));
+
+            for (u32Fd = 0; u32Fd < u32Nfds; u32Fd++) {
+                u32 u32Byte = u32Fd / 8u;
+                u8 u8Bit = (u8)(1u << (u32Fd % 8u));
+                u32 u32Want = 0;
+                u32 u32Got;
+                int fInR = 0;
+                int fInW = 0;
+                int fInE = 0;
+
+                if (fHaveR && (aInR[u32Byte] & u8Bit) != 0) {
+                    fInR = 1;
+                    u32Want |= (u32)LINUX_POLLIN;
+                }
+                if (fHaveW && (aInW[u32Byte] & u8Bit) != 0) {
+                    fInW = 1;
+                    u32Want |= (u32)LINUX_POLLOUT;
+                }
+                if (fHaveE && (aInE[u32Byte] & u8Bit) != 0) {
+                    fInE = 1;
+                    u32Want |= (u32)LINUX_POLLERR;
+                }
+                if (u32Want == 0) {
+                    continue;
+                }
+                u32Got = protonrt_soft_fd_ready_mask((i64)u32Fd, u32Want);
+                if (fInR && (u32Got & (u32)LINUX_POLLIN) != 0) {
+                    aOutR[u32Byte] |= u8Bit;
+                    u32Ready++;
+                }
+                if (fInW && (u32Got & (u32)LINUX_POLLOUT) != 0) {
+                    aOutW[u32Byte] |= u8Bit;
+                    u32Ready++;
+                }
+                if (fInE &&
+                    (u32Got & ((u32)LINUX_POLLERR | (u32)LINUX_POLLHUP)) !=
+                        0) {
+                    aOutE[u32Byte] |= u8Bit;
+                    u32Ready++;
+                }
+            }
+
+            if (u32Ready != 0 || i64TimeoutMs <= 0 || u32SpinLeft == 0) {
+                break;
+            }
+            thread_yield();
+            if (u32SpinLeft > 0) {
+                u32SpinLeft--;
+            }
+            /* Hard soft cap ~320ms @ GJ_TIMER_HZ=100 (Soft!=product block). */
+            if ((timer_jiffies() - u64J0) > 32ull) {
+                break;
+            }
+            (void)u32Pass;
+        }
+
+        if (fHaveR) {
+            if (user_range_ok(pRegs->u64Arg1, u32CbSet)) {
+                if (copy_to_user(pRegs->u64Arg1, aOutR, u32CbSet) != GJ_OK) {
+                    return -LINUX_EFAULT;
+                }
+            } else {
+                memcpy((void *)(gj_vaddr_t)pRegs->u64Arg1, aOutR, u32CbSet);
+            }
+        }
+        if (fHaveW) {
+            if (user_range_ok(pRegs->u64Arg2, u32CbSet)) {
+                if (copy_to_user(pRegs->u64Arg2, aOutW, u32CbSet) != GJ_OK) {
+                    return -LINUX_EFAULT;
+                }
+            } else {
+                memcpy((void *)(gj_vaddr_t)pRegs->u64Arg2, aOutW, u32CbSet);
+            }
+        }
+        if (fHaveE) {
+            if (user_range_ok(pRegs->u64Arg3, u32CbSet)) {
+                if (copy_to_user(pRegs->u64Arg3, aOutE, u32CbSet) != GJ_OK) {
+                    return -LINUX_EFAULT;
+                }
+            } else {
+                memcpy((void *)(gj_vaddr_t)pRegs->u64Arg3, aOutE, u32CbSet);
+            }
+        }
+
+        if (g_fPrtSoftSelectOnce == 0) {
+            g_fPrtSoftSelectOnce = 1;
+            /* Grep: protonrt: soft select residual lean */
+            kprintf("protonrt: soft select residual lean "
+                    "nfds=%u ready=%u timeout_ms=%ld Soft!=product "
+                    "g_ac_1=1 abi_adj=proton_p0 not_bar3=1\n",
+                    u32Nfds, u32Ready, (long)i64TimeoutMs);
+        }
+        return (i64)u32Ready;
     }
 
     case LINUX_NR_unlink:
@@ -4344,7 +4540,7 @@ protonrt_service(struct gj_linux_regs *pRegs, void *pCtx)
     }
 
     case LINUX_NR_openat2: {
-        /* open_how: flags at 0, mode at 8, resolve at 16 — use flags/mode */
+        /* open_how: flags at 0, mode at 8, resolve at 16 - use flags/mode */
         u64 u64How = pRegs->u64Arg2;
         u64 u64Flags = 0;
         u64 u64Mode = 0;
@@ -4427,7 +4623,7 @@ protonrt_service(struct gj_linux_regs *pRegs, void *pCtx)
         memcpy(&u64Ino, aStat + 8, 8);
         memcpy(&u32Mode, aStat + 24, 4);
         memcpy(&i64Size, aStat + 48, 8);
-        /* statx: stx_mask@0 stx_blksize@4 stx_attributes@8 … stx_mode@20
+        /* statx: stx_mask@0 stx_blksize@4 stx_attributes@8 ... stx_mode@20
          * stx_ino@32 stx_size@40 (public man layout; clean-room). */
         {
             u32 m = 0x000007ffu; /* basic STATX_* mask */
@@ -4465,13 +4661,13 @@ protonrt_service(struct gj_linux_regs *pRegs, void *pCtx)
     }
 
     case LINUX_NR_vfork:
-        /* vfork: child runs first — mark zombie so parent wait sees exit */
+        /* vfork: child runs first - mark zombie so parent wait sees exit */
         return process_linux_fork(1, 1);
 
     case LINUX_NR_clone:
     case LINUX_NR_clone3: {
         /*
-         * clone(flags, stack, ...): CLONE_THREAD → same-pid thread spawn.
+         * clone(flags, stack, ...): CLONE_THREAD -> same-pid thread spawn.
          * Otherwise process_clone_soft when parent PCB available.
          * greppable: protonrt: soft fork-wait wire PASS
          */
@@ -4565,7 +4761,7 @@ protonrt_service(struct gj_linux_regs *pRegs, void *pCtx)
         }
         /*
          * aImg/aInterp sit in high kernel BSS (can pass PE 0x400000 once embeds
-         * grow). Private AS COW/protect bugs have left those leaves RO — repair
+         * grow). Private AS COW/protect bugs have left those leaves RO - repair
          * identity R/W under kernel + active CR3 before the store.
          */
         (void)vmm_ensure_identity_rw((gj_vaddr_t)aImg, sizeof(aImg));
@@ -4731,31 +4927,44 @@ protonrt_service(struct gj_linux_regs *pRegs, void *pCtx)
     }
 
     case LINUX_NR_close_range: {
-        /* close_range(first, last, flags): close inclusive fd range */
+        /*
+         * close_range(first, last, flags): close inclusive fd range.
+         * Residual lean: cold_net close (tcp+lo soft clear) then vfs_ram.
+         * Soft!=product. G-AC-1 userspace host reach.
+         */
         u32 u32First = (u32)pRegs->u64Arg0;
         u32 u32Last = (u32)pRegs->u64Arg1;
         u32 i;
 
+        protonrt_soft_inc(&g_u64PrtLeanClose);
         if (u32First > u32Last) {
             return -LINUX_EINVAL;
         }
-        if (u32Last > 31u) {
-            u32Last = 31u;
+        if (u32Last > 127u) {
+            u32Last = 127u; /* cover ram + net_lo(64..) + net_tcp(96..) soft */
         }
         for (i = u32First; i <= u32Last; i++) {
+            struct gj_linux_regs sub;
+            i64 i64St;
+
+            memset(&sub, 0, sizeof(sub));
+            sub.u64Nr = LINUX_NR_close;
+            sub.u64Arg0 = (u64)i;
+            i64St = gj_linux_cold_close(&sub);
+            if (i64St != -(i64)LINUX_EBADF) {
+                continue;
+            }
             if (vfs_ram_fd_ok((i64)i)) {
                 (void)vfs_ram_close((i64)i);
-            } else if (net_lo_fd_ok((i64)i)) {
-                (void)net_lo_close((i64)i);
             }
         }
         return 0;
     }
 
     /*
-     * Soft module load path (Option C cold). Soft≠product .ko AC (G-AC-1).
+     * Soft module load path (Option C cold). Soft!=product .ko AC (G-AC-1).
      * init_module(umod, len, uargs) / finit_module(fd, uargs, flags) /
-     * delete_module(name, flags). Bounce ≤2 MiB → load_mem + init_call.
+     * delete_module(name, flags). Bounce <=2 MiB -> load_mem + init_call.
      * greppable: protonrt: soft init_module|finit_module|delete_module PASS|FAIL
      */
     case LINUX_NR_init_module: {
@@ -4808,7 +5017,7 @@ protonrt_service(struct gj_linux_regs *pRegs, void *pCtx)
     case LINUX_NR_finit_module: {
         /*
          * finit_module(int fd, const char *uargs, int flags)
-         * vfs_ram fd only: read file → bounce ≤2 MiB → load_mem + init_call.
+         * vfs_ram fd only: read file -> bounce <=2 MiB -> load_mem + init_call.
          */
         i64 i64Fd = (i64)pRegs->u64Arg0;
         size_t cb = 0;
@@ -4884,7 +5093,7 @@ protonrt_service(struct gj_linux_regs *pRegs, void *pCtx)
     }
 
     case LINUX_NR_delete_module: {
-        /* delete_module(const char *name, int flags) — soft exit_call if loaded */
+        /* delete_module(const char *name, int flags) - soft exit_call if loaded */
         char szName[GJ_SOFT_MODULE_NAME_MAX];
         i64 i64R;
 
@@ -4919,15 +5128,29 @@ protonrt_service(struct gj_linux_regs *pRegs, void *pCtx)
 void
 gj_protonrt_attach_cold(void)
 {
+    /*
+     * cold_ipc attach: ProtonRT/Linux personality service for cold NRs.
+     * Residual lean reach path for userspace drivers (UDX/DDI hosts).
+     * Soft!=product. G-AC-1: not in-kernel .ko product AC.
+     * greppable: protonrt: soft cold_ipc attach
+     */
     cold_ipc_set_service(protonrt_service, NULL);
     cold_ipc_set_doors_mode(1);
     cold_ipc_set_personality_attached(1);
     protonrt_soft_inc(&g_u64PrtSoftAttach);
+    kprintf("protonrt: soft cold_ipc attach service=protonrt_service "
+            "userspace_drivers=reach g_ac_1=1 Soft!=product\n");
     /*
      * Soft multi-server confine deepen probe (expose / ledger / death).
      * Product multi-server confine stays OPEN. Preserves confine soft PASS.
      */
     confine_soft_selfprobe();
-    /* Wave 15 soft inventory baseline after cold attach. */
+    /* Soft inventory baseline after cold attach (bring-up diagnostics). */
     protonrt_soft_inventory_log();
+    /*
+     * Lean soft residual once-lamp (storm=0; no version stamp).
+     * Soft!=product dual MIT OR Apache-2.0 - not multi-server / bar3 close.
+     * greppable: protonrt: soft residual lean | cold_link: soft residual lean
+     */
+    protonrt_soft_residual_lean_once();
 }

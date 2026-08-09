@@ -2,7 +2,7 @@
  * SPDX-License-Identifier: MIT OR Apache-2.0
  * Copyright (c) 2026 Project GreenJade contributors
  *
- * Virtual memory manager — 4K map/unmap/protect on top of boot identity,
+ * Virtual memory manager - 4K map/unmap/protect on top of boot identity,
  * per-process CR3 (G-AS-*), HHDM (P-MEM-5), COW fork leaves, device UC.
  *
  * Pure C11 freestanding. Dual license: MIT OR Apache-2.0.
@@ -24,28 +24,28 @@
  * Geometry (see gj/config.h)
  * --------------------------
  *   GJ_PAGE_SIZE          4 KiB leaves (map/unmap unit)
- *   GJ_HHDM_BASE          phys 0 → higher-half direct map
+ *   GJ_HHDM_BASE          phys 0 -> higher-half direct map
  *   GJ_DEVICE_MMIO_BASE   UC window: VA = BASE + PA (first 512 GiB PA)
  *   Boot identity         low PA==VA until HHDM / private AS
  *
  * Layering
  * --------
- *   pmm / pmm_core   — physical frames
- *   vmm (this)       — page tables, AS create/clone/destroy, COW, HHDM
- *   memobj           — object + region views; calls vmm_map_page
- *   fault            — pager cookie path; may call COW / map later
- *   smep             — clear U on kernel maps; enable CR4.SMEP/SMAP
- *   user_access      — range + present/U/(W|COW) before copy
+ *   pmm / pmm_core   - physical frames
+ *   vmm (this)       - page tables, AS create/clone/destroy, COW, HHDM
+ *   memobj           - object + region views; calls vmm_map_page
+ *   fault            - pager cookie path; may call COW / map later
+ *   smep             - clear U on kernel maps; enable CR4.SMEP/SMAP
+ *   user_access      - range + present/U/(W|COW) before copy
  *
  * Soft product surface
  * --------------------
- *   VMM_HHDM           — 2 MiB HHDM of [0, paMax); unlocks pmm_release_high
- *   VMM_AS_CREATE      — private PML4; kernel half shared (G-AS-1/2)
- *   VMM_AS_DESTROY     — free user tables + private leaves; not boot AS
- *   VMM_COW            — share RO+COW; break on write fault
- *   VMM_MAP_DEVICE_UC  — high UC BAR window for T1 soft CAP
- *   VMM_MAP_USER_DEVICE — user-AS UC MMIO (UDX ioremap product path)
- *   VMM_ENSURE_ID_RW   — repair RO identity leaves before BSS stores
+ *   VMM_HHDM           - 2 MiB HHDM of [0, paMax); unlocks pmm_release_high
+ *   VMM_AS_CREATE      - private PML4; kernel half shared (G-AS-1/2)
+ *   VMM_AS_DESTROY     - free user tables + private leaves; not boot AS
+ *   VMM_COW            - share RO+COW; break on write fault
+ *   VMM_MAP_DEVICE_UC  - high UC BAR window for T1 soft CAP
+ *   VMM_MAP_USER_DEVICE - user-AS UC MMIO (UDX ioremap product path)
+ *   VMM_ENSURE_ID_RW   - repair RO identity leaves before BSS stores
  *
  * Active-CR3 rule (normative for map/unmap/protect/translate)
  * -----------------------------------------------------------
@@ -57,17 +57,31 @@
  * Greppable serial markers (kernel/mm/vmm.c)
  * ------------------------------------------
  *   vmm: HHDM base=
- *   vmm: as_create cr3= … live= total= PASS
- *   vmm: as_destroy leaf= … priv= cow_drop= tables= … PASS
- *   vmm: COW break … free_old|PASS  (also live=/frees=)
- *   vmm: as_clone_user … cow= rocopy= cow_live=
- *   vmm: map_device_uc … pages= soft PASS
- *   vmm: soft user mmio map PASS   — first user-AS device MMIO map
- *   vmm: ensure_identity_rw … fixed= dual= soft PASS
+ *   vmm: as_create cr3= ... live= total= PASS
+ *   vmm: as_destroy leaf= ... priv= cow_drop= tables= ... PASS
+ *   vmm: COW break ... free_old|PASS  (also live=/frees=)
+ *   vmm: as_clone_user ... cow= rocopy= cow_live=
+ *   vmm: map_device_uc ... pages= soft PASS
+ *   vmm: soft user mmio map PASS   - first user-AS device MMIO map
+ *   vmm: ensure_identity_rw ... fixed= dual= soft PASS
+ *
+ * Lean residual - device UC for UDX MMIO / DDI MAP_BAR (Soft!=product dual MIT OR Apache-2.0)
+ * ------------------------------------------------------------------------------------------
+ * Once-only soft residual (path or inventory; never hard-gates; G-AC-1):
+ *   vmm: soft residual user_dma    - device/user map tallies
+ *   vmm: soft residual device_uc   - UC maps used by UDX MMIO / MAP_BAR
+ *   vmm: soft residual map_bar     - DDI MAP_BAR product-path prefer user-AS UC
+ *   vmm: soft residual lean        - lean UC + identity honesty
+ * Soft residual != product UDX datapath closed; mmio_frame_cap remains OPEN.
+ * DDI MAP_BAR prefers vmm_map_user_device (user-AS UC); kernel map_device_uc
+ * is fallback only. Soft grant note != product MMIO_FRAME CNode mint.
  *
  * greppable: VMM_HHDM VMM_AS_CREATE VMM_AS_DESTROY VMM_COW G-AS
  * greppable: VMM_MAP_DEVICE_UC VMM_MAP_USER_DEVICE VMM_ENSURE_ID_RW
  * greppable: P-MEM-5 G-MAP "vmm: soft user mmio map PASS"
+ * greppable: "vmm: soft residual device_uc" "vmm: soft residual map_bar"
+ * greppable: "vmm: soft residual lean" "vmm: soft residual user_dma"
+ * greppable: Soft!=product G-AC-1 dual MIT OR Apache-2.0
  */
 #pragma once
 
@@ -80,7 +94,7 @@ struct gj_process;
 /*
  * Software-facing mask passed to map/protect/mmap. Implementation folds these
  * into arch PTE bits (R/W, NX, U/S). Product user maps must include
- * GJ_VMM_PROT_USER (memobj forces this — G-MAP-2). W|X without CapJit is a
+ * GJ_VMM_PROT_USER (memobj forces this - G-MAP-2). W|X without CapJit is a
  * higher-layer policy (P-MEM-6 / personality); VMM may still install bits.
  */
 #define GJ_VMM_PROT_READ  (1u << 0)
@@ -113,7 +127,7 @@ void vmm_init(void);
 gj_status_t vmm_hhdm_init(u64 paMax);
 
 /**
- * Phys → kernel VA: HHDM if ready, else identity for low mem.
+ * Phys -> kernel VA: HHDM if ready, else identity for low mem.
  * Not for device MMIO outside RAM (use vmm_map_device / map_device_uc).
  */
 gj_vaddr_t hhdm_to_virt(gj_paddr_t pa);
@@ -152,7 +166,7 @@ gj_status_t vmm_as_destroy(u64 u64Cr3);
  *
  * Skips kernel-shared table subtrees and identity (PA==VA) leftovers.
  * Prefer true COW (RO + software COW bit) when writable; RO copy otherwise.
- * Caps copies at u32Max (0 → default 256). Writes count to *pCopied if set.
+ * Caps copies at u32Max (0 -> default 256). Writes count to *pCopied if set.
  *
  * Logs cow= vs rocopy= share counts and cow_live=.
  * Returns GJ_OK or GJ_ERR_* (NOMEM when frames/tables exhaust).
@@ -174,7 +188,7 @@ gj_status_t vmm_cow_break_page(gj_vaddr_t va);
 u64 vmm_kernel_cr3(void);
 
 /**
- * Map one 4K page under *active* CR3: VA → PA with u32Prot.
+ * Map one 4K page under *active* CR3: VA -> PA with u32Prot.
  * May split boot 2 MiB leaves as needed. TLB maintenance is caller/impl.
  * Returns GJ_OK or GJ_ERR_*.
  */
@@ -182,7 +196,7 @@ gj_status_t vmm_map_page(gj_vaddr_t va, gj_paddr_t pa, u32 u32Prot);
 
 /**
  * Unmap one 4K VA under *active* CR3 (clear present; may free intermediate
- * empties soft). Does not free the physical frame — owner (memobj/PMM) does.
+ * empties soft). Does not free the physical frame - owner (memobj/PMM) does.
  */
 gj_status_t vmm_unmap_page(gj_vaddr_t va);
 
@@ -200,7 +214,7 @@ gj_status_t vmm_protect_page(gj_vaddr_t va, u32 u32Prot);
 void vmm_tlb_flush_page(gj_vaddr_t va);
 
 /**
- * Translate VA → PA under *active* CR3; 0 if not present or walk fails.
+ * Translate VA -> PA under *active* CR3; 0 if not present or walk fails.
  * Large-page walks return the containing frame PA + offset soft as page PA.
  */
 gj_paddr_t vmm_virt_to_phys(gj_vaddr_t va);
@@ -240,7 +254,7 @@ u64 vmm_read_pte(gj_vaddr_t va);
  * Repairs both the kernel template CR3 and the active CR3 when they differ
  * (private AS may have left identity leaves RO via COW share).
  * Use before kernel BSS/image stores that must not #PF on RO leaves.
- * Soft-path greppable: `vmm: ensure_identity_rw … soft PASS` (always).
+ * Soft-path greppable: `vmm: ensure_identity_rw ... soft PASS` (always).
  */
 gj_status_t vmm_ensure_identity_rw(gj_vaddr_t va, size_t cb);
 
@@ -256,32 +270,39 @@ gj_status_t vmm_map_device(gj_paddr_t pa, u64 cb);
 /**
  * Map device MMIO into the dedicated high UC window (GJ_DEVICE_MMIO_BASE+PA).
  *
- * Safe for T1 soft CAP when BAR is in low physical space. Writes *pVaOut
- * (required non-NULL). Soft-path greppable: `vmm: map_device_uc … soft PASS`
+ * Safe for T1 soft CAP when BAR is in low physical space. Also MAP_BAR
+ * fallback when user-AS map is unavailable. Writes *pVaOut (required
+ * non-NULL). Soft-path greppable: `vmm: map_device_uc ... soft PASS`
  * (or soft reject). Span limited by GJ_DEVICE_MMIO_SPAN (config).
+ * Residual lean: contributes to `vmm: soft residual device_uc` (Soft!=product).
  */
 gj_status_t vmm_map_device_uc(gj_paddr_t pa, u64 cb, gj_vaddr_t *pVaOut);
 
 /**
  * Map physical MMIO pages into a user process address space (driver hosts).
  *
- * Product path for UDX ioremap under GJ: install 4 KiB USER + UC (PCD|PWT)
- * leaves under the process private CR3 so a userspace driver host can access
- * BAR/MMIO without kernel identity maps. Kernel-half map_device_uc remains
- * the soft CAP probe path; this is the process-local grant install helper.
+ * Preferred DDI MAP_BAR / UDX ioremap install under GJ: install 4 KiB
+ * USER + UC (PCD|PWT) leaves under the process private CR3 so a userspace
+ * driver host can access BAR/MMIO without kernel identity maps. Kernel-half
+ * map_device_uc remains the soft CAP / MAP_BAR fallback when no process is
+ * current; this is the process-local grant install helper (G-AC-1: userspace
+ * UDX, not Linux .ko product AC). Soft grant note != product MMIO_FRAME mint.
  *
  * Preconditions / policy:
  *   - pProc non-NULL; ensures private AS (process_as_ensure) and activates it
  *   - u64UserVa and pa page-aligned; cb > 0 (rounded up to pages)
  *   - VA span entirely in [GJ_USER_VA_BASE, GJ_USER_VA_END) (G-MAP-2 band)
  *   - PA span must not overlap kernel image/BSS phys (identity link range)
- *   - Always forces GJ_VMM_PROT_USER; always NX (no W|X — EXEC stripped)
+ *   - Always forces GJ_VMM_PROT_USER; always NX (no W|X - EXEC stripped)
  *   - Leaf PTE gets PCD|PWT UC attributes (same pattern as map_device_uc)
  *   - u32Prot may request READ and/or WRITE; empty rights default to READ
  *
- * Does not allocate frames (PA is device/MMIO). Does not free on unmap —
+ * Does not allocate frames (PA is device/MMIO). Does not free on unmap -
  * caller unmaps via vmm_unmap_page / process teardown. Soft greppable once:
  *   `vmm: soft user mmio map PASS`
+ * Residual (once; Soft!=product dual MIT OR Apache-2.0; no stamp storms):
+ *   `vmm: soft residual map_bar` / `device_uc` / `user_dma` / `lean`
+ * Product: mmio_frame_cap=OPEN; DDI MAP_BAR soft path only (not CNode mint).
  *
  * Returns GJ_OK, or GJ_ERR_INVAL / GJ_ERR_PERM / GJ_ERR_NOMEM.
  */

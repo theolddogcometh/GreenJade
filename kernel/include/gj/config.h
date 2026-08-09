@@ -3,19 +3,67 @@
  * Copyright (c) 2026 Project GreenJade contributors
  *
  * Compile-time product knobs (IMPLEMENTATION §15 / P-MEM / P-SMP).
- * Pure C11 freestanding — macros only (no runtime state).
+ * Pure C11 freestanding - macros only (no runtime state).
  *
  * greppable: GJ_CONFIG_PRODUCT GJ_PAGE_SIZE GJ_MAX_CPUS GJ_CPU_STATIC_MAX
  * greppable: GJ_HHDM_BASE GJ_DEVICE_MMIO GJ_SPIN_CONFIG GJ_CACHELINE
  *
- * Soft stamp (Wave 14 exclusive — header comment only):
+ * Assurance lite (docs/ASSURANCE_LITE.md - process honesty, not DO-178C):
+ *   GJ_IMAGE_VERSION is the deliverable object-code identity (test what you fly).
+ *   Soft!=product · G-AC-1 · Dual DoD open until host L3 proof on stamped media.
+ * greppable: assurance: lite | test what you fly | Soft!=product | G-AC-1
+ *
+ * Soft stamp (Wave 14 exclusive - header comment only):
  *   Compile-time geometry / SMP / klog knobs. Not a soft inventory helper
  *   (no runtime tallies). Does not light product lamps, close multi-server
- *   product,. Continuum high-water toward 15600 is
+ *   product. Continuum high-water toward 15600 is
  *   documented in companion scripts/docs (CREATE-ONLY soft graph only).
  * greppable: GJ_CONFIG_SOFT_STAMP_WAVE14
  */
 #pragma once
+
+/* ------------------------------------------------------------------ */
+/* Image identity (STATUS static title + boot log)                     */
+/* ------------------------------------------------------------------ */
+
+/*
+ * Bump when shipping a new flashable image so operators can confirm the
+ * DUT is running the expected build (STATUS title: "STATUS (static) v...").
+ * Format: YYYY.MM.DD.N - date of the image cut, N = same-day build counter.
+ *
+ * Assurance (C1 Dual DoD): host probes must target this stamp after flash
+ * (L3 object code). Tree residual after pack is not media until re-image.
+ * greppable: GJ_IMAGE_VERSION | test what you fly
+ */
+#ifndef GJ_IMAGE_VERSION
+/* Fly cut: UDX L2 bridge Own handoff + ETH_INJECT/TX_PULL for Dual DoD B. */
+#define GJ_IMAGE_VERSION  "2026.08.04.93"
+#endif
+
+/*
+ * Freestanding xHCI MSC BOT probe (lab G752 a12f).
+ * Default 0: SKIP freestanding USB class driver (not product). Soft USB /
+ * Linux-shaped userspace UDX path is product direction (G-AC-1).
+ * Set to 1 only for targeted freestanding MSC residual experiments.
+ * greppable: GJ_XHCI_MSC_PROBE Soft!=product freestanding USB SKIP
+ */
+#ifndef GJ_XHCI_MSC_PROBE
+#define GJ_XHCI_MSC_PROBE  0
+#endif
+
+/*
+ * Freestanding in-kernel rtl8168 probe (G752 10ec:8168).
+ * Default 0: SKIP freestanding NIC class driver - same product policy as
+ * freestanding USB (GJ_XHCI_MSC_PROBE=0). Operator 2026-08: stop freestanding
+ * rtl rabbit hole; product net = virtio T0 + Linux-shaped userspace UDX/DDI
+ * over hot+cold ABI (not in-kernel r8169.ko; G-AC-1). Soft r8169 load/ksym
+ * eng residual remains separate (GJ_SOFT_R8169_LOAD).
+ * Set to 1 only for deliberate freestanding rtl residual experiments.
+ * greppable: GJ_RTL8168_PROBE Soft!=product freestanding rtl SKIP
+ */
+#ifndef GJ_RTL8168_PROBE
+#define GJ_RTL8168_PROBE  0
+#endif
 
 /* ------------------------------------------------------------------ */
 /* Memory geometry                                                     */
@@ -107,10 +155,10 @@
 #endif
 
 /*
- * Soft freestanding→r8169 MMIO ownership handoff (lab only).
- * Default 0: freestanding rtl8168 keeps BAR/rings (current working path).
- * Set 1 only for deliberate G752 handoff experiments — can drop net until
- * soft open is proven. Soft≠product; G-AC-1; see docs/R8169_MMIO_HANDOFF.md.
+ * Soft MMIO ownership handoff experiments (lab only; rarely used).
+ * Default 0. Freestanding rtl is SKIP by default (GJ_RTL8168_PROBE=0);
+ * product path is userspace UDX, not freestanding->.ko handoff.
+ * Soft!=product; G-AC-1; see docs/R8169_MMIO_HANDOFF.md.
  * greppable: GJ_SOFT_R8169_MMIO_HANDOFF
  */
 #ifndef GJ_SOFT_R8169_MMIO_HANDOFF
@@ -118,12 +166,11 @@
 #endif
 
 /*
- * Soft boot load of embedded/media r8169.ko (lab only).
- * Default 1: load + init_module after freestanding net_l2 (hybrid 4a).
- * Soft ksyms no-op real CF8/iomap for 10ec:8168 while rtl8168_ready().
- * Set 0 to skip soft r8169 entirely (freestanding-only net prove). Soft≠product.
- * greppable: GJ_SOFT_R8169_LOAD
- * See docs/R8169_MMIO_HANDOFF.md · docs/LINUX_MODULE_PATH.md.
+ * Soft boot load of embedded/media r8169.ko (lab/eng only).
+ * Default 1: soft load + ksym residual (RUN_INIT=0 / freestanding_no_exec).
+ * Not product wire owner (G-AC-1). Product NIC = userspace UDX + ABI.
+ * Soft!=product. greppable: GJ_SOFT_R8169_LOAD
+ * See docs/R8169_MMIO_HANDOFF.md · docs/LINUX_MODULE_PATH.md · docs/ABI_FIRST_PIVOT.md.
  */
 #ifndef GJ_SOFT_R8169_LOAD
 #define GJ_SOFT_R8169_LOAD  1
@@ -132,7 +179,7 @@
 /*
  * Phase-3 Option B: call .ko ndo_open after sole-owner (RISKY lab only).
  * Default 0: phase-3 try_open does soft open only (carrier/queue; no .ko).
- * Requires GJ_SOFT_R8169_MMIO_HANDOFF=1 as well. Soft≠product; G-AC-1.
+ * Requires GJ_SOFT_R8169_MMIO_HANDOFF=1 as well. Soft!=product; G-AC-1.
  * greppable: GJ_SOFT_R8169_KO_NDO_OPEN
  * See docs/R8169_MMIO_HANDOFF.md phase 3 Option B.
  */
@@ -142,10 +189,10 @@
 
 /*
  * Soft-originated L2 TX smoke at bridge enable (lab only).
- * Default 0: API + ksym only — never auto-inject frames on live NIC.
+ * Default 0: API + ksym only - never auto-inject frames on live NIC.
  * Set 1 only for deliberate reverse-path smoke (builds a soft skb and
- * calls linux_netdev_soft_l2_tx_from_skb once). Soft≠product; G752 has
- * real wire — do not ship default 1.
+ * calls linux_netdev_soft_l2_tx_from_skb once). Soft!=product; G752 has
+ * real wire - do not ship default 1.
  * greppable: GJ_SOFT_L2_TX_SMOKE
  */
 #ifndef GJ_SOFT_L2_TX_SMOKE

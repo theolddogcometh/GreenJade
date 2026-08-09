@@ -10,11 +10,11 @@
  *   - FLOCK_CONFLICT_SPLIT: partial UNLCK/SETLK carves own ranges; leaves
  *     non-overlapped remnants; adjacent same-type coalesce
  *   - FLOCK_SOFT_MULTI_WAITER: register waiters, thread_block/wake, gen bump
- *   - Soft deadlock: short cycle over waiter table → -GJ_FLOCK_EDEADLK
+ *   - Soft deadlock: short cycle over waiter table -> -GJ_FLOCK_EDEADLK
  *   - GETLK: lowest-start conflict; write preferred on equal start
  *   - Overflow-safe range ends; len 0 = to EOF (exclusive end sentinel)
  *
- * Capacity (file_lock.c — soft product limits, not wire ABI):
+ * Capacity (file_lock.c - soft product limits, not wire ABI):
  *   GJ_FLOCK_MAX=32 active ranges; GJ_FLOCK_MAX_WAITERS=8
  *   Soft multi-wake budget per unlock/release (bounded, not a hard queue)
  *
@@ -60,7 +60,7 @@ void file_lock_init(void);
  * F_SETLK-shaped: apply or unlock.
  * Returns 0, -LINUX_EAGAIN (nonblock conflict), -LINUX_ENOLCK (table full),
  * -LINUX_EBADF / -LINUX_EINVAL, -GJ_FLOCK_EDEADLK (soft wait cycle).
- * fBlock: non-zero → soft multi-waiter block until free (F_SETLKW).
+ * fBlock: non-zero -> soft multi-waiter block until free (F_SETLKW).
  * Partial UNLCK/SETLK carves own ranges (split remnants; FLOCK_CONFLICT_SPLIT).
  * Same-pid overlapping SET replaces/carves; cross-pid write conflicts block
  * or EAGAIN. Successful SET/unlock bumps wake_gen for waiters.

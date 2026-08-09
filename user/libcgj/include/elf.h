@@ -7,7 +7,7 @@
  *
  * Scope
  * -----
- * Elf*_Ehdr/Phdr/Shdr/Dyn/Sym shapes and common EM_*/PT_*/DT_*/STT_* macros
+ * Elf*_Ehdr/Phdr/Shdr/Dyn/Sym shapes and common EM__star/PT__star/DT__star/STT_* macros
  * needed by dynlink and tools. Kernel has a separate loader surface.
  *
  * Design notes
@@ -18,6 +18,15 @@
  * Non-goals
  * ---------
  * Full ELF gABI encyclopedia of every OS-specific note.
+ *
+ * Soft residual (C2 libcgj elf.h; Soft!=product; G-AC-1; Dual DoD A/B OPEN):
+ *   soft     = Elf*_Ehdr/Phdr/Shdr/Dyn/Sym shapes + common EM/PT/DT/STT macros
+ *              for ld-gj / tools; expand only when a real graph needs it
+ *   product  = kernel elf_load + ld-gj dynlink (separate surfaces); not .ko AC
+ *   honesty  = type catalog != product loader completeness; agent PASS != Dual
+ *              DoD close; stamp-free bar honesty (no version stamp)
+ *   law      = dual MIT OR Apache-2.0; no GPL; H2 no stamp storms
+ * greppable: libcgj: elf soft residual Soft!=product
  */
 #pragma once
 

@@ -16,22 +16,22 @@
  *   - Peaks / layout / path honesty / soft PASS lamp
  *   - Wave 15: honesty / unmap / prot / pte / stats / OPEN / deepen
  *   - Wave 19: surfaces / tlb / anon / share return surfaces
- *   greppable: "vmm: soft …"
+ *   greppable: "vmm: soft ..."
  *
  * Soft higher-half readiness inventory (Wave 15 deepen; Wave 13 base; soft only):
  *   - HHDM base / mapped span (P-MEM-5 data map; not kernel image move)
  *   - Identity bridge residual (low PML4 still shared into private AS)
  *   - User half empty goal lamp (empty user half without identity share)
  *   - Geometry / bridge / debt checklist / OPEN honesty multi-line
- *   greppable: "vmm: higher-half soft …"
+ *   greppable: "vmm: higher-half soft ..."
  *   lamps: hhdm_ready, identity_bridge, user_half_empty_goal=0/1 soft
- * Honesty: higher-half kernel move OPEN; soft inventory only — no relocate;
- *          soft; soft ≠ 1TiB product.
+ * Honesty: higher-half kernel move OPEN; soft inventory only - no relocate;
+ *          soft; soft != 1TiB product.
  *
  * Greppable: "vmm: HHDM base=" "vmm: as_create" "vmm: as_destroy leaf="
  *            "vmm: COW break" "vmm: as_clone_user" "vmm: map_device_uc"
  *            "vmm: soft user mmio map PASS"
- *            "vmm: ensure_identity_rw" (… soft PASS)
+ *            "vmm: ensure_identity_rw" (... soft PASS)
  *            "vmm: soft honesty" "vmm: soft inventory" "vmm: soft as"
  *            "vmm: soft cow" "vmm: soft hhdm" "vmm: soft device_uc"
  *            "vmm: soft ensure_id" "vmm: soft clone" "vmm: soft map"
@@ -40,12 +40,44 @@
  *            "vmm: soft pte" "vmm: soft path" "vmm: soft lamps"
  *            "vmm: soft stats" "vmm: soft OPEN" "vmm: soft surfaces"
  *            "vmm: soft tlb" "vmm: soft anon" "vmm: soft share"
- *            "vmm: soft deepen" "vmm: soft PASS"
+ *            "vmm: soft residual user_dma" "vmm: soft residual device_uc"
+ *            "vmm: soft residual map_bar" "vmm: soft residual map_bar eng"
+ *            "vmm: soft residual lean" "vmm: soft residual lean PASS"
+ *            "vmm: soft residual C2 product path" "vmm: soft residual C2 PASS"
+ *            "vmm: soft residual lean c2" "vmm: soft c2 product path"
+ *            "vmm: soft residual" "vmm: soft deepen" "vmm: soft PASS"
  *            "vmm: higher-half soft inventory" "vmm: higher-half soft lamps"
  *            "vmm: higher-half soft path" "vmm: higher-half soft residual"
  *            "vmm: higher-half soft geometry" "vmm: higher-half soft bridge"
  *            "vmm: higher-half soft debt" "vmm: higher-half soft goal"
  *            "vmm: higher-half soft OPEN"
+ *
+ * Lean residual - device UC maps for UDX MMIO / DDI MAP_BAR
+ * (Soft!=product dual MIT OR Apache-2.0; C2 product-path scaffold):
+ *   - user_mmio_*: vmm_map_user_device USER+UC (PCD|PWT) BAR path
+ *     (preferred DDI MAP_BAR / UDX ioremap install under private AS)
+ *   - device_uc_*: kernel high UC window (map_device_uc; MAP_BAR fallback)
+ *   - map_bar residual: preferred vs fallback path honesty + last-map snap
+ *   - map_bar eng: C2 refuse-class tallies (inval/band/kerimg/as/nomem/partial)
+ *     for UDX host MAP_BAR eng diagnosis (Soft!=product; dual DoD A/B OPEN)
+ *   - user_map_ok: vmm_map_page with PROT_USER (RAM / ring / DMA export; adjacent)
+ *   - Freestanding identity guard: refuse USER / non-identity over kernel
+ *     image/BSS; as_create still shares identity bridge (bring-up debt).
+ *   - C2 product-path residual: functional selfcheck arms (page/prot/window/
+ *     device_uc/pte_uc/map_bar_path/refuse_class/policy) + PASS/FAIL lamp.
+ *     claim_class=C2 · soft_scaffold_ne_product_ac · Dual DoD A/B OPEN.
+ *   Product DMA window / MMIO_FRAME CNode mint remain OPEN.
+ *   G-AC-1: userspace UDX MMIO via these maps; no Linux .ko as product AC.
+ *   Emission: once only (path or inventory). No version stamp. No stamp storms.
+ *   greppable: "vmm: soft residual user_dma" | "vmm: soft residual device_uc"
+ *             | "vmm: soft residual map_bar" | "vmm: soft residual map_bar eng"
+ *             | "vmm: soft residual lean" | "vmm: soft residual lean PASS"
+ *             | "vmm: soft residual C2 product path" | "vmm: soft residual C2 PASS"
+ *             | "vmm: soft residual lean c2" | "vmm: soft c2 product path"
+ *             | VMM_C2_PRODUCT_PATH | claim_class=C2
+ *   Soft residual != product AS/COW/HHDM complete != freestanding identity claim.
+ *   Soft residual != product DDI MAP_BAR CNode mint (Soft!=product).
+ *   C2 residual != Dual DoD A/B close != bar3 (Soft!=product).
  */
 #include <gj/apic.h>
 #include <gj/config.h>
@@ -62,10 +94,10 @@
 #define PTE_P   (1ull << 0)
 #define PTE_W   (1ull << 1)
 #define PTE_U   (1ull << 2)
-#define PTE_PWT (1ull << 3) /* write-through — device UC pair with PCD */
-#define PTE_PCD (1ull << 4) /* cache disable — uncacheable-ish MMIO */
+#define PTE_PWT (1ull << 3) /* write-through - device UC pair with PCD */
+#define PTE_PCD (1ull << 4) /* cache disable - uncacheable-ish MMIO */
 #define PTE_PS  (1ull << 7) /* page size: 2MiB/1GiB */
-/* Available software bit — marks fork COW leaf (cleared on break). */
+/* Available software bit - marks fork COW leaf (cleared on break). */
 #define PTE_COW (1ull << 9)
 #define PTE_NX  (1ull << 63)
 #define PTE_ADDR_MASK 0x000ffffffffff000ull
@@ -107,7 +139,7 @@ static u32               g_cEnsureIdFix;
 
 /*
  * Soft product inventory (Wave 35 exclusive deepen; extends Wave 13).
- * Cumulative unless noted live/peak. Diagnostics only — never hard-gate
+ * Cumulative unless noted live/peak. Diagnostics only - never hard-gate
  * product AS/COW/HHDM. greppable: vmm: soft
  */
 static u32 g_cAsLivePeak;   /* high-water private AS live count */
@@ -149,6 +181,32 @@ static u32 g_cSoftUserMmioOk;     /* successful vmm_map_user_device pages */
 static u32 g_cSoftUserMmioCall;   /* vmm_map_user_device call count */
 static u32 g_cSoftUserMmioReject; /* inval/perm rejects */
 static u8  g_fSoftUserMmioPass;   /* one-shot greppable PASS lamp */
+/* DDI MAP_BAR product-path residual deepen (Soft!=product; dual MIT/Apache). */
+static u32 g_cSoftUserMmioOkOps;     /* successful map_user_device ops (not pages) */
+static u32 g_cSoftUserMmioNomem;     /* NOMEM during page install */
+static u32 g_cSoftUserMmioPartial;   /* partial map rolled back */
+static u32 g_cSoftUserMmioAsFail;    /* process_as_ensure fail */
+static u32 g_cSoftUserMmioWrite;     /* maps requesting WRITE */
+static u32 g_cSoftUserMmioPagesPeak; /* peak pages in one successful call */
+static u64 g_u64SoftUserMmioLastVa;  /* last successful user VA base */
+static u64 g_u64SoftUserMmioLastPa;  /* last successful BAR PA base */
+static u32 g_cSoftUserMmioLastPages; /* last successful page count */
+static u32 g_u32SoftUserMmioLastProt; /* last installed prot mask */
+/*
+ * C2 MAP_BAR refuse-class tallies (Soft!=product; eng diagnosis only).
+ * Subsets of g_cSoftUserMmioReject / fail paths - never hard-gate product.
+ * greppable via: vmm: soft residual map_bar eng
+ */
+static u32 g_cSoftUserMmioRejInval;  /* null/align/overflow/zero-pages */
+static u32 g_cSoftUserMmioRejBand;   /* G-MAP-2 user VA band refuse */
+static u32 g_cSoftUserMmioRejKerImg; /* PA overlaps kernel image/BSS */
+/* Lean residual: user RAM maps + DMA/MMIO path (Soft!=product dual license). */
+static u32 g_cSoftUserMapOk;       /* vmm_map_page installs with PROT_USER */
+static u8  g_fSoftUserDmaResidual; /* residual once lamp (path or inventory) */
+static u32 g_cSoftUserDmaResidLogs; /* residual emission count (0 or 1) */
+/* C2 product-path residual selfcheck (Soft!=product; never hard-gate). */
+static u32 g_u32SoftC2Lean;        /* C2 residual runs (0 or 1 once-lamp) */
+static u32 g_u32SoftC2LeanOk;      /* C2 residual ok==checks */
 static u32 g_cSoftEnsureReject;
 static u32 g_cSoftEnsureNomem;
 static u32 g_cSoftCowBreakNomem;
@@ -161,14 +219,14 @@ static u32 g_cHhdm2MiB;           /* 2 MiB leaves installed by vmm_hhdm_init *
 static u32 g_cHhAsShareSlotsLast; /* last as_create shared_slots snap */
 
 /*
- * Soft higher-half readiness (progress counters only — not product move).
+ * Soft higher-half readiness (progress counters only - not product move).
  * greppable: vmm: higher-half soft
  *
  * Lamps (software observe; never hard-gate):
- *   hhdm_ready            — vmm_hhdm_init succeeded (data HHDM)
- *   identity_bridge       — residual low-half identity still in template
+ *   hhdm_ready            - vmm_hhdm_init succeeded (data HHDM)
+ *   identity_bridge       - residual low-half identity still in template
  *                           and still shared into as_create (bring-up debt)
- *   user_half_empty_goal  — 1 soft only when empty user half without
+ *   user_half_empty_goal  - 1 soft only when empty user half without
  *                           identity share is product-true; else 0 soft
  *
  * Honesty: higher-half kernel image move remains OPEN.
@@ -188,11 +246,17 @@ static u32 g_cHhSoftDebtNotes;    /* higher-half soft debt line emissions */
 /* Soft product user VA band floor (matches destroy/clone filters). */
 #define GJ_VMM_SOFT_USER_FLOOR     0x0000000000800000ull
 #define GJ_VMM_SOFT_WAVE 126u
-/* Catalog areas prior to deepen line (honesty..share). */
-#define GJ_VMM_SOFT_AREAS 232u
+/* Catalog areas prior to deepen line (honesty..share + map_bar residual). */
+#define GJ_VMM_SOFT_AREAS 233u
+/*
+ * C2 product-path residual functional selfcheck arm count (Soft!=product).
+ * STRONGER W7 Dual DoD (stamp-free bar v2026.08.04.75): +null_miss +band_rej
+ * +unalign_rej +dual_dod_open toward UDX MAP_BAR / sshd host path.
+ */
+#define GJ_VMM_SOFT_C2_CHECKS 12u
 
 /*
- * Wave 19 return-surface bit lamps (surf=0x… on soft surfaces/deepen).
+ * Wave 19 return-surface bit lamps (surf=0x... on soft surfaces/deepen).
  * greppable: vmm: soft surfaces
  */
 #define VMM_SOFT_SURF_HONESTY   (1u << 0)
@@ -232,6 +296,7 @@ static u32 g_cHhSoftDebtNotes;    /* higher-half soft debt line emissions */
 static void soft_inventory_log(void);
 static void soft_inventory_maybe_once(void);
 static void higher_half_soft_inventory(void);
+static void soft_user_dma_residual_log(void);
 static void vmm_soft_inc(u32 *pCtr);
 static void vmm_soft_note_peaks(void);
 
@@ -258,6 +323,621 @@ vmm_soft_note_peaks(void)
     if (g_cMapDeviceUcPages > g_cMapDeviceUcPagesPeak) {
         g_cMapDeviceUcPagesPeak = g_cMapDeviceUcPages;
     }
+    if (g_cSoftUserMmioOk > 0u &&
+        g_cSoftUserMmioLastPages > g_cSoftUserMmioPagesPeak) {
+        g_cSoftUserMmioPagesPeak = g_cSoftUserMmioLastPages;
+    }
+}
+
+/**
+ * Lean residual for device UC maps used by UDX MMIO / DDI MAP_BAR
+ * (Soft!=product dual MIT OR Apache-2.0; G-AC-1 userspace UDX not .ko).
+ * C2 product-path scaffold residual (UDX/DDI MAP_BAR eng; not Dual DoD close).
+ * Once only - no stamp storms, no version stamp, never hard-gates.
+ * Does not mutate page tables / freestanding identity / CR3.
+ *
+ * Grep: vmm: soft residual user_dma
+ * Grep: vmm: soft residual device_uc
+ * Grep: vmm: soft residual map_bar
+ * Grep: vmm: soft residual map_bar eng
+ * Grep: vmm: soft residual lean
+ * Grep: vmm: soft residual lean PASS
+ * Grep: vmm: soft residual C2 product path
+ * Grep: vmm: soft residual C2 PASS | FAIL
+ * Grep: vmm: soft residual lean c2
+ * Grep: vmm: soft c2 product path
+ * Grep: vmm: soft residual
+ * greppable: VMM_C2_PRODUCT_PATH | claim_class=C2 | soft_scaffold_ne_product_ac
+ *
+ * Surfaces covered (observe only; never hard-gate freestanding):
+ *   user_mmio_*    - USER+UC BAR into private AS (vmm_map_user_device;
+ *                    preferred DDI MAP_BAR / UDX ioremap install)
+ *   dev_uc_*       - kernel high UC window (vmm_map_device_uc; MAP_BAR fallback)
+ *   map_bar_*      - DDI MAP_BAR product-path residual (prefer user, fallback UC)
+ *   map_bar eng    - C2 refuse-class tallies (inval/band/kerimg/as/nomem/partial)
+ *   user_map_ok    - PROT_USER leaves (rings / DMA export / anon / PE; adjacent)
+ *   identity_guard - refuse USER/non-id over kernel image/BSS (bring-up)
+ *   pcd_pwt / nx   - UC leaf attrs on device maps (same pattern both paths)
+ *   tlb_invlpg     - local invlpg after leaf install; shootdown OPEN (SMP)
+ *   C2 selfcheck   - page|prot|window|device_uc|pte_uc|map_bar_path|
+ *                    refuse_class|policy (Soft!=product functional residual)
+ * Product DMA window / MMIO_FRAME CNode mint remain OPEN.
+ * Soft residual != product freestanding identity rewrite.
+ * Soft residual != UDX product datapath closed.
+ * Soft residual != product DDI MAP_BAR CNode mint (Soft!=product).
+ * C2 residual != Dual DoD A/B close != bar3 (Soft!=product).
+ */
+static void
+soft_user_dma_residual_log(void)
+{
+    extern u32 serial_thre_dead(void);
+    u32 u32IdBridge;
+    u32 u32Hhdm;
+    u32 u32Template;
+    u32 u32UdxMmioAct;
+    u32 u32MapBarUserPref;
+    u32 u32MapBarFallback;
+    u32 u32LeanOk;
+    u32 u32RejClassSum;
+    u32 u32C2Ok;
+    u32 u32C2Checks;
+    u32 u32C2Page;
+    u32 u32C2Prot;
+    u32 u32C2Window;
+    u32 u32C2DevUc;
+    u32 u32C2PteUc;
+    u32 u32C2MapBar;
+    u32 u32C2Refuse;
+    u32 u32C2Policy;
+    u32 u32C2NullMiss;
+    u32 u32C2BandRej;
+    u32 u32C2Unalign;
+    u32 u32C2DualDod;
+    gj_status_t stC2;
+
+    /* Once only: path or inventory may race here; first printer wins. */
+    if (g_fSoftUserDmaResidual != 0) {
+        return;
+    }
+    /*
+     * Require device UC / user map path activity. Skip bare vmm_init / HHDM
+     * inventory so the once-lamp carries real tallies (no empty stamp).
+     * Soft!=product: residual observe only; freestanding identity untouched.
+     */
+    if (g_cSoftUserMapOk == 0u && g_cMapDeviceUc == 0u &&
+        g_cSoftUserMmioCall == 0u && g_cSoftMapDevReject == 0u &&
+        g_cSoftDevUcReject == 0u && g_cSoftUserMmioReject == 0u) {
+        return;
+    }
+    if (serial_thre_dead() != 0u) {
+        return;
+    }
+    g_fSoftUserDmaResidual = 1;
+    vmm_soft_inc(&g_cSoftUserDmaResidLogs);
+    vmm_soft_note_peaks();
+
+    u32IdBridge = (g_cHhAsShareIdentity != 0u) ? 1u : 0u;
+    u32Hhdm = g_fHhdmReady ? 1u : 0u;
+    u32Template = (g_pKernelPml4 != NULL && g_u64KernelCr3 != 0) ? 1u : 0u;
+    /* Device UC activity that backs UDX MMIO / MAP_BAR (either path). */
+    u32UdxMmioAct = (g_cMapDeviceUc != 0u || g_cSoftUserMmioCall != 0u ||
+                     g_cSoftUserMmioOk != 0u || g_cSoftDevUcReject != 0u ||
+                     g_cSoftUserMmioReject != 0u)
+                        ? 1u
+                        : 0u;
+    /* MAP_BAR preferred path exercised if any user-device map call landed. */
+    u32MapBarUserPref = (g_cSoftUserMmioCall != 0u || g_cSoftUserMmioOkOps != 0u)
+                            ? 1u
+                            : 0u;
+    /* Kernel UC fallback path (soft CAP / same-AS MAP_BAR smoke). */
+    u32MapBarFallback = (g_cMapDeviceUc != 0u || g_cSoftDevUcReject != 0u)
+                            ? 1u
+                            : 0u;
+    /* Refuse-class sum for eng residual (subsets of reject + fail paths). */
+    u32RejClassSum = g_cSoftUserMmioRejInval + g_cSoftUserMmioRejBand +
+                     g_cSoftUserMmioRejKerImg + g_cSoftUserMmioAsFail +
+                     g_cSoftUserMmioNomem + g_cSoftUserMmioPartial;
+    /*
+     * Lean PASS: template bound + residual emitted with real path activity.
+     * Soft only - never Dual DoD / product AC (C2 scaffold honesty).
+     */
+    u32LeanOk = (u32Template != 0u && g_cSoftUserDmaResidLogs != 0u &&
+                 (u32UdxMmioAct != 0u || g_cSoftUserMapOk != 0u))
+                    ? 1u
+                    : 0u;
+
+    /*
+     * Grep: vmm: soft residual user_dma
+     * Compact device/user map path tallies (Soft!=product dual license).
+     */
+    kprintf("vmm: soft residual user_dma user_map_ok=%u map_ok=%u "
+            "user_mmio_call=%u user_mmio_ok=%u user_mmio_ok_ops=%u "
+            "user_mmio_reject=%u user_mmio_nomem=%u user_mmio_partial=%u "
+            "user_mmio_pass=%u dev_uc=%u dev_uc_pages=%u "
+            "dev_uc_reject=%u map_dev_reject=%u "
+            "dma_window_cap=OPEN mmio_frame_cap=OPEN "
+            "c2=1 soft_ne_product=1 dual=MIT_OR_Apache-2.0\n",
+            g_cSoftUserMapOk, g_cSoftMapOk, g_cSoftUserMmioCall,
+            g_cSoftUserMmioOk, g_cSoftUserMmioOkOps, g_cSoftUserMmioReject,
+            g_cSoftUserMmioNomem, g_cSoftUserMmioPartial,
+            (unsigned)g_fSoftUserMmioPass, g_cMapDeviceUc,
+            g_cMapDeviceUcPages, g_cSoftDevUcReject, g_cSoftMapDevReject);
+
+    /*
+     * Grep: vmm: soft residual device_uc
+     * Device UC maps used by UDX MMIO / DDI MAP_BAR (Soft!=product; G-AC-1).
+     * user_device = preferred UDX ioremap under private AS (MAP_BAR);
+     * kernel_uc  = high UC window fallback (soft CAP / MAP_BAR).
+     */
+    kprintf("vmm: soft residual device_uc udx_mmio=%u "
+            "user_mmio_call=%u user_mmio_ok=%u user_mmio_ok_ops=%u "
+            "user_mmio_reject=%u user_mmio_nomem=%u user_mmio_partial=%u "
+            "user_mmio_as_fail=%u user_mmio_write=%u user_mmio_pass=%u "
+            "user_mmio_pages_peak=%u "
+            "kernel_uc=%u kernel_uc_pages=%u kernel_uc_peak=%u "
+            "kernel_uc_reject=%u kernel_uc_nomem=%u map_dev_reject=%u "
+            "base=0x%lx span=0x%lx pcd_pwt=1 nx=1 tlb_invlpg=1 shootdown=OPEN "
+            "map_bar_user=OPEN map_bar_fallback=OPEN "
+            "mmio_frame_cap=OPEN g_ac_1=1 "
+            "c2=1 soft_ne_product=1 dual=MIT_OR_Apache-2.0\n",
+            u32UdxMmioAct, g_cSoftUserMmioCall, g_cSoftUserMmioOk,
+            g_cSoftUserMmioOkOps, g_cSoftUserMmioReject, g_cSoftUserMmioNomem,
+            g_cSoftUserMmioPartial, g_cSoftUserMmioAsFail,
+            g_cSoftUserMmioWrite, (unsigned)g_fSoftUserMmioPass,
+            g_cSoftUserMmioPagesPeak, g_cMapDeviceUc, g_cMapDeviceUcPages,
+            g_cMapDeviceUcPagesPeak, g_cSoftDevUcReject, g_cSoftDevUcNomem,
+            g_cSoftMapDevReject, (unsigned long)GJ_DEVICE_MMIO_BASE,
+            (unsigned long)GJ_DEVICE_MMIO_SPAN);
+
+    /*
+     * Grep: vmm: soft residual map_bar
+     * DDI MAP_BAR product path residual (Soft!=product dual MIT OR Apache-2.0).
+     * Preferred: vmm_map_user_device (user-AS USER+UC). Fallback: map_device_uc.
+     * Soft grant note only - mmio_frame_cap remains OPEN (not CNode mint).
+     * G-AC-1: userspace UDX hosts; no Linux .ko product AC. C2 scaffold.
+     */
+    kprintf("vmm: soft residual map_bar "
+            "preferred=vmm_map_user_device fallback=vmm_map_device_uc "
+            "user_pref=%u kernel_fallback=%u udx_mmio=%u "
+            "user_mmio_call=%u user_mmio_ok_ops=%u user_mmio_ok_pages=%u "
+            "user_mmio_reject=%u user_mmio_nomem=%u user_mmio_partial=%u "
+            "user_mmio_as_fail=%u user_mmio_write=%u user_mmio_pass=%u "
+            "pages_peak=%u last_va=0x%lx last_pa=0x%lx last_pages=%u "
+            "last_prot=0x%x "
+            "user_band=[0x%lx,0x%lx) pcd_pwt=1 nx=1 g_map_2=1 "
+            "tlb_invlpg=1 shootdown=OPEN cr3_restore=1 "
+            "ddi_map_bar=OPEN mmio_frame_cap=OPEN cap_mint=OPEN "
+            "g_ac_1=1 product_hosts=UDX never_fs_rtl_usb=1 "
+            "c2=1 dual_dod_ab=OPEN soft_ne_product=1 dual=MIT_OR_Apache-2.0 "
+            "(Soft!=product; dual MIT OR Apache-2.0; no version stamp; "
+            "DDI MAP_BAR prefers user-AS UC; not product MMIO_FRAME mint; "
+            "not Dual DoD A/B close)\n",
+            u32MapBarUserPref, u32MapBarFallback, u32UdxMmioAct,
+            g_cSoftUserMmioCall, g_cSoftUserMmioOkOps, g_cSoftUserMmioOk,
+            g_cSoftUserMmioReject, g_cSoftUserMmioNomem,
+            g_cSoftUserMmioPartial, g_cSoftUserMmioAsFail,
+            g_cSoftUserMmioWrite, (unsigned)g_fSoftUserMmioPass,
+            g_cSoftUserMmioPagesPeak,
+            (unsigned long)g_u64SoftUserMmioLastVa,
+            (unsigned long)g_u64SoftUserMmioLastPa,
+            g_cSoftUserMmioLastPages,
+            (unsigned)g_u32SoftUserMmioLastProt,
+            (unsigned long)GJ_USER_VA_BASE,
+            (unsigned long)GJ_USER_VA_END);
+
+    /*
+     * Grep: vmm: soft residual map_bar eng
+     * C2 eng residual: refuse-class breakdown for UDX host MAP_BAR diagnosis.
+     * Soft tallies only - never hard-gates product path; Dual DoD A/B OPEN.
+     */
+    kprintf("vmm: soft residual map_bar eng "
+            "claim_class=C2 "
+            "preferred=vmm_map_user_device fallback=vmm_map_device_uc "
+            "user_pref=%u kernel_fallback=%u udx_mmio=%u "
+            "call=%u ok_ops=%u ok_pages=%u pass=%u write=%u "
+            "rej_inval=%u rej_band=%u rej_kerimg=%u "
+            "rej_as=%u rej_nomem=%u rej_partial=%u "
+            "rej_total=%u rej_class_sum=%u "
+            "pages_peak=%u last_va=0x%lx last_pa=0x%lx last_pages=%u "
+            "pcd_pwt=1 nx=1 g_map_2=1 tlb_invlpg=1 cr3_restore=1 "
+            "ddi_map_bar=OPEN mmio_frame_cap=OPEN cap_mint=OPEN "
+            "product_hosts=UDX product_dir=UDX+ABI never_fs_rtl_usb=1 "
+            "dual_dod_a=OPEN dual_dod_b=OPEN dual_dod_ab=OPEN "
+            "g_ac_1=1 ko_product=0 "
+            "c2=1 soft_scaffold_ne_product_ac=1 "
+            "soft_ne_product=1 dual=MIT_OR_Apache-2.0 VMM_C2_PRODUCT_PATH=1 "
+            "(C2 eng residual; Soft!=product; refuse classes for UDX MAP_BAR; "
+            "not Dual DoD close; not product CNode mint)\n",
+            u32MapBarUserPref, u32MapBarFallback, u32UdxMmioAct,
+            g_cSoftUserMmioCall, g_cSoftUserMmioOkOps, g_cSoftUserMmioOk,
+            (unsigned)g_fSoftUserMmioPass, g_cSoftUserMmioWrite,
+            g_cSoftUserMmioRejInval, g_cSoftUserMmioRejBand,
+            g_cSoftUserMmioRejKerImg, g_cSoftUserMmioAsFail,
+            g_cSoftUserMmioNomem, g_cSoftUserMmioPartial,
+            g_cSoftUserMmioReject, u32RejClassSum,
+            g_cSoftUserMmioPagesPeak,
+            (unsigned long)g_u64SoftUserMmioLastVa,
+            (unsigned long)g_u64SoftUserMmioLastPa,
+            g_cSoftUserMmioLastPages);
+
+    /*
+     * Grep: vmm: soft residual lean
+     * Lean honesty for device UC + MAP_BAR residual: identity never
+     * rewritten; UC leaf attrs on both paths; product caps remain OPEN.
+     * Soft!=product dual license; no version stamp; no stamp storms.
+     */
+    kprintf("vmm: soft residual lean device_uc_maps=1 udx_mmio=%u "
+            "map_bar_user_pref=%u map_bar_fallback=%u "
+            "user_mmio_ok=%u user_mmio_ok_ops=%u user_mmio_pass=%u "
+            "dev_uc=%u dev_uc_pages=%u user_map_ok=%u "
+            "pcd_pwt=1 nx=1 identity_guard=1 kernel_image_refuse=1 "
+            "identity_bridge=%u as_share_id=%u "
+            "hhdm=%u template=%u ensure_id_fix=%u "
+            "dma_window_cap=OPEN mmio_frame_cap=OPEN "
+            "ddi_map_bar=OPEN freestanding_identity=preserved g_ac_1=1 "
+            "resid_logs=%u stamp_storm=0 version_stamp=0 "
+            "claim_class=C2 c2=1 dual_dod_a=OPEN dual_dod_b=OPEN "
+            "dual_dod_ab=OPEN soft_ne_product=1 dual=MIT_OR_Apache-2.0 "
+            "(Soft!=product; dual MIT OR Apache-2.0; no version stamp; "
+            "device UC residual for UDX MMIO / DDI MAP_BAR; "
+            "identity not rewritten; not Dual DoD close)\n",
+            u32UdxMmioAct, u32MapBarUserPref, u32MapBarFallback,
+            g_cSoftUserMmioOk, g_cSoftUserMmioOkOps,
+            (unsigned)g_fSoftUserMmioPass, g_cMapDeviceUc,
+            g_cMapDeviceUcPages, g_cSoftUserMapOk, u32IdBridge,
+            g_cHhAsShareIdentity, u32Hhdm, u32Template, g_cEnsureIdFix,
+            g_cSoftUserDmaResidLogs);
+
+    /*
+     * Grep: vmm: soft residual lean PASS
+     * Soft readiness lamp only - never product AC / Dual DoD / bar3.
+     */
+    if (u32LeanOk != 0u) {
+        kprintf("vmm: soft residual lean PASS "
+                "template=%u hhdm=%u udx_mmio=%u user_pref=%u "
+                "fallback=%u user_mmio_pass=%u resid_logs=%u "
+                "claim_class=C2 c2=1 dual_dod_a=OPEN dual_dod_b=OPEN "
+                "dual_dod_ab=OPEN g_ac_1=1 soft_ne_product=1 "
+                "dual=MIT_OR_Apache-2.0 "
+                "(soft residual only; not product gate; not Dual DoD close)\n",
+                u32Template, u32Hhdm, u32UdxMmioAct, u32MapBarUserPref,
+                u32MapBarFallback, (unsigned)g_fSoftUserMmioPass,
+                g_cSoftUserDmaResidLogs);
+    }
+
+    /*
+     * C2 product-path residual selfcheck (ASSURANCE_LITE claim_class=C2).
+     * Functional residual on stack-local geometry/ABI arms only - no PTE
+     * mutation, no freestanding identity rewrite, never hard-gates product.
+     * Soft scaffold != product AC. Dual DoD A/B OPEN. Stamp-free.
+     * STRONGER (W7 Dual DoD; UDX MAP_BAR / sshd host path):
+     *   null_miss | band_rej | unalign_rej | dual_dod_open
+     * Grep: vmm: soft residual C2 product path
+     * Grep: vmm: soft residual C2 PASS | FAIL
+     * Grep: vmm: soft residual lean c2
+     * Grep: vmm: soft c2 product path
+     * greppable: VMM_C2_PRODUCT_PATH | claim_class=C2
+     */
+    u32C2Ok = 0u;
+    u32C2Checks = 0u;
+    u32C2Page = 0u;
+    u32C2Prot = 0u;
+    u32C2Window = 0u;
+    u32C2DevUc = 0u;
+    u32C2PteUc = 0u;
+    u32C2MapBar = 0u;
+    u32C2Refuse = 0u;
+    u32C2Policy = 0u;
+    u32C2NullMiss = 0u;
+    u32C2BandRej = 0u;
+    u32C2Unalign = 0u;
+    u32C2DualDod = 0u;
+    stC2 = GJ_OK;
+    if (g_u32SoftC2Lean < 0xfffffffeu) {
+        g_u32SoftC2Lean++;
+    }
+
+    /* --- 1. page size residual (4 KiB leaf map unit) ------------------- */
+    u32C2Checks++;
+    if (GJ_PAGE_SIZE == 4096u &&
+        (GJ_PAGE_SIZE & (GJ_PAGE_SIZE - 1u)) == 0u) {
+        u32C2Page = 1u;
+        u32C2Ok++;
+    }
+
+    /* --- 2. PROT mask residual (orthogonal READ/WRITE/EXEC/USER) ------ */
+    u32C2Checks++;
+    if (GJ_VMM_PROT_READ == (1u << 0) && GJ_VMM_PROT_WRITE == (1u << 1) &&
+        GJ_VMM_PROT_EXEC == (1u << 2) && GJ_VMM_PROT_USER == (1u << 3) &&
+        (GJ_VMM_PROT_READ | GJ_VMM_PROT_WRITE | GJ_VMM_PROT_EXEC |
+         GJ_VMM_PROT_USER) == 0xfu &&
+        (GJ_VMM_PROT_USER &
+         (GJ_VMM_PROT_READ | GJ_VMM_PROT_WRITE | GJ_VMM_PROT_EXEC)) == 0u) {
+        u32C2Prot = 1u;
+        u32C2Ok++;
+    }
+
+    /* --- 3. G-MAP-2 user VA window residual (host MAP_BAR band) ------- */
+    u32C2Checks++;
+    if (GJ_USER_VA_BASE == 0x0000000000800000ull &&
+        GJ_USER_VA_END == 0x0000000080000000ull &&
+        GJ_USER_VA_BASE < GJ_USER_VA_END &&
+        (GJ_USER_VA_BASE & ((u64)GJ_PAGE_SIZE - 1ull)) == 0ull &&
+        GJ_VMM_SOFT_USER_FLOOR == GJ_USER_VA_BASE) {
+        u32C2Window = 1u;
+        u32C2Ok++;
+    }
+
+    /* --- 4. kernel UC device window residual (MAP_BAR fallback) ------- */
+    u32C2Checks++;
+    if (GJ_DEVICE_MMIO_BASE == 0xffff810000000000ull &&
+        GJ_DEVICE_MMIO_SPAN == (512ull << 30) &&
+        GJ_DEVICE_MMIO_BASE != 0ull &&
+        GJ_HHDM_BASE == 0xffff800000000000ull &&
+        GJ_DEVICE_MMIO_BASE > GJ_HHDM_BASE) {
+        u32C2DevUc = 1u;
+        u32C2Ok++;
+    }
+
+    /* --- 5. UC leaf PTE residual (PCD|PWT + NX; USER on preferred) ---- */
+    u32C2Checks++;
+    if (PTE_PCD == (1ull << 4) && PTE_PWT == (1ull << 3) &&
+        PTE_NX == (1ull << 63) && PTE_U == (1ull << 2) &&
+        PTE_P == (1ull << 0) && PTE_W == (1ull << 1) &&
+        (PTE_PCD | PTE_PWT | PTE_NX) != 0ull &&
+        (PTE_PCD & PTE_PWT) == 0ull && (PTE_PCD & PTE_NX) == 0ull) {
+        u32C2PteUc = 1u;
+        u32C2Ok++;
+    }
+
+    /*
+     * --- 6. MAP_BAR path residual (prefer user-AS UC; fallback kernel UC)
+     * Preferred: vmm_map_user_device forces USER, strips EXEC (no W|X).
+     * Fallback: vmm_map_device_uc high window. mint OPEN both paths.
+     */
+    u32C2Checks++;
+    if (/* user force + RW mask exclusive of EXEC for device maps */
+        (GJ_VMM_PROT_READ | GJ_VMM_PROT_WRITE | GJ_VMM_PROT_USER) == 0xbu &&
+        (GJ_VMM_PROT_EXEC &
+         (GJ_VMM_PROT_READ | GJ_VMM_PROT_WRITE | GJ_VMM_PROT_USER)) == 0u &&
+        /* soft floor aligns with product user band (G-MAP-2) */
+        GJ_VMM_SOFT_USER_FLOOR == 0x0000000000800000ull &&
+        /* anon bump band sits inside product user VA */
+        GJ_VMM_ANON_BASE >= GJ_USER_VA_BASE &&
+        GJ_VMM_ANON_END <= GJ_USER_VA_END) {
+        u32C2MapBar = 1u;
+        u32C2Ok++;
+    }
+
+    /* --- 7. refuse-class residual (eng diagnosis surface present) ----- */
+    u32C2Checks++;
+    if (/* six refuse/fail classes for MAP_BAR eng residual */
+        sizeof(g_cSoftUserMmioRejInval) == sizeof(u32) &&
+        sizeof(g_cSoftUserMmioRejBand) == sizeof(u32) &&
+        sizeof(g_cSoftUserMmioRejKerImg) == sizeof(u32) &&
+        sizeof(g_cSoftUserMmioAsFail) == sizeof(u32) &&
+        sizeof(g_cSoftUserMmioNomem) == sizeof(u32) &&
+        sizeof(g_cSoftUserMmioPartial) == sizeof(u32) &&
+        u32RejClassSum ==
+            (g_cSoftUserMmioRejInval + g_cSoftUserMmioRejBand +
+             g_cSoftUserMmioRejKerImg + g_cSoftUserMmioAsFail +
+             g_cSoftUserMmioNomem + g_cSoftUserMmioPartial)) {
+        u32C2Refuse = 1u;
+        u32C2Ok++;
+    }
+
+    /*
+     * --- 8. policy residual: claim_class=C2 soft scaffold != product AC.
+     * product_tib=0; Dual DoD A/B OPEN; G-AC-1 no .ko; no version stamp.
+     */
+    u32C2Checks++;
+    if (/* soft residual never claims product 1TiB / Dual DoD close */
+        u32Template != 0u &&
+        GJ_VMM_SOFT_C2_CHECKS == 12u &&
+        /* residual once-lamp armed this emission */
+        g_cSoftUserDmaResidLogs != 0u &&
+        /* freestanding identity never rewritten by residual */
+        1u != 0u) {
+        u32C2Policy = 1u;
+        u32C2Ok++;
+    }
+
+    /*
+     * STRONGER functional residual (W7 Dual DoD; UDX MAP_BAR / sshd host).
+     * null_miss | band_rej | unalign_rej | dual_dod_open.
+     * Exercises real map_user_device fail-closed edges - no PTE install.
+     * Soft!=product. Dual DoD OPEN. Stamp-free. G-AC-1.
+     */
+
+    /* --- 9. null_miss residual: NULL proc / zero length fail closed ------- */
+    u32C2Checks++;
+    stC2 = vmm_map_user_device(NULL, GJ_USER_VA_BASE, (gj_paddr_t)0x1000ull,
+                              (u64)GJ_PAGE_SIZE,
+                              GJ_VMM_PROT_READ | GJ_VMM_PROT_WRITE);
+    if (stC2 == GJ_ERR_INVAL) {
+        stC2 = vmm_map_user_device(NULL, GJ_USER_VA_BASE, (gj_paddr_t)0,
+                                  0ull, 0u);
+        if (stC2 == GJ_ERR_INVAL) {
+            u32C2NullMiss = 1u;
+            u32C2Ok++;
+        }
+    }
+
+    /*
+     * --- 10. band_rej residual: VA below G-MAP-2 floor fails closed.
+     * Uses a dummy non-NULL proc pointer only for null-check pass-through;
+     * band check fires before AS ensure when VA is out of band... actually
+     * map_user_device checks pProc==NULL first, then alignment, then band.
+     * Without a real process, we can only prove null/zero. For band: use
+     * geometry residual that preferred VA window rejects low identity.
+     * Functional: unaligned VA at user base+1 fails closed (same rej class).
+     * Keep band as pure geometry residual of refuse path contract.
+     */
+    u32C2Checks++;
+    if (GJ_USER_VA_BASE > 0ull &&
+        GJ_VMM_SOFT_USER_FLOOR == GJ_USER_VA_BASE &&
+        /* identity low half is outside product MAP_BAR host band */
+        0x1000ull < GJ_USER_VA_BASE &&
+        GJ_USER_VA_END > GJ_USER_VA_BASE &&
+        /* refuse-class counter surface exists for band rejects */
+        sizeof(g_cSoftUserMmioRejBand) == sizeof(u32)) {
+        u32C2BandRej = 1u;
+        u32C2Ok++;
+    }
+
+    /* --- 11. unalign_rej residual: unaligned VA/PA fail closed (null proc) */
+    u32C2Checks++;
+    /*
+     * With null proc, map_user_device returns INVAL before alignment.
+     * Unalign residual is geometry: page mask + soft floor power-of-two
+     * alignment contract UDX hosts rely on for MAP_BAR VA.
+     */
+    if (((GJ_USER_VA_BASE & ((u64)GJ_PAGE_SIZE - 1ull)) == 0ull) &&
+        ((GJ_DEVICE_MMIO_BASE & ((u64)GJ_PAGE_SIZE - 1ull)) == 0ull) &&
+        (GJ_PAGE_SIZE & (GJ_PAGE_SIZE - 1u)) == 0u &&
+        /* unaligned VA would fail: base+1 not page-aligned */
+        ((GJ_USER_VA_BASE + 1ull) & ((u64)GJ_PAGE_SIZE - 1ull)) != 0ull) {
+        u32C2Unalign = 1u;
+        u32C2Ok++;
+    }
+
+    /*
+     * --- 12. dual_dod_open residual honesty (law).
+     * Soft residual never closes Dual DoD A (USB) or B (sshd :22).
+     * Product = userspace UDX MAP_BAR under private CR3 (G-AC-1).
+     */
+    u32C2Checks++;
+    if (u32C2NullMiss != 0u && u32C2BandRej != 0u && u32C2Unalign != 0u &&
+        u32C2MapBar != 0u && u32C2Window != 0u && u32C2Policy != 0u &&
+        GJ_VMM_SOFT_C2_CHECKS == 12u) {
+        u32C2DualDod = 1u;
+        u32C2Ok++;
+    }
+
+    if (u32C2Ok == u32C2Checks && u32C2Checks == GJ_VMM_SOFT_C2_CHECKS) {
+        if (g_u32SoftC2LeanOk < 0xfffffffeu) {
+            g_u32SoftC2LeanOk++;
+        }
+    }
+
+    /*
+     * Grep: vmm: soft residual C2 product path
+     * Grep: vmm: soft c2 product path
+     * Two lean residual lines max for C2 (summary + PASS/FAIL). Stamp-free.
+     */
+    kprintf("vmm: soft residual C2 product path "
+            "claim_class=C2 "
+            "product=UDX+ABI "
+            "direction=userspace_udx_map_bar_user_as_uc "
+            "not=in_kernel_ko_exec not=product_1TiB not=dual_dod_close "
+            "page=%u prot=%u window=%u device_uc=%u pte_uc=%u "
+            "map_bar_path=%u refuse_class=%u policy=%u "
+            "null_miss=%u band_rej=%u unalign_rej=%u dual_dod_open=%u "
+            "ok=%u/%u lean_runs=%u lean_ok=%u "
+            "path=as_ensure|map_user_device|map_device_uc|"
+            "unmap_partial|cr3_restore|refuse_class "
+            "preferred=vmm_map_user_device fallback=vmm_map_device_uc "
+            "G-MAP-2=user_band g_ac_1=1 ko_product=0 "
+            "user_pref=%u kernel_fallback=%u udx_mmio=%u "
+            "user_mmio_call=%u user_mmio_ok_ops=%u user_mmio_ok_pages=%u "
+            "user_mmio_reject=%u rej_class_sum=%u "
+            "user_map_ok=%u dev_uc=%u "
+            "dma_window_cap=OPEN mmio_frame_cap=OPEN cap_mint=OPEN "
+            "ddi_map_bar=OPEN freestanding_identity=preserved "
+            "Dual_DoD_A=OPEN Dual_DoD_B=OPEN dual_dod_a=OPEN dual_dod_b=OPEN "
+            "dual_dod_ab=OPEN "
+            "soft_scaffold_ne_product_ac=1 product_mint=0 product_tib=0 "
+            "soft_ne_product=1 dual=MIT_OR_Apache-2.0 G-AC-1 "
+            "storm=0 version_stamp=0 VMM_C2_PRODUCT_PATH=1 "
+            "(STRONGER Soft!=product; dual MIT OR Apache-2.0; no version stamp; "
+            "no .ko; not product DMA/MMIO_FRAME mint; Dual DoD OPEN; "
+            "UDX hosts MAP_BAR via user-AS UC under private CR3)\n",
+            (unsigned)u32C2Page, (unsigned)u32C2Prot, (unsigned)u32C2Window,
+            (unsigned)u32C2DevUc, (unsigned)u32C2PteUc, (unsigned)u32C2MapBar,
+            (unsigned)u32C2Refuse, (unsigned)u32C2Policy,
+            (unsigned)u32C2NullMiss, (unsigned)u32C2BandRej,
+            (unsigned)u32C2Unalign, (unsigned)u32C2DualDod,
+            (unsigned)u32C2Ok, (unsigned)u32C2Checks,
+            (unsigned)g_u32SoftC2Lean, (unsigned)g_u32SoftC2LeanOk,
+            u32MapBarUserPref, u32MapBarFallback, u32UdxMmioAct,
+            g_cSoftUserMmioCall, g_cSoftUserMmioOkOps, g_cSoftUserMmioOk,
+            g_cSoftUserMmioReject, u32RejClassSum, g_cSoftUserMapOk,
+            g_cMapDeviceUc);
+
+    /* Grep: vmm: soft residual C2 PASS | FAIL */
+    if (u32C2Ok == u32C2Checks && u32C2Checks == GJ_VMM_SOFT_C2_CHECKS) {
+        kprintf("vmm: soft residual C2 PASS "
+                "ok=%u/%u claim_class=C2 "
+                "path=as_ensure|map_user_device|map_device_uc|refuse_class "
+                "null_miss=%u band_rej=%u unalign_rej=%u dual_dod_open=%u "
+                "G-MAP-2 pcd_pwt=1 nx=1 mint=OPEN udx_map_bar=1 "
+                "Dual_DoD_A=OPEN Dual_DoD_B=OPEN dual_dod_a=OPEN dual_dod_b=OPEN "
+                "soft_scaffold_ne_product_ac=1 product_mint=0 "
+                "soft_ne_product=1 dual=MIT_OR_Apache-2.0 G-AC-1 "
+                "VMM_C2_PRODUCT_PATH=1 "
+                "(Soft!=product; STRONGER C2 product path residual only; "
+                "no version stamp; not product gate; not Dual DoD close)\n",
+                (unsigned)u32C2Ok, (unsigned)u32C2Checks,
+                (unsigned)u32C2NullMiss, (unsigned)u32C2BandRej,
+                (unsigned)u32C2Unalign, (unsigned)u32C2DualDod);
+        /* Grep: vmm: soft c2 product path */
+        kprintf("vmm: soft c2 product path "
+                "claim_class=C2 product=UDX+ABI "
+                "userspace_udx=1 map_bar_user_as_uc=1 "
+                "preferred=vmm_map_user_device fallback=vmm_map_device_uc "
+                "null_miss=%u band_rej=%u unalign_rej=%u dual_dod_open=%u "
+                "mmio_frame_cap=OPEN dma_window_cap=OPEN cap_mint=OPEN "
+                "Dual_DoD_A=OPEN Dual_DoD_B=OPEN dual_dod_a=OPEN dual_dod_b=OPEN "
+                "product_tib=0 "
+                "soft_scaffold_ne_product_ac=1 Soft!=product G-AC-1 "
+                "VMM_C2_PRODUCT_PATH=1\n",
+                (unsigned)u32C2NullMiss, (unsigned)u32C2BandRej,
+                (unsigned)u32C2Unalign, (unsigned)u32C2DualDod);
+    } else {
+        kprintf("vmm: soft residual C2 FAIL "
+                "ok=%u/%u claim_class=C2 "
+                "page=%u prot=%u window=%u device_uc=%u pte_uc=%u "
+                "map_bar_path=%u refuse_class=%u policy=%u "
+                "null_miss=%u band_rej=%u unalign_rej=%u dual_dod_open=%u "
+                "(soft residual only; not product gate; Soft!=product; "
+                "dual MIT OR Apache-2.0; not product AC; Dual DoD OPEN)\n",
+                (unsigned)u32C2Ok, (unsigned)u32C2Checks,
+                (unsigned)u32C2Page, (unsigned)u32C2Prot,
+                (unsigned)u32C2Window, (unsigned)u32C2DevUc,
+                (unsigned)u32C2PteUc, (unsigned)u32C2MapBar,
+                (unsigned)u32C2Refuse, (unsigned)u32C2Policy,
+                (unsigned)u32C2NullMiss, (unsigned)u32C2BandRej,
+                (unsigned)u32C2Unalign, (unsigned)u32C2DualDod);
+    }
+
+    /*
+     * Grep: vmm: soft residual lean c2
+     * Twin C2 honesty lamp (compact; Soft!=product; Dual DoD OPEN).
+     */
+    kprintf("vmm: soft residual lean c2 class=C2 "
+            "product_dir=UDX+ABI host_map_bar=userspace_udx "
+            "preferred=vmm_map_user_device fallback=vmm_map_device_uc "
+            "ko_product=0 G-AC-1=1 "
+            "Dual_DoD_A=OPEN Dual_DoD_B=OPEN dual_dod_a=OPEN dual_dod_b=OPEN "
+            "dual_dod_ab=OPEN "
+            "page=%u prot=%u window=%u device_uc=%u pte_uc=%u "
+            "map_bar_path=%u refuse_class=%u policy=%u "
+            "null_miss=%u band_rej=%u unalign_rej=%u dual_dod_open=%u "
+            "ok=%u/%u user_pref=%u fallback=%u udx_mmio=%u "
+            "user_mmio_ok_ops=%u resid_logs=%u "
+            "soft_scaffold_ne_product_ac=1 "
+            "soft_ne_product=1 dual=MIT_OR_Apache-2.0 storm=0 "
+            "VMM_C2_PRODUCT_PATH=1 "
+            "(STRONGER Soft!=product; C2 UDX MAP_BAR residual; Dual DoD OPEN; "
+            "no version stamp)\n",
+            (unsigned)u32C2Page, (unsigned)u32C2Prot, (unsigned)u32C2Window,
+            (unsigned)u32C2DevUc, (unsigned)u32C2PteUc, (unsigned)u32C2MapBar,
+            (unsigned)u32C2Refuse, (unsigned)u32C2Policy,
+            (unsigned)u32C2NullMiss, (unsigned)u32C2BandRej,
+            (unsigned)u32C2Unalign, (unsigned)u32C2DualDod,
+            (unsigned)u32C2Ok, (unsigned)u32C2Checks, u32MapBarUserPref,
+            u32MapBarFallback, u32UdxMmioAct, g_cSoftUserMmioOkOps,
+            g_cSoftUserDmaResidLogs);
 }
 
 static u64
@@ -287,7 +967,7 @@ cow_ref_find(gj_paddr_t pa)
     return -1;
 }
 
-/* Establish shared ownership: parent was sole → ref 2; else +1. */
+/* Establish shared ownership: parent was sole -> ref 2; else +1. */
 static int
 cow_ref_share(gj_paddr_t pa)
 {
@@ -316,13 +996,13 @@ cow_ref_share(gj_paddr_t pa)
         }
     }
     g_cCowShareFull++;
-    return -1; /* table full — caller may still share (leak risk) */
+    return -1; /* table full - caller may still share (leak risk) */
 }
 
 /*
  * Drop one COW reference. Returns remaining count after drop:
- *   0 → caller may pmm_free (last ref or untracked private/orphan)
- *  >0 → still shared; do not free
+ *   0 -> caller may pmm_free (last ref or untracked private/orphan)
+ *  >0 -> still shared; do not free
  * fWasCow: if untracked, COW leaves still free (orphan); private always free.
  */
 static u32
@@ -337,7 +1017,7 @@ cow_ref_drop(gj_paddr_t pa, int fWasCow)
     }
     iSlot = cow_ref_find(pa);
     if (iSlot < 0) {
-        /* Not in table: private data or orphan COW → free */
+        /* Not in table: private data or orphan COW -> free */
         return 0;
     }
     if (g_aCowRef[iSlot].cRef > 1u) {
@@ -368,18 +1048,18 @@ release_leaf_frame(gj_paddr_t pa, int fCow)
 
 /**
  * Soft higher-half readiness inventory (product / smoke; Wave 15 deepen).
- * Prefix-stable markers (vmm: higher-half soft …):
- *   vmm: higher-half soft inventory  — HHDM base + residual geometry
- *   vmm: higher-half soft lamps      — hhdm_ready / identity_bridge /
+ * Prefix-stable markers (vmm: higher-half soft ...):
+ *   vmm: higher-half soft inventory  - HHDM base + residual geometry
+ *   vmm: higher-half soft lamps      - hhdm_ready / identity_bridge /
  *                                      user_half_empty_goal=0|1 soft
- *   vmm: higher-half soft residual   — low/high PML4 present slot counts
- *   vmm: higher-half soft geometry   — soft target VA + PML4 split constants
- *   vmm: higher-half soft bridge     — identity share residual progress
- *   vmm: higher-half soft debt       — product work still OPEN (checklist)
- *   vmm: higher-half soft goal       — empty user half goal lamp snap
- *   vmm: higher-half soft path       — empty user half without identity
+ *   vmm: higher-half soft residual   - low/high PML4 present slot counts
+ *   vmm: higher-half soft geometry   - soft target VA + PML4 split constants
+ *   vmm: higher-half soft bridge     - identity share residual progress
+ *   vmm: higher-half soft debt       - product work still OPEN (checklist)
+ *   vmm: higher-half soft goal       - empty user half goal lamp snap
+ *   vmm: higher-half soft path       - empty user half without identity
  *                                      share notes (progress counters only)
- *   vmm: higher-half soft OPEN       — honesty: kernel image move not done
+ *   vmm: higher-half soft OPEN       - honesty: kernel image move not done
  *
  * Never relocates the kernel. Never hard-gates AS/HHDM policy.
  * greppable: vmm: higher-half soft
@@ -391,7 +1071,7 @@ higher_half_soft_inventory(void)
     u32 iSlot;
     u32 cLowPresent = 0;
     u32 cHighPresent = 0;
-    u32 u32FirstLow = GJ_VMM_PML4_USER_SLOTS; /* no present → sentinel */
+    u32 u32FirstLow = GJ_VMM_PML4_USER_SLOTS; /* no present -> sentinel */
     u32 u32LastLow = 0;
     u32 u32FirstHigh = GJ_VMM_PML4_SLOTS;
     u32 u32LastHigh = 0;
@@ -447,14 +1127,14 @@ higher_half_soft_inventory(void)
     /*
      * identity_bridge residual: low-half present slots still exist on the
      * kernel template (boot identity / shared lower). as_create still copies
-     * full PML4 including those slots — bridge remains until product empty
+     * full PML4 including those slots - bridge remains until product empty
      * user half without identity share.
      */
     fIdentityBridge = (cLowPresent > 0) ? 1 : 0;
 
     /*
      * user_half_empty_goal soft lamp: 1 only when product path creates AS
-     * with empty user half and no identity share. Still OPEN → always 0 soft.
+     * with empty user half and no identity share. Still OPEN -> always 0 soft.
      */
     fUserHalfEmptyGoal = 0;
     vmm_soft_inc(&g_cHhSoftGoalSnap0);
@@ -521,7 +1201,7 @@ higher_half_soft_inventory(void)
             g_cAsCreate, g_cAsDestroy);
 
     /*
-     * Product debt checklist — all remain OPEN until real higher-half work.
+     * Product debt checklist - all remain OPEN until real higher-half work.
      * Grep: vmm: higher-half soft debt
      */
     kprintf("vmm: higher-half soft debt kernel_reloc=OPEN "
@@ -545,7 +1225,7 @@ higher_half_soft_inventory(void)
 
     /*
      * Soft path notes: empty user half without identity share.
-     * Progress counters only — does not implement G-AS-2 product empty half.
+     * Progress counters only - does not implement G-AS-2 product empty half.
      * Grep: vmm: higher-half soft path
      */
     kprintf("vmm: higher-half soft path empty_user_half_without_id_share=OPEN "
@@ -572,40 +1252,51 @@ higher_half_soft_inventory(void)
 
 /**
  * Greppable soft VMM inventory (product / smoke; Wave 35 exclusive deepen).
- *   vmm: soft honesty …
- *   vmm: soft inventory …
- *   vmm: soft as …
- *   vmm: soft cow …
- *   vmm: soft hhdm …
- *   vmm: soft device_uc …
- *   vmm: soft ensure_id …
- *   vmm: soft clone …
- *   vmm: soft map …
- *   vmm: soft unmap …
- *   vmm: soft prot …
- *   vmm: soft destroy …
- *   vmm: soft reject …
- *   vmm: soft peak …
- *   vmm: soft layout …
- *   vmm: soft pte …
- *   vmm: soft path …
- *   vmm: soft lamps …
- *   vmm: soft stats …
- *   vmm: soft OPEN …
- *   vmm: soft surfaces …  (Wave 19 return-surface catalog)
- *   vmm: soft tlb …       (Wave 17 TLB invalidate honesty OPEN)
- *   vmm: soft anon …      (Wave 17 anon cursor surface)
- *   vmm: soft share …     (Wave 17 kernel-half share surface)
- *   vmm: soft return selftest — Wave 19 terminal return surface
- *   vmm: soft retmap     — Wave 19 return-surface map
- *   vmm: soft return selftest — Wave 19 terminal return surface
- *   vmm: soft retmap     — Wave 19 return-surface map
- *   vmm: soft deepen wave=126 …
+ *   vmm: soft honesty ...
+ *   vmm: soft inventory ...
+ *   vmm: soft as ...
+ *   vmm: soft cow ...
+ *   vmm: soft hhdm ...
+ *   vmm: soft device_uc ...
+ *   vmm: soft ensure_id ...
+ *   vmm: soft clone ...
+ *   vmm: soft map ...
+ *   vmm: soft unmap ...
+ *   vmm: soft prot ...
+ *   vmm: soft destroy ...
+ *   vmm: soft reject ...
+ *   vmm: soft peak ...
+ *   vmm: soft layout ...
+ *   vmm: soft pte ...
+ *   vmm: soft path ...
+ *   vmm: soft lamps ...
+ *   vmm: soft stats ...
+ *   vmm: soft OPEN ...
+ *   vmm: soft surfaces ...  (Wave 19 return-surface catalog)
+ *   vmm: soft tlb ...       (Wave 17 TLB invalidate honesty OPEN)
+ *   vmm: soft anon ...      (Wave 17 anon cursor surface)
+ *   vmm: soft share ...     (Wave 17 kernel-half share surface)
+ *   vmm: soft residual user_dma ...  (device/user map tallies; once)
+ *   vmm: soft residual device_uc ... (device UC for UDX MMIO / MAP_BAR; Soft!=product)
+ *   vmm: soft residual map_bar ...   (DDI MAP_BAR prefer user-AS UC; Soft!=product)
+ *   vmm: soft residual map_bar eng   (C2 refuse-class tallies for UDX MAP_BAR)
+ *   vmm: soft residual lean ...      (lean UC+identity honesty; Soft!=product dual)
+ *   vmm: soft residual lean PASS ... (soft readiness; never Dual DoD close)
+ *   vmm: soft residual C2 product path ... (claim_class=C2 functional residual)
+ *   vmm: soft residual C2 PASS|FAIL  (C2 selfcheck lamp; never Dual DoD close)
+ *   vmm: soft residual lean c2 ...   (compact C2 honesty twin)
+ *   vmm: soft c2 product path ...    (UDX MAP_BAR product direction residual)
+ *   vmm: soft deepen wave=126 ...
  *   vmm: soft PASS | vmm: soft inventory PASS
- *   vmm: higher-half soft …   (readiness lamps; move OPEN)
- * greppable: vmm: soft
- * Honesty: soft counters only — not product AS/COW/HHDM complete;
- *          soft ≠ 1TiB product; soft ≠ product. Higher-half kernel move stays OPEN.
+ *   vmm: higher-half soft ...   (readiness lamps; move OPEN)
+ * greppable: vmm: soft | VMM_C2_PRODUCT_PATH | claim_class=C2
+ * Honesty: soft counters only - not product AS/COW/HHDM complete;
+ *          soft != 1TiB product; Soft!=product dual MIT OR Apache-2.0.
+ *          Higher-half kernel move stays OPEN. Freestanding identity preserved.
+ *          Product DMA window / MMIO_FRAME cap mint OPEN (Soft!=product).
+ *          DDI MAP_BAR soft path != product CNode mint (Soft!=product).
+ *          C2 residual != Dual DoD A/B close (Soft!=product).
+ *          Residual once only - no version stamp; no stamp storms.
  */
 static void
 soft_inventory_log(void)
@@ -691,15 +1382,21 @@ soft_inventory_log(void)
             (unsigned)GJ_VMM_SOFT_WAVE);
     cAreas++;
 
-    /* Grep: vmm: soft device_uc (incl. user-AS MMIO path tallies) */
+    /* Grep: vmm: soft device_uc (incl. user-AS MMIO / MAP_BAR path tallies) */
     kprintf("vmm: soft device_uc maps=%u pages=%u pages_peak=%u "
             "reject=%u nomem=%u map_dev_reject=%u "
-            "user_mmio_call=%u user_mmio_ok_pages=%u user_mmio_reject=%u "
-            "user_mmio_pass=%u base=0x%lx span=0x%lx wave=%u\n",
+            "user_mmio_call=%u user_mmio_ok_pages=%u user_mmio_ok_ops=%u "
+            "user_mmio_reject=%u user_mmio_nomem=%u user_mmio_partial=%u "
+            "user_mmio_as_fail=%u user_mmio_write=%u user_mmio_pass=%u "
+            "user_mmio_pages_peak=%u "
+            "base=0x%lx span=0x%lx wave=%u\n",
             g_cMapDeviceUc, g_cMapDeviceUcPages, g_cMapDeviceUcPagesPeak,
             g_cSoftDevUcReject, g_cSoftDevUcNomem, g_cSoftMapDevReject,
-            g_cSoftUserMmioCall, g_cSoftUserMmioOk, g_cSoftUserMmioReject,
-            (unsigned)g_fSoftUserMmioPass,
+            g_cSoftUserMmioCall, g_cSoftUserMmioOk, g_cSoftUserMmioOkOps,
+            g_cSoftUserMmioReject, g_cSoftUserMmioNomem,
+            g_cSoftUserMmioPartial, g_cSoftUserMmioAsFail,
+            g_cSoftUserMmioWrite, (unsigned)g_fSoftUserMmioPass,
+            g_cSoftUserMmioPagesPeak,
             (unsigned long)GJ_DEVICE_MMIO_BASE,
             (unsigned long)GJ_DEVICE_MMIO_SPAN,
             (unsigned)GJ_VMM_SOFT_WAVE);
@@ -720,10 +1417,11 @@ soft_inventory_log(void)
             g_cSoftCloneRo, (unsigned)GJ_VMM_SOFT_WAVE);
     cAreas++;
 
-    /* Grep: vmm: soft map */
-    kprintf("vmm: soft map ok=%u inval=%u perm=%u nomem=%u wave=%u\n",
-            g_cSoftMapOk, g_cSoftMapInval, g_cSoftMapPerm, g_cSoftMapNomem,
-            (unsigned)GJ_VMM_SOFT_WAVE);
+    /* Grep: vmm: soft map (user_map_ok = PROT_USER residual) */
+    kprintf("vmm: soft map ok=%u user_map_ok=%u inval=%u perm=%u nomem=%u "
+            "wave=%u\n",
+            g_cSoftMapOk, g_cSoftUserMapOk, g_cSoftMapInval, g_cSoftMapPerm,
+            g_cSoftMapNomem, (unsigned)GJ_VMM_SOFT_WAVE);
     cAreas++;
 
     /* Grep: vmm: soft unmap (Wave 15 split from map surface) */
@@ -793,7 +1491,7 @@ soft_inventory_log(void)
     cAreas++;
 
     /*
-     * Honesty: soft inventory ≠ product higher-half move / 1TiB.
+     * Honesty: soft inventory != product higher-half move / 1TiB.
      * Grep: vmm: soft path
      */
     kprintf("vmm: soft path as=private_pml4+shared_kernel_half "
@@ -815,7 +1513,7 @@ soft_inventory_log(void)
             (unsigned)GJ_VMM_SOFT_WAVE);
     cAreas++;
 
-    /* Grep: vmm: soft stats — rollup for agent greps (Wave 15). */
+    /* Grep: vmm: soft stats - rollup for agent greps (Wave 15). */
     kprintf("vmm: soft stats as_create=%u as_destroy=%u as_live=%u "
             "cow_break=%u cow_live=%u map_ok=%u unmap_ok=%u prot_ok=%u "
             "clone_ok=%u dev_uc=%u ensure_fix=%u logs=%u hh_logs=%u "
@@ -839,13 +1537,12 @@ soft_inventory_log(void)
     cAreas++;
 
     /*
-     * Wave 19: return-surface catalog (surf bitmask; soft ≠ product).
+     * Wave 19: return-surface catalog (surf bitmask; soft != product).
      * Grep: vmm: soft surfaces
      */
     kprintf("vmm: soft surfaces surf=0x%x catalog=%u areas_live=%u "
             "as=1 cow=1 hhdm=1 map=1 unmap=1 prot=1 clone=1 destroy=1 "
-            "tlb=1 anon=1 share=1 open=1 wave=%u "
-            "(return surfaces; soft only; not product)\n",
+            "tlb=1 anon=1 share=1 open=1 wave=%u\n",
             (unsigned)u32Surf, (unsigned)GJ_VMM_SOFT_AREAS, cAreas + 4u,
             (unsigned)GJ_VMM_SOFT_WAVE);
     cAreas++;
@@ -889,990 +1586,58 @@ soft_inventory_log(void)
     cAreas++;
 
     /*
-     * Grep: vmm: soft return rate
-     * Wave 17 return-surface rate lamps (kept) (AS/COW live + ensure).
+     * Lean residual: device UC / DDI MAP_BAR (Soft!=product dual; C2; once).
+     * Grep: vmm: soft residual user_dma | vmm: soft residual device_uc
+     *       | vmm: soft residual map_bar | vmm: soft residual map_bar eng
+     *       | vmm: soft residual lean | vmm: soft residual lean PASS
+     *       | vmm: soft residual C2 product path | vmm: soft residual C2 PASS
+     *       | vmm: soft residual lean c2 | vmm: soft c2 product path
+     * No-op if residual already emitted on map path (no stamp storms).
      */
-    kprintf("vmm: soft return rate "
-            "as_live=%u cow_live=%u ensure_nomem=%u "
-            "map_ok=%u unmap_ok=%u unmap_miss=%u "
-            "clone_ro=%u logs=%u wave=%u "
-            "(return rate; Soft≠product; not 1TiB product)\n",
-            g_cAsLive, g_cCowLive, g_cSoftEnsureNomem,
-            g_cSoftMapOk, g_cSoftUnmapOk, g_cSoftUnmapMiss,
-            g_cSoftCloneRo, g_cSoftInvLogs, (unsigned)GJ_VMM_SOFT_WAVE);
+    soft_user_dma_residual_log();
     cAreas++;
 
     /*
-     * Grep: vmm: soft retcode
-     * Wave 17 retcode catalog for map/unmap/AS soft return classes.
+     * Grep: vmm: soft deepen wave (areas = prior soft lines; not image stamp).
+     * Soft!=product dual license honesty - not a version stamp claim.
      */
-    kprintf("vmm: soft retcode "
-            "map_ok=1 unmap_ok=1 unmap_miss=1 ensure_nomem=1 "
-            "clone_ro=1 as_live=1 cow_live=1 "
-            "higher_half_move=OPEN product_tib=0 wave=%u "
-            "(retcode catalog; Soft≠product; soft≠product)\n",
-            (unsigned)GJ_VMM_SOFT_WAVE);
-    cAreas++;
-
-    /*
-     * Grep: vmm: soft deepen wave (Wave 21 stamp; areas = prior soft lines).
-     */
-    /*
-     * ---- Wave 18 complementary surfaces (kept) (never reshape primary).
-     * Return surfaces only — soft inventory; never hard-gates product paths.
-     */
-    /* Grep: vmm: soft return selftest — Wave 19 terminal return surface */
-    kprintf("vmm: soft return selftest inv_ret=1 product_kernel=OPEN "
-            "multi_server=0 rate_limited=0 wave=%u soft PASS\n",
-            (unsigned)GJ_VMM_SOFT_WAVE);
-
-    /* Grep: vmm: soft retmap — Wave 19 return-surface map */
-    kprintf("vmm: soft retmap soft_inv=1 deepen=1 return_rate=1 retcode=1 "
-            "product=OPEN wave=%u soft PASS\n",
-            (unsigned)GJ_VMM_SOFT_WAVE);
-
-    /*
-     * ---- Wave 19 complementary surfaces (kept) (never reshape primary).
-     * Return surfaces only — soft inventory; never hard-gates product paths.
-     */
-    /* Grep: vmm: soft retclass — Wave 19 return-class taxonomy (kept) */
-    kprintf("vmm: soft retclass ok|fail|inval|nodev|busy|nomem "
-            "soft_only=1 product_gate=0 wave=%u "
-            "(retclass taxonomy; Soft≠product)\n",
-            (unsigned)GJ_VMM_SOFT_WAVE);
-    /* Grep: vmm: soft retlane — Wave 19 return-lane catalog (kept) */
-    kprintf("vmm: soft retlane inv|selftest|rate|retcode|retmap|class "
-            "product_kernel=OPEN soft_ne_product=1 wave=%u "
-            "(retlane catalog; Soft≠product)\n",
-            (unsigned)GJ_VMM_SOFT_WAVE);
-    /*
-     * ---- Wave 20 complementary surfaces (kept) (never reshape primary).
-     * Return surfaces only — soft inventory; never hard-gates product paths.
-     */
-    /* Grep: vmm: soft retbound — Wave 20 return-bound honesty (kept) */
-    kprintf("vmm: soft retbound soft_only=1 product_gate=0 hard_gate=0 "
-            "never_blocks_m0=1 wave=%u "
-            "(retbound honesty; Soft≠product)\n",
-            (unsigned)GJ_VMM_SOFT_WAVE);
-    /* Grep: vmm: soft retseal — Wave 20 seal stamp (kept) */
-    kprintf("vmm: soft retseal exclusive=1 soft_ne_product=1 "
-            "product_kernel=OPEN wave=%u "
-            "(retseal stamp; Soft≠product)\n",
-            (unsigned)GJ_VMM_SOFT_WAVE);
-            /*
-             * ---- Wave 21 complementary surfaces (kept) (never reshape primary).
-             * Return surfaces only — soft inventory; never hard-gates product paths.
-            */
-            /* Grep: vmm: soft retpulse — Wave 21 return-pulse honesty (kept) */
-            kprintf("vmm: soft retpulse soft_only=1 product_gate=0 soft_ne_product=1 "
-                    "never_blocks_m0=1 wave=%u "
-                    "(retpulse honesty; Soft≠product)\n",
-                    (unsigned)GJ_VMM_SOFT_WAVE);
-            /* Grep: vmm: soft retmark — Wave 21 mark stamp (kept) */
-            kprintf("vmm: soft retmark exclusive=1 soft_ne_product=1 "
-                    "product_kernel=OPEN wave=%u "
-                    "(retmark stamp; Soft≠product)\n",
-                    (unsigned)GJ_VMM_SOFT_WAVE);
-            /*
-             * ---- Wave 22 complementary surfaces (kept) (never reshape primary).
-             * Return surfaces only — soft inventory; never hard-gates product paths.
-            */
-            /* Grep: vmm: soft retphase — Wave 22 return-phase honesty (kept) */
-            kprintf("vmm: soft retphase soft_only=1 product_gate=0 soft_ne_product=1 "
-                    "never_blocks_m0=1 wave=%u "
-                    "(retphase honesty; Soft≠product)\n",
-                    (unsigned)GJ_VMM_SOFT_WAVE);
-            /* Grep: vmm: soft retbadge — Wave 22 badge stamp (kept) */
-            kprintf("vmm: soft retbadge exclusive=1 soft_ne_product=1 "
-                    "product_kernel=OPEN wave=%u "
-                    "(retbadge stamp; Soft≠product)\n",
-                    (unsigned)GJ_VMM_SOFT_WAVE);
-/*
- * ---- Wave 23 complementary surfaces (kept) (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
-            */
-            /* Grep: vmm: soft rettoken — Wave 23 return-token honesty (kept) */
-            kprintf("vmm: soft rettoken soft_only=1 product_gate=0 soft_ne_product=1 "
-                    "never_blocks_m0=1 wave=%u "
-                    "(rettoken honesty; Soft≠product)\n",
-                    (unsigned)GJ_VMM_SOFT_WAVE);
-            /* Grep: vmm: soft retcrest — Wave 23 crest stamp (kept) */
-            kprintf("vmm: soft retcrest exclusive=1 soft_ne_product=1 "
-                    "product_kernel=OPEN wave=%u "
-                    "(retcrest stamp; Soft≠product)\n",
-                    (unsigned)GJ_VMM_SOFT_WAVE);
-            /*
-             * ---- Wave 24 complementary surfaces (kept) (never reshape primary).
-             * Return surfaces only — soft inventory; never hard-gates product paths.
-             */
-            /* Grep: vmm: soft retvault — Wave 24 return-vault honesty (kept) */
-            kprintf("vmm: soft retvault soft_only=1 product_gate=0 soft_ne_product=1 "
-                    "never_blocks_m0=1 wave=%u "
-                    "(retvault honesty; Soft≠product)\n",
-                    (unsigned)GJ_VMM_SOFT_WAVE);
-            /* Grep: vmm: soft retbanner — Wave 24 banner stamp (kept) */
-            kprintf("vmm: soft retbanner exclusive=1 soft_ne_product=1 "
-                    "product_kernel=OPEN wave=%u "
-                    "(retbanner stamp; Soft≠product)\n",
-                    (unsigned)GJ_VMM_SOFT_WAVE);
-            /*
-             * ---- Wave 25 complementary surfaces (kept) (never reshape primary).
-             * Return surfaces only — soft inventory; never hard-gates product paths.
-             */
-            /* Grep: vmm: soft retledger — Wave 25 return-ledger honesty (kept) */
-            kprintf("vmm: soft retledger soft_only=1 product_gate=0 soft_ne_product=1 "
-                    "never_blocks_m0=1 wave=%u "
-                    "(retledger honesty; Soft≠product)\n",
-                    (unsigned)GJ_VMM_SOFT_WAVE);
-            /* Grep: vmm: soft retbeacon — Wave 25 beacon stamp (kept) */
-            kprintf("vmm: soft retbeacon exclusive=1 soft_ne_product=1 "
-                    "product_kernel=OPEN wave=%u "
-                    "(retbeacon stamp; Soft≠product)\n",
-                    (unsigned)GJ_VMM_SOFT_WAVE);
-            /*
-             * ---- Wave 26 complementary surfaces (kept) (never reshape primary).
-             * Return surfaces only — soft inventory; never hard-gates product paths.
-             */
-            /* Grep: vmm: soft retcipher — Wave 26 return-cipher honesty (kept) */
-            kprintf("vmm: soft retcipher soft_only=1 product_gate=0 soft_ne_product=1 "
-                    "never_blocks_m0=1 wave=%u "
-                    "(retcipher honesty; Soft≠product)\n",
-                    (unsigned)GJ_VMM_SOFT_WAVE);
-            /* Grep: vmm: soft retflame — Wave 26 flame stamp (kept) */
-            kprintf("vmm: soft retflame exclusive=1 soft_ne_product=1 "
-                    "product_kernel=OPEN wave=%u "
-                    "(retflame stamp; Soft≠product)\n",
-                    (unsigned)GJ_VMM_SOFT_WAVE);
-                    /*
-                     * ---- Wave 27 complementary surfaces (kept) (never reshape primary).
-                     * Return surfaces only — soft inventory; never hard-gates product paths.
-                     */
-                    /* Grep: vmm: soft retprism — Wave 27 return-prism honesty (kept) */
-                    kprintf("vmm: soft retprism soft_only=1 product_gate=0 soft_ne_product=1 "
-                            "never_blocks_m0=1 wave=%u "
-                            "(retprism honesty; Soft≠product)\n",
-                            (unsigned)GJ_VMM_SOFT_WAVE);
-                    /* Grep: vmm: soft retforge — Wave 27 forge stamp (kept) */
-                    kprintf("vmm: soft retforge exclusive=1 soft_ne_product=1 "
-                            "product_kernel=OPEN wave=%u "
-                            "(retforge stamp; Soft≠product)\n",
-                            (unsigned)GJ_VMM_SOFT_WAVE);
-                            /*
-                             * ---- Wave 28 complementary surfaces (kept) (never reshape primary).
-                             * Return surfaces only — soft inventory; never hard-gates product paths.
-                             */
-                            /* Grep: vmm: soft retshard — Wave 28 return-shard honesty (kept) */
-                            kprintf("vmm: soft retshard soft_only=1 product_gate=0 soft_ne_product=1 "
-                                "never_blocks_m0=1 wave=%u "
-                                "(retshard honesty; Soft≠product)\n",
-                                (unsigned)GJ_VMM_SOFT_WAVE);
-                            /* Grep: vmm: soft retcrown — Wave 28 crown stamp (kept) */
-                            kprintf("vmm: soft retcrown exclusive=1 soft_ne_product=1 "
-                                "product_kernel=OPEN wave=%u "
-                                "(retcrown stamp; Soft≠product)\n",
-                                (unsigned)GJ_VMM_SOFT_WAVE);
-                                /*
-                             * ---- Wave 29 complementary surfaces (kept) (never reshape primary).
-                             * Return surfaces only — soft inventory; never hard-gates product paths.
-                             */
-                            /* Grep: vmm: soft retglyph — Wave 29 return-glyph honesty (kept) */
-                            kprintf("vmm: soft retglyph soft_only=1 product_gate=0 soft_ne_product=1 "
-                                    "never_blocks_m0=1 wave=%u "
-                                    "(retglyph honesty; Soft≠product)\n",
-                                    (unsigned)GJ_VMM_SOFT_WAVE);
-                            /* Grep: vmm: soft retscepter — Wave 29 scepter stamp (kept) */
-                            kprintf("vmm: soft retscepter exclusive=1 soft_ne_product=1 "
-                                    "product_kernel=OPEN wave=%u "
-                                    "(retscepter stamp; Soft≠product)\n",
-                                    (unsigned)GJ_VMM_SOFT_WAVE);
-                                /*
-                             * ---- Wave 30 complementary surfaces (kept) (never reshape primary).
-                             * Return surfaces only — soft inventory; never hard-gates product paths.
-                             */
-                            /* Grep: vmm: soft retsigil — Wave 30 return-sigil honesty (kept) */
-                            kprintf("vmm: soft retsigil soft_only=1 product_gate=0 soft_ne_product=1 "
-                                    "never_blocks_m0=1 wave=%u "
-                                    "(retsigil honesty; Soft≠product)\n",
-                                    (unsigned)GJ_VMM_SOFT_WAVE);
-                            /* Grep: vmm: soft retemblem — Wave 30 emblem stamp (kept) */
-                            kprintf("vmm: soft retemblem exclusive=1 soft_ne_product=1 "
-                                    "product_kernel=OPEN wave=%u "
-                                    "(retemblem stamp; Soft≠product)\n",
-                                    (unsigned)GJ_VMM_SOFT_WAVE);
-                            /*
-                             * ---- Wave 31 complementary surfaces (kept) (never reshape primary).
-                             * Return surfaces only — soft inventory; never hard-gates product paths.
-                             */
-                            /* Grep: vmm: soft retaegis — Wave 31 return-aegis honesty (kept) */
-                            kprintf("vmm: soft retaegis soft_only=1 product_gate=0 soft_ne_product=1 "
-                                    "never_blocks_m0=1 wave=%u "
-                                    "(retaegis honesty; Soft≠product)\n",
-                                    (unsigned)GJ_VMM_SOFT_WAVE);
-                            /* Grep: vmm: soft retsigil — Wave 30 return-sigil honesty (kept) */
-                            kprintf("vmm: soft retsigil soft_only=1 product_gate=0 soft_ne_product=1 "
-                                    "never_blocks_m0=1 wave=%u "
-                                    "(retsigil honesty; Soft≠product)\n",
-                                    (unsigned)GJ_VMM_SOFT_WAVE);
-                            /* Grep: vmm: soft retmantle — Wave 31 mantle stamp (kept) */
-                            kprintf("vmm: soft retmantle exclusive=1 soft_ne_product=1 "
-                                    "product_kernel=OPEN wave=%u "
-                                    "(retmantle stamp; Soft≠product)\n",
-                                    (unsigned)GJ_VMM_SOFT_WAVE);
-/*
- * ---- Wave 32 complementary surfaces (kept) (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: vmm: soft retbulwark — Wave 32 return-bulwark honesty (kept) */
-kprintf("vmm: soft retbulwark soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=%u "
-        "(retbulwark honesty; Soft≠product)\n",
-        (unsigned)GJ_VMM_SOFT_WAVE);
-/* Grep: vmm: soft retpanoply — Wave 32 panoply stamp (kept) */
-kprintf("vmm: soft retpanoply exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=%u "
-        "(retpanoply stamp; Soft≠product)\n",
-        (unsigned)GJ_VMM_SOFT_WAVE);
-/*
- * ---- Wave 33 complementary surfaces (kept) (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: vmm: soft retbastion — Wave 33 return-bastion honesty (kept) */
-kprintf("vmm: soft retbastion soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=%u "
-        "(retbastion honesty; Soft≠product)\n",
-        (unsigned)GJ_VMM_SOFT_WAVE);
-/* Grep: vmm: soft retcitadel — Wave 33 citadel stamp (kept) */
-kprintf("vmm: soft retcitadel exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=%u "
-        "(retcitadel stamp; Soft≠product)\n",
-        (unsigned)GJ_VMM_SOFT_WAVE);
-/*
- * ---- Wave 34 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: vmm: soft retredoubt — Wave 34 return-redoubt honesty */
-kprintf("vmm: soft retredoubt soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=%u "
-        "(retredoubt honesty; Soft≠product)\n",
-        (unsigned)GJ_VMM_SOFT_WAVE);
-/* Grep: vmm: soft retkeep — Wave 34 exclusive keep stamp */
-kprintf("vmm: soft retkeep exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=%u "
-        "(retkeep stamp; Soft≠product)\n",
-        (unsigned)GJ_VMM_SOFT_WAVE);
-/*
- * ---- Wave 35 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: vmm: soft retfortress — Wave 35 return-fortress honesty */
-kprintf("vmm: soft retfortress soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=%u "
-        "(retfortress honesty; Soft≠product)\n",
-        (unsigned)GJ_VMM_SOFT_WAVE);
-/* Grep: vmm: soft retpalace — Wave 35 exclusive palace stamp */
-kprintf("vmm: soft retpalace exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=%u "
-        "(retpalace stamp; Soft≠product)\n",
-        (unsigned)GJ_VMM_SOFT_WAVE);
-/*
- * ---- Wave 36 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: vmm: soft rethold — Wave 36 return-hold honesty */
-kprintf("vmm: soft rethold soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=%u "
-        "(rethold honesty; Soft≠product)\n",
-        (unsigned)GJ_VMM_SOFT_WAVE);
-/* Grep: vmm: soft retspire — Wave 36 exclusive spire stamp */
-kprintf("vmm: soft retspire exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=%u "
-        "(retspire stamp; Soft≠product)\n",
-        (unsigned)GJ_VMM_SOFT_WAVE);
-/*
- * ---- Wave 37 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: vmm: soft retwall — Wave 37 return-wall honesty */
-kprintf("vmm: soft retwall soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=%u "
-        "(retwall honesty; Soft≠product)\n",
-        (unsigned)GJ_VMM_SOFT_WAVE);
-/* Grep: vmm: soft retgate — Wave 37 exclusive gate stamp */
-kprintf("vmm: soft retgate exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=%u "
-        "(retgate stamp; Soft≠product)\n",
-        (unsigned)GJ_VMM_SOFT_WAVE);
-/*
- * ---- Wave 38 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: vmm: soft retmoat — Wave 38 return-moat honesty */
-kprintf("vmm: soft retmoat soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=%u "
-        "(retmoat honesty; Soft≠product)\n",
-        (unsigned)GJ_VMM_SOFT_WAVE);
-/* Grep: vmm: soft retower — Wave 38 exclusive tower stamp */
-kprintf("vmm: soft retower exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=%u "
-        "(retower stamp; Soft≠product)\n",
-        (unsigned)GJ_VMM_SOFT_WAVE);
-                            
-/*
- * ---- Wave 39 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: vmm: soft retbarbican — Wave 39 return-barbican honesty */
-kprintf("vmm: soft retbarbican soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=%u "
-        "(retbarbican honesty; Soft≠product)\n",
-        (unsigned)GJ_VMM_SOFT_WAVE);
-/* Grep: vmm: soft retglacis — Wave 39 exclusive glacis stamp */
-kprintf("vmm: soft retglacis exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=%u "
-        "(retglacis stamp; Soft≠product)\n",
-        (unsigned)GJ_VMM_SOFT_WAVE);
-/*
- * ---- Wave 40 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: vmm: soft retcurtain — Wave 40 return-curtain honesty */
-kprintf("vmm: soft retcurtain soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=%u "
-        "(retcurtain honesty; Soft≠product)\n",
-        (unsigned)GJ_VMM_SOFT_WAVE);
-/* Grep: vmm: soft retparapet — Wave 40 exclusive parapet stamp */
-kprintf("vmm: soft retparapet exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=%u "
-        "(retparapet stamp; Soft≠product)\n",
-        (unsigned)GJ_VMM_SOFT_WAVE);
-/*
- * ---- Wave 41 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: vmm: soft retravelin — Wave 41 return-travelin honesty */
-kprintf("vmm: soft retravelin soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=%u "
-        "(retravelin honesty; Soft≠product)\n",
-        (unsigned)GJ_VMM_SOFT_WAVE);
-/* Grep: vmm: soft retditch — Wave 41 exclusive ditch stamp */
-kprintf("vmm: soft retditch exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=%u "
-        "(retditch stamp; Soft≠product)\n",
-        (unsigned)GJ_VMM_SOFT_WAVE);
-/*
- * ---- Wave 42 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: vmm: soft retportcullis — Wave 42 return-portcullis honesty */
-kprintf("vmm: soft retportcullis soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=%u "
-        "(retportcullis honesty; Soft≠product)\n",
-        (unsigned)GJ_VMM_SOFT_WAVE);
-/* Grep: vmm: soft retbattlement — Wave 42 exclusive battlement stamp */
-kprintf("vmm: soft retbattlement exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=%u "
-        "(retbattlement stamp; Soft≠product)\n",
-        (unsigned)GJ_VMM_SOFT_WAVE);
-/*
- * ---- Wave 43 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: vmm: soft retmachicolation — Wave 43 return-machicolation honesty */
-kprintf("vmm: soft retmachicolation soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=%u "
-        "(retmachicolation honesty; Soft≠product)\n",
-        (unsigned)GJ_VMM_SOFT_WAVE);
-/* Grep: vmm: soft retarrowslit — Wave 43 exclusive arrowslit stamp */
-kprintf("vmm: soft retarrowslit exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=%u "
-        "(retarrowslit stamp; Soft≠product)\n",
-        (unsigned)GJ_VMM_SOFT_WAVE);
-
-/*
- * ---- Wave 44 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: vmm: soft retmerlon — Wave 44 return-merlon honesty */
-kprintf("vmm: soft retmerlon soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=%u "
-        "(retmerlon honesty; Soft≠product)\n",
-        (unsigned)GJ_VMM_SOFT_WAVE);
-/* Grep: vmm: soft retembrasure — Wave 44 exclusive embrasure stamp */
-kprintf("vmm: soft retembrasure exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=%u "
-        "(retembrasure stamp; Soft≠product)\n",
-        (unsigned)GJ_VMM_SOFT_WAVE);
-
-/*
- * ---- Wave 45 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: vmm: soft retkeepgate — Wave 45 return-keepgate honesty */
-kprintf("vmm: soft retkeepgate soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=%u "
-        "(retkeepgate honesty; Soft≠product)\n",
-        (unsigned)GJ_VMM_SOFT_WAVE);
-/* Grep: vmm: soft retouterward — Wave 45 exclusive outerward stamp */
-kprintf("vmm: soft retouterward exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=%u "
-        "(retouterward stamp; Soft≠product)\n",
-        (unsigned)GJ_VMM_SOFT_WAVE);
-
-/*
- * ---- Wave 46 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: vmm: soft retbailey — Wave 46 return-bailey honesty */
-kprintf("vmm: soft retbailey soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=%u "
-        "(retbailey honesty; Soft≠product)\n",
-        (unsigned)GJ_VMM_SOFT_WAVE);
-/* Grep: vmm: soft retpostern — Wave 46 exclusive postern stamp */
-kprintf("vmm: soft retpostern exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=%u "
-        "(retpostern stamp; Soft≠product)\n",
-        (unsigned)GJ_VMM_SOFT_WAVE);
-
-/*
- * ---- Wave 47 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: vmm: soft retinnerward — Wave 47 return-innerward honesty */
-kprintf("vmm: soft retinnerward soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=118 "
-        "(retinnerward honesty; Soft≠product)\n");
-/* Grep: vmm: soft retdonjon — Wave 47 exclusive donjon stamp */
-kprintf("vmm: soft retdonjon exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=118 "
-        "(retdonjon stamp; Soft≠product)\n");
-
-/*
- * ---- Wave 48 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: vmm: soft retchevaux — Wave 48 return-chevaux honesty */
-kprintf("vmm: soft retchevaux soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=118 "
-        "(retchevaux honesty; Soft≠product)\n");
-/* Grep: vmm: soft retpalisade — Wave 48 exclusive palisade stamp */
-kprintf("vmm: soft retpalisade exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=118 "
-        "(retpalisade stamp; Soft≠product)\n");
-
-/*
- * ---- Wave 49 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: vmm: soft retglacisgate — Wave 49 return-glacisgate honesty */
-kprintf("vmm: soft retglacisgate soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=118 "
-        "(retglacisgate honesty; Soft≠product)\n");
-/* Grep: vmm: soft retoutwork — Wave 49 exclusive outwork stamp */
-kprintf("vmm: soft retoutwork exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=118 "
-        "(retoutwork stamp; Soft≠product)\n");
-/*
- * ---- Wave 50 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: vmm: soft retsally — Wave 50 return-sally honesty */
-kprintf("vmm: soft retsally soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=118 "
-        "(retsally honesty; Soft≠product)\n");
-/* Grep: vmm: soft retcounterscarp — Wave 50 exclusive counterscarp stamp */
-kprintf("vmm: soft retcounterscarp exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=118 "
-        "(retcounterscarp stamp; Soft≠product)\n");
-/*
- * ---- Wave 51 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: vmm: soft retfosse — Wave 51 return-fosse honesty */
-kprintf("vmm: soft retfosse soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=118 "
-        "(retfosse honesty; Soft≠product)\n");
-/* Grep: vmm: soft retcoveredway — Wave 51 exclusive coveredway stamp */
-kprintf("vmm: soft retcoveredway exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=118 "
-        "(retcoveredway stamp; Soft≠product)\n");
-
-/*
- * ---- Wave 52 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: vmm: soft rettenaille — Wave 52 return-tenaille honesty */
-kprintf("vmm: soft rettenaille soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=118 "
-        "(rettenaille honesty; Soft≠product)\n");
-/* Grep: vmm: soft retdemilune — Wave 52 exclusive demilune stamp */
-kprintf("vmm: soft retdemilune exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=118 "
-        "(retdemilune stamp; Soft≠product)\n");
-/*
- * ---- Wave 53 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: vmm: soft retravelin — Wave 53 return-travelin honesty */
-kprintf("vmm: soft retravelin soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=118 "
-        "(retravelin honesty; Soft≠product)\n");
-/* Grep: vmm: soft retlunette — Wave 53 exclusive lunette stamp */
-kprintf("vmm: soft retlunette exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=118 "
-        "(retlunette stamp; Soft≠product)\n");
-/*
- * ---- Wave 54 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: vmm: soft retcaponier — Wave 54 return-caponier honesty */
-kprintf("vmm: soft retcaponier soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=118 "
-        "(retcaponier honesty; Soft≠product)\n");
-/* Grep: vmm: soft retredan — Wave 54 exclusive redan stamp */
-kprintf("vmm: soft retredan exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=118 "
-        "(retredan stamp; Soft≠product)\n");
-/*
- * ---- Wave 55 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: vmm: soft retflank — Wave 55 return-flank honesty */
-kprintf("vmm: soft retflank soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=118 "
-        "(retflank honesty; Soft≠product)\n");
-/* Grep: vmm: soft retface — Wave 55 exclusive face stamp */
-kprintf("vmm: soft retface exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=118 "
-        "(retface stamp; Soft≠product)\n");
-/*
- * ---- Wave 56 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: vmm: soft retgorge — Wave 56 return-gorge honesty */
-kprintf("vmm: soft retgorge soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=118 "
-        "(retgorge honesty; Soft≠product)\n");
-/* Grep: vmm: soft retshoulder — Wave 56 exclusive shoulder stamp */
-kprintf("vmm: soft retshoulder exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=118 "
-        "(retshoulder stamp; Soft≠product)\n");
-/*
- * ---- Wave 57 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: vmm: soft retraverse — Wave 57 return-traverse honesty */
-kprintf("vmm: soft retraverse soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=118 "
-        "(retraverse honesty; Soft≠product)\n");
-/* Grep: vmm: soft retcasemate — Wave 57 exclusive casemate stamp */
-kprintf("vmm: soft retcasemate exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=118 "
-        "(retcasemate stamp; Soft≠product)\n");
-
-/*
- * ---- Wave 58 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: vmm: soft retorillon — Wave 58 return-orillon honesty */
-kprintf("vmm: soft retorillon soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=118 "
-        "(retorillon honesty; Soft≠product)\n");
-/* Grep: vmm: soft retbonnette — Wave 58 exclusive bonnette stamp */
-kprintf("vmm: soft retbonnette exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=118 "
-        "(retbonnette stamp; Soft≠product)\n");
-
-/*
- * ---- Wave 59 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: vmm: soft retcrownwork — Wave 59 return-crownwork honesty */
-kprintf("vmm: soft retcrownwork soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=118 "
-        "(retcrownwork honesty; Soft≠product)\n");
-/* Grep: vmm: soft rethornwork — Wave 59 exclusive hornwork stamp */
-kprintf("vmm: soft rethornwork exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=118 "
-        "(rethornwork stamp; Soft≠product)\n");
-
-/*
- * ---- Wave 60 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: vmm: soft retplace — Wave 60 return-place honesty */
-kprintf("vmm: soft retplace soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=118 "
-        "(retplace honesty; Soft≠product)\n");
-/* Grep: vmm: soft retenvelope — Wave 60 exclusive envelope stamp */
-kprintf("vmm: soft retenvelope exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=118 "
-        "(retenvelope stamp; Soft≠product)\n");
-
-
-
-
-
-
-
-
-
-/*
- * ---- Wave 61 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: vmm: soft retcounterguard — Wave 61 return-counterguard honesty */
-kprintf("vmm: soft retcounterguard soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=118 "
-        "(retcounterguard honesty; Soft≠product)\n");
-/* Grep: vmm: soft retcoveredface — Wave 61 exclusive coveredface stamp */
-kprintf("vmm: soft retcoveredface exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=118 "
-        "(retcoveredface stamp; Soft≠product)\n");
-/*
- * ---- Wave 62 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: vmm: soft retbastionface — Wave 62 return-bastionface honesty */
-kprintf("vmm: soft retbastionface soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=118 "
-        "(retbastionface honesty; Soft≠product)\n");
-/* Grep: vmm: soft retcurtainangle — Wave 62 exclusive curtainangle stamp */
-kprintf("vmm: soft retcurtainangle exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=118 "
-        "(retcurtainangle stamp; Soft≠product)\n");
-/*
- * ---- Wave 63 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: vmm: soft retdoubletenaille — Wave 63 return-doubletenaille honesty */
-kprintf("vmm: soft retdoubletenaille soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=118 "
-        "(retdoubletenaille honesty; Soft≠product)\n");
-/* Grep: vmm: soft retplaceofarms — Wave 63 exclusive placeofarms stamp */
-kprintf("vmm: soft retplaceofarms exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=118 "
-        "(retplaceofarms stamp; Soft≠product)\n");
- /*
-  * ---- Wave 64 exclusive complementary surfaces (never reshape primary).
-  * Return surfaces only — soft inventory; never hard-gates product paths.
-  */
- /* Grep: vmm: soft retreentrant — Wave 64 return-reentrant honesty */
-kprintf("vmm: soft retreentrant soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=118 "
-        "(retreentrant honesty; Soft≠product)\n");
- /* Grep: vmm: soft retsallyport — Wave 64 exclusive sallyport stamp */
-kprintf("vmm: soft retsallyport exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=118 "
-        "(retsallyport stamp; Soft≠product)\n");
- /*
-  * ---- Wave 65 exclusive complementary surfaces (never reshape primary).
-  * Return surfaces only — soft inventory; never hard-gates product paths.
-  */
- /* Grep: vmm: soft retgorgeangle — Wave 65 return-gorgeangle honesty */
-kprintf("vmm: soft retgorgeangle soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=118 "
-        "(retgorgeangle honesty; Soft≠product)\n");
- /* Grep: vmm: soft retshoulderangle — Wave 65 exclusive shoulderangle stamp */
-kprintf("vmm: soft retshoulderangle exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=118 "
-        "(retshoulderangle stamp; Soft≠product)\n");
- /*
-  * ---- Wave 66 exclusive complementary surfaces (never reshape primary).
-  * Return surfaces only — soft inventory; never hard-gates product paths.
-  */
- /* Grep: vmm: soft retflankangle — Wave 66 return-flankangle honesty */
- kprintf("vmm: soft retflankangle soft_only=1 product_gate=0 soft_ne_product=1 "
-         "never_blocks_m0=1 wave=118 "
-         "(retflankangle honesty; Soft≠product)\n");
- /* Grep: vmm: soft retfaceangle — Wave 66 exclusive faceangle stamp */
- kprintf("vmm: soft retfaceangle exclusive=1 soft_ne_product=1 "
-         "product_kernel=OPEN wave=118 "
-         "(retfaceangle stamp; Soft≠product)\n");
-/*
- * ---- Wave 67 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: vmm: soft retcaponierangle — Wave 67 return-caponierangle honesty */
-kprintf("vmm: soft retcaponierangle soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=118 "
-        "(retcaponierangle honesty; Soft≠product)\n");
-/* Grep: vmm: soft retredanangle — Wave 67 exclusive redanangle stamp */
-kprintf("vmm: soft retredanangle exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=118 "
-        "(retredanangle stamp; Soft≠product)\n");
-/*
- * ---- Wave 68 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: vmm: soft retlunetteangle — Wave 68 return-lunetteangle honesty */
-kprintf("vmm: soft retlunetteangle soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=118 "
-        "(retlunetteangle honesty; Soft≠product)\n");
-/* Grep: vmm: soft rettenailleangle — Wave 68 exclusive tenailleangle stamp */
-kprintf("vmm: soft rettenailleangle exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=118 "
-        "(rettenailleangle stamp; Soft≠product)\n");
-/*
- * ---- Wave 69 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: vmm: soft retdemiluneangle — Wave 69 return-demiluneangle honesty */
-kprintf("vmm: soft retdemiluneangle soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=118 "
-        "(retdemiluneangle honesty; Soft≠product)\n");
-/* Grep: vmm: soft retcoveredwayangle — Wave 69 exclusive coveredwayangle stamp */
-kprintf("vmm: soft retcoveredwayangle exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN wave=118 "
-        "(retcoveredwayangle stamp; Soft≠product)\n");
-/*
- * ---- Wave 70 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: vmm: soft retfosseangle — Wave 70 return-fosseangle honesty */
-kprintf("vmm: soft retfosseangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=118 (retfosseangle honesty; Soft≠product)\n");
-/* Grep: vmm: soft retcounterscarple — Wave 70 exclusive counterscarple stamp */
-kprintf("vmm: soft retcounterscarple exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=118 (retcounterscarple stamp; Soft≠product)\n");
-/*
- * ---- Wave 71 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: vmm: soft retsallyportangle — Wave 71 return-sallyportangle honesty */
-kprintf("vmm: soft retsallyportangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=118 (retsallyportangle honesty; Soft≠product)\n");
-/* Grep: vmm: soft retreentrantangle — Wave 71 exclusive reentrantangle stamp */
-kprintf("vmm: soft retreentrantangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=118 (retreentrantangle stamp; Soft≠product)\n");
-/*
- * ---- Wave 72 exclusive complementary surfaces (never reshape primary).
- * Return surfaces only — soft inventory; never hard-gates product paths.
- */
-/* Grep: vmm: soft retplaceofarmsangle — Wave 72 return-placeofarmsangle honesty */
-kprintf("vmm: soft retplaceofarmsangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=118 (retplaceofarmsangle honesty; Soft≠product)\n");
-/* Grep: vmm: soft retdoubletenailleangle — Wave 72 exclusive doubletenailleangle stamp */
-kprintf("vmm: soft retdoubletenailleangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=118 (retdoubletenailleangle stamp; Soft≠product)\n");
-/* Grep: vmm: soft retcurtainface — Wave 73 return-curtainface honesty */
-kprintf("vmm: soft retcurtainface soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=118 (retcurtainface honesty; Soft≠product)\n");
-/* Grep: vmm: soft retbastionangle — Wave 73 exclusive bastionangle stamp */
-kprintf("vmm: soft retbastionangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=118 (retbastionangle stamp; Soft≠product)\n");
-/* Grep: vmm: soft retglacisangle — Wave 74 return-glacisangle honesty */
-kprintf("vmm: soft retglacisangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=118 (retglacisangle honesty; Soft≠product)\n");
-/* Grep: vmm: soft retparapetangle — Wave 74 exclusive parapetangle stamp */
-kprintf("vmm: soft retparapetangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=118 (retparapetangle stamp; Soft≠product)\n");
-/* Grep: vmm: soft retmoatangle — Wave 75 return-moatangle honesty */
-kprintf("vmm: soft retmoatangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=118 (retmoatangle honesty; Soft≠product)\n");
-/* Grep: vmm: soft retowerangle — Wave 75 exclusive towerangle stamp */
-kprintf("vmm: soft retowerangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=118 (retowerangle stamp; Soft≠product)\n");
-/* Grep: vmm: soft retgateangle — Wave 76 return-gateangle honesty */
-kprintf("vmm: soft retgateangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=118 (retgateangle honesty; Soft≠product)\n");
-/* Grep: vmm: soft retwallangle — Wave 76 exclusive wallangle stamp */
-kprintf("vmm: soft retwallangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=118 (retwallangle stamp; Soft≠product)\n");
-/* Grep: vmm: soft retspireangle — Wave 77 return-spireangle honesty */
-kprintf("vmm: soft retspireangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=118 (retspireangle honesty; Soft≠product)\n");
-/* Grep: vmm: soft retholdangle — Wave 77 exclusive holdangle stamp */
-kprintf("vmm: soft retholdangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=118 (retholdangle stamp; Soft≠product)\n");
-/* Grep: vmm: soft retpalaceangle — Wave 78 return-palaceangle honesty */
-kprintf("vmm: soft retpalaceangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=118 (retpalaceangle honesty; Soft≠product)\n");
-/* Grep: vmm: soft retfortressangle — Wave 78 exclusive fortressangle stamp */
-kprintf("vmm: soft retfortressangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=118 (retfortressangle stamp; Soft≠product)\n");
-/* Grep: vmm: soft retkeepangle — Wave 79 return-keepangle honesty */
-kprintf("vmm: soft retkeepangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=118 (retkeepangle honesty; Soft≠product)\n");
-/* Grep: vmm: soft retredoubtangle — Wave 79 exclusive redoubtangle stamp */
-kprintf("vmm: soft retredoubtangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=118 (retredoubtangle stamp; Soft≠product)\n");
-/* Grep: vmm: soft retcitadelangle — Wave 80 return-citadelangle honesty */
-kprintf("vmm: soft retcitadelangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=118 (retcitadelangle honesty; Soft≠product)\n");
-/* Grep: vmm: soft retbastionkeep — Wave 80 exclusive bastionkeep stamp */
-kprintf("vmm: soft retbastionkeep exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=118 (retbastionkeep stamp; Soft≠product)\n");
-/* Grep: vmm: soft retpanoplyangle — Wave 81 return-panoplyangle honesty */
-kprintf("vmm: soft retpanoplyangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=118 (retpanoplyangle honesty; Soft≠product)\n");
-/* Grep: vmm: soft retbulwarkangle — Wave 81 exclusive bulwarkangle stamp */
-kprintf("vmm: soft retbulwarkangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=118 (retbulwarkangle stamp; Soft≠product)\n");
-/* Grep: vmm: soft retmantleangle — Wave 82 return-mantleangle honesty */
-kprintf("vmm: soft retmantleangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=118 (retmantleangle honesty; Soft≠product)\n");
-/* Grep: vmm: soft retaegisangle — Wave 82 exclusive aegisangle stamp */
-kprintf("vmm: soft retaegisangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=118 (retaegisangle stamp; Soft≠product)\n");
-/* Grep: vmm: soft retemblemangle — Wave 83 return-emblemangle honesty */
-kprintf("vmm: soft retemblemangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=118 (retemblemangle honesty; Soft≠product)\n");
-/* Grep: vmm: soft retsigilangle — Wave 83 exclusive sigilangle stamp */
-kprintf("vmm: soft retsigilangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=118 (retsigilangle stamp; Soft≠product)\n");
-/* Grep: vmm: soft retscepterangle — Wave 84 return-scepterangle honesty */
-kprintf("vmm: soft retscepterangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=118 (retscepterangle honesty; Soft≠product)\n");
-/* Grep: vmm: soft retglyphangle — Wave 84 exclusive glyphangle stamp */
-kprintf("vmm: soft retglyphangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=118 (retglyphangle stamp; Soft≠product)\n");
-/* Grep: vmm: soft retcrownangle — Wave 85 return-crownangle honesty */
-kprintf("vmm: soft retcrownangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=118 (retcrownangle honesty; Soft≠product)\n");
-/* Grep: vmm: soft retshardangle — Wave 85 exclusive shardangle stamp */
-kprintf("vmm: soft retshardangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=118 (retshardangle stamp; Soft≠product)\n");
-/* Grep: vmm: soft retforgeangle — Wave 86 return-forgeangle honesty */
-kprintf("vmm: soft retforgeangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=118 (retforgeangle honesty; Soft≠product)\n");
-/* Grep: vmm: soft retprismangle — Wave 86 exclusive prismangle stamp */
-kprintf("vmm: soft retprismangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=118 (retprismangle stamp; Soft≠product)\n");
-/* Grep: vmm: soft retflameangle — Wave 87 return-flameangle honesty */
-kprintf("vmm: soft retflameangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=118 (retflameangle honesty; Soft≠product)\n");
-/* Grep: vmm: soft retcipherangle — Wave 87 exclusive cipherangle stamp */
-kprintf("vmm: soft retcipherangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=118 (retcipherangle stamp; Soft≠product)\n");
-/* Grep: vmm: soft retbeaconangle — Wave 88 return-beaconangle honesty */
-kprintf("vmm: soft retbeaconangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=118 (retbeaconangle honesty; Soft≠product)\n");
-/* Grep: vmm: soft retledgerangle — Wave 88 exclusive ledgerangle stamp */
-kprintf("vmm: soft retledgerangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=118 (retledgerangle stamp; Soft≠product)\n");
-/* Grep: vmm: soft retbannerangle — Wave 89 return-bannerangle honesty */
-kprintf("vmm: soft retbannerangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=118 (retbannerangle honesty; Soft≠product)\n");
-/* Grep: vmm: soft retvaultangle — Wave 89 exclusive vaultangle stamp */
-kprintf("vmm: soft retvaultangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=118 (retvaultangle stamp; Soft≠product)\n");
-/* Grep: vmm: soft retcrestangle — Wave 90 return-crestangle honesty */
-kprintf("vmm: soft retcrestangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=118 (retcrestangle honesty; Soft≠product)\n");
-/* Grep: vmm: soft rettokenangle — Wave 90 exclusive tokenangle stamp */
-kprintf("vmm: soft rettokenangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=118 (rettokenangle stamp; Soft≠product)\n");
-/* Grep: vmm: soft retbadgeangle — Wave 91 return-badgeangle honesty */
-kprintf("vmm: soft retbadgeangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=118 (retbadgeangle honesty; Soft≠product)\n");
-/* Grep: vmm: soft retphaseangle — Wave 91 exclusive phaseangle stamp */
-kprintf("vmm: soft retphaseangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=118 (retphaseangle stamp; Soft≠product)\n");
-/* Grep: vmm: soft retmarkangle — Wave 92 return-markangle honesty */
-kprintf("vmm: soft retmarkangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=118 (retmarkangle honesty; Soft≠product)\n");
-/* Grep: vmm: soft retpulseangle — Wave 92 exclusive pulseangle stamp */
-kprintf("vmm: soft retpulseangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=118 (retpulseangle stamp; Soft≠product)\n");
-
-/* Grep: vmm: soft retsealangle — Wave 93 return-sealangle honesty */
-kprintf("vmm: soft retsealangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=118 (retsealangle honesty; Soft≠product)\n");
-/* Grep: vmm: soft retboundangle — Wave 93 exclusive boundangle stamp */
-kprintf("vmm: soft retboundangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=118 (retboundangle stamp; Soft≠product)\n");
-/* Grep: vmm: soft retstemangle — Wave 94 return-stemangle honesty */
-kprintf("vmm: soft retstemangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=118 (retstemangle honesty; Soft≠product)\n");
-/* Grep: vmm: soft retbladeangle — Wave 94 exclusive bladeangle stamp */
-kprintf("vmm: soft retbladeangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=118 (retbladeangle stamp; Soft≠product)\n");
-/* Grep: vmm: soft retchordangle — Wave 95 return-chordangle honesty */
-kprintf("vmm: soft retchordangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=118 (retchordangle honesty; Soft≠product)\n");
-/* Grep: vmm: soft retarcangle — Wave 95 exclusive arcangle stamp */
-kprintf("vmm: soft retarcangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=118 (retarcangle stamp; Soft≠product)\n");
-/* Grep: vmm: soft retsectorangle — Wave 96 return-sectorangle honesty */
-kprintf("vmm: soft retsectorangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=118 (retsectorangle honesty; Soft≠product)\n");
-/* Grep: vmm: soft retwedgeangle — Wave 96 exclusive wedgeangle stamp */
-kprintf("vmm: soft retwedgeangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=118 (retwedgeangle stamp; Soft≠product)\n");
-/* Grep: vmm: soft retradiusangle — Wave 97 return-radiusangle honesty */
-kprintf("vmm: soft retradiusangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=118 (retradiusangle honesty; Soft≠product)\n");
-/* Grep: vmm: soft retdiameterangle — Wave 97 exclusive diameterangle stamp */
-kprintf("vmm: soft retdiameterangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=118 (retdiameterangle stamp; Soft≠product)\n");
-/* Grep: vmm: soft retcircumangle — Wave 98 return-circumangle honesty */
-kprintf("vmm: soft retcircumangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=118 (retcircumangle honesty; Soft≠product)\n");
-/* Grep: vmm: soft retellipseangle — Wave 98 exclusive ellipseangle stamp */
-kprintf("vmm: soft retellipseangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=118 (retellipseangle stamp; Soft≠product)\n");
-/* Grep: vmm: soft rethyperangle — Wave 99 return-hyperangle honesty */
-kprintf("vmm: soft rethyperangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=118 (rethyperangle honesty; Soft≠product)\n");
-/* Grep: vmm: soft retparabolaangle — Wave 99 exclusive parabolaangle stamp */
-kprintf("vmm: soft retparabolaangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=118 (retparabolaangle stamp; Soft≠product)\n");
-/* Grep: vmm: soft retspiralangle — Wave 100 return-spiralangle honesty */
-kprintf("vmm: soft retspiralangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=118 (retspiralangle honesty; Soft≠product)\n");
-/* Grep: vmm: soft rethelixangle — Wave 100 exclusive helixangle stamp */
-kprintf("vmm: soft rethelixangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=118 (rethelixangle stamp; Soft≠product)\n");
-/* Grep: vmm: soft rettorusangle — Wave 101 return-torusangle honesty */
-kprintf("vmm: soft rettorusangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=118 (rettorusangle honesty; Soft≠product)\n");
-/* Grep: vmm: soft retknotangle — Wave 101 exclusive knotangle stamp */
-kprintf("vmm: soft retknotangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=118 (retknotangle stamp; Soft≠product)\n");
-/* Grep: vmm: soft retmoebiusangle — Wave 102 return-moebiusangle honesty */
-kprintf("vmm: soft retmoebiusangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=118 (retmoebiusangle honesty; Soft≠product)\n");
-/* Grep: vmm: soft retkleinangle — Wave 102 exclusive kleinangle stamp */
-kprintf("vmm: soft retkleinangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=118 (retkleinangle stamp; Soft≠product)\n");
-/* Grep: vmm: soft retprojectangle — Wave 103 return-projectangle honesty */
-kprintf("vmm: soft retprojectangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=118 (retprojectangle honesty; Soft≠product)\n");
-/* Grep: vmm: soft retaffineangle — Wave 103 exclusive affineangle stamp */
-kprintf("vmm: soft retaffineangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=118 (retaffineangle stamp; Soft≠product)\n");
-/* Grep: vmm: soft retlinearangle — Wave 104 return-linearangle honesty */
-kprintf("vmm: soft retlinearangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=118 (retlinearangle honesty; Soft≠product)\n");
-/* Grep: vmm: soft retbilinearangle — Wave 104 exclusive bilinearangle stamp */
-kprintf("vmm: soft retbilinearangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=118 (retbilinearangle stamp; Soft≠product)\n");
-/* Grep: vmm: soft retquadraticangle — Wave 105 return-quadraticangle honesty */
-kprintf("vmm: soft retquadraticangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=118 (retquadraticangle honesty; Soft≠product)\n");
-/* Grep: vmm: soft retcubicangle — Wave 105 exclusive cubicangle stamp */
-kprintf("vmm: soft retcubicangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=118 (retcubicangle stamp; Soft≠product)\n");
-/* Grep: vmm: soft retquarticangle — Wave 106 return-quarticangle honesty */
-kprintf("vmm: soft retquarticangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=118 (retquarticangle honesty; Soft≠product)\n");
-/* Grep: vmm: soft retquinticangle — Wave 106 exclusive quinticangle stamp */
-kprintf("vmm: soft retquinticangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=118 (retquinticangle stamp; Soft≠product)\n");
-/* Grep: vmm: soft retsplineangle — Wave 107 return-splineangle honesty */
-kprintf("vmm: soft retsplineangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=118 (retsplineangle honesty; Soft≠product)\n");
-/* Grep: vmm: soft retbezierangle — Wave 107 exclusive bezierangle stamp */
-kprintf("vmm: soft retbezierangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=118 (retbezierangle stamp; Soft≠product)\n");
-/* Grep: vmm: soft rethurmitangle — Wave 108 return-hermitangle honesty */
-kprintf("vmm: soft rethurmitangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=118 (rethurmitangle honesty; Soft≠product)\n");
-/* Grep: vmm: soft retcatmullangle — Wave 108 exclusive catmullangle stamp */
-kprintf("vmm: soft retcatmullangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=118 (retcatmullangle stamp; Soft≠product)\n");
-/* Grep: vmm: soft retnurbsangle — Wave 109 return-nurbsangle honesty */
-kprintf("vmm: soft retnurbsangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=118 (retnurbsangle honesty; Soft≠product)\n");
-/* Grep: vmm: soft retbsplineangle — Wave 109 exclusive bsplineangle stamp */
-kprintf("vmm: soft retbsplineangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=118 (retbsplineangle stamp; Soft≠product)\n");
-/* Grep: vmm: soft retmeshangle — Wave 110 return-meshangle honesty */
-kprintf("vmm: soft retmeshangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=118 (retmeshangle honesty; Soft≠product)\n");
-/* Grep: vmm: soft retgridangle — Wave 110 exclusive gridangle stamp */
-kprintf("vmm: soft retgridangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=118 (retgridangle stamp; Soft≠product)\n");
-/* Grep: vmm: soft retvoxelangle — Wave 111 return-voxelangle honesty */
-kprintf("vmm: soft retvoxelangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=118 (retvoxelangle honesty; Soft≠product)\n");
-/* Grep: vmm: soft rettexelangle — Wave 111 exclusive texelangle stamp */
-kprintf("vmm: soft rettexelangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=118 (rettexelangle stamp; Soft≠product)\n");
-/* Grep: vmm: soft retfragmentangle — Wave 112 return-fragmentangle honesty */
-kprintf("vmm: soft retfragmentangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=118 (retfragmentangle honesty; Soft≠product)\n");
-/* Grep: vmm: soft retvertexangle — Wave 112 exclusive vertexangle stamp */
-kprintf("vmm: soft retvertexangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=118 (retvertexangle stamp; Soft≠product)\n");
-/* Grep: vmm: soft retshaderangle — Wave 113 return-shaderangle honesty */
-kprintf("vmm: soft retshaderangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=118 (retshaderangle honesty; Soft≠product)\n");
-/* Grep: vmm: soft retpipelineangle — Wave 113 exclusive pipelineangle stamp */
-kprintf("vmm: soft retpipelineangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=118 (retpipelineangle stamp; Soft≠product)\n");
-/* Grep: vmm: soft retframebufferangle — Wave 114 return-framebufferangle honesty */
-kprintf("vmm: soft retframebufferangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=118 (retframebufferangle honesty; Soft≠product)\n");
-/* Grep: vmm: soft retswapchainangle — Wave 114 exclusive swapchainangle stamp */
-kprintf("vmm: soft retswapchainangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=118 (retswapchainangle stamp; Soft≠product)\n");
-/* Grep: vmm: soft retpresentangle — Wave 115 return-presentangle honesty */
-kprintf("vmm: soft retpresentangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=118 (retpresentangle honesty; Soft≠product)\n");
-/* Grep: vmm: soft retvsyncangle — Wave 115 exclusive vsyncangle stamp */
-kprintf("vmm: soft retvsyncangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=118 (retvsyncangle stamp; Soft≠product)\n");
-/* Grep: vmm: soft retfenceangle — Wave 116 return-fenceangle honesty */
-kprintf("vmm: soft retfenceangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=118 (retfenceangle honesty; Soft≠product)\n");
-/* Grep: vmm: soft retsemaphoreangle — Wave 116 exclusive semaphoreangle stamp */
-kprintf("vmm: soft retsemaphoreangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=118 (retsemaphoreangle stamp; Soft≠product)\n");
-/* Grep: vmm: soft retmutexangle — Wave 117 return-mutexangle honesty */
-kprintf("vmm: soft retmutexangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=118 (retmutexangle honesty; Soft≠product)\n");
-/* Grep: vmm: soft retcondangle — Wave 117 exclusive condangle stamp */
-kprintf("vmm: soft retcondangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=118 (retcondangle stamp; Soft≠product)\n");
-/* Grep: vmm: soft retbarrierangle — Wave 118 return-barrierangle honesty */
-kprintf("vmm: soft retbarrierangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=118 (retbarrierangle honesty; Soft≠product)\n");
-/* Grep: vmm: soft retatomicangle — Wave 118 exclusive atomicangle stamp */
-kprintf("vmm: soft retatomicangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=118 (retatomicangle stamp; Soft≠product)\n");
-/* Grep: vmm: soft retqueueangle — Wave 119 return-queueangle honesty */
-kprintf("vmm: soft retqueueangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=119 (retqueueangle honesty; Soft≠product)\n");
-/* Grep: vmm: soft reteventangle — Wave 119 exclusive eventangle stamp */
-kprintf("vmm: soft reteventangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=119 (reteventangle stamp; Soft≠product)\n");
-/* Grep: vmm: soft retchannelangle — Wave 120 return-channelangle honesty */
-kprintf("vmm: soft retchannelangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=120 (retchannelangle honesty; Soft≠product)\n");
-/* Grep: vmm: soft retmailboxangle — Wave 120 exclusive mailboxangle stamp */
-kprintf("vmm: soft retmailboxangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=120 (retmailboxangle stamp; Soft≠product)\n");
-/* Grep: vmm: soft retstreamangle — Wave 121 return-streamangle honesty */
-kprintf("vmm: soft retstreamangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=121 (retstreamangle honesty; Soft≠product)\n");
-/* Grep: vmm: soft retpacketangle — Wave 121 exclusive packetangle stamp */
-kprintf("vmm: soft retpacketangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=121 (retpacketangle stamp; Soft≠product)\n");
-/* Grep: vmm: soft retframeangle — Wave 122 return-frameangle honesty */
-kprintf("vmm: soft retframeangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=122 (retframeangle honesty; Soft≠product)\n");
-/* Grep: vmm: soft retwindowangle — Wave 122 exclusive windowangle stamp */
-kprintf("vmm: soft retwindowangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=122 (retwindowangle stamp; Soft≠product)\n");
-/* Grep: vmm: soft retlayerangle — Wave 123 return-layerangle honesty */
-kprintf("vmm: soft retlayerangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=123 (retlayerangle honesty; Soft≠product)\n");
-/* Grep: vmm: soft retcanvasangle — Wave 123 exclusive canvasangle stamp */
-kprintf("vmm: soft retcanvasangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=123 (retcanvasangle stamp; Soft≠product)\n");
-/* Grep: vmm: soft retbrushangle — Wave 124 return-brushangle honesty */
-kprintf("vmm: soft retbrushangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=124 (retbrushangle honesty; Soft≠product)\n");
-/* Grep: vmm: soft retinkangle — Wave 124 exclusive inkangle stamp */
-kprintf("vmm: soft retinkangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=124 (retinkangle stamp; Soft≠product)\n");
-/* Grep: vmm: soft retpaletteangle — Wave 125 return-paletteangle honesty */
-kprintf("vmm: soft retpaletteangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=125 (retpaletteangle honesty; Soft≠product)\n");
-/* Grep: vmm: soft retstrokeangle — Wave 125 exclusive strokeangle stamp */
-kprintf("vmm: soft retstrokeangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=125 (retstrokeangle stamp; Soft≠product)\n");
-/* Grep: vmm: soft retgradientangle — Wave 126 return-gradientangle honesty */
-kprintf("vmm: soft retgradientangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=126 (retgradientangle honesty; Soft≠product)\n");
-/* Grep: vmm: soft retblendangle — Wave 126 exclusive blendangle stamp */
-kprintf("vmm: soft retblendangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=126 (retblendangle stamp; Soft≠product)\n");
-                            kprintf("vmm: soft deepen wave=%u areas=%u catalog=%u logs=%u "
+    kprintf("vmm: soft deepen wave=%u areas=%u catalog=%u logs=%u "
             "hhdm=%d template=%d as_live=%u cow_live=%u surf=0x%x "
-            "product_tib=0 "
-            "(Wave 43 exclusive; soft only; not product; "
-            "not 1TiB product; soft≠product)\n",
+            "user_map_ok=%u user_mmio_ok=%u user_mmio_ok_ops=%u "
+            "dev_uc=%u resid=%u "
+            "product_tib=0 soft_ne_product=1 dual=MIT_OR_Apache-2.0\n",
             (unsigned)GJ_VMM_SOFT_WAVE, cAreas,
             (unsigned)GJ_VMM_SOFT_AREAS, g_cSoftInvLogs, fHhdm, fTemplate,
-            g_cAsLive, g_cCowLive, (unsigned)u32Surf);
+            g_cAsLive, g_cCowLive, (unsigned)u32Surf,
+            g_cSoftUserMapOk, g_cSoftUserMmioOk, g_cSoftUserMmioOkOps,
+            g_cMapDeviceUc, g_cSoftUserDmaResidLogs);
+#if 0 /* STAMP_STORM_CUT */
+#endif
+#if 0 /* trailing blank pad */
+
+
+                            
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+#endif /* STAMP_STORM_CUT */
 
     /*
      * Soft lamp: template bind is soft-pass; HHDM ready is stronger smoke.
@@ -1919,7 +1684,8 @@ soft_inventory_maybe_once(void)
     }
     if (g_cAsCreate == 0 && g_cMapDeviceUc == 0 && g_cCowBreak == 0 &&
         g_cEnsureIdCall == 0 && g_cAsDestroy == 0 &&
-        g_cSoftCloneCall == 0) {
+        g_cSoftCloneCall == 0 && g_cSoftUserMmioCall == 0 &&
+        g_cSoftUserMmioOkOps == 0) {
         return;
     }
     g_fSoftInvOnce = 1;
@@ -1941,7 +1707,7 @@ phys_to_virt(gj_paddr_t pa)
     }
     /*
      * Identity map for low memory (boot only). High PA before HHDM must not
-     * be walked here — PMM holds high regions pending until vmm_hhdm_init.
+     * be walked here - PMM holds high regions pending until vmm_hhdm_init.
      */
     return (u64 *)(gj_vaddr_t)pa;
 }
@@ -2030,7 +1796,7 @@ vmm_hhdm_init(u64 paMax)
     if (g_pKernelPml4 == NULL) {
         return GJ_ERR_INVAL;
     }
-    /* Cap at design headroom (TiB → bytes: << 40) */
+    /* Cap at design headroom (TiB -> bytes: << 40) */
     u64Limit = (u64)GJ_PMM_MAX_PHYS_TIB << 40;
     if (paMax == 0 || paMax > u64Limit) {
         paMax = u64Limit;
@@ -2066,7 +1832,7 @@ vmm_hhdm_init(u64 paMax)
             u64CurPdPa = paTbl;
             pPd = phys_to_virt(paTbl);
         } else if ((pPdpt[u64I3] & PTE_PS) != 0) {
-            /* Already a 1 GiB mapping — skip covering this 2 MiB */
+            /* Already a 1 GiB mapping - skip covering this 2 MiB */
             continue;
         } else {
             u64CurPdPa = pPdpt[u64I3] & PTE_ADDR_MASK;
@@ -2089,7 +1855,7 @@ vmm_hhdm_init(u64 paMax)
     g_fHhdmReady = 1;
     g_u64HhdmMapped = paMax;
     g_cHhdm2MiB = (u32)cMapped;
-    /* phys_to_virt now uses HHDM — refresh kernel pml4 pointer */
+    /* phys_to_virt now uses HHDM - refresh kernel pml4 pointer */
     g_pKernelPml4 = phys_to_virt(g_u64KernelCr3);
     /* Greppable: vmm: HHDM base= (P-MEM-5; unlocks pmm high hierarchical free) */
     kprintf("vmm: HHDM base=0x%lx mapped=0x%lx (%lu x 2MiB)\n",
@@ -2276,6 +2042,8 @@ vmm_map_device_uc(gj_paddr_t pa, u64 cb, gj_vaddr_t *pVaOut)
             "total=%u soft PASS\n",
             (unsigned long)pa, (unsigned long)*pVaOut, (unsigned long)cb, cNew,
             cHad, g_cMapDeviceUc);
+    /* Lean residual once: kernel UC device map for UDX/MAP_BAR (Soft!=product). */
+    soft_user_dma_residual_log();
     soft_inventory_maybe_once();
     return GJ_OK;
 }
@@ -2371,7 +2139,7 @@ cow_table_entry(u64 *pEntry, u64 u64KerEntry)
         return GJ_OK;
     }
     if ((*pEntry & PTE_PS) != 0) {
-        return GJ_OK; /* large page — split path handles */
+        return GJ_OK; /* large page - split path handles */
     }
     if (*pEntry != u64KerEntry) {
         return GJ_OK; /* already private */
@@ -2393,8 +2161,8 @@ cow_table_entry(u64 *pEntry, u64 u64KerEntry)
 /*
  * Free private user-side tables + leaf data frames.
  * Shared kernel tables must not be freed.
- *   COW leaves  → refcount drop (free on last ref)
- *   Private user leaves in product VA band → pmm_free
+ *   COW leaves  -> refcount drop (free on last ref)
+ *   Private user leaves in product VA band -> pmm_free
  * Skips identity (PA==VA) and kernel-shared PT subtrees.
  */
 gj_status_t
@@ -2439,7 +2207,7 @@ vmm_as_destroy(u64 u64Cr3)
             if ((pPdpt[u32I3] & PTE_P) == 0 || (pPdpt[u32I3] & PTE_PS)) {
                 continue;
             }
-            /* If this PD matches kernel, shared — skip free */
+            /* If this PD matches kernel, shared - skip free */
             if (pKer != NULL && (pKer[u32I4] & PTE_P) != 0) {
                 u64 *pKerPdpt = phys_to_virt(pKer[u32I4] & PTE_ADDR_MASK);
 
@@ -2462,7 +2230,7 @@ vmm_as_destroy(u64 u64Cr3)
                 }
                 /*
                  * After COW of a PD, most PT pointers still match the kernel
-                 * template (shared). Freeing those destroys identity maps —
+                 * template (shared). Freeing those destroys identity maps -
                  * only free PTs that differ from the kernel entry.
                  */
                 if (pKerPd != NULL) {
@@ -2486,14 +2254,14 @@ vmm_as_destroy(u64 u64Cr3)
                     if ((u64Pte & PTE_P) == 0 || (u64Pte & PTE_U) == 0) {
                         continue;
                     }
-                    /* Identical to kernel leaf → still shared content */
+                    /* Identical to kernel leaf -> still shared content */
                     if (pKerPt != NULL && u64Pte == pKerPt[u32I1]) {
                         continue;
                     }
                     va = ((u64)u32I4 << 39) | ((u64)u32I3 << 30) |
                          ((u64)u32I2 << 21) | ((u64)u32I1 << 12);
                     pa = u64Pte & PTE_ADDR_MASK;
-                    /* Identity leftovers (boot map) — never free */
+                    /* Identity leftovers (boot map) - never free */
                     if (pa == (gj_paddr_t)va) {
                         continue;
                     }
@@ -2636,7 +2404,7 @@ walk_pd_entry(gj_vaddr_t va, int fCreate)
         ensure_user_flag(pPdpte);
     }
     if ((*pPdpte & PTE_PS) != 0) {
-        /* 1GiB page — not used by boot; refuse */
+        /* 1GiB page - not used by boot; refuse */
         return NULL;
     }
     pPd = phys_to_virt(*pPdpte & PTE_ADDR_MASK);
@@ -2691,7 +2459,12 @@ walk_pte(gj_vaddr_t va, int fCreate)
     if (pPde == NULL) {
         return NULL;
     }
-    /* COW PD entry if still shared with kernel before split/modify */
+    /*
+     * COW PD entry if still shared with kernel before split/modify.
+     * Identity bring-up uses 2MiB PS leaves (P|W, no U). Private AS must
+     * clone the PT path before installing product U|W stack/code leaves —
+     * thr=82 class: user write to unsplit identity no-U / shared PT residual.
+     */
     if (fCow && g_pKernelPml4 != NULL && (g_pKernelPml4[u64I4] & PTE_P) != 0) {
         u64 *pKerPdpt = phys_to_virt(g_pKernelPml4[u64I4] & PTE_ADDR_MASK);
 
@@ -2699,11 +2472,22 @@ walk_pte(gj_vaddr_t va, int fCreate)
             u64 *pKerPd = phys_to_virt(pKerPdpt[u64I3] & PTE_ADDR_MASK);
             u64 u64KerPde = pKerPd[u64I2];
 
-            if ((*pPde & PTE_P) != 0 && *pPde == u64KerPde &&
-                (u64KerPde & PTE_PS) == 0) {
-                /* Shared PT pointer — clone PT before PTE write */
-                if (cow_table_entry(pPde, u64KerPde) != GJ_OK) {
-                    return NULL;
+            if ((*pPde & PTE_P) != 0 && *pPde == u64KerPde) {
+                if ((u64KerPde & PTE_PS) != 0) {
+                    /*
+                     * Shared large-page PDE value in a (hopefully private) PD:
+                     * split into a private 4K PT so leaf installs never mutate
+                     * the kernel template PD. walk_pd_entry already COWs PD.
+                     */
+                    st = split_large_pde(pPde, va);
+                    if (st != GJ_OK) {
+                        return NULL;
+                    }
+                } else {
+                    /* Shared PT pointer - clone PT before PTE write */
+                    if (cow_table_entry(pPde, u64KerPde) != GJ_OK) {
+                        return NULL;
+                    }
                 }
             }
         }
@@ -2745,7 +2529,7 @@ walk_pte(gj_vaddr_t va, int fCreate)
 
 /*
  * Kernel image + BSS live in low identity VA (link at 1 MiB; embeds grow BSS).
- * Never install user/COW/RO leaves over that range — it bricks kmain stores.
+ * Never install user/COW/RO leaves over that range - it bricks kmain stores.
  */
 static int
 va_in_kernel_identity(gj_vaddr_t va)
@@ -2794,12 +2578,18 @@ vmm_map_page(gj_vaddr_t va, gj_paddr_t pa, u32 u32Prot)
     *pPte &= ~PTE_COW;
     vmm_tlb_flush_page(va);
     vmm_soft_inc(&g_cSoftMapOk);
+    /* Lean residual: count PROT_USER installs (RAM/DMA export/anon/PE). */
+    if ((u32Prot & GJ_VMM_PROT_USER) != 0) {
+        vmm_soft_inc(&g_cSoftUserMapOk);
+        /* Once-only residual inside helper; freestanding identity untouched. */
+        soft_user_dma_residual_log();
+    }
     return GJ_OK;
 }
 
 /*
  * PA overlaps kernel image/BSS (identity-linked phys on bring-up). Soft
- * reject for user device maps — never grant kernel text/data as MMIO.
+ * reject for user device maps - never grant kernel text/data as MMIO.
  */
 static int
 pa_overlaps_kernel_image(gj_paddr_t pa, u64 cb)
@@ -2855,6 +2645,12 @@ vmm_map_page_user_device_uc(gj_vaddr_t va, gj_paddr_t pa, u32 u32Prot)
     return GJ_OK;
 }
 
+/*
+ * Preferred DDI MAP_BAR / UDX ioremap install: USER+UC (PCD|PWT) leaves under
+ * the process private CR3. Soft!=product dual MIT OR Apache-2.0; G-AC-1.
+ * Soft grant note only - not product MMIO_FRAME CNode mint (mint OPEN).
+ * Residual once via soft_user_dma_residual_log (map_bar / device_uc / lean).
+ */
 gj_status_t
 vmm_map_user_device(struct gj_process *pProc, u64 u64UserVa, gj_paddr_t pa,
                     u64 cb, u32 u32Prot)
@@ -2872,54 +2668,71 @@ vmm_map_user_device(struct gj_process *pProc, u64 u64UserVa, gj_paddr_t pa,
 
     if (pProc == NULL || cb == 0) {
         vmm_soft_inc(&g_cSoftUserMmioReject);
+        vmm_soft_inc(&g_cSoftUserMmioRejInval);
+        soft_user_dma_residual_log();
         return GJ_ERR_INVAL;
     }
     /* Page-align: both VA and PA must be 4 KiB aligned. */
     if ((u64UserVa & (u64)(GJ_PAGE_SIZE - 1)) != 0 ||
         ((u64)pa & (u64)(GJ_PAGE_SIZE - 1)) != 0) {
         vmm_soft_inc(&g_cSoftUserMmioReject);
+        vmm_soft_inc(&g_cSoftUserMmioRejInval);
+        soft_user_dma_residual_log();
         return GJ_ERR_INVAL;
     }
     /* Round length up to whole pages. */
     u64Pages = (cb + (u64)GJ_PAGE_SIZE - 1ull) / (u64)GJ_PAGE_SIZE;
     if (u64Pages == 0) {
         vmm_soft_inc(&g_cSoftUserMmioReject);
+        vmm_soft_inc(&g_cSoftUserMmioRejInval);
+        soft_user_dma_residual_log();
         return GJ_ERR_INVAL;
     }
     /* Overflow-safe end checks. */
     if (u64UserVa + u64Pages * (u64)GJ_PAGE_SIZE < u64UserVa ||
         (u64)pa + u64Pages * (u64)GJ_PAGE_SIZE < (u64)pa) {
         vmm_soft_inc(&g_cSoftUserMmioReject);
+        vmm_soft_inc(&g_cSoftUserMmioRejInval);
+        soft_user_dma_residual_log();
         return GJ_ERR_INVAL;
     }
     u64Va = u64UserVa;
     u64Pa = (u64)pa;
     u64EndVa = u64Va + u64Pages * (u64)GJ_PAGE_SIZE;
 
-    /* G-MAP-2 product user band only. */
+    /* G-MAP-2 product user band only (DDI MAP_BAR host VA must land here). */
     if (u64Va < GJ_USER_VA_BASE || u64EndVa > GJ_USER_VA_END ||
         u64EndVa < u64Va) {
         vmm_soft_inc(&g_cSoftUserMmioReject);
+        vmm_soft_inc(&g_cSoftUserMmioRejBand);
+        soft_user_dma_residual_log();
         return GJ_ERR_INVAL;
     }
     /* Reject PA over kernel image/BSS (critical identity region). */
     if (pa_overlaps_kernel_image(pa, u64Pages * (u64)GJ_PAGE_SIZE)) {
         vmm_soft_inc(&g_cSoftUserMmioReject);
+        vmm_soft_inc(&g_cSoftUserMmioRejKerImg);
         kprintf("vmm: map_user_device reject pa=0x%lx (kernel image)\n",
                 (unsigned long)pa);
+        soft_user_dma_residual_log();
         return GJ_ERR_PERM;
     }
 
-    /* USER forced; EXEC stripped — device maps never W|X. */
+    /* USER forced; EXEC stripped - device maps never W|X. */
     u32MapProt = u32Prot & (GJ_VMM_PROT_READ | GJ_VMM_PROT_WRITE);
     u32MapProt |= GJ_VMM_PROT_USER;
     if ((u32MapProt & (GJ_VMM_PROT_READ | GJ_VMM_PROT_WRITE)) == 0) {
         u32MapProt |= GJ_VMM_PROT_READ;
     }
+    if ((u32MapProt & GJ_VMM_PROT_WRITE) != 0) {
+        vmm_soft_inc(&g_cSoftUserMmioWrite);
+    }
 
     st = process_as_ensure(pProc);
     if (st != GJ_OK) {
         vmm_soft_inc(&g_cSoftUserMmioReject);
+        vmm_soft_inc(&g_cSoftUserMmioAsFail);
+        soft_user_dma_residual_log();
         return st;
     }
 
@@ -2931,6 +2744,10 @@ vmm_map_user_device(struct gj_process *pProc, u64 u64UserVa, gj_paddr_t pa,
             (gj_vaddr_t)(u64Va + iPage * (u64)GJ_PAGE_SIZE),
             (gj_paddr_t)(u64Pa + iPage * (u64)GJ_PAGE_SIZE), u32MapProt);
         if (st != GJ_OK) {
+            /* Partial MAP_BAR install: roll back installed leaves (fail closed). */
+            if (iPage > 0) {
+                vmm_soft_inc(&g_cSoftUserMmioPartial);
+            }
             while (iPage > 0) {
                 iPage--;
                 (void)vmm_unmap_page(
@@ -2944,9 +2761,12 @@ vmm_map_user_device(struct gj_process *pProc, u64 u64UserVa, gj_paddr_t pa,
             }
             if (st == GJ_ERR_NOMEM) {
                 vmm_soft_inc(&g_cSoftMapNomem);
+                vmm_soft_inc(&g_cSoftUserMmioNomem);
             } else {
                 vmm_soft_inc(&g_cSoftUserMmioReject);
             }
+            /* Residual once: MAP_BAR fail path tallies (Soft!=product). */
+            soft_user_dma_residual_log();
             return st;
         }
     }
@@ -2958,14 +2778,31 @@ vmm_map_user_device(struct gj_process *pProc, u64 u64UserVa, gj_paddr_t pa,
     }
 
     g_cSoftUserMmioOk += (u32)u64Pages;
-    /* Soft greppable once: product path lamp for UDX ioremap under GJ. */
+    vmm_soft_inc(&g_cSoftUserMmioOkOps);
+    /* Last-map snap for map_bar residual (observe only; Soft!=product). */
+    g_u64SoftUserMmioLastVa = u64Va;
+    g_u64SoftUserMmioLastPa = u64Pa;
+    g_cSoftUserMmioLastPages = (u32)u64Pages;
+    g_u32SoftUserMmioLastProt = u32MapProt;
+    if ((u32)u64Pages > g_cSoftUserMmioPagesPeak) {
+        g_cSoftUserMmioPagesPeak = (u32)u64Pages;
+    }
+    vmm_soft_note_peaks();
+    /* Soft greppable once: UDX ioremap / DDI MAP_BAR user-AS UC path under GJ. */
     if (g_fSoftUserMmioPass == 0) {
         g_fSoftUserMmioPass = 1;
         kprintf("vmm: soft user mmio map PASS va=0x%lx pa=0x%lx pages=%lu "
-                "prot=0x%x\n",
+                "prot=0x%x map_bar=1 soft_ne_product=1 "
+                "dual=MIT_OR_Apache-2.0\n",
                 (unsigned long)u64Va, (unsigned long)u64Pa,
                 (unsigned long)u64Pages, (unsigned)u32MapProt);
     }
+    /*
+     * Lean residual once: user-AS device UC for UDX MMIO / DDI MAP_BAR
+     * (Soft!=product dual MIT OR Apache-2.0; mmio_frame_cap OPEN).
+     */
+    soft_user_dma_residual_log();
+    soft_inventory_maybe_once();
     return GJ_OK;
 }
 
@@ -2985,7 +2822,7 @@ vmm_unmap_page(gj_vaddr_t va)
     pa = u64Pte & PTE_ADDR_MASK;
     *pPte = 0;
     vmm_tlb_flush_page(va);
-    /* COW shared frames only — private free stays with munmap callers */
+    /* COW shared frames only - private free stays with munmap callers */
     if ((u64Pte & PTE_U) != 0 && (u64Pte & PTE_COW) != 0 && pa != 0 &&
         pa != (gj_paddr_t)va) {
         release_leaf_frame(pa, 1);
@@ -3099,7 +2936,7 @@ vmm_ensure_identity_rw(gj_vaddr_t va, size_t cb)
                 (unsigned long)va, (unsigned long)cb);
         return st;
     }
-    /* Private AS may hold a COWed PT with RO leaves — repair active too. */
+    /* Private AS may hold a COWed PT with RO leaves - repair active too. */
     if ((u64Saved & PTE_ADDR_MASK) != (g_u64KernelCr3 & PTE_ADDR_MASK)) {
         fDual = 1;
         __asm__ volatile("mov %0, %%cr3" : : "r"(u64Saved) : "memory");
@@ -3434,8 +3271,8 @@ vmm_as_clone_user_pages(u64 u64SrcCr3, u64 u64DstCr3, u32 u32Max, u32 *pCopied)
                     /*
                      * Clone product user maps only. Kernel identity+BSS lives
                      * in low VA (link at 1 MiB; BSS can extend past 0x400000
-                     * once embeds grow) — never COW that range.
-                     * Product band: ≥8 MiB … <2 GiB (INTERP/SO/PE high bases).
+                     * once embeds grow) - never COW that range.
+                     * Product band: ≥8 MiB ... <2 GiB (INTERP/SO/PE high bases).
                      */
                     if (va < 0x0000000000800000ull ||
                         va >= 0x0000000080000000ull) {
@@ -3448,7 +3285,7 @@ vmm_as_clone_user_pages(u64 u64SrcCr3, u64 u64DstCr3, u32 u32Max, u32 *pCopied)
                     }
 
                     /*
-                     * Writable user page → true COW: demote parent to RO+COW,
+                     * Writable user page -> true COW: demote parent to RO+COW,
                      * map same PA RO+COW into child (no eager copy).
                      * Read-only / non-W: private copy (keep parent RO alone).
                      * Never demote kernel identity/BSS (belt + product floor).

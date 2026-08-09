@@ -4,9 +4,16 @@
  *
  * storaged — host POSIX software-image smoke (A1 CI path).
  *
+ * C2 product daemon residual (exclusive host stub; Soft!=product):
+ *   Host soft image != freestanding product. Product block daemon path is
+ *   storaged_gj.c over GJ_SYS_STORE + UDX ring (product_store=UDX direction).
+ *   Dual DoD remains OPEN (agent never closes). G-AC-1: no Linux .ko product.
+ *   Ring-map is freestanding-only (host ring_host=0). residual_lean=1.
+ *
  * Soft inventory (Wave 126 exclusive deepen — greppable "storaged: soft …"):
  *   storaged: soft inventory … / soft deepen wave=70 …
- *   multi_server=0 confine=0; soft ≠ product multi-server confine.
+ *   storaged: soft residual lean … Soft!=product product_store=UDX …
+ *   multi_server=0 confine=0; Soft!=product multi-server confine.
  *
  * Exercises door-shaped sector R/W against an in-process 32 KiB image so CI
  * can green without the kernel store door. The freestanding product path is
@@ -16,6 +23,7 @@
  * Compatibility notes (keep aligned with storaged_gj + store_door):
  *   - Sector size 512 B; transfers are sector-multiple only.
  *   - Bounds: reject null, zero length, non-sector-multiple, LBA overflow.
+ *   - Ownership: same-token reclaim ok; foreign CLAIM BUSY; wrong RELEASE -1.
  *   - Soft multi-sector, CAP, QUEUE, FLUSH-shaped probes deepen the surface.
  *   - Host markers are independent of ring-map (ring is freestanding-only).
  *
@@ -176,7 +184,7 @@ store_release(uint32_t u32Tok)
     return 0;
 }
 
-/* Reject path probe — must stay -1 (CI / API contract). */
+/* Reject path probe — must stay -1 (CI / API contract; Soft!=product). */
 static int
 store_reject_probe(void)
 {
@@ -184,31 +192,46 @@ store_reject_probe(void)
     static uint8_t aBig[GJ_STORE_XFER_MAX + GJ_STORE_SECTOR];
     int nFails = 0;
 
-    /* Null buffer */
+    /* Null buffer (write + read) */
     if (store_write(0, NULL, GJ_STORE_SECTOR) == 0) {
         nFails++;
     }
     if (store_read(0, NULL, GJ_STORE_SECTOR) == 0) {
         nFails++;
     }
-    /* Zero length */
+    /* Zero length (write + read) */
     if (store_write(0, aTmp, 0) == 0) {
         nFails++;
     }
-    /* Non-sector-multiple */
+    if (store_read(0, aTmp, 0) == 0) {
+        nFails++;
+    }
+    /* Non-sector-multiple (write + read) */
     if (store_write(0, aTmp, GJ_STORE_SECTOR - 1u) == 0) {
         nFails++;
     }
-    /* LBA past end */
+    if (store_read(0, aTmp, GJ_STORE_SECTOR - 1u) == 0) {
+        nFails++;
+    }
+    /* LBA past end (write + read) */
     if (store_write(GJ_STORE_SECTS, aTmp, GJ_STORE_SECTOR) == 0) {
         nFails++;
     }
-    /* Range overflow past image end */
+    if (store_read(GJ_STORE_SECTS, aTmp, GJ_STORE_SECTOR) == 0) {
+        nFails++;
+    }
+    /* Range overflow past image end (write + read) */
     if (store_write(GJ_STORE_SECTS - 1u, aTmp, GJ_STORE_SECTOR * 2u) == 0) {
         nFails++;
     }
-    /* Over XFER_MAX (door ceiling) */
+    if (store_read(GJ_STORE_SECTS - 1u, aTmp, GJ_STORE_SECTOR * 2u) == 0) {
+        nFails++;
+    }
+    /* Over XFER_MAX (door ceiling; write + read) */
     if (store_write(0, aBig, (uint32_t)sizeof(aBig)) == 0) {
+        nFails++;
+    }
+    if (store_read(0, aBig, (uint32_t)sizeof(aBig)) == 0) {
         nFails++;
     }
     /* Null CAP / STATS / QUEUE */
@@ -267,8 +290,22 @@ main(void)
         printf("storaged: reclaim FAIL\n");
         return 1;
     }
+    /*
+     * Ownership contract (store_door-shaped; Soft!=product host soft):
+     * foreign CLAIM while owned -> BUSY (-1); wrong RELEASE token -> -1.
+     * Same-token reclaim already proven above. Do not drop ownership yet.
+     */
+    if (store_claim(uTok ^ 0x1u) == 0) {
+        printf("storaged: BUSY CLAIM FAIL\n");
+        return 1;
+    }
+    if (store_release(uTok ^ 0x1u) == 0) {
+        printf("storaged: wrong RELEASE FAIL\n");
+        return 1;
+    }
     cSoft++;
-    printf("storaged: reclaim soft ok token=0x%x\n", (unsigned)uTok);
+    printf("storaged: reclaim soft ok token=0x%x busy_ok=1 wrong_rel_ok=1\n",
+           (unsigned)uTok);
 
     /* CAP soft */
     u64Cap = 0ull;
@@ -400,10 +437,10 @@ main(void)
     printf("storaged: free soft ok soft_steps=%u\n", cSoft);
 
     /* Grep: storaged: soft inventory (Wave 126 exclusive deepen) */
-/* Wave 126 soft deepen surfaces (CREATE-ONLY soft ≠ product):
+/* Wave 126 soft deepen surfaces (CREATE-ONLY Soft!=product):
  *   greppable: soft retgradientangle continuum_toward=26800 soft_ne_product=1 wave=126
  *   greppable: soft retblendangle exclusive=1 continuum_toward=26800 soft_ne_product=1 wave=126
- * Soft ≠ product complete; product lamps 0;
+ * Soft!=product complete; product lamps 0; dual DoD OPEN;
  */
 
     printf("storaged: soft inventory soft_steps=%u sectors=%u io=%u "
@@ -413,6 +450,15 @@ main(void)
            "confine=0\n");
     printf("storaged: soft honesty multi_server=0 confine=0 "
            "exclusive=1 soft=1 product_kernel=OPEN wave=70\n");
+    /*
+     * C2 product daemon residual lean (host soft only; Soft!=product).
+     * greppable: storaged: soft residual lean
+     * Product path = freestanding storaged_gj + UDX ring (product_store=UDX).
+     * Host smoke never claims ring / dual DoD close / freestanding product.
+     */
+    printf("storaged: soft residual lean residual_lean=1 product_store=UDX "
+           "product_path=UDX ring_host=0 host_soft=1 freestanding_path=1 "
+           "Soft!=product dual_dod=OPEN G-AC-1=1 exclusive=1 soft_ne_product=1\n");
 
     printf("storaged: door-shaped multi-lba ok sectors=%u io=%u\n",
            (unsigned)GJ_STORE_SECTS, (unsigned)g_u32Io);

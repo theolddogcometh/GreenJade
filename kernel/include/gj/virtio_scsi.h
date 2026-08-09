@@ -2,31 +2,47 @@
  * SPDX-License-Identifier: MIT OR Apache-2.0
  * Copyright (c) 2026 Project GreenJade contributors
  *
- * Clean-room virtio-scsi (modern PCI) — pure C11 freestanding, dual license,
- * no GPL. Product SCSI path: control + event + request virtqueues for
- * scsi_mid / scsi_door when virtio-blk is absent or for raw CDB traffic.
- * OASIS virtio-scsi layout numbers only; no Linux source.
+ * Clean-room virtio-scsi (modern PCI) - pure C11 freestanding, dual license
+ * (MIT OR Apache-2.0). No GPL. OASIS virtio-scsi layout numbers only;
+ * no Linux virtio source. Soft!=product for freestanding residual lamps.
+ *
+ * SAS / SCSI path role (product ladder):
+ *   scsi_mid -> virtio-scsi (T0 interim transport) -> later SAS HBA host.
+ *   This unit is the T0 residual transport under scsi_mid / scsi_door /
+ *   GJ_SYS_SCSI. Real SAS HBA (T2 clean-room / UDX host) is a separate
+ *   product track — Soft residual lamps != product SAS HBA DoD close.
  *
  * Queues (fixed OASIS indices):
- *   q0 control — TMF / AN (soft poll path; kick + used poll)
- *   q1 event   — asynchronous events (post at probe; soft poll + repost)
- *   q2 request — command submission (blocking used-ring poll I/O)
+ *   q0 control - TMF / AN (soft poll path; kick + used poll)
+ *   q1 event   - asynchronous events (post at probe; soft poll + repost)
+ *   q2 request - command submission (blocking used-ring poll I/O)
  *
  * Soft path (bring-up, no live HBA):
  *   After failed/absent probe the module soft-arms: TMF/stats/event_poll
  *   still answer; CDB I/O stays with scsi_mid soft LUN (submit returns -1).
- *   greppable log: "virtio-scsi: soft-armed …"
+ *   greppable: "virtio-scsi: soft-armed ..."
  *
- * Soft product depth:
+ * Soft residual lean (this unit only; Soft!=product; dual MIT OR Apache-2.0):
+ *   One-shot boot inventory + one-shot first soft-activity residual lean.
+ *   Silent path counters (TMF/event/req/residual-byte/probe/free-min).
+ *   Never multi-line stamp storms / no wave= / no version stamp.
+ *   Soft residual lean != product SAS HBA dual-license DoD.
+ *   greppable: virtio-scsi: soft residual lean
+ *   greppable: virtio-scsi: soft residual
+ *   greppable: virtio-scsi: soft inventory
+ *   greppable: Soft!=product path=sas_t0
+ *
+ * Soft depth (eng residual, not product claim):
  *   - ctrl q0: TMF submit (live poll) or soft-accept LUN reset/abort
  *   - event q1: non-blocking soft poll + repost; empty when no HBA
- *   - req  q2: residual / fail counters / free-desc soft stats
+ *   - req  q2: residual-byte clamp / fail counters / free-desc soft stats
+ *   - soft cfg snap: sense_size / cdb_size / num_queues (device-cfg peek)
  *
  * Bring-up lifecycle (live HBA):
- *   scan → first KIND_SCSI → setup → negotiate → q0+q1+q2 → post event
- *   → driver_ok → ready; submit CDBs via virtio_scsi_submit
+ *   scan -> first KIND_SCSI -> setup -> negotiate -> q0+q1+q2 -> post event
+ *   -> driver_ok -> ready; submit CDBs via virtio_scsi_submit
  *
- * Product markers (serial): "virtio-scsi: ready …" / "soft-armed";
+ * Product markers (serial): "virtio-scsi: ready ..." / "soft-armed";
  * I/O via scsi_mid/scsi_door / GJ_SYS_SCSI.
  *
  * greppable: GJ_VIRTIO_SCSI_ virtio_scsi_probe virtio_scsi_qstats
@@ -38,9 +54,9 @@
 
 /*
  * Queue indices (OASIS virtio-scsi fixed layout):
- *   0 control  — TMF / AN (soft poll path)
- *   1 event    — asynchronous events (post + soft poll/repost)
- *   2 request0 — command submission (blocking poll I/O)
+ *   0 control  - TMF / AN (soft poll path)
+ *   1 event    - asynchronous events (post + soft poll/repost)
+ *   2 request0 - command submission (blocking poll I/O)
  */
 #define GJ_VIRTIO_SCSI_Q_CONTROL 0u
 #define GJ_VIRTIO_SCSI_Q_EVENT   1u
@@ -110,7 +126,7 @@ struct gj_virtio_scsi_qstats {
     u16 u16FreeReq;
     u16 u16Pad;
     u32 u32LastResponse;  /* last request-q virtio response code */
-    u32 u32LastResidual;  /* last request-q residual bytes */
+    u32 u32LastResidual;  /* last request-q residual bytes (OASIS residual) */
     u32 u32LastScsiStatus;/* last SAM status byte */
 };
 
@@ -118,7 +134,7 @@ struct gj_virtio_scsi_qstats {
  * Probe first virtio-scsi; set up ctrl/event/req qs + event post + DRIVER_OK.
  * On no device / hard fail: soft-arms soft path and may still return 0 so
  * TMF/stats stay available (see virtio_scsi_soft_active). Live success logs
- * "virtio-scsi: ready …".
+ * "virtio-scsi: ready ...".
  */
 int  virtio_scsi_probe(void);
 
@@ -170,13 +186,13 @@ u32  virtio_scsi_event_count(void);
 u32  virtio_scsi_ctrl_count(void);
 
 /**
- * Fill soft queue stats; null pOut → -1. Works when soft-only (u32Soft=1).
+ * Fill soft queue stats; null pOut -> -1. Works when soft-only (u32Soft=1).
  * Returns 0 on success.
  */
 int  virtio_scsi_qstats(struct gj_virtio_scsi_qstats *pOut);
 
 /**
  * Free descriptor count for queue index (0 ctrl / 1 event / 2 req).
- * Soft-only or bad index → 0.
+ * Soft-only or bad index -> 0.
  */
 u16  virtio_scsi_q_free(u32 u32QIdx);

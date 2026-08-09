@@ -15,19 +15,19 @@
  *
  * Dual stacks per thread
  * ----------------------
- *   aStack  — cooperative switch_context (schedule / trampoline)
- *   aKstack — per-thr SYSCALL stack so door_recv can block mid-call (G-PERS)
+ *   aStack  - cooperative switch_context (schedule / trampoline)
+ *   aKstack - per-thr SYSCALL stack so door_recv can block mid-call (G-PERS)
  *
- * Hard invariants (prior residual-#UD fix — do not regress)
+ * Hard invariants (prior residual-#UD fix - do not regress)
  * --------------------------------------------------------
  *   1) TSS.RSP0 always the dedicated IRQ stack (tss_use_irq_rsp0). Never
  *      pin RSP0 to a thr aKstack: a parked thr mid-syscall has frames there;
- *      another thr's ring-3 IRQ would smash them → garbage RIP / kernel #UD.
+ *      another thr's ring-3 IRQ would smash them -> garbage RIP / kernel #UD.
  *   2) Per-CPU GS USER_* (RIP/RSP/RFLAGS) is not per-thread. schedule()
  *      save/restore via u64SysUser* so yield mid-syscall sysretq's to the
  *      correct user context after another thr has run.
  *   3) Install thr SYSCALL kstack (u64KernelRsp) only after switch_context
- *      (or from the user-entry trampoline) — never while still on pCur.
+ *      (or from the user-entry trampoline) - never while still on pCur.
  *
  * Soft product surfaces
  * ---------------------
@@ -38,13 +38,13 @@
  *
  * Code map
  * --------
- *   kernel/sched/thread.c          — create / block / wake / pick / QoS
- *   kernel/arch/x86_64/switch.S    — switch_context
- *   kernel/cpu/cpu.c               — GS USER_* / u64KernelRsp / TSS.RSP0
+ *   kernel/sched/thread.c          - create / block / wake / pick / QoS
+ *   kernel/arch/x86_64/switch.S    - switch_context
+ *   kernel/cpu/cpu.c               - GS USER_* / u64KernelRsp / TSS.RSP0
  *
  * Related: gj/process.h (pProc owner), gj/spawn.h, gj/user_task.h,
  *          gj/except.h (block tags on exception port).
- * docs/LINUX_ABI_HYBRID.md · docs/APPLE_CHANNEL_REMAINING.md §8 (QoS spirit)
+ * docs/LINUX_ABI_HYBRID.md * docs/APPLE_CHANNEL_REMAINING.md §8 (QoS spirit)
  */
 #pragma once
 
@@ -56,7 +56,7 @@ struct gj_thread;
 /**
  * Thread lifecycle states.
  * UNUSED slots may be recycled; EXITED threads stay until reaped by product
- * policy (bring-up may leave them occupied — fixed GJ_MAX_THREADS table).
+ * policy (bring-up may leave them occupied - fixed GJ_MAX_THREADS table).
  */
 enum gj_thread_state {
     GJ_THR_UNUSED   = 0,
@@ -71,6 +71,41 @@ enum gj_thread_state {
  * frames overflowed, corrupted saved RSP frames, and produced kernel #UD with
  * garbage RIP (e.g. 0x510e2002 near store door tokens) while thr=sshd was
  * current. Canary at aKstack[0] catches further growth pressure.
+ *
+ * 32 KiB aKstack stands (Soft!=product). Optional 32->48 KiB bump only when
+ * soft HWM / canary evidence shows pressure - not speculative.
+ *
+ * H1 residual lean (Soft!=product; G-AC-1):
+ *   net_eth_poll only on scheduler_run thr stack (every pass; full thr stack).
+ *   Never timer / APIC / MSI-X / IRQ stack (IRQ stack smash / #PF I=1 class).
+ *   AP scheduler_run_ap does not own NIC poll (BSP run-loop only).
+ *   freestanding class SKIP; product UDX; poll ownership still thr-stack
+ *   for virtio/UDX later (H1 stands independent of freestanding class SKIP).
+ * greppable: net_eth_poll=run_loop_only * net_eth_irq=0 * owner=scheduler_run
+ * greppable: freestanding_class=SKIP * product=UDX * poll_own=thr_stack
+ * greppable: virtio_udx_later=1 * stack=thr
+ *
+ * H3 residual lean (Soft!=product; UDX host teardown companion):
+ *   thread_exit_process drains non-current siblings BEFORE process_death
+ *   private as_destroy (ASSURANCE H3 | thr_exit before as_destroy).
+ *   Trampoline refuse-enter when !alive / cr3==0 (dead AS belt).
+ *   UDX multi-thr hosts (rtl8168_udx / xhci_udx / ddi_host) share one
+ *   process AS: sibling IRQ/work thr must EXIT before maps free, else
+ *   USER*_ENTRY / mid-syscall iretq into freed CR3 (#PF I=1 class;
+ *   pe32 clone_vm lab RIP~0x58240013). Soft residual != product multi-CPU
+ *   thr-kill / full UDX host product close.
+ * thr_exit residual deepen (UDX host teardown eng; Soft!=product):
+ *   scrub-class tallies: state (runnable/running/blocked) + USER*_ENTRY +
+ *   mid-syscall USER_* + thr CR3 + block key + DRIVER QoS.
+ *   multi-thr host class (n>=2) + null/zero-sibling barrier honesty.
+ *   dead-AS refuse class split: null_proc | alive0 | cr3_0.
+ *   residual lean once-lamp (inventory-capped / first drain).
+ * greppable: thr_exit_before_as_destroy=1 * H3=death_residual
+ * greppable: thread: exit_process * sched: exit_process * thr skip user dead AS
+ * greppable: thread: soft thr_exit * thread: soft thr_exit residual lean
+ * greppable: thread: soft residual lean H3 * udx_host_teardown=1
+ * greppable: hosts=rtl8168_udx|xhci_udx|ddi_host * soft_ne_product=1
+ * Preserve thread_exit_process (H3 death residual). Do not remove.
  *
  * aStack remains smaller: pure cooperative switch frames only.
  * Mid canary + poison fill give early overflow soft signals before base smash.
@@ -113,7 +148,7 @@ enum gj_thread_state {
  * Security / correctness notes:
  *   - u64Cr3: 0 means "use CPU default / boot CR3" (shared AS bring-up).
  *   - pBlockObj + u32BlockTag form the wait key for thread_wake (pointer
- *     identity; no refcount — object must outlive waiters or wake-all first).
+ *     identity; no refcount - object must outlive waiters or wake-all first).
  *   - u64SysUser* valid only while mid-SYSCALL (u32SysUserValid != 0).
  *   - aKstack grows down from u64KstackTop; base + mid canaries planted on create.
  */
@@ -131,7 +166,7 @@ struct gj_thread {
     void               *pArg;
     u64                 u64UserRip;      /* first ring-3 entry (G-PERS) */
     u64                 u64UserRsp;
-    u64                 u64KstackTop;    /* top of aKstack → cpu u64KernelRsp */
+    u64                 u64KstackTop;    /* top of aKstack -> cpu u64KernelRsp */
     u64                 u64KstackCanary; /* expected value at aKstack base */
     /*
      * Mid-syscall user return target. Per-CPU GS USER_* is overwritten when
@@ -169,11 +204,50 @@ u32 thread_create_user(struct gj_process *pProc, u64 u64Entry, u64 u64Stack);
 u32 thread_create_user32(struct gj_process *pProc, u64 u64Entry, u64 u64Stack);
 
 /**
+ * Soft thr tag for panel/no-COM1 diagnose (G752 USER KILL photo).
+ * Short ASCII name only (max 11 chars + NUL). Not product identity.
+ * Auto-set on user/user32 create from entry VA class (pe32 / ring3 / …).
+ * greppable: thread: soft tag | thr tag=
+ */
+void thread_soft_tag_set(u32 u32ThrId, const char *szTag);
+/** Returns soft tag or "" if unknown thr / empty. Lifetime: until thr slot reuse. */
+const char *thread_soft_tag_get(u32 u32ThrId);
+/** First-schedule user entry RIP (0 if thr unknown / kernel thr). */
+u64 thread_user_entry_get(u32 u32ThrId);
+/** GJ_THR_F_* or 0 if thr unknown. */
+u32 thread_flags_get(u32 u32ThrId);
+
+/**
  * After execve: rewrite all user-entry threads of pProc to (entry, stack).
  * Returns count of threads updated. Does not create new threads.
  * Kernel-only threads of pProc are left alone.
  */
 u32 thread_exec_replace(struct gj_process *pProc, u64 u64Entry, u64 u64Stack);
+
+/**
+ * Exit every non-current thread bound to pProc (CLONE_VM siblings, etc.).
+ * Clears USER*_ENTRY / sysuser / block key / thr CR3 so a later schedule
+ * cannot iretq or load into a destroyed AS (lab class: pe32 clone_vm child
+ * RIP~0x58240013 -> #PF I=1 after parent exit).
+ * Returns count of threads marked EXITED. Soft!=product.
+ *
+ * H3 residual lean (Soft!=product; UDX host teardown safety):
+ *   process_death / fork_stub call this BEFORE private as_destroy.
+ *   UDX host processes may hold IRQ-thread + work thr on one shared AS;
+ *   sibling drain is the thr-unit half of thr_exit_before_as_destroy=1.
+ *   Soft residual != product multi-CPU thr kill / full UDX host close.
+ * thr_exit residual deepen (UDX host teardown eng):
+ *   Classifies scrub (state/user/sysuser/cr3/block/DRIVER), multi-thr
+ *   (n>=2), null/zero-sibling, and arms residual lean once-lamp.
+ *   hosts=rtl8168_udx|xhci_udx|ddi_host honesty only - not product close.
+ * H3 death residual - do not remove (process_death thr_exit before as_destroy).
+ * Grep: thread: exit_process | sched: exit_process | thr skip user dead AS
+ *       | thr_exit_before_as_destroy=1 | udx_host_teardown=1
+ *       | thread: soft thr_exit | thread: soft thr_exit residual lean
+ *       | thread: soft residual lean H3 | H3=death_residual
+ *       | hosts=rtl8168_udx|xhci_udx|ddi_host
+ */
+u32 thread_exit_process(struct gj_process *pProc);
 
 /**
  * Query thread state (GJ_THR_*). Returns GJ_THR_UNUSED if id unknown.
@@ -186,7 +260,7 @@ void thread_yield(void);
 void thread_yield_request(void);
 /** Consume pending yield request; returns 1 if yield was requested. */
 int  thread_yield_pending(void);
-/** Current thread → EXITED and schedule away (does not return). */
+/** Current thread -> EXITED and schedule away (does not return). */
 void thread_exit(void);
 
 /**
@@ -219,12 +293,22 @@ void schedule(void);
  */
 void thread_install_kstack(struct gj_thread *pThr);
 
-/** Enter scheduler forever (idle + others). BSP product path. */
+/**
+ * Enter scheduler forever (idle + others). BSP product path.
+ * H1 residual lean (Soft!=product; G-AC-1):
+ *   net_eth_poll only on this thr stack every pass (never IRQ/timer/APIC).
+ *   freestanding class SKIP; product UDX; thr-stack for virtio/UDX later.
+ * Grep: sched: run loop | net_eth_poll=run_loop_only | net_eth_irq=0
+ *       | owner=scheduler_run | freestanding_class=SKIP | product=UDX
+ *       | poll_own=thr_stack | virtio_udx_later=1
+ */
 void scheduler_run(void) __attribute__((noreturn));
 
 /**
  * Per-CPU idle + schedule loop for AP (HLT when nothing runnable on this CPU).
  * Called from smp_ap_c_entry after AP online.
+ * Does NOT call net_eth_poll - H1 thr-stack poll is BSP scheduler_run only
+ * (Soft!=product; freestanding class SKIP; product UDX; virtio/UDX later).
  */
 void scheduler_run_ap(void) __attribute__((noreturn));
 
@@ -270,7 +354,7 @@ u32  thread_qos_effective_rank(u32 u32ThrId);
 /*
  * Greppable soft product counters (pick_next / QoS / kstack canary).
  * Prefix-stable line: "sched: soft stats ..."
- * Wrap OK; diagnostics only — never hard-gate scheduling decisions beyond
+ * Wrap OK; diagnostics only - never hard-gate scheduling decisions beyond
  * canary fail (which is a halt path when base/mid mismatch).
  */
 struct gj_sched_soft_stats {
@@ -285,7 +369,7 @@ struct gj_sched_soft_stats {
     u64 u64PickEqualFair;    /* equal-rank wait-age wins */
     u64 u64PickSelf;         /* fell back to current */
     u64 u64QosSet;           /* thread_set_qos hits */
-    u64 u64QosClamp;         /* class out of range → normal */
+    u64 u64QosClamp;         /* class out of range -> normal */
     u64 u64QosBoostSoft;     /* boost_soft applications */
     u64 u64QosBoostDecay;    /* boost ticks decayed on leave */
     u64 u64CanaryPlant;      /* base+mid plant ops */

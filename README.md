@@ -31,30 +31,6 @@ If you just cloned the repo: a normal host toolchain and QEMU are enough to buil
 
 ---
 
-## Support the project (Patreon)
-
-GreenJade is built in the open under dual **MIT OR Apache-2.0** licenses. If you want to help keep the work going, the author runs a Patreon:
-
-**→ [patreon.com/cw/TheOldDog](https://www.patreon.com/cw/TheOldDog)** · creator **TheOldDog**
-
-**Tagline from the page:** *Help fund a pure-C microkernel that aims for Steam — built in the open, dual-licensed free, and rude to complexity.*
-
-Most OSes are skyscrapers built by a thousand crews over thirty years—amazing, huge, and hard for anyone to fully understand. GreenJade is the opposite bet: a **small, pure-C microkernel** aimed at a **real laptop**, **real hardware**, and eventually **Steam-style game compatibility**, without rebranding Linux or pasting a GPL kernel into the product core.
-
-Patrons help fund unglamorous work: silicon time, STATUS-panel digs, Ethernet that actually answers ping, USB that isn’t vaporware, and the long push toward real desktop software. Membership options start at a few dollars a month; free follow is available on the page. Support is **optional** and does **not** change the open-source licenses—the code stays free to use under MIT OR Apache-2.0.
-
-| Tier (examples) | Name | Flavor |
-|-----------------|------|--------|
-| $3 | **kprintf** | I’m here for the serial spam. |
-| $5 | **Own=1** | You believe the ring will clear. Someday. |
-| $10 | **C you C me, C us together** | Pure C, pure chaos—just braces and belief. |
-| $25 | **Bar3 scout** | Deck Top 50 or bust (eventually). |
-| $50 | **Ring-0 benefactor** | Another boot, another dig—optional glory in a release note. |
-
-Live tiers and posts: **[TheOldDog on Patreon](https://www.patreon.com/cw/TheOldDog)** · [membership](https://www.patreon.com/cw/TheOldDog/membership) · latest post *Building a pure-C microkernel that can run Steam*.
-
----
-
 **Host tools you need:**
 
 - `gcc` or `clang`, `ld` (binutils), `make`

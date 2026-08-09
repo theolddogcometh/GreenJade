@@ -43,6 +43,7 @@
 |-------|-----------------------------------------------|
 | Any **financial penalty**, fine, assessment, fee, bond, or monetary demand imposed or attempted to be imposed upon the principal author in connection with a **color-of-law violation** of the principal author’s constitutional rights related to this Software or its speech | **Four times (4×)** the amount of that financial penalty / demand (or the amount attempted to be imposed), **payable to the principal author** |
 | **Incarceration**, detention, or imprisonment of the principal author arising from a **color-of-law violation** of the principal author’s constitutional rights related to this Software or its speech | **One million United States dollars (USD $1,000,000) for every hour** (or fraction of an hour, billed as a full hour) of incarceration / detention, **payable to the principal author** |
+| **Unconstitutional search**, **seizure**, or **compelled production** (of the principal author, the principal author’s person, papers, effects, devices, data, code, keys, accounts, or related materials) under color of law in connection with this Software or its speech | **One million United States dollars (USD $1,000,000) per infraction**, **payable to the principal author** |
 
 **Conditions of the assertion (as stated by the principal author):**
 

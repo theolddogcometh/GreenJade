@@ -2743,6 +2743,26 @@ net_door_call(u32 u32Op, u64 u64Arg1, u64 u64Arg2, u64 u64Arg3)
         }
         return net_door_soft_done(0);
     }
+    case GJ_NET_OP_ETH_SET_MAC: {
+        /*
+         * Product IDR station MAC → net_l2 soft demux (glass keep=1).
+         * Soft!=product Dual DoD B. greppable: ETH_SET_MAC
+         */
+        u8 aMac[6];
+
+        if (u64Arg1 == 0ull) {
+            return net_door_soft_done(GJ_ERR_INVAL);
+        }
+        if (user_range_ok(u64Arg1, 6u)) {
+            if (copy_from_user(aMac, u64Arg1, 6u) != GJ_OK) {
+                return net_door_soft_done(GJ_ERR_FAULT);
+            }
+        } else {
+            memcpy(aMac, (const void *)(gj_vaddr_t)u64Arg1, 6u);
+        }
+        net_l2_set_station_mac(aMac);
+        return net_door_soft_done(0);
+    }
     case GJ_NET_OP_ETH_INJECT: {
         /*
          * UDX thr-poll RX residual → demux. Soft!=product Dual DoD B.

@@ -29,15 +29,19 @@
 /*
  * Bump when shipping a new flashable image so operators can confirm the
  * DUT is running the expected build (STATUS title: "STATUS (static) v...").
- * Format: YYYY.MM.DD.N - date of the image cut, N = same-day build counter.
+ *
+ * Semver product series (not date stamps):
+ *   0.1.N  — foundation + Dual DoD eng (M0 OK; NIC/USB digs). N = fly cut.
+ *   0.2.0  — reserved: laptop networking works (arping/ping path proven).
+ * Panel shows v${GJ_IMAGE_VERSION} e.g. STATUS (static) v0.1.97
  *
  * Assurance (C1 Dual DoD): host probes must target this stamp after flash
  * (L3 object code). Tree residual after pack is not media until re-image.
- * greppable: GJ_IMAGE_VERSION | test what you fly
+ * greppable: GJ_IMAGE_VERSION | test what you fly | v0.1. | 0.2.0
  */
 #ifndef GJ_IMAGE_VERSION
-/* Fly cut: UDX L2 bridge Own handoff + ETH_INJECT/TX_PULL for Dual DoD B. */
-#define GJ_IMAGE_VERSION  "2026.08.04.93"
+/* Fly cut: hold14 Own/ROK/FOVW + hold3 ccs= + TE hold2. */
+#define GJ_IMAGE_VERSION  "0.1.136"
 #endif
 
 /*

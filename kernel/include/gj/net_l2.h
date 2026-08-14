@@ -186,6 +186,14 @@ i32 net_l2_rx(void *pOut, u32 cbMax);
 /** Current station MAC (6). */
 void net_l2_mac(u8 *pMac);
 
+/**
+ * Publish product NIC station MAC into soft demux identity (UDX Dual DoD B).
+ * Used when rtl8168_udx IDR keep=1 (EEPROM) so ARP SHA matches on-wire IDR.
+ * Pins lab IP 10.200.125.50 when backend=none. Soft!=product Dual DoD B OPEN.
+ * greppable: net_l2: soft station mac
+ */
+void net_l2_set_station_mac(const u8 *pMac6);
+
 /** Current IPv4 (4). QEMU virtio: 10.0.2.15; Realtek lab: 10.200.125.50. */
 void net_l2_ip(u8 *pIp);
 
@@ -194,9 +202,8 @@ void net_l2_ip(u8 *pIp);
  * pin lab IPv4 10.200.125.50 and soft demux lab MAC
  * LAB_MAC_UDX=02:00:00:47:4a:50 (same as rtl8168_udx product IDR
  * lab_fallback; not QEMU g_aVirtMac) so ARP/ICMP match / replies leave
- * into ETH_TX_PULL. Soft demux MAC aligns with product idr lab_fallback
- * Soft!=product. OPEN: idr keep=1 EEPROM station not yet published here.
- * No-op when a freestanding backend owns identity. Idempotent.
+ * into ETH_TX_PULL. Prefer net_l2_set_station_mac after product IDR keep=1.
+ * Soft!=product Dual DoD B OPEN. No-op when freestanding backend owns identity.
  * greppable: net_l2: soft udx ready
  * greppable: LAB_MAC_UDX=02:00:00:47:4a:50
  */

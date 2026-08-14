@@ -239,6 +239,12 @@
  * Soft!=product Dual DoD B. greppable: ETH_UDX_READY
  */
 #define GJ_NET_OP_ETH_UDX_READY 30u
+/**
+ * ETH_SET_MAC: arg1=user ptr to 6-byte station MAC (product IDR).
+ * Publishes into net_l2 soft demux so ARP SHA matches on-wire IDR keep=1.
+ * Soft!=product Dual DoD B. greppable: ETH_SET_MAC | net_l2: soft station mac
+ */
+#define GJ_NET_OP_ETH_SET_MAC 31u
 
 /**
  * Soft UDX TX enqueue for demux replies when freestanding backend=none.

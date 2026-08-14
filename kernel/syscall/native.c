@@ -186,6 +186,7 @@
 #include <gj/virtio_gpu.h>
 #include <gj/vmm.h>
 #include <gj/wow64.h>
+#include <gj/fb_console.h>
 
 /* Cap DEBUG_LOG payload so a bad len cannot pin the CPU copying forever. */
 #define GJ_NATIVE_DEBUG_LOG_MAX 4096u
@@ -3280,6 +3281,149 @@ gj_native_syscall_dispatch(struct gj_syscall_regs *pRegs)
                 pRegs->i64Ret = GJ_ERR_FAULT;
             } else {
                 pRegs->i64Ret = (i64)pa;
+            }
+        } else if (u32Op == 7) {
+            /*
+             * PLATFORM_INFO op7: G752 bus3/TE densify for rtl8168_udx.
+             * Glass Own-stuck under TE with page-align PASS + LINKOK=1
+             * → TE without bus3 identity is classic DMA fault.
+             * Re-run bus3 residual, return packed status:
+             *   bit0 te_armed  bit1 te_hw  bit2 vtd_ready
+             *   bit3 bus3_ok(residual>0)  bit4 identity_1g
+             * Soft!=product Dual DoD B OPEN.
+             * greppable: PLATFORM_INFO op7 bus3_te
+             */
+            int nBus3;
+            int fTe;
+            int fReady;
+            int fId;
+            int fHw;
+            u32 u32Pack;
+
+            native_soft_inc(&g_nativeDeep.u64PlatIommuWin);
+            nBus3 = iommu_vtd_bus3_identity_residual();
+            fTe = iommu_vtd_te_armed();
+            fReady = iommu_vtd_ready();
+            fId = iommu_vtd_identity_covers(0, 0x40000000ull /* 1 GiB */);
+            fHw = (iommu_vtd_te_mode() == GJ_IOMMU_TE_HW) ? 1 : 0;
+            u32Pack = 0u;
+            if (fTe != 0) {
+                u32Pack |= 1u;
+            }
+            if (fHw != 0) {
+                u32Pack |= 2u;
+            }
+            if (fReady != 0) {
+                u32Pack |= 4u;
+            }
+            if (nBus3 > 0) {
+                u32Pack |= 8u;
+            }
+            if (fId != 0) {
+                u32Pack |= 16u;
+            }
+            /* greppable: PLATFORM_INFO op7 bus3_te */
+            kprintf("PLATFORM_INFO op7 bus3_te te=%d hw=%d ready=%d "
+                    "bus3=%d id1g=%d pack=0x%x tt=multi_level "
+                    "Soft!=product dual_dod_b=OPEN "
+                    "(Own-stuck dig under TE; identity SLPT for NIC DMA)\n",
+                    fTe, fHw, fReady, nBus3, fId, (unsigned)u32Pack);
+            pRegs->i64Ret = (i64)u32Pack;
+        } else if (u32Op == 8) {
+            /*
+             * PLATFORM_INFO op8: kernel wbinvd (ring0 only).
+             * Userspace must not execute wbinvd (v0.1.104 USER KILL).
+             * Soft!=product Dual DoD B Own/cache dig.
+             * greppable: PLATFORM_INFO op8 wbinvd
+             */
+            native_soft_inc(&g_nativeDeep.u64PlatIommuWin);
+            __asm__ volatile("wbinvd" ::: "memory");
+            kprintf("PLATFORM_INFO op8 wbinvd PASS Soft!=product "
+                    "dual_dod_b=OPEN\n");
+            pRegs->i64Ret = 0;
+        } else if (u32Op == 9) {
+            /*
+             * PLATFORM_INFO op9: TE disarm dig for rtl8168 Own-stuck.
+             * iommu_vtd_te_disarm once-updates persist hold2 (te_disarm
+             * tes=0) — does not fight UDX hold14 te_disarm fovw|wire.
+             * greppable: PLATFORM_INFO op9 te_disarm
+             * greppable: iommu: vtd TE hold2
+             */
+            int fOff;
+
+            native_soft_inc(&g_nativeDeep.u64PlatIommuEnf);
+            fOff = iommu_vtd_te_disarm();
+            /* greppable: PLATFORM_INFO op9 te_disarm */
+            kprintf("PLATFORM_INFO op9 te_disarm result=%d Soft!=product "
+                    "dual_dod_b=OPEN "
+                    "(clears DRHD TES even under soft-arm/firmware)\n",
+                    fOff);
+            pRegs->i64Ret = fOff ? 0 : GJ_ERR_INVAL;
+        } else if (u32Op == 10) {
+            /*
+             * PLATFORM_INFO op10: kernel read u32 at physical address.
+             * Dual DoD B dig: CPU volatile load vs DRAM at programmed
+             * bus PA (Own/cookie densify when NIC may not write host).
+             * Quiet return (no stamp storm — product host densify lamp).
+             * greppable: PLATFORM_INFO op10 phys_read32
+             */
+            gj_paddr_t pa = (gj_paddr_t)pRegs->u64Arg1;
+            gj_vaddr_t va;
+            u32 u32Val;
+
+            native_soft_inc(&g_nativeDeep.u64PlatIommuWin);
+            /* 4-byte aligned; dig window = force32 low 4 GiB RAM. */
+            if (pa == 0 || (pa & 3ull) != 0ull ||
+                pa > 0xfffffffcu) {
+                pRegs->i64Ret = GJ_ERR_INVAL;
+            } else {
+                va = hhdm_to_virt(pa);
+                u32Val = *(volatile u32 *)(void *)va;
+                /* Zero-extend so high bit (Own) stays non-negative. */
+                pRegs->i64Ret = (i64)(u32)u32Val;
+            }
+        } else if (u32Op == 11) {
+            /*
+             * PLATFORM_INFO op11: pin short STATUS hold line (glass densify).
+             * arg1=line arg2=user ptr arg3=len (0 → scan up to FB_HOLD_CHARS-1).
+             * Product rtl8168_udx pins phys_dig so LOG flood cannot bury it.
+             * Kernel TE/identity persist is hold2 (te_arm / te_disarm once).
+             * Do not steal hold0 title / hold6 NET / hold13 USB / hold14-15
+             * live UDX pins from this door. Soft!=product dual_dod_b=OPEN.
+             * greppable: PLATFORM_INFO op11 panel_hold
+             */
+            char aHold[FB_HOLD_CHARS];
+            u32 u32Line = (u32)pRegs->u64Arg1;
+            u64 u64Src = pRegs->u64Arg2;
+            u32 cb = (u32)pRegs->u64Arg3;
+            i64 st;
+
+            native_soft_inc(&g_nativeDeep.u64PlatIommuWin);
+            if (u32Line >= FB_HOLD_LINES || u64Src == 0) {
+                pRegs->i64Ret = GJ_ERR_INVAL;
+            } else {
+                if (cb == 0u || cb >= FB_HOLD_CHARS) {
+                    cb = FB_HOLD_CHARS - 1u;
+                }
+                st = native_copy_in(aHold, u64Src, cb);
+                if (st != 0) {
+                    pRegs->i64Ret = st;
+                } else {
+                    aHold[cb] = '\0';
+                    /* Strip CR/LF so hold stays one visual row. */
+                    {
+                        u32 i;
+
+                        for (i = 0u; i < cb; i++) {
+                            if (aHold[i] == '\n' || aHold[i] == '\r') {
+                                aHold[i] = '\0';
+                                break;
+                            }
+                        }
+                    }
+                    fb_console_hold(u32Line, aHold);
+                    pRegs->i64Ret = 0;
+                }
             }
         } else {
             native_soft_inc(&g_nativeDeep.u64PlatInval);

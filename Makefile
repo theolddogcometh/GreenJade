@@ -587,15 +587,37 @@ $(RTL8168_UDX_HOST): $(UDX_LIB) user/drivers/rtl8168_udx/rtl8168_udx.c \
 	cp -f $(BUILD)/user/drivers-host/rtl8168_udx $@
 	@echo "built $@  (host-libc soft lab; optional)"
 
-$(XHCI_UDX_BIN): $(UDX_LIB) user/drivers/xhci_udx/xhci_udx.c \
+# Freestanding product xhci_udx (Dual DoD A): static + libudx-fs + libgj.
+# Embed + stage-esp use this binary (not host-libc inject lab).
+# Soft residual catalogs remain; product_program_try: halt, public xECP
+# USBLEGSUP handshake (missing=continue, timeout=SKIP), then RS-off
+# scratchpad DCBAA[0] + CONFIG/DCBAAP/CRCR/ERST + IMAN.IE when real_ddi+gate
+# (USBCMD.RS stays OPEN; irq_bind=PASS/FAIL/OPEN after IMAN.IE; PORTSC CCS
+# once-read after doorbell; never write PORTSC).
+$(XHCI_UDX_BIN): user/drivers/xhci_udx/xhci_udx.c \
+		$(UDX_FS_LIB) $(LIBGJ) user/init/user.ld
+	@mkdir -p $(dir $@) $(BUILD)/user/drivers
+	$(CC) $(UDX_FS_CFLAGS) -c -o $(BUILD)/user/drivers/xhci_udx.o \
+		user/drivers/xhci_udx/xhci_udx.c
+	$(LD) $(USER_LDFLAGS) -o $@ $(BUILD)/user/drivers/xhci_udx.o \
+		$(UDX_FS_LIB) $(LIBGJ)
+	@test -f $@ || (echo "drivers-udx: FAIL missing $@" >&2; exit 1)
+	@echo "built $@  (freestanding xhci_udx; Dual DoD A product path)"
+
+# Optional host-libc soft lab (inject 8086:a12f; product program SKIP).
+# Builds into drivers-host/ so freestanding embed binary is never overwritten.
+XHCI_UDX_HOST := $(BUILD)/user/drivers/xhci_udx.host
+$(XHCI_UDX_HOST): $(UDX_LIB) user/drivers/xhci_udx/xhci_udx.c \
 		user/drivers/xhci_udx/Makefile
-	@mkdir -p $(dir $@)
+	@mkdir -p $(dir $@) $(BUILD)/user/drivers-host
 	$(MAKE) -C user/drivers/xhci_udx \
 		UDX_LIB=$(abspath $(UDX_LIB)) \
 		UDX_INC=$(abspath user/udx/include) \
-		BUILD=$(abspath $(BUILD)/user/drivers)
-	@test -f $@ || (echo "drivers-udx: FAIL missing $@" >&2; exit 1)
-	@echo "built $@"
+		BUILD=$(abspath $(BUILD)/user/drivers-host)
+	@test -f $(BUILD)/user/drivers-host/xhci_udx || \
+		(echo "xhci_udx.host: FAIL" >&2; exit 1)
+	cp -f $(BUILD)/user/drivers-host/xhci_udx $@
+	@echo "built $@  (host-libc soft lab; optional)"
 
 sshd-gj: $(SSHD_GJ_ELF)
 	@echo "sshd-gj: $(SSHD_GJ_ELF)"

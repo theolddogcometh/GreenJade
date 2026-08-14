@@ -6,9 +6,9 @@
 | **Target class** | ASUS G752VT laptop wired NIC (and similar) |
 | **License** | **MIT OR Apache-2.0** — **no GPL**, no Linux source |
 | **Role** | Userspace **Dual DoD B** product residual host vs [libudx](../../udx/) |
-| **QEMU T0 net** | **virtio-net** until UDX owns laptop wire |
-| **Dual DoD B** | **OPEN** — product residual programs silicon on real DDI; L3 arping/sshd not closed |
-| **Fly bar** | Match kernel `GJ_IMAGE_VERSION` (e.g. **v2026.08.04.93**) |
+| **QEMU T0 net** | **virtio-net** on QEMU/CI. Laptop wire is this UDX host |
+| **Dual DoD B** | **OPEN** until host **sshd :22**. **L3 ARP + ping proven** (2026-08-14) on lab **10.200.125.50** |
+| **Fly bar** | Match kernel `GJ_IMAGE_VERSION` (**STATUS (static) v0.1.136**) |
 
 ## Honesty (read first)
 
@@ -33,7 +33,7 @@ This tree is the **Linux-shaped userspace NIC host** for Dual DoD **B** (hot+col
 - **bind != wire**: host inject / freestanding `bind_by_id` residual is not wire handoff. Userspace probe residual **never claims freestanding wire**.
 - **Product direction:** this UDX host (plus ABI/DDI caps) is the laptop NIC path. Freestanding rtl is **SKIP by default** (`GJ_RTL8168_PROBE=0`) — not product.
 - Lean residual: **no version stamp**, no multi-KiB kprintf floods, no stamp storms.
-- Soft residual stages still dominate host inject demos; **Dual DoD B remains OPEN** (agent≠close).
+- Soft residual stages still dominate host inject demos. **Laptop L3 ARP/ping is proven**; Dual DoD B remains **OPEN** until sshd **:22** (agent≠close).
 - Is **not** in-kernel `r8169.ko` product (**G-AC-1**).
 - Greppable soft lamps are **not** HCL product close and **not** bar3.
 
@@ -43,7 +43,8 @@ When bind is **real DDI** + program_gate (MAP+DMA+ring+align), option-3 **produc
 
 | Symbol / lamp | What it does (public RTL only) |
 |---------------|--------------------------------|
-| `rtl8168_product_program_try` | RST → C+CR → `own_handoff` → TNPDS/RDSAR → TE\|RE → **IntrMask** → lock 9346CR |
+| `rtl8168_product_program_try` | RST → C+CR → **PHY BMCR ANE** → `own_handoff` → TNPDS/RDSAR → TE\|RE → **IntrMask** → lock 9346CR |
+| `rtl8168_product_phy_link_bringup` | Public PHYAR: clear PWD/ISOLATE, ANE+Restart_AN, poll LinkOk (glass .93 LINKOK=0 dig) |
 | `rtl8168_product_own_handoff` | FORCE32 RX slots (4 KiB page = Buffer_Size) + TX bounce, IOMMU grant, Own=1, opts2=0, EOR last only, RCR AAP\|APM\|AB\|AM, MAR all1, RMS, MTPS, **IDR MAC** under 9346CR cfgwrite |
 | `rtl8168_product_l2_poll` | thr-only: IntrStatus ack → RX reclaim (Frame_Length−FCS) → ETH_INJECT → TX pull + TPPOLL; densified `own_stuck` dig |
 
@@ -51,8 +52,11 @@ Greppable product lamps (≠ Dual DoD B close):
 
 | Marker | Meaning |
 |--------|---------|
+| `rtl8168_udx: product phy bringup` | PASS/WAIT after BMCR ANE; physt/linkok/bmsr |
+| `rtl8168_udx: product phy link UP` / `DOWN` | thr-poll once-lamps; re-AN when down |
 | `rtl8168_udx: product program PASS` | TNPDS/RDSAR/TE\|RE wrote; `product_mint=1` `wire_owner=udx` |
 | `rtl8168_udx: product own_handoff PASS` | RX Own + RCR/MAR residual armed |
+| `rtl8168_udx: product dma_pa dig` | Once: page_align of rx0/ring/txb + ring↔RX span_ok (v0.1.97 FOVW overlap dig) |
 | `rtl8168_udx: product rx_desc dig` | Once after Own: opts0, buf_mask, eor_last, page_bytes, soft_rx_buf |
 | `rtl8168_udx: product idr` | IDR MAC keep-EEPROM or lab fallback `02:00:00:47:4a:50` |
 | `rtl8168_udx: product imr` | Public IntrMask ROK\|RER\|TOK\|TER\|… (not MSI-X) |
@@ -61,11 +65,11 @@ Greppable product lamps (≠ Dual DoD B close):
 | `rtl8168_udx: product l2 poll fovw_rer` | Once: FOVW\|RER sticky RX FIFO dig (RCR RXFTH/MXDMA re-read) |
 | `rtl8168_udx: product l2 poll fovw_reappear` | Once: FOVW still set after public W1C IntrStatus clear |
 | `rtl8168_udx: product program densify_obs` | Once after program PASS: RCR/TCR/RMS/ChipCmd/PHY/IMR/ISR observe-back |
-| `rtl8168_udx: product l2 poll rekick` | Once: rewrite RDSAR + clflush ring |
+| `rtl8168_udx: product l2 poll rekick` | Once: RE off → re-Own RX + clflush + RDSAR + RE on (FOVW recovery) |
 | `rtl8168_udx: product l2 poll inject_fail` | ETH_INJECT n≤0 once-lamp (still re-arms) |
 | `rtl8168_udx: product l2 poll tx_own_stuck` | TX frame ready but desc Own stuck |
 
-**Soft≠product. Dual DoD B OPEN until DUT L3 (arping/ping/sshd :22). Never claim Dual DoD closed from these lamps.**
+**Soft≠product. Dual DoD B L3 ARP/ping proven on DUT (2026-08-14). Dual DoD B stays OPEN until sshd :22 host banner. Never claim Dual DoD closed from lamps alone.**
 
 **RX desc residual (public 8168/8111B-class):** Own fill advertises `Buffer_Size` = page (4096, ×8) matching FORCE32 DMA (glass FOVW had `opts0=0x80000800` = OWN+2 KiB while page was 4 KiB); EOR only on last slot; opts2 zeroed; store-barrier+clflush before TE\|RE. When Own clears, bits 13:0 are `Frame_Length` (includes FCS) — reclaim strips 4 B before inject; RES skips inject. Soft≠product; Dual DoD B OPEN.
 
@@ -291,11 +295,11 @@ API: `udx_host_inject_pci(0x10ec, 0x8168, bus, devfn, irq, aBarLen, aBarMem, &pP
 - No MSI-X product path
 - No claim of G752VT LAN product support / Dual DoD B **closed**
 - No in-kernel `r8169.ko` product AC (**G-AC-1**)
-- Lab wire proof (arping/ping/:22) remains DUT residual — dual_dod_b=**OPEN**
+- Lab L3 ARP/ping **proven** (2026-08-14). sshd **:22** still DUT residual — dual_dod_b=**OPEN**
 
 **License:** MIT OR Apache-2.0 only — **no GPL**, no Linux source paste.
 
-*Userspace UDX residual for laptop NIC class IDs — product=UDX+ABI; freestanding product=SKIP; Soft!=product; G-AC-1; product_program/own_handoff/l2_poll are real product residual when real_ddi+gate (Dual DoD B OPEN, not soft never_program only); product net T0 virtio until DUT L3 closes Dual DoD B.*
+*Userspace UDX host for laptop NIC class IDs — product=UDX+ABI; freestanding product=SKIP; Soft!=product; G-AC-1; product_program/own_handoff/l2_poll write on real_ddi+gate; laptop ARP/ping L3 proven; Dual DoD B OPEN until sshd :22; QEMU T0 remains virtio.*
 
 ---
 

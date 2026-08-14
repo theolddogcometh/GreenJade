@@ -5,8 +5,9 @@
 #
 # Compile-time stamp lives in kernel/include/gj/config.h and is baked into
 # KERNEL.ELF / build/greenjade.elf as the panel title:
-#   STATUS (static) vYYYY.MM.DD.N
-# Serial also prints: main: image version=YYYY.MM.DD.N
+#   STATUS (static) v0.1.N   (semver series; 0.2.0 when networking works)
+# Serial also prints: main: image version=0.1.N
+# Legacy date stamps (YYYY.MM.DD.N) still extract if present in old media.
 #
 # Usage:
 #   ./scripts/gj-image-version.sh              # print version only
@@ -22,7 +23,7 @@
 # not Dual DoD close, not UDX product AC. Freestanding class SKIP defaults and
 # freestanding_no_exec are orthogonal process law (see gj-assurance-check).
 #
-# Flash bar honesty (lab): stamp e.g. v2026.08.04.75 names the deliverable.
+# Flash bar honesty (lab): stamp e.g. v0.1.97 names the deliverable.
 # L1 make assurance-check PASS != Dual DoD A/B close. Dual DoD OPEN until L3
 # host probes on this stamp after flash. Soft!=product · test what you fly.
 # Stamp-free residual: this script never bumps GJ_IMAGE_VERSION / never invents
@@ -62,18 +63,19 @@ if [ -z "$elf" ]; then
 	elf="${GJ_KERNEL_ELF:-build/greenjade.elf}"
 fi
 
-# Extract YYYY.MM.DD.N from an ELF that contains the STATUS title string.
+# Extract fly bar from an ELF that contains the STATUS title string.
 # Prefer the exact panel title (concatenated in fb_console.c); fall back to
 # bare stamp if present as its own rodata C-string; then config.h.
+# Accepts: 0.1.N (current) or legacy YYYY.MM.DD.N.
 extract_from_elf() {
 	_f=$1
 	[ -f "$_f" ] || return 1
 	if ! command -v strings >/dev/null 2>&1; then
 		return 1
 	fi
-	# Panel title: "STATUS (static) v2026.08.04.2"
+	# Panel title: "STATUS (static) v0.1.97" or legacy date form
 	_v=$(strings "$_f" 2>/dev/null \
-		| sed -n 's/^STATUS (static) v\([0-9]\{4\}\.[0-9]\{2\}\.[0-9]\{2\}\.[0-9][0-9]*\)$/\1/p' \
+		| sed -n 's/^STATUS (static) v\([0-9][0-9]*\.[0-9][0-9]*\.[0-9][0-9]*\)$/\1/p' \
 		| head -n 1)
 	if [ -n "$_v" ]; then
 		printf '%s\n' "$_v"
@@ -81,7 +83,7 @@ extract_from_elf() {
 	fi
 	# Bare stamp only (if compiler split the literal)
 	_v=$(strings "$_f" 2>/dev/null \
-		| grep -E '^[0-9]{4}\.[0-9]{2}\.[0-9]{2}\.[0-9]+$' \
+		| grep -E '^[0-9]+\.[0-9]+\.[0-9]+$' \
 		| head -n 1)
 	if [ -n "$_v" ]; then
 		printf '%s\n' "$_v"

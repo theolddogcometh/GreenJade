@@ -40,7 +40,21 @@
  *         "soft product densify map_bar=" / "soft product densify dma_ring=" /
  *         "soft product densify iommu=" / "soft product densify program_gate=" /
  *         "soft dma residual" / "soft ring residual" / "soft iommu residual" /
- *         "product program" / "product program SKIP" / "never_program=1" /
+ *         "product program" / "product program PASS" / "product program SKIP" /
+ *         "product program halt" / "product program scratchpad" /
+ *         "product program usblegsup" / "product program iman" /
+ *         "product program imod" / "product program irq_bind" /
+ *         "product program doorbell" / "doorbell=OPEN" /
+ *         "never_ring_while_halted=1" / "need=usbcmd_rs" /
+ *         "dboff=" / "db0=" / "reason=dboff_missing" / "reason=dboff_oor" /
+ *         "product program portsc" / "never_portsc_write=1" /
+ *         "ports=" / "ccs=" / "ccs_n=" / "reason=portsc_oor" /
+ *         "product program status hold" / "hold3=" /
+ *         "UDX xhci PASS" / "UDX xhci SKIP" /
+ *         "usblegsup=" / "xecp_walk=" / "irq_bind=" /
+ *         "irq_bind=PASS" / "irq_bind=FAIL" / "irq_bind=OPEN" /
+ *         "rs_was=" / "HCH_after=" / "scratchpad=" /
+         "never_program=1" /
  *         "soft bind_ne_stick" / "soft probe residual" / "soft residual" /
  *         "soft residual lean" / "soft residual lean cap" /
  *         "soft residual lean catalog" / "soft residual lean ddi" /
@@ -103,9 +117,46 @@
  * Prefer real GJ_SYS_DDI bind (8086:a12f freestanding + host prefer) over
  * inject-only; host inject is fallback when DDI soft-SKIPs (host-linux).
  * Soft DMA ring residual + udx_dma_iommu_grant residual densify product
- * path honesty (never CRCR/DCBAAP write; never_program=1 class law).
- * Product program gate: only when real_ddi+program_gate would mint; soft
- * residual always never_program honesty (no invent silicon program).
+ * path honesty (soft residual never CRCR/DCBAAP/RS write).
+ * Product program (once, fail-closed): if USBCMD.RS=1 or USBSTS.HCH=0,
+ * halt (clear RS only; never HCRST unless halt timeout + documented need).
+ * Then public xECP walk (HCCPARAMS1.xECP + Next) for USBLEGSUP (ID=1).
+ * Missing → lamp usblegsup=0 and continue. Present → OS/BIOS semaphore
+ * handshake (xHCI 7.1, bounded wait). Handshake timeout → SKIP.
+ * Then real_ddi+program_gate writes public CONFIG.MaxSlotsEn + DCBAAP +
+ * CRCR.RCS + ERSTSZ/ERSTBA/ERDP, then IMAN.IE for IR0 when RTSOFF known
+ * (optional public IMODI=4000 / 1 ms). If HCSPARAMS2 MaxScratchpadBufs>0,
+ * FORCE32 array+pages and DCBAA[0]=array PA (0 → lamp scratchpad=0 and
+ * continue; alloc fail or need>clamp → SKIP). Never set USBCMD.RS=1
+ * (run/stop still OPEN; prefer IMAN.IE only — do not set USBCMD.INTE).
+ * After IMAN.IE sticky: gj_ddi_irq_bind once on retained DDI OPEN handle
+ * (udx_host_ddi_handle). Lamp irq_bind=PASS/FAIL/OPEN honestly. Kernel
+ * DDI IRQ_BIND is irq_msix soft handle→badge (not stub) — PASS is the
+ * soft note only; product Notification mint stays OPEN. Stub-only would
+ * lamp OPEN (never fake PASS). Never invent MSI-X tables. No BOT/MSC.
+ * After program PASS (RS still 0 / HCH=1): name public command-ring
+ * doorbell (DBOFF from cap; doorbell[0] = slot 0 / Host Controller
+ * Command Ring). Range-check DBOFF; read (never write) doorbell[0].
+ * Missing/OOR → SKIP reason, continue; never invent offsets. Do not
+ * ring while halted. Lamp doorbell=OPEN never_ring_while_halted=1
+ * need=usbcmd_rs. Never write USBCMD.RS=1. Never write doorbell if RS=0.
+ * After program PASS (RS still 0): once-read public PORTSC for ports
+ * 1..MaxPorts (HCSPARAMS1). Decode CCS only (xHCI 5.4.8). Never write
+ * PORTSC (no PR/WPR/PP/PED/CSC W1C). Lamp product program portsc
+ * ports= ccs= ccs_n= rs=0 never_rs=1 never_portsc_write=1. Op/port
+ * range OOR → reason=portsc_oor, continue. Serial lamp stays dense;
+ * hold3 after observe carries ccs=0|1|? (glass, often no COM1).
+ * Never clobber hold0/2/6/14/15. Never Enable Slot / RS=1 /
+ * doorbell write / BOT/MSC / MSI-X invent.
+ * MAP miss or DMA alloc fail → SKIP (never invent silicon).
+ * After PASS or SKIP (once): pin STATUS hold3 via udx_dma_panel_hold
+ * (PLATFORM_INFO op11) so G752 glass (often no COM1) sees Dual DoD A
+ * residual + stick presence. Short one-row:
+ * "UDX xhci PASS rs=0 iman=N irq=WORD ccs=N" or
+ * "UDX xhci SKIP reason=...". Never hold0 title / hold2 TE+trap RIP /
+ * hold6 NET / hold14-15 UDX NIC. hold4 stays MSC SKIP honesty.
+ * Doorbell stays serial-only (do not clobber hold3). Dual
+ * DoD A stays OPEN (need=usbcmd_rs). Never USBCMD.RS=1.
  * Soft!=product. Dual license MIT OR Apache-2.0. No version stamp.
  * Bar honesty v2026.08.04.75 stamp-free; NEVER invent .76 / bump stamp.
  * denser residual bar .75 Soft!=product dual_dod_a=OPEN freestanding_msc=SKIP.
@@ -115,6 +166,11 @@
  */
 
 #include <udx/udx.h>
+
+#if !defined(UDX_HOST_LIBC)
+/* Freestanding product host: gj_exit / gj_yield (user.ld ENTRY(_start)). */
+#include <gj/syscalls.h>
+#endif
 
 /* ------------------------------------------------------------------ */
 /* PCI identity - G752VT Intel 100 Series / C230 USB 3.0 xHCI.         */
@@ -142,9 +198,9 @@
  *   Offset 00h  Rsvd       (RO)  bits 15:8
  *   Offset 02h  HCIVERSION (RO)  16-bit Interface Version Number
  *   Offset 04h  HCSPARAMS1 (RO)  MaxSlots[7:0] MaxIntrs[18:8] MaxPorts[31:24]
- *   Offset 08h  HCSPARAMS2 (RO)  soft observe only (scratchpad names; never alloc)
+ *   Offset 08h  HCSPARAMS2 (RO)  MaxScratchpadBufs (product DCBAA[0] only)
  *   Offset 0Ch  HCSPARAMS3 (RO)  soft observe U1/U2 exit latency names only
- *   Offset 10h  HCCPARAMS1 (RO)  soft observe AC64/CSZ/xECP names; never xECP walk
+ *   Offset 10h  HCCPARAMS1 (RO)  AC64/CSZ/xECP names; product walks xECP
  *   ...
  *   Operational registers base = BAR0 + CAPLENGTH
  *   PORTSC[n] (n=1..MaxPorts) at op + 0x400 + (n-1)*0x10  (xHCI 5.4.8)
@@ -157,11 +213,22 @@
 #define XHCI_CAP_CAPLENGTH   0x00ull /* 1-byte CAPLENGTH within dword 0 */
 #define XHCI_CAP_HCIVERSION  0x02ull /* 16-bit HCIVERSION */
 #define XHCI_CAP_HCSPARAMS1  0x04ull /* MaxSlots / MaxIntrs / MaxPorts */
-#define XHCI_CAP_HCSPARAMS2  0x08ull /* soft observe; never scratchpad alloc */
+#define XHCI_CAP_HCSPARAMS2  0x08ull /* MaxScratchpadBufs; product DCBAA[0] */
 #define XHCI_CAP_HCSPARAMS3  0x0cull /* soft observe U1/U2 latency names */
 #define XHCI_CAP_HCCPARAMS1  0x10ull /* HCCPARAMS1 (public; soft observe) */
 #define XHCI_CAP_DBOFF       0x14ull /* Doorbell Array Offset (public) */
 #define XHCI_CAP_RTSOFF      0x18ull /* Runtime Register Space Offset */
+/*
+ * Doorbell Array (xHCI 5.3.7 / 5.6 public).
+ * DBOFF bits 31:2 = byte offset from Capability Base; bits 1:0 RsvdP.
+ * doorbell[n] at (DBOFF & ~3) + n*4. doorbell[0] is Host Controller
+ * Command Ring (slot ID 0). Named + fail-closed this gate: read-only
+ * while USBCMD.RS=0. Never invent DBOFF. Never write if RS=0.
+ */
+#define XHCI_DBOFF_RSVD_MASK     0x3u
+#define XHCI_DB_REG_BYTES        4ull
+#define XHCI_DB_SLOT_CMD         0u /* doorbell[0] = command ring */
+#define XHCI_DB_TARGET_HCR       0u /* named only; never write this gate */
 
 /* Soft seed values (illustrative; not a claim of live silicon readout). */
 #define XHCI_SOFT_CAPLENGTH  0x20u   /* common 32-byte capability region */
@@ -172,17 +239,31 @@
 /* Soft cap-ext seed: DBOFF=0x1000, RTSOFF=0x2000 (host inject only). */
 #define XHCI_SOFT_DBOFF      0x00001000u
 #define XHCI_SOFT_RTSOFF     0x00002000u
-/* Soft HCCPARAMS1: AC64=1; CSZ=0; xECP=0 (never walk USBLEGSUP). */
+/* Soft HCCPARAMS1: AC64=1; CSZ=0; xECP=0 (inject has no USBLEGSUP). */
 #define XHCI_SOFT_HCCPARAMS1 (1u << 0) /* AC64 public bit */
 /* Soft USBSTS seed: HCH=1 (controller halted residual observe). */
 #define XHCI_SOFT_USBSTS_SEED (1u << 0)
 
-/* HCCPARAMS1 public bit/field names - observe residual only. */
+/* HCCPARAMS1 public bit/field names (xHCI 5.3.6). */
 #define XHCI_HCCPARAMS1_AC64       (1u << 0)
 #define XHCI_HCCPARAMS1_BNC        (1u << 1)
 #define XHCI_HCCPARAMS1_CSZ        (1u << 2)
 #define XHCI_HCCPARAMS1_XECP_SHIFT 16u
 #define XHCI_HCCPARAMS1_XECP_MASK  0xffffu
+
+/*
+ * xHCI extended capabilities (xHCI 7 / 7.1 public).
+ * HCCPARAMS1.xECP = DWORD offset from Capability Base.
+ * Next (header bits 15:8) = DWORD offset from the current capability.
+ * USBLEGSUP Capability ID = 1. Semaphores: BIOS Owned bit 16, OS Owned bit 24.
+ */
+#define XHCI_XECP_CAP_ID_MASK        0xffu
+#define XHCI_XECP_NEXT_SHIFT         8u
+#define XHCI_XECP_NEXT_MASK          0xffu
+#define XHCI_XECP_ID_USBLEGSUP       1u
+#define XHCI_USBLEGSUP_BIOS_OWNED    (1u << 16)
+#define XHCI_USBLEGSUP_OS_OWNED      (1u << 24)
+#define XHCI_USBLEGCTLSTS_OFF        4ull
 
 /* Soft BOT progress stages (lamps only; never product MSC). */
 #define XHCI_SOFT_BOT_ST_CAP     1u /* CAPLENGTH + HCIVERSION ok */
@@ -211,10 +292,43 @@
 #define XHCI_OP_DCBAAP           0x30ull /* Device Context Base Array Ptr */
 #define XHCI_OP_DCBAAP_HI        0x34ull /* DCBAAP high dword (program order) */
 #define XHCI_OP_CONFIG           0x38ull /* MaxSlotsEn */
+/*
+ * PORTSC[n] (xHCI 5.4.8 public): op + 0x400 + (n-1)*0x10, n=1..MaxPorts.
+ * Product program after PASS: once-read CCS only. Never write PORTSC.
+ */
+#define XHCI_OP_PORTSC           0x400ull
+#define XHCI_PORTSC_STRIDE       0x10ull
+#define XHCI_HCS1_MAXPORTS_SHIFT 24u
+#define XHCI_HCS1_MAXPORTS_MASK  0xffu
 
 /* Soft USBCMD/USBSTS bit names (public) - observe residual only. */
 #define XHCI_USBCMD_RS           (1u << 0)
 #define XHCI_USBCMD_HCRST        (1u << 1)
+#define XHCI_USBCMD_INTE         (1u << 2) /* named only; prefer IMAN.IE */
+/* CRCR public bits (xHCI 5.4.5) — product program sets RCS only. */
+#define XHCI_CRCR_RCS            (1u << 0)
+#define XHCI_CRCR_CS             (1u << 1)
+#define XHCI_CRCR_CA             (1u << 2)
+#define XHCI_CRCR_CRR            (1u << 3)
+#define XHCI_CRCR_CTRL_MASK      0x3full /* bits 5:0: RCS/CS/CA/CRR/RsvdP */
+
+/*
+ * Runtime Interrupter Register Set 0 (xHCI 5.5.2 public).
+ * Base = BAR0 + RTSOFF. Product program: ERST/ERDP then IMAN.IE
+ * (+ optional IMOD). Never USBCMD.RS=1. Prefer IMAN.IE only.
+ */
+#define XHCI_RT_IR0              0x20ull
+#define XHCI_IR_IMAN             0x00ull /* Interrupter Management */
+#define XHCI_IR_IMOD             0x04ull /* Interrupter Moderation */
+#define XHCI_IR_ERSTSZ           0x08ull
+#define XHCI_IR_ERSTBA           0x10ull
+#define XHCI_IR_ERSTBA_HI        0x14ull
+#define XHCI_IR_ERDP             0x18ull
+#define XHCI_IR_ERDP_HI          0x1cull
+#define XHCI_IMAN_IP             (1u << 0) /* RW1C; write 0 so we never W1C */
+#define XHCI_IMAN_IE             (1u << 1) /* Interrupt Enable */
+/* Public conservative IMODI default (xHCI 5.5.2.2): 4000 * 250 ns = 1 ms. */
+#define XHCI_IMOD_INTERVAL_1MS   4000u
 #define XHCI_USBSTS_HCH          (1u << 0)
 #define XHCI_USBSTS_HSE          (1u << 2)  /* Host System Error residual name */
 #define XHCI_USBSTS_EINT         (1u << 3)  /* Event Interrupt residual name */
@@ -264,6 +378,35 @@
     (XHCI_SOFT_EVT_TRBS * XHCI_SOFT_TRB_BYTES)
 #define XHCI_SOFT_RING_BYTES \
     (XHCI_SOFT_CMD_BYTES + XHCI_SOFT_EVT_BYTES)
+
+/*
+ * Product program (RS-off) FORCE32 page geometry. Public TRB=16B;
+ * one event-ring segment fills one 4 KiB page (256 TRBs).
+ * MaxSlotsEn clamped so DCBAA ((N+1)*8) stays well inside one page.
+ */
+#define XHCI_PROD_PAGE_BYTES       4096u
+#define XHCI_PROD_ALIGN            64u
+#define XHCI_PROD_MAXSLOTS_CLAMP   8u
+#define XHCI_PROD_SPAD_PAGES_CLAMP 16u /* MaxScratchpadBufs storm cap */
+#define XHCI_PROD_ERST_ENTS        1u
+#define XHCI_PROD_EVT_TRBS         (XHCI_PROD_PAGE_BYTES / XHCI_SOFT_TRB_BYTES)
+#define XHCI_PROD_WROTE_CONFIG     (1u << 0)
+#define XHCI_PROD_WROTE_DCBAAP     (1u << 1)
+#define XHCI_PROD_WROTE_CRCR       (1u << 2)
+#define XHCI_PROD_WROTE_ERSTSZ     (1u << 3)
+#define XHCI_PROD_WROTE_ERSTBA     (1u << 4)
+#define XHCI_PROD_WROTE_ERDP       (1u << 5)
+#define XHCI_PROD_WROTE_IMAN       (1u << 6) /* IMAN.IE IR0 after ERDP */
+#define XHCI_PROD_WROTE_IMOD       (1u << 7) /* optional public IMODI=4000 */
+#define XHCI_PROD_WROTE_ALL \
+    (XHCI_PROD_WROTE_CONFIG | XHCI_PROD_WROTE_DCBAAP | \
+     XHCI_PROD_WROTE_CRCR | XHCI_PROD_WROTE_ERSTSZ | \
+     XHCI_PROD_WROTE_ERSTBA | XHCI_PROD_WROTE_ERDP)
+/* Bounded HCH wait after USBCMD.RS=0 (xHCI 4.2; no infinite loop). */
+#define XHCI_PROD_HALT_SPINS       5000000u
+/* Bounded xECP walk + USBLEGSUP BIOS/OS handshake (xHCI 7.1). */
+#define XHCI_PROD_XECP_WALK_MAX    64u
+#define XHCI_PROD_USBLEG_SPINS     5000000u
 
 /*
  * Soft DDI caps residual step ids (product=UDX+ABI need=DDI_caps).
@@ -526,6 +669,7 @@
 udx_status_t udx_host_bind_by_id(u16 u16Vendor, u16 u16Device,
                                  struct udx_pci_dev **ppOut)
     __attribute__((weak));
+long udx_host_ddi_handle(void) __attribute__((weak));
 #endif
 
 /*
@@ -568,7 +712,24 @@ struct xhci_udx_soft {
     u32                 u32FRealDdi; /* 1=GJ_SYS_DDI bind_by_id real path */
     u32                 u32FRingOk;  /* soft DMA cmd/evt ring residual ok */
     u32                 u32FIommu;   /* soft udx_dma_iommu_grant residual ok */
-    u32                 u32FProductMint; /* product mint (0 soft residual) */
+    u32                 u32FProductMint; /* 1 after RS-off public program */
+    u32                 u32FProductProg; /* once: product program wrote */
+    u32                 u32WroteBits;    /* XHCI_PROD_WROTE_* */
+    u32                 u32SlotsEn;      /* programmed CONFIG.MaxSlotsEn */
+    void               *pDcbaa;          /* FORCE32 DCBAA page VA */
+    udx_dma_addr_t      dmaDcbaa;
+    void               *pErst;           /* FORCE32 ERST page VA */
+    udx_dma_addr_t      dmaErst;
+    void               *pCmdProd;        /* dedicated cmd page; NULL=reuse */
+    udx_dma_addr_t      dmaCmdProd;
+    void               *pEvtProd;        /* dedicated evt page; NULL=reuse */
+    udx_dma_addr_t      dmaEvtProd;
+    void               *pSpadArr;        /* FORCE32 scratchpad array page */
+    udx_dma_addr_t      dmaSpadArr;
+    void               *pSpadBuf[XHCI_PROD_SPAD_PAGES_CLAMP];
+    udx_dma_addr_t      dmaSpadBuf[XHCI_PROD_SPAD_PAGES_CLAMP];
+    u32                 u32SpadNeed;     /* HCSPARAMS2 MaxScratchpadBufs */
+    u32                 u32SpadPages;    /* allocated (clamped) count */
     u32                 u32PathBits; /* XHCI_SOFT_PATH_* residual rollup */
     u8                  u8Ep0Steps;  /* EP0 residual steps cataloged (0..4) */
     u8                  u8CfgSteps;  /* config residual steps cataloged (0..5) */
@@ -589,11 +750,49 @@ struct xhci_udx_soft {
     u32                 u32Hcs2;     /* soft HCSPARAMS2 snapshot (observe) */
     u32                 u32Hcs3;     /* soft HCSPARAMS3 snapshot (observe) */
     u32                 u32Hcc1;     /* soft HCCPARAMS1 snapshot */
+    u32                 u32FUsbleg;  /* 1 if USBLEGSUP found (xECP walk) */
+    u32                 u32UsblegOff; /* USBLEGSUP byte offset from cap */
+    u32                 u32Usbleg;   /* last USBLEGSUP dword snapshot */
     u32                 u32Dboff;    /* soft DBOFF snapshot */
     u32                 u32Rtsoff;   /* soft RTSOFF snapshot */
     u32                 u32Dnctrl;   /* soft DNCTRL snapshot (observe) */
     u32                 u32Config;   /* soft CONFIG MaxSlotsEn snapshot */
+    u32                 u32Iman;     /* last IMAN snapshot (IR0) */
+    u32                 u32Imod;     /* last IMOD snapshot (IR0) */
+    u32                 u32FImanIe;  /* 1 if IMAN.IE readback sticky */
+    u32                 u32FImod;    /* 1 if public IMODI=4000 wrote */
+    s64                 i64DdiH;     /* retained DDI OPEN handle (0=none) */
+    u32                 u32IrqBind;  /* XHCI_IRQ_BIND_* lamp (OPEN/PASS/FAIL) */
+    u32                 u32FIrqBindTried; /* once: post-IMAN IRQ_BIND */
+    u32                 u32Db0;      /* doorbell[0] snapshot (read-only) */
+    u32                 u32FDbObs;   /* 1 if doorbell[0] in-range + read */
+    u32                 u32FDoorbellTried; /* once: post-PASS doorbell gate */
+    u32                 u32PortscPorts; /* MaxPorts walked (product CCS) */
+    u32                 u32PortscCcs;   /* 1 if any CCS; 0 none */
+    u32                 u32PortscCcsN;  /* CCS count (xHCI 5.4.8 bit 0) */
+    u32                 u32FPortscObs;  /* 1 if PORTSC CCS walk completed */
+    u32                 u32FPortscTried; /* once: post-PASS PORTSC CCS */
 };
+
+/* irq_bind lamp: never fake PASS on stub / no handle. */
+#define XHCI_IRQ_BIND_OPEN  0u
+#define XHCI_IRQ_BIND_PASS  1u
+#define XHCI_IRQ_BIND_FAIL  2u
+/*
+ * Kernel DDI_OP_IRQ_BIND is irq_msix_soft_user_bind (handle→badge note).
+ * Not a no-op stub. Product Notification cap mint remains OPEN.
+ * If this were stub-only, post-IMAN must lamp OPEN (never fake PASS).
+ */
+#define XHCI_IRQ_BIND_STUB  0u
+
+static void xhci_udx_keep_ddi_handle(struct xhci_udx_soft *pSoft);
+static const char *xhci_udx_irq_bind_word(const struct xhci_udx_soft *pSoft);
+static void xhci_udx_product_irq_bind_try(struct xhci_udx_soft *pSoft);
+static void xhci_udx_product_doorbell_try(struct xhci_udx_soft *pSoft);
+static void xhci_udx_product_portsc_try(struct xhci_udx_soft *pSoft);
+static void xhci_udx_product_status_hold_once(const struct xhci_udx_soft *pSoft,
+                                             int fPass,
+                                             const char *szReason);
 
 static struct xhci_udx_soft s_soft;
 
@@ -3205,15 +3404,1325 @@ xhci_udx_soft_dma_ring_residual(struct xhci_udx_soft *pSoft)
 }
 
 /**
- * Product program gate honesty (Dual DoD A direction; rtl option-3 spirit).
- * Only when real_ddi + program_gate would product-mint; this soft residual
- * never invents CRCR/DCBAAP/ERST/RS silicon program — never_program=1 held.
- * Inject path always SKIP. Dual DoD A remains OPEN (agent!=close).
+ * Product program (Dual DoD A; rtl option-3 spirit).
+ * When real_ddi + program_gate: once, fail-closed, public xHCI init
+ * registers only (xHCI 4.2 / 5.4 / 5.5.2) — USBCMD.RS stays off.
+ *
+ *   0) If USBCMD.RS=1 or USBSTS.HCH=0: fail-closed halt (RS=0 only)
+ *   0b) Public xECP walk + USBLEGSUP (ID=1) OS ownership (xHCI 7.1).
+ *       Missing → lamp usblegsup=0 continue. Timeout → SKIP.
+ *   1) FORCE32 pages: DCBAA + ERST + event ring (reuse cmd/evt if ok)
+ *   1b) HCSPARAMS2 MaxScratchpadBufs: 0 → lamp scratchpad=0 continue;
+ *       >0 → FORCE32 array+pages (clamp 16), DCBAA[0]=array PA;
+ *       alloc fail or need>clamp → SKIP
+ *   2) CONFIG.MaxSlotsEn (HCSPARAMS1, clamp small N)
+ *   3) DCBAAP
+ *   4) CRCR with RCS
+ *   5) ERSTSZ / ERSTBA / ERDP
+ *   6) IMAN.IE for IR0 if RTSOFF known (prefer IMAN.IE; no USBCMD.INTE)
+ *      Optional public IMODI=4000 (1 ms). Then gj_ddi_irq_bind once
+ *      on retained DDI handle; lamp irq_bind=PASS/FAIL/OPEN.
+ *   7) Name + fail-close command-ring doorbell (DBOFF; doorbell[0]=
+ *      slot 0). Read-only. Missing/OOR → SKIP reason, continue.
+ *      Never ring while halted. Never USBCMD.RS=1.
+ *   8) After PASS (RS=0): once-read PORTSC[1..MaxPorts] CCS only.
+ *      Never write PORTSC. Op/port OOR → reason=portsc_oor, continue.
+ *      Then once-pin hold3 with ccs=0|1|? (glass; SKIP string unchanged).
+ *
+ * MAP miss, DMA alloc fail, running/CNR, or readback miss → SKIP.
+ * Halt timeout (still RS=1 or HCH=0) → SKIP controller_running.
+ * USBLEGSUP handshake timeout → SKIP usblegsup_timeout.
+ * Never invent silicon. Inject path always SKIP. Dual DoD A OPEN.
  *
  * greppable: xhci_udx: product program
+ * greppable: xhci_udx: product program PASS
  * greppable: xhci_udx: product program SKIP
- * greppable: never_program=1 / product_mint=0 / dual_dod_a=OPEN
+ * greppable: xhci_udx: product program halt
+ * greppable: xhci_udx: product program scratchpad
+ * greppable: xhci_udx: product program usblegsup
+ * greppable: xhci_udx: product program iman
+ * greppable: xhci_udx: product program imod
+ * greppable: xhci_udx: product program irq_bind
+ * greppable: xhci_udx: product program doorbell
+ * greppable: doorbell=OPEN never_ring_while_halted=1 need=usbcmd_rs
+ * greppable: dboff= db0= reason=dboff_missing reason=dboff_oor
+ * greppable: xhci_udx: product program portsc
+ * greppable: ports= ccs= ccs_n= never_portsc_write=1
+ * greppable: reason=portsc_oor
+ * greppable: xhci_udx: product program status hold
+ * greppable: hold3= UDX xhci PASS UDX xhci SKIP
+ * greppable: usblegsup= xecp_walk=
+ * greppable: rs_was= HCH_after=
+ * greppable: wrote= config= dcbaap= crcr= erstsz= erstba= erdp= iman= imod=
+ * greppable: irq_bind=PASS irq_bind=FAIL irq_bind=OPEN rs=0
+ * greppable: scratchpad= need= spad_pages= dcbaa0=
  */
+/**
+ * HCSPARAMS2 MaxScratchpadBufs (xHCI 5.3.4 public): Hi[25:21]<<5 | Lo[31:27].
+ */
+static u32
+xhci_udx_hcs2_max_scratchpad(u32 u32Hcs2)
+{
+    return ((((u32Hcs2 >> 21) & 0x1fu) << 5) |
+            ((u32Hcs2 >> 27) & 0x1fu));
+}
+
+static void
+xhci_udx_store_pa64(void *pCpu, u32 iEnt, udx_dma_addr_t dma)
+{
+    u32 *pDw;
+
+    if (pCpu == NULL) {
+        return;
+    }
+    pDw = (u32 *)pCpu;
+    pDw[(iEnt * 2u) + 0u] = (u32)((u64)dma & 0xffffffffull);
+    pDw[(iEnt * 2u) + 1u] = (u32)(((u64)dma >> 32) & 0xffffffffull);
+}
+
+static int
+xhci_udx_prod_dma_ok(udx_dma_addr_t dma, size_t cb)
+{
+    if (dma == 0 || cb == 0) {
+        return 0;
+    }
+    if (((u64)dma & ((u64)XHCI_PROD_ALIGN - 1ull)) != 0ull) {
+        return 0;
+    }
+    if (!udx_dma_is_low(dma)) {
+        return 0;
+    }
+    if (udx_dma_window_ok(dma, cb, 1) == 0) {
+        return 0;
+    }
+    return 1;
+}
+
+static void
+xhci_udx_prod_zero_page(void *pCpu)
+{
+    u8 *pBytes;
+    u32 iByte;
+
+    if (pCpu == NULL) {
+        return;
+    }
+    pBytes = (u8 *)pCpu;
+    for (iByte = 0u; iByte < XHCI_PROD_PAGE_BYTES; iByte++) {
+        pBytes[iByte] = 0u;
+    }
+}
+
+static void *
+xhci_udx_prod_alloc_page(struct xhci_udx_soft *pSoft, udx_dma_addr_t *pDma)
+{
+    void *pCpu;
+    udx_dma_addr_t dma;
+
+    if (pSoft == NULL || pDma == NULL || pSoft->pPdev == NULL ||
+        pSoft->pPdev->pDev == NULL) {
+        return NULL;
+    }
+    dma = 0;
+    pCpu = udx_dma_alloc_coherent(pSoft->pPdev->pDev, XHCI_PROD_PAGE_BYTES,
+                                  &dma, UDX_DMA_F_FORCE32);
+    if (pCpu == NULL || dma == 0) {
+        if (pCpu != NULL) {
+            udx_dma_free_coherent(pSoft->pPdev->pDev, XHCI_PROD_PAGE_BYTES,
+                                  pCpu, dma);
+        }
+        return NULL;
+    }
+    if (xhci_udx_prod_dma_ok(dma, (size_t)XHCI_PROD_PAGE_BYTES) == 0) {
+        udx_dma_free_coherent(pSoft->pPdev->pDev, XHCI_PROD_PAGE_BYTES,
+                              pCpu, dma);
+        return NULL;
+    }
+    xhci_udx_prod_zero_page(pCpu);
+    *pDma = dma;
+    return pCpu;
+}
+
+static void
+xhci_udx_prod_spad_free(struct xhci_udx_soft *pSoft)
+{
+    struct udx_device *pDev;
+    u32 iPage;
+
+    if (pSoft == NULL || pSoft->pPdev == NULL) {
+        return;
+    }
+    pDev = pSoft->pPdev->pDev;
+    if (pDev == NULL) {
+        return;
+    }
+    for (iPage = 0u; iPage < XHCI_PROD_SPAD_PAGES_CLAMP; iPage++) {
+        if (pSoft->pSpadBuf[iPage] != NULL) {
+            udx_dma_free_coherent(pDev, XHCI_PROD_PAGE_BYTES,
+                                  pSoft->pSpadBuf[iPage],
+                                  pSoft->dmaSpadBuf[iPage]);
+            pSoft->pSpadBuf[iPage] = NULL;
+            pSoft->dmaSpadBuf[iPage] = 0;
+        }
+    }
+    if (pSoft->pSpadArr != NULL) {
+        udx_dma_free_coherent(pDev, XHCI_PROD_PAGE_BYTES,
+                              pSoft->pSpadArr, pSoft->dmaSpadArr);
+        pSoft->pSpadArr = NULL;
+        pSoft->dmaSpadArr = 0;
+    }
+    pSoft->u32SpadPages = 0u;
+}
+
+static void
+xhci_udx_prod_pages_free_unprogrammed(struct xhci_udx_soft *pSoft)
+{
+    struct udx_device *pDev;
+
+    if (pSoft == NULL || pSoft->pPdev == NULL) {
+        return;
+    }
+    pDev = pSoft->pPdev->pDev;
+    if (pDev == NULL) {
+        return;
+    }
+    xhci_udx_prod_spad_free(pSoft);
+    pSoft->u32SpadNeed = 0u;
+    if (pSoft->pDcbaa != NULL) {
+        udx_dma_free_coherent(pDev, XHCI_PROD_PAGE_BYTES,
+                              pSoft->pDcbaa, pSoft->dmaDcbaa);
+        pSoft->pDcbaa = NULL;
+        pSoft->dmaDcbaa = 0;
+    }
+    if (pSoft->pErst != NULL) {
+        udx_dma_free_coherent(pDev, XHCI_PROD_PAGE_BYTES,
+                              pSoft->pErst, pSoft->dmaErst);
+        pSoft->pErst = NULL;
+        pSoft->dmaErst = 0;
+    }
+    if (pSoft->pCmdProd != NULL) {
+        udx_dma_free_coherent(pDev, XHCI_PROD_PAGE_BYTES,
+                              pSoft->pCmdProd, pSoft->dmaCmdProd);
+        pSoft->pCmdProd = NULL;
+        pSoft->dmaCmdProd = 0;
+    }
+    if (pSoft->pEvtProd != NULL) {
+        udx_dma_free_coherent(pDev, XHCI_PROD_PAGE_BYTES,
+                              pSoft->pEvtProd, pSoft->dmaEvtProd);
+        pSoft->pEvtProd = NULL;
+        pSoft->dmaEvtProd = 0;
+    }
+}
+
+/**
+ * Fail-closed scratchpad for product program (xHCI 4.20 / 6.6 public).
+ * MaxScratchpadBufs==0: lamp scratchpad=0, DCBAA[0] stays 0, continue.
+ * >0: FORCE32 array + pages; DCBAA[0] = array PA. need>clamp or alloc
+ * fail → 0 (caller SKIP). Never USBCMD.RS / doorbell / BOT / MSC.
+ *
+ * greppable: xhci_udx: product program scratchpad
+ */
+static int
+xhci_udx_product_scratchpad_try(struct xhci_udx_soft *pSoft, u32 u32Hcs2)
+{
+    u32 u32Need;
+    u32 u32Pages;
+    u32 iPage;
+    u32 u32Bdf;
+    struct udx_device *pDev;
+
+    if (pSoft == NULL || pSoft->pDcbaa == NULL || pSoft->pPdev == NULL ||
+        pSoft->pPdev->pDev == NULL) {
+        if (pSoft != NULL) {
+            udx_printk("xhci_udx: product program SKIP "
+                       "reason=scratchpad_alloc which=dcbaa_missing "
+                       "product_mint=0 write=0 never_program=1 "
+                       "never_invent_silicon=1 never_rs=1 "
+                       "Soft!=product dual_dod_a=OPEN "
+                       "freestanding_msc=SKIP\n");
+        }
+        return 0;
+    }
+
+    pDev = pSoft->pPdev->pDev;
+    u32Need = xhci_udx_hcs2_max_scratchpad(u32Hcs2);
+    pSoft->u32SpadNeed = u32Need;
+    pSoft->u32SpadPages = 0u;
+
+    if (u32Need == 0u) {
+        xhci_udx_store_pa64(pSoft->pDcbaa, 0u, 0);
+        udx_printk("xhci_udx: product program scratchpad "
+                   "scratchpad=0 need=0 pages=0 dcbaa0=0 "
+                   "hcs2=0x%08x clamp=%u skip_alloc=1 "
+                   "Soft!=product dual_dod_a=OPEN never_rs=1 "
+                   "freestanding_msc=SKIP\n",
+                   (unsigned)u32Hcs2,
+                   (unsigned)XHCI_PROD_SPAD_PAGES_CLAMP);
+        return 1;
+    }
+
+    u32Pages = u32Need;
+    if (u32Pages > XHCI_PROD_SPAD_PAGES_CLAMP) {
+        /* Fail-closed: do not under-provision; clamp avoids alloc storm. */
+        udx_printk("xhci_udx: product program SKIP "
+                   "reason=scratchpad_clamp need=%u clamp=%u "
+                   "hcs2=0x%08x product_mint=0 write=0 "
+                   "never_program=1 never_invent_silicon=1 never_rs=1 "
+                   "Soft!=product dual_dod_a=OPEN "
+                   "freestanding_msc=SKIP\n",
+                   (unsigned)u32Need,
+                   (unsigned)XHCI_PROD_SPAD_PAGES_CLAMP,
+                   (unsigned)u32Hcs2);
+        return 0;
+    }
+
+    pSoft->pSpadArr = xhci_udx_prod_alloc_page(pSoft, &pSoft->dmaSpadArr);
+    if (pSoft->pSpadArr == NULL) {
+        udx_printk("xhci_udx: product program SKIP "
+                   "reason=scratchpad_alloc which=array need=%u "
+                   "product_mint=0 write=0 never_program=1 "
+                   "never_invent_silicon=1 never_rs=1 "
+                   "Soft!=product dual_dod_a=OPEN "
+                   "freestanding_msc=SKIP\n",
+                   (unsigned)u32Need);
+        return 0;
+    }
+    xhci_udx_prod_zero_page(pSoft->pSpadArr);
+
+    for (iPage = 0u; iPage < u32Pages; iPage++) {
+        pSoft->pSpadBuf[iPage] = xhci_udx_prod_alloc_page(pSoft,
+            &pSoft->dmaSpadBuf[iPage]);
+        if (pSoft->pSpadBuf[iPage] == NULL) {
+            xhci_udx_prod_spad_free(pSoft);
+            udx_printk("xhci_udx: product program SKIP "
+                       "reason=scratchpad_alloc which=page i=%u "
+                       "need=%u product_mint=0 write=0 "
+                       "never_program=1 never_invent_silicon=1 "
+                       "never_rs=1 Soft!=product dual_dod_a=OPEN "
+                       "freestanding_msc=SKIP\n",
+                       (unsigned)iPage, (unsigned)u32Need);
+            return 0;
+        }
+        xhci_udx_store_pa64(pSoft->pSpadArr, iPage,
+                            pSoft->dmaSpadBuf[iPage]);
+    }
+
+    xhci_udx_store_pa64(pSoft->pDcbaa, 0u, pSoft->dmaSpadArr);
+    pSoft->u32SpadPages = u32Pages;
+
+    u32Bdf = udx_dma_bdf(pSoft->pPdev->u8Bus, udx_pci_slot(pSoft->pPdev),
+                         udx_pci_func(pSoft->pPdev));
+    udx_dma_sync_single_for_device(pDev, pSoft->dmaSpadArr,
+                                   (size_t)XHCI_PROD_PAGE_BYTES,
+                                   UDX_DMA_BIDIRECTIONAL);
+    (void)udx_dma_iommu_grant(u32Bdf, pSoft->dmaSpadArr,
+                              (size_t)XHCI_PROD_PAGE_BYTES);
+    for (iPage = 0u; iPage < u32Pages; iPage++) {
+        udx_dma_sync_single_for_device(pDev, pSoft->dmaSpadBuf[iPage],
+                                       (size_t)XHCI_PROD_PAGE_BYTES,
+                                       UDX_DMA_BIDIRECTIONAL);
+        (void)udx_dma_iommu_grant(u32Bdf, pSoft->dmaSpadBuf[iPage],
+                                  (size_t)XHCI_PROD_PAGE_BYTES);
+    }
+
+    udx_printk("xhci_udx: product program scratchpad "
+               "scratchpad=%u need=%u pages=%u clamped=0 "
+               "dcbaa0=0x%llx dma_spad_arr=0x%llx "
+               "hcs2=0x%08x force32=1 clamp=%u "
+               "Soft!=product dual_dod_a=OPEN never_rs=1 "
+               "freestanding_msc=SKIP\n",
+               (unsigned)u32Pages, (unsigned)u32Need,
+               (unsigned)u32Pages,
+               (unsigned long long)pSoft->dmaSpadArr,
+               (unsigned long long)pSoft->dmaSpadArr,
+               (unsigned)u32Hcs2,
+               (unsigned)XHCI_PROD_SPAD_PAGES_CLAMP);
+    return 1;
+}
+
+static void
+xhci_udx_writel64(struct udx_iomem *pIo, u64 u64Off, u64 u64Val)
+{
+    udx_writel(pIo, u64Off, (u32)(u64Val & 0xffffffffull));
+    udx_writel(pIo, u64Off + 4ull,
+               (u32)((u64Val >> 32) & 0xffffffffull));
+    udx_mmio_flush(pIo);
+}
+
+static u64
+xhci_udx_readl64(const struct udx_iomem *pIo, u64 u64Off)
+{
+    u32 u32Lo;
+    u32 u32Hi;
+
+    u32Lo = udx_readl(pIo, u64Off);
+    u32Hi = udx_readl(pIo, u64Off + 4ull);
+    return ((u64)u32Hi << 32) | (u64)u32Lo;
+}
+
+static void
+xhci_udx_prod_pause(void)
+{
+#if defined(__x86_64__) || defined(__i386__)
+    __asm__ volatile("pause" ::: "memory");
+#elif defined(__aarch64__)
+    __asm__ volatile("yield" ::: "memory");
+#else
+    __asm__ volatile("" ::: "memory");
+#endif
+}
+
+/**
+ * Fail-closed halt before product program silicon writes (xHCI 4.2).
+ * Firmware often leaves USBCMD.RS=1 / USBSTS.HCH=0 so RS-off program SKIP.
+ *
+ * If RS=1 or HCH=0: write USBCMD.RS=0 only (clear run bit). Do not HCRST
+ * (no documented halt-timeout reset need this gate). Bounded spin for
+ * HCH=1 — never an infinite loop. Still running → 0 so caller SKIP
+ * reason=controller_running (same as today).
+ *
+ * Still NEVER set USBCMD.RS=1. Still no BOT/MSC/doorbell.
+ * USBLEGSUP handshake is a later product-program step (after halt).
+ *
+ * greppable: xhci_udx: product program halt
+ * greppable: rs_was=
+ * greppable: HCH_after=
+ * Returns 1 if halted (ready for RS-off program); 0 if still running.
+ */
+static int
+xhci_udx_product_halt_try(struct xhci_udx_soft *pSoft, u64 u64Op,
+                          u32 *pCmd, u32 *pSts)
+{
+    u32 u32Cmd;
+    u32 u32Sts;
+    u32 u32CmdW;
+    u32 u32RsWas;
+    u32 u32HchAfter;
+    u32 iSpin;
+
+    if (pSoft == NULL || pSoft->pCap == NULL || pCmd == NULL ||
+        pSts == NULL) {
+        return 0;
+    }
+
+    u32Cmd = *pCmd;
+    u32Sts = *pSts;
+    u32RsWas = ((u32Cmd & XHCI_USBCMD_RS) != 0u) ? 1u : 0u;
+
+    /* Already halted — no USBCMD write. */
+    if (u32RsWas == 0u && (u32Sts & XHCI_USBSTS_HCH) != 0u) {
+        return 1;
+    }
+
+    /*
+     * Clear RS only. Mask HCRST so this write cannot start a reset.
+     * Never set USBCMD.RS=1. Preserve other USBCMD bits (INTE/HSEE/...).
+     */
+    u32CmdW = u32Cmd & ~(XHCI_USBCMD_RS | XHCI_USBCMD_HCRST);
+    udx_writel(pSoft->pCap, u64Op + XHCI_OP_USBCMD, u32CmdW);
+    udx_mmio_flush(pSoft->pCap);
+
+    u32Sts = 0u;
+    for (iSpin = 0u; iSpin < XHCI_PROD_HALT_SPINS; iSpin++) {
+        u32Sts = udx_readl(pSoft->pCap, u64Op + XHCI_OP_USBSTS);
+        if ((u32Sts & XHCI_USBSTS_HCH) != 0u) {
+            break;
+        }
+        xhci_udx_prod_pause();
+    }
+
+    u32Cmd = udx_readl(pSoft->pCap, u64Op + XHCI_OP_USBCMD);
+    u32Sts = udx_readl(pSoft->pCap, u64Op + XHCI_OP_USBSTS);
+    u32HchAfter = ((u32Sts & XHCI_USBSTS_HCH) != 0u) ? 1u : 0u;
+    *pCmd = u32Cmd;
+    *pSts = u32Sts;
+    pSoft->u32UsbCmd = u32Cmd;
+    pSoft->u32UsbSts = u32Sts;
+
+    udx_printk("xhci_udx: product program halt "
+               "rs_was=%u HCH_after=%u rs_after=%u usbcmd=0x%08x "
+               "usbsts=0x%08x wrote_rs0=1 never_hcrst=1 never_rs=1 "
+               "spins=%u Soft!=product dual_dod_a=OPEN "
+               "freestanding_msc=SKIP\n",
+               (unsigned)u32RsWas, (unsigned)u32HchAfter,
+               ((u32Cmd & XHCI_USBCMD_RS) != 0u) ? 1u : 0u,
+               (unsigned)u32Cmd, (unsigned)u32Sts, (unsigned)iSpin);
+
+    if ((u32Cmd & XHCI_USBCMD_RS) != 0u || u32HchAfter == 0u) {
+        return 0;
+    }
+    return 1;
+}
+
+/**
+ * Public xECP walk + USBLEGSUP OS-ownership handshake (xHCI 7 / 7.1).
+ * HCCPARAMS1.xECP (31:16) is a DWORD offset from Capability Base.
+ * Walk Next (header bits 15:8, DWORD offset from current). ID=1 is
+ * USBLEGSUP. Bounded walk — never an infinite loop.
+ *
+ * Missing (xECP=0 or ID=1 not on the list): lamp usblegsup=0, continue.
+ * Present: set HC OS Owned (bit 24), bounded wait for HC BIOS Owned
+ * (bit 16) to clear. Timeout or OS bit not sticky → 0 (caller SKIP).
+ * Do not invent ownership. Never USBCMD.RS=1 / HCRST / BOT.
+ *
+ * greppable: xhci_udx: product program usblegsup
+ * greppable: usblegsup=
+ * greppable: xecp_walk=
+ * Returns 1 if program may continue; 0 if fail-closed SKIP.
+ */
+static int
+xhci_udx_product_usblegsup_try(struct xhci_udx_soft *pSoft)
+{
+    u32 u32Hcc1;
+    u32 u32Xecp;
+    u32 u32OffDw;
+    u32 u32Head;
+    u32 u32Leg;
+    u32 u32LegW;
+    u32 u32BiosWas;
+    u32 u32OsWas;
+    u32 u32Bios;
+    u32 u32Os;
+    u32 u32SmiOff;
+    u32 u32Walked;
+    u32 iCap;
+    u32 iSpin;
+    u16 u16Xecp;
+    u8  u8Id;
+    u8  u8Next;
+    u64 u64Off;
+    u64 u64Ctl;
+
+    if (pSoft == NULL || pSoft->pCap == NULL) {
+        udx_printk("xhci_udx: product program SKIP reason=usblegsup_map "
+                   "usblegsup=0 xecp_walk=0 product_mint=0 write=0 "
+                   "never_program=1 never_invent=1 never_rs=1 "
+                   "Soft!=product dual_dod_a=OPEN freestanding_msc=SKIP\n");
+        return 0;
+    }
+
+    u32Hcc1 = udx_readl(pSoft->pCap, XHCI_CAP_HCCPARAMS1);
+    pSoft->u32Hcc1 = u32Hcc1;
+    if (u32Hcc1 == 0xffffffffu) {
+        udx_printk("xhci_udx: product program SKIP reason=hccparams1 "
+                   "usblegsup=0 xecp_walk=0 hccparams1=0xffffffff "
+                   "product_mint=0 write=0 never_program=1 never_invent=1 "
+                   "never_rs=1 Soft!=product dual_dod_a=OPEN "
+                   "freestanding_msc=SKIP\n");
+        return 0;
+    }
+
+    u16Xecp = (u16)((u32Hcc1 >> XHCI_HCCPARAMS1_XECP_SHIFT) &
+                    XHCI_HCCPARAMS1_XECP_MASK);
+    u32Xecp = (u32)u16Xecp;
+    pSoft->u32FUsbleg = 0u;
+    pSoft->u32UsblegOff = 0u;
+    pSoft->u32Usbleg = 0u;
+
+    if (u32Xecp == 0u) {
+        udx_printk("xhci_udx: product program usblegsup "
+                   "usblegsup=0 xecp=0x0000 xecp_walk=0 "
+                   "bios=0 os=0 wrote_os=0 spins=0 smi_off=0 "
+                   "Soft!=product dual_dod_a=OPEN never_rs=1 "
+                   "freestanding_msc=SKIP\n");
+        return 1;
+    }
+
+    u32OffDw = u32Xecp;
+    u32Walked = 0u;
+    for (iCap = 0u; iCap < XHCI_PROD_XECP_WALK_MAX; iCap++) {
+        u64Off = ((u64)u32OffDw) << 2;
+        if (!udx_mmio_in_range(pSoft->pCap, u64Off, 4ull)) {
+            if (iCap == 0u) {
+                udx_printk("xhci_udx: product program SKIP "
+                           "reason=xecp_range usblegsup=0 "
+                           "xecp=0x%04x off=0x%llx xecp_walk=1 "
+                           "product_mint=0 write=0 never_program=1 "
+                           "never_invent=1 never_rs=1 "
+                           "Soft!=product dual_dod_a=OPEN "
+                           "freestanding_msc=SKIP\n",
+                           (unsigned)u32Xecp,
+                           (unsigned long long)u64Off);
+                return 0;
+            }
+            break;
+        }
+
+        u32Head = udx_readl(pSoft->pCap, u64Off);
+        if (u32Head == 0xffffffffu) {
+            if (iCap == 0u) {
+                udx_printk("xhci_udx: product program SKIP "
+                           "reason=xecp_read usblegsup=0 "
+                           "xecp=0x%04x off=0x%llx xecp_walk=1 "
+                           "product_mint=0 write=0 never_program=1 "
+                           "never_invent=1 never_rs=1 "
+                           "Soft!=product dual_dod_a=OPEN "
+                           "freestanding_msc=SKIP\n",
+                           (unsigned)u32Xecp,
+                           (unsigned long long)u64Off);
+                return 0;
+            }
+            break;
+        }
+
+        u32Walked++;
+        u8Id = (u8)(u32Head & XHCI_XECP_CAP_ID_MASK);
+        u8Next = (u8)((u32Head >> XHCI_XECP_NEXT_SHIFT) &
+                      XHCI_XECP_NEXT_MASK);
+
+        if (u8Id == XHCI_XECP_ID_USBLEGSUP) {
+            u32Leg = u32Head;
+            u32BiosWas = ((u32Leg & XHCI_USBLEGSUP_BIOS_OWNED) != 0u)
+                         ? 1u : 0u;
+            u32OsWas = ((u32Leg & XHCI_USBLEGSUP_OS_OWNED) != 0u)
+                       ? 1u : 0u;
+
+            /* Preserve RsvdP; set HC OS Owned (xHCI 7.1). */
+            u32LegW = u32Leg | XHCI_USBLEGSUP_OS_OWNED;
+            udx_writel(pSoft->pCap, u64Off, u32LegW);
+            udx_mmio_flush(pSoft->pCap);
+
+            u32Leg = udx_readl(pSoft->pCap, u64Off);
+            for (iSpin = 0u; iSpin < XHCI_PROD_USBLEG_SPINS; iSpin++) {
+                u32Leg = udx_readl(pSoft->pCap, u64Off);
+                if ((u32Leg & XHCI_USBLEGSUP_BIOS_OWNED) == 0u) {
+                    break;
+                }
+                xhci_udx_prod_pause();
+            }
+
+            u32Bios = ((u32Leg & XHCI_USBLEGSUP_BIOS_OWNED) != 0u)
+                      ? 1u : 0u;
+            u32Os = ((u32Leg & XHCI_USBLEGSUP_OS_OWNED) != 0u)
+                    ? 1u : 0u;
+            pSoft->u32FUsbleg = 1u;
+            pSoft->u32UsblegOff = (u32)u64Off;
+            pSoft->u32Usbleg = u32Leg;
+
+            if (u32Bios != 0u) {
+                udx_printk("xhci_udx: product program SKIP "
+                           "reason=usblegsup_timeout usblegsup=1 "
+                           "xecp=0x%04x off=0x%llx xecp_walk=1 "
+                           "bios_was=%u bios=1 os_was=%u os=%u "
+                           "wrote_os=1 spins=%u walked=%u "
+                           "usbleg=0x%08x product_mint=0 write=0 "
+                           "never_program=1 never_invent=1 never_rs=1 "
+                           "never_hcrst=1 Soft!=product dual_dod_a=OPEN "
+                           "freestanding_msc=SKIP\n",
+                           (unsigned)u32Xecp,
+                           (unsigned long long)u64Off,
+                           (unsigned)u32BiosWas, (unsigned)u32OsWas,
+                           (unsigned)u32Os, (unsigned)iSpin,
+                           (unsigned)u32Walked, (unsigned)u32Leg);
+                return 0;
+            }
+            if (u32Os == 0u) {
+                udx_printk("xhci_udx: product program SKIP "
+                           "reason=usblegsup_os usblegsup=1 "
+                           "xecp=0x%04x off=0x%llx xecp_walk=1 "
+                           "bios_was=%u bios=0 os_was=%u os=0 "
+                           "wrote_os=1 spins=%u walked=%u "
+                           "usbleg=0x%08x product_mint=0 write=0 "
+                           "never_program=1 never_invent=1 never_rs=1 "
+                           "Soft!=product dual_dod_a=OPEN "
+                           "freestanding_msc=SKIP\n",
+                           (unsigned)u32Xecp,
+                           (unsigned long long)u64Off,
+                           (unsigned)u32BiosWas, (unsigned)u32OsWas,
+                           (unsigned)iSpin, (unsigned)u32Walked,
+                           (unsigned)u32Leg);
+                return 0;
+            }
+
+            /*
+             * Public USBLEGCTLSTS @ +4: drop SMI enables after OS
+             * owns (xHCI 7.1.2). Write 0. Out of range → skip write.
+             */
+            u32SmiOff = 0u;
+            u64Ctl = u64Off + XHCI_USBLEGCTLSTS_OFF;
+            if (udx_mmio_in_range(pSoft->pCap, u64Ctl, 4ull)) {
+                udx_writel(pSoft->pCap, u64Ctl, 0u);
+                udx_mmio_flush(pSoft->pCap);
+                u32SmiOff = 1u;
+            }
+
+            udx_printk("xhci_udx: product program usblegsup "
+                       "usblegsup=1 xecp=0x%04x off=0x%llx "
+                       "xecp_walk=1 id=1 bios_was=%u bios=0 "
+                       "os_was=%u os=1 wrote_os=1 smi_off=%u "
+                       "spins=%u walked=%u usbleg=0x%08x "
+                       "never_rs=1 never_hcrst=1 never_bot=1 "
+                       "Soft!=product dual_dod_a=OPEN "
+                       "freestanding_msc=SKIP\n",
+                       (unsigned)u32Xecp,
+                       (unsigned long long)u64Off,
+                       (unsigned)u32BiosWas, (unsigned)u32OsWas,
+                       (unsigned)u32SmiOff, (unsigned)iSpin,
+                       (unsigned)u32Walked, (unsigned)u32Leg);
+            return 1;
+        }
+
+        if (u8Next == 0u) {
+            break;
+        }
+        u32OffDw = u32OffDw + (u32)u8Next;
+    }
+
+    udx_printk("xhci_udx: product program usblegsup "
+               "usblegsup=0 xecp=0x%04x xecp_walk=1 walked=%u "
+               "bios=0 os=0 wrote_os=0 spins=0 smi_off=0 "
+               "Soft!=product dual_dod_a=OPEN never_rs=1 "
+               "freestanding_msc=SKIP\n",
+               (unsigned)u32Xecp, (unsigned)u32Walked);
+    return 1;
+}
+
+/**
+ * Keep DDI OPEN handle from udx_host_bind_by_id (handle_retain=1).
+ * Product path: post-IMAN gj_ddi_irq_bind needs this h. Soft!=product.
+ * greppable: xhci_udx: soft ddi handle retain
+ */
+static void
+xhci_udx_keep_ddi_handle(struct xhci_udx_soft *pSoft)
+{
+    s64 i64H;
+
+    if (pSoft == NULL) {
+        return;
+    }
+    i64H = 0;
+#if !defined(UDX_HOST_LIBC)
+    if (udx_host_ddi_handle != NULL) {
+        i64H = (s64)udx_host_ddi_handle();
+    }
+#else
+    i64H = (s64)udx_host_ddi_handle();
+#endif
+    if (i64H > 0) {
+        pSoft->i64DdiH = i64H;
+    }
+    udx_printk("xhci_udx: soft ddi handle retain "
+               "h=%ld retain=%u real_ddi=%u "
+               "handle_retain=1 close_on_bind=0 "
+               "Soft!=product dual_dod_a=OPEN "
+               "freestanding_msc=SKIP\n",
+               (long)pSoft->i64DdiH,
+               (pSoft->i64DdiH > 0) ? 1u : 0u,
+               (pSoft->u32FRealDdi == XHCI_SOFT_REAL_DDI_BIND) ? 1u : 0u);
+}
+
+static const char *
+xhci_udx_irq_bind_word(const struct xhci_udx_soft *pSoft)
+{
+    if (pSoft == NULL) {
+        return "OPEN";
+    }
+    if (pSoft->u32IrqBind == XHCI_IRQ_BIND_PASS) {
+        return "PASS";
+    }
+    if (pSoft->u32IrqBind == XHCI_IRQ_BIND_FAIL) {
+        return "FAIL";
+    }
+    return "OPEN";
+}
+
+/**
+ * After IMAN.IE sticky: one fail-closed gj_ddi_irq_bind on retained h.
+ * Kernel DDI_OP_IRQ_BIND is irq_msix handle→badge (not stub). Stub-only
+ * would lamp OPEN (never fake PASS). No MSI-X table invent. Never RS=1.
+ * greppable: xhci_udx: product program irq_bind
+ */
+static void
+xhci_udx_product_irq_bind_try(struct xhci_udx_soft *pSoft)
+{
+    long i64Ret;
+    const char *szLamp;
+    u32 u32Wired;
+    u32 u32HaveH;
+    u32 u32Stub;
+
+    if (pSoft == NULL) {
+        return;
+    }
+    if (pSoft->u32FIrqBindTried != 0u) {
+        return;
+    }
+    pSoft->u32FIrqBindTried = 1u;
+    pSoft->u32IrqBind = XHCI_IRQ_BIND_OPEN;
+
+    u32HaveH = (pSoft->i64DdiH > 0) ? 1u : 0u;
+    u32Stub = XHCI_IRQ_BIND_STUB;
+    u32Wired = 0u;
+    i64Ret = 0;
+    szLamp = "OPEN";
+
+    if (u32HaveH == 0u) {
+        /* No retained handle — fail-closed OPEN. */
+    } else if (u32Stub != 0u) {
+        /* Stub-only kernel note: never fake PASS. */
+        szLamp = "OPEN";
+    } else {
+#if !defined(UDX_HOST_LIBC)
+        i64Ret = gj_ddi_irq_bind((unsigned long)pSoft->i64DdiH,
+                                 (unsigned long)UDX_DDI_IRQ_BADGE_SOFT);
+        u32Wired = 1u;
+        if (i64Ret >= 0) {
+            pSoft->u32IrqBind = XHCI_IRQ_BIND_PASS;
+            szLamp = "PASS";
+        } else {
+            pSoft->u32IrqBind = XHCI_IRQ_BIND_FAIL;
+            szLamp = "FAIL";
+        }
+#else
+        /* Host-linux: no GJ_SYS_DDI door. */
+        szLamp = "OPEN";
+#endif
+    }
+
+    udx_printk("xhci_udx: product program irq_bind "
+               "irq_bind=%s wired=%u ddi_handle=%u h=%ld ret=%ld "
+               "badge=0x%llx soft_note=1 stub=%u "
+               "msix_table=0 never_invent_msix=1 "
+               "cap_mint=OPEN irq_notify=0 "
+               "never_rs=1 Soft!=product dual_dod_a=OPEN "
+               "freestanding_msc=SKIP\n",
+               szLamp, (unsigned)u32Wired, (unsigned)u32HaveH,
+               (long)pSoft->i64DdiH, (long)i64Ret,
+               (unsigned long long)UDX_DDI_IRQ_BADGE_SOFT,
+               (unsigned)u32Stub);
+}
+
+/**
+ * After ERDP: write public IMAN.IE for IR0 when RTSOFF is known
+ * (xHCI 5.5.2.1). Prefer IMAN.IE only — never set USBCMD.RS=1 and
+ * never set USBCMD.INTE (controller stays halted; RS=0).
+ *
+ * Optional conservative IMODI=4000 (1 ms; xHCI 5.5.2.2 public default).
+ * IMOD write miss → lamp imod=0 and continue (optional residual).
+ *
+ * After IMAN.IE sticky: gj_ddi_irq_bind once on retained DDI handle.
+ * Lamp irq_bind=PASS/FAIL/OPEN honestly. Do not invent MSI-X tables.
+ *
+ * greppable: xhci_udx: product program iman
+ * greppable: xhci_udx: product program imod
+ * greppable: xhci_udx: product program irq_bind
+ * greppable: irq_bind=PASS irq_bind=FAIL irq_bind=OPEN iman= ie=
+ * Returns 1 if IMAN.IE readback sticky; 0 if IE not programmed.
+ */
+static int
+xhci_udx_product_iman_try(struct xhci_udx_soft *pSoft, u64 u64Rt,
+                          u32 *pWrote)
+{
+    u32 u32ImanRd;
+    u32 u32ImanW;
+    u32 u32ImodRd;
+    u32 u32ImodW;
+    u32 u32Ie;
+    u32 u32ImodOk;
+    u32 u32Wrote;
+
+    if (pSoft == NULL || pSoft->pCap == NULL || u64Rt == 0ull) {
+        if (pSoft != NULL) {
+            pSoft->u32FImanIe = 0u;
+            pSoft->u32FImod = 0u;
+            udx_printk("xhci_udx: product program iman "
+                       "iman=0 ie=0 wrote_ie=0 rtsoff=0 "
+                       "usbcmd_inte=0 never_rs=1 irq_bind=OPEN "
+                       "msix=0 never_invent_msix=1 "
+                       "Soft!=product dual_dod_a=OPEN "
+                       "freestanding_msc=SKIP\n");
+            udx_printk("xhci_udx: product program irq_bind "
+                       "irq_bind=OPEN wired=0 ddi_handle=0 "
+                       "msix_table=0 never_invent_msix=1 "
+                       "never_rs=1 Soft!=product dual_dod_a=OPEN "
+                       "freestanding_msc=SKIP\n");
+        }
+        return 0;
+    }
+
+    u32Wrote = (pWrote != NULL) ? *pWrote : 0u;
+    u32ImanRd = 0u;
+    u32ImanW = 0u;
+    u32ImodRd = 0u;
+    u32ImodW = 0u;
+    u32Ie = 0u;
+    u32ImodOk = 0u;
+
+    /*
+     * Optional public IMODI=4000 (1 ms). Conservative default only.
+     * Skip claim if range/readback miss — IMOD is optional.
+     */
+    if (udx_mmio_in_range(pSoft->pCap,
+                          u64Rt + XHCI_RT_IR0 + XHCI_IR_IMOD, 4ull)) {
+        u32ImodW = (u32)XHCI_IMOD_INTERVAL_1MS;
+        udx_writel(pSoft->pCap, u64Rt + XHCI_RT_IR0 + XHCI_IR_IMOD,
+                   u32ImodW);
+        udx_mmio_flush(pSoft->pCap);
+        u32ImodRd = udx_readl(pSoft->pCap,
+                              u64Rt + XHCI_RT_IR0 + XHCI_IR_IMOD);
+        if ((u32ImodRd & 0xffffu) == (u32)XHCI_IMOD_INTERVAL_1MS) {
+            u32ImodOk = 1u;
+            u32Wrote |= XHCI_PROD_WROTE_IMOD;
+        }
+    }
+    pSoft->u32Imod = u32ImodRd;
+    pSoft->u32FImod = u32ImodOk;
+    udx_printk("xhci_udx: product program imod "
+               "imod=0x%08x imodi=%u wrote=%u conservative=1 "
+               "public_default_1ms=1 skip=%u "
+               "never_rs=1 Soft!=product dual_dod_a=OPEN "
+               "freestanding_msc=SKIP\n",
+               (unsigned)u32ImodRd,
+               (unsigned)(u32ImodRd & 0xffffu),
+               (unsigned)u32ImodOk,
+               (unsigned)(u32ImodOk == 0u) ? 1u : 0u);
+
+    /* IMAN.IE — set IE; write 0 to IP so this cannot W1C pending. */
+    if (udx_mmio_in_range(pSoft->pCap,
+                          u64Rt + XHCI_RT_IR0 + XHCI_IR_IMAN, 4ull)) {
+        u32ImanRd = udx_readl(pSoft->pCap,
+                              u64Rt + XHCI_RT_IR0 + XHCI_IR_IMAN);
+        u32ImanW = (u32ImanRd | XHCI_IMAN_IE) & ~XHCI_IMAN_IP;
+        udx_writel(pSoft->pCap, u64Rt + XHCI_RT_IR0 + XHCI_IR_IMAN,
+                   u32ImanW);
+        udx_mmio_flush(pSoft->pCap);
+        u32ImanRd = udx_readl(pSoft->pCap,
+                              u64Rt + XHCI_RT_IR0 + XHCI_IR_IMAN);
+        if ((u32ImanRd & XHCI_IMAN_IE) != 0u) {
+            u32Ie = 1u;
+            u32Wrote |= XHCI_PROD_WROTE_IMAN;
+        }
+    }
+    pSoft->u32Iman = u32ImanRd;
+    pSoft->u32FImanIe = u32Ie;
+    if (pWrote != NULL) {
+        *pWrote = u32Wrote;
+    }
+
+    /*
+     * After IMAN.IE sticky: one fail-closed DDI IRQ_BIND on retained h.
+     * No handle / stub / host-linux → irq_bind=OPEN (never fake PASS).
+     * Never invent MSI-X tables. Never USBCMD.RS=1.
+     */
+    if (u32Ie != 0u) {
+        xhci_udx_product_irq_bind_try(pSoft);
+    } else {
+        udx_printk("xhci_udx: product program irq_bind "
+                   "irq_bind=OPEN wired=0 ddi_handle=%u "
+                   "msix_table=0 never_invent_msix=1 "
+                   "iman_ie=0 never_rs=1 Soft!=product "
+                   "dual_dod_a=OPEN freestanding_msc=SKIP\n",
+                   (pSoft->i64DdiH > 0) ? 1u : 0u);
+    }
+
+    udx_printk("xhci_udx: product program iman "
+               "iman=0x%08x ie=%u wrote_ie=%u ip_w1c=0 "
+               "ir=0 rtsoff=0x%08x usbcmd_inte=0 never_rs=1 "
+               "irq_bind=%s msix=0 never_invent_msix=1 "
+               "Soft!=product dual_dod_a=OPEN "
+               "freestanding_msc=SKIP\n",
+               (unsigned)u32ImanRd, (unsigned)u32Ie, (unsigned)u32Ie,
+               (unsigned)pSoft->u32Rtsoff,
+               xhci_udx_irq_bind_word(pSoft));
+    return (u32Ie != 0u) ? 1 : 0;
+}
+
+/*
+ * Dual DoD A persist: STATUS hold3 (USB / XHCI honesty).
+ * Do not steal hold0 title, hold2 TE+trap RIP, hold6 NET, hold14-15 NIC.
+ * hold4 stays kernel "USB MSC: SKIP freestanding (UDX product)".
+ */
+#define XHCI_PROD_STATUS_HOLD  3u
+
+/* Once-only STATUS pin (no stamp storms). Soft!=product Dual DoD A OPEN. */
+static u8 g_fProductStatusHoldOnce;
+
+static void
+xhci_udx_hold_cat(char *szDst, u32 cbDst, u32 *pOff, const char *szSrc)
+{
+    u32 u32Off;
+
+    if (szDst == NULL || pOff == NULL || szSrc == NULL || cbDst == 0u) {
+        return;
+    }
+    u32Off = *pOff;
+    while (szSrc[0] != '\0' && (u32Off + 1u) < cbDst) {
+        szDst[u32Off] = szSrc[0];
+        u32Off++;
+        szSrc++;
+    }
+    szDst[u32Off] = '\0';
+    *pOff = u32Off;
+}
+
+/**
+ * Once-pin product program PASS/SKIP on STATUS hold3 (G752 no-COM1).
+ * Call after PORTSC observe on PASS so glass sees stick presence.
+ * PASS: "UDX xhci PASS rs=0 iman=0|1 irq=WORD ccs=0|1|?"
+ *       ccs=1 any PORTSC CCS; ccs=0 none; ccs=? observe miss.
+ * SKIP: "UDX xhci SKIP reason=..." (unchanged; no ccs=).
+ * Doorbell stays serial-only — do not clobber this row.
+ * Never USBCMD.RS=1. Dual DoD A stays OPEN (need=usbcmd_rs).
+ * greppable: xhci_udx: product program status hold
+ * greppable: UDX xhci PASS
+ * greppable: UDX xhci SKIP
+ * greppable: hold3=
+ * greppable: ccs=
+ */
+static void
+xhci_udx_product_status_hold_once(const struct xhci_udx_soft *pSoft,
+                                  int fPass,
+                                  const char *szReason)
+{
+    char szHold[64];
+    u32 u32Off;
+    u32 u32Iman;
+    const char *szIrq;
+    const char *szWhy;
+
+    if (g_fProductStatusHoldOnce != 0u) {
+        return;
+    }
+    g_fProductStatusHoldOnce = 1u;
+
+    szHold[0] = '\0';
+    u32Off = 0u;
+    u32Iman = 0u;
+    szIrq = "OPEN";
+    if (pSoft != NULL) {
+        u32Iman = (pSoft->u32FImanIe != 0u) ? 1u : 0u;
+        szIrq = xhci_udx_irq_bind_word(pSoft);
+    }
+
+    if (fPass != 0 && pSoft != NULL) {
+        xhci_udx_hold_cat(szHold, (u32)sizeof(szHold), &u32Off,
+                          "UDX xhci PASS rs=0 iman=");
+        if ((u32Off + 1u) < (u32)sizeof(szHold)) {
+            szHold[u32Off] = (char)('0' + (u32Iman & 1u));
+            u32Off++;
+            szHold[u32Off] = '\0';
+        }
+        xhci_udx_hold_cat(szHold, (u32)sizeof(szHold), &u32Off, " irq=");
+        xhci_udx_hold_cat(szHold, (u32)sizeof(szHold), &u32Off, szIrq);
+        /*
+         * PORTSC CCS presence (observe-only; walked just before this pin).
+         * 0/1 = any CCS; ? = walk missed (portsc_oor). Never invent stick.
+         */
+        xhci_udx_hold_cat(szHold, (u32)sizeof(szHold), &u32Off, " ccs=");
+        if (pSoft->u32FPortscObs != 0u) {
+            if ((u32Off + 1u) < (u32)sizeof(szHold)) {
+                szHold[u32Off] = (char)('0' + (pSoft->u32PortscCcs & 1u));
+                u32Off++;
+                szHold[u32Off] = '\0';
+            }
+        } else {
+            xhci_udx_hold_cat(szHold, (u32)sizeof(szHold), &u32Off, "?");
+        }
+    } else {
+        szWhy = szReason;
+        if (szWhy == NULL || szWhy[0] == '\0') {
+            szWhy = (pSoft == NULL) ? "null" : "fail";
+        }
+        xhci_udx_hold_cat(szHold, (u32)sizeof(szHold), &u32Off,
+                          "UDX xhci SKIP reason=");
+        xhci_udx_hold_cat(szHold, (u32)sizeof(szHold), &u32Off, szWhy);
+    }
+
+    (void)udx_dma_panel_hold(XHCI_PROD_STATUS_HOLD, szHold);
+    udx_printk("xhci_udx: product program status hold "
+               "hold3=\"%s\" once=1 rs=0 never_rs=1 "
+               "need=usbcmd_rs doorbell=OPEN Soft!=product "
+               "dual_dod_a=OPEN freestanding_msc=SKIP "
+               "G-AC-1 agent_ne_close=1\n",
+               szHold);
+}
+
+/**
+ * After product program PASS (USBCMD.RS=0 / USBSTS.HCH=1): name and
+ * fail-close the public command-ring doorbell (xHCI 5.3.7 / 5.6).
+ * DBOFF from Capability Base; doorbell[0] is Host Controller Command
+ * Ring (slot ID 0). Range-check DBOFF; read (never write) doorbell[0].
+ * Missing or out-of-range → SKIP reason, continue; never invent offsets.
+ * Never ring while halted. Never write USBCMD.RS=1. Never write the
+ * doorbell if RS=0. Serial lamps only (do not clobber hold3).
+ *
+ * greppable: xhci_udx: product program doorbell
+ * greppable: doorbell=OPEN
+ * greppable: never_ring_while_halted=1
+ * greppable: need=usbcmd_rs
+ * greppable: dboff= db0=
+ * greppable: reason=dboff_missing reason=dboff_oor
+ */
+static void
+xhci_udx_product_doorbell_try(struct xhci_udx_soft *pSoft)
+{
+    u32 u32Dboff;
+    u32 u32Db0;
+    u32 u32Cmd;
+    u32 u32Sts;
+    u32 u32Rs;
+    u32 u32Hch;
+    u64 u64Db;
+    u64 u64Op;
+    u64 u64MapLen;
+    const char *szReason;
+
+    if (pSoft == NULL) {
+        return;
+    }
+    if (pSoft->u32FDoorbellTried != 0u) {
+        return;
+    }
+    pSoft->u32FDoorbellTried = 1u;
+    pSoft->u32FDbObs = 0u;
+    pSoft->u32Db0 = 0u;
+
+    u32Dboff = 0u;
+    u32Db0 = 0u;
+    u32Cmd = 0u;
+    u32Sts = 0u;
+    u32Rs = 0u;
+    u32Hch = 0u;
+    u64Db = 0ull;
+    u64Op = 0ull;
+    u64MapLen = 0ull;
+    szReason = NULL;
+
+    if (pSoft->pCap == NULL || !udx_mmio_is_mapped(pSoft->pCap)) {
+        szReason = "dboff_missing";
+    } else {
+        u64MapLen = udx_mmio_len(pSoft->pCap);
+        u64Op = (u64)pSoft->u8CapLen;
+        if (udx_mmio_in_range(pSoft->pCap, u64Op + XHCI_OP_USBCMD, 4ull) &&
+            udx_mmio_in_range(pSoft->pCap, u64Op + XHCI_OP_USBSTS, 4ull)) {
+            u32Cmd = udx_readl(pSoft->pCap, u64Op + XHCI_OP_USBCMD);
+            u32Sts = udx_readl(pSoft->pCap, u64Op + XHCI_OP_USBSTS);
+            u32Rs = ((u32Cmd & XHCI_USBCMD_RS) != 0u) ? 1u : 0u;
+            u32Hch = ((u32Sts & XHCI_USBSTS_HCH) != 0u) ? 1u : 0u;
+            pSoft->u32UsbCmd = u32Cmd;
+            pSoft->u32UsbSts = u32Sts;
+        }
+        if (!udx_mmio_in_range(pSoft->pCap, XHCI_CAP_DBOFF, 4ull)) {
+            szReason = "dboff_missing";
+        } else {
+            u32Dboff = udx_readl(pSoft->pCap, XHCI_CAP_DBOFF);
+            pSoft->u32Dboff = u32Dboff;
+            if (u32Dboff == 0u || u32Dboff == 0xffffffffu) {
+                szReason = "dboff_missing";
+            } else {
+                u64Db = (u64)(u32Dboff & ~XHCI_DBOFF_RSVD_MASK);
+                if (u64Db == 0ull ||
+                    !udx_mmio_in_range(pSoft->pCap, u64Db,
+                                       XHCI_DB_REG_BYTES)) {
+                    szReason = "dboff_oor";
+                }
+            }
+        }
+    }
+
+    if (szReason != NULL) {
+        /*
+         * Fail-closed: do not invent a doorbell offset. Product program
+         * still continues (this is not a silicon write). RS stays 0.
+         */
+        udx_printk("xhci_udx: product program doorbell SKIP "
+                   "reason=%s doorbell=OPEN never_ring_while_halted=1 "
+                   "need=usbcmd_rs dboff=0x%08x db0=0 "
+                   "slot=%u cmd_ring=1 db_target=%u "
+                   "rs=%u hch=%u wrote=0 "
+                   "never_rs=1 never_doorbell_write=1 "
+                   "never_invent_offset=1 continue=1 "
+                   "map_len=0x%llx Soft!=product dual_dod_a=OPEN "
+                   "freestanding_msc=SKIP G-AC-1 agent_ne_close=1\n",
+                   szReason, (unsigned)u32Dboff,
+                   (unsigned)XHCI_DB_SLOT_CMD,
+                   (unsigned)XHCI_DB_TARGET_HCR,
+                   (unsigned)u32Rs, (unsigned)u32Hch,
+                   (unsigned long long)u64MapLen);
+        return;
+    }
+
+    /*
+     * In-range: observe doorbell[0] only. Never write — controller is
+     * halted (RS=0). Even if RS were unexpectedly 1, this gate still
+     * does not ring (no Enable Slot / command TRB).
+     */
+    u32Db0 = udx_readl(pSoft->pCap, u64Db);
+    pSoft->u32Db0 = u32Db0;
+    pSoft->u32FDbObs = 1u;
+
+    udx_printk("xhci_udx: product program doorbell "
+               "doorbell=OPEN never_ring_while_halted=1 "
+               "need=usbcmd_rs dboff=0x%08x db0=0x%08x "
+               "db_off=0x%llx slot=%u cmd_ring=1 db_target=%u "
+               "rs=%u hch=%u observe=1 wrote=0 "
+               "never_rs=1 never_doorbell_write=1 "
+               "never_invent_offset=1 "
+               "Soft!=product dual_dod_a=OPEN "
+               "freestanding_msc=SKIP G-AC-1 agent_ne_close=1\n",
+               (unsigned)u32Dboff, (unsigned)u32Db0,
+               (unsigned long long)u64Db,
+               (unsigned)XHCI_DB_SLOT_CMD,
+               (unsigned)XHCI_DB_TARGET_HCR,
+               (unsigned)u32Rs, (unsigned)u32Hch);
+}
+
+/**
+ * After product program PASS (USBCMD.RS=0 / USBSTS.HCH=1): once-read
+ * public PORTSC for ports 1..MaxPorts (HCSPARAMS1). Decode CCS only
+ * (xHCI 5.4.8 bit 0). Never write PORTSC (no PR/WPR/PP/PED/CSC W1C).
+ * Op or port range OOR → SKIP reason=portsc_oor, continue (never invent).
+ * Serial lamp stays dense. Caller once-pins hold3 after this walk
+ * (ccs=0|1|?; do not clobber hold0/2/6/14/15 from here).
+ * Never Enable Slot, doorbell write, USBCMD.RS=1, BOT/MSC, MSI-X invent.
+ *
+ * greppable: xhci_udx: product program portsc
+ * greppable: ports= ccs= ccs_n=
+ * greppable: rs=0 never_rs=1 never_portsc_write=1
+ * greppable: reason=portsc_oor
+ */
+static void
+xhci_udx_product_portsc_try(struct xhci_udx_soft *pSoft)
+{
+    u32 u32Hcs1;
+    u32 u32Ports;
+    u32 u32Ccs;
+    u32 u32CcsN;
+    u32 u32Cmd;
+    u32 u32Sts;
+    u32 u32Rs;
+    u32 u32Hch;
+    u32 u32Port;
+    u32 u32Ps;
+    u64 u64Op;
+    u64 u64Off;
+    u64 u64Last;
+    const char *szReason;
+
+    if (pSoft == NULL) {
+        return;
+    }
+    if (pSoft->u32FPortscTried != 0u) {
+        return;
+    }
+    pSoft->u32FPortscTried = 1u;
+    pSoft->u32FPortscObs = 0u;
+    pSoft->u32PortscPorts = 0u;
+    pSoft->u32PortscCcs = 0u;
+    pSoft->u32PortscCcsN = 0u;
+
+    u32Hcs1 = 0u;
+    u32Ports = 0u;
+    u32Ccs = 0u;
+    u32CcsN = 0u;
+    u32Cmd = 0u;
+    u32Sts = 0u;
+    u32Rs = 0u;
+    u32Hch = 0u;
+    u32Ps = 0u;
+    u64Op = 0ull;
+    u64Off = 0ull;
+    u64Last = 0ull;
+    szReason = NULL;
+
+    if (pSoft->pCap == NULL || !udx_mmio_is_mapped(pSoft->pCap) ||
+        pSoft->u8CapLen == 0u) {
+        szReason = "portsc_oor";
+    } else {
+        u64Op = (u64)pSoft->u8CapLen;
+        if (!udx_mmio_in_range(pSoft->pCap, u64Op + XHCI_OP_USBCMD, 4ull) ||
+            !udx_mmio_in_range(pSoft->pCap, u64Op + XHCI_OP_USBSTS, 4ull) ||
+            !udx_mmio_in_range(pSoft->pCap, XHCI_CAP_HCSPARAMS1, 4ull)) {
+            szReason = "portsc_oor";
+        } else {
+            u32Cmd = udx_readl(pSoft->pCap, u64Op + XHCI_OP_USBCMD);
+            u32Sts = udx_readl(pSoft->pCap, u64Op + XHCI_OP_USBSTS);
+            u32Hcs1 = udx_readl(pSoft->pCap, XHCI_CAP_HCSPARAMS1);
+            u32Rs = ((u32Cmd & XHCI_USBCMD_RS) != 0u) ? 1u : 0u;
+            u32Hch = ((u32Sts & XHCI_USBSTS_HCH) != 0u) ? 1u : 0u;
+            pSoft->u32UsbCmd = u32Cmd;
+            pSoft->u32UsbSts = u32Sts;
+            u32Ports = (u32Hcs1 >> XHCI_HCS1_MAXPORTS_SHIFT) &
+                       XHCI_HCS1_MAXPORTS_MASK;
+            pSoft->u32PortscPorts = u32Ports;
+            if (u32Ports > 0u) {
+                u64Off = u64Op + XHCI_OP_PORTSC;
+                u64Last = u64Op + XHCI_OP_PORTSC +
+                          ((u64)(u32Ports - 1u) * XHCI_PORTSC_STRIDE);
+                if (!udx_mmio_in_range(pSoft->pCap, u64Off, 4ull) ||
+                    !udx_mmio_in_range(pSoft->pCap, u64Last, 4ull)) {
+                    szReason = "portsc_oor";
+                }
+            }
+        }
+    }
+
+    if (szReason != NULL) {
+        /*
+         * Fail-closed: do not invent PORTSC. Product program still
+         * continues (this is not a silicon write). RS stays 0.
+         */
+        udx_printk("xhci_udx: product program portsc SKIP "
+                   "reason=%s ports=%u ccs=0 ccs_n=0 "
+                   "rs=0 never_rs=1 never_portsc_write=1 "
+                   "rs_obs=%u hch=%u observe=0 wrote=0 "
+                   "never_pr=1 never_wpr=1 never_pp=1 never_ped=1 "
+                   "never_csc_w1c=1 never_enable_slot=1 "
+                   "never_doorbell_write=1 continue=1 "
+                   "need=usbcmd_rs Soft!=product dual_dod_a=OPEN "
+                   "freestanding_msc=SKIP G-AC-1 agent_ne_close=1\n",
+                   szReason, (unsigned)u32Ports,
+                   (unsigned)u32Rs, (unsigned)u32Hch);
+        return;
+    }
+
+    /*
+     * In-range: read PORTSC[n] CCS only. Never write — controller is
+     * halted (RS=0). Change bits / PR / WPR / PP / PED stay untouched.
+     */
+    for (u32Port = 1u; u32Port <= u32Ports; u32Port++) {
+        u64Off = u64Op + XHCI_OP_PORTSC +
+                 ((u64)(u32Port - 1u) * XHCI_PORTSC_STRIDE);
+        if (!udx_mmio_in_range(pSoft->pCap, u64Off, 4ull)) {
+            udx_printk("xhci_udx: product program portsc SKIP "
+                       "reason=portsc_oor ports=%u ccs=0 ccs_n=0 "
+                       "rs=0 never_rs=1 never_portsc_write=1 "
+                       "rs_obs=%u hch=%u observe=0 wrote=0 "
+                       "never_pr=1 never_wpr=1 never_pp=1 never_ped=1 "
+                       "never_csc_w1c=1 never_enable_slot=1 "
+                       "never_doorbell_write=1 continue=1 "
+                       "need=usbcmd_rs Soft!=product dual_dod_a=OPEN "
+                       "freestanding_msc=SKIP G-AC-1 agent_ne_close=1\n",
+                       (unsigned)u32Ports,
+                       (unsigned)u32Rs, (unsigned)u32Hch);
+            return;
+        }
+        u32Ps = udx_readl(pSoft->pCap, u64Off);
+        if ((u32Ps & XHCI_PORTSC_CCS) != 0u) {
+            if (u32CcsN < 0xffffffffu) {
+                u32CcsN++;
+            }
+            u32Ccs = 1u;
+        }
+    }
+
+    pSoft->u32PortscCcs = u32Ccs;
+    pSoft->u32PortscCcsN = u32CcsN;
+    pSoft->u32FPortscObs = 1u;
+
+    udx_printk("xhci_udx: product program portsc "
+               "ports=%u ccs=%u ccs_n=%u "
+               "rs=0 never_rs=1 never_portsc_write=1 "
+               "rs_obs=%u hch=%u observe=1 wrote=0 "
+               "never_pr=1 never_wpr=1 never_pp=1 never_ped=1 "
+               "never_csc_w1c=1 never_enable_slot=1 "
+               "never_doorbell_write=1 never_bot=1 never_msc=1 "
+               "need=usbcmd_rs Soft!=product dual_dod_a=OPEN "
+               "freestanding_msc=SKIP G-AC-1 agent_ne_close=1\n",
+               (unsigned)u32Ports, (unsigned)u32Ccs, (unsigned)u32CcsN,
+               (unsigned)u32Rs, (unsigned)u32Hch);
+}
+
 static int
 xhci_udx_product_program_try(struct xhci_udx_soft *pSoft)
 {
@@ -3223,12 +4732,106 @@ xhci_udx_product_program_try(struct xhci_udx_soft *pSoft)
     u32 u32Ddi;
     u32 u32Ring;
     u32 u32ProgGate;
+    u32 u32Cmd;
+    u32 u32Sts;
+    u32 u32Page;
+    u32 u32Hcs1;
+    u32 u32Hcs2;
+    u32 u32Rtsoff;
+    u32 u32SlotsEn;
+    u32 u32MaxSlots;
+    u32 u32MaxIntrs;
+    u32 u32Wrote;
+    u32 u32Bdf;
+    u32 u32Rb32;
+    u64 u64Op;
+    u64 u64Rt;
+    u64 u64MapLen;
+    u64 u64Crcr;
+    u64 u64Rb;
+    udx_dma_addr_t dmaCmdUse;
+    udx_dma_addr_t dmaEvtUse;
+    size_t cbCmd;
+    size_t cbEvt;
     const char *szBindPath;
+    const char *szReason;
+    struct udx_device *pDev;
 
     if (pSoft == NULL) {
         udx_printk("xhci_udx: product program SKIP reason=null "
                    "never_program=1 product_mint=0 Soft!=product "
                    "dual_dod_a=OPEN\n");
+        xhci_udx_product_status_hold_once(pSoft, 0, "null");
+        return 0;
+    }
+
+    if (pSoft->u32FProductProg != 0u) {
+        xhci_udx_product_doorbell_try(pSoft);
+        xhci_udx_product_portsc_try(pSoft);
+        udx_printk("xhci_udx: product program PASS already=1 "
+                   "product_mint=%u product_prog=1 write=1 "
+                   "wrote=0x%x config=%u dcbaap=%u crcr=%u "
+                   "erstsz=%u erstba=%u erdp=%u iman=%u imod=%u rs=0 "
+                   "irq_bind=%s usbcmd_inte=0 "
+                   "slotsen=%u scratchpad=%u spad_pages=%u "
+                   "usblegsup=%u usbleg=0x%08x "
+                   "dcbaa0=0x%llx dma_dcbaa=0x%llx dma_erst=0x%llx "
+                   "ports=%u ccs=%u ccs_n=%u never_portsc_write=1 "
+                   "need=usbcmd_rs Soft!=product dual_dod_a=OPEN "
+                   "freestanding_msc=SKIP\n",
+                   (unsigned)pSoft->u32FProductMint,
+                   (unsigned)pSoft->u32WroteBits,
+                   (unsigned)((pSoft->u32WroteBits &
+                               XHCI_PROD_WROTE_CONFIG) != 0u) ? 1u : 0u,
+                   (unsigned)((pSoft->u32WroteBits &
+                               XHCI_PROD_WROTE_DCBAAP) != 0u) ? 1u : 0u,
+                   (unsigned)((pSoft->u32WroteBits &
+                               XHCI_PROD_WROTE_CRCR) != 0u) ? 1u : 0u,
+                   (unsigned)((pSoft->u32WroteBits &
+                               XHCI_PROD_WROTE_ERSTSZ) != 0u) ? 1u : 0u,
+                   (unsigned)((pSoft->u32WroteBits &
+                               XHCI_PROD_WROTE_ERSTBA) != 0u) ? 1u : 0u,
+                   (unsigned)((pSoft->u32WroteBits &
+                               XHCI_PROD_WROTE_ERDP) != 0u) ? 1u : 0u,
+                   (unsigned)(pSoft->u32FImanIe != 0u) ? 1u : 0u,
+                   (unsigned)(pSoft->u32FImod != 0u) ? 1u : 0u,
+                   xhci_udx_irq_bind_word(pSoft),
+                   (unsigned)pSoft->u32SlotsEn,
+                   (unsigned)pSoft->u32SpadNeed,
+                   (unsigned)pSoft->u32SpadPages,
+                   (unsigned)(pSoft->u32FUsbleg != 0u) ? 1u : 0u,
+                   (unsigned)pSoft->u32Usbleg,
+                   (unsigned long long)pSoft->dmaSpadArr,
+                   (unsigned long long)pSoft->dmaDcbaa,
+                   (unsigned long long)pSoft->dmaErst,
+                   (unsigned)pSoft->u32PortscPorts,
+                   (unsigned)pSoft->u32PortscCcs,
+                   (unsigned)pSoft->u32PortscCcsN);
+        xhci_udx_product_status_hold_once(pSoft, 1, NULL);
+        return 1;
+    }
+
+    /* Partial prior attempt: do not hammer silicon. */
+    if (pSoft->u32WroteBits != 0u) {
+        udx_printk("xhci_udx: product program SKIP reason=already_partial "
+                   "wrote=0x%x config=%u dcbaap=%u crcr=%u "
+                   "erstsz=%u erstba=%u erdp=%u iman=0 imod=0 rs=0 "
+                   "irq_bind=OPEN product_mint=0 write=1 never_program=1 "
+                   "Soft!=product dual_dod_a=OPEN freestanding_msc=SKIP\n",
+                   (unsigned)pSoft->u32WroteBits,
+                   (unsigned)((pSoft->u32WroteBits &
+                               XHCI_PROD_WROTE_CONFIG) != 0u) ? 1u : 0u,
+                   (unsigned)((pSoft->u32WroteBits &
+                               XHCI_PROD_WROTE_DCBAAP) != 0u) ? 1u : 0u,
+                   (unsigned)((pSoft->u32WroteBits &
+                               XHCI_PROD_WROTE_CRCR) != 0u) ? 1u : 0u,
+                   (unsigned)((pSoft->u32WroteBits &
+                               XHCI_PROD_WROTE_ERSTSZ) != 0u) ? 1u : 0u,
+                   (unsigned)((pSoft->u32WroteBits &
+                               XHCI_PROD_WROTE_ERSTBA) != 0u) ? 1u : 0u,
+                   (unsigned)((pSoft->u32WroteBits &
+                               XHCI_PROD_WROTE_ERDP) != 0u) ? 1u : 0u);
+        xhci_udx_product_status_hold_once(pSoft, 0, "already_partial");
         return 0;
     }
 
@@ -3241,12 +4844,13 @@ xhci_udx_product_program_try(struct xhci_udx_soft *pSoft)
     u32ProgGate = (u32Open != 0u && u32Map != 0u && u32Ddi != 0u &&
                    u32Ring != 0u && pSoft->u32FOpRes != 0u) ? 1u : 0u;
 
-    pSoft->u32FProductMint = 0u;
-
     udx_printk("xhci_udx: product program enter "
                "prefer_real_ddi=1 real_ddi=%u bind_path=%s "
                "program_gate=%u soft_ring=%u soft_iommu=%u "
                "open_map_ddi=%u product_mint=0 "
+               "order=halt,usblegsup,scratchpad,config,dcbaap,crcr,"
+               "erstsz,erstba,erdp,imod,iman,doorbell,portsc "
+               "rs=0 irq_bind=OPEN usbcmd_inte=0 doorbell=OPEN "
                "chain=SCAN,GET,OPEN,MAP_BAR Soft!=product dual_dod_a=OPEN\n",
                (unsigned)u32RealDdi, szBindPath, (unsigned)u32ProgGate,
                (unsigned)u32Ring,
@@ -3261,6 +4865,7 @@ xhci_udx_product_program_try(struct xhci_udx_soft *pSoft)
                    "never_program=1 never_crcr=1 never_dcbaap=1 never_rs=1 "
                    "Soft!=product dual_dod_a=OPEN freestanding_msc=SKIP\n",
                    szBindPath, (unsigned)u32ProgGate);
+        xhci_udx_product_status_hold_once(pSoft, 0, "not_real_ddi");
         return 0;
     }
     if (u32ProgGate == 0u) {
@@ -3272,27 +4877,445 @@ xhci_udx_product_program_try(struct xhci_udx_soft *pSoft)
                    (unsigned)u32Open, (unsigned)u32Map, (unsigned)u32Ddi,
                    (unsigned)u32Ring,
                    (unsigned)(pSoft->u32FOpRes != 0u) ? 1u : 0u);
+        xhci_udx_product_status_hold_once(pSoft, 0, "program_gate_closed");
+        return 0;
+    }
+
+    /* Fail-closed: MAP missing → never invent silicon. */
+    if (pSoft->pCap == NULL || pSoft->u8CapLen == 0u ||
+        !udx_mmio_is_mapped(pSoft->pCap)) {
+        udx_printk("xhci_udx: product program SKIP reason=map_missing "
+                   "real_ddi=1 program_gate=1 product_mint=0 write=0 "
+                   "never_program=1 never_invent_silicon=1 "
+                   "Soft!=product dual_dod_a=OPEN freestanding_msc=SKIP\n");
+        xhci_udx_product_status_hold_once(pSoft, 0, "map_missing");
+        return 0;
+    }
+    if (pSoft->pPdev == NULL || pSoft->pPdev->pDev == NULL) {
+        udx_printk("xhci_udx: product program SKIP reason=pdev_missing "
+                   "real_ddi=1 program_gate=1 product_mint=0 write=0 "
+                   "never_program=1 never_invent_silicon=1 "
+                   "Soft!=product dual_dod_a=OPEN freestanding_msc=SKIP\n");
+        xhci_udx_product_status_hold_once(pSoft, 0, "pdev_missing");
+        return 0;
+    }
+
+    pDev = pSoft->pPdev->pDev;
+    u64MapLen = udx_mmio_len(pSoft->pCap);
+    u64Op = (u64)pSoft->u8CapLen;
+    if (!udx_mmio_in_range(pSoft->pCap, u64Op + XHCI_OP_CONFIG, 4ull) ||
+        !udx_mmio_in_range(pSoft->pCap, u64Op + XHCI_OP_CRCR, 8ull) ||
+        !udx_mmio_in_range(pSoft->pCap, u64Op + XHCI_OP_DCBAAP, 8ull)) {
+        udx_printk("xhci_udx: product program SKIP reason=op_range "
+                   "caplen=0x%02x map_len=0x%llx product_mint=0 write=0 "
+                   "never_program=1 Soft!=product dual_dod_a=OPEN\n",
+                   (unsigned)pSoft->u8CapLen,
+                   (unsigned long long)u64MapLen);
+        xhci_udx_product_status_hold_once(pSoft, 0, "op_range");
+        return 0;
+    }
+
+    /* Live silicon observe — do not trust stale soft snapshots. */
+    u32Cmd    = udx_readl(pSoft->pCap, u64Op + XHCI_OP_USBCMD);
+    u32Sts    = udx_readl(pSoft->pCap, u64Op + XHCI_OP_USBSTS);
+    u32Page   = udx_readl(pSoft->pCap, u64Op + XHCI_OP_PAGESIZE);
+    u32Hcs1   = udx_readl(pSoft->pCap, XHCI_CAP_HCSPARAMS1);
+    u32Hcs2   = udx_readl(pSoft->pCap, XHCI_CAP_HCSPARAMS2);
+    u32Rtsoff = udx_readl(pSoft->pCap, XHCI_CAP_RTSOFF);
+    pSoft->u32UsbCmd   = u32Cmd;
+    pSoft->u32UsbSts   = u32Sts;
+    pSoft->u32PageSize = u32Page;
+    pSoft->u32Hcs2     = u32Hcs2;
+    pSoft->u32Rtsoff   = u32Rtsoff;
+
+    szReason = NULL;
+    if ((u32Sts & XHCI_USBSTS_CNR) != 0u) {
+        szReason = "cnr";
+    } else if ((u32Cmd & XHCI_USBCMD_HCRST) != 0u) {
+        szReason = "hcrst_busy";
+    } else if ((u32Cmd & XHCI_USBCMD_RS) != 0u ||
+               (u32Sts & XHCI_USBSTS_HCH) == 0u) {
+        /*
+         * Fail-closed halt before CONFIG/DCBAAP/CRCR/ERST writes.
+         * USBCMD.RS=0 only; never HCRST; never RS=1. If still running
+         * after bounded HCH wait, SKIP controller_running as today.
+         */
+        if (xhci_udx_product_halt_try(pSoft, u64Op, &u32Cmd,
+                                      &u32Sts) == 0) {
+            szReason = "controller_running";
+        }
+    }
+    if (szReason == NULL &&
+        (u32Page == 0xffffffffu || (u32Page & 1u) == 0u)) {
+        szReason = "pagesize";
+    }
+    if (szReason != NULL) {
+        udx_printk("xhci_udx: product program SKIP reason=%s "
+                   "real_ddi=1 program_gate=1 "
+                   "usbcmd=0x%08x usbsts=0x%08x pagesize=0x%08x "
+                   "rs=%u hch=%u cnr=%u product_mint=0 write=0 "
+                   "never_program=1 never_rs=1 "
+                   "Soft!=product dual_dod_a=OPEN freestanding_msc=SKIP\n",
+                   szReason,
+                   (unsigned)u32Cmd, (unsigned)u32Sts, (unsigned)u32Page,
+                   ((u32Cmd & XHCI_USBCMD_RS) != 0u) ? 1u : 0u,
+                   ((u32Sts & XHCI_USBSTS_HCH) != 0u) ? 1u : 0u,
+                   ((u32Sts & XHCI_USBSTS_CNR) != 0u) ? 1u : 0u);
+        xhci_udx_product_status_hold_once(pSoft, 0, szReason);
         return 0;
     }
 
     /*
-     * real_ddi + program_gate: residual gate ready, but CRCR/DCBAAP/ERST/RS
-     * product program needs proven event-ring/ERST/MaxSlotsEn sequence.
-     * Do NOT invent silicon writes. Hold never_program honesty.
-     * Dual DoD A remains OPEN until userspace UDX owns lab USB datapath.
+     * After halt, before CONFIG/scratchpad: public xECP walk +
+     * USBLEGSUP OS ownership. Missing → continue. Timeout → SKIP.
      */
-    udx_printk("xhci_udx: product program SKIP reason=never_invent_silicon "
-               "real_ddi=1 program_gate=1 bind_path=ddi "
-               "gate_ready=1 product_mint=0 would_write=0 write=0 "
-               "crcr=OPEN dcbaap=OPEN erst=OPEN rs=OPEN "
+    if (xhci_udx_product_usblegsup_try(pSoft) == 0) {
+        xhci_udx_product_status_hold_once(pSoft, 0, "usblegsup");
+        return 0;
+    }
+
+    u64Rt = (u64)(u32Rtsoff & ~0x1fu);
+    if (u64Rt == 0ull ||
+        !udx_mmio_in_range(pSoft->pCap,
+                           u64Rt + XHCI_RT_IR0 + XHCI_IR_ERDP, 8ull)) {
+        udx_printk("xhci_udx: product program SKIP reason=rtsoff_missing "
+                   "rtsoff=0x%08x map_len=0x%llx product_mint=0 write=0 "
+                   "never_program=1 never_invent_silicon=1 "
+                   "Soft!=product dual_dod_a=OPEN\n",
+                   (unsigned)u32Rtsoff, (unsigned long long)u64MapLen);
+        xhci_udx_product_status_hold_once(pSoft, 0, "rtsoff_missing");
+        return 0;
+    }
+
+    u32MaxSlots = u32Hcs1 & 0xffu;
+    u32MaxIntrs = (u32Hcs1 >> 8) & 0x7ffu;
+    if (u32MaxSlots == 0u || u32MaxIntrs == 0u) {
+        udx_printk("xhci_udx: product program SKIP reason=hcsparams1 "
+                   "maxslots=%u maxintrs=%u product_mint=0 write=0 "
+                   "never_program=1 Soft!=product dual_dod_a=OPEN\n",
+                   (unsigned)u32MaxSlots, (unsigned)u32MaxIntrs);
+        xhci_udx_product_status_hold_once(pSoft, 0, "hcsparams1");
+        return 0;
+    }
+    u32SlotsEn = u32MaxSlots;
+    if (u32SlotsEn > XHCI_PROD_MAXSLOTS_CLAMP) {
+        u32SlotsEn = XHCI_PROD_MAXSLOTS_CLAMP;
+    }
+
+    /* Reuse soft FORCE32 cmd/evt pages when aligned; else alloc. */
+    dmaCmdUse = pSoft->dmaCmd;
+    dmaEvtUse = pSoft->dmaEvt;
+    cbCmd = (size_t)XHCI_SOFT_CMD_BYTES;
+    cbEvt = (size_t)XHCI_SOFT_EVT_BYTES;
+    if (xhci_udx_prod_dma_ok(dmaCmdUse, cbCmd) == 0) {
+        pSoft->pCmdProd = xhci_udx_prod_alloc_page(pSoft,
+                                                   &pSoft->dmaCmdProd);
+        if (pSoft->pCmdProd == NULL) {
+            udx_printk("xhci_udx: product program SKIP reason=dma_alloc "
+                       "which=cmd product_mint=0 write=0 "
+                       "never_program=1 never_invent_silicon=1 "
+                       "Soft!=product dual_dod_a=OPEN\n");
+            xhci_udx_product_status_hold_once(pSoft, 0, "dma_alloc");
+            return 0;
+        }
+        dmaCmdUse = pSoft->dmaCmdProd;
+        cbCmd = (size_t)XHCI_PROD_PAGE_BYTES;
+    }
+    if (xhci_udx_prod_dma_ok(dmaEvtUse, cbEvt) == 0) {
+        pSoft->pEvtProd = xhci_udx_prod_alloc_page(pSoft,
+                                                   &pSoft->dmaEvtProd);
+        if (pSoft->pEvtProd == NULL) {
+            xhci_udx_prod_pages_free_unprogrammed(pSoft);
+            udx_printk("xhci_udx: product program SKIP reason=dma_alloc "
+                       "which=evt product_mint=0 write=0 "
+                       "never_program=1 never_invent_silicon=1 "
+                       "Soft!=product dual_dod_a=OPEN\n");
+            xhci_udx_product_status_hold_once(pSoft, 0, "dma_alloc");
+            return 0;
+        }
+        dmaEvtUse = pSoft->dmaEvtProd;
+        cbEvt = (size_t)XHCI_PROD_PAGE_BYTES;
+    }
+
+    if (pSoft->pDcbaa == NULL) {
+        pSoft->pDcbaa = xhci_udx_prod_alloc_page(pSoft, &pSoft->dmaDcbaa);
+    }
+    if (pSoft->pErst == NULL) {
+        pSoft->pErst = xhci_udx_prod_alloc_page(pSoft, &pSoft->dmaErst);
+    }
+    if (pSoft->pDcbaa == NULL || pSoft->pErst == NULL ||
+        xhci_udx_prod_dma_ok(pSoft->dmaDcbaa,
+                             (size_t)XHCI_PROD_PAGE_BYTES) == 0 ||
+        xhci_udx_prod_dma_ok(pSoft->dmaErst,
+                             (size_t)XHCI_PROD_PAGE_BYTES) == 0) {
+        xhci_udx_prod_pages_free_unprogrammed(pSoft);
+        udx_printk("xhci_udx: product program SKIP reason=dma_alloc "
+                   "which=dcbaa_erst product_mint=0 write=0 "
+                   "never_program=1 never_invent_silicon=1 "
+                   "Soft!=product dual_dod_a=OPEN\n");
+        xhci_udx_product_status_hold_once(pSoft, 0, "dma_alloc");
+        return 0;
+    }
+
+    /* DCBAA: zero page; slot 0 = scratchpad array PA or 0. */
+    xhci_udx_prod_zero_page(pSoft->pDcbaa);
+    if (xhci_udx_product_scratchpad_try(pSoft, u32Hcs2) == 0) {
+        xhci_udx_prod_pages_free_unprogrammed(pSoft);
+        xhci_udx_product_status_hold_once(pSoft, 0, "scratchpad");
+        return 0;
+    }
+
+    /* ERST: one segment pointing at the event ring (xHCI 6.5 public). */
+    xhci_udx_prod_zero_page(pSoft->pErst);
+    {
+        u32 *pErst32;
+
+        pErst32 = (u32 *)pSoft->pErst;
+        pErst32[0] = (u32)((u64)dmaEvtUse & 0xffffffffull);
+        pErst32[1] = (u32)(((u64)dmaEvtUse >> 32) & 0xffffffffull);
+        pErst32[2] = (u32)XHCI_PROD_EVT_TRBS;
+        pErst32[3] = 0u;
+    }
+
+    udx_dma_sync_single_for_device(pDev, pSoft->dmaDcbaa,
+                                   (size_t)XHCI_PROD_PAGE_BYTES,
+                                   UDX_DMA_BIDIRECTIONAL);
+    udx_dma_sync_single_for_device(pDev, pSoft->dmaErst,
+                                   (size_t)XHCI_PROD_PAGE_BYTES,
+                                   UDX_DMA_BIDIRECTIONAL);
+    udx_dma_sync_single_for_device(pDev, dmaCmdUse, cbCmd,
+                                   UDX_DMA_BIDIRECTIONAL);
+    udx_dma_sync_single_for_device(pDev, dmaEvtUse, cbEvt,
+                                   UDX_DMA_BIDIRECTIONAL);
+
+    /* Best-effort IOMMU cover (RS off — no DMA yet). */
+    u32Bdf = udx_dma_bdf(pSoft->pPdev->u8Bus, udx_pci_slot(pSoft->pPdev),
+                         udx_pci_func(pSoft->pPdev));
+    (void)udx_dma_iommu_grant(u32Bdf, pSoft->dmaDcbaa,
+                              (size_t)XHCI_PROD_PAGE_BYTES);
+    (void)udx_dma_iommu_grant(u32Bdf, pSoft->dmaErst,
+                              (size_t)XHCI_PROD_PAGE_BYTES);
+    (void)udx_dma_iommu_grant(u32Bdf, dmaCmdUse, cbCmd);
+    (void)udx_dma_iommu_grant(u32Bdf, dmaEvtUse, cbEvt);
+
+    udx_printk("xhci_udx: product program alloc "
+               "dcbaa=0x%llx erst=0x%llx cmd=0x%llx evt=0x%llx "
+               "slotsen=%u maxslots=%u erst_ents=%u evt_trbs=%u "
+               "cmd_own=%u evt_own=%u force32=1 "
+               "scratchpad=%u spad_pages=%u dcbaa0=0x%llx "
+               "Soft!=product dual_dod_a=OPEN\n",
+               (unsigned long long)pSoft->dmaDcbaa,
+               (unsigned long long)pSoft->dmaErst,
+               (unsigned long long)dmaCmdUse,
+               (unsigned long long)dmaEvtUse,
+               (unsigned)u32SlotsEn, (unsigned)u32MaxSlots,
+               (unsigned)XHCI_PROD_ERST_ENTS,
+               (unsigned)XHCI_PROD_EVT_TRBS,
+               (pSoft->pCmdProd != NULL) ? 1u : 0u,
+               (pSoft->pEvtProd != NULL) ? 1u : 0u,
+               (unsigned)pSoft->u32SpadNeed,
+               (unsigned)pSoft->u32SpadPages,
+               (unsigned long long)pSoft->dmaSpadArr);
+
+    u32Wrote = 0u;
+
+    /* 1) CONFIG.MaxSlotsEn */
+    udx_writel(pSoft->pCap, u64Op + XHCI_OP_CONFIG, u32SlotsEn);
+    udx_mmio_flush(pSoft->pCap);
+    u32Rb32 = udx_readl(pSoft->pCap, u64Op + XHCI_OP_CONFIG) & 0xffu;
+    if (u32Rb32 != u32SlotsEn) {
+        pSoft->u32WroteBits = u32Wrote;
+        udx_printk("xhci_udx: product program SKIP reason=readback "
+                   "step=config want=%u got=%u wrote=0x%x "
+                   "config=0 dcbaap=0 crcr=0 erstsz=0 erstba=0 erdp=0 rs=0 "
+                   "product_mint=0 write=0 never_program=1 "
+                   "Soft!=product dual_dod_a=OPEN freestanding_msc=SKIP\n",
+                   (unsigned)u32SlotsEn, (unsigned)u32Rb32,
+                   (unsigned)u32Wrote);
+        xhci_udx_product_status_hold_once(pSoft, 0, "readback_config");
+        return 0;
+    }
+    u32Wrote |= XHCI_PROD_WROTE_CONFIG;
+    pSoft->u32Config = u32SlotsEn;
+    pSoft->u32SlotsEn = u32SlotsEn;
+
+    /* 2) DCBAAP (lo then hi). */
+    xhci_udx_writel64(pSoft->pCap, u64Op + XHCI_OP_DCBAAP,
+                      (u64)pSoft->dmaDcbaa);
+    u64Rb = xhci_udx_readl64(pSoft->pCap, u64Op + XHCI_OP_DCBAAP);
+    if ((u64Rb & ~((u64)XHCI_CRCR_CTRL_MASK)) != (u64)pSoft->dmaDcbaa) {
+        pSoft->u32WroteBits = u32Wrote;
+        udx_printk("xhci_udx: product program SKIP reason=readback "
+                   "step=dcbaap want=0x%llx got=0x%llx wrote=0x%x "
+                   "config=1 dcbaap=0 crcr=0 erstsz=0 erstba=0 erdp=0 rs=0 "
+                   "product_mint=0 write=1 never_program=1 "
+                   "Soft!=product dual_dod_a=OPEN freestanding_msc=SKIP\n",
+                   (unsigned long long)pSoft->dmaDcbaa,
+                   (unsigned long long)u64Rb, (unsigned)u32Wrote);
+        xhci_udx_product_status_hold_once(pSoft, 0, "readback_dcbaap");
+        return 0;
+    }
+    u32Wrote |= XHCI_PROD_WROTE_DCBAAP;
+    pSoft->u32DcbaapLo = (u32)((u64)pSoft->dmaDcbaa & 0xffffffffull);
+
+    /* 3) CRCR with RCS (empty ring: TRB cycle=0, RCS=1). */
+    u64Crcr = ((u64)dmaCmdUse & ~((u64)XHCI_CRCR_CTRL_MASK)) |
+              (u64)XHCI_CRCR_RCS;
+    xhci_udx_writel64(pSoft->pCap, u64Op + XHCI_OP_CRCR, u64Crcr);
+    u64Rb = xhci_udx_readl64(pSoft->pCap, u64Op + XHCI_OP_CRCR);
+    if ((u64Rb & ~((u64)XHCI_CRCR_CS | (u64)XHCI_CRCR_CA |
+                   (u64)XHCI_CRCR_CRR)) != u64Crcr) {
+        pSoft->u32WroteBits = u32Wrote;
+        udx_printk("xhci_udx: product program SKIP reason=readback "
+                   "step=crcr want=0x%llx got=0x%llx wrote=0x%x "
+                   "config=1 dcbaap=1 crcr=0 erstsz=0 erstba=0 erdp=0 rs=0 "
+                   "product_mint=0 write=1 never_program=1 "
+                   "Soft!=product dual_dod_a=OPEN freestanding_msc=SKIP\n",
+                   (unsigned long long)u64Crcr, (unsigned long long)u64Rb,
+                   (unsigned)u32Wrote);
+        xhci_udx_product_status_hold_once(pSoft, 0, "readback_crcr");
+        return 0;
+    }
+    u32Wrote |= XHCI_PROD_WROTE_CRCR;
+    pSoft->u32CrcrLo = (u32)(u64Crcr & 0xffffffffull);
+
+    /* 4) ERSTSZ */
+    udx_writel(pSoft->pCap, u64Rt + XHCI_RT_IR0 + XHCI_IR_ERSTSZ,
+               (u32)XHCI_PROD_ERST_ENTS);
+    udx_mmio_flush(pSoft->pCap);
+    u32Rb32 = udx_readl(pSoft->pCap,
+                        u64Rt + XHCI_RT_IR0 + XHCI_IR_ERSTSZ) & 0xffffu;
+    if (u32Rb32 != (u32)XHCI_PROD_ERST_ENTS) {
+        pSoft->u32WroteBits = u32Wrote;
+        udx_printk("xhci_udx: product program SKIP reason=readback "
+                   "step=erstsz want=%u got=%u wrote=0x%x "
+                   "config=1 dcbaap=1 crcr=1 erstsz=0 erstba=0 erdp=0 rs=0 "
+                   "product_mint=0 write=1 never_program=1 "
+                   "Soft!=product dual_dod_a=OPEN freestanding_msc=SKIP\n",
+                   (unsigned)XHCI_PROD_ERST_ENTS, (unsigned)u32Rb32,
+                   (unsigned)u32Wrote);
+        xhci_udx_product_status_hold_once(pSoft, 0, "readback_erstsz");
+        return 0;
+    }
+    u32Wrote |= XHCI_PROD_WROTE_ERSTSZ;
+
+    /* 5) ERSTBA */
+    xhci_udx_writel64(pSoft->pCap, u64Rt + XHCI_RT_IR0 + XHCI_IR_ERSTBA,
+                      (u64)pSoft->dmaErst);
+    u64Rb = xhci_udx_readl64(pSoft->pCap,
+                             u64Rt + XHCI_RT_IR0 + XHCI_IR_ERSTBA);
+    if ((u64Rb & ~((u64)XHCI_CRCR_CTRL_MASK)) != (u64)pSoft->dmaErst) {
+        pSoft->u32WroteBits = u32Wrote;
+        udx_printk("xhci_udx: product program SKIP reason=readback "
+                   "step=erstba want=0x%llx got=0x%llx wrote=0x%x "
+                   "config=1 dcbaap=1 crcr=1 erstsz=1 erstba=0 erdp=0 rs=0 "
+                   "product_mint=0 write=1 never_program=1 "
+                   "Soft!=product dual_dod_a=OPEN freestanding_msc=SKIP\n",
+                   (unsigned long long)pSoft->dmaErst,
+                   (unsigned long long)u64Rb, (unsigned)u32Wrote);
+        xhci_udx_product_status_hold_once(pSoft, 0, "readback_erstba");
+        return 0;
+    }
+    u32Wrote |= XHCI_PROD_WROTE_ERSTBA;
+
+    /* 6) ERDP — dequeue at event-ring base; DESI=0 EHB=0. Never RS. */
+    xhci_udx_writel64(pSoft->pCap, u64Rt + XHCI_RT_IR0 + XHCI_IR_ERDP,
+                      (u64)dmaEvtUse);
+    u64Rb = xhci_udx_readl64(pSoft->pCap,
+                             u64Rt + XHCI_RT_IR0 + XHCI_IR_ERDP);
+    if ((u64Rb & ~0xfull) != ((u64)dmaEvtUse & ~0xfull)) {
+        pSoft->u32WroteBits = u32Wrote;
+        udx_printk("xhci_udx: product program SKIP reason=readback "
+                   "step=erdp want=0x%llx got=0x%llx wrote=0x%x "
+                   "config=1 dcbaap=1 crcr=1 erstsz=1 erstba=1 erdp=0 rs=0 "
+                   "product_mint=0 write=1 never_program=1 "
+                   "Soft!=product dual_dod_a=OPEN freestanding_msc=SKIP\n",
+                   (unsigned long long)dmaEvtUse,
+                   (unsigned long long)u64Rb, (unsigned)u32Wrote);
+        xhci_udx_product_status_hold_once(pSoft, 0, "readback_erdp");
+        return 0;
+    }
+    u32Wrote |= XHCI_PROD_WROTE_ERDP;
+
+    /*
+     * After ERDP: public IMAN.IE for IR0 (RTSOFF already validated).
+     * Optional IMODI=4000. Then gj_ddi_irq_bind once on retained h.
+     * Prefer IMAN.IE only — USBCMD.INTE stays unmodified; RS remains 0.
+     */
+    (void)xhci_udx_product_iman_try(pSoft, u64Rt, &u32Wrote);
+
+    /*
+     * After IMAN.IE + IRQ_BIND: name + fail-close command-ring doorbell.
+     * RS is still 0 / HCH=1 — never write doorbell[0]. Missing/OOR
+     * DBOFF → SKIP reason, continue (never invent offsets).
+     * Then once-read PORTSC CCS (never write PORTSC / never RS=1).
+     */
+    xhci_udx_product_doorbell_try(pSoft);
+    xhci_udx_product_portsc_try(pSoft);
+
+    pSoft->u32WroteBits = u32Wrote;
+    pSoft->u32FProductProg = 1u;
+    pSoft->u32FProductMint = 1u;
+    pSoft->u32UsbCmd = udx_readl(pSoft->pCap, u64Op + XHCI_OP_USBCMD);
+    pSoft->u32UsbSts = udx_readl(pSoft->pCap, u64Op + XHCI_OP_USBSTS);
+
+    udx_printk("xhci_udx: product program PASS "
+               "order=halt,usblegsup,scratchpad,config,dcbaap,crcr,"
+               "erstsz,erstba,erdp,imod,iman,doorbell,portsc "
+               "wrote=0x%x config=1 dcbaap=1 crcr=1 "
+               "erstsz=1 erstba=1 erdp=1 iman=%u imod=%u rs=0 "
+               "irq_bind=%s usbcmd_inte=0 doorbell=OPEN "
+               "slotsen=%u maxslots=%u "
+               "scratchpad=%u spad_pages=%u dcbaa0=0x%llx "
+               "usblegsup=%u usbleg=0x%08x "
+               "dcbaap=0x%llx crcr=0x%llx erstba=0x%llx erdp=0x%llx "
+               "iman_snap=0x%08x imod_snap=0x%08x "
+               "dma_dcbaa=0x%llx dma_erst=0x%llx "
                "dma_cmd=0x%llx dma_evt=0x%llx "
-               "need=proven_erst_maxslots_rs_order never_program=1 "
-               "never_crcr=1 never_dcbaap=1 never_rs=1 "
+               "product_mint=1 product_prog=1 never_program=0 write=1 "
+               "never_rs=1 usbcmd=0x%08x usbsts=0x%08x "
+               "hch=%u bind_path=ddi real_ddi=1 program_gate=1 "
+               "need=usbcmd_rs doorbell=OPEN "
+               "never_ring_while_halted=1 irq_bind=%s "
+               "dboff=0x%08x db0=0x%08x db_obs=%u "
+               "ports=%u ccs=%u ccs_n=%u never_portsc_write=1 "
+               "bot residual OPEN msc residual OPEN "
                "Soft!=product dual_dod_a=OPEN freestanding_msc=SKIP "
-               "G-AC-1 agent_ne_close=1 denser residual != Dual DoD close\n",
-               (unsigned long long)pSoft->dmaCmd,
-               (unsigned long long)pSoft->dmaEvt);
-    return 0;
+               "G-AC-1 agent_ne_close=1 "
+               "(PASS=RS-off public init + IMAN.IE; doorbell named "
+               "fail-closed; PORTSC CCS observe; Dual DoD A not closed)\n",
+               (unsigned)u32Wrote,
+               (unsigned)(pSoft->u32FImanIe != 0u) ? 1u : 0u,
+               (unsigned)(pSoft->u32FImod != 0u) ? 1u : 0u,
+               xhci_udx_irq_bind_word(pSoft),
+               (unsigned)u32SlotsEn, (unsigned)u32MaxSlots,
+               (unsigned)pSoft->u32SpadNeed,
+               (unsigned)pSoft->u32SpadPages,
+               (unsigned long long)pSoft->dmaSpadArr,
+               (unsigned)(pSoft->u32FUsbleg != 0u) ? 1u : 0u,
+               (unsigned)pSoft->u32Usbleg,
+               (unsigned long long)pSoft->dmaDcbaa,
+               (unsigned long long)u64Crcr,
+               (unsigned long long)pSoft->dmaErst,
+               (unsigned long long)dmaEvtUse,
+               (unsigned)pSoft->u32Iman,
+               (unsigned)pSoft->u32Imod,
+               (unsigned long long)pSoft->dmaDcbaa,
+               (unsigned long long)pSoft->dmaErst,
+               (unsigned long long)dmaCmdUse,
+               (unsigned long long)dmaEvtUse,
+               (unsigned)pSoft->u32UsbCmd,
+               (unsigned)pSoft->u32UsbSts,
+               ((pSoft->u32UsbSts & XHCI_USBSTS_HCH) != 0u) ? 1u : 0u,
+               xhci_udx_irq_bind_word(pSoft),
+               (unsigned)pSoft->u32Dboff,
+               (unsigned)pSoft->u32Db0,
+               (unsigned)(pSoft->u32FDbObs != 0u) ? 1u : 0u,
+               (unsigned)pSoft->u32PortscPorts,
+               (unsigned)pSoft->u32PortscCcs,
+               (unsigned)pSoft->u32PortscCcsN);
+    xhci_udx_product_status_hold_once(pSoft, 1, NULL);
+    return 1;
 }
 
 /**
@@ -4415,7 +6438,8 @@ xhci_udx_soft_residual_lean(const struct xhci_udx_soft *pSoft)
 
 /**
  * Soft-read HCSPARAMS1 (+ HCSPARAMS2/3 observe) and lamp stage=2 params.
- * HCSPARAMS2: MaxScratchpadBufs public field names only - never allocate.
+ * HCSPARAMS2: MaxScratchpadBufs public decode; this soft residual never
+ * allocates (product program DCBAA[0] is the only spad alloc).
  * HCSPARAMS3: U1/U2 Device Exit Latency residual names - never program LPM.
  * Returns 0 on empty/implausible MaxPorts; non-zero when params usable.
  *
@@ -4445,12 +6469,8 @@ xhci_udx_soft_params(struct xhci_udx_soft *pSoft)
     u8Slots  = (u8)(u32Hcs1 & 0xffu);
     u16Intrs = (u16)((u32Hcs1 >> 8) & 0x7ffu);
     u8Ports  = (u8)((u32Hcs1 >> 24) & 0xffu);
-    /*
-     * HCSPARAMS2 MaxScratchpadBufs: Hi[25:21] | Lo[31:27] per xHCI Spec
-     * public layout - residual count name only; never scratchpad DMA.
-     */
-    u16Spad = (u16)((((u32Hcs2 >> 21) & 0x1fu) << 5) |
-                    ((u32Hcs2 >> 27) & 0x1fu));
+    /* HCSPARAMS2 MaxScratchpadBufs public decode; product program allocs. */
+    u16Spad = (u16)xhci_udx_hcs2_max_scratchpad(u32Hcs2);
     /* HCSPARAMS3: U1[7:0] / U2[15:8] residual names - never LPM program. */
     u8U1Lat  = (u8)(u32Hcs3 & 0xffu);
     u16U2Lat = (u16)((u32Hcs3 >> 8) & 0xffu);
@@ -4527,7 +6547,8 @@ xhci_udx_soft_ports(struct xhci_udx_soft *pSoft)
         u8  u8PortPls;
 
         /* PORTSC[n] = op + 0x400 + (n-1)*0x10 (xHCI Spec 5.4.8). */
-        u64Off = u64OpBase + 0x400ull + ((u64)(u32Port - 1u) * 0x10ull);
+        u64Off = u64OpBase + XHCI_OP_PORTSC +
+                 ((u64)(u32Port - 1u) * XHCI_PORTSC_STRIDE);
         if (u64Off + 4ull > XHCI_UDX_BAR0_LEN) {
             break;
         }
@@ -5072,6 +7093,7 @@ xhci_udx_probe(struct udx_pci_dev *pPdev, const struct udx_pci_device_id *pId)
     u8  u8Cap;
     u16 u16Ver;
     u32 u32Dword0;
+    u32 iSpad;
 
     if (pPdev == NULL || pPdev->pDev == NULL) {
         return UDX_ERR_INVAL;
@@ -5147,6 +7169,25 @@ xhci_udx_probe(struct udx_pci_dev *pPdev, const struct udx_pci_device_id *pId)
     pSoft->u32FRingOk  = 0;
     pSoft->u32FIommu   = 0;
     pSoft->u32FProductMint = 0;
+    pSoft->u32FProductProg = 0;
+    pSoft->u32WroteBits = 0;
+    pSoft->u32SlotsEn  = 0;
+    pSoft->pDcbaa      = NULL;
+    pSoft->dmaDcbaa    = 0;
+    pSoft->pErst       = NULL;
+    pSoft->dmaErst     = 0;
+    pSoft->pCmdProd    = NULL;
+    pSoft->dmaCmdProd  = 0;
+    pSoft->pEvtProd    = NULL;
+    pSoft->dmaEvtProd  = 0;
+    pSoft->pSpadArr    = NULL;
+    pSoft->dmaSpadArr  = 0;
+    pSoft->u32SpadNeed = 0;
+    pSoft->u32SpadPages = 0;
+    for (iSpad = 0u; iSpad < XHCI_PROD_SPAD_PAGES_CLAMP; iSpad++) {
+        pSoft->pSpadBuf[iSpad] = NULL;
+        pSoft->dmaSpadBuf[iSpad] = 0;
+    }
     pSoft->u32PathBits = XHCI_SOFT_PATH_OPEN;
     pSoft->u8Ep0Steps  = 0;
     pSoft->u8CfgSteps  = 0;
@@ -5167,10 +7208,23 @@ xhci_udx_probe(struct udx_pci_dev *pPdev, const struct udx_pci_device_id *pId)
     pSoft->u32Hcs2     = 0;
     pSoft->u32Hcs3     = 0;
     pSoft->u32Hcc1     = 0;
+    pSoft->u32FUsbleg  = 0;
+    pSoft->u32UsblegOff = 0;
+    pSoft->u32Usbleg   = 0;
     pSoft->u32Dboff    = 0;
     pSoft->u32Rtsoff   = 0;
     pSoft->u32Dnctrl   = 0;
     pSoft->u32Config   = 0;
+    pSoft->u32Iman     = 0;
+    pSoft->u32Imod     = 0;
+    pSoft->u32FImanIe  = 0;
+    pSoft->u32FImod    = 0;
+    pSoft->i64DdiH     = 0;
+    pSoft->u32IrqBind  = XHCI_IRQ_BIND_OPEN;
+    pSoft->u32FIrqBindTried = 0;
+    pSoft->u32Db0      = 0;
+    pSoft->u32FDbObs   = 0;
+    pSoft->u32FDoorbellTried = 0;
 
     pSoft->pCap = udx_ioremap(u64Bar, u64Len);
     if (pSoft->pCap == NULL) {
@@ -5408,6 +7462,35 @@ xhci_udx_remove(struct udx_pci_dev *pPdev)
     }
     pSoft = (struct xhci_udx_soft *)udx_get_drvdata(pPdev->pDev);
     if (pSoft != NULL) {
+        xhci_udx_prod_spad_free(pSoft);
+        pSoft->u32SpadNeed = 0;
+        if (pSoft->pDcbaa != NULL) {
+            udx_dma_free_coherent(pPdev->pDev, XHCI_PROD_PAGE_BYTES,
+                                  pSoft->pDcbaa, pSoft->dmaDcbaa);
+            pSoft->pDcbaa = NULL;
+            pSoft->dmaDcbaa = 0;
+        }
+        if (pSoft->pErst != NULL) {
+            udx_dma_free_coherent(pPdev->pDev, XHCI_PROD_PAGE_BYTES,
+                                  pSoft->pErst, pSoft->dmaErst);
+            pSoft->pErst = NULL;
+            pSoft->dmaErst = 0;
+        }
+        if (pSoft->pCmdProd != NULL) {
+            udx_dma_free_coherent(pPdev->pDev, XHCI_PROD_PAGE_BYTES,
+                                  pSoft->pCmdProd, pSoft->dmaCmdProd);
+            pSoft->pCmdProd = NULL;
+            pSoft->dmaCmdProd = 0;
+        }
+        if (pSoft->pEvtProd != NULL) {
+            udx_dma_free_coherent(pPdev->pDev, XHCI_PROD_PAGE_BYTES,
+                                  pSoft->pEvtProd, pSoft->dmaEvtProd);
+            pSoft->pEvtProd = NULL;
+            pSoft->dmaEvtProd = 0;
+        }
+        pSoft->u32FProductProg = 0;
+        pSoft->u32WroteBits = 0;
+        pSoft->u32SlotsEn = 0;
         if (pSoft->pRing != NULL) {
             udx_dma_free_coherent(pPdev->pDev, XHCI_SOFT_RING_BYTES,
                                   pSoft->pRing, pSoft->dmaRing);
@@ -5460,10 +7543,23 @@ xhci_udx_remove(struct udx_pci_dev *pPdev)
         pSoft->u32Hcs2     = 0;
         pSoft->u32Hcs3     = 0;
         pSoft->u32Hcc1     = 0;
+        pSoft->u32FUsbleg  = 0;
+        pSoft->u32UsblegOff = 0;
+        pSoft->u32Usbleg   = 0;
         pSoft->u32Dboff    = 0;
         pSoft->u32Rtsoff   = 0;
         pSoft->u32Dnctrl   = 0;
         pSoft->u32Config   = 0;
+        pSoft->u32Iman     = 0;
+        pSoft->u32Imod     = 0;
+        pSoft->u32FImanIe  = 0;
+        pSoft->u32FImod    = 0;
+        pSoft->i64DdiH     = 0;
+        pSoft->u32IrqBind  = XHCI_IRQ_BIND_OPEN;
+        pSoft->u32FIrqBindTried = 0;
+        pSoft->u32Db0      = 0;
+        pSoft->u32FDbObs   = 0;
+        pSoft->u32FDoorbellTried = 0;
         udx_set_drvdata(pPdev->pDev, NULL);
     }
     udx_pci_release_regions(pPdev);
@@ -5563,19 +7659,22 @@ main(int argc, char **argv)
             pSoft->u32FOpenOk != 0u && pSoft->u32FMapOk != 0u &&
             pSoft->u32FRingOk != 0u) {
             pSoft->u32FRealDdi = XHCI_SOFT_REAL_DDI_BIND;
+            xhci_udx_keep_ddi_handle(pSoft);
             /* Re-densify after real_ddi stamp (program_gate / prefer_real). */
             xhci_udx_soft_program_residual(pSoft);
             xhci_udx_soft_functional_residual(pSoft);
+            (void)xhci_udx_product_program_try(pSoft);
             udx_printk("xhci_udx: soft bind host_ddi=1 freestanding_bind=1 "
                        "inject=0 prefer_real_ddi=1 real_ddi=1 host_inject=0 "
                        "bind_path=ddi gj_sys_ddi=%u "
                        "chain=SCAN,GET,OPEN,MAP_BAR soft_ring=%u soft_iommu=%u "
-                       "product_mint=0 never_program=1 dual_dod_a=OPEN "
+                       "product_mint=%u product_prog=%u dual_dod_a=OPEN "
                        "freestanding_msc=SKIP Soft!=product\n",
                        (unsigned)GJ_SYS_DDI,
                        (unsigned)(pSoft->u32FRingOk != 0u) ? 1u : 0u,
-                       (unsigned)(pSoft->u32FIommu != 0u) ? 1u : 0u);
-            (void)xhci_udx_product_program_try(pSoft);
+                       (unsigned)(pSoft->u32FIommu != 0u) ? 1u : 0u,
+                       (unsigned)pSoft->u32FProductMint,
+                       (unsigned)pSoft->u32FProductProg);
         } else {
             pSoft = NULL;
             pPdev = NULL;
@@ -5828,21 +7927,21 @@ main(int argc, char **argv)
 #else /* !UDX_HOST_LIBC */
 
 /*
- * Freestanding registration + preferred real DDI bind for 8086:a12f.
- * Prefer udx_host_bind_by_id (GJ_SYS_DDI SCAN/GET/OPEN/MAP_BAR path) over
- * host inject. When linked, probe runs against the granted BAR0 and
- * soft-lamps open/MAP -> BOT -> EP0/config/CDB residual from live or
- * zeroed MMIO (zero -> params/ports soft-empty; cap still gates probe).
- * After bind PASS, mark real_ddi and re-densify functional rings/slot/BOT
- * with STRONGER open_map_ddi_ready + program_gate + gj_sys_ddi residual.
+ * Freestanding product path (Dual DoD A / option-3 spirit, rtl8168 parity).
+ *
+ * Prefer udx_host_bind_by_id (GJ_SYS_DDI SCAN/GET/OPEN/MAP_BAR) over inject.
+ * Probe walks open/MAP/DMA-ring residual against granted BAR0 (live or
+ * zero CAP → probe FAIL honesty). After bind PASS: real_ddi=1, densify
+ * program/functional residual, product_program_try (RS-off public
+ * CONFIG/DCBAAP/CRCR/ERST + IMAN.IE + doorbell name/fail-close when
+ * gate ready; USBCMD.RS stays OPEN).
  *
  * Soft freestanding bind PASS only when bind + probe set u32FProbeOk.
  * Bind alone != soft probe PASS. No product BOT/MSC/EP0/CDB claim.
- * Does not touch kernel/drv/xhci_msc.c.
+ * Does not touch kernel/drv/xhci_msc.c (freestanding MSC SKIP).
  *
- * Product model: this userspace host is Dual DoD A direction.
- * Freestanding MSC lab path stays optional (GJ_XHCI_MSC_PROBE=0 default).
- * Not in-kernel usb_storage.ko init as product (G-AC-1).
+ * Product model: userspace UDX+ABI host. Not usb_storage.ko init (G-AC-1).
+ * greppable: xhci_udx: freestanding main / soft freestanding bind PASS
  */
 int
 xhci_udx_freestanding_register(void)
@@ -5854,6 +7953,17 @@ xhci_udx_freestanding_register(void)
     if (udx_init() != UDX_OK) {
         return UDX_ERR_IO;
     }
+    /* Soft DDI host surface notes (observation only; Soft!=product). */
+    udx_host_soft_init();
+    udx_host_soft_lifecycle_note();
+
+    /* Host product path honesty: freestanding MSC remains SKIP. */
+    udx_printk("xhci_udx: soft freestanding product=SKIP "
+               "GJ_XHCI_MSC_PROBE_default=0 product=UDX+ABI "
+               "freestanding=1 prefer_real_ddi=1 Soft!=product G-AC-1 "
+               "dual_dod_a=OPEN\n");
+    xhci_udx_soft_catalog();
+
     st = udx_pci_register_driver(&xhci_udx_driver);
     if (st != UDX_OK) {
         udx_printk("xhci_udx: soft SKIP (register %d)\n", (int)st);
@@ -5911,8 +8021,11 @@ xhci_udx_freestanding_register(void)
             return UDX_ERR_IO;
         }
         pSoft = (struct xhci_udx_soft *)udx_get_drvdata(pPdev->pDev);
-        if (pSoft == NULL || pSoft->u32FProbeOk == 0u) {
-            udx_printk("xhci_udx: soft SKIP (bind ok, probe incomplete) "
+        if (pSoft == NULL || pSoft->u32FProbeOk == 0u ||
+            pSoft->u32FOpenOk == 0u || pSoft->u32FMapOk == 0u ||
+            pSoft->u32FRingOk == 0u) {
+            udx_printk("xhci_udx: soft SKIP (bind ok, probe/open+map/"
+                       "ring residual incomplete) "
                        "soft!=product bot=OPEN "
                        "prefer_real_ddi=1 real_ddi=0 "
                        "bind_path=none gj_sys_ddi=%u\n",
@@ -5927,9 +8040,17 @@ xhci_udx_freestanding_register(void)
          * product stick PASS / never MSC product close.
          */
         pSoft->u32FRealDdi = XHCI_SOFT_REAL_DDI_BIND;
+        xhci_udx_keep_ddi_handle(pSoft);
         xhci_udx_soft_program_residual(pSoft);
         xhci_udx_soft_functional_residual(pSoft);
-        /* Product program gate: only real_ddi+gate; still never invent silicon. */
+        /*
+         * Product program: real_ddi+gate → halt + USBLEGSUP handshake
+         * then once RS-off public CONFIG/DCBAAP/CRCR/ERST + IMAN.IE.
+         * After IMAN.IE: gj_ddi_irq_bind once; then name + fail-close
+         * command-ring doorbell (never ring while halted); then once
+         * PORTSC CCS observe (never write PORTSC). USBCMD.RS stays OPEN.
+         * Dual DoD A OPEN.
+         */
         (void)xhci_udx_product_program_try(pSoft);
 
         udx_printk("xhci_udx: soft freestanding bind PASS soft!=product "
@@ -5939,13 +8060,15 @@ xhci_udx_freestanding_register(void)
                    "ep0_steps=%u cfg_steps=%u cdb_steps=%u ddi_steps=%u "
                    "prod_steps=%u prog_steps=%u stick_steps=%u "
                    "func_steps=%u abi_steps=%u "
+                   "soft_ring=%u soft_iommu=%u product_mint=%u "
                    "prefer_real_ddi=1 real_ddi=1 host_inject=0 "
                    "bind_path=ddi gj_sys_ddi=%u "
                    "open_map_ddi_ready=%u program_gate=%u "
                    "chain=SCAN,GET,OPEN,MAP_BAR not=inject_only "
                    "path=open,map,ddi,rings,slot_addr,ep0,bot "
-                   "path=0x%x product_mint=0 Soft!=product never_stick_PASS=1 "
+                   "path=0x%x product_prog=%u Soft!=product never_stick_PASS=1 "
                    "dual_dod_a=OPEN product=UDX+ABI need=DDI_caps "
+                   "need=usbcmd_rs doorbell=OPEN irq_bind=%s "
                    "freestanding_msc=SKIP G-AC-1 agent_ne_close=1\n",
                    (unsigned)pSoft->u32FOpenOk,
                    (unsigned)pSoft->u32FMapOk,
@@ -5970,6 +8093,9 @@ xhci_udx_freestanding_register(void)
                    (unsigned)pSoft->u8StickSteps,
                    (unsigned)pSoft->u8FuncSteps,
                    (unsigned)pSoft->u8AbiSteps,
+                   (unsigned)(pSoft->u32FRingOk != 0u) ? 1u : 0u,
+                   (unsigned)(pSoft->u32FIommu != 0u) ? 1u : 0u,
+                   (unsigned)pSoft->u32FProductMint,
                    (unsigned)GJ_SYS_DDI,
                    (unsigned)((pSoft->u32FOpenOk != 0u &&
                                pSoft->u32FMapOk != 0u &&
@@ -5978,8 +8104,11 @@ xhci_udx_freestanding_register(void)
                                pSoft->u32FMapOk != 0u &&
                                pSoft->u32FDdiCaps != 0u &&
                                pSoft->u32FOpRes != 0u &&
+                               pSoft->u32FRingOk != 0u &&
                                pSoft->u32FProgRes != 0u) ? 1u : 0u),
-                   (unsigned)pSoft->u32PathBits);
+                   (unsigned)pSoft->u32PathBits,
+                   (unsigned)pSoft->u32FProductProg,
+                   xhci_udx_irq_bind_word(pSoft));
         udx_printk("xhci_udx: soft probe PASS freestanding=1 bot_stage=%u "
                    "func=%u func_steps=%u/%u "
                    "prefer_real_ddi=1 real_ddi=1 host_inject=0 "
@@ -6005,6 +8134,7 @@ xhci_udx_freestanding_register(void)
                                pSoft->u32FMapOk != 0u &&
                                pSoft->u32FDdiCaps != 0u &&
                                pSoft->u32FOpRes != 0u &&
+                               pSoft->u32FRingOk != 0u &&
                                pSoft->u32FProgRes != 0u) ? 1u : 0u));
         xhci_udx_soft_bind_ne_stick(pSoft, 1);
         xhci_udx_soft_open_map_honesty(pSoft);
@@ -6022,6 +8152,104 @@ xhci_udx_freestanding_register(void)
                "need=DDI_caps not=inject_only_product\n",
                (unsigned)GJ_SYS_DDI);
     return UDX_ERR_NOSYS;
+}
+
+/* Alias for option-3 naming parity with rtl8168_udx_freestanding_start. */
+int
+xhci_udx_freestanding_start(void)
+{
+    return xhci_udx_freestanding_register();
+}
+
+/**
+ * Freestanding ELF entry (product host launch / stage-esp / user.ld).
+ * Option-3 spirit: freestanding_start → real DDI bind → product_program_try
+ * (RS-off CONFIG/DCBAAP/CRCR/ERST + IMAN.IE + doorbell name/fail-close
+ * + PORTSC CCS observe; USBCMD.RS stays OPEN).
+ *
+ * Product keep_live: park thr after soft bind PASS so DDI MAP + soft DMA
+ * ring residual + DCBAA/ERST/scratchpad pages stay live for later
+ * EP0/BOT product deepen (no SYS_EXIT that tears AS/MAP). Soft!=product.
+ * Dual DoD A OPEN. G-AC-1.
+ *
+ * greppable: xhci_udx: freestanding main
+ * greppable: xhci_udx: product host park
+ * greppable: keep_live=1
+ */
+int
+main(int argc, char **argv)
+{
+    udx_status_t st;
+    u32 u32ParkN;
+
+    (void)argc;
+    (void)argv;
+    udx_printk("xhci_udx: freestanding main option3=1 "
+               "prefer_real_ddi=1 product=UDX+ABI id=8086:a12f "
+               "chain=SCAN,GET,OPEN,MAP_BAR dual_dod_a=OPEN "
+               "freestanding_msc=SKIP Soft!=product G-AC-1\n");
+    st = xhci_udx_freestanding_start();
+    udx_printk("xhci_udx: freestanding main done st=%d "
+               "product_prog_path=1 dual_dod_a=OPEN Soft!=product "
+               "need=usbcmd_rs doorbell=OPEN irq_bind=%s never_rs=1 "
+               "never_portsc_write=1\n",
+               (int)st, xhci_udx_irq_bind_word(&s_soft));
+    if (st != UDX_OK) {
+        return 1;
+    }
+
+    /*
+     * Product host keep_live (Dual DoD A): never SYS_EXIT after soft bind.
+     * MAP_BAR window + DCBAA/ERST/cmd/evt/scratchpad pages stay in the
+     * live process AS while later USBCMD.RS / slot product deepen
+     * (IMAN.IE + doorbell name + PORTSC CCS already done when program PASS).
+     * greppable: xhci_udx: product host park
+     */
+    udx_printk("xhci_udx: product host park keep_live=1 "
+               "product=UDX+ABI chain=xhci_udx "
+               "bind_path=ddi prefer_real_ddi=1 real_ddi=1 "
+               "next=usbcmd_rs doorbell=OPEN irq_bind=%s "
+               "never_portsc_write=1 "
+               "bot residual OPEN msc residual OPEN "
+               "dual_dod_a=OPEN agent_ne_close=1 "
+               "Soft!=product G-AC-1 freestanding_msc=SKIP\n",
+               xhci_udx_irq_bind_word(&s_soft));
+    u32ParkN = 0u;
+    for (;;) {
+        gj_yield();
+        u32ParkN++;
+        /* Once-lamp every ~2^16 yields — no stamp storm. */
+        if ((u32ParkN & 0xffffu) == 0u) {
+            udx_printk("xhci_udx: product host park live "
+                       "keep_live=1 yields=%u "
+                       "product_mint=%u product_prog=%u soft_ring=%u "
+                       "soft_iommu=%u scratchpad=%u spad_pages=%u "
+                       "dual_dod_a=OPEN Soft!=product never_rs=1\n",
+                       (unsigned)u32ParkN,
+                       (unsigned)s_soft.u32FProductMint,
+                       (unsigned)s_soft.u32FProductProg,
+                       (unsigned)(s_soft.u32FRingOk != 0u) ? 1u : 0u,
+                       (unsigned)(s_soft.u32FIommu != 0u) ? 1u : 0u,
+                       (unsigned)s_soft.u32SpadNeed,
+                       (unsigned)s_soft.u32SpadPages);
+        }
+    }
+    /* not reached */
+    return 0;
+}
+
+/*
+ * user.ld ENTRY(_start). Freestanding native process (no host crt0).
+ * Success: main parks (keep_live); failure: gj_exit(nonzero).
+ */
+void
+_start(void)
+{
+    int n;
+
+    n = main(0, (char **)0);
+    /* Only failure paths return from main. */
+    gj_exit(n);
 }
 
 #endif /* UDX_HOST_LIBC */

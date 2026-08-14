@@ -6661,6 +6661,9 @@ kernel_after_mmap(struct gj_mem_region *aRegions, size_t cRegions)
      *   dma -> time -> netdev -> phy -> pci
      *
      * STATUS hold map (static pane; soft!=product only in kprintf):
+     *   2  kernel TE/identity persist (after TE path below; once-pin)
+     *      TE mode=hw|soft|none tes= tt=ML slpt= rdy bus3 id1g
+     *      do not clobber 0 title / 6 NET / 13 USB / 14-15 UDX pins
      *   7  ksym n=N
      *   8  mod r8169 init=... | FAIL ... | SKIP no embed
      *   9  netdev soft N | unres=... | use finit_module later
@@ -6669,6 +6672,7 @@ kernel_after_mmap(struct gj_mem_region *aRegions, size_t cRegions)
      *  11  pci reg=N match=M [st=S]    (PASS; st when mode>=0)
      *  12-13 soft xhci_pci + usb_storage multi-mod (below)
      *  14  soft l2 bridge rx=/tx= (spare only; if bridge on; never 7-13)
+     *      UDX later pins hold14 UDX te_disarm fovw|wire — leave to UDX
      *  15  HYBRID wire=fs soft=r8169 (phase 4a; SOFT|REAL+bridge+primary+fs)
      * Serial (once; not STATUS): main: soft linux netdev path REAL|SOFT
      *   netdev=N mode=... when primary+carrier helpers; after force emu.
@@ -7703,6 +7707,12 @@ kernel_after_mmap(struct gj_mem_region *aRegions, size_t cRegions)
         if (iommu_vtd_te_arm() && iommu_vtd_te_armed()) {
             kprintf("iommu: vtd TE path PASS\n");
         }
+        /*
+         * te_arm once-pins persist STATUS hold2 TE/identity snapshot
+         * (mode tes tt slpt rdy bus3 id1g) for G752 glass without COM1.
+         * Never clobbers hold0 title / hold6 NET / hold13 USB / hold14-15
+         * UDX pins. Soft!=product dual_dod_b=OPEN. Grep: iommu: vtd TE hold2
+         */
         if (iommu_vtd_te_live_ready()) {
             kprintf("iommu: vtd TE live mode=%d\n", iommu_vtd_te_mode());
         }

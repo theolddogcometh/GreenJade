@@ -24,27 +24,27 @@ Specs: [Architecture](GREENJADE_KERNEL_SPEC.md) · [Design complete](DESIGN_SPEC
 
 ---
 
-## Current track — 2026-08-06 · **Linux drivers via ABI/UDX only** · flash bar **v2026.08.04.93**
+## Current track — 2026-08-14 · **Linux drivers via ABI/UDX only** · flash bar **v0.1.136**
 
 **Operator direction (2026-08-06):** **Stop freestanding rtl8168 rabbit hole.** Remove freestanding NIC from product the **same as freestanding USB**. **Focus only on getting Linux-shaped drivers to work** over **hot + cold ABI + DDI/UDX** (userspace). Soft ≠ product. Dual **MIT OR Apache-2.0**. **Bar3** only [STEAM_BAR3_STATUS.md](STEAM_BAR3_STATUS.md).  
 **Process:** [ASSURANCE_LITE.md](ASSURANCE_LITE.md) · [ABI_FIRST_PIVOT.md](ABI_FIRST_PIVOT.md).  
 **Check:** `make assurance-check` (L1 only).
 
-**Progress note (docs honesty · Soft≠product):** **MEM_PLACE** Option A soft residual landed (CREATE_PLACED / MAP_REPLICA; no PA leak) · **PURE_C_CONCURRENCY** house rules codified ([PURE_C_CONCURRENCY_AND_OPS.md](PURE_C_CONCURRENCY_AND_OPS.md)) · Dual DoD **A/B still OPEN** · NIC product residual dig **in flight** (not freestanding climb; not Dual DoD close). **UDX L2 soft ready identity residual:** `ETH_UDX_READY` → pin lab IP **10.200.125.50** + soft demux MAC on `net_l2` (backend=none / freestanding rtl SKIP) so inject→ARP reply→`ETH_TX_PULL` has identity; greppable `net_l2: soft udx ready` / `net_eth: soft arp reply` once-lamps. Soft≠product; Dual DoD B **OPEN**.
+**Progress note (docs honesty · Soft≠product):** Dual DoD **B** laptop **L3 ARP + ping proven** (2026-08-14) on `rtl8168_udx` / lab **10.200.125.50**. Dual DoD **B still OPEN** until host **sshd :22**. Dual DoD **A still OPEN** (`xhci_udx` RS-off program; no BOT/MSC). Fly **v0.1.136** (VT-d multi-level identity + firmware TES disarm + UDX product path). Freestanding rtl/USB **SKIP**. **MEM_PLACE** Option A soft + **PURE_C_CONCURRENCY** house rules remain. Soft≠product; **G-AC-1**.
 
 ### DUT STATUS (fly this cut — test what you fly · **no invent next N**)
 
 | Item | DUT / fly status |
 |------|------------------|
-| **Flash bar / STATUS title** | **STATUS (static) v2026.08.04.93** (`GJ_IMAGE_VERSION`) — serial `main: image version=…` |
+| **Flash bar / STATUS title** | **STATUS (static) v0.1.136** (`GJ_IMAGE_VERSION`) — serial `main: image version=…` |
 | **Soft ≠ product** | Soft lamps / soft bridges / soft ksym **≠** product close |
 | **G-AC-1** | No Linux `.ko` runs **in kernel** as product |
 | **Freestanding rtl** | **SKIP** default (`GJ_RTL8168_PROBE=0`) — not Dual DoD **B** |
 | **Freestanding USB** | **SKIP** default (`GJ_XHCI_MSC_PROBE=0`) — not Dual DoD **A** |
 | **Soft `.ko` init** | **SKIP exec** all staged `.ko` (`freestanding_no_exec`) — eng residual |
 | **Dual DoD A** | **UDX product OPEN** — `xhci_udx` + DDI (Linux-shaped USB userspace) |
-| **Dual DoD B** | **UDX product OPEN** — `rtl8168_udx` + DDI (Linux-shaped NIC userspace; wire / lab IP / stack / sshd) |
-| **T0 product net** | **virtio-net** until UDX owns laptop wire |
+| **Dual DoD B** | **UDX product OPEN** until sshd **:22** — laptop **ARP + ping proven** (2026-08-14) |
+| **T0 product net** | **virtio-net** on QEMU; laptop wire is **UDX** |
 | **Bar3** | [STEAM_BAR3_STATUS.md](STEAM_BAR3_STATUS.md) only (**OPEN**) |
 | **Next stamp** | **Do not invent next N** — bump only on real flashable cut |
 
@@ -56,7 +56,7 @@ Specs: [Architecture](GREENJADE_KERNEL_SPEC.md) · [Design complete](DESIGN_SPEC
 | **Product drivers** | **Linux-shaped** drivers in **userspace** over **hot + cold** Linux ABI / doors / **DDI·UDX** (caps for MMIO/IRQ/DMA). |
 | **Freestanding class drivers** | **Not product.** Default **SKIP**: `GJ_XHCI_MSC_PROBE=0` (USB) · **`GJ_RTL8168_PROBE=0`** (NIC). Opt-in residual only. |
 | **Soft kernel `.ko` path** | Lab/eng only (ksym, soft layout). **`RUN_INIT=0` / `freestanding_no_exec`** = do not execute `.ko` init **in kernel** — not “never use Linux drivers.” |
-| **T0 product net** | **virtio-net** until UDX NIC owns laptop wire. |
+| **T0 product net** | **virtio-net** on QEMU/CI. Laptop wire is **UDX** (`rtl8168_udx`). |
 
 **DEFERRED / FORBIDDEN as product AC:** “**`r8169.ko` runs in-kernel and owns the wire**.” Product NIC = **`rtl8168_udx` (and successors)** + ABI, not freestanding `rtl8168.c`, not in-kernel `.ko` exec.
 
@@ -65,7 +65,7 @@ Specs: [Architecture](GREENJADE_KERNEL_SPEC.md) · [Design complete](DESIGN_SPEC
 | # | DoD | Class | Status | Close when |
 |---|-----|-------|--------|------------|
 | **A** | **Linux-shaped USB** (laptop) | C1/C2 UDX | **OPEN** | Userspace UDX/DDI host path + soft ksym seed. **Not** freestanding MSC. **Not** `usb_storage.ko` init in kernel. |
-| **B** | **Linux-shaped NIC** (laptop) | C1/C2 UDX | **OPEN** | Userspace UDX NIC (`rtl8168_udx` …) binds `10ec:8168` and owns wire for lab IP / stack / sshd. **Not** freestanding rtl R-climb. **Not** in-kernel `r8169.ko` wire. Soft lamps alone ≠ close. |
+| **B** | **Linux-shaped NIC** (laptop) | C1/C2 UDX | **OPEN** (L3 ARP/ping **proven**) | Close when host **sshd :22** banner on lab **10.200.125.50**. Wire/ARP/ICMP already via `rtl8168_udx`. **Not** freestanding rtl. **Not** in-kernel `r8169.ko`. Soft lamps alone ≠ close. |
 
 **Defaults (honesty):**
 - `GJ_XHCI_MSC_PROBE=0` · **`GJ_RTL8168_PROBE=0`** — freestanding class SKIP.
@@ -85,7 +85,7 @@ Specs: [Architecture](GREENJADE_KERNEL_SPEC.md) · [Design complete](DESIGN_SPEC
 
 **Blocking now:** Linux-shaped **userspace** NIC + USB hosts over ABI/UDX. Soft ≠ product · **G-AC-1.**
 
-### Stamp **v2026.08.04.16** (prior soft-land cut; fly flash bar **v2026.08.04.93**)
+### Stamp **v2026.08.04.16** (prior soft-land cut; fly flash bar **v0.1.97**)
 
 | Item | Note |
 |------|------|
@@ -114,9 +114,9 @@ Specs: [Architecture](GREENJADE_KERNEL_SPEC.md) · [Design complete](DESIGN_SPEC
 | Item | Note |
 |------|------|
 | **DUT** | G752VT · `10ec:8168` · xHCI `8086:a12f` · lab **10.200.125.50** |
-| **Image stamp / flash bar** | Fly **STATUS (static) v2026.08.04.93** (`GJ_IMAGE_VERSION`); prior soft-land cut **.16** in tree notes. Bump each flashable cut; serial `main: image version=…` |
-| **Lab ping** | Earlier freestanding ICMP PROVEN (historical); ICMP multi-try (prior .7); recent boots may show **R0/R1**; hybrid **SOFT gate0**. Freestanding net **≠** Dual DoD **B** close |
-| **sshd** | Soft listen **:22** / freestanding eth residual in tree; product **:22** on laptop wire closes only via **UDX NIC** path (DoD **B**). Soft lamps alone ≠ close |
+| **Image stamp / flash bar** | Fly **STATUS (static) v0.1.136** (`GJ_IMAGE_VERSION`). Bump each flashable cut; serial `main: image version=…` |
+| **Lab ping** | **UDX product ARP + ping proven** 2026-08-14 on **10.200.125.50**. Earlier freestanding ICMP is historical and **≠** Dual DoD **B** close |
+| **sshd** | Soft listen **:22** ≠ host banner. Product **:22** on laptop wire still **OPEN** (closes Dual DoD **B**). Soft lamps alone ≠ close |
 | **Hybrid 4a** | Eng residual: `HYBRID WIRE=FS SOFT=R8169` · freestanding may own wire at **gate0** when opt-in — **not** product AC; default freestanding **SKIP** |
 | **soft init** | **SKIP exec** all **`.ko`** (`freestanding_no_exec`) — **G-AC-1** |
 | **REAL probe** | Hostish REAL soft PASS when gated; gate0 skips REAL for 8168 |
@@ -700,7 +700,7 @@ Exclusive deepen shipped greppable soft product surfaces for the open list — *
 9. [ ] Full multi-server security / `confine` + drop ambient authority
 10. [x] `io_uring` min rings + SQE I/O + register depth/more opcodes soft PASS (game/title I/O still open)
 11. [x] `aarch64` product-shaped scaffold (shared C string/stdio/pmm/sched + PSCI; UEFI PE still open)
-12. [ ] **Dual DoD (G752 laptop)** — **A** Linux-shaped USB via **UDX/DDI** (`xhci_udx` …) **OPEN** · **B** Linux-shaped NIC via **UDX/DDI** (`rtl8168_udx` …) **OPEN** (UDX owns wire / lab IP / stack / sshd). **Not** freestanding MSC/rtl close; freestanding default **SKIP**. Soft ≠ product · **G-AC-1.** See Current track. Flash bar **v2026.08.04.93**.
+12. [ ] **Dual DoD (G752 laptop)** — **A** Linux-shaped USB via **UDX/DDI** (`xhci_udx` …) **OPEN** · **B** Linux-shaped NIC via **UDX/DDI** (`rtl8168_udx` …) **OPEN** until sshd **:22** (laptop **ARP + ping proven** 2026-08-14). **Not** freestanding MSC/rtl close; freestanding default **SKIP**. Soft ≠ product · **G-AC-1.** See Current track. Flash bar **v0.1.136**.
 
 ---
 
@@ -708,9 +708,11 @@ Exclusive deepen shipped greppable soft product surfaces for the open list — *
 
 | Date | Note |
 |------|------|
-| 2026-08-08 | **Fly bar align v2026.08.04.93** (docs + pack; no invent stamp): `GJ_IMAGE_VERSION` already **2026.08.04.93** in tree. Public docs that still said **.74** retargeted to fly **.91**. **MEM_PLACE** Option A soft residual + **PURE_C_CONCURRENCY** house rules noted; Dual DoD **A/B still OPEN**; NIC product residual dig in flight. Soft ≠ product · **G-AC-1.** Dual MIT/Apache. No photo IDs. Bar3 only [STEAM_BAR3_STATUS.md](STEAM_BAR3_STATUS.md). |
+| 2026-08-14 | **Fly bar v0.1.136.** Laptop Dual DoD **B** **L3 ARP + ping proven** on `rtl8168_udx` / **10.200.125.50**. VT-d bring-up: context **TT=multi_level** + identity SLPT [0,1 GiB) + firmware TES disarm + FOVW `te_disarm`. Dual DoD **B still OPEN** until host sshd **:22**. Dual DoD **A OPEN** (`xhci_udx` RS-off program; never `USBCMD.RS=1`). Soft ≠ product · **G-AC-1.** Dual MIT/Apache. No photo IDs. Bar3 only [STEAM_BAR3_STATUS.md](STEAM_BAR3_STATUS.md). |
+| 2026-08-09 | **Fly bar v0.1.98** page-align DMA dig: glass **v0.1.97** densify `ROK=1 FOVW=1 inject=0` Own-stuck — mid-page `dma_rx0` + 4 KiB Buffer_Size **overlapped descriptor ring**. Freestanding UDX DMA slabs **page-aligned**; product `dma_pa dig` + FOVW rekick re-Own. Dual DoD **A/B still OPEN** until host arping/ping/sshd. Soft ≠ product · **G-AC-1.** Dual MIT/Apache. No photo IDs. Bar3 only [STEAM_BAR3_STATUS.md](STEAM_BAR3_STATUS.md). |
+| 2026-08-08 | **Fly bar align v0.1.97** (docs + pack; no invent stamp): `GJ_IMAGE_VERSION` already **0.1.97** in tree. Public docs that still said **.74** retargeted to fly **.91**. **MEM_PLACE** Option A soft residual + **PURE_C_CONCURRENCY** house rules noted; Dual DoD **A/B still OPEN**; NIC product residual dig in flight. Soft ≠ product · **G-AC-1.** Dual MIT/Apache. No photo IDs. Bar3 only [STEAM_BAR3_STATUS.md](STEAM_BAR3_STATUS.md). |
 | 2026-08-06 | **.72 DUT STATUS align (docs only; superseded by later flash cuts):** earlier align to fly **.72** before pack. Freestanding rtl/USB **SKIP**; Dual DoD **A/B UDX product OPEN**; Soft ≠ product · **G-AC-1**. Dual MIT/Apache. No photo IDs. Bar3 only [STEAM_BAR3_STATUS.md](STEAM_BAR3_STATUS.md). |
-| 2026-08-06 | **Stamp v2026.08.04.74:** flashable cut after UDX/ABI exclusive wave harvest (historical; fly now **v2026.08.04.93**). Product path residual: libudx + ddi_door + ddi_host + rtl8168_udx + xhci_udx; freestanding SKIP; Dual DoD **A/B OPEN** (UDX). Soft ≠ product · **G-AC-1.** Dual MIT/Apache. No photo IDs. Bar3 only [STEAM_BAR3_STATUS.md](STEAM_BAR3_STATUS.md). |
+| 2026-08-06 | **Stamp v2026.08.04.74:** flashable cut after UDX/ABI exclusive wave harvest (historical; fly now **v0.1.97**). Product path residual: libudx + ddi_door + ddi_host + rtl8168_udx + xhci_udx; freestanding SKIP; Dual DoD **A/B OPEN** (UDX). Soft ≠ product · **G-AC-1.** Dual MIT/Apache. No photo IDs. Bar3 only [STEAM_BAR3_STATUS.md](STEAM_BAR3_STATUS.md). |
 | 2026-08-06 | **Operator pivot residual align (docs only):** Current track = **Linux drivers via ABI/UDX only**; freestanding class **SKIP** (NIC same as USB); Dual DoD **A/B** retargeted **UDX OPEN** (not freestanding stage / freestanding :22 close). Soft ≠ product · **G-AC-1.** Dual MIT/Apache. No photo IDs. Bar3 only [STEAM_BAR3_STATUS.md](STEAM_BAR3_STATUS.md). |
 | 2026-08-04 | **Stamp v2026.08.04.16:** soft **SKIP exec** all staged **`.ko`** (`freestanding_no_exec`). Dual DoD **A/B OPEN** until DUT. No photo IDs. **Soft ≠ product** · **G-AC-1.** Dual MIT/Apache. Bar3 only [STEAM_BAR3_STATUS.md](STEAM_BAR3_STATUS.md). |
 | 2026-08-04 | **Stamp v2026.08.04.7:** TX short-frame BM/slot · ICMP multi-try · soft listen **:22** · soft dep virtual **usbcore**/**scsi_mod** · xHCI GET_CONFIG soft-align · hold14 freestanding R mirror · hold6 force refresh. Dual DoD **A/B OPEN**. No photo IDs. **Soft ≠ product** · **G-AC-1.** Dual MIT/Apache. Bar3 only [STEAM_BAR3_STATUS.md](STEAM_BAR3_STATUS.md). |

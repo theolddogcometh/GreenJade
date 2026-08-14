@@ -24,9 +24,11 @@
  *   Product Dual DoD A = UDX/DDI USB OPEN; Dual DoD B = UDX/DDI NIC OPEN.
  *   Soft/freestanding STATUS lamps never close A/B (not freestanding stage).
  * Residual honesty lamps (grep: dual DoD hold6 | dual DoD hold13 | dual DoD hold14):
+ *   hold2  kernel TE/identity persist (mode tes tt slpt bus3 id1g) - Dual DoD B
+ *          glass no-COM1; once-pin after te_arm; te_disarm once-updates same row
  *   hold6  net force-refresh t/f/b/r - dual DoD B residual diagnose only
  *   hold13 USB / usb_storage short STATUS - dual DoD A residual (soft class)
- *   hold14 L2 br + freestanding R mirror - dual DoD B residual mirror
+ *   hold14 L2 br + freestanding R mirror / UDX te_disarm fovw|wire (leave UDX)
  * Freestanding SKIP honesty lamps (dim paint; Soft!=product):
  *   hold8  mod r8169 SKIP...   hold12 mod xhci_pci SKIP...
  *   Any hold text with SKIP paints dim (never warm PASS look).
@@ -56,6 +58,7 @@
  * greppable: Soft!=product | freestanding SKIP | G-AC-1 | stamp_storm=0
  * greppable: STATUS (static) v | FB_STATUS_TITLE_OK | g_fFaultHold
  * greppable: dual DoD hold6 | dual DoD hold13 | dual DoD hold14 | NET residual
+ * greppable: iommu: vtd TE hold2 | TE mode=
  */
 #include <gj/boot_info.h>
 #include <gj/config.h>
@@ -67,7 +70,7 @@
 /*
  * Compile-time panel title (adjacent string merge -> one rodata C-string).
  * Keep version in title (do not strip): product-path / L3 media honesty.
- * gj-image-version.sh greps: STATUS (static) vYYYY.MM.DD.N
+ * gj-image-version.sh greps: STATUS (static) v0.1.N (semver fly bar)
  * Soft!=product: title identity != Dual DoD close. No stamp storms.
  */
 #define FB_STATUS_TITLE_OK    "STATUS (static) v" GJ_IMAGE_VERSION
@@ -198,6 +201,11 @@ fb_hold_str_tail_prefer(const char *sz)
     /* "NET ... t/f/b/r" - dual DoD B residual freestanding counters */
     if (sz[0] == 'N' && sz[1] == 'E' && sz[2] == 'T' &&
         (sz[3] == ' ' || sz[3] == '\0')) {
+        return 1;
+    }
+    /* "TE mode=... tes= tt= slpt= bus3 id1g" - kernel TE persist (hold2) */
+    if (sz[0] == 'T' && sz[1] == 'E' &&
+        (sz[2] == ' ' || sz[2] == '\0')) {
         return 1;
     }
     /* "l2 br rx=... tx=..." - freestanding R/T mirror (hold14) */

@@ -183,26 +183,34 @@ u32 udx_core_should_run(void);
 #define UDX_FS_IOMEM_SLOTS         16u
 
 /*
- * Freestanding DMA slot: aBytes must be RTL TNPDS/RDSAR-aligned (256)
- * so product program_gate (option 3 Dual DoD B) can open on real DDI bind.
+ * Freestanding DMA slot: aBytes page-aligned (4 KiB).
+ *
+ * Glass v0.1.97 Dual DoD B residual (own_stuck / FOVW / ROK inject=0):
+ *   256-byte-only align left bus PA mid-page (e.g. dma_rx0=0x…8900 with
+ *   Buffer_Size=0x1000). NIC RX DMA then spanned into the descriptor ring
+ *   (dma_ring=0x…9800 inside the 4 KiB RX window) — Own writeback never
+ *   visible, FOVW sticky. Page align keeps each 4 KiB DMA in its own
+ *   physical page and non-overlapping with ring/slots.
+ * TNPDS/RDSAR still need 256-byte align (subset of page align).
  * Soft!=product; identity cookie under VT-d [0,1GiB) identity.
+ * greppable: udx: soft residual fs_pool page_align
  */
 struct udx_fs_dma_slot {
     u8             aBytes[UDX_FS_DMA_SLOT_CB]
-        __attribute__((aligned(256)));
+        __attribute__((aligned(4096)));
     u8             u8Used;
     size_t         cbAlloc;
     /* Bus PA after virt_to_phys (0 until resolved). clflush uses VA. */
     udx_dma_addr_t dmaCookie;
-} __attribute__((aligned(256)));
+} __attribute__((aligned(4096)));
 
 struct udx_fs_dma_large_slot {
     u8             aBytes[UDX_FS_DMA_LARGE_SLOT_CB]
-        __attribute__((aligned(256)));
+        __attribute__((aligned(4096)));
     u8             u8Used;
     size_t         cbAlloc;
     udx_dma_addr_t dmaCookie;
-} __attribute__((aligned(256)));
+} __attribute__((aligned(4096)));
 
 #endif /* !UDX_HOST_LIBC */
 
@@ -250,12 +258,19 @@ struct udx_fs_dma_large_slot {
  * Full plat catalog lives in libgj syscalls.h; UDX residual consumes:
  *   op5 IOMMU window grant soft note
  *   op6 user VA → PA (product freestanding DMA bus cookie; Soft!=product)
+ *   op7 bus3/TE densify for rtl8168 Own-stuck under TE (Soft!=product)
  * Soft!=product mint OPEN.
  * greppable: udx: soft residual iommu_grant
  * greppable: udx: soft residual virt_to_phys
+ * greppable: udx: soft residual bus3_te
  */
 #define UDX_GJ_PLAT_IOMMU_GRANT   5
 #define UDX_GJ_PLAT_VIRT_TO_PHYS  6
+#define UDX_GJ_PLAT_BUS3_TE       7
+#define UDX_GJ_PLAT_WBINVD        8 /* kernel wbinvd; never ring3 */
+#define UDX_GJ_PLAT_TE_DISARM     9 /* TE off dig for Own-stuck */
+#define UDX_GJ_PLAT_PHYS_READ32  10 /* kernel read u32 at bus PA */
+#define UDX_GJ_PLAT_PANEL_HOLD   11 /* pin STATUS hold line (glass densify) */
 
 /*
  * NOTIFY_WAIT residual shape (matches GJ_NOTIFY_WHICH_MSIX_GLOBAL).
@@ -283,6 +298,39 @@ struct udx_fs_dma_large_slot {
 #define UDX_GJ_SYSCALL_CLOBBER                                             \
     "rax", "rdi", "rsi", "rdx", "rcx", "r8", "r9", "r10", "r11", "memory", \
         "cc"
+
+static inline long
+udx_gj_syscall1(long nNr, long a0)
+{
+    long ret;
+
+    __asm__ volatile(
+        "mov %1, %%rax\n\t"
+        "mov %2, %%rdi\n\t"
+        "syscall\n\t"
+        "mov %%rax, %0"
+        : "=r"(ret)
+        : "r"(nNr), "r"(a0)
+        : UDX_GJ_SYSCALL_CLOBBER);
+    return ret;
+}
+
+static inline long
+udx_gj_syscall2(long nNr, long a0, long a1)
+{
+    long ret;
+
+    __asm__ volatile(
+        "mov %1, %%rax\n\t"
+        "mov %2, %%rdi\n\t"
+        "mov %3, %%rsi\n\t"
+        "syscall\n\t"
+        "mov %%rax, %0"
+        : "=r"(ret)
+        : "r"(nNr), "r"(a0), "r"(a1)
+        : UDX_GJ_SYSCALL_CLOBBER);
+    return ret;
+}
 
 static inline long
 udx_gj_syscall3(long nNr, long a0, long a1, long a2)
@@ -427,6 +475,66 @@ udx_gj_iommu_grant(u32 u32Bdf, udx_dma_addr_t dma, size_t cbSize)
                            (long)u32Bdf,
                            (long)dma,
                            (long)cbSize);
+}
+
+/**
+ * Bus3/TE densify (PLATFORM_INFO op7): re-run bus3 identity residual;
+ * return packed te/hw/ready/bus3/id1g. Soft!=product Dual DoD B.
+ * greppable: udx: soft residual bus3_te
+ */
+static inline long
+udx_gj_bus3_te_densify(void)
+{
+    return udx_gj_syscall1(UDX_GJ_SYS_PLATFORM_INFO, UDX_GJ_PLAT_BUS3_TE);
+}
+
+/** Kernel wbinvd (op8). Soft!=product Dual DoD B. */
+static inline long
+udx_gj_wbinvd(void)
+{
+    return udx_gj_syscall1(UDX_GJ_SYS_PLATFORM_INFO, UDX_GJ_PLAT_WBINVD);
+}
+
+/** TE disarm dig (op9). Soft!=product Dual DoD B. */
+static inline long
+udx_gj_te_disarm(void)
+{
+    return udx_gj_syscall1(UDX_GJ_SYS_PLATFORM_INFO, UDX_GJ_PLAT_TE_DISARM);
+}
+
+/**
+ * Kernel read 32-bit at physical address (op10).
+ * Dual DoD B dig: verify Own/cookie in DRAM at programmed bus PA.
+ * Returns value as non-negative (low 32 bits) or negative errno.
+ * Soft!=product.
+ * greppable: udx: soft residual phys_read32
+ */
+static inline long
+udx_gj_phys_read32(udx_dma_addr_t dmaPa)
+{
+    return udx_gj_syscall2(UDX_GJ_SYS_PLATFORM_INFO, UDX_GJ_PLAT_PHYS_READ32,
+                           (long)dmaPa);
+}
+
+/**
+ * Pin short STATUS hold line (op11). Glass densify survives LOG flood.
+ * u32Line: 0..15 (prefer 14 dual DoD B residual / 15 spare).
+ * Soft!=product; never Dual DoD close.
+ * greppable: udx: soft residual panel_hold
+ */
+static inline long
+udx_gj_panel_hold(u32 u32Line, const char *szText)
+{
+    u32 cb = 0u;
+
+    if (szText == NULL) {
+        return (long)-1;
+    }
+    while (szText[cb] != '\0' && cb < 95u) {
+        cb++;
+    }
+    return udx_gj_syscall4(UDX_GJ_SYS_PLATFORM_INFO, UDX_GJ_PLAT_PANEL_HOLD,
+                           (long)u32Line, (long)(uintptr_t)szText, (long)cb);
 }
 
 /**

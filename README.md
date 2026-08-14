@@ -99,19 +99,19 @@ Product direction is **ABI-first** (Linux-shaped **userspace** drivers over hot+
 | **DDI / UDX hosts** | `rtl8168_udx` · `xhci_udx` · `ddi_host_gj` | Dual DoD **B** (NIC) / **A** (USB) product direction |
 | **Soft module path** | Host-collected `.ko` via ksym (eng) | **Soft ≠ product**; **G-AC-1** no `.ko` product AC |
 | **Freestanding class** | `rtl8168` / `xhci_msc` | **SKIP** default (`GJ_RTL8168_PROBE=0` · `GJ_XHCI_MSC_PROBE=0`) |
-| **T0 product net (QEMU)** | **virtio-net** | Until UDX owns laptop wire |
-| **Fly bar** | `GJ_IMAGE_VERSION` | Fly what you flash — e.g. **STATUS (static) v2026.08.04.93** |
+| **T0 product net (QEMU)** | **virtio-net** | QEMU/CI. Laptop wire is **UDX** (`rtl8168_udx`) |
+| **Fly bar** | `GJ_IMAGE_VERSION` | Semver fly stamp — **STATUS (static) v0.1.136**; **0.2.0** reserved for Dual DoD B close (sshd **:22**) |
 
 **First DUT:** ASUS ROG **G752VT** — NIC `10ec:8168`, xHCI `8086:a12f`, lab static **10.200.125.50**.
 
-### Dual DoD (honest — both OPEN)
+### Dual DoD (honest)
 
 | # | Goal | Path | Status |
 |---|------|------|--------|
-| **A** | Linux-shaped USB | `xhci_udx` + DDI | **OPEN** — soft residual + program_gate honesty; freestanding MSC SKIP |
-| **B** | Linux-shaped NIC + stack + sshd | `rtl8168_udx` → netstackd → sshd | **OPEN** — product residual *writes* TE\|RE / Own on real DDI; glass dig FOVW/RER / Own stuck; inject/arping L3 not closed |
+| **A** | Linux-shaped USB | `xhci_udx` + DDI | **OPEN** — RS-off product program (halt / USBLEGSUP / scratchpad / rings / IMAN); never `USBCMD.RS=1`; BOT/MSC SKIP |
+| **B** | Linux-shaped NIC + stack + sshd | `rtl8168_udx` → netstackd → sshd | **OPEN** until host **sshd :22** banner. **L3 ARP + ping proven** (2026-08-14) on laptop UDX wire / lab **10.200.125.50**. Soft lamps ≠ close |
 
-**Lab status (honest):** Product residual on glass programs TNPDS/RDSAR/TE\|RE, Own handoff, thr-poll L2 bridge, lab IP pin under UDX ready (`LAB_MAC_UDX=02:00:00:47:4a:50`). Historical freestanding ICMP is **not** the product track (freestanding rtl **SKIP**). Soft listen **:22** ≠ product host banner on the wire. Soft ≠ product; **G-AC-1**. Backlog: [docs/TODO.md](docs/TODO.md) · [docs/ASSURANCE_LITE.md](docs/ASSURANCE_LITE.md) · [docs/PURE_C_CONCURRENCY_AND_OPS.md](docs/PURE_C_CONCURRENCY_AND_OPS.md) · [docs/MEM_PLACE_CHANNEL.md](docs/MEM_PLACE_CHANNEL.md).
+**Lab status (honest):** Fly **v0.1.136**. Product `rtl8168_udx` owns the G752 wired NIC (`10ec:8168`): TNPDS/RDSAR/TE\|RE, Own, thr-poll inject/TX pull. Operator **arping and ping return** on **10.200.125.50**. Historical freestanding ICMP is **not** this track (freestanding rtl **SKIP**). Soft listen **:22** ≠ product host banner — Dual DoD B stays **OPEN** until `nc`/`ssh` sees the product id. Soft ≠ product; **G-AC-1**. Backlog: [docs/TODO.md](docs/TODO.md) · [docs/ASSURANCE_LITE.md](docs/ASSURANCE_LITE.md).
 
 ```sh
 make collect-linux-drivers   # host .ko → build/linux-drivers/ (+ NEEDED-DRIVERS)
@@ -130,7 +130,10 @@ On boot, GOP **STATUS (STATIC)** holds track module path (soft):
 | 10 | `probe 10ec:8168 soft` \| `real` \| `miss` |
 | 11 | `pci reg=… match=…` |
 | 12–13 | xHCI soft SKIP when host `xhci_pci` is **builtin**; USB MSC / `usb_storage need=usbcore` |
-| 14–15 | soft L2 bridge · hybrid wire=fs soft=r8169 |
+| 2 | kernel TE persist (`TE mode=… tes= tt=ML slpt=`) |
+| 3 | `UDX xhci PASS … ccs=` (RS-off program; Dual DoD A OPEN) |
+| 14 | `UDX te_disarm fovw own= rok= fovw= c=` (UDX wire dig) |
+| 14–15 (soft residual) | L2 bridge · hybrid wire=fs soft=r8169 |
 
 Gate0 hybrid skips real `r8169` probe on the live BAR (EMU soft netdev + freestanding wire). Real hostish probe is gated ([docs/PCI_DEV_SOFT_LAYOUT.md](docs/PCI_DEV_SOFT_LAYOUT.md) · [docs/R8169_MMIO_HANDOFF.md](docs/R8169_MMIO_HANDOFF.md)).
 

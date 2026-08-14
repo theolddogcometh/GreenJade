@@ -188,13 +188,21 @@ int  iommu_vtd_window_grant(u8 bus, u8 slot, u8 func, u64 pa, u64 cb,
  * Soft-arm translation enable (TE) when tables ready.
  * With DRHD: programs MMIO (mode=HW) only after identity preflight
  * (all 256 root buses + bus3 for G752 03:00.0 + identity [0,1GiB)).
- * Waits GSTS.TES. Without DRHD / on MMIO fail: soft policy (mode=SOFT).
+ * HW sequence: clear firmware TES → RTADDR/SRTP → context+IOTLB inv → TE.
+ * Contexts: TT=multi_level + SLPTPTR identity [0,1GiB) + DID0 + AW=39.
+ * Without DRHD / on MMIO fail: soft policy (mode=SOFT) and **disarm any
+ * live firmware TES** so soft-arm does not leave foreign remapping (Own).
  * Pre-runs UDX DMA safety eng residual (bus3 + usb + did0 + map) and
  * DDI DMA_NOTE residual (soft window + cover; window_mint OPEN) so TE
  * does not leave UDX force32 DMA OWN-stuck. Soft!=product / G-AC-1.
  * Soft-skip residual when no VT-d (no DMAR/DRHD, no tables).
  * Returns 1 if TE considered armed, 0 otherwise.
+ * Once-pins persist STATUS hold2 TE/identity lamp (G752 no-COM1 glass):
+ *   TE mode=hw|soft|none tes= tt=ML slpt= rdy bus3 id1g
+ * Never hold0/6/13/14/15. Soft!=product dual_dod_b=OPEN.
  * Grep: iommu: vtd TE preflight | bus3_p | TE arm HW/soft-arm PASS
+ * Grep: iommu: vtd ctx TT=multi_level | iommu: vtd inv | TE firmware
+ * Grep: iommu: vtd TE hold2
  * Grep: iommu: soft udx residual | soft bus3 residual Soft!=product
  * Grep: iommu: soft ddi residual | soft dma_note residual | window_mint=OPEN
  */
@@ -205,6 +213,17 @@ int  iommu_vtd_te_armed(void);
 
 /** GJ_IOMMU_TE_NONE / GJ_IOMMU_TE_SOFT / GJ_IOMMU_TE_HW. */
 int  iommu_vtd_te_mode(void);
+
+/**
+ * Dual DoD B dig: clear DRHD GSTS.TES whenever mapped (firmware residual
+ * included) and drop software TE flags. Glass gap: soft-arm mode used to
+ * skip GCMD writes so firmware TES stayed live. Soft!=product.
+ * Returns 1 if TE now off, 0 if HW TES clear timed out.
+ * Once-updates persist STATUS hold2 with tes=0 te_disarm (not UDX hold14).
+ * greppable: iommu: vtd TE disarm | PLATFORM_INFO op9 te_disarm
+ * greppable: iommu: vtd TE hold2
+ */
+int  iommu_vtd_te_disarm(void);
 
 /**
  * Product live-ready check: tables + TE + identity window.

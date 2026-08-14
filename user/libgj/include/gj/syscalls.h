@@ -133,6 +133,14 @@ extern "C" {
  *   arg0=3 → MSI-X IRQ notify soft inject badge=arg1; ret=irq count
  *   arg0=4 → IOMMU enforce: arg1=0/1 set; ret=enforce
  *   arg0=5 → IOMMU window grant: arg1=BDF arg2=pa arg3=cb
+ *   arg0=6 → virt_to_phys: arg1=user VA → PA (UDX DMA bus cookie)
+ *   arg0=7 → bus3_te: packed te/hw/ready/bus3/id1g (Own-stuck dig)
+ *   arg0=8 → wbinvd: kernel ring0 wbinvd (never execute in ring3)
+ *   arg0=9 → te_disarm: TE off dig for rtl8168 Own-stuck
+ *   arg0=10 → phys_read32: arg1=bus PA → zero-extended u32
+ *   arg0=11 → panel_hold: arg1=line arg2=user ptr arg3=len
+ * Soft!=product; Dual DoD A/B OPEN (named residual != close).
+ * Match kernel native.c + UDX UDX_GJ_PLAT_* (do not invent NRs).
  */
 #define GJ_SYS_PLATFORM_INFO     98
 
@@ -226,6 +234,8 @@ struct gj_mem_place_out {
 /*
  * Soft DDI ops for userspace driver hosts (docs/DDI_SOFT.md).
  * Soft!=product. G-AC-1. Dual DoD OPEN. Numbers match DDI_OP_* (frozen).
+ * CLOSE / IRQ_BIND / DMA_BUF_* name kernel ddi_door.h only — no new NR.
+ * Soft lamps / named ops != Dual DoD A/B close.
  * Greppable: Soft!=product, GJ_DDI_OP_, G-AC-1
  */
 #define GJ_DDI_OP_SCAN       1u /* → device count (devmgr_soft_pci_scan) */
@@ -235,6 +245,12 @@ struct gj_mem_place_out {
 #define GJ_DDI_OP_CFG_READ   5u /* arg1=handle arg2=offset → u32 */
 #define GJ_DDI_OP_DMA_NOTE   6u /* arg1=handle arg2=pa arg3=cb */
 #define GJ_DDI_OP_INVENTORY  7u /* once: ddi_door: soft product surface PASS */
+#define GJ_DDI_OP_CLOSE      8u /* arg1=handle; soft free / grant forget */
+#define GJ_DDI_OP_IRQ_BIND   9u /* arg1=handle arg2=badge; Notification mint OPEN */
+#define GJ_DDI_OP_DMA_BUF_ALLOC 10u /* arg1=handle arg2=cPages arg3=flags */
+#define GJ_DDI_OP_DMA_BUF_FREE  11u /* arg1=handle arg2=pa arg3=cPages */
+#define GJ_DDI_OP_DMA_BUF_MAP   12u /* arg1=handle arg2=pa arg3=cb */
+/* 13..15 reserved (kernel ddi_door.h); do not invent opcodes */
 #define GJ_DDI_OP_CFG_WRITE 16u /* arg1=handle arg2=off arg3=val; careful soft */
 
 /* ---- Net door ops (arg0 of GJ_SYS_NET) — match kernel net_door.h ---- */
@@ -292,6 +308,7 @@ struct gj_mem_place_out {
 #define GJ_NET_OP_ETH_INJECT  28u /* arg1=user frame arg2=len → demux ok */
 #define GJ_NET_OP_ETH_TX_PULL 29u /* arg1=user buf arg2=max → bytes or 0 */
 #define GJ_NET_OP_ETH_UDX_READY 30u /* arg1=1 arm / 0 drop UDX L2 soft */
+#define GJ_NET_OP_ETH_SET_MAC   31u /* arg1=user u8[6] station MAC (IDR) */
 
 /* Soft net socket domain/type + bounce — opt-in (see GJ_LIBGJ_NET_RING_OPS). */
 #if defined(GJ_LIBGJ_NET_RING_OPS)
@@ -371,12 +388,19 @@ struct gj_mem_place_out {
 
 /* ---- Platform info ops (arg0 of GJ_SYS_PLATFORM_INFO) ---- */
 /* See GJ_SYS_PLATFORM_INFO block above for full arg layout per op. */
+/* Soft!=product Dual DoD A/B OPEN — named residual != product close. */
 #define GJ_PLAT_OP_IOMMU_INFO      0u /* arg1=info* → present */
 #define GJ_PLAT_OP_MSIX_INVENTORY  1u /* → count; opt arg1=array */
 #define GJ_PLAT_OP_WOW64           2u /* arg1=0 query / 1 en / 2 dis */
 #define GJ_PLAT_OP_MSIX_INJECT     3u /* arg1=badge soft inject */
 #define GJ_PLAT_OP_IOMMU_ENFORCE   4u /* arg1=0/1 set → enforce */
 #define GJ_PLAT_OP_IOMMU_GRANT     5u /* arg1=BDF arg2=pa arg3=cb */
+#define GJ_PLAT_OP_VIRT_TO_PHYS    6u /* arg1=user VA → PA (UDX bus cookie) */
+#define GJ_PLAT_OP_BUS3_TE         7u /* packed te/hw/ready/bus3/id1g */
+#define GJ_PLAT_OP_WBINVD          8u /* kernel wbinvd; never ring3 */
+#define GJ_PLAT_OP_TE_DISARM       9u /* TE off dig; Soft!=product */
+#define GJ_PLAT_OP_PHYS_READ32    10u /* arg1=bus PA → u32 */
+#define GJ_PLAT_OP_PANEL_HOLD     11u /* arg1=line arg2=ptr arg3=len */
 
 /* ---- Console ops (arg0 of GJ_SYS_CONSOLE) ---- */
 #define GJ_CONSOLE_OP_POLL  0u /* → 1 if char ready, else 0 */
@@ -834,6 +858,11 @@ static inline long gj_net_eth_udx_ready(int fArm)
 {
     return gj_net(GJ_NET_OP_ETH_UDX_READY, (long)(fArm ? 1 : 0), 0, 0);
 }
+/** Publish product IDR station MAC into net_l2 soft demux (ARP SHA). Soft!=product. */
+static inline long gj_net_eth_set_mac(const unsigned char *pMac6)
+{
+    return gj_net(GJ_NET_OP_ETH_SET_MAC, (long)(uintptr_t)pMac6, 0, 0);
+}
 static inline long gj_net_eth_inject(const void *pFrame, size_t cb)
 {
     return gj_net(GJ_NET_OP_ETH_INJECT, (long)(uintptr_t)pFrame, (long)cb, 0);
@@ -1183,6 +1212,49 @@ static inline long gj_ddi_inventory(void)
 }
 
 /**
+ * Soft CLOSE: free handle / forget map-grant / unbind IRQ / free DMA_BUF.
+ * Soft!=product; not Phase-A revoke; Dual DoD A/B stay OPEN.
+ */
+static inline long gj_ddi_close(unsigned long uHandle)
+{
+    return gj_ddi(GJ_DDI_OP_CLOSE, uHandle, 0, 0);
+}
+
+/**
+ * Soft IRQ_BIND: handle → badge note. Notification cap mint OPEN.
+ * Soft!=product; Dual DoD A/B OPEN (note != close).
+ */
+static inline long gj_ddi_irq_bind(unsigned long uHandle, unsigned long uBadge)
+{
+    return gj_ddi(GJ_DDI_OP_IRQ_BIND, uHandle, uBadge, 0);
+}
+
+/**
+ * Soft DMA_BUF_ALLOC: pages + flags (bit0=force32). Window mint OPEN.
+ * Soft!=product Dual DoD A/B OPEN.
+ */
+static inline long gj_ddi_dma_buf_alloc(unsigned long uHandle, unsigned cPages,
+                                        unsigned uFlags)
+{
+    return gj_ddi(GJ_DDI_OP_DMA_BUF_ALLOC, uHandle, (unsigned long)cPages,
+                  (unsigned long)uFlags);
+}
+
+/** Soft DMA_BUF_FREE: handle + pa + pages. Not product IOMMU revoke. */
+static inline long gj_ddi_dma_buf_free(unsigned long uHandle, unsigned long uPa,
+                                       unsigned cPages)
+{
+    return gj_ddi(GJ_DDI_OP_DMA_BUF_FREE, uHandle, uPa, (unsigned long)cPages);
+}
+
+/** Soft DMA_BUF_MAP: handle + pa + cb → bus cookie. Mint OPEN. */
+static inline long gj_ddi_dma_buf_map(unsigned long uHandle, unsigned long uPa,
+                                      unsigned long uCb)
+{
+    return gj_ddi(GJ_DDI_OP_DMA_BUF_MAP, uHandle, uPa, uCb);
+}
+
+/**
  * Wait/poll notification badges. which=GJ_NOTIFY_WHICH_MSIX_GLOBAL (0);
  * mask selects badges; block=0 poll / 1 sleep. Returns cleared pending.
  */
@@ -1223,6 +1295,63 @@ static inline long gj_plat_msix_inventory(void *pInfoOpt)
 static inline long gj_plat_msix_inject(unsigned long uBadge)
 {
     return gj_platform_info(GJ_PLAT_OP_MSIX_INJECT, (long)uBadge, 0, 0);
+}
+
+/**
+ * User VA → PA under active CR3 (PLATFORM_INFO op6).
+ * UDX freestanding DMA bus cookie. Soft!=product; Dual DoD A/B OPEN.
+ */
+static inline long gj_plat_virt_to_phys(const void *pVa)
+{
+    return gj_platform_info(GJ_PLAT_OP_VIRT_TO_PHYS, (long)(uintptr_t)pVa, 0,
+                            0);
+}
+
+/**
+ * Bus3/TE densify (op7): packed te/hw/ready/bus3/id1g.
+ * Soft!=product Dual DoD B OPEN (Own-stuck dig != close).
+ */
+static inline long gj_plat_bus3_te(void)
+{
+    return gj_platform_info(GJ_PLAT_OP_BUS3_TE, 0, 0, 0);
+}
+
+/**
+ * Kernel ring0 wbinvd (op8). Never execute wbinvd in ring3.
+ * Soft!=product Dual DoD B OPEN.
+ */
+static inline long gj_plat_wbinvd(void)
+{
+    return gj_platform_info(GJ_PLAT_OP_WBINVD, 0, 0, 0);
+}
+
+/**
+ * TE disarm dig (op9). Soft!=product Dual DoD B OPEN (not Dual DoD close).
+ */
+static inline long gj_plat_te_disarm(void)
+{
+    return gj_platform_info(GJ_PLAT_OP_TE_DISARM, 0, 0, 0);
+}
+
+/**
+ * Kernel read u32 at bus PA (op10). Soft!=product Own/cookie dig.
+ */
+static inline long gj_plat_phys_read32(unsigned long uPa)
+{
+    return gj_platform_info(GJ_PLAT_OP_PHYS_READ32, (long)uPa, 0, 0);
+}
+
+/**
+ * Pin STATUS hold line (op11). Soft!=product; never Dual DoD close.
+ * @param uLine  0..15 (prefer 14 Dual DoD B residual / 15 spare).
+ * @param szText Hold text (NUL-terminated; kernel copies cb bytes).
+ * @param cb     Byte count (0 → kernel scans up to hold-char max).
+ */
+static inline long gj_plat_panel_hold(unsigned uLine, const char *szText,
+                                      unsigned cb)
+{
+    return gj_platform_info(GJ_PLAT_OP_PANEL_HOLD, (long)uLine,
+                            (long)(uintptr_t)szText, (long)cb);
 }
 
 /**

@@ -610,6 +610,7 @@ static u32 g_u32DdiResGetOk;      /* GET ret >= 0 */
 static u32 g_u32DdiResMatch;      /* GET vend:dev match (bind_by_id / hit) */
 static u32 g_u32DdiResOpen;       /* OP_OPEN enters */
 static u32 g_u32DdiResOpenOk;     /* OPEN handle > 0 */
+static long g_i64DdiHandleRetain; /* last OPEN h; retain=1 no CLOSE */
 static u32 g_u32DdiResMap;        /* OP_MAP_BAR enters */
 static u32 g_u32DdiResMapOk;      /* MAP note.u8Ok / VA residual */
 static u32 g_u32DdiResMapEmpty;   /* preferred BAR empty (not a fail) */
@@ -4081,6 +4082,11 @@ host_ddi_open_map_install_idx(long iIdx,
     }
     host_soft_inc(&g_u32DdiResOpenOk);
     u32Life |= UDX_DDI_LIFE_OPEN;
+    /*
+     * Product hosts retain OPEN handle (no CLOSE on install).
+     * Expose last h so xhci_udx can gj_ddi_irq_bind after IMAN.IE.
+     */
+    g_i64DdiHandleRetain = h;
 
     /* Soft CFG_READ residual (identity + cmdst + id_match prove). */
     u32CfgIdMatch = 0;
@@ -4592,6 +4598,12 @@ udx_host_bind_by_id(u16 u16Vendor, u16 u16Device,
         return UDX_OK;
     }
 #endif
+}
+
+long
+udx_host_ddi_handle(void)
+{
+    return g_i64DdiHandleRetain;
 }
 
 /* Soft DDI residual deepen (C2 libudx host; Soft!=product; product=UDX+ABI):

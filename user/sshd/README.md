@@ -6,7 +6,7 @@ GreenJade product SSH daemon — freestanding ELF + host smoke. Tail of Dual DoD
 rtl8168_udx → netstackd → sshd :22  (lab 10.200.125.50)
 ```
 
-**Soft!=product.** Soft listen **:22** / live spawn **≠** Dual DoD B close (needs UDX NIC wire + host banner on glass). Dual DoD B **OPEN**.
+**Soft!=product.** UDX NIC wire **L3 ARP + ping proven** (2026-08-14). Soft listen **:22** / live spawn **≠** Dual DoD B close (needs host banner). Dual DoD B **OPEN**.
 
 **Product markers** (greppable): `sshd-gj: … PASS`, `sshd: … PASS`,
 `sshd: live spawn PASS` (kernel). See tables below.

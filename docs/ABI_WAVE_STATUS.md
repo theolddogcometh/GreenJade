@@ -2,7 +2,7 @@
 
 | Field | Value |
 |-------|--------|
-| **As of** | 2026-08-08 · flash bar **v2026.08.04.93** · Dual DoD ([TODO.md](TODO.md) Current track): **A** Linux-shaped **USB UDX OPEN** · **B** Linux-shaped **NIC UDX OPEN** (not freestanding close); freestanding class **SKIP** default; soft **SKIP exec all .ko** (`freestanding_no_exec`); eng residual: hybrid **SOFT gate0** / prior freestanding ICMP / R0–R1 / soft listen **:22** ≠ product; **MEM_PLACE** Option A soft + **PURE_C_CONCURRENCY** house rules; NIC product residual dig in flight; Soft ≠ product · **G-AC-1** |
+| **As of** | 2026-08-14 · flash bar **v0.1.136** · Dual DoD ([TODO.md](TODO.md) Current track): **A** Linux-shaped **USB UDX OPEN** (RS-off program) · **B** Linux-shaped **NIC UDX OPEN** until sshd **:22** — laptop **ARP + ping proven**; freestanding class **SKIP** default; soft **SKIP exec all .ko** (`freestanding_no_exec`); Soft ≠ product · **G-AC-1** |
 | **Law** | Dual **MIT OR Apache-2.0** only; **no GPL** in tree; **G-AC-1** — **not** Linux `.ko`; **Linux-SHAPED UDX** only |
 | **Normative pivot** | [ABI_FIRST_PIVOT.md](ABI_FIRST_PIVOT.md) |
 | **Coding backlog** | [TODO.md](TODO.md) § *Current track* |
@@ -14,45 +14,45 @@
 | **Module path** | [LINUX_MODULE_PATH.md](LINUX_MODULE_PATH.md) — soft loader / staged `.ko`; **not** product AC |
 | **pci_dev plan** | [PCI_DEV_SOFT_LAYOUT.md](PCI_DEV_SOFT_LAYOUT.md) — hostish **0xb40** Strategy A (real probe soft PASS) |
 
-**Honesty rule:** greppable soft PASS / scaffold / soft bridge ≠ product DoD. Dual laptop DoD (**A** Linux-shaped USB UDX · **B** Linux-shaped NIC UDX) stays **OPEN** until DUT proof — soft lamps do not close either. Bar3: [STEAM_BAR3_STATUS.md](STEAM_BAR3_STATUS.md). T0 product net = **virtio**. Freestanding `xhci_msc` / `rtl8168` = **SKIP default** (not product; not dual-DoD close). Soft `NETDEV SOFT ≥1` ≠ TX/RX. Soft L2 bridge ON ≠ freestanding MMIO handoff. Real probe `ST=0` ≠ product datapath. Soft listen **:22** ≠ host banner ≠ DoD **B** close. **G-AC-1:** staged / soft-loaded Linux `.ko` ≠ product claim. Soft **SKIP exec** all `.ko` (`freestanding_no_exec`) ≠ product driver path. **Soft ≠ product.** No test-panel photo IDs in public docs.
+**Honesty rule:** greppable soft PASS / scaffold / soft bridge ≠ product DoD. Dual laptop DoD **A** (USB UDX) stays **OPEN**. Dual DoD **B** (NIC UDX) has **L3 ARP + ping proven** (2026-08-14) and stays **OPEN** until host sshd **:22**. Soft lamps do not close either. Bar3: [STEAM_BAR3_STATUS.md](STEAM_BAR3_STATUS.md). T0 product net on QEMU = **virtio**; laptop wire = **UDX**. Freestanding `xhci_msc` / `rtl8168` = **SKIP default**. Soft listen **:22** ≠ host banner. **G-AC-1.** **Soft ≠ product.** No test-panel photo IDs in public docs.
 
 **G-AC-1 restated (2026-08-06):** **No Linux `.ko` binary runs in the kernel** as product. Product drivers = **userspace** Linux-shaped hosts over **hot + cold** ABI / DDI·UDX. Soft kernel path with **`freestanding_no_exec`** = eng residual (no in-kernel `.ko` init), **not** “never use Linux drivers.” In-kernel “r8169 owns the wire” is **not** product AC. Freestanding rtl/USB are **demoted** (default **SKIP**) — Dual DoD **B** is **not** freestanding net climb; close only via UDX NIC bind/wire. See [TODO.md](TODO.md) · [ABI_FIRST_PIVOT.md](ABI_FIRST_PIVOT.md).
 
 ---
 
-## Wave note — 2026-08-08 · flash bar **v2026.08.04.93** (ABI/UDX Dual DoD; freestanding demoted)
+## Wave note — 2026-08-14 · flash bar **v0.1.136** (ABI/UDX Dual DoD; L3 ARP/ping)
 
-**Dual DoD (normative: [TODO.md](TODO.md) § Current track):** **A** Linux-shaped **USB** via **UDX/DDI** (`xhci_udx` …) **OPEN**. **B** Linux-shaped **NIC** via **UDX/DDI** (`rtl8168_udx` …) **OPEN** until userspace host binds `10ec:8168` and owns wire (lab IP / stack / sshd). **Not** freestanding MSC / freestanding rtl R-climb / in-kernel `.ko` wire. Soft ≠ product · **G-AC-1** · dual **MIT OR Apache-2.0**.
+**Dual DoD (normative: [TODO.md](TODO.md) § Current track):** **A** Linux-shaped **USB** via **UDX/DDI** (`xhci_udx` …) **OPEN** (RS-off; never `USBCMD.RS=1`). **B** Linux-shaped **NIC** via **UDX/DDI** (`rtl8168_udx` …) **OPEN** until sshd **:22**. Laptop **ARP + ping proven** on lab **10.200.125.50**. **Not** freestanding MSC / freestanding rtl / in-kernel `.ko` wire. Soft ≠ product · **G-AC-1** · dual **MIT OR Apache-2.0**.
 
-**Progress note (Soft≠product):** **MEM_PLACE** Option A soft residual landed · **PURE_C_CONCURRENCY** house rules codified · Dual DoD **A/B still OPEN** · NIC product residual dig **in flight** (not freestanding climb; not Dual DoD close).
+**Progress note (Soft≠product):** Fly **v0.1.136** — VT-d context **TT=multi_level** + identity SLPT + firmware TES disarm unblocked NIC DMA (glass 0.1.122 class was Own-all + FOVW + cookie `deadbeef`). Operator reports **arping and ping return**. Dual DoD **B** not closed (sshd). Dual DoD **A** not closed (no BOT).
 
 ### Image identity
 
 | Item | Fact |
 |------|------|
-| **STATUS title / flash bar** | **STATUS (static) v2026.08.04.93** (fly this cut) |
-| **Prior soft-land stamp** | **v2026.08.04.16** (soft SKIP exec all `.ko` / `freestanding_no_exec`) — eng residual notes below |
+| **STATUS title / flash bar** | **STATUS (static) v0.1.136** (fly this cut) |
+| **Prior soft-land stamp** | **v0.1.98** page-align · **v0.1.97** ROK clflush · earlier soft SKIP exec — eng residual notes below |
 | **Macro** | `GJ_IMAGE_VERSION` in `kernel/include/gj/config.h` (override at build if needed) |
 | **Serial** | `main: image version=…` |
 | **Operator use** | Confirm DUT flash matches the expected cut before claiming lamps or DoD progress |
-| **Next stamp** | **No invent next N** — bump only on real flashable cut |
+| **Next stamp** | **0.2.0** reserved for Dual DoD **B** close (sshd **:22**); bump 0.1.N only on real flashable cuts |
 
 ### DUT STATUS (fly this cut — aligns [TODO.md](TODO.md) Current track)
 
 | Item | DUT / fly status |
 |------|------------------|
-| **Flash bar** | **STATUS (static) v2026.08.04.93** |
+| **Flash bar** | **STATUS (static) v0.1.136** |
 | **Soft ≠ product** | Soft lamps ≠ product close |
 | **G-AC-1** | No Linux `.ko` in-kernel as product |
 | **Freestanding rtl** | **SKIP** (`GJ_RTL8168_PROBE=0`) — not Dual DoD **B** |
 | **Freestanding USB** | **SKIP** (`GJ_XHCI_MSC_PROBE=0`) — not Dual DoD **A** |
 | **Soft `.ko` init** | **SKIP exec** all staged `.ko` (`freestanding_no_exec`) |
 | **Dual DoD A** | **UDX product OPEN** (`xhci_udx` + DDI) |
-| **Dual DoD B** | **UDX product OPEN** (`rtl8168_udx` + DDI; wire / stack / sshd) |
-| **T0 product net** | **virtio-net** until UDX owns laptop wire |
+| **Dual DoD B** | **UDX product OPEN** until sshd **:22** — laptop **ARP + ping proven** |
+| **T0 product net** | **virtio-net** on QEMU; laptop wire is **UDX** |
 | **Bar3** | [STEAM_BAR3_STATUS.md](STEAM_BAR3_STATUS.md) only (**OPEN**) |
 
-### Stamp **v2026.08.04.16** (prior soft-land cut; fly flash bar **v2026.08.04.93**)
+### Stamp **v2026.08.04.16** (prior soft-land cut; fly flash bar **v0.1.97**)
 
 | Item | Fact |
 |------|------|
@@ -107,7 +107,7 @@
 | Item | Fact |
 |------|------|
 | **Earlier HW** | Freestanding **ICMP** + hybrid 4a eng (historical; freestanding demoted from product track) |
-| **Current track** | Flash bar **v2026.08.04.93**; Dual DoD **A/B** = **UDX OPEN**; freestanding class **SKIP**; soft **SKIP exec** all **`.ko`** (`freestanding_no_exec`); MEM_PLACE Option A soft + PURE_C house rules; NIC residual dig in flight |
+| **Current track** | Flash bar **v0.1.97**; Dual DoD **A/B** = **UDX OPEN**; freestanding class **SKIP**; soft **SKIP exec** all **`.ko`** (`freestanding_no_exec`); MEM_PLACE Option A soft + PURE_C house rules; NIC residual dig in flight |
 | **Prior soft** | REAL+SOFT1 stable when REAL gated; ksym N=289→295 — eng residual only |
 | **Not proven / not product** | Full `.ko` wire (4b); freestanding rtl/USB as product; UDX product TX/RX · BOT; sshd **:22** on laptop via UDX; soft listen ≠ product; soft **SKIP exec** `.ko` ≠ product driver path |
 | **Next** | Dual DoD **A** `xhci_udx` + **B** `rtl8168_udx` over hot+cold ABI / DDI caps — **not** freestanding R-climb / 4b thrash |

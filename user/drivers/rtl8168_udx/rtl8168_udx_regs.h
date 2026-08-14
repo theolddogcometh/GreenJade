@@ -241,7 +241,8 @@
 #define RTL_PHYAR_REG_MASK     0x001f0000u /* public RegAddr 4-0 */
 #define RTL_PHYAR_FLAG         0x80000000u /* public Flag bit 31 */
 
-/* C+CR / CPlusCmd soft bits (public C+CR Table 19; soft never programs). */
+/* C+CR / CPlusCmd soft bits (public C+CR Table 19). */
+#define RTL_CPLUS_PCIMULRW     0x0008u /* public PCIMulRW — multi beat PCI DMA */
 #define RTL_CPLUS_RXCHKSUM     0x0020u /* public RxChkSum */
 #define RTL_CPLUS_RXVLAN       0x0040u /* public RxVLAN */
 
@@ -360,13 +361,15 @@
 
 /*
  * Product RX buffer geometry (public Buffer_Size honesty).
- * FORCE32 per-slot pages are 4 KiB; Buffer_Size in Own opts1 must match
- * usable DMA span (multiple of 8, ≤ RTL_DESC_RX_BUF_MAX). Glass FOVW with
- * opts0=0x80000800 (2 KiB advertise vs 4 KiB page) → use page-sized buf.
+ * FORCE32 per-slot pages are 4 KiB page-aligned (udx fs_dma slab).
+ * Buffer_Size in Own opts1 must be multiple of 8, ≤ RTL_DESC_RX_BUF_MAX,
+ * and ≤ page. Glass v0.1.99: page_align PASS but Own still stuck + FOVW
+ * with Buffer_Size=4KiB; use standard eth span 1536 (0x600) — public
+ * regular-frame size; page remains 4 KiB DMA alloc.
  * Soft!=product Dual DoD B OPEN.
  */
 #define RTL_SOFT_RX_PAGE_BYTES 4096u
-#define RTL_SOFT_RX_BUF_BYTES  RTL_SOFT_RX_PAGE_BYTES
+#define RTL_SOFT_RX_BUF_BYTES  0x0600u /* 1536 — eth+FCS headroom; ×8 */
 
 /*
  * Public IEEE/GMII MDIO register addresses (datasheet Table 22 PHY
@@ -387,7 +390,7 @@
 #define RTL_MDIO_GBSR          0x0Au /* public GBSR 1000Base-T Status */
 #define RTL_MDIO_GBESR         0x0Fu /* public GBESR 1000Base-T Extended Status */
 
-/* Public BMCR soft bits (Table 23; soft never PHYAR — names only). */
+/* Public BMCR bits (Table 23). Soft residual catalogs only; product path may PHYAR. */
 #define RTL_BMCR_RESET         0x8000u /* public Reset */
 #define RTL_BMCR_LOOPBACK      0x4000u /* public Loopback */
 #define RTL_BMCR_ANE           0x1000u /* public ANE Auto-Negotiation Enable */
@@ -395,6 +398,18 @@
 #define RTL_BMCR_ISOLATE       0x0400u /* public Isolate */
 #define RTL_BMCR_RESTART_AN    0x0200u /* public Restart_AN */
 #define RTL_BMCR_DUPLEX        0x0100u /* public Duplex */
+
+/* Public BMSR bits (Table 24 spirit). */
+#define RTL_BMSR_LINK          0x0004u /* public Link Status (latched) */
+#define RTL_BMSR_ANEG_COMPLETE 0x0020u /* public Auto-Negotiation Complete */
+
+/*
+ * Public GBCR 1000Base-T Control (IEEE 802.3 / Table 22 spirit).
+ * Windows control on same cable/switch proves partner can link; advertise
+ * 1000Full so G752-class copper is not stuck half-advertised. Soft!=product.
+ */
+#define RTL_GBCR_1000FULL      0x0200u /* public 1000BASE-T Full Duplex */
+#define RTL_GBCR_1000HALF      0x0100u /* public 1000BASE-T Half Duplex */
 
 /*
  * Soft probe progress stages (lamps only; never product TX/RX):

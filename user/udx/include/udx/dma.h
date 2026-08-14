@@ -443,6 +443,37 @@ udx_dma_bdf(u8 u8Bus, u8 u8Slot, u8 u8Func)
            ((u32)u8Func & 0x7u);
 }
 
+/**
+ * Bus3/TE densify (PLATFORM_INFO op7) for rtl8168_udx Own-stuck under TE.
+ * Re-runs kernel bus3 identity residual; returns packed status:
+ *   bit0 te_armed bit1 te_hw bit2 vtd_ready bit3 bus3_ok bit4 id1g
+ * Negative on residual fail / ENOSYS. Soft!=product Dual DoD B OPEN.
+ * greppable: udx: soft residual bus3_te
+ */
+long udx_dma_bus3_te_densify(void);
+
+/** Kernel wbinvd via PLATFORM_INFO op8 (not ring3). Soft!=product. */
+long udx_dma_wbinvd(void);
+
+/** TE disarm dig via PLATFORM_INFO op9. Soft!=product Dual DoD B. */
+long udx_dma_te_disarm(void);
+
+/**
+ * Kernel read u32 at bus physical address (PLATFORM_INFO op10).
+ * Dual DoD B dig: CPU volatile vs DRAM at programmed PA (Own/cookie).
+ * Returns zero-extended u32 as non-negative long, or negative errno.
+ * Soft!=product.
+ * greppable: udx: soft residual phys_read32
+ */
+long udx_dma_phys_read32(udx_dma_addr_t dmaPa);
+
+/**
+ * Pin short STATUS hold line (PLATFORM_INFO op11) for glass densify.
+ * Prefer line 14 (dual DoD B residual). Soft!=product.
+ * greppable: udx: soft residual panel_hold
+ */
+long udx_dma_panel_hold(u32 u32Line, const char *szText);
+
 /* ---- force32 geometric notes (Soft!=product; no live VT-d) ------------- */
 
 /**

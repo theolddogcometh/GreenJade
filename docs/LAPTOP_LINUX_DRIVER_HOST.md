@@ -130,7 +130,7 @@ Porter contract: [UDX_LINUX_PORTER.md](UDX_LINUX_PORTER.md). Soft DDI surface: [
 | **Real PCI scan** | `kernel/drv/devmgr_soft.c` | CF8/CFC walk; `devmgr: soft pci scan PASS n=N`; `devmgr: soft found 10ec:8168` / `8086:a12f` when present |
 | **UDX bind** | `user/udx/src/host.c` | `udx_host_bind_by_id` / `bind_scan` → same SCAN/GET/OPEN/MAP_BAR opcodes as kernel |
 | **User MMIO** | `vmm_map_user_device` in `kernel/mm/vmm.c` | MAP_BAR prefers process user-AS UC map; falls back to kernel UC for same-AS smoke |
-| **rtl8168_udx** | `user/drivers/rtl8168_udx/` | Clean-room skeleton — soft probe / ISR / work; **Dual DoD B OPEN** (no product TX/RX yet) |
+| **rtl8168_udx** | `user/drivers/rtl8168_udx/` | Product residual host — laptop **ARP + ping proven** (2026-08-14); Dual DoD **B OPEN** until sshd **:22** |
 | **xhci_udx** | `user/drivers/xhci_udx/` | Clean-room skeleton — soft cap/params/PORTSC + **soft BOT progress stub**; **Dual DoD A OPEN** (no product BOT/MSC) |
 
 ### 2.2 Explicitly still **OPEN** (do not claim)
@@ -138,8 +138,8 @@ Porter contract: [UDX_LINUX_PORTER.md](UDX_LINUX_PORTER.md). Soft DDI surface: [
 | Bar | Status |
 |-----|--------|
 | Dual DoD **A** — **UDX USB** datapath / BOT / MSC on `8086:a12f` | **OPEN** |
-| Dual DoD **B** — **UDX NIC** TX/RX / wire ownership on `10ec:8168` | **OPEN** |
-| Product NIC **TX/RX** datapath / link / PHY (userspace UDX) | **OPEN** |
+| Dual DoD **B** — **UDX NIC** stack + sshd **:22** on `10ec:8168` | **OPEN** (L3 ARP/ping **proven**) |
+| Product NIC **TX/RX** datapath / link / PHY (userspace UDX) | **L3 ARP/ping proven** (2026-08-14); sshd still OPEN |
 | Product xHCI **BOT / MSC / HID** (userspace UDX) | **OPEN** |
 | **Live IRQ** path (kernel notify → userspace host ISR product) | **OPEN** (host-sim / soft fire only) |
 | Live DDI **cap mint** (MMIO_FRAME / IRQ Notification / DMA window into host CNode) | **OPEN** |
@@ -345,10 +345,10 @@ make -C user/drivers/xhci_udx && ./user/drivers/xhci_udx/build/xhci_udx
 
 | Claim | Status |
 |-------|--------|
-| **T0 product net** | **virtio-net** (QEMU / CI). Remains virtio until a **UDX NIC product** path with real DDI grants **and** TX/RX. |
-| **Dual DoD B (UDX NIC)** | **OPEN** — `rtl8168_udx` userspace bind + wire ownership. Soft probe ≠ close. |
+| **T0 product net** | **virtio-net** (QEMU / CI). Laptop wire is **UDX** (`rtl8168_udx`). |
+| **Dual DoD B (UDX NIC)** | **OPEN** until sshd **:22**. Laptop **ARP + ping proven** (2026-08-14). Soft probe ≠ close. |
 | **Dual DoD A (UDX USB)** | **OPEN** — `xhci_udx` userspace bind + USB datapath. Soft bot stub ≠ close. |
-| **G752 wired NIC** | Hardware **`10ec:8168`**. Soft `rtl8168_udx` probe / residual freestanding `rtl8168` ≠ product LAN. **Product TX/RX OPEN.** **Product NIC ≠ freestanding · ≠ in-kernel `r8169.ko`.** |
+| **G752 wired NIC** | Hardware **`10ec:8168`**. Product path = `rtl8168_udx`. **L3 ARP + ping proven.** sshd **:22 OPEN**. **Product NIC ≠ freestanding · ≠ in-kernel `r8169.ko`.** |
 | **G752 xHCI** | Hardware **`8086:a12f`**. Soft `xhci_udx` cap read / residual freestanding `xhci_msc` ≠ product USB. **Product BOT/MSC OPEN.** |
 | **Live IRQ to UDX host** | **OPEN** — host `fire_irq` / soft ISR only; kernel notify product not closed. |
 | **Freestanding `rtl8168` / `xhci_msc` kernel** | **SKIP default** — residual opt-in only. **Not** Dual DoD close. **Stop freestanding rtl rabbit hole.** |
@@ -364,12 +364,12 @@ GreenJade hwtest stick →  wave D soft host path + staged linux-drivers/ (eng)
 Module path (track B)  →  collect → stage → loader/ksym → eng only (not product AC)
 Product path           →  hot+cold Linux ABI + UDX/DDI userspace hosts
 Dual DoD A             →  UDX USB  OPEN
-Dual DoD B             →  UDX NIC  OPEN
-Product T0             →  virtio apps on QEMU
+Dual DoD B             →  UDX NIC  OPEN until :22 (ARP/ping proven)
+Product T0             →  virtio apps on QEMU; laptop wire = UDX
 Product real-HW        →  DDI caps + dual-license UDX userspace
 Freestanding class     →  SKIP default (not Dual DoD)
 bar3                   →  OPEN until client + matrix evidence
-Flash bar              →  STATUS (static) v2026.08.04.73 
+Flash bar              →  STATUS (static) v0.1.136 
 ```
 
 ---

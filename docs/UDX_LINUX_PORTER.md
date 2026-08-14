@@ -245,7 +245,7 @@ Flash bar honesty for operator media: panel **`STATUS (static) v2026.08.04.73`**
 | **Full GJ grants (PCI/IRQ/DMA)** | **Open** — see 12 Host vs Full GJ |
 | **Product multi-server confine** | **Open** — UDX soft path does **not** close multi-server confine product |
 | **Dual DoD A (UDX USB)** | **OPEN** |
-| **Dual DoD B (UDX NIC)** | **OPEN** |
+| **Dual DoD B (UDX NIC)** | **OPEN** until sshd **:22** — laptop ARP/ping **proven** (2026-08-14) |
 | **Freestanding rtl / freestanding USB** | **SKIP default** — residual opt-in only; **not** Dual DoD close |
 | **Product lamps (TX/RX · BOT · live IRQ)** | Remain **0** / **OPEN** by design until evidence |
 | **bar3 / Steam client** | **Out of scope** for this doc — no claim; **bar3 remains OPEN** |

@@ -881,9 +881,8 @@ net_l2_soft_gate0_honesty_denser(int nProbeMode)
  * IPv4 10.200.125.50 and lab soft demux MAC LAB_MAC_UDX=02:00:00:47:4a:50 so
  * net_eth ARP/ICMP match and replies enqueue for ETH_TX_PULL. Soft demux MAC
  * aligns with rtl8168_udx product idr lab_fallback (same 6 bytes; Soft!=product).
- * Not g_aVirtMac (QEMU 52:54:…) — virt residual would desync ARP SHA vs product
- * IDR lab LAA. OPEN: product idr keep=1 (EEPROM) still uses lab LAA here until
- * station MAC can publish into net_l2. Soft!=product Dual DoD B OPEN.
+ * Not g_aVirtMac. Prefer net_l2_set_station_mac after product IDR keep=1.
+ * Soft!=product Dual DoD B OPEN.
  * greppable: net_l2: soft udx ready
  * greppable: LAB_MAC_UDX=02:00:00:47:4a:50
  */
@@ -902,10 +901,9 @@ net_l2_udx_ready_identity(void)
     /* Lab IPv4 pin (never leave 0.0.0.0 / QEMU SLIRP under UDX ready). */
     memcpy(g_aIp, g_aRtlIp, 4);
     /*
-     * Soft demux MAC residual: freestanding has no station under SKIP.
-     * Fill zero only — lab LAA matches product IDR lab_fallback.
-     * Soft!=product; Soft demux MAC aligns with rtl8168_udx product idr
-     * lab_fallback Soft!=product.
+     * Soft demux MAC: fill zero only. Station MAC from product IDR may
+     * already be published via net_l2_set_station_mac (keep=1 EEPROM).
+     * Soft!=product Dual DoD B OPEN.
      */
     fMacZero = 1;
     for (i = 0; i < 6u; i++) {
@@ -927,14 +925,18 @@ net_l2_udx_ready_identity(void)
                     "owner=product_udx_abi path=rtl8168_udx "
                     "lab_ip=10.200.125.50 "
                     "mac=%02x:%02x:%02x:%02x:%02x:%02x "
-                    "lab_mac_udx=1 "
+                    "lab_mac_udx=%u station_or_lab=1 "
                     "ip=%u.%u.%u.%u dual_dod_b=OPEN_UDX "
                     "freestanding_rtl=SKIP Soft!=product G-AC-1 "
-                    "(identity pin; Soft demux MAC aligns with "
-                    "rtl8168_udx product idr lab_fallback Soft!=product; "
-                    "OPEN keep=1 EEPROM station not published to net_l2)\n",
+                    "(identity pin; prefer set_station_mac after IDR keep)\n",
                     g_aMac[0], g_aMac[1], g_aMac[2], g_aMac[3], g_aMac[4],
-                    g_aMac[5], g_aIp[0], g_aIp[1], g_aIp[2], g_aIp[3]);
+                    g_aMac[5],
+                    (g_aMac[0] == 0x02u && g_aMac[1] == 0x00u &&
+                     g_aMac[2] == 0x00u && g_aMac[3] == 0x47u &&
+                     g_aMac[4] == 0x4au && g_aMac[5] == 0x50u)
+                        ? 1u
+                        : 0u,
+                    g_aIp[0], g_aIp[1], g_aIp[2], g_aIp[3]);
         }
     }
 }
@@ -1647,6 +1649,55 @@ net_l2_mac(u8 *pMac)
     }
     for (i = 0; i < 6u; i++) {
         pMac[i] = g_aMac[i];
+    }
+}
+
+/*
+ * Publish product NIC station MAC (rtl8168_udx IDR keep=1) into soft demux.
+ * Glass .94: EEPROM D5:69:… vs lab LAA desyncs ARP SHA. Soft!=product.
+ * greppable: net_l2: soft station mac
+ */
+void
+net_l2_set_station_mac(const u8 *pMac6)
+{
+    u32 i;
+    u32 fZero;
+
+    if (pMac6 == NULL) {
+        return;
+    }
+    /* Prefer station even when freestanding backend present (UDX residual). */
+    fZero = 1u;
+    for (i = 0; i < 6u; i++) {
+        if (pMac6[i] != 0u) {
+            fZero = 0u;
+            break;
+        }
+    }
+    if (fZero != 0u) {
+        return;
+    }
+    for (i = 0; i < 6u; i++) {
+        g_aMac[i] = pMac6[i];
+    }
+    if (g_u32Backend == GJ_NET_L2_NONE) {
+        memcpy(g_aIp, g_aRtlIp, 4);
+    }
+    {
+        static u8 s_fStationMacLamp;
+
+        if (s_fStationMacLamp == 0u) {
+            s_fStationMacLamp = 1u;
+            kprintf("net_l2: soft station mac "
+                    "mac=%02x:%02x:%02x:%02x:%02x:%02x "
+                    "lab_ip=%u.%u.%u.%u backend=%u "
+                    "path=rtl8168_udx dual_dod_b=OPEN "
+                    "Soft!=product G-AC-1 "
+                    "(product IDR station published for ARP SHA)\n",
+                    g_aMac[0], g_aMac[1], g_aMac[2], g_aMac[3], g_aMac[4],
+                    g_aMac[5], g_aIp[0], g_aIp[1], g_aIp[2], g_aIp[3],
+                    (unsigned)g_u32Backend);
+        }
     }
 }
 

@@ -7,7 +7,7 @@ UDP-echo smoke. Middle of Dual DoD **B** chain:
 rtl8168_udx (UDX NIC residual) → netstackd (this) → sshd :22
 ```
 
-**Soft!=product.** Dual DoD B **OPEN** until glass L3 (arping / ssh on lab wire).
+**Soft!=product.** Dual DoD B **L3 ARP + ping proven** (2026-08-14) on lab **10.200.125.50**. Dual DoD B stays **OPEN** until host sshd **:22**.
 
 ## License
 

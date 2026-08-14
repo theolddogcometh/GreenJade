@@ -27,9 +27,13 @@
  * path (7-12) + dual-DoD holds + NET/R residual spare.
  *
  * Hold index map (boot / panel path - see main.c / net_eth / xhci / linux_netdev_soft):
- *   0  headline (bright) / FAULT
+ *   0  headline (bright) / FAULT  — do not clobber title via hold0 after boot
  *   1  phase
- *   2  phase / soft note
+ *   2  kernel TE/identity persist (after iommu_vtd_te_arm ~main TE path PASS)
+ *      e.g. TE mode=hw tes=1 tt=ML slpt=1 rdy bus3 id1g
+ *      once-pin only; te_disarm once-updates same row (not UDX hold14)
+ *      early boot: "phase: PCI / IOMMU / xHCI" until TE bring-up
+ *      user-kill trap overwrites hold2 with rip/thr/tag (FAULT photo)
  *   3  USB MSC detail
  *   4  USB MSC ready/fail
  *   5  timer / M0
@@ -44,18 +48,20 @@
  *  12  mod xhci_pci ... | SKIP builtin  (freestanding SKIP lamp; Soft!=product; dim)
  *  13  USB / usb_storage lamp (dual DoD A residual; Soft!=product; never product PASS)
  *      e.g. USB linux OPEN builtin | usb_storage need=usbcore | LOAD ok | probe a12f
- *  14  L2 br / freestanding R mirror (dual DoD B residual mirror; Soft!=product)
- *      e.g. l2 br rx=N tx=M  - climb != product TX/RX; never Dual DoD B close
- *  15  spare (HYBRID wire=...) · on FAULT pin (when row visible): last NET t/f/b/r
+ *  14  L2 br / freestanding R mirror + live UDX product pins (do not clobber)
+ *      e.g. l2 br rx=N tx=M · UDX te_disarm fovw|wire · UDX mac / mdio
+ *      kernel TE snapshot lives on hold2 — never steal UDX hold14
+ *  15  live UDX product pins / HYBRID wire=... · FAULT: last NET t/f/b/r
  *
  * Dual DoD honesty lean (product=UDX; Soft!=product; G-AC-1):
  *   Product Dual DoD A = Linux-shaped USB via UDX/DDI  - OPEN until DUT proof
  *   Product Dual DoD B = Linux-shaped NIC via UDX/DDI  - OPEN until DUT proof
  *   Soft/freestanding STATUS lamps never close Dual DoD A/B (not freestanding stage).
  * Grep dual DoD residual lamps (honesty only; never product PASS):
+ *   dual DoD hold2  - kernel TE/identity persist (mode tes tt slpt bus3 id1g)
  *   dual DoD hold6  - net refresh (t/f/b/r / :22); freestanding diagnose != B close
  *   dual DoD hold13 - USB/usb_storage soft path; LOAD/OPEN != stick datapath PASS
- *   dual DoD hold14 - soft L2 bridge + freestanding R mirror; rx/tx != product wire
+ *   dual DoD hold14 - soft L2 bridge + freestanding R mirror / UDX te_disarm pins
  * Freestanding SKIP honesty lamps (dim paint; Soft!=product):
  *   hold8  mod r8169 SKIP...  - freestanding NIC class residual (GJ_RTL8168_PROBE=0)
  *   hold12 mod xhci_pci SKIP... - freestanding USB class residual (not xhci_udx close)
@@ -80,6 +86,7 @@
  * Grep: g_fFaultHold | FAULT PINNED | KERNEL FAULT | dual DoD B R0 | NET residual
  * Grep: STATUS (static) v | GJ_IMAGE_VERSION | product=UDX | Soft!=product
  * Grep: freestanding SKIP | dual_dod_a=OPEN_UDX | dual_dod_b=OPEN_UDX
+ * Grep: iommu: vtd TE hold2 | TE mode=
  */
 #define FB_HOLD_LINES 16u
 

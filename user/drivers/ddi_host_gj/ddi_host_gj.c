@@ -147,18 +147,15 @@
 #define DDI_HOST_SCAN_MAX   32u
 
 /*
- * Soft ops not yet wrapped in libgj (match kernel ddi_door.h DDI_OP_*).
- * Use raw gj_ddi() so residual can exercise IRQ_BIND / CLOSE / DMA_BUF
- * without libgj churn. Soft residual only; may return NOSUPPORT — honesty.
- * CFG_WRITE uses GJ_DDI_OP_CFG_WRITE (16) via gj_ddi_cfg_write when present.
+ * Soft DDI ops — libgj GJ_DDI_OP_* (match kernel ddi_door.h).
+ * Soft!=product; Dual DoD A/B OPEN (named residual != close).
  */
-#define DDI_HOST_OP_CLOSE          8u
-#define DDI_HOST_OP_IRQ_BIND       9u
-#define DDI_HOST_OP_DMA_BUF_ALLOC 10u
-#define DDI_HOST_OP_DMA_BUF_FREE  11u
-#define DDI_HOST_OP_DMA_BUF_MAP   12u
-/* Opcode 16 — careful soft only (match DDI_OP_CFG_WRITE / GJ_DDI_OP_CFG_WRITE). */
-#define DDI_HOST_OP_CFG_WRITE     16u
+#define DDI_HOST_OP_CLOSE          GJ_DDI_OP_CLOSE
+#define DDI_HOST_OP_IRQ_BIND       GJ_DDI_OP_IRQ_BIND
+#define DDI_HOST_OP_DMA_BUF_ALLOC  GJ_DDI_OP_DMA_BUF_ALLOC
+#define DDI_HOST_OP_DMA_BUF_FREE   GJ_DDI_OP_DMA_BUF_FREE
+#define DDI_HOST_OP_DMA_BUF_MAP    GJ_DDI_OP_DMA_BUF_MAP
+#define DDI_HOST_OP_CFG_WRITE      GJ_DDI_OP_CFG_WRITE
 
 /* Soft MSI-X badge default (kernel GJ_MSIX_BADGE_SOFT when badge=0). */
 #define DDI_HOST_IRQ_BADGE_SOFT  1ull

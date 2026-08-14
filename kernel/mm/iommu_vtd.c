@@ -65,6 +65,7 @@
  * Dual MIT OR Apache-2.0. No GPL.
  */
 #include <gj/config.h>
+#include <gj/fb_console.h>
 #include <gj/iommu.h>
 #include <gj/klog.h>
 #include <gj/pmm.h>
@@ -82,9 +83,29 @@
 /* Context entry: present + translation type + SLPT ptr */
 #define VTD_CTX_P     (1ull << 0)
 #define VTD_CTX_TT_ML (0ull << 2) /* multi-level translate */
+#define VTD_CTX_TT_PT (2ull << 2) /* pass-through (DMA uses host PA) */
+#define VTD_CTX_TT_MASK (3ull << 2)
+#define VTD_CTX_SLPT_MASK (~0xfffull) /* bits 63:12 second-level ptr */
 /* Context hi: AW in [2:0], DID in [23:8] (public VT-d context-entry) */
-#define VTD_CTX_AW_48  2ull
+#define VTD_CTX_AW_39  1ull /* 3-level / 39-bit — matches our PDPT→PD SLPT */
+#define VTD_CTX_AW_48  2ull /* 4-level / 48-bit — needs PML4 (we do not build) */
 #define VTD_CTX_DID_SHIFT 8u
+/*
+ * Glass Dual DoD B Own-stuck under TE (v0.1.100–.122):
+ * page_align=1 LINKOK=1 BM=1 FOVW ROK=0 inject=0 cookie=deadbeef.
+ * PT dig (TT=pass_through) + soft iommu_grant(rds_pa) did not clear Own:
+ *  (1) multi-level contexts never wired SLPTPTR → identity walk empty
+ *  (2) program_hw lacked context/IOTLB invalidate after SRTP
+ *  (3) soft-arm left firmware GSTS.TES live under foreign root
+ *  (4) te_disarm only cleared HW when mode==HW (soft → no GCMD write)
+ * Product bring-up: TT=multi_level + SLPT identity [0,1GiB) + DID0 + AW=39.
+ * Soft!=product. Dual DoD B OPEN.
+ * greppable: iommu: vtd ctx TT=multi_level
+ * greppable: iommu: vtd ctx AW=39
+ * greppable: iommu: vtd inv
+ * greppable: iommu: vtd TE firmware
+ * greppable: iommu: vtd TE hold2
+ */
 
 /* Bring-up identity SLPT covers [0, 1 GiB). */
 #define VTD_IDENTITY_LIMIT (1024ull * 1024ull * 1024ull)
@@ -101,11 +122,26 @@
 #define VTD_REG_GCMD   0x18u
 #define VTD_REG_GSTS   0x1cu
 #define VTD_REG_RTADDR 0x20u
+#define VTD_REG_CCMD   0x28u /* context-command (register-based inv) */
 
 #define VTD_GCMD_TE   (1u << 31)
 #define VTD_GCMD_SRTP (1u << 30)
 #define VTD_GSTS_TES  (1u << 31) /* Translation Enable Status */
 #define VTD_GSTS_RTPS (1u << 30)
+
+/* Context-cache invalidate (CCMD): ICC + CIRG=global (01b @62:61) */
+#define VTD_CCMD_ICC          (1ull << 63)
+#define VTD_CCMD_CIRG_GLOBAL  (1ull << 61)
+/* IOTLB invalidate: IVT + IIRG=global (01b @61:60) + drain r/w */
+#define VTD_IOTLB_IVT         (1ull << 63)
+#define VTD_IOTLB_IIRG_GLOBAL (1ull << 60)
+#define VTD_IOTLB_DR          (1ull << 49)
+#define VTD_IOTLB_DW          (1ull << 48)
+/* ECAP: QI bit1; IRO bits 15:8 (IOTLB reg offset in 16-byte units) */
+#define VTD_ECAP_QI           (1ull << 1)
+#define VTD_ECAP_PT           (1ull << 6)
+#define VTD_ECAP_IRO_SHIFT    8u
+#define VTD_ECAP_IRO_MASK     0xffull
 
 /*
  * G752VT freestanding NIC (10ec:8168) BDF - bus 3, not bus 0.
@@ -180,6 +216,14 @@ static u64        g_u64Drhd;
 static int        g_fVtdReady;
 static int        g_fTeArmed;
 static int        g_nTeMode; /* GJ_IOMMU_TE_* */
+/*
+ * Once-only STATUS hold2 TE/identity lamp (G752 no-COM1 glass).
+ * Arm pin after first te_arm success; disarm pin once if TES actually
+ * cleared. Never hold0/6/13/14/15. Soft!=product dual_dod_b=OPEN.
+ * Grep: g_fTeHoldArmOnce | iommu: vtd TE hold2
+ */
+static u8         g_fTeHoldArmOnce;
+static u8         g_fTeHoldDisarmOnce;
 static u32        g_u32VtdPages;
 static u32        g_u32CtxDevices;
 
@@ -275,6 +319,7 @@ _Static_assert(VTD_UDX_DENSE_MIN == VTD_UDX_DENSE_ARMS,
 static void vtd_soft_inventory_log(void);
 static void vtd_soft_note_att_peak(void);
 static void vtd_domain_pool_init(void);
+static void vtd_te_status_hold_once(int fDisarm);
 static int  vtd_soft_bdf_identity_ready(u8 bus, u8 slot, u8 func);
 static int  vtd_soft_identity_map_ok(void);
 static int  vtd_soft_eng_busmaster_ok(int fBareCheck, int *pNicOk,
@@ -2054,6 +2099,26 @@ vtd_soft_ddi_dma_note_residual(void)
 }
 
 /**
+ * Build one identity context entry: multi-level + SLPTPTR + DID + AW=39.
+ * Glass .100–.122: TT=PT dig without SLPTPTR left Own stuck under HW TE.
+ * Product path wires identity SLPT so force32 DMA in [0,1GiB) translates.
+ * Soft!=product Dual DoD B OPEN.
+ * greppable: iommu: vtd ctx TT=multi_level
+ */
+static void
+vtd_ctx_entry_identity(u64 *pE, u32 u32Did)
+{
+    u64 u64Slpt;
+
+    if (pE == NULL) {
+        return;
+    }
+    u64Slpt = ((u64)g_paPdpt) & VTD_CTX_SLPT_MASK;
+    pE[0] = VTD_CTX_P | VTD_CTX_TT_ML | u64Slpt;
+    pE[1] = VTD_CTX_AW_39 | ((u64)u32Did << VTD_CTX_DID_SHIFT);
+}
+
+/**
  * Write context-entry DID (+AW) when tables ready.
  * Bring-up shares one context table across all root bus entries (identity).
  * Soft path: updates RAM only; no context-cache invalidate (no QI soft).
@@ -2083,11 +2148,12 @@ vtd_ctx_set_did(u8 u8Bus, u8 u8Slot, u8 u8Func, u32 u32Did)
     }
     u32Idx = vtd_ctx_index(u8Slot, u8Func);
     pE = &pCtx[u32Idx * 2u];
-    /* Keep P|TT|SLPT; rewrite hi with AW + DID */
-    if ((pE[0] & VTD_CTX_P) == 0) {
-        pE[0] = (u64)g_paPdpt | VTD_CTX_P | VTD_CTX_TT_ML;
-    }
-    pE[1] = VTD_CTX_AW_48 | ((u64)u32Did << VTD_CTX_DID_SHIFT);
+    /*
+     * Always re-wire multi-level identity SLPT + DID/AW.
+     * Do not leave TT=PT or SLPTPTR=0 (glass Own-stuck under TE).
+     * Soft!=product Dual DoD B OPEN.
+     */
+    vtd_ctx_entry_identity(pE, u32Did);
     return 0;
 }
 
@@ -2343,14 +2409,15 @@ iommu_vtd_init_tables(void)
     /*
      * Context entries for all 256 devfn indices (slot[4:0]<<3 | func[2:0]).
      * Shared identity SLPT; DID=0 soft default. Applies to every bus via root.
+     * Product: TT=multi_level + SLPTPTR=PDPT (identity [0,1GiB)) + AW=39.
+     * Glass PT dig left SLPT unwired → Own stuck under HW TE. Soft!=product.
      */
     g_u32CtxDevices = 0;
     for (u32Dev = 0; u32Dev < VTD_CTX_ENTRIES; u32Dev++) {
         u64 *pE = &pCtx[u32Dev * 2u];
 
-        /* lo: P | TT | SLPT; hi: AW=48-bit, DID=0 */
-        pE[0] = (u64)g_paPdpt | VTD_CTX_P | VTD_CTX_TT_ML;
-        pE[1] = VTD_CTX_AW_48 | (0ull << VTD_CTX_DID_SHIFT);
+        /* greppable: iommu: vtd ctx TT=multi_level */
+        vtd_ctx_entry_identity(pE, 0u);
         g_u32CtxDevices++;
     }
     vtd_domain_pool_init();
@@ -2358,11 +2425,13 @@ iommu_vtd_init_tables(void)
     /*
      * Grep: iommu: vtd root=
      * Grep: root_buses=256 bus3_p= did0_ctx=
-     * All-bus DID0: 256 root P + 256 shared-CT entries with DID=0.
+     * Grep: iommu: vtd ctx TT=multi_level
+     * All-bus root P + shared-CT multi-level identity (G752 NIC under TE).
      */
     kprintf("iommu: vtd root=0x%lx ctx=0x%lx slpt=0x%lx pages=%u ctx_dev=%u "
             "root_buses=%u bus0_p=%d bus3_p=%d ctx_00_p=%d did0_ctx=%u "
-            "(shared identity DID0; covers G752 03:00.0 + 0:14.0)\n",
+            "tt=multi_level aw=39 slptptr=1 "
+            "(identity [0,1GiB) for Own under TE; Soft!=product Dual DoD B)\n",
             (unsigned long)g_paRoot, (unsigned long)g_paContext,
             (unsigned long)g_paPdpt, g_u32VtdPages, g_u32CtxDevices,
             vtd_root_buses_p_count(), vtd_root_bus_p(0),
@@ -2412,7 +2481,119 @@ iommu_vtd_pages(void)
 }
 
 /**
+ * Read GSTS.TES from DRHD when mapped. 1=translation live, 0=off/unknown.
+ * greppable: iommu: vtd TE firmware
+ */
+static int
+vtd_hw_tes_live(volatile u32 *pMmio)
+{
+    if (pMmio == NULL) {
+        return 0;
+    }
+    return ((pMmio[VTD_REG_GSTS / 4u] & VTD_GSTS_TES) != 0u) ? 1 : 0;
+}
+
+/**
+ * Clear GCMD.TE and wait GSTS.TES=0. Returns 1 if TES clear (or no MMIO).
+ * Used to drop firmware TE before SRTP and for te_disarm product honesty.
+ * Soft!=product Dual DoD B OPEN.
+ * greppable: iommu: vtd TE firmware disarm
+ */
+static int
+vtd_hw_te_clear(volatile u32 *pMmio)
+{
+    u32 u32Spins;
+
+    if (pMmio == NULL) {
+        return 0;
+    }
+    if (!vtd_hw_tes_live(pMmio)) {
+        return 1;
+    }
+    /* Write TE=0 to GCMD; wait GSTS.TES clear (public VT-d). */
+    pMmio[VTD_REG_GCMD / 4u] = 0u;
+    for (u32Spins = 0; u32Spins < VTD_GSTS_SPINS; u32Spins++) {
+        if ((pMmio[VTD_REG_GSTS / 4u] & VTD_GSTS_TES) == 0u) {
+            return 1;
+        }
+    }
+    return 0;
+}
+
+/**
+ * Global context-cache + IOTLB invalidate after SRTP (register path).
+ * Required before TE so walks use our root/ctx/SLPT (not stale/firmware).
+ * QI-capable units: register inv may still complete; if stuck, lamp + continue.
+ * Soft!=product Dual DoD B OPEN.
+ * greppable: iommu: vtd inv
+ */
+static void
+vtd_hw_global_invalidate(volatile u32 *pMmio)
+{
+    u32 u32Spins;
+    u64 u64Ecap;
+    u64 u64Ccmd;
+    u64 u64Iotlb;
+    u32 u32Iro;
+    u32 u32IotlbOff;
+    volatile u32 *pIotlb;
+
+    if (pMmio == NULL) {
+        return;
+    }
+    u64Ecap = g_u64Ecap;
+    if (g_fCapFromMmio == 0) {
+        u64Ecap = (u64)pMmio[VTD_REG_ECAP / 4u] |
+                  ((u64)pMmio[(VTD_REG_ECAP + 4u) / 4u] << 32);
+    }
+
+    /* Context-cache global invalidate via CCMD (public). */
+    u64Ccmd = VTD_CCMD_ICC | VTD_CCMD_CIRG_GLOBAL;
+    pMmio[VTD_REG_CCMD / 4u] = (u32)(u64Ccmd & 0xffffffffu);
+    pMmio[(VTD_REG_CCMD + 4u) / 4u] = (u32)(u64Ccmd >> 32);
+    for (u32Spins = 0; u32Spins < VTD_GSTS_SPINS; u32Spins++) {
+        u64 u64Hi = (u64)pMmio[(VTD_REG_CCMD + 4u) / 4u];
+
+        if ((u64Hi & (VTD_CCMD_ICC >> 32)) == 0ull) {
+            break;
+        }
+    }
+    /* greppable: iommu: vtd inv context */
+    kprintf("iommu: vtd inv context %s qi=%d Soft!=product dual_dod_b=OPEN\n",
+            (u32Spins < VTD_GSTS_SPINS) ? "PASS" : "TIMEOUT",
+            ((u64Ecap & VTD_ECAP_QI) != 0ull) ? 1 : 0);
+
+    /* IOTLB global invalidate at ECAP.IRO * 16. */
+    u32Iro = (u32)((u64Ecap >> VTD_ECAP_IRO_SHIFT) & VTD_ECAP_IRO_MASK);
+    if (u32Iro == 0u) {
+        /* greppable: iommu: vtd inv iotlb */
+        kprintf("iommu: vtd inv iotlb SKIP iro=0 Soft!=product\n");
+        return;
+    }
+    u32IotlbOff = u32Iro * 16u;
+    pIotlb = pMmio + (u32IotlbOff / 4u);
+    u64Iotlb = VTD_IOTLB_IVT | VTD_IOTLB_IIRG_GLOBAL | VTD_IOTLB_DR |
+               VTD_IOTLB_DW;
+    pIotlb[0] = (u32)(u64Iotlb & 0xffffffffu);
+    pIotlb[1] = (u32)(u64Iotlb >> 32);
+    for (u32Spins = 0; u32Spins < VTD_GSTS_SPINS; u32Spins++) {
+        if ((pIotlb[1] & (u32)(VTD_IOTLB_IVT >> 32)) == 0u) {
+            break;
+        }
+    }
+    /* greppable: iommu: vtd inv iotlb */
+    kprintf("iommu: vtd inv iotlb %s iro=%u Soft!=product dual_dod_b=OPEN\n",
+            (u32Spins < VTD_GSTS_SPINS) ? "PASS" : "TIMEOUT",
+            (unsigned)u32Iro);
+}
+
+/**
  * Attempt to program RTADDR + GCMD.TE on DRHD when base known.
+ * Product sequence (glass Own-stuck dig):
+ *   1) clear firmware TES if live
+ *   2) RTADDR + SRTP
+ *   3) global context + IOTLB invalidate
+ *   4) TE after bus3/identity preflight
  * Safe no-op if no DRHD (typical QEMU without -device intel-iommu).
  * Returns 1 if MMIO written, 0 if software-only / map fail.
  */
@@ -2423,6 +2604,7 @@ iommu_vtd_program_hw(void)
     u64 u64Rt;
     u32 u32Spins;
     gj_vaddr_t vaDrhd;
+    int fFwTes;
 
     if (!g_fVtdReady || g_u64Drhd == 0 || g_paRoot == 0) {
         return 0;
@@ -2432,11 +2614,29 @@ iommu_vtd_program_hw(void)
         return 0;
     }
     pMmio = (volatile u32 *)vaDrhd;
+
+    /*
+     * Firmware often leaves TES=1 with a foreign root. SRTP while TE is
+     * live is undefined on some units; clear first so our tables install.
+     * greppable: iommu: vtd TE firmware
+     */
+    fFwTes = vtd_hw_tes_live(pMmio);
+    if (fFwTes != 0) {
+        kprintf("iommu: vtd TE firmware TES=1 DRHD=0x%lx "
+                "(clear before SRTP; Soft!=product dual_dod_b=OPEN)\n",
+                (unsigned long)g_u64Drhd);
+        if (!vtd_hw_te_clear(pMmio)) {
+            kprintf("iommu: vtd TE firmware disarm FAIL Soft!=product\n");
+            return 0;
+        }
+        kprintf("iommu: vtd TE firmware disarm PASS Soft!=product\n");
+    }
+
     /* RTADDR at 0x20 (64-bit), GCMD at 0x18 - public VT-d register map */
     u64Rt = (u64)g_paRoot;
     pMmio[VTD_REG_RTADDR / 4u] = (u32)(u64Rt & 0xffffffffu);
     pMmio[(VTD_REG_RTADDR + 4u) / 4u] = (u32)(u64Rt >> 32);
-    /* Set SRTP then TE - only when a real unit is present */
+    /* Set SRTP then invalidate then TE */
     pMmio[VTD_REG_GCMD / 4u] = VTD_GCMD_SRTP;
     for (u32Spins = 0; u32Spins < VTD_GSTS_SPINS; u32Spins++) {
         if ((pMmio[VTD_REG_GSTS / 4u] & VTD_GSTS_RTPS) != 0) {
@@ -2448,6 +2648,8 @@ iommu_vtd_program_hw(void)
                 (unsigned long)g_u64Drhd);
         return 0;
     }
+    /* Walks must see our multi-level identity CT + SLPT, not stale cache. */
+    vtd_hw_global_invalidate(pMmio);
     /*
      * Arm TE only after identity preflight (all 256 root buses + bus3).
      * Without bus3 root P, G752 03:00.0 DMA faults -> freestanding OWN-stuck.
@@ -2471,9 +2673,10 @@ iommu_vtd_program_hw(void)
     g_fTeArmed = 1;
     g_nTeMode = GJ_IOMMU_TE_HW;
     kprintf("iommu: vtd MMIO programmed DRHD=0x%lx RT=0x%lx TES=1 "
-            "bus3_p=%d root_buses=%u\n",
+            "bus3_p=%d root_buses=%u tt=multi_level inv=1 fw_tes_was=%d\n",
             (unsigned long)g_u64Drhd, (unsigned long)u64Rt,
-            vtd_root_bus_p(VTD_G752_NIC_BUS), vtd_root_buses_p_count());
+            vtd_root_bus_p(VTD_G752_NIC_BUS), vtd_root_buses_p_count(),
+            fFwTes);
     return 1;
 }
 
@@ -2496,6 +2699,7 @@ iommu_vtd_te_arm(void)
                 "eng_bm=%d Soft!=product\n",
                 g_nTeMode, vtd_root_bus_p(VTD_G752_NIC_BUS),
                 vtd_root_buses_p_count(), fEngBm);
+        vtd_te_status_hold_once(0);
         return 1;
     }
     if (!g_fVtdReady) {
@@ -2532,10 +2736,11 @@ iommu_vtd_te_arm(void)
             /* Grep: iommu: vtd TE arm HW PASS */
             fEngBm = vtd_soft_eng_busmaster_ok(0, NULL, NULL, NULL);
             kprintf("iommu: vtd TE arm HW PASS bus3_p=%d root_buses=%u "
-                    "eng_bm=%d id_limit=0x%lx "
+                    "eng_bm=%d id_limit=0x%lx tt=multi_level "
                     "(force32 DMA must stay in [0,1GiB))\n",
                     vtd_root_bus_p(VTD_G752_NIC_BUS), vtd_root_buses_p_count(),
                     fEngBm, (unsigned long)VTD_IDENTITY_LIMIT);
+            vtd_te_status_hold_once(0);
             return 1;
         }
         kprintf("iommu: vtd TE arm HW fail -> soft bus3_p=%d\n",
@@ -2544,7 +2749,37 @@ iommu_vtd_te_arm(void)
         kprintf("iommu: vtd TE arm HW skipped preflight FAIL -> soft\n");
     }
 
-    /* Soft TE: tables present; production HW path would set GCMD.TE */
+    /*
+     * Soft TE path: tables present but we did not take over HW.
+     * Product honesty (glass 0.1.122): if DRHD firmware left TES=1 under a
+     * foreign root, soft-arm alone leaves NIC DMA remapped → Own stuck +
+     * FOVW. Clear hardware TE so force32 host PA DMA is untranslated.
+     * greppable: iommu: vtd TE firmware disarm
+     */
+    if (g_u64Drhd != 0) {
+        gj_vaddr_t vaDrhd = vtd_drhd_va();
+        volatile u32 *pMmio;
+        int fLive;
+
+        if (vaDrhd != 0) {
+            pMmio = (volatile u32 *)vaDrhd;
+            fLive = vtd_hw_tes_live(pMmio);
+            if (fLive != 0) {
+                kprintf("iommu: vtd TE firmware TES=1 under soft-arm "
+                        "(disarm for untranslated DMA; Soft!=product "
+                        "dual_dod_b=OPEN)\n");
+                if (vtd_hw_te_clear(pMmio)) {
+                    kprintf("iommu: vtd TE firmware disarm PASS "
+                            "soft_arm=1 Soft!=product dual_dod_b=OPEN\n");
+                } else {
+                    kprintf("iommu: vtd TE firmware disarm FAIL "
+                            "soft_arm=1 residual=Own_stick Soft!=product\n");
+                }
+            }
+        }
+    }
+
+    /* Soft TE: policy armed; HW TES should be off when DRHD present. */
     g_fTeArmed = 1;
     g_nTeMode = GJ_IOMMU_TE_SOFT;
     fEngBm = vtd_soft_eng_busmaster_ok(0, NULL, NULL, NULL);
@@ -2557,6 +2792,7 @@ iommu_vtd_te_arm(void)
     kprintf("iommu: vtd TE soft-arm PASS bus3_cover=%d eng_bm=%d "
             "Soft!=product\n",
             vtd_root_bus_p(VTD_G752_NIC_BUS), fEngBm);
+    vtd_te_status_hold_once(0);
     return 1;
 }
 
@@ -2564,6 +2800,182 @@ int
 iommu_vtd_te_armed(void)
 {
     return g_fTeArmed != 0;
+}
+
+/**
+ * Append NUL-terminated bytes into a STATUS hold buffer (no snprintf).
+ * Stops at qEnd (last writable char). Soft!=product. Hungarian locals.
+ */
+static char *
+vtd_te_hold_put(char *qDst, char *qEnd, const char *szSrc)
+{
+    if (qDst == NULL || qEnd == NULL || szSrc == NULL) {
+        return qDst;
+    }
+    while (*szSrc != '\0' && qDst < qEnd) {
+        *qDst++ = *szSrc++;
+    }
+    return qDst;
+}
+
+/**
+ * Once-pin STATUS hold2 with TE/identity snapshot for G752 glass (no COM1).
+ * One visual row. Decodes bus3_te pack bits (te|hw|ready|bus3|id1g) plus
+ * tes_live / tt=ML / slpt so morning Own-all+FOVW+cookie+ROK=0 is TE/identity
+ * residual, not cache thrash. Does not touch hold0/6/13/14/15.
+ * fDisarm=0: first successful te_arm. fDisarm=1: first TES-clear te_disarm
+ * (same persist row; UDX keeps hold14 "UDX te_disarm fovw|wire").
+ * Soft!=product dual_dod_b=OPEN. No stamp storms.
+ * greppable: iommu: vtd TE hold2
+ * Lamp: TE mode=hw|soft|none tes=0|1 tt=ML| - slpt=0|1 [rdy] [bus3] [id1g]
+ *       [te_disarm]
+ */
+static void
+vtd_te_status_hold_once(int fDisarm)
+{
+    char szHold[FB_HOLD_CHARS];
+    char *qDst;
+    char *qEnd;
+    int nMode;
+    int fTes;
+    int fTtMl;
+    int fSlpt;
+    int fBus3;
+    int fId1g;
+    int fRdy;
+    gj_vaddr_t vaDrhd;
+    volatile u32 *pMmio;
+    u64 *pCtx;
+    u32 u32Idx;
+    u64 u64Lo;
+
+    if (fDisarm != 0) {
+        if (g_fTeHoldDisarmOnce != 0) {
+            return;
+        }
+        g_fTeHoldDisarmOnce = 1;
+    } else {
+        if (g_fTeHoldArmOnce != 0) {
+            return;
+        }
+        g_fTeHoldArmOnce = 1;
+    }
+
+    nMode = iommu_vtd_te_mode();
+    fTes = 0;
+    if (g_u64Drhd != 0) {
+        vaDrhd = vtd_drhd_va();
+        if (vaDrhd != 0) {
+            pMmio = (volatile u32 *)vaDrhd;
+            fTes = vtd_hw_tes_live(pMmio);
+        }
+    }
+    fTtMl = 0;
+    fSlpt = 0;
+    if (g_fVtdReady != 0 && g_paContext != 0) {
+        pCtx = (u64 *)vtd_virt(g_paContext);
+        if (pCtx != NULL) {
+            u32Idx = vtd_ctx_index(VTD_G752_NIC_SLOT, VTD_G752_NIC_FUNC);
+            u64Lo = pCtx[u32Idx * 2u];
+            if ((u64Lo & VTD_CTX_TT_MASK) == VTD_CTX_TT_ML) {
+                fTtMl = 1;
+            }
+            if ((u64Lo & VTD_CTX_P) != 0 &&
+                (u64Lo & VTD_CTX_SLPT_MASK) != 0) {
+                fSlpt = 1;
+            }
+        }
+    }
+    fBus3 = vtd_root_bus_p(VTD_G752_NIC_BUS);
+    fId1g = iommu_vtd_identity_covers(0, VTD_IDENTITY_LIMIT);
+    fRdy = g_fVtdReady;
+
+    qDst = szHold;
+    qEnd = szHold + (FB_HOLD_CHARS - 1u);
+    qDst = vtd_te_hold_put(qDst, qEnd, "TE mode=");
+    if (nMode == GJ_IOMMU_TE_HW) {
+        qDst = vtd_te_hold_put(qDst, qEnd, "hw");
+    } else if (nMode == GJ_IOMMU_TE_SOFT) {
+        qDst = vtd_te_hold_put(qDst, qEnd, "soft");
+    } else {
+        qDst = vtd_te_hold_put(qDst, qEnd, "none");
+    }
+    qDst = vtd_te_hold_put(qDst, qEnd, " tes=");
+    if (qDst < qEnd) {
+        *qDst++ = (fTes != 0) ? '1' : '0';
+    }
+    qDst = vtd_te_hold_put(qDst, qEnd, " tt=");
+    qDst = vtd_te_hold_put(qDst, qEnd, (fTtMl != 0) ? "ML" : "-");
+    qDst = vtd_te_hold_put(qDst, qEnd, " slpt=");
+    if (qDst < qEnd) {
+        *qDst++ = (fSlpt != 0) ? '1' : '0';
+    }
+    if (fRdy != 0) {
+        qDst = vtd_te_hold_put(qDst, qEnd, " rdy");
+    }
+    if (fBus3 != 0) {
+        qDst = vtd_te_hold_put(qDst, qEnd, " bus3");
+    }
+    if (fId1g != 0) {
+        qDst = vtd_te_hold_put(qDst, qEnd, " id1g");
+    }
+    if (fDisarm != 0) {
+        qDst = vtd_te_hold_put(qDst, qEnd, " te_disarm");
+    }
+    if (qDst > qEnd) {
+        qDst = qEnd;
+    }
+    *qDst = '\0';
+
+    /* Persist hold2 — never 0/6/13/14/15. Soft!=product. */
+    fb_console_hold(2u, szHold);
+    /* greppable: iommu: vtd TE hold2 */
+    kprintf("iommu: vtd TE hold2 \"%s\" Soft!=product dual_dod_b=OPEN\n",
+            szHold);
+}
+
+/**
+ * Dual DoD B Own-stuck dig: turn TE off so NIC DMA is not remapped.
+ * Always clears DRHD GSTS.TES when mapped — even if software mode was
+ * SOFT/NONE (firmware TE residual; glass 0.1.122 te_disarm gap).
+ * Soft!=product — lab dig only; not product always-on IOMMU claim.
+ * greppable: iommu: vtd TE disarm
+ * greppable: PLATFORM_INFO op9 te_disarm
+ */
+int
+iommu_vtd_te_disarm(void)
+{
+    volatile u32 *pMmio;
+    gj_vaddr_t vaDrhd;
+    int fHwClear = 1;
+    int fWasLive = 0;
+    int fSoftWas = g_fTeArmed;
+
+    if (g_u64Drhd != 0) {
+        vaDrhd = vtd_drhd_va();
+        if (vaDrhd != 0) {
+            pMmio = (volatile u32 *)vaDrhd;
+            fWasLive = vtd_hw_tes_live(pMmio);
+            if (fWasLive != 0) {
+                fHwClear = vtd_hw_te_clear(pMmio);
+                if (!fHwClear) {
+                    kprintf("iommu: vtd TE disarm TES timeout Soft!=product "
+                            "dual_dod_b=OPEN\n");
+                    return 0;
+                }
+            }
+        }
+    }
+    g_fTeArmed = 0;
+    g_nTeMode = GJ_IOMMU_TE_NONE;
+    /* greppable: iommu: vtd TE disarm */
+    kprintf("iommu: vtd TE disarm PASS hw_tes_was=%d soft_was=%d "
+            "Soft!=product dual_dod_b=OPEN "
+            "(Own dig: NIC DMA without remapping)\n",
+            fWasLive, fSoftWas);
+    /* Same persist hold2 (not UDX hold14). Once only. */
+    vtd_te_status_hold_once(1);
+    return 1;
 }
 
 /**

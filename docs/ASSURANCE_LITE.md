@@ -103,7 +103,7 @@ DO-178C-style plan *roles*, not certification binders.
 | Claim surface | Canonical home | Close criterion |
 |---------------|----------------|-----------------|
 | Dual DoD **A** (USB path) | [TODO.md](TODO.md) · [LINUX_MODULE_PATH.md](LINUX_MODULE_PATH.md) | DUT proof per TODO (not soft-only) |
-| Dual DoD **B** (sshd :22 lab) | [TODO.md](TODO.md) | Host arping + ping **10.200.125.50** + TCP **:22** on stamped image |
+| Dual DoD **B** (sshd :22 lab) | [TODO.md](TODO.md) | Host arping + ping **10.200.125.50** **proven** 2026-08-14; close still needs TCP **:22** on stamped image |
 | Hybrid SOFT gate0 | [R8169_MMIO_HANDOFF.md](R8169_MMIO_HANDOFF.md) | Eng honesty only; Soft≠product |
 | Bar3 / Top 50 | [STEAM_BAR3_STATUS.md](STEAM_BAR3_STATUS.md) | That file only |
 | Product net | ABI pivot · virtio T0 · later UDX | Not freestanding rtl forever |

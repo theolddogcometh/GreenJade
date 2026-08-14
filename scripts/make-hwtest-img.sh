@@ -20,7 +20,7 @@
 #   After pack this script prints: expected panel "STATUS (static) v…"
 #   Soft!=product: stamp confirms which image is flashed — not product PASS.
 #   Stamp residual: pack never bumps GJ_IMAGE_VERSION (reads KERNEL.ELF only).
-#   Fly bar is config.h (current: 2026.08.04.76). Bump only on real flash cuts.
+#   Fly bar is config.h (current: 0.1.97 (semver; 0.2.0 when net works)). Bump only on real flash cuts.
 #
 # Soft residual deepen (C2 scripts residual Soft!=product; G-AC-1;
 # dual MIT OR Apache-2.0; Dual DoD A/B OPEN; stamp-free residual):

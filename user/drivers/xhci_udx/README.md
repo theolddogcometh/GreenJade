@@ -6,8 +6,9 @@
 | **License** | **MIT OR Apache-2.0** - dual; **no GPL**, no Linux xHCI paste |
 | **Match** | PCI `8086:a12f` (G752VT 100 Series / C230 xHCI) · optional class `0x0c0330` |
 | **Runtime** | Links **libudx** (`user/udx/`) - Linux-shaped `probe` / `quiesce` / `remove` |
-| **Dual DoD A** | **OPEN** — userspace USB host residual; BOT/MSC stick **not** closed |
-| **Program** | `never_program=1` / `product_mint=0` until proven real_ddi+gate silicon path |
+| **Dual DoD A** | **OPEN** — RS-off product program; BOT/MSC stick **not** closed |
+| **Fly bar** | Match kernel `GJ_IMAGE_VERSION` (**STATUS (static) v0.1.136**) |
+| **Program** | real_ddi+gate: halt if RS/HCH running, public xECP walk + USBLEGSUP OS handshake (missing → `usblegsup=0` continue; timeout → SKIP), then scratchpad DCBAA[0] + once RS-off `CONFIG`/`DCBAAP`/`CRCR`/`ERST*` + `IMAN.IE` IR0 + post-IMAN IRQ_BIND + command-ring doorbell name/fail-close + once-read public PORTSC CCS (`product program PASS`); never set `USBCMD.RS`; never ring doorbell while halted; never write PORTSC; `doorbell=OPEN` · `need=usbcmd_rs` |
 | **Freestanding MSC** | **SKIP** default (`GJ_XHCI_MSC_PROBE=0`) — not product |
 
 ## Honesty split (read this first)
@@ -52,7 +53,7 @@ the xHCI module path - [docs/LINUX_MODULE_PATH.md](../../../docs/LINUX_MODULE_PA
    major/minor once-lamp (xHCI Spec offsets only).
 7. **Stage 2 params**: soft-read **HCSPARAMS1** + **HCSPARAMS2** + **HCSPARAMS3**
    observe (`soft params residual` MaxScratchpadBufs + U1/U2 exit latency names -
-   **never** scratchpad alloc / LPM program).
+   soft residual **never** scratchpad alloc / LPM program).
 8. **Stage 3 ports**: soft PORTSC walk at `op + 0x400 + (n-1)*0x10` (op = CAPLENGTH);
    count CCS; lamp first connected port + speed + **PLS** residual name;
    **ports residual** change-bit *names* only (**never** PORTSC W1C / port reset / PLS write).
@@ -60,7 +61,8 @@ the xHCI module path - [docs/LINUX_MODULE_PATH.md](../../../docs/LINUX_MODULE_PA
    + USBSTS bit *names* (HSE/EINT/PCD/CNR/HCE) + PAGESIZE page-bit residual
    (observe only - **never** RS/HCRST/ring program / USBSTS W1C).
 10. **Soft cap-ext residual**: soft-read **HCCPARAMS1 / DBOFF / RTSOFF** with
-    AC64/BNC/CSZ/xECP field names (**never** xECP walk / USBLEGSUP / doorbell/runtime program).
+    AC64/BNC/CSZ/xECP field names (**soft path never** xECP walk / USBLEGSUP /
+    doorbell/runtime program — product program walks xECP separately).
 11. **Stage 4 stub**: soft BOT **progress** lamp only - catalogs next product steps
     without CBW/CSW wire.
 12. **Stage 5 EP0 residual**: clean-room catalog steps 1..4 - Enable Slot /
@@ -79,9 +81,32 @@ the xHCI module path - [docs/LINUX_MODULE_PATH.md](../../../docs/LINUX_MODULE_PA
     **never programs HW**; `soft product step=` / `soft product catalog PASS` +
     **`soft product densify`** (prefer_real_ddi / MAP_BAR / dma_ring / iommu /
     program_gate once-lamps; `never_program=1`).
-17. **Product program gate honesty**: `product program SKIP` unless real_ddi +
-    program_gate; soft residual **never invents** CRCR/DCBAAP/ERST/RS writes
-    (`never_program=1` / `product_mint=0`; Dual DoD A remains **OPEN**).
+17. **Product program (RS-off)**: when real_ddi + program_gate, if
+    `USBCMD.RS=1` or `USBSTS.HCH=0` fail-closed halt (`USBCMD.RS=0` only;
+    bounded HCH wait; **never** HCRST unless halt timeout + documented need).
+    Still running → `product program SKIP reason=controller_running`.
+    Then public xECP walk (`HCCPARAMS1.xECP` + Next) for **USBLEGSUP** (ID=1):
+    missing → lamp `usblegsup=0` and continue; present → OS/BIOS semaphore
+    handshake (xHCI 7.1, bounded wait); timeout or OS bit not sticky →
+    `product program SKIP`. Then if `HCSPARAMS2` MaxScratchpadBufs==0 lamp
+    `scratchpad=0` and continue; if >0 alloc FORCE32 array+pages (clamp 16),
+    write `DCBAA[0]`=array PA; alloc fail or need>clamp → `product program SKIP`.
+    Then once write public `CONFIG.MaxSlotsEn` → `DCBAAP` → `CRCR.RCS` →
+    `ERSTSZ`/`ERSTBA`/`ERDP` → optional public `IMODI=4000` (1 ms) →
+    `IMAN.IE` for IR0 when RTSOFF known. Prefer `IMAN.IE` only (do **not**
+    set `USBCMD.INTE`). Then DDI `IRQ_BIND` once on retained handle
+    (`irq_bind=PASS/FAIL/OPEN`). Then name + fail-close the public
+    command-ring doorbell (`DBOFF` from cap; `doorbell[0]` = slot 0 /
+    Host Controller Command Ring). Range-check `DBOFF`; **read** (never
+    write) `doorbell[0]`. Missing/OOR → `product program doorbell SKIP`
+    reason, continue (never invent offsets). **Do not ring** while halted
+    (`never_ring_while_halted=1`). Then once-read public PORTSC for
+    ports 1..MaxPorts (HCSPARAMS1); decode CCS only (xHCI 5.4.8).
+    **Never write PORTSC** (no PR/WPR/PP/PED/CSC W1C). Op/port range
+    OOR → `product program portsc SKIP reason=portsc_oor`, continue.
+    MAP miss or DMA alloc fail → `product program SKIP`.
+    **Never set** `USBCMD.RS=1`. **Never write doorbell if RS=0**.
+    Dual DoD A remains **OPEN** (`need=usbcmd_rs`).
 18. **Honesty catalog**: soft-ready flags + open/MAP honesty + `soft bind_ne_stick` +
     path bits + `soft probe residual` / `soft residual` vs product-OPEN steps;
     product model (`product=UDX+ABI` · `need=DDI_caps` · freestanding MSC SKIP;
@@ -126,7 +151,7 @@ Soft DDI caps catalog != product MMIO/IRQ/DMA mint. Soft product catalog != prod
 | `xhci_udx: soft cap residual` | CAPLENGTH + HCIVERSION major/minor residual once-lamp |
 | `xhci_udx: soft bot stage=1 cap` | Soft BOT progress: capability ok |
 | `xhci_udx: soft params ... maxports=` | HCSPARAMS1 soft snapshot |
-| `xhci_udx: soft params residual` | HCSPARAMS2/3 observe · MaxScratchpadBufs + U1/U2 latency names - **never spad alloc / LPM** |
+| `xhci_udx: soft params residual` | HCSPARAMS2/3 observe · MaxScratchpadBufs + U1/U2 latency names - soft residual never spad alloc / LPM |
 | `xhci_udx: soft bot stage=2 params` | Soft BOT progress: params ok |
 | `xhci_udx: soft port N ccs=1 ...` | Per-port PORTSC soft CCS hit (+ pls residual name) |
 | `xhci_udx: soft ports n=... ccs=...` | Soft port walk summary |
@@ -136,7 +161,7 @@ Soft DDI caps catalog != product MMIO/IRQ/DMA mint. Soft product catalog != prod
 | `xhci_udx: soft catalog` | Dual DoD A surface list - **!= product** · dual_dod_a=OPEN |
 | `xhci_udx: soft op residual` | USBCMD/USBSTS/DNCTRL/... observe - **never RS/HCRST/ring program** |
 | `xhci_udx: soft op residual bits` | USBSTS HSE/EINT/PCD/CNR/HCE + PAGESIZE page-bit residual |
-| `xhci_udx: soft cap-ext residual` | HCCPARAMS1(AC64/xECP)/DBOFF/RTSOFF - **never xECP walk / doorbell** |
+| `xhci_udx: soft cap-ext residual` | HCCPARAMS1(AC64/xECP)/DBOFF/RTSOFF - **soft never xECP walk / doorbell** |
 | `xhci_udx: soft bot stage=4 stub` | Soft BOT catalog complete |
 | `xhci_udx: soft bot stub PASS` | Soft progress path finished - **!= product BOT** |
 | `xhci_udx: soft ep0 residual` / `soft ep0 step=` / `soft ep0 setup` / `soft ep0 catalog PASS` | EP0 residual scaffolding (4 steps) - **!= GET_DESC wire** |
@@ -147,7 +172,16 @@ Soft DDI caps catalog != product MMIO/IRQ/DMA mint. Soft product catalog != prod
 | `xhci_udx: soft product residual` / `soft product step=` / `soft product catalog PASS` | Product OPEN catalog (6 steps) - **!= stick / BOT program** |
 | `xhci_udx: soft product densify` / `soft product densify prefer_real_ddi=` / `map_bar=` / `dma_ring=` / `iommu=` / `program_gate=` | Product residual densify (prefer real DDI + MAP_BAR + DMA/IOMMU + gate honesty; **never_program=1**) |
 | `xhci_udx: soft dma residual` / `soft ring residual` / `soft iommu residual` | Soft cmd/evt ring layout + `udx_dma_iommu_grant` residual - **never** CRCR/DCBAAP/ERST write |
-| `xhci_udx: product program` / `product program SKIP` | Product program gate honesty - only real_ddi+gate would mint; soft **never invents** silicon program |
+| `xhci_udx: product program` / `PASS` / `SKIP` | RS-off public CONFIG/DCBAAP/CRCR/ERST + IMAN.IE when real_ddi+gate; `rs=0`; `irq_bind=OPEN`; MAP/DMA fail → SKIP |
+| `xhci_udx: product program iman` / `ie=` / `usbcmd_inte=0` | IR0 `IMAN.IE` after ERDP (prefer IMAN only; never USBCMD.INTE / RS) |
+| `xhci_udx: product program imod` / `conservative=1` | Optional public IMODI=4000 (1 ms); skip claim if readback miss |
+| `xhci_udx: product program irq_bind` / `irq_bind=OPEN` | DDI IRQ_BIND once on retained handle; PASS/FAIL/OPEN; never invent MSI-X |
+| `xhci_udx: product program doorbell` / `doorbell=OPEN` / `never_ring_while_halted=1` / `need=usbcmd_rs` | Name + fail-close command-ring doorbell (`DBOFF`; `doorbell[0]`=slot 0). Read-only. Missing/OOR → `SKIP reason=dboff_missing\|dboff_oor`, continue. Never ring while halted. Never write if RS=0. |
+| `xhci_udx: product program portsc` / `ports=` / `ccs=` / `ccs_n=` / `never_portsc_write=1` / `reason=portsc_oor` | After PASS: once-read PORTSC[1..MaxPorts] CCS only (xHCI 5.4.8). `ccs=`=any stick present; `ccs_n=`=CCS count. Op/port OOR → SKIP reason, continue. Never write PORTSC. Serial lamp + hold3 `ccs=0\|1\|?` (glass, no-COM1). |
+| `xhci_udx: product program status hold` / `hold3=` / `UDX xhci PASS` / `UDX xhci SKIP` | Once-pin STATUS hold3 after PORTSC observe: `UDX xhci PASS rs=0 iman=N irq=WORD ccs=N` (or SKIP `reason=…` unchanged). Never hold0/2/6/14/15. |
+| `xhci_udx: product program scratchpad` / `scratchpad=` / `dcbaa0=` | HCSPARAMS2 MaxScratchpadBufs: 0 continue; >0 FORCE32 array+pages + DCBAA[0]; alloc fail / need>16 → SKIP |
+| `xhci_udx: product program halt` / `rs_was=` / `HCH_after=` | Fail-closed halt before silicon writes (`USBCMD.RS=0` only; bounded HCH; never HCRST this gate) |
+| `xhci_udx: product program usblegsup` / `usblegsup=` / `xecp_walk=` | Public xECP walk + USBLEGSUP OS handshake (missing=`usblegsup=0` continue; present=OS/BIOS semaphores; timeout → SKIP) |
 | `xhci_udx: soft ddi prefer` / `soft prefer real DDI` / `prefer_real_ddi=1` | Prefer GJ_SYS_DDI bind_by_id over inject-only (`chain=SCAN,GET,OPEN,MAP_BAR`) |
 | `xhci_udx: soft bind_ne_stick` | bind/open/MAP != stick honesty (Dual DoD A C1) |
 | `xhci_udx: soft ready open=... map=... op_res=... cap_ext=... ep0_res=... cfg_res=... cdb_res=... ddi_caps=... prod_cat=... path=` | Soft-ready honesty rollup |
@@ -167,30 +201,41 @@ Soft DDI caps catalog != product MMIO/IRQ/DMA mint. Soft product catalog != prod
 ```sh
 make -C user/drivers/xhci_udx
 ./user/drivers/xhci_udx/build/xhci_udx | tee /tmp/xhci_udx.log
-grep -E 'xhci_udx: soft (probe PASS|probe residual|residual lean|catalog|open |map |open/map|op residual|cap residual|cap-ext|bot stage=|bot stub PASS|ep0 |config |cdb |ddi caps|caps residual|caps step=|product residual|product step=|product catalog|product densify|dma residual|ring residual|iommu residual|bind_ne_stick|ports |params |product model|residual |ddi prefer|prefer real)|product program|prefer_real_ddi|never_program|product=UDX\+ABI|need=DDI|Soft!=product|dual_dod_a=OPEN|soft residual lean (cap|catalog|ddi|honesty|rollup)' /tmp/xhci_udx.log
+grep -E 'xhci_udx: soft (probe PASS|probe residual|residual lean|catalog|open |map |open/map|op residual|cap residual|cap-ext|bot stage=|bot stub PASS|ep0 |config |cdb |ddi caps|caps residual|caps step=|product residual|product step=|product catalog|product densify|dma residual|ring residual|iommu residual|bind_ne_stick|ports |params |product model|residual |ddi prefer|prefer real)|product program|product program scratchpad|product program usblegsup|product program iman|product program imod|product program irq_bind|product program doorbell|product program portsc|doorbell=OPEN|never_ring_while_halted=1|need=usbcmd_rs|never_portsc_write=1|ports=|ccs=|ccs_n=|reason=portsc_oor|dboff=|db0=|usblegsup=|xecp_walk=|scratchpad=|irq_bind=OPEN|prefer_real_ddi|never_program|product=UDX\+ABI|need=DDI|Soft!=product|dual_dod_a=OPEN|soft residual lean (cap|catalog|ddi|honesty|rollup)' /tmp/xhci_udx.log
 ```
 
 ## Build
 
-Requires host `libudx` first:
+### Product freestanding (Dual DoD A — embed / stage-esp)
 
 ```sh
-# from repo root
-make udx
-# or local
-make -C user/udx lib
-
-make -C user/drivers/xhci_udx
-./user/drivers/xhci_udx/build/xhci_udx
+# from repo root — static user.ld + libudx-fs + libgj (no UDX_HOST_LIBC)
+make drivers-udx
+# → build/user/drivers/xhci_udx  (ENTRY _start → freestanding main →
+#    xhci_udx_freestanding_start → prefer udx_host_bind_by_id(8086:a12f) →
+#    product_program_try; keep_live park after soft bind PASS)
+file build/user/drivers/xhci_udx   # expect: statically linked
 ```
 
-`UDX_HOST_LIBC=1` is the default for the host binary. Host path **prefers**
-`udx_host_bind_by_id(8086,a12f)` then **inject fallback** (seed BAR0) when DDI
-soft-SKIPs. Freestanding shape: `xhci_udx_freestanding_register` registers the
-driver and, when linked, `udx_host_bind_by_id(8086, a12f)` via **GJ_SYS_DDI**
-SCAN/GET/OPEN/MAP_BAR - still **no** product BOT/EP0/MSC claim. Soft DDI
-open/MAP + soft DMA ring != product cap mint / CRCR program.
-**Dual DoD A remains OPEN.** Soft!=product.
+### Host-libc soft lab (inject 8086:a12f; product program SKIP)
+
+```sh
+make udx
+make -C user/drivers/xhci_udx
+./user/drivers/xhci_udx/build/xhci_udx
+# optional staged host binary:
+# make build/user/drivers/xhci_udx.host
+```
+
+Host path **prefers** `udx_host_bind_by_id(8086,a12f)` then **inject fallback**
+(seed BAR0) when DDI soft-SKIPs. Freestanding product ELF uses
+`xhci_udx_freestanding_start` / `_start` via **GJ_SYS_DDI** SCAN/GET/OPEN/MAP_BAR
+— still **no** product BOT/EP0/MSC claim; `product_program_try` does
+USBLEGSUP handshake then writes RS-off scratchpad `DCBAA[0]` +
+`CONFIG`/`DCBAAP`/`CRCR`/`ERST*` + `IMAN.IE` when real_ddi+gate, then
+names the command-ring doorbell fail-closed and once-reads PORTSC CCS
+(never `USBCMD.RS`; never ring while halted; never write PORTSC).
+Soft DDI open/MAP + soft DMA ring != product cap mint. **Dual DoD A remains OPEN.** Soft!=product.
 
 ## Public registers / USB names (clean-room)
 
@@ -201,19 +246,26 @@ Offsets relative to **BAR0** unless noted. Soft path only:
 | `0x00` | **CAPLENGTH** | 8-bit | Length of capability registers |
 | `0x02` | **HCIVERSION** | 16-bit | Interface Version Number (major/minor residual) |
 | `0x04` | **HCSPARAMS1** | 32-bit | MaxSlots / MaxIntrs / MaxPorts |
-| `0x08` | **HCSPARAMS2** | 32-bit | Soft observe MaxScratchpadBufs name only |
+| `0x08` | **HCSPARAMS2** | 32-bit | Soft observe MaxScratchpadBufs; product program DCBAA[0] |
 | `0x0C` | **HCSPARAMS3** | 32-bit | Soft observe U1/U2 Device Exit Latency names only |
-| `0x10` | **HCCPARAMS1** | 32-bit | Soft observe AC64/BNC/CSZ/xECP (never xECP walk) |
-| `0x14` | **DBOFF** | 32-bit | Soft observe only (never doorbell program) |
+| `0x10` | **HCCPARAMS1** | 32-bit | Soft observe AC64/BNC/CSZ/xECP; product program walks xECP for USBLEGSUP |
+| `xECP + Next` | **USBLEGSUP** (ID=1) | 32-bit | Product OS/BIOS semaphores (bits 24/16); missing → `usblegsup=0` continue |
+| `0x14` | **DBOFF** | 32-bit | Cap doorbell-array offset (bits 31:2). Product: range-check + read `doorbell[0]` only |
+| `(DBOFF&~3)+0` | **doorbell[0]** | 32-bit | Host Controller Command Ring (slot 0). Named/fail-closed; **never write if RS=0** |
 | `0x18` | **RTSOFF** | 32-bit | Soft observe only (never runtime program) |
 | `CAPLENGTH + 0x00` | **USBCMD** | 32-bit | Soft observe only (never RS/HCRST) |
 | `CAPLENGTH + 0x04` | **USBSTS** | 32-bit | Soft observe only (HCH + HSE/EINT/PCD/CNR/HCE names; host seeds HCH) |
 | `CAPLENGTH + 0x08` | **PAGESIZE** | 32-bit | Soft observe (+ page-bit residual decode) |
 | `CAPLENGTH + 0x14` | **DNCTRL** | 32-bit | Soft observe only |
-| `CAPLENGTH + 0x18` | **CRCR** | 64-bit | Soft observe lo only (never program) |
-| `CAPLENGTH + 0x30` | **DCBAAP** | 64-bit | Soft observe lo only (never program) |
-| `CAPLENGTH + 0x38` | **CONFIG** | 32-bit | Soft observe MaxSlotsEn |
-| `CAPLENGTH + 0x400 + (n-1)*0x10` | **PORTSC[n]** | 32-bit | Soft CCS/PED/PP/speed/PLS snapshot |
+| `CAPLENGTH + 0x18` | **CRCR** | 64-bit | Soft observe lo; product program writes RCS+ptr (RS-off) |
+| `CAPLENGTH + 0x30` | **DCBAAP** | 64-bit | Soft observe lo; product program writes DCBAA ptr |
+| `CAPLENGTH + 0x38` | **CONFIG** | 32-bit | Soft observe MaxSlotsEn; product program writes clamp-N |
+| `RTSOFF + 0x20` | **IMAN** | 32-bit | Product program sets IE for IR0 after ERDP (never USBCMD.INTE) |
+| `RTSOFF + 0x24` | **IMOD** | 32-bit | Optional public IMODI=4000 (1 ms conservative default) |
+| `RTSOFF + 0x28` | **ERSTSZ** | 32-bit | Product program writes 1 (interrupter 0) |
+| `RTSOFF + 0x30` | **ERSTBA** | 64-bit | Product program writes ERST ptr |
+| `RTSOFF + 0x38` | **ERDP** | 64-bit | Product program writes event-ring dequeue |
+| `CAPLENGTH + 0x400 + (n-1)*0x10` | **PORTSC[n]** | 32-bit | Soft CCS/PED/PP/speed/PLS snapshot; product after PASS: CCS-only once-read (never write) |
 
 USB Ch.9 / MSC / SCSI names used in **residual catalog only** (never issued on wire here):
 
@@ -235,7 +287,7 @@ USB Ch.9 / MSC / SCSI names used in **residual catalog only** (never issued on w
 | DDI caps residual steps 1..3 | mmio / irq / dma | need=DDI_caps catalog only - **never mint** |
 | product residual steps 1..6 | run_stop / rings / irq_db / slot_addr / ep0_cfg / bot_stick | OPEN catalog only + densify lamps |
 | soft DMA ring residual | cmd TRBs + evt TRBs (16B public TRB size) | Layout + IOMMU grant residual; **never** CRCR/DCBAAP/ERST |
-| product program gate | real_ddi + open/map/ddi/ring/op | **never_program=1** soft residual (no invent silicon write) |
+| product program (RS-off) | real_ddi + open/map/ddi/ring/op | halt if RS=1 or HCH=0 (`USBCMD.RS=0` only); xECP USBLEGSUP handshake (missing continue / timeout SKIP); scratchpad DCBAA[0]; then CONFIG/DCBAAP/CRCR/ERST + IMAN.IE once; optional IMODI=4000; IRQ_BIND; doorbell name/fail-close (read `db0`, never ring); PORTSC CCS once-read (`ccs=`/`ccs_n=`; never write PORTSC); **never set USBCMD.RS**; fail-closed MAP/DMA/spad |
 
 Host seed writes:
 
@@ -246,9 +298,8 @@ Host seed writes:
 - dword at `CAPLENGTH+USBSTS`: soft HCH=1 (halted residual)
 - dword at PORTSC[1]: CCS|PED|PP|speed=SS
 
-No operational run/stop, runtime, doorbell, EP0 ring, or ring program in this
-skeleton. Soft EP0/config/CDB/product residual does **not** issue
-Setup/Data/Status TRBs, SET_CONFIGURATION, CBW/CSW, or SCSI wire CDBs.
+Product program (real_ddi+gate only) walks xECP for USBLEGSUP (missing=`usblegsup=0` continue), then writes RS-off scratchpad `DCBAA[0]` + `CONFIG`/`DCBAAP`/`CRCR`/`ERST*` + `IMAN.IE` (optional IMODI=4000), then names the command-ring doorbell (read-only) and once-reads PORTSC CCS (read-only).
+**Never** `USBCMD.RS`, `USBCMD.INTE`, doorbell **write**, PORTSC **write**, EP0 TRB, SET_CONFIGURATION, CBW/CSW, or SCSI wire. `doorbell=OPEN` · `need=usbcmd_rs`.
 
 ## Clean-room rules
 
@@ -258,7 +309,7 @@ Setup/Data/Status TRBs, SET_CONFIGURATION, CBW/CSW, or SCSI wire CDBs.
 - Caps, IOMMU, hard IRQ stay inside UDX - never in this driver `.c`.
 - Soft host inject != product MMIO/IRQ/DMA grants from devmgr.
 - Soft open/MAP / DMA ring / IOMMU / op residual / bot stage / EP0 / config / CDB / DDI caps / product densify catalog **PASS** != product stick access.
-- Soft product residual densify + program gate honesty hold **never_program=1** (no invent CRCR/DCBAAP/ERST/RS silicon write).
+- Soft product residual densify holds **never_program=1**. Product program (real_ddi+gate) writes RS-off public init + IMAN.IE only; names doorbell fail-closed; once-reads PORTSC CCS; **never USBCMD.RS**; **never doorbell write while halted**; **never PORTSC write**.
 - **Not** product AC via in-kernel `usb_storage.ko` init (**G-AC-1**).
 - Freestanding MSC remains optional lab (`GJ_XHCI_MSC_PROBE`; **default 0** / **SKIP**); **not product**.
 - Product direction: **product=UDX+ABI** · **need=DDI caps** · prefer real DDI bind · Soft!=product · residual lean once-lamps.

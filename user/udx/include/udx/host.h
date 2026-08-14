@@ -462,6 +462,15 @@ udx_status_t udx_host_bind_by_id(u16 u16Vendor, u16 u16Device,
                                  struct udx_pci_dev **ppOut);
 
 /**
+ * Last retained DDI OPEN handle from bind_scan / bind_by_id (0 if none).
+ * Product hosts keep this for post-IMAN gj_ddi_irq_bind (Dual DoD A ABI).
+ * Handle is not CLOSEd on bind PASS (UDX_HOST_SOFT_HANDLE_RETAIN=1).
+ * Soft!=product; not a product IRQ Notification cap.
+ * greppable: handle_retain=1 close_on_bind=0
+ */
+long udx_host_ddi_handle(void);
+
+/**
  * Install a DDI-granted PCI function into the UDX device table.
  *
  * Fills BAR phys/len from grant; if pBar0Va is non-NULL and BAR0 length

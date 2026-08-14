@@ -97,6 +97,7 @@
  * Bar honesty v2026.08.04.75 stamp-free. NEVER bump GJ_IMAGE_VERSION.
  */
 #include "udx_internal.h"
+#include <udx/udx.h>
 
 #include <udx/dma.h>
 #include <udx/device.h>
@@ -108,12 +109,12 @@
 #include <stdlib.h>
 #include <string.h>
 #else
-/* 256-byte aligned for TNPDS/RDSAR product program_gate (option 3). */
+/* Page-aligned for product RX Buffer_Size=4KiB without ring overlap. */
 static struct udx_fs_dma_slot g_aFsDma[UDX_FS_DMA_SLOTS]
-    __attribute__((aligned(256)));
-/* Large tier: product rtl8168_udx RX pool (32 KiB); Soft!=product. */
+    __attribute__((aligned(4096)));
+/* Large tier: product rtl8168_udx residual; Soft!=product. */
 static struct udx_fs_dma_large_slot g_aFsDmaLarge[UDX_FS_DMA_LARGE_SLOTS]
-    __attribute__((aligned(256)));
+    __attribute__((aligned(4096)));
 #endif
 
 /*
@@ -2440,6 +2441,33 @@ udx_dma_alloc_coherent(struct udx_device *pDev, size_t cbSize,
             return NULL;
         }
         dma0 = (udx_dma_addr_t)i64Pa0;
+        /*
+         * Page-align honesty (glass v0.1.97 own_stuck): mid-page bus PA +
+         * Buffer_Size=4KiB let RX DMA walk into the descriptor ring.
+         * Require page-aligned VA and PA for product-sized coherent pages.
+         * Soft!=product Dual DoD B OPEN.
+         * greppable: udx: dma soft residual coherent page_align
+         */
+        if ((((uintptr_t)p) & 0xfffu) != 0u ||
+            ((u64)dma0 & 0xfffull) != 0ull) {
+            static u8 s_fPageAlignFailLamp;
+            if (s_fPageAlignFailLamp == 0u) {
+                s_fPageAlignFailLamp = 1u;
+                /* greppable: udx: dma soft residual coherent page_align */
+                udx_printk("udx: dma soft residual coherent page_align "
+                           "FAIL va=0x%llx pa=0x%llx cb=%u "
+                           "Soft!=product dual_dod_b=OPEN "
+                           "(mid-page DMA corrupts ring under FOVW)\n",
+                           (unsigned long long)(uintptr_t)p,
+                           (unsigned long long)dma0,
+                           (unsigned)((cbSize > 0xffffffffu)
+                                          ? 0xffffffffu
+                                          : (u32)cbSize));
+            }
+            fs_dma_free(p);
+            dma_soft_inc(&g_u32DmaAllocFail);
+            return NULL;
+        }
         /* Multi-page: require physically contiguous frames (desc base+off). */
         for (off = 4096u; off < cbSize; off += 4096u) {
             long i64Pa;
@@ -2511,6 +2539,63 @@ udx_dma_alloc_coherent(struct udx_device *pDev, size_t cbSize,
  * greppable residual: udx: dma soft residual iommu
  * greppable residual: udx: dma soft residual iommu FAIL
  */
+long
+udx_dma_bus3_te_densify(void)
+{
+#if defined(UDX_HOST_LIBC)
+    /* Host soft: no VT-d; report te=0 ready=0 bus3=0 id1g=1 soft identity. */
+    return (long)16; /* id1g only */
+#else
+    return udx_gj_bus3_te_densify();
+#endif
+}
+
+long
+udx_dma_wbinvd(void)
+{
+#if defined(UDX_HOST_LIBC)
+    return 0;
+#else
+    return udx_gj_wbinvd();
+#endif
+}
+
+long
+udx_dma_te_disarm(void)
+{
+#if defined(UDX_HOST_LIBC)
+    return 0;
+#else
+    return udx_gj_te_disarm();
+#endif
+}
+
+long
+udx_dma_phys_read32(udx_dma_addr_t dmaPa)
+{
+#if defined(UDX_HOST_LIBC)
+    /* Host soft: identity cookie = CPU VA; read via cast. */
+    if (dmaPa == 0 || ((u64)dmaPa & 3ull) != 0ull) {
+        return -1;
+    }
+    return (long)(u32)*(volatile u32 *)(void *)(uintptr_t)dmaPa;
+#else
+    return udx_gj_phys_read32(dmaPa);
+#endif
+}
+
+long
+udx_dma_panel_hold(u32 u32Line, const char *szText)
+{
+#if defined(UDX_HOST_LIBC)
+    (void)u32Line;
+    (void)szText;
+    return 0;
+#else
+    return udx_gj_panel_hold(u32Line, szText);
+#endif
+}
+
 int
 udx_dma_iommu_grant(u32 u32Bdf, udx_dma_addr_t dma, size_t cbSize)
 {

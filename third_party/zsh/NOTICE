@@ -1,0 +1,39 @@
+GreenJade third-party vendor notice
+===================================
+
+Package:          zsh (Z shell)
+Role:             default interactive / login shell — not product MIT/Apache-2.0
+Upstream:         https://www.zsh.org/
+Mirror:           https://github.com/zsh-users/zsh  (tag zsh-5.9.2)
+Tarball URL:      https://www.zsh.org/pub/zsh-5.9.2.tar.xz
+Checksum URL:     https://www.zsh.org/pub/SHA256SUM
+Licence URL:      https://www.zsh.org/pub/LICENCE
+Version / tag:    5.9.2 (zsh-5.9.2)
+Fetched:          2026-08-14
+Vendor date:      2026-08-14
+
+Tarball SHA-256:  36fa734374b44783582cec09bcd67822e2f992c779ec1624ab5596df078d2f81
+                  (matches official https://www.zsh.org/pub/SHA256SUM)
+
+License file:     LICENCE (kept) — zsh’s own MIT-like licence
+SPDX (imported):  LicenseRef-zsh
+
+LICENCE notes that some completion/shell functions are GPL. Those files
+were omitted (see below). Core Src/ is LicenseRef-zsh.
+
+VENDOR_STATUS:    OK — release snapshot imported; GPL files omitted
+
+Omitted (GPL — not imported):
+  config.guess                         GPL-3.0-or-later WITH Autoconf-exception
+  config.sub                           GPL-3.0-or-later WITH Autoconf-exception
+  Completion/Linux/Command/_qdbus      GPLv2
+  Completion/Unix/Command/_darcs       GPL-2.0-or-later
+  Completion/openSUSE/Command/_osc     GPLv2
+  Completion/openSUSE/Command/_zypper  GPLv2
+
+Completion/Unix/Command/_composer mentions SPDX GPL/LGPL *names* as
+completion values only; the file itself is not GPL and was imported.
+
+This is not product kernel/user code. Port to the GreenJade ABI is later.
+Canonical vendor tree is this directory — not user/zsh/zsh.c (host smoke).
+No bash. Soft≠product.

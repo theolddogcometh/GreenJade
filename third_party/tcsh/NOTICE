@@ -1,0 +1,32 @@
+GreenJade third-party vendor notice
+===================================
+
+Package:          tcsh (TENEX C shell)
+Role:             C-shell option — not product MIT/Apache-2.0
+Upstream:         https://www.tcsh.org/
+Tarball URL:      https://astron.com/pub/tcsh/tcsh-6.24.16.tar.gz
+Git (mirror):     https://github.com/tcsh-org/tcsh  (tag TCSH6_24_16)
+Version / tag:    6.24.16
+Fetched:          2026-08-14
+Vendor date:      2026-08-14
+
+Tarball SHA-256:  4208cf4630fb64d91d81987f854f9570a5a0e8a001a92827def37d0ed8f37364
+
+License file:     Copyright (kept) — BSD-3-Clause
+                  debian/copyright (kept) restates the same BSD-3-Clause
+SPDX (imported):  BSD-3-Clause
+
+VENDOR_STATUS:    OK — release snapshot imported; GPL files omitted
+
+Omitted (GPL — not imported):
+  acaux/config.guess   GPL-3.0-or-later WITH Autoconf-exception
+  acaux/config.sub     GPL-3.0-or-later WITH Autoconf-exception
+  nls/pl/              entire Polish NLS catalog — nls/pl/README says
+                       “Licencja GPL” (Paweł Niewiadomski)
+
+configure / aclocal.m4 / acaux/config.rpath carry the Autoconf “unlimited
+permission” / FSF all-permissive notice (not GPL) and were imported.
+acaux/install-sh is X11 / MIT.
+
+This is not product kernel/user code. Port to the GreenJade ABI is later.
+No bash. Soft≠product.

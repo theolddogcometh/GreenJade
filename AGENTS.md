@@ -21,6 +21,7 @@ in chat.
 | **Dual DoD B** | NIC + stack + sshd. **OPEN** until host **interactive SSH login**. Banner / ARP / ping / PK_OK / SUCCESS are proven-class, not close. |
 | **0.2.0** | Reserved. Do not ship. |
 | **Fly stamp** | `GJ_IMAGE_VERSION` in `kernel/include/gj/config.h`. Do **not invent the next N**. Bump only on a real flashable cut the operator asked for. |
+| **Vendor source** | Non-dual licenses live **only** under `third_party/<license>/`. Do not mix into `kernel/`, `user/`, `scripts/`, or `abandoned/`. Table: [PROVENANCE.md](third_party/PROVENANCE.md). Gate: `make license`. |
 
 **Never claim:** Dual DoD A/B close, bar3 / Deck Top 50, Steam client, live dash, interactive SSH login — unless the operator has host evidence on **that** stamp.
 
@@ -54,6 +55,23 @@ No GOP un-isolate. No `USBCMD.RS=1`. Do not re-link `abandoned/user/sshd`.
 
 Do not climb rungs 6–8 while Dual DoD **B** is OPEN.
 
+## Vendor license (hard)
+
+Canonical: [third_party/PROVENANCE.md](third_party/PROVENANCE.md). Persona: `vendor-license`.
+
+| Rule | Meaning |
+|------|---------|
+| **Folder** | Non-dual source **only** under `third_party/<license>/`. |
+| **Trees** | `apache-2.0/openssl` · `bsd/{dash,openssh,tcsh}` · `licenseref-zsh/zsh` · `public-domain/ed25519` |
+| **Dual trees** | `kernel/` `user/` `scripts/` `abandoned/` `.grok/` — SPDX **MIT OR Apache-2.0** only |
+| **Glue** | `user/openssh/` `user/dash/` `scripts/openssl-gj-perl/` are **GJ dual**, not vendor |
+| **Import** | No GPL / LGPL / AGPL / CDDL. Each vendor tree needs `NOTICE` + upstream license file |
+| **Pack** | `scripts/stage-rootfs.sh` copies `/usr/share/licenses/{greenjade,dash,openssh,openssl}/` |
+| **Gate** | `make license` (`check-license.sh` + `check-third-party-license.sh`) |
+| **Leak** | **FAIL** if `ed25519.c` or vendor `COPYING`/`LICENCE` appears under dual trees |
+
+New vendor import: put it in the matching license folder, add a `NOTICE` + PROVENANCE row, keep omitted GPL paths absent. Do not rewrite SSH in-tree to dodge this.
+
 ## Lab DUT
 
 ASUS ROG **G752VT** · NIC `10ec:8168` · xHCI `8086:a12f` · lab **10.200.125.50** · `:22`.
@@ -83,6 +101,8 @@ make hwtest-img           # build/greenjade-hwtest.img
 - Exclusive soft deepen, continuum `makefile_max` / `graph_batch*` as work, leftover flybar docs as primary
 - Parallel writers on the same file (`kernel/main.c`, `rtl8168_udx.c`, …)
 - Overnight STOP-loop / path-lock farms; more than one durable coordinator
+- Dropping vendor (BSD/ISC/Apache/Public Domain/zsh) sources into `kernel/`, `user/`, `scripts/`, or `abandoned/`
+- Importing GPL / LGPL / AGPL / CDDL into the product core or `third_party/`
 
 Flash is a **human** step: `sudo ./scripts/install-hwtest-usb.sh /dev/sdX` in a
 real shell (the flash-deny hook blocks it from Grok). Override only if the
@@ -92,10 +112,11 @@ real shell (the flash-deny hook blocks it from Grok). Override only if the
 
 | Kind | Name | Role |
 |------|------|------|
-| Agent | `honesty-auditor` | Read-only verdicts. Soft≠product, G-AC-1, Dual DoD wording, stamp match. |
+| Agent | `honesty-auditor` | Read-only verdicts. Soft≠product, G-AC-1, Dual DoD wording, stamp match, vendor-license folder law. |
 | Agent | `hwtest-packer` | May run `make`. Must not flash. Must not edit product sources unless the task named the file. |
 | Agent | `pr-writer` | Patreon + X **only on major milestones**. Stills from `media/` (logo/mascot) or `image_edit` thereof. Never publish. |
 | Persona | `fail-closed` | No claim without extracted-object or host-probe evidence. |
+| Persona | `vendor-license` | Non-dual source only under `third_party/<license>/`. `make license` is the gate. |
 | Persona | `no-densify` | No extra lamps, bind dumps, or residual comments unless the task named them. |
 | Persona | `overnight` | One hole, one writer file, QEMU51 baseline, identical-hang cap 2. |
 | Persona | `m0-ok` | Lab-diary public voice: stamp, evidence, still OPEN. |
@@ -125,6 +146,7 @@ Spawn `pr-writer` **only** when one of these is newly proven (glass + host on th
 | `/workflow check-work-gj {"target":"HEAD"}` | Disjoint read-only review + adversarial verify. |
 | `/workflow glass-triage {"stamp":"0.1.184"}` | Score glass/holds/host probes vs a stamp. No writers. |
 | `/workflow overnight-sshd {"hole":"…"}` | **One Dual DoD B cycle:** path-lock vs QEMU51 keys, optional one writer file, score, 12-line report. Caps identical hangs. Does not flash. |
+| `/workflow license-gj` | Vendor-license law: leaks outside `third_party/<license>/`, omitted GPL paths, `make license`. Read-only + gate. |
 
 Watch runs in `/workflows`. Overnight “work toward goals” is **not** a substitute
 for a named workflow and a budget.

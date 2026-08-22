@@ -4,7 +4,7 @@ Userspace network-door smoke for GreenJade — freestanding live daemon + host
 UDP-echo. **Not** Dual DoD **B** mid-hop. Fly **v0.1.184** (packed, not host-probed; Dual DoD **A/B OPEN**; **0.2.0** reserved) product `:22` is:
 
 ```text
-rtl8168_udx → kernel net_tcp → sshd.elf :22
+rtl8168_udx → kernel net_tcp → OpenSSH :22
 ```
 
 This ELF listens **`:7777`**, then RELEASE + exit. Soft≠product. Dual DoD B stays

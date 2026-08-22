@@ -152,10 +152,37 @@ Specs: [Architecture](GREENJADE_KERNEL_SPEC.md) · [Design complete](DESIGN_SPEC
 - [x] Root `LICENSE` is **MIT OR Apache-2.0** dual
 - [x] `STYLE.md` followed for all new C
 - [x] Every source file: `SPDX-License-Identifier: MIT OR Apache-2.0`
-- [x] `third_party/PROVENANCE.md` exists (empty OK)
+- [x] `third_party/PROVENANCE.md` table, hashes, omitted GPL, what is linked
 - [x] `scripts/check-license.sh` rejects GPL strings in tree
+- [x] Vendor non-dual source only under `third_party/<license>/` (`make license`; `/workflow license-gj`)
 - [x] README points at docs + product bar
 - [ ] Optional: run `./scripts/audit-ops-shame.sh` on fence/MMIO/DMA patches; house rules in [PURE_C_CONCURRENCY_AND_OPS.md](PURE_C_CONCURRENCY_AND_OPS.md) (Soft!=product; not Dual DoD close)
+
+---
+
+## Clean-room vendor omissions (no GPL paste)
+
+Omitted GPL files from official tarballs stay **out** of
+`third_party/<license>/` ([PROVENANCE.md](../third_party/PROVENANCE.md)).
+Replacements, if any, are
+GJ **MIT OR Apache-2.0** from public names/specs only — not bash, not the
+omitted sources. `make license` must keep those paths absent.
+
+| Omitted (GPL) | Need? | Status |
+|---------------|-------|--------|
+| dash `src/mksignames.c` (bash host generator) | **Yes** for product `/bin/sh` (`trap` / `kill` names) | [ ] Clean-room table: `user/dash/signames.c` exists (original POSIX/Linux x86_64 names, NSIG=65). **Audit** not-derived-from-bash; extend only if dash on GJ needs more names. Do **not** import `third_party/bsd/dash/src/mksignames.c`. |
+| tcsh `nls/pl/` (Polish catalog, “Licencja GPL”) | **Only if** we ship tcsh **and** want Polish messages | [ ] Clean-room GJ `nls/pl` under MIT OR Apache-2.0, or ship tcsh without Polish. **Not linked today.** Path omitted: `third_party/bsd/tcsh/nls/pl/`. Autoconf `config.guess` / `config.sub` stay omitted (host autotools). |
+| zsh `_qdbus` `_darcs` `_osc` `_zypper` | **No** — see below | **Omit forever** unless an operator names those completions |
+
+**zsh GPL completions — not needed.** They are optional `Completion/` scripts
+for Qt D-Bus (`qdbus`), Darcs, and openSUSE `osc` / `zypper`. zsh `Src/` is
+LicenseRef-zsh without them. zsh is **not linked**. Steam/Proton/DUT login
+does not require those four files. Do not clean-room rewrite them. Do not
+import them.
+
+Also omitted (not clean-room product work): Autoconf `config.guess` /
+`config.sub` / dash `compile` `depcomp` `missing`; OpenSSL
+`external/perl/Text-Template-1.56/` (host `perl Configure`).
 
 ---
 

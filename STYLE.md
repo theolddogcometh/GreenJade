@@ -19,7 +19,7 @@ Do **not** make code “pretty” by removing checks, widening privileges, or hi
 ## Files
 
 - One logical module per `.c`; matching decls in `kernel/include/gj/` or local `.h`
-- Every file starts with:
+- Every **product** file (`kernel/`, `user/` glue, `scripts/`, `abandoned/`) starts with:
 
 ```c
 /*
@@ -27,6 +27,12 @@ Do **not** make code “pretty” by removing checks, widening privileges, or hi
  * Copyright (c) 2026 Project GreenJade contributors
  */
 ```
+
+- **Vendor** source is **not** dual-licensed. It lives only under
+  `third_party/<license>/` (Apache-2.0, BSD, LicenseRef-zsh, public-domain)
+  with its upstream license file + GJ `NOTICE`. Do not paste vendor files
+  into product trees. See [third_party/PROVENANCE.md](third_party/PROVENANCE.md)
+  and `make license`.
 
 ## Naming — Hungarian notation (required)
 

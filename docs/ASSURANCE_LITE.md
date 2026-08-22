@@ -4,12 +4,12 @@
 |-------|--------|
 | **Status** | Living process notes (not a certification claim) |
 | **As of** | 2026-08-21 · fly **v0.1.184** packed, not host-probed (exec TX drain after 183 Sending command **PASS** / exec 124; not login; GOP isolate; Dual DoD A/B OPEN; **0.2.0** reserved) |
-| **Law** | Dual **MIT OR Apache-2.0**; **no GPL** source in tree |
+| **Law** | Dual **MIT OR Apache-2.0** for product; **no GPL** in the product core. Vendor only under [`third_party/<license>/`](../third_party/PROVENANCE.md). |
 | **Lawful use** | **You** must not use this project where illegal — [LEGAL_DISCLAIMER.md](LEGAL_DISCLAIMER.md) (not legal advice; not DO-178C) |
 | **Inspiration** | **DO-178C** habits (objectives, evidence, independence, config identity) + **Richard Hipp / SQLite** reliability lessons (test what you fly, do not trust compilers alone, design for testability) — **not** DO-178C compliance or “we are SQLite” |
 | **Talk pointer** | R. Hipp, *Reliability Lessons From SQLite*, SSW 2026 — [youtu.be/V_qzqY1bb7I](https://youtu.be/V_qzqY1bb7I) (DO-178B-inspired MC/DC story; “we do not trust compilers”) |
 | **Does not claim** | Airborne certification · DO-178C/ED-12C conformity · ISO 26262 · bar3 · Steam Top 50 · product net complete · 100% MC/DC for GreenJade · lawful use in every jurisdiction |
-| **Companions** | [TODO.md](TODO.md) · [ABI_FIRST_PIVOT.md](ABI_FIRST_PIVOT.md) · [SECURITY_CORE_DESIGN.md](SECURITY_CORE_DESIGN.md) · [DESIGN_SPEC_COMPLETE.md](DESIGN_SPEC_COMPLETE.md) · [STEAM_BAR3_STATUS.md](STEAM_BAR3_STATUS.md) · [R8169_MMIO_HANDOFF.md](R8169_MMIO_HANDOFF.md) · [LINUX_MODULE_PATH.md](LINUX_MODULE_PATH.md) · [LEGAL_DISCLAIMER.md](LEGAL_DISCLAIMER.md) |
+| **Companions** | [TODO.md](TODO.md) · [ABI_FIRST_PIVOT.md](ABI_FIRST_PIVOT.md) · [SECURITY_CORE_DESIGN.md](SECURITY_CORE_DESIGN.md) · [DESIGN_SPEC_COMPLETE.md](DESIGN_SPEC_COMPLETE.md) · [STEAM_BAR3_STATUS.md](STEAM_BAR3_STATUS.md) · [R8169_MMIO_HANDOFF.md](R8169_MMIO_HANDOFF.md) · [LINUX_MODULE_PATH.md](LINUX_MODULE_PATH.md) · [LEGAL_DISCLAIMER.md](LEGAL_DISCLAIMER.md) · [PROVENANCE](../third_party/PROVENANCE.md) |
 
 **One sentence:** Use criticality-based evidence so lab DoD, soft residual, and product claims cannot be confused — verify the **binary you flash**, not only the source you wrote.
 
@@ -253,8 +253,8 @@ Keep rows short. Expand only for C1–C3.
 | B-LLR-1 | Low-level | `rtl8168_udx` RX delivers frames to kernel `net_tcp` |
 | B-LLR-2 | Low-level | ARP request for guest IP gets UDX reply |
 | B-LLR-3 | Low-level | ICMP echo request gets UDX reply |
-| B-LLR-4 | Low-level | TCP demux accepts dest lab IP; `sshd.elf` listen :22 |
-| B-CODE | Code (examples) | `user/drivers/rtl8168_udx/` · `kernel/net/net_tcp.c` · `user/sshd/src/sshd_gj.c` |
+| B-LLR-4 | Low-level | TCP demux accepts dest lab IP; OpenSSH DUT listen :22 |
+| B-CODE | Code (examples) | `user/drivers/rtl8168_udx/` · `kernel/net/net_tcp.c` · `user/openssh/` + `third_party/bsd/openssh/` |
 | B-V&V-1 | Verify (L3) | STATUS: no FAULT PINNED; hold7 lab IP; Dual DoD **B OPEN** on **stamped** image |
 | B-V&V-2 | Verify (L3) | Host: `arping -I <if> 10.200.125.50` receives replies |
 | B-V&V-3 | Verify (L3) | Host: `ping -c 3 10.200.125.50` 0% loss (or documented partial) |

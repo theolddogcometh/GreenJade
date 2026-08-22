@@ -29,7 +29,8 @@ scanned=0
 soft_skip=0
 spdx_hits=0
 
-echo "check-license: scanning product tree (soft-exclude .git/build/tools/third_party)"
+echo "check-license: scanning product tree (soft-exclude .git/build/tools/third_party/abandoned)"
+# Vendor-licensed source must live under third_party/<license>/, not here.
 
 # Scan for license filenames / markers we reject as project policy.
 # shellcheck disable=SC2044
@@ -38,6 +39,8 @@ for f in $(find . -type f \
     ! -path './build/*' \
     ! -path './tools/*' \
     ! -path './third_party/*' \
+    ! -path './thirdparty/*' \
+    ! -path './abandoned/*' \
     \( -iname '*copying*' -o -iname '*gpl*' -o -name 'LICENSE*' -o -name 'LICENCE*' \) \
     2>/dev/null); do
     scanned=$((scanned + 1))
@@ -75,7 +78,8 @@ trap cleanup_spdx EXIT INT TERM
 : >"$spdx_list"
 
 # Portable path walk — avoid grep -R --exclude-dir variance across hosts.
-find ./kernel ./user ./scripts \
+# abandoned/ is not product, but must not grow GPL SPDX either.
+find ./kernel ./user ./scripts ./abandoned \
     \( -name '*.c' -o -name '*.h' -o -name '*.S' -o -name '*.ld' \) \
     -type f 2>/dev/null |
 while IFS= read -r f; do
@@ -101,6 +105,25 @@ if [ -d tools ]; then
 else
     echo "check-license: soft info tools/ absent"
 fi
+
+# Non-dual vendor sources must not sit beside GJ dual code.
+leak="${TMPDIR:-/tmp}/gj-license-vendor-leak.$$.txt"
+: >"$leak"
+find ./kernel ./user ./abandoned ./scripts \
+    \( -name 'ed25519.c' -o -name 'COPYING' -o -name 'LICENCE' \) \
+    -type f 2>/dev/null |
+while IFS= read -r f; do
+    printf '%s\n' "$f"
+done >"$leak" || true
+if [ -s "$leak" ]; then
+    while IFS= read -r f; do
+        [ -n "$f" ] || continue
+        echo "REJECT (vendor-licensed file outside third_party/<license>/): $f"
+        bad=1
+        hits=$((hits + 1))
+    done <"$leak"
+fi
+rm -f "$leak" 2>/dev/null || true
 
 echo "check-license: soft report license-name scanned=$scanned soft_skip=$soft_skip copyleft_hits=$hits spdx_hits=$spdx_hits"
 

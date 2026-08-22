@@ -107,6 +107,21 @@ if [ -f build/openssh-dut/sshd-auth ]; then
 	cp -f build/openssh-dut/sshd-auth "$out/usr/libexec/sshd-auth"
 	chmod +x "$out/usr/libexec/sshd-auth"
 fi
+# BSD / Apache-2.0 require license text with redistributed binaries.
+# See third_party/PROVENANCE.md. Staging texts ≠ Dual DoD B close.
+lic="$out/usr/share/licenses"
+mkdir -p "$lic/greenjade" "$lic/dash" "$lic/openssh" "$lic/openssl"
+cp -f "$root/LICENSE" "$lic/greenjade/LICENSE"
+cp -f "$root/third_party/bsd/dash/COPYING" "$lic/dash/COPYING"
+if [ -f "$root/third_party/bsd/openssh/LICENCE" ]; then
+	cp -f "$root/third_party/bsd/openssh/LICENCE" "$lic/openssh/LICENCE"
+fi
+if [ -f "$root/third_party/apache-2.0/openssl/LICENSE.txt" ]; then
+	cp -f "$root/third_party/apache-2.0/openssl/LICENSE.txt" "$lic/openssl/LICENSE.txt"
+fi
+if [ -f "$root/third_party/apache-2.0/openssl/NOTICE" ]; then
+	cp -f "$root/third_party/apache-2.0/openssl/NOTICE" "$lic/openssl/NOTICE"
+fi
 # Host-libc OpenSSH only (build/openssh/ssh-keygen). Not DUT ssh-keygen.
 # Packed HostKey != Dual DoD B close.
 if [ -x build/openssh/ssh-keygen ] && \

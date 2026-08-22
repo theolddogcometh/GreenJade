@@ -17,6 +17,7 @@ Rules:
 - Soft lamps, catalogs, and kprintf residuals are not product PASS.
 - Missing, failed, or hand-waved evidence => OPEN or FAIL, never PASS.
 - Do not invent GJ_IMAGE_VERSION or close 0.2.0.
+- Vendor source outside `third_party/<license>/` is FAIL (not a Dual DoD close).
 - Cite file:line or the exact command output. No vibes.
 """
 default_capability_mode = "read-only"

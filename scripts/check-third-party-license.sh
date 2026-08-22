@@ -30,26 +30,27 @@ license_scanned=0
 license_skip=0
 license_hits=0
 
-echo "check-third-party-license: scanning third_party/{dash,zsh,tcsh,openssh,openssl}"
+echo "check-third-party-license: scanning third_party/{bsd,apache-2.0,licenseref-zsh,public-domain}"
+# scripts/openssl-gj-perl is GJ MIT OR Apache-2.0 glue (not CPAN; not this gate).
 
 # Listed-omitted GPL (must remain absent). Paths relative to repo root.
 omitted='
-third_party/dash/compile
-third_party/dash/depcomp
-third_party/dash/missing
-third_party/dash/src/mksignames.c
-third_party/zsh/config.guess
-third_party/zsh/config.sub
-third_party/zsh/Completion/Linux/Command/_qdbus
-third_party/zsh/Completion/Unix/Command/_darcs
-third_party/zsh/Completion/openSUSE/Command/_osc
-third_party/zsh/Completion/openSUSE/Command/_zypper
-third_party/tcsh/acaux/config.guess
-third_party/tcsh/acaux/config.sub
-third_party/tcsh/nls/pl
-third_party/openssh/config.guess
-third_party/openssh/config.sub
-third_party/openssl/external/perl/Text-Template-1.56/LICENSE
+third_party/bsd/dash/compile
+third_party/bsd/dash/depcomp
+third_party/bsd/dash/missing
+third_party/bsd/dash/src/mksignames.c
+third_party/licenseref-zsh/zsh/config.guess
+third_party/licenseref-zsh/zsh/config.sub
+third_party/licenseref-zsh/zsh/Completion/Linux/Command/_qdbus
+third_party/licenseref-zsh/zsh/Completion/Unix/Command/_darcs
+third_party/licenseref-zsh/zsh/Completion/openSUSE/Command/_osc
+third_party/licenseref-zsh/zsh/Completion/openSUSE/Command/_zypper
+third_party/bsd/tcsh/acaux/config.guess
+third_party/bsd/tcsh/acaux/config.sub
+third_party/bsd/tcsh/nls/pl
+third_party/bsd/openssh/config.guess
+third_party/bsd/openssh/config.sub
+third_party/apache-2.0/openssl/external/perl/Text-Template-1.56/LICENSE
 '
 
 # Portable file count (find + wc; strip leading blanks).
@@ -62,11 +63,11 @@ count_files() {
     find "$dir" -type f 2>/dev/null | wc -l | awk '{ print $1 }'
 }
 
-n_dash=$(count_files third_party/dash)
-n_zsh=$(count_files third_party/zsh)
-n_tcsh=$(count_files third_party/tcsh)
-n_openssh=$(count_files third_party/openssh)
-n_openssl=$(count_files third_party/openssl)
+n_dash=$(count_files third_party/bsd/dash)
+n_zsh=$(count_files third_party/licenseref-zsh/zsh)
+n_tcsh=$(count_files third_party/bsd/tcsh)
+n_openssh=$(count_files third_party/bsd/openssh)
+n_openssl=$(count_files third_party/apache-2.0/openssl)
 
 # --- omitted paths must stay gone ---
 # Use a here-doc so POSIX sh does not rely on bashisms.
@@ -82,6 +83,27 @@ done <<EOF
 $omitted
 EOF
 
+# Vendor NOTICE + upstream license file must exist (provenance table).
+for n in \
+    third_party/bsd/dash/NOTICE \
+    third_party/bsd/dash/COPYING \
+    third_party/licenseref-zsh/zsh/NOTICE \
+    third_party/licenseref-zsh/zsh/LICENCE \
+    third_party/bsd/tcsh/NOTICE \
+    third_party/bsd/tcsh/Copyright \
+    third_party/bsd/openssh/NOTICE \
+    third_party/bsd/openssh/LICENCE \
+    third_party/apache-2.0/openssl/NOTICE \
+    third_party/apache-2.0/openssl/LICENSE.txt \
+    third_party/public-domain/ed25519/NOTICE \
+    third_party/public-domain/ed25519/ed25519.c
+do
+    if [ ! -f "$n" ]; then
+        echo "REJECT (missing provenance file): $n"
+        bad=1
+    fi
+done
+
 # --- license-named files: fail only on leftover GNU/CDDL license blobs ---
 # Filename heuristic matches check-license.sh plus copyright/copyleft.
 # Do not hard-fail configure / aclocal.m4 (Autoconf unlimited-permission).
@@ -93,8 +115,9 @@ cleanup_tp() {
 trap cleanup_tp EXIT INT TERM
 : >"$license_list"
 
-find ./third_party/dash ./third_party/zsh ./third_party/tcsh \
-     ./third_party/openssh ./third_party/openssl -type f \
+find ./third_party/bsd/dash ./third_party/licenseref-zsh/zsh ./third_party/bsd/tcsh \
+     ./third_party/bsd/openssh ./third_party/apache-2.0/openssl \
+     ./third_party/public-domain/ed25519 -type f \
     \( -iname '*copying*' -o -iname '*copyright*' -o -iname '*gpl*' \
        -o -iname 'LICENSE*' -o -iname 'LICENCE*' -o -iname '*copyleft*' \) \
     2>/dev/null >"$license_list" || true

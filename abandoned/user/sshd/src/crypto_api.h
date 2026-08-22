@@ -2,7 +2,8 @@
  * SPDX-License-Identifier: MIT OR Apache-2.0
  * Copyright (c) 2026 Project GreenJade contributors
  *
- * Minimal SUPERCOP / OpenSSH crypto_api.h for vendored ed25519.c.
+ * Minimal SUPERCOP / OpenSSH crypto_api.h for Public Domain ed25519.c
+ * (lives in third_party/public-domain/ed25519/, not this dual-license dir).
  * Types and decls: public domain (Markus Friedl / SUPERCOP assembly).
  * SHA-512 backend is product MIT OR Apache-2.0 (ssh_crypto.c).
  * No OpenSSL. No includes.h. Freestanding.

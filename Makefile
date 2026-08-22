@@ -649,7 +649,7 @@ shell-gj: $(SHELL_ELF)
 # Vendor C: -Wall only (no -Werror). Soft≠product. Do not bump GJ_IMAGE_VERSION.
 # ---------------------------------------------------------------------------
 DASH_ELF := $(BUILD)/user/dash.elf
-DASH_SRC := third_party/dash/src
+DASH_SRC := third_party/bsd/dash/src
 DASH_GEN := $(BUILD)/user/dash
 DASH_CFLAGS := -std=c11 -ffreestanding -fno-builtin -fno-stack-protector \
 	-fno-pic -mno-red-zone -msse2 \
@@ -818,15 +818,15 @@ $(DASH_ELF): $(DASH_OBJS) user/init/user.ld
 
 # ---------------------------------------------------------------------------
 # OpenSSH-portable 10.5p1 + OpenSSL 3.5.7 LTS libcrypto (security first).
-# Vendor trees: third_party/openssh (BSD/ISC) · third_party/openssl (Apache-2.0).
+# Vendor trees: third_party/bsd/openssh (BSD/ISC) · third_party/apache-2.0/openssl (Apache-2.0).
 # Glue: user/openssh/. sshd_gj is abandoned (not linked). Dual DoD B OPEN.
 # Do not ship --without-openssl (upstream EXPERIMENTAL). No stamp bump.
 # openssl-gj: out-of-tree Configure+build in $(BUILD)/openssl (never vendor).
 # Host-libc libcrypto.a is a compile stepping stone; DUT: make openssh-dut.
 # ---------------------------------------------------------------------------
 PERL ?= perl
-OPENSSH_SRC := third_party/openssh
-OPENSSL_SRC := third_party/openssl
+OPENSSH_SRC := third_party/bsd/openssh
+OPENSSL_SRC := third_party/apache-2.0/openssl
 OPENSSL_GEN := $(BUILD)/openssl
 OPENSSL_CFG_HDR := $(OPENSSL_GEN)/include/openssl/configuration.h
 OPENSSL_LIBCRYPTO := $(OPENSSL_GEN)/libcrypto.a
@@ -970,7 +970,7 @@ openssh-gj: openssl-gj $(OPENSSH_GLUE_OBJS)
 	@echo "openssh-gj: Dual DoD B OPEN"
 
 # Host-libc OpenSSH 10.5p1 (not DUT; Dual DoD B OPEN).
-# Links third_party/openssh + $(OPENSSL_LIBCRYPTO) + host libc. no-zlib.
+# Links third_party/bsd/openssh + $(OPENSSL_LIBCRYPTO) + host libc. no-zlib.
 # Operator: build/openssh/ssh-keygen -t ed25519 -f /tmp/gj-ed25519 -N ''
 OPENSSH_HOST_GEN := $(BUILD)/openssh
 OPENSSH_HOST_KEYGEN := $(OPENSSH_HOST_GEN)/ssh-keygen

@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: MIT OR Apache-2.0
 #
 # Out-of-tree OpenSSL 3.5.7 Configure for make openssl-gj.
-# Writes generated files only under the build dir (never third_party/openssl).
+# Writes generated files only under the build dir (never third_party/apache-2.0/openssl).
 # Host-libc libcrypto.a is a compile stepping stone; DUT libcgj port is later.
 # Keep EC / NIST P-521. System perl (vendor Text-Template is GPL, omitted).
 #
@@ -16,7 +16,7 @@ fail() {
 }
 
 if [ "${1:-}" = "-h" ] || [ "${1:-}" = "--help" ] || [ "$#" -ne 2 ]; then
-	echo "usage: $0 <third_party/openssl> <build/openssl>" >&2
+	echo "usage: $0 <third_party/apache-2.0/openssl> <build/openssl>" >&2
 	exit 2
 fi
 

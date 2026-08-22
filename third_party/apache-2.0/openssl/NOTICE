@@ -32,5 +32,9 @@ Why 3.5 LTS (security first):
   supported libcrypto, not the reduced internal-crypto build.
   3.5 is LTS through 2030. Not 1.1.1 (old license + EOL). Not 4.0 (shorter EOL).
 
-This is not product kernel/user code. Port to the GreenJade ABI is later.
+libcrypto is linked into DUT OpenSSH (`make openssl-libcgj` /
+`openssh-dut`). The vendor tree itself is Apache-2.0, not GJ dual.
+Empty upstream submodule directories in this snapshot (`oqs-provider`,
+`wycheproof`, `python-ecdsa`, `tlsfuzzer`, `tlslite-ng`,
+`cloudflare-quiche`, `pkcs11-provider`) contain **no source**.
 Soft≠product. Dual DoD A/B stay OPEN.

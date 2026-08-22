@@ -2,7 +2,7 @@
  * Copyright (c) 2026 Project GreenJade contributors
  *
  * Glue configure results for OpenSSH-portable 10.5p1 WITH_OPENSSL
- * against third_party/openssl 3.5.7 LTS (Apache-2.0).
+ * against third_party/apache-2.0/openssl 3.5.7 LTS (Apache-2.0).
  * Not a relicense of OpenSSH (BSD/ISC) or OpenSSL.
  * Security first: do not ship --without-openssl (upstream EXPERIMENTAL).
  * SANDBOX_NULL until GJ has a real sandbox; not a confine claim.

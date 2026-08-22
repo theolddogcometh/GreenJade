@@ -10,7 +10,7 @@
 | **Platform profile** | [X86_64_INTEL_PLATFORM.md](X86_64_INTEL_PLATFORM.md) |
 | **Hardware bar** | **≥ 1 TiB RAM**, **SMP**, **SAS/SCSI** |
 | **Language** | Pure C11 + minimal asm |
-| **License** | **MIT OR Apache-2.0** |
+| **License** | Product **MIT OR Apache-2.0**; vendor only under `third_party/<license>/` |
 | **Priority order** | **1. Security → 2. Performance → 3. Portability → 4. Readability** |
 | **Live track (2026-08)** | [TODO.md](TODO.md) § *Current track* · [ABI_FIRST_PIVOT.md](ABI_FIRST_PIVOT.md) · [LINUX_MODULE_PATH.md](LINUX_MODULE_PATH.md) |
 | **Fly (Dual DoD A/B)** | **v0.1.184** packed, not host-probed. Dual DoD **A/B OPEN**. |
@@ -28,7 +28,7 @@ This document is what you implement against. Architecture policy lives in `GREEN
 
 ```
 knano/
-├── LICENSE                 # MIT
+├── LICENSE                 # MIT OR Apache-2.0 (product)
 ├── README.md
 ├── STYLE.md
 ├── Makefile                # top-level
@@ -36,7 +36,11 @@ knano/
 │   ├── GREENJADE_KERNEL_SPEC.md
 │   ├── IMPLEMENTATION.md   # this file
 │   └── TODO.md
-├── third_party/            # MIT, Apache-2.0, BSD-2/3, ISC, CC0/PD, LicenseRef-zsh; each NOTICE + PROVENANCE row
+├── third_party/            # non-dual vendor source only, grouped by license
+│   ├── apache-2.0/openssl/
+│   ├── bsd/{dash,openssh,tcsh}/
+│   ├── licenseref-zsh/zsh/
+│   ├── public-domain/ed25519/
 │   └── PROVENANCE.md
 ├── tools/                  # host tools (C preferred)
 │   └── (later: mkimage, etc.)
@@ -512,7 +516,7 @@ All in **userspace driver host** processes, not kernel.
 - [ ] `make run` → serial `GreenJade` / `M0 OK`
 - [ ] Freestanding pure C + asm only
 - [ ] `SPDX-License-Identifier: MIT OR Apache-2.0`
-- [ ] No third_party GPL
+- [ ] No third_party GPL; vendor only under `third_party/<license>/`
 
 ### Product (desktop) — later gates
 

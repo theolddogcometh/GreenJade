@@ -1,11 +1,12 @@
 # sshd_gj — **abandoned** (not product, not linked)
 
 Moved out of `user/sshd/`. Not on `C_SRCS` / `S_SRCS`. Do not re-link.
-Product SSH is OpenSSH-portable on the Linux ABI (`user/openssh/`).
+Product SSH is OpenSSH-portable on the Linux ABI
+([`user/openssh/`](../../../user/openssh/README.md)).
 
 **Was** a NATIVE lab probe. Product SSH is **OpenSSH-portable 10.5p1** +
 **OpenSSL 3.5.7 LTS libcrypto** (Apache-2.0) on the **Linux ABI**
-([`user/openssh/`](../openssh/README.md)). This tree is a **NATIVE**
+([`user/openssh/`](../../../user/openssh/README.md)). This tree is a **NATIVE**
 `GJ_SYS_NET` probe (`u32Personality = 0`). **Freeze it** — no RFC 4254
 deepen, no residual-lean deepen.
 
@@ -15,7 +16,8 @@ Linux-ABI `sshd`. Banner / PK_OK / **SUCCESS** / `true` ≠ login.
 Lab wire for the probe (not Dual DoD B close):
 
 ```text
-rtl8168_udx → kernel net_tcp → sshd.elf :22  (lab 10.200.125.50)
+rtl8168_udx → kernel net_tcp → abandoned sshd.elf :22  (lab 10.200.125.50)
+# product :22 is OpenSSH (user/openssh), not this ELF
 ```
 
 **Soft≠product.** **G-AC-1.** GOP dash isolate stays.
@@ -25,8 +27,8 @@ rtl8168_udx → kernel net_tcp → sshd.elf :22  (lab 10.200.125.50)
 | Item | Policy |
 |------|--------|
 | Lab probe (`sshd_gj.c`, `ssh_crypto.c`, `sshd.c`) | **MIT OR Apache-2.0** (SPDX dual) |
-| Probe crypto | SHA-256/512 + X25519/ChaCha/Poly from RFCs; Ed25519 is SUPERCOP/OpenSSH `ed25519.c` (Public Domain) |
-| **OpenSSH** | **BSD** (OpenBSD / portable) — **not GPL**. Same third-party class as `dash`. Allowed per [PROVENANCE.md](../../third_party/PROVENANCE.md). |
+| Probe crypto | SHA-256/512 + X25519/ChaCha/Poly from RFCs (GJ dual). Ed25519 is Public Domain SUPERCOP/OpenSSH — **not** in this directory: [`third_party/public-domain/ed25519/`](../../../third_party/public-domain/ed25519/) |
+| **OpenSSH** | **BSD** (OpenBSD / portable) — **not GPL**. Same third-party class as `dash`. Allowed per [PROVENANCE.md](../../../third_party/PROVENANCE.md). |
 | Product SSH | **OpenSSH-portable 10.5p1** + **OpenSSL 3.5.7 LTS libcrypto** (Apache-2.0) in `third_party/`. LINUX-personality. Not more protocol in `sshd_gj.c`. |
 | **Not** in tree | GPL / LGPL paste. OpenSSH is not that. |
 
@@ -47,7 +49,7 @@ See repository root `LICENSE` and `third_party/PROVENANCE.md`.
 | `build/user/sshd.elf` | `make sshd-gj` | Frozen NATIVE probe (net door :22). Not the product daemon. |
 | `build/sshd` | `make sshd` | Host POSIX smoke (default `127.0.0.1:2222`) |
 
-Product daemon work is [`user/openssh/`](../openssh/README.md) (`make openssh-gj`).
+Product daemon work is [`user/openssh/`](../../../user/openssh/README.md) (`make openssh-gj`).
 It does not replace this embed.
 
 ## History (proven-class, not next work)
@@ -251,9 +253,9 @@ Boot log shows the kernel markers above; probe markers appear once the
 ELF runs its TCP :22 self-smoke. This embed is **not** the product
 daemon.
 
-See also: [OpenSSH-portable](../openssh/README.md) (product SSH) ·
-[ABI-first pivot](../../docs/ABI_FIRST_PIVOT.md).
+See also: [OpenSSH-portable](../../../user/openssh/README.md) (product SSH) ·
+[ABI-first pivot](../../../docs/ABI_FIRST_PIVOT.md).
 
 ---
 
-**Project:** GreenJade · Soft≠product · Dual DoD A **OPEN** until host USB path · Dual DoD B **OPEN** until interactive SSH login. [root README](../../README.md). Support: [Patreon — TheOldDog](https://www.patreon.com/cw/TheOldDog).
+**Project:** GreenJade · Soft≠product · Dual DoD A **OPEN** until host USB path · Dual DoD B **OPEN** until interactive SSH login. [root README](../../../README.md). Support: [Patreon — TheOldDog](https://www.patreon.com/cw/TheOldDog).

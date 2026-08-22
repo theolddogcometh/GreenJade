@@ -3886,6 +3886,23 @@ net_tcp_input(const u8 *pFrame, u32 cb)
 				g_aT[ns].u8RtxBusy = 1;
 			}
 		}
+		if (dport == (u16)TCP_SOFT_SSH_PORT) {
+			static u8 s_u8SynAckOnce;
+
+			if (s_u8SynAckOnce == 0u) {
+				s_u8SynAckOnce = 1u;
+				/* Stall debug: nTx<0 = bounce busy; nTx>=0 kicked. */
+				kprintf("net_tcp: synack :22 nTx=%d tx=%u "
+					"busy=%u kick=%u rx=%u state=%u "
+					"Dual_DoD_B_OPEN\n",
+					nTx,
+					virtio_net_tx_count(),
+					virtio_net_tx_busy_count(),
+					virtio_net_kick_count(),
+					virtio_net_rx_count(),
+					(unsigned)g_aT[ns].u8State);
+			}
+		}
 		g_aT[ls].i16Peer = (i16)ns; /* newest AcceptQ child hint */
 		if (g_aT[ls].u8Pending < 255u) {
 			g_aT[ls].u8Pending++;

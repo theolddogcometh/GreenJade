@@ -16,6 +16,7 @@ Hard rules:
 - Identical-hang cap = 2. Same hang_line twice with no 271 ret after listen → stop writers.
 - At most one durable scheduler. No STOP-loop / path-lock farms.
 - No densify lamps, no DUT relink, no stamp bump, no flash.
+- Do not drop vendor sources into kernel/user/abandoned. Dual glue stays dual.
 - PTY, vfork, dash, 0x1000000, sshd_gj, USBCMD.RS=1 are off-path unless the operator named them this turn.
 - Honesty is read-only. If two agents can touch the same path, one of them is wrong.
 

@@ -9,6 +9,12 @@ and distribution of this software.
 
 SPDX-License-Identifier: MIT OR Apache-2.0
 
+**Third-party code** (OpenSSH, OpenSSL, dash, zsh, tcsh, and listed
+omissions) is **not** this dual license. Canonical table, SPDX, tarball
+hashes, and what is actually linked: **[third_party/PROVENANCE.md](third_party/PROVENANCE.md)**.
+Policy: no GPL / LGPL / AGPL / CDDL in the product core. Packed images
+must carry the vendor license texts under `/usr/share/licenses/`.
+
 ------------------------------------------------------------------------------
 Jurisdiction and lawful-use notice (read with the licenses below)
 ------------------------------------------------------------------------------

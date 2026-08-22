@@ -25,12 +25,13 @@ Omitted (GPL — not imported):
   config.sub       GPL-3.0-or-later (FSF)
   .github/         CI only (not needed)
 
-libcrypto:        third_party/openssl 3.5.7 (Apache-2.0 LTS). OpenSSH 10.5
+libcrypto:        third_party/apache-2.0/openssl 3.5.7 (Apache-2.0 LTS). OpenSSH 10.5
                   requires ECC including NISTP521 in libcrypto. Do not ship
                   --without-openssl as product (upstream: EXPERIMENTAL).
 
 install-sh is X11/MIT (kept).
 
-This is not product kernel/user code. GJ glue lives in user/openssh/.
-user/sshd/sshd_gj.c stays a frozen NATIVE lab probe. Soft≠product.
-Dual DoD A/B stay OPEN until host interactive SSH login via this daemon.
+This is not product kernel/user code. GJ glue lives in user/openssh/
+(MIT OR Apache-2.0). sshd_gj is abandoned (`abandoned/user/sshd/`, not
+linked). Soft≠product. Dual DoD A/B stay OPEN until host interactive
+SSH login via this daemon.

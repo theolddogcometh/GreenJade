@@ -10,6 +10,7 @@ Forbidden unless the user named the exact change this turn:
 - Extra comments that only restate Soft≠product / G-AC-1 / lab IP
 - Parallel writers on the same file
 - Overnight "work toward goals" without `/workflow overnight-sshd`
+- Mixing vendor-licensed files into kernel/user/abandoned (use third_party/<license>/)
 - STOP-loop / path-lock farms; stacking cuts after an identical QEMU hang
 - Stamp bumps, Dual DoD close language, 0.2.0
 

@@ -1,6 +1,6 @@
 let meta = #{
     name: "check-work-gj",
-    description: "Disjoint GreenJade review (kernel-net, udx, abi-sshd, pack-proof, docs) plus adversarial verify.",
+    description: "Disjoint GreenJade review (kernel-net, udx, abi-sshd, pack-proof, docs, vendor-license) plus adversarial verify.",
     when_to_use: "When asked to check work, verify a pack, or review the Dual DoD / ABI / UDX tree without overlapping writers.",
     phases: [
         #{ title: "Review", detail: "one read-only shard per disjoint prefix list" },
@@ -89,7 +89,13 @@ let shards = [
         id: "abi-sshd",
         mode: "read-only",
         kind: "honesty-auditor",
-        prefixes: ["kernel/syscall/", "user/sshd/", "user/dash/", "kernel/proc/elf_load.c", "kernel/include/gj/linux_"],
+        prefixes: ["kernel/syscall/", "user/openssh/", "abandoned/user/sshd/", "user/dash/", "kernel/proc/elf_load.c", "kernel/include/gj/linux_"],
+    },
+    #{
+        id: "vendor-license",
+        mode: "read-only",
+        kind: "honesty-auditor",
+        prefixes: ["third_party/", "scripts/check-license.sh", "scripts/check-third-party-license.sh", "scripts/stage-rootfs.sh", "AGENTS.md", "STYLE.md"],
     },
     #{
         id: "pack-proof",

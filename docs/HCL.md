@@ -110,7 +110,7 @@ Two **different** USB images — do not mix labels or claims:
 | 3. Layout | **p1** ESP FAT **`GREENJADE`** (UEFI) · **p2** **ext4** **`GJ-PERSIST`** (logs + ssh + **steam/**) |
 | 4. Boot DUT | UEFI → `BOOTX64.EFI` → serial/panel `GJ-EFI` / `M0 OK` |
 | 5. Collect logs | Lab host: `sudo mount -L GJ-PERSIST /mnt/gj-persist` → `logs/`; ESP: `EFI/GREENJADE/BOOT.LOG`, `KLOG.TXT` |
-| 6. Remote SSH | T0 QEMU **sshd** on virtio-net (`sshd.elf` **TCP :22**). Laptop Dual DoD B is **rtl8168_udx** on fly **v0.1.184** packed, not host-probed until host **interactive SSH login** (**v0.1.183** host FAIL: `Sending command: true` **PASS**; exec 124 historical; **v0.1.180** host **143315** **FAIL** / **130127** first `true` **exit 0** historical; not login). QEMU hostfwd `2222→22` ≠ Dual DoD B close. |
+| 6. Remote SSH | T0 QEMU **OpenSSH** on virtio-net (**TCP :22**). Laptop Dual DoD B is **rtl8168_udx** on fly **v0.1.184** packed, not host-probed until host **interactive SSH login** (**v0.1.183** host FAIL: `Sending command: true` **PASS**; exec 124 historical; **v0.1.180** host **143315** **FAIL** / **130127** first `true` **exit 0** historical; not login). Historical SUCCESS on **0.1.178** was abandoned `sshd_gj`. QEMU hostfwd `2222→22` ≠ Dual DoD B close. |
 | 7. Steam (options **2 + 3**) | **No dpkg.** Media only on `GJ-PERSIST/steam/STATUS`. See [STEAM_HWTEST.md](STEAM_HWTEST.md). **bar3 OPEN.** |
 
 ### B) Linux inventory USB (DUT map / xHCI evidence)
@@ -130,7 +130,7 @@ Also available:
 |--------|--------|-----|
 | `make live-iso` | `build/greenjade-live.iso` | QEMU `-cdrom` / optical Multiboot2+EFI hybrid |
 | `./scripts/run-live-iso.sh` | QEMU boot of live ISO | Serial on stdio; hostfwd `2222→22` is T0 virtio, not Dual DoD B close |
-| `make sshd-gj` / `make sshd` | `build/user/sshd.elf` / `build/sshd` | Freestanding product daemon + host POSIX smoke |
+| `make openssh-dut` | `build/openssh-dut/{sshd,sshd-session,sshd-auth}` | Product SSH (OpenSSH 10.5 LINUX). `make sshd-gj` is abandoned and exits 1. Dual DoD B **OPEN** until interactive login |
 
 QEMU ISO smoke:
 

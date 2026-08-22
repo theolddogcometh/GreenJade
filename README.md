@@ -19,7 +19,7 @@ If you just cloned the repo: a normal host toolchain and QEMU are enough to buil
 | **What it is** | Freestanding pure-C microkernel + hybrid Linux personality |
 | **What it is not** | A Linux distro, SteamOS port, or GPL-derived kernel |
 | **Priorities** | **1. Security → 2. Performance → 3. Portability → 4. Readability** |
-| **License** | **MIT OR Apache-2.0** (dual) — **no GPL/copyleft source** |
+| **License** | Product: **MIT OR Apache-2.0**. Vendor (OpenSSH, OpenSSL, dash, …) lives only under [`third_party/<license>/`](third_party/PROVENANCE.md). **No GPL** in the product core. |
 | **Lawful use** | **You** are responsible for not using this project where illegal — [docs/LEGAL_DISCLAIMER.md](docs/LEGAL_DISCLAIMER.md) |
 | **Language** | Pure C only in-tree (no C++, Rust, …) |
 | **Firmware** | **UEFI** product path; Multiboot2 bring-up for QEMU |
@@ -73,8 +73,9 @@ make install-img    # GPT install image (local build only)
 make live-iso       # hybrid Multiboot2+EFI test ISO (local build only)
 make hwtest-img     # dual-partition hardware-test image
 make openssh-host   # host OpenSSH 10.5p1 (not DUT)
+make openssh-dut    # DUT OpenSSH trio (Linux ABI; not Dual DoD B close)
 make udx            # host UDX driver runtime
-make license        # coarse GPL guard
+make license        # product SPDX + vendor folder + provenance gate
 ```
 
 USB / lab helpers (`install-usb`, `steam-fetch`, …) need root or lab host setup — see [docs/STEAM_HWTEST.md](docs/STEAM_HWTEST.md) and [docs/HCL.md](docs/HCL.md).
@@ -109,7 +110,7 @@ Product direction is **ABI-first** (Linux-shaped **userspace** drivers over hot+
 | # | Goal | Path | Status |
 |---|------|------|--------|
 | **A** | Linux-shaped USB | `xhci_udx` + DDI | **OPEN** — RS-off park (177 host `PASS rs=0`); never `USBCMD.RS=1`; USB path OPEN |
-| **B** | Linux-shaped NIC + stack + sshd | `rtl8168_udx` → kernel `net_tcp` → `sshd.elf` | **OPEN** for **interactive login**. SUCCESS proven on **0.1.178**. **0.1.183** host: `Sending command: true` **PASS**; exec 124. Fly **0.1.184** packed, not host-probed. GOP isolate. Soft lamps ≠ close |
+| **B** | Linux-shaped NIC + stack + sshd | `rtl8168_udx` → kernel `net_tcp` → **OpenSSH 10.5** (Linux ABI) | **OPEN** until host **interactive login**. Historical SUCCESS on **0.1.178** was abandoned `sshd_gj`. **0.1.183** host: `Sending command: true` **PASS**; exec 124. Fly **0.1.184** packed, not host-probed. GOP isolate. Soft lamps ≠ close |
 
 **Lab status (honest):** Fly **v0.1.184** packed, not host-probed (Dual DoD **A** park RS-off · **B** exec TX drain after 183 Sending command; GOP isolate; login OPEN). Dual DoD A **OPEN** until host USB path · Dual DoD B **OPEN** until interactive SSH login. Soft ≠ product; **G-AC-1**. Backlog: [docs/TODO.md](docs/TODO.md) · [docs/ASSURANCE_LITE.md](docs/ASSURANCE_LITE.md).
 
@@ -165,7 +166,8 @@ Abandoned in-kernel rtl/xhci_msc/linux_*_soft live in `./abandoned` (not linked)
 | [UDX Linux porter](docs/UDX_LINUX_PORTER.md) | Userspace driver API |
 | [Implementation](docs/IMPLEMENTATION.md) / [TODO](docs/TODO.md) | Coding phases |
 | [Deck Top 50 matrix](matrix/deck-top50-TEMPLATE.md) | Adoption tracking |
-| [STYLE](STYLE.md) · [LICENSE](LICENSE) | Style · dual MIT/Apache |
+| [STYLE](STYLE.md) · [LICENSE](LICENSE) | Style · dual MIT/Apache (product) |
+| [**Third-party provenance**](third_party/PROVENANCE.md) | Vendor licenses, hashes, omitted GPL, what is linked |
 | [**Legal disclaimer**](docs/LEGAL_DISCLAIMER.md) | Lawful use · U.S. Constitution / speech notice · author fee schedule claim |
 
 Driver hosts use **UDX** (`user/udx/`) and soft DDI (`user/drivers/`) — Linux-shaped `probe` / `irq` / `dma` / `mmio` with caps hidden; see the UDX guide.

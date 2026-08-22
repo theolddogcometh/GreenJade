@@ -18,7 +18,7 @@ fail() {
 }
 
 if [ "${1:-}" = "-h" ] || [ "${1:-}" = "--help" ] || [ "$#" -ne 2 ]; then
-	echo "usage: $0 <third_party/openssl> <build/openssl-libcgj>" >&2
+	echo "usage: $0 <third_party/apache-2.0/openssl> <build/openssl-libcgj>" >&2
 	exit 2
 fi
 

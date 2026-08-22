@@ -1,0 +1,20 @@
+GreenJade third-party vendor notice
+===================================
+
+Package:          SUPERCOP / OpenSSH portable ed25519.c
+Role:             Public Domain Ed25519 for abandoned sshd_gj only
+                  — not product MIT OR Apache-2.0, not product SSH
+Upstream:         https://github.com/openssh/openssh-portable
+File:             ed25519.c  ($OpenBSD: ed25519.c,v 1.8 2026/06/14)
+Git:              ecbf552d8286468e88e6c75d9c090c2f8c60ec7b
+SUPERCOP:         crypto_sign/ed25519/ref  supercop-20221122
+
+License:          Public Domain
+Authors:          Daniel J. Bernstein, Niels Duif, Tanja Lange,
+                  Peter Schwabe, Bo-Yin Yang
+
+This file must not live next to GreenJade dual-licensed sources
+(kernel/, user/, abandoned/). SHA-512 backend for the abandoned probe
+is MIT OR Apache-2.0 in abandoned/user/sshd/src/ssh_crypto.c.
+
+Not linked. Product SSH uses OpenSSL 3.5.7 libcrypto (Apache-2.0).

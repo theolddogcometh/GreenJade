@@ -55,7 +55,7 @@ Host soft check (no download, always exit 0):
 | Host prep onto stick/image (option 3) | **wired** | `scripts/steam-host-prep.sh --to-label` / `--to-img` / `--to-mount` |
 | Offline / skip re-download | **wired** | `GJ_SKIP_FETCH=1` or stage alone → skeleton if no tree |
 | Soft media inventory | **wired** | `./scripts/steam-bar3-check.sh` (file counts, launcher, blob, STATUS hits) |
-| Product **sshd** live at boot | leftover MAP listen **:22** | `sshd.elf` embed; Dual DoD B **OPEN** until host **interactive SSH login**. Banner / PK_OK / SUCCESS ≠ close. |
+| Product **sshd** live at boot | leftover MAP listen **:22** | OpenSSH DUT embed; Dual DoD B **OPEN** until host **interactive SSH login**. Banner / PK_OK / SUCCESS ≠ close. `sshd_gj` abandoned. |
 | **scsi_mid** live embed | **done** | `scsi_mid.elf` boot spawn; `GJ_SYS_SCSI` + virtio-scsi path |
 | **HDA multi-stream (kernel)** | **PASS** | SD0 DMA + multi-stream mixer; `hda: multi-stream mixer PASS` — **kernel only** |
 | Graph continuum **toward 26800** | **soft** | high-water **advancing toward 26800** (scan may still be **26600**); CREATE-ONLY soft gates; **soft ≠ bar3** client run |

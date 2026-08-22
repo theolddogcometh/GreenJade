@@ -138,7 +138,7 @@ Porter contract: [UDX_LINUX_PORTER.md](UDX_LINUX_PORTER.md). Soft DDI surface: [
 | Bar | Status |
 |-----|--------|
 | Dual DoD **A** — **UDX USB** datapath / BOT / MSC on `8086:a12f` | **OPEN** |
-| Dual DoD **B** — **UDX NIC** + `sshd.elf` on `10ec:8168` | **OPEN** until host **interactive SSH login** (L3 ARP/ping **proven**; SUCCESS on **0.1.178** historical; **0.1.183** host FAIL (`Sending command: true` **PASS**; exec 124) historical; fly **0.1.184** packed, not host-probed) |
+| Dual DoD **B** — **UDX NIC** + OpenSSH on `10ec:8168` | **OPEN** until host **interactive SSH login** (L3 ARP/ping **proven**; SUCCESS on **0.1.178** was abandoned `sshd_gj`; **0.1.183** host FAIL (`Sending command: true` **PASS**; exec 124) historical; fly **0.1.184** packed, not host-probed) |
 | Product NIC **TX/RX** datapath / link / PHY (userspace UDX) | **L3 ARP/ping proven** (2026-08-14); login still OPEN |
 | Product xHCI **BOT / MSC / HID** (userspace UDX) | **OPEN** |
 | **Live IRQ** path (kernel notify → userspace host ISR product) | **OPEN** (host-sim / soft fire only) |

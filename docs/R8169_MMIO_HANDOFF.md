@@ -19,7 +19,7 @@
 | **Linux `.ko` binary runs in kernel** (REAL `init` / product datapath) and owns BAR/TX/RX | **Forbidden as product** (**G-AC-1**). Not “never use Linux drivers.” |
 | **Product NIC path** | **Userspace** Linux-shaped driver over **hot + cold** ABI / DDI·UDX (MMIO/IRQ/DMA caps) |
 | T0 product net (interim) | **virtio-net** |
-| Lab dual DoD **B** (now) | **`rtl8168_udx` + `net_tcp` + `sshd.elf`** — **OPEN** until host **interactive SSH login** |
+| Lab dual DoD **B** (now) | **`rtl8168_udx` + `net_tcp` + OpenSSH 10.5** — **OPEN** until host **interactive SSH login** |
 | Soft kernel r8169 work | Optional eng residual (ksym, gate0 hybrid, hostish diagnostics) — Soft ≠ product; **do not** treat as “load and run `.ko` in kernel” product |
 
 Operator note (2026-08-05): dual-DoD lab **does not** require proving “r8169.ko runs in-kernel and owns the wire.” Product goal remains **Linux drivers in userspace** with matching hot/cold calls — not freestanding-only forever, and not in-kernel GPL `.ko` exec.

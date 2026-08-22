@@ -126,7 +126,7 @@
  * Honesty: soft inventory only - not product multi-server seal, not Apple s13
  * closed. Fork stub != real user child; wait table != full posix wait.
  * keep_live residual != product UDX close; denser residual != Dual DoD close;
- * Dual DoD A/B OPEN until DUT. Soft!=product. G-AC-1.
+ * Dual DoD A/B OPEN until host USB path / interactive SSH login. Soft!=product. G-AC-1.
  * docs/CAP_ADDRESSING.md | docs/APPLE_CHANNEL_REMAINING.md s13 |
  * docs/SOLARIS_STYLE_REMAINING.md s6 | s9 | docs/SECURITY_CORE_DESIGN.md s13 |
  * docs/ASSURANCE_LITE.md H3
@@ -135,10 +135,12 @@
 #include <gj/cpu.h>
 #include <gj/door.h>
 #include <gj/klog.h>
+#include <gj/linux_cold_net.h>
 #include <gj/memobj.h>
 #include <gj/process.h>
 #include <gj/string.h>
 #include <gj/thread.h>
+#include <gj/user_access.h>
 #include <gj/vmm.h>
 
 /* ---- Wave 19 exclusive soft inventory (this unit only) ------------------ */
@@ -153,11 +155,21 @@
 #define GJ_WAIT_PID_BASE 100u
 /* Soft fork stub pool (shell pipelines later; not product process table). */
 #define GJ_FORK_STUBS 32u
+/*
+ * LINUX fork clone cap (pages). OpenSSH-portable LINUX fork; 512 was 2MiB;
+ * Dual DoD B OPEN; not full COW. 4096 = 16MiB covers sshd-session ~11MiB
+ * file + BSS (DUT .bss ~80KiB; 8192 not required).
+ */
+#define GJ_FORK_CLONE_PAGES 4096u
+/* USER child (sshd session): text + brk + mmap + grow-down stack. */
+#define GJ_FORK_CLONE_PAGES_USER 16384u
 
 /*
  * Soft path tallies (diagnostics only; wrap OK). Never hard-gate product.
  * greppable: process: soft ...
  */
+static struct gj_process *g_pLastUserldProc;
+
 static u32 g_u32SoftInitOk;
 static u32 g_u32SoftInitNull;
 static u32 g_u32SoftRootMetaOk;
@@ -745,6 +757,16 @@ gj_process_init(struct gj_process *pProc, struct gj_cnode *pCnode,
     pProc->u32Promises = GJ_PROMISE_ALL;
     pProc->u64Cr3 = 0; /* inherit until per-process AS (G-AS-1) */
     pProc->u64AnonNext = 0x0000000040000000ull;
+    pProc->u64BrkBase = 0;
+    pProc->u64BrkCur = 0;
+    pProc->u32Pgid = 0;
+    pProc->u32Sid = 0;
+    memset(pProc->aSigHandler, 0, sizeof(pProc->aSigHandler));
+    pProc->u64SigPending = 0;
+    pProc->u64UserSysRip = 0;
+    pProc->u64UserSysRsp = 0;
+    pProc->u32UserSysThr = 0;
+    pProc->pUserThr = NULL;
     pProc->u64ExecEntry = 0;
     pProc->u64InterpEntry = 0;
     pProc->u64LoadBias = 0;
@@ -756,6 +778,8 @@ gj_process_init(struct gj_process *pProc, struct gj_cnode *pCnode,
     pProc->cAuxv = 0;
     memset(pProc->aAuxv, 0, sizeof(pProc->aAuxv));
     memset(pProc->szExecPath, 0, sizeof(pProc->szExecPath));
+    pProc->szCwd[0] = '/';
+    pProc->szCwd[1] = '\0';
     memset(pProc->aRegions, 0, sizeof(pProc->aRegions));
     pProc->pParent = NULL;
     pProc->u32ExitCode = 0;
@@ -1768,16 +1792,71 @@ process_wait_register(struct gj_process *pChild, u32 u32Ppid)
     return 0; /* table full - caller may continue without wait4 */
 }
 
+/*
+ * Soft: OR SIGCHLD into parent pending if sa_handler is a user VA.
+ * SIG_DFL(0) / SIG_IGN(1) leave pending unchanged. No sigframe this cut.
+ */
+static void
+process_wait_pend_sigchld(struct gj_process *pParent)
+{
+    u64 u64H;
+
+    if (pParent == NULL) {
+        return;
+    }
+    u64H = pParent->aSigHandler[GJ_SIGCHLD];
+    if (u64H <= 1ull) {
+        return;
+    }
+    if (u64H < GJ_USER_VA_BASE || u64H >= GJ_USER_VA_END) {
+        return;
+    }
+    pParent->u64SigPending |= (1ull << GJ_SIGCHLD);
+}
+
+/*
+ * After a wait slot is consumed: clear parent SIGCHLD pending iff no other
+ * unreaped zombie remains for that parent. Linux-shaped leftover work.
+ */
+static void
+process_wait_clear_sigchld(struct gj_process *pParent, u32 u32Ppid)
+{
+    u32 i;
+
+    if (pParent == NULL) {
+        pParent = process_soft_parent_pcb_of_pid(u32Ppid);
+    }
+    if (pParent == NULL) {
+        return;
+    }
+    for (i = 0; i < GJ_WAIT_SLOTS; i++) {
+        if (!g_aWait[i].u8Used || g_aWait[i].u8Reaped ||
+            !g_aWait[i].u8Zombie) {
+            continue;
+        }
+        if (u32Ppid != 0u && g_aWait[i].u32Ppid == u32Ppid) {
+            return;
+        }
+        if (g_aWait[i].pProc != NULL &&
+            g_aWait[i].pProc->pParent == pParent) {
+            return;
+        }
+    }
+    pParent->u64SigPending &= ~(1ull << GJ_SIGCHLD);
+}
+
 void
 process_wait_note_exit(struct gj_process *pChild, u32 u32Code)
 {
     u32 i;
+    struct gj_process *pParent;
 
     if (pChild == NULL) {
         return;
     }
     pChild->u32ExitCode = u32Code;
     pChild->u32Alive = 0;
+    pParent = pChild->pParent;
     for (i = 0; i < GJ_WAIT_SLOTS; i++) {
         if (g_aWait[i].u8Used && g_aWait[i].pProc == pChild) {
             /* Soft: re-note updates exit code even if already zombie. */
@@ -1787,11 +1866,15 @@ process_wait_note_exit(struct gj_process *pChild, u32 u32Code)
             }
             g_aWait[i].u8Zombie = 1;
             g_aWait[i].u32Exit = u32Code;
+            if (pParent == NULL) {
+                pParent = process_soft_parent_pcb_of_pid(g_aWait[i].u32Ppid);
+            }
             kprintf("process: zombie pid=%u code=%u\n", g_aWait[i].u32Pid,
                     u32Code);
-            return;
+            break;
         }
     }
+    process_wait_pend_sigchld(pParent);
 }
 
 void
@@ -2084,6 +2167,13 @@ process_death_scrub_exec(struct gj_process *pProc)
     pProc->cAuxv = 0;
     memset(pProc->aAuxv, 0, sizeof(pProc->aAuxv));
     memset(pProc->szExecPath, 0, sizeof(pProc->szExecPath));
+    pProc->u64UserSysRip = 0;
+    pProc->u64UserSysRsp = 0;
+    pProc->u32UserSysThr = 0;
+    pProc->pUserThr = NULL;
+    if (g_pLastUserldProc == pProc) {
+        g_pLastUserldProc = NULL;
+    }
     pProc->u64AnonNext = 0x0000000040000000ull;
     /*
      * Soft multi-server confine death cleanup: drop PCB confine flags so a
@@ -2474,13 +2564,17 @@ process_death(struct gj_process *pProc, u32 u32ExitCode)
 }
 
 /*
- * Stub children for Linux fork/vfork/clone (no full AS clone until product
- * spawn). greppable: process: soft fork
- * Product incomplete: stub does not run user code; usable for parent
- * wait4/waitid WNOHANG smokes and shell/sshd ABI later.
+ * Stub children for Linux fork/vfork/clone (no full AS/CNode clone).
+ * LINUX parent in user.ld [0x1000000, 0x1800000) (dash/sh) or
+ * [0x4000000, 0x5000000) (OpenSSH/init) gets a USER child
+ * (thread_create_user) so execve uses thread_exec_replace.
+ * Kernel-side smoke without that parent still uses the death worker.
+ * greppable: process: soft fork | process: linux_fork user child
  */
 static struct gj_process g_aForkStub[GJ_FORK_STUBS];
 static u8                g_aForkUsed[GJ_FORK_STUBS];
+/* Parent PCB for process_linux_fork when current is a cold kthread. */
+static struct gj_process *g_pForkFromParent;
 
 /**
  * Soft reverse: drop private AS on fork path when wait_register fails
@@ -2589,6 +2683,300 @@ fork_child_exit_worker(void *pArg)
     thread_exit();
 }
 
+/*
+ * LINUX user text. HEAD user.ld [0x1000000, 0x1800000) (dash/sh);
+ * OpenSSH ~11MiB at that base overflows 8MiB; 0x4000000 window is the
+ * same ELF class. Not ld-gj INTERP (0x20000000) / PE32.
+ */
+static int
+process_userld_text_ok(u64 u64Va)
+{
+    return (u64Va >= 0x1000000ull && u64Va < 0x5000000ull) ? 1 : 0;
+}
+
+static int
+process_fork_pe32_va(u64 u64Va)
+{
+    /* WoW64/PE32 maps ~0x58200000. OpenSSH stack 0x6fxxxxxx is not PE32. */
+    return (u64Va >= 0x50000000ull && u64Va < 0x60000000ull) ? 1 : 0;
+}
+
+static int
+process_fork_ld_stack_va(u64 u64Va)
+{
+    /* GJ_LD_HANDOFF/STACK 0x6ff0.... Child SP, never PE32, never resume RIP. */
+    return (u64Va >= 0x6f000000ull && u64Va < 0x70000000ull) ? 1 : 0;
+}
+
+static int
+process_fork_ld_interp_va(u64 u64Va)
+{
+    /* ld-gj.ld 0x20000000. Leftover GS RIP, never fork resume. */
+    return (u64Va >= 0x20000000ull && u64Va < 0x30000000ull) ? 1 : 0;
+}
+
+static int
+process_fork_resume_rip_ok(u64 u64Rip)
+{
+    /* dash/sh 0x1000000 + OpenSSH 0x4000000 + brk/mmap. Not stack, not PE32. */
+    if (process_fork_pe32_va(u64Rip) != 0 ||
+        process_fork_ld_stack_va(u64Rip) != 0 ||
+        process_fork_ld_interp_va(u64Rip) != 0) {
+        return 0;
+    }
+    return (u64Rip >= 0x1000000ull && u64Rip < 0x80000000ull) ? 1 : 0;
+}
+
+static int
+process_fork_resume_rsp_ok(u64 u64Rsp)
+{
+    /* User SP including OpenSSH grow-down stack 0x6fxxxxxx. Not PE32. */
+    if (process_fork_pe32_va(u64Rsp) != 0) {
+        return 0;
+    }
+    return (u64Rsp >= 0x1000000ull && u64Rsp < 0x80000000ull) ? 1 : 0;
+}
+
+static int
+process_linux_text_lo(u64 u64Va)
+{
+    return (u64Va >= 0x1000000ull && u64Va < 0x1800000ull) ? 1 : 0;
+}
+
+/*
+ * USER thr after trampoline: USER*_ENTRY is cleared. Sysuser or
+ * pfnEntry==NULL + user RIP still means ring-3 (kernel workers keep pfn).
+ */
+static int
+process_thr_is_user(const struct gj_thread *pThr)
+{
+    if (pThr == NULL) {
+        return 0;
+    }
+    if ((pThr->u32Flags &
+         (GJ_THR_F_USER_ENTRY | GJ_THR_F_USER32_ENTRY)) != 0) {
+        return 1;
+    }
+    if (pThr->u32SysUserValid != 0) {
+        return 1;
+    }
+    if (pThr->pfnEntry == NULL && pThr->u64UserRip != 0) {
+        return 1;
+    }
+    return 0;
+}
+
+/*
+ * Doors kthread: in-flight USER client (pClient). Fork/exec resume lives
+ * on that TCB after schedule() saved GS. NULL if SERVICE_FIRST / no flight.
+ */
+static struct gj_thread *
+process_linux_door_client(void)
+{
+    struct gj_door *pDoor;
+    struct gj_thread *pCli;
+
+    pDoor = door_cold_personality();
+    if (pDoor == NULL) {
+        return NULL;
+    }
+    pCli = pDoor->pClient;
+    if (process_thr_is_user(pCli) == 0) {
+        return NULL;
+    }
+    if (pCli->pProc == NULL || pCli->pProc->u32Personality != 1u) {
+        return NULL;
+    }
+    return pCli;
+}
+
+static int
+process_linux_pcb_userld(const struct gj_process *pProc)
+{
+    if (pProc == NULL || pProc->u32Personality != 1u) {
+        return 0;
+    }
+    if (process_userld_text_ok(pProc->u64StartEntry) != 0 ||
+        process_userld_text_ok(pProc->u64ExecEntry) != 0 ||
+        process_userld_text_ok(pProc->u64UserSysRip) != 0) {
+        return 1;
+    }
+    /* main.c sshd/dash: ExecStack live, StartEntry still 0 until exec. */
+    if (process_fork_resume_rsp_ok(pProc->u64UserSysRsp) != 0 ||
+        process_fork_resume_rsp_ok(pProc->u64ExecStack) != 0) {
+        return 1;
+    }
+    return 0;
+}
+
+static int
+process_linux_pcb_lo(const struct gj_process *pProc)
+{
+    if (pProc == NULL || pProc->u32Personality != 1u) {
+        return 0;
+    }
+    if (process_linux_text_lo(pProc->u64StartEntry) != 0 ||
+        process_linux_text_lo(pProc->u64ExecEntry) != 0 ||
+        process_linux_text_lo(pProc->u64UserSysRip) != 0) {
+        return 1;
+    }
+    return 0;
+}
+
+static int
+process_linux_at_userld(const struct gj_process *pProc,
+                        const struct gj_thread *pThr)
+{
+    if (process_linux_pcb_userld(pProc) != 0 ||
+        process_linux_pcb_lo(pProc) != 0) {
+        return 1;
+    }
+    if (pProc == NULL || pProc->u32Personality != 1u) {
+        return 0;
+    }
+    if (pThr == NULL || pThr->pProc != pProc) {
+        return 0;
+    }
+    if (process_userld_text_ok(pThr->u64UserRip) != 0) {
+        return 1;
+    }
+    if (pThr->u32SysUserValid != 0 &&
+        process_userld_text_ok(pThr->u64SysUserRip) != 0) {
+        return 1;
+    }
+    return 0;
+}
+
+/**
+ * Current PCB as LINUX fork parent only if this thr is USER or the PCB
+ * is already user.ld. A doors kthread PCB is LINUX-default (gj_process_init)
+ * and must not steal pSrc (that hid [0x1000000, 0x1800000) last-fields).
+ */
+static struct gj_process *
+process_linux_src_from_current(struct gj_thread *pCur)
+{
+    struct gj_process *pProc;
+
+    if (pCur == NULL || pCur->pProc == NULL) {
+        return NULL;
+    }
+    pProc = pCur->pProc;
+    if (pProc->u32Personality != 1u) {
+        return NULL;
+    }
+    if (process_thr_is_user(pCur) != 0) {
+        return pProc;
+    }
+    if (process_linux_pcb_userld(pProc) != 0 ||
+        process_linux_pcb_lo(pProc) != 0) {
+        return pProc;
+    }
+    return NULL;
+}
+
+static void
+process_fork_bind_child_user(struct gj_process *pChild, u32 u32Thr, u64 u64Rip,
+                             u64 u64Rsp)
+{
+    struct gj_thread *pCur;
+
+    if (pChild == NULL || u32Thr == 0) {
+        return;
+    }
+    pChild->u32StartThr = u32Thr;
+    pChild->u32UserSysThr = u32Thr;
+    pChild->u64UserSysRip = u64Rip;
+    pChild->u64UserSysRsp = u64Rsp;
+    pCur = thread_current();
+    if (pCur != NULL && pCur->u32Id == u32Thr && pCur->pProc == pChild) {
+        pChild->pUserThr = pCur;
+    } else {
+        struct gj_thread *pCli = process_linux_door_client();
+
+        /* Doors client is the parent; only bind if ids already match. */
+        if (pCli != NULL && pCli->u32Id == u32Thr && pCli->pProc == pChild) {
+            pChild->pUserThr = pCli;
+        }
+    }
+}
+
+/* Child FS: calling USER first, else parent last-field TCB (doors kthread). */
+static void
+process_fork_child_fs(u32 u32Thr, const struct gj_process *pSrc,
+                      const struct gj_thread *pCur)
+{
+    u64 u64Fs = 0;
+
+    if (u32Thr == 0) {
+        return;
+    }
+    if (pCur != NULL && pCur->u64FsBase != 0) {
+        u64Fs = pCur->u64FsBase;
+    }
+    if (u64Fs == 0 && pSrc != NULL && pSrc->pUserThr != NULL) {
+        u64Fs = pSrc->pUserThr->u64FsBase;
+    }
+    if (u64Fs != 0) {
+        thread_set_fs_base(u32Thr, u64Fs);
+    }
+    /* Inherit LCN names: parent close(newsock) must not last-ref ESTAB. */
+    gj_linux_cold_fork_dup_names();
+}
+
+static int
+process_linux_parent_userld(const struct gj_process *pProc,
+                            const struct gj_thread *pThr, u64 u64Rip)
+{
+    if (process_linux_pcb_userld(pProc) != 0 ||
+        process_linux_pcb_lo(pProc) != 0 ||
+        process_linux_text_lo(u64Rip) != 0) {
+        return 1;
+    }
+    if (pProc != NULL && pProc->u32Personality == 1u &&
+        process_userld_text_ok(u64Rip) != 0) {
+        return 1;
+    }
+    /*
+     * main.c / elf_load may leave StartEntry=0 while handoff SP is live
+     * (OpenSSH at 0x4000000, dash at 0x1000000). Gated by USER thr or
+     * process_fork_soft — not kernel smoke.
+     */
+    if (pProc != NULL && pProc->u32Personality == 1u &&
+        (process_fork_resume_rsp_ok(pProc->u64ExecStack) != 0 ||
+         process_fork_resume_rsp_ok(pProc->u64UserSysRsp) != 0)) {
+        return 1;
+    }
+    if (pThr == NULL) {
+        return 0;
+    }
+    /* Kernel workers keep pfnEntry; USER syscalls do not. */
+    if ((pThr->u32Flags &
+         (GJ_THR_F_USER_ENTRY | GJ_THR_F_USER32_ENTRY)) == 0 &&
+        pThr->u32SysUserValid == 0 && pThr->pfnEntry != NULL &&
+        (pThr->pProc != pProc || pProc == NULL)) {
+        return 0;
+    }
+    if (process_linux_at_userld(pProc, pThr) != 0) {
+        return 1;
+    }
+    if (pProc != NULL && pThr->pProc == pProc &&
+        pProc->u32Personality == 1u && process_userld_text_ok(u64Rip) != 0) {
+        return 1;
+    }
+    return 0;
+}
+
+static void
+process_fork_stub_release(u32 iStub)
+{
+    if (iStub >= GJ_FORK_STUBS) {
+        return;
+    }
+    process_wait_forget(&g_aForkStub[iStub]);
+    fork_stub_as_teardown(&g_aForkStub[iStub]);
+    g_aForkUsed[iStub] = 0;
+}
+
 i64
 process_linux_fork(u32 u32Ppid, int fExitNow)
 {
@@ -2596,12 +2984,254 @@ process_linux_fork(u32 u32Ppid, int fExitNow)
     u32 pid;
     u32 thr = 0;
     u32 u32Parent;
+    u32 u32CloneMax;
+    u32 cCloned;
+    struct gj_cpu *pCpu;
+    struct gj_thread *pCur;
+    struct gj_process *pSrc;
+    extern struct gj_process *g_pLinuxProc;
+    u64 u64Rip;
+    u64 u64Rsp;
+    int fLinuxUserld;
+    int fCurIsUser;
 
     /*
      * process: soft fork - enter
      * Returns usable wait-table pid (>= GJ_WAIT_PID_BASE) on success.
      */
     process_soft_inc(&g_u32SoftForkEnter);
+    pCpu = cpu_current();
+    pCur = thread_current();
+    pSrc = g_pForkFromParent;
+    u64Rip = 0;
+    u64Rsp = 0;
+    /*
+     * LINUX fork must not clone a native kthread PCB (doors / personality).
+     * [0x1000000, 0x1800000) parent is process_fork_soft / last-fields /
+     * door pClient. Doors kthread is LINUX-default; only take it if USER
+     * or user.ld.
+     */
+    if (pSrc == NULL) {
+        pSrc = process_linux_src_from_current(pCur);
+    }
+    {
+        struct gj_thread *pDoorCli = process_linux_door_client();
+
+        if (pDoorCli != NULL) {
+            if (pSrc == NULL || pSrc == g_pLinuxProc) {
+                pSrc = pDoorCli->pProc;
+            }
+            if (pSrc == pDoorCli->pProc &&
+                (pCur == NULL || process_thr_is_user(pCur) == 0)) {
+                pCur = pDoorCli;
+            }
+        }
+    }
+    /*
+     * Doors/queue kthread PCB is LINUX-default (gj_process_init) and is
+     * not a user.ld parent. Drop it so last-userld / [0x1000000, 0x1800000)
+     * last-fields still get a thread_create_user child.
+     */
+    if (pSrc != NULL && pSrc != g_pLinuxProc &&
+        process_linux_pcb_userld(pSrc) == 0 &&
+        process_linux_pcb_lo(pSrc) == 0) {
+        if (pCur == NULL || pCur->pProc != pSrc ||
+            process_thr_is_user(pCur) == 0) {
+            pSrc = NULL;
+        }
+    }
+    if (pSrc == NULL && g_pLastUserldProc != NULL &&
+        g_pLastUserldProc->u32Alive != 0 &&
+        (process_linux_pcb_userld(g_pLastUserldProc) != 0 ||
+         process_linux_pcb_lo(g_pLastUserldProc) != 0)) {
+        pSrc = g_pLastUserldProc;
+    }
+    if (pSrc == NULL) {
+        pSrc = g_pLinuxProc;
+    }
+    /*
+     * Capture SYSCALL resume before dropping a doors kthread. Inventing
+     * 0x1000000 / 0x4000000 as RIP would re-run _start, not fork return.
+     */
+    if (pCpu != NULL) {
+        if (process_fork_resume_rip_ok(pCpu->u64UserRip) != 0) {
+            u64Rip = pCpu->u64UserRip;
+        }
+        if (process_fork_resume_rsp_ok(pCpu->u64UserRsp) != 0) {
+            u64Rsp = pCpu->u64UserRsp;
+        }
+    }
+    if (pCur != NULL && pCur->pProc != pSrc) {
+        if (pCur->u32SysUserValid != 0) {
+            if (u64Rip == 0 &&
+                process_fork_resume_rip_ok(pCur->u64SysUserRip) != 0) {
+                u64Rip = pCur->u64SysUserRip;
+            }
+            if (u64Rsp == 0 &&
+                process_fork_resume_rsp_ok(pCur->u64SysUserRsp) != 0) {
+                u64Rsp = pCur->u64SysUserRsp;
+            }
+        }
+        pCur = NULL;
+    }
+    if (pCpu != NULL && pCur != NULL) {
+        if (u64Rip == 0) {
+            u64Rip = pCpu->u64UserRip;
+        }
+        if (u64Rsp == 0) {
+            u64Rsp = pCpu->u64UserRsp;
+        }
+    }
+    if (pCur != NULL) {
+        if (u64Rip == 0 && pCur->u32SysUserValid != 0) {
+            u64Rip = pCur->u64SysUserRip;
+        }
+        if (u64Rsp == 0 && pCur->u32SysUserValid != 0) {
+            u64Rsp = pCur->u64SysUserRsp;
+        }
+        if (u64Rip == 0) {
+            u64Rip = pCur->u64UserRip;
+        }
+        if (u64Rsp == 0) {
+            u64Rsp = pCur->u64UserRsp;
+        }
+        if ((pCur->u32Flags &
+             (GJ_THR_F_USER_ENTRY | GJ_THR_F_USER32_ENTRY)) == 0 &&
+            pCur->u32SysUserValid == 0 && pCur->pfnEntry != NULL) {
+            u64Rip = 0;
+            u64Rsp = 0;
+        }
+    }
+    if (pSrc != NULL) {
+        if (u64Rip == 0) {
+            u64Rip = pSrc->u64UserSysRip;
+        }
+        if (u64Rsp == 0) {
+            u64Rsp = pSrc->u64UserSysRsp;
+        }
+        /*
+         * LINUX [0x1000000, 0x1800000) parent: leftover GS RIP at
+         * 0x4000000 / INTERP / stack must not become the child's resume.
+         * 11MiB sshd at HEAD 0x1000000 (RIP in [0x1800000, 0x4000000))
+         * is kept.
+         */
+        if (process_linux_pcb_lo(pSrc) != 0 ||
+            process_linux_text_lo(pSrc->u64UserSysRip) != 0) {
+            if (process_linux_text_lo(u64Rip) == 0 &&
+                !(u64Rip >= 0x1800000ull && u64Rip < 0x4000000ull)) {
+                if (process_linux_text_lo(pSrc->u64UserSysRip) != 0) {
+                    u64Rip = pSrc->u64UserSysRip;
+                } else if (pCur != NULL && pCur->pProc == pSrc &&
+                           pCur->u32SysUserValid != 0 &&
+                           process_linux_text_lo(pCur->u64SysUserRip) != 0) {
+                    u64Rip = pCur->u64SysUserRip;
+                } else if (pCur != NULL && pCur->pProc == pSrc &&
+                           process_linux_text_lo(pCur->u64UserRip) != 0) {
+                    u64Rip = pCur->u64UserRip;
+                }
+            }
+        }
+    }
+    /*
+     * Doors kthread: GS is the kthread restore, not the USER SYSCALL
+     * return. pCur is door pClient — its sysuser is the fork resume.
+     */
+    if (pCur != NULL && pCur->pProc == pSrc &&
+        process_thr_is_user(pCur) != 0 && thread_current() != pCur) {
+        if (pCur->u32SysUserValid != 0) {
+            if (process_fork_resume_rip_ok(pCur->u64SysUserRip) != 0) {
+                u64Rip = pCur->u64SysUserRip;
+            }
+            if (process_fork_resume_rsp_ok(pCur->u64SysUserRsp) != 0) {
+                u64Rsp = pCur->u64SysUserRsp;
+            }
+        } else {
+            if (process_fork_resume_rip_ok(pCur->u64UserRip) != 0) {
+                u64Rip = pCur->u64UserRip;
+            }
+            if (process_fork_resume_rsp_ok(pCur->u64UserRsp) != 0) {
+                u64Rsp = pCur->u64UserRsp;
+            }
+        }
+    }
+    fCurIsUser = 0;
+    if (pCur != NULL && pCur->pProc == pSrc &&
+        process_thr_is_user(pCur) != 0) {
+        fCurIsUser = 1;
+    }
+    /*
+     * Doors kthread: do not clone g_pLinuxProc smoke when a LINUX
+     * [0x1000000, 0x1800000) / [0x4000000, 0x5000000) parent exists.
+     */
+    if (fCurIsUser == 0 &&
+        (pSrc == NULL || pSrc == g_pLinuxProc) &&
+        g_pLastUserldProc != NULL && g_pLastUserldProc->u32Alive != 0 &&
+        (process_linux_pcb_userld(g_pLastUserldProc) != 0 ||
+         process_linux_pcb_lo(g_pLastUserldProc) != 0)) {
+        pSrc = g_pLastUserldProc;
+    }
+    if (pSrc != NULL && u64Rip != 0 &&
+        (fCurIsUser != 0 || process_linux_pcb_lo(pSrc) != 0 ||
+         process_linux_pcb_userld(pSrc) != 0)) {
+        pSrc->u64UserSysRip = u64Rip;
+        if (u64Rsp != 0) {
+            pSrc->u64UserSysRsp = u64Rsp;
+        }
+        if (pCur != NULL && pCur->pProc == pSrc) {
+            pSrc->u32UserSysThr = pCur->u32Id;
+            pSrc->pUserThr = pCur;
+        }
+    }
+    /*
+     * USER child for a real LINUX parent (USER thr or process_fork_soft).
+     * Kernel-side smoke (main/PE32, no g_pForkFromParent) keeps the
+     * death worker. [0x1000000, 0x1800000) is a hard USER-child case
+     * even when current is a cold kthread (PCB last-fields / start),
+     * including when that PCB is g_pLinuxProc. Leftover GS RIP on
+     * g_pLinuxProc without pcb_lo stays death-worker (0.1.140).
+     * [0x4000000, 0x5000000) OpenSSH/init is the same (user.ld HEAD).
+     */
+    fLinuxUserld = 0;
+    if (pSrc != NULL && process_linux_pcb_lo(pSrc) != 0) {
+        fLinuxUserld = 1;
+    }
+    if (fLinuxUserld == 0 && pSrc != NULL && pSrc != g_pLinuxProc &&
+        (process_linux_pcb_userld(pSrc) != 0 ||
+         process_linux_pcb_lo(pSrc) != 0)) {
+        fLinuxUserld = 1;
+    }
+    if (fLinuxUserld == 0 &&
+        (fCurIsUser != 0 ||
+         (g_pForkFromParent != NULL && g_pForkFromParent == pSrc))) {
+        fLinuxUserld = process_linux_parent_userld(pSrc, pCur, u64Rip);
+    }
+    /*
+     * LINUX parent in [0x1000000, 0x1800000) always gets a USER child
+     * (thread_create_user), including doors kthread + last-fields.
+     * [0x4000000, 0x5000000) OpenSSH/init is the same (user.ld HEAD).
+     * OpenSSH stack 0x6fxxxxxx is SP, not text.
+     */
+    if (fLinuxUserld == 0 && pSrc != NULL && pSrc->u32Personality == 1u &&
+        process_linux_text_lo(u64Rip) != 0 &&
+        process_fork_resume_rsp_ok(u64Rsp) != 0 &&
+        (fCurIsUser != 0 || process_linux_pcb_lo(pSrc) != 0 ||
+         (g_pForkFromParent != NULL && g_pForkFromParent == pSrc))) {
+        fLinuxUserld = 1;
+    }
+    if (fLinuxUserld == 0 && pSrc != NULL && pSrc != g_pLinuxProc &&
+        pSrc->u32Personality == 1u &&
+        (process_linux_pcb_lo(pSrc) != 0 ||
+         process_linux_text_lo(u64Rip) != 0 ||
+         process_userld_text_ok(u64Rip) != 0 ||
+         process_linux_pcb_userld(pSrc) != 0 ||
+         (process_fork_resume_rip_ok(u64Rip) != 0 &&
+          process_fork_resume_rsp_ok(u64Rsp) != 0))) {
+        fLinuxUserld = 1;
+    }
+    if (fLinuxUserld != 0 && pSrc != NULL &&
+        (pSrc != g_pLinuxProc || process_linux_pcb_lo(pSrc) != 0)) {
+        g_pLastUserldProc = pSrc;
+    }
     for (i = 0; i < GJ_FORK_STUBS; i++) {
         if (!g_aForkUsed[i]) {
             break;
@@ -2619,31 +3249,123 @@ process_linux_fork(u32 u32Ppid, int fExitNow)
     /*
      * Private AS shell for child (G-AS) + clone parent private user pages.
      * Product: full COW; bring-up: copy non-identity user 4K pages from parent.
-     * Soft incomplete (process: soft fork): not a runnable user child.
+     * Runnable USER child when LINUX parent is in [0x1000000, 0x1800000)
+     * or [0x4000000, 0x5000000) (sshd session spawn / dash).
      */
+    cCloned = 0;
     if (process_as_ensure(&g_aForkStub[i]) == GJ_OK) {
-        u32 cCloned = 0;
-        extern struct gj_process *g_pLinuxProc;
-
         process_soft_inc(&g_u32SoftForkAsOk);
         kprintf("process: linux_fork as cr3=0x%lx\n",
                 (unsigned long)g_aForkStub[i].u64Cr3);
-        if (g_pLinuxProc != NULL && g_pLinuxProc->u64Cr3 != 0 &&
-            g_aForkStub[i].u64Cr3 != 0 &&
-            (g_pLinuxProc->u64Cr3 & ~0xfffull) !=
-                (g_aForkStub[i].u64Cr3 & ~0xfffull)) {
-            if (vmm_as_clone_user_pages(g_pLinuxProc->u64Cr3,
-                                        g_aForkStub[i].u64Cr3, 512,
-                                        &cCloned) == GJ_OK) {
-                process_soft_inc(&g_u32SoftForkCloneOk);
-                kprintf("process: linux_fork clone pages=%u PASS\n", cCloned);
-            } else {
-                process_soft_inc(&g_u32SoftForkCloneFail);
-                kprintf("process: linux_fork clone pages FAIL\n");
+        if (pSrc != NULL) {
+            size_t iCwd;
+
+            if (pSrc->u32Personality != 0u) {
+                g_aForkStub[i].u32Personality = pSrc->u32Personality;
+            }
+            g_aForkStub[i].u32Pgid = pSrc->u32Pgid;
+            g_aForkStub[i].u32Sid = pSrc->u32Sid;
+            g_aForkStub[i].u32Jit = pSrc->u32Jit;
+            g_aForkStub[i].u32Confined = pSrc->u32Confined;
+            g_aForkStub[i].u32Promises = pSrc->u32Promises;
+            g_aForkStub[i].u64AnonNext = pSrc->u64AnonNext;
+            g_aForkStub[i].u64BrkBase = pSrc->u64BrkBase;
+            g_aForkStub[i].u64BrkCur = pSrc->u64BrkCur;
+            g_aForkStub[i].u64StartEntry = pSrc->u64StartEntry;
+            g_aForkStub[i].u64ExecEntry = pSrc->u64ExecEntry;
+            g_aForkStub[i].u64ExecStack = pSrc->u64ExecStack;
+            g_aForkStub[i].u64UserSysRip = pSrc->u64UserSysRip;
+            g_aForkStub[i].u64UserSysRsp = pSrc->u64UserSysRsp;
+            g_aForkStub[i].pUserThr = NULL;
+            memcpy(g_aForkStub[i].aSigHandler, pSrc->aSigHandler,
+                   sizeof(g_aForkStub[i].aSigHandler));
+            {
+                size_t iPath;
+
+                for (iPath = 0;
+                     iPath + 1 < sizeof(g_aForkStub[i].szExecPath) &&
+                     pSrc->szExecPath[iPath] != '\0';
+                     iPath++) {
+                    g_aForkStub[i].szExecPath[iPath] = pSrc->szExecPath[iPath];
+                }
+                g_aForkStub[i].szExecPath[iPath] = '\0';
+            }
+            if (process_userld_text_ok(g_aForkStub[i].u64StartEntry) == 0) {
+                if (process_userld_text_ok(pSrc->u64UserSysRip) != 0) {
+                    g_aForkStub[i].u64StartEntry = pSrc->u64UserSysRip;
+                } else if (pCur != NULL &&
+                           process_userld_text_ok(pCur->u64UserRip) != 0) {
+                    g_aForkStub[i].u64StartEntry = pCur->u64UserRip;
+                } else if (pCur != NULL && pCur->u32SysUserValid != 0 &&
+                           process_userld_text_ok(pCur->u64SysUserRip) != 0) {
+                    g_aForkStub[i].u64StartEntry = pCur->u64SysUserRip;
+                }
+            }
+            for (iCwd = 0; iCwd + 1 < sizeof(g_aForkStub[i].szCwd) &&
+                           pSrc->szCwd[iCwd] != '\0';
+                 iCwd++) {
+                g_aForkStub[i].szCwd[iCwd] = pSrc->szCwd[iCwd];
+            }
+            g_aForkStub[i].szCwd[iCwd] = '\0';
+            if (g_aForkStub[i].szCwd[0] == '\0') {
+                g_aForkStub[i].szCwd[0] = '/';
+                g_aForkStub[i].szCwd[1] = '\0';
+            }
+        }
+        /*
+         * ~11MiB OpenSSH + brk/mmap + 0x6f stack: 16384 pages (64MiB).
+         * fExitNow / kernel smoke keep the smaller cap.
+         */
+        u32CloneMax = (fLinuxUserld != 0 && fExitNow == 0) ?
+                          GJ_FORK_CLONE_PAGES_USER : GJ_FORK_CLONE_PAGES;
+        {
+            u64 u64SrcCr3 = 0;
+            u64 u64Ker;
+
+            if (pSrc != NULL) {
+                u64SrcCr3 = pSrc->u64Cr3;
+            }
+            u64Ker = vmm_kernel_cr3();
+            if (u64SrcCr3 == 0) {
+                u64 u64Cur = cpu_read_cr3();
+
+                if (u64Cur != 0 && u64Ker != 0 &&
+                    (u64Cur & ~0xfffull) != (u64Ker & ~0xfffull)) {
+                    u64SrcCr3 = u64Cur;
+                }
+            }
+            if (u64SrcCr3 != 0 && g_aForkStub[i].u64Cr3 != 0 &&
+                (u64SrcCr3 & ~0xfffull) !=
+                    (g_aForkStub[i].u64Cr3 & ~0xfffull)) {
+                if (vmm_as_clone_user_pages(u64SrcCr3,
+                                            g_aForkStub[i].u64Cr3, u32CloneMax,
+                                            &cCloned) == GJ_OK) {
+                    process_soft_inc(&g_u32SoftForkCloneOk);
+                    kprintf("process: linux_fork clone pages=%u PASS\n",
+                            cCloned);
+                } else {
+                    process_soft_inc(&g_u32SoftForkCloneFail);
+                    kprintf("process: linux_fork clone pages FAIL\n");
+                    cCloned = 0;
+                }
             }
         }
     } else {
         process_soft_inc(&g_u32SoftForkAsFail);
+    }
+    /*
+     * LINUX user.ld parent: never a death-worker child. Empty AS or
+     * clone miss would #PF at first user insn (0.1.140 class).
+     */
+    if (fLinuxUserld != 0 && fExitNow == 0 &&
+        (g_aForkStub[i].u64Cr3 == 0 || cCloned == 0)) {
+        fork_stub_as_teardown(&g_aForkStub[i]);
+        g_aForkUsed[i] = 0;
+        process_soft_inc(&g_u32SoftForkFull);
+        kprintf("process: linux_fork user child EAGAIN pid=%u "
+                "rip=0x%lx rsp=0x%lx\n",
+                0u, (unsigned long)u64Rip, (unsigned long)u64Rsp);
+        return -11; /* EAGAIN */
     }
     u32Parent = u32Ppid ? u32Ppid : 1u;
     pid = process_wait_register(&g_aForkStub[i], u32Parent);
@@ -2658,19 +3380,119 @@ process_linux_fork(u32 u32Ppid, int fExitNow)
     }
     g_u32SoftLastForkPid = pid;
     if (fExitNow) {
-        /* vfork-shaped: child already zombie; parent wait4 reaps immediately */
+        /* Kernel/PE32 vfork-smoke: child already zombie; wait4 reaps now. */
         process_soft_inc(&g_u32SoftForkVfork);
         process_death(&g_aForkStub[i], 0);
     } else {
+        int fUserChild;
+
         /*
-         * fork-shaped: deferred zombie so parent can:
-         *   wait4(pid, ..., WNOHANG) -> 0 while live, then pid+status
-         * greppable: process: soft fork / process: soft wait
+         * Product-min: resume child at parent SYSCALL return (rax=0).
+         * LINUX parent in [0x1000000, 0x1800000) or [0x4000000, 0x5000000):
+         * USER child via thread_create_user, never kthread death worker.
+         * Shared-AS vfork OPEN. Death worker: kernel-side smoke only.
+         * greppable: process: linux_fork user child
          */
+        if (fLinuxUserld != 0) {
+            if (u64Rip == 0 || process_fork_resume_rip_ok(u64Rip) == 0) {
+                if (pSrc != NULL &&
+                    process_fork_resume_rip_ok(pSrc->u64UserSysRip) != 0) {
+                    u64Rip = pSrc->u64UserSysRip;
+                } else if (pCur != NULL &&
+                           process_fork_resume_rip_ok(pCur->u64UserRip) != 0) {
+                    u64Rip = pCur->u64UserRip;
+                } else if (pCur != NULL && pCur->u32SysUserValid != 0 &&
+                           process_fork_resume_rip_ok(pCur->u64SysUserRip) !=
+                               0) {
+                    u64Rip = pCur->u64SysUserRip;
+                }
+            }
+            if (u64Rsp == 0 || process_fork_resume_rsp_ok(u64Rsp) == 0) {
+                if (pSrc != NULL &&
+                    process_fork_resume_rsp_ok(pSrc->u64UserSysRsp) != 0) {
+                    u64Rsp = pSrc->u64UserSysRsp;
+                } else if (pCur != NULL &&
+                           process_fork_resume_rsp_ok(pCur->u64UserRsp) != 0) {
+                    u64Rsp = pCur->u64UserRsp;
+                } else if (pCur != NULL && pCur->u32SysUserValid != 0 &&
+                           process_fork_resume_rsp_ok(pCur->u64SysUserRsp) !=
+                               0) {
+                    u64Rsp = pCur->u64SysUserRsp;
+                }
+            }
+            /*
+             * Resume at SYSCALL return only (rax=0). Do not invent
+             * 0x1000000/0x4000000 (_start). EAGAIN, never death-worker.
+             */
+            if (process_fork_resume_rip_ok(u64Rip) == 0 ||
+                process_fork_resume_rsp_ok(u64Rsp) == 0) {
+                process_fork_stub_release(i);
+                process_soft_inc(&g_u32SoftForkFull);
+                kprintf("process: linux_fork user child EAGAIN pid=%u "
+                        "rip=0x%lx rsp=0x%lx\n",
+                        pid, (unsigned long)u64Rip, (unsigned long)u64Rsp);
+                return -11; /* EAGAIN */
+            }
+            if (pSrc != NULL) {
+                pSrc->u64UserSysRip = u64Rip;
+                pSrc->u64UserSysRsp = u64Rsp;
+                if (pCur != NULL && pCur->pProc == pSrc) {
+                    pSrc->u32UserSysThr = pCur->u32Id;
+                    pSrc->pUserThr = pCur;
+                }
+            }
+            thr = thread_create_user(&g_aForkStub[i], u64Rip, u64Rsp);
+            if (thr != 0) {
+                process_fork_bind_child_user(&g_aForkStub[i], thr, u64Rip,
+                                             u64Rsp);
+                process_fork_child_fs(thr, pSrc, pCur);
+                process_soft_inc(&g_u32SoftForkDeferred);
+                process_soft_inc(&g_u32SoftForkOk);
+                process_soft_maybe_once();
+                kprintf("process: linux_fork user child pid=%u thr=%u "
+                        "rip=0x%lx rsp=0x%lx rax0=1\n",
+                        pid, thr, (unsigned long)u64Rip,
+                        (unsigned long)u64Rsp);
+                return (i64)pid;
+            }
+            /* LINUX user.ld must not fall through to the death worker. */
+            process_fork_stub_release(i);
+            process_soft_inc(&g_u32SoftForkFull);
+            kprintf("process: linux_fork user child EAGAIN pid=%u "
+                    "rip=0x%lx rsp=0x%lx\n",
+                    pid, (unsigned long)u64Rip, (unsigned long)u64Rsp);
+            return -11; /* EAGAIN */
+        }
+        fUserChild = 0;
+        if (u64Rsp != 0 && process_userld_text_ok(u64Rip) != 0 &&
+            pSrc != NULL && pSrc != g_pLinuxProc && cCloned != 0) {
+            fUserChild = 1;
+        }
+        if (fUserChild == 0 && u64Rsp != 0 && cCloned != 0 && pSrc != NULL &&
+            process_linux_text_lo(u64Rip) != 0 &&
+            (fCurIsUser != 0 || process_linux_pcb_lo(pSrc) != 0 ||
+             (g_pForkFromParent != NULL && g_pForkFromParent == pSrc))) {
+            fUserChild = 1;
+        }
+        if (fUserChild != 0) {
+            thr = thread_create_user(&g_aForkStub[i], u64Rip, u64Rsp);
+            if (thr != 0) {
+                process_fork_bind_child_user(&g_aForkStub[i], thr, u64Rip,
+                                             u64Rsp);
+                process_fork_child_fs(thr, pSrc, pCur);
+                process_soft_inc(&g_u32SoftForkDeferred);
+                process_soft_inc(&g_u32SoftForkOk);
+                process_soft_maybe_once();
+                kprintf("process: linux_fork user child pid=%u thr=%u "
+                        "rip=0x%lx rsp=0x%lx rax0=1\n",
+                        pid, thr, (unsigned long)u64Rip,
+                        (unsigned long)u64Rsp);
+                return (i64)pid;
+            }
+        }
         thr = thread_create(&g_aForkStub[i], fork_child_exit_worker,
                             &g_aForkStub[i]);
         if (thr == 0) {
-            /* Fallback: immediate exit so wait still works with usable pid */
             process_death(&g_aForkStub[i], 0);
             process_soft_inc(&g_u32SoftForkOk);
             process_soft_maybe_once();
@@ -2720,9 +3542,89 @@ process_linux_clone(u32 u32Ppid, u64 u64Flags)
         return -22; /* EINVAL */
     }
 
-    /* CLONE_VFORK -> immediate zombie; parent wait4 reaps. */
+    /* CLONE_VFORK: LINUX [0x1000000,0x1800000)/[0x4000000,0x5000000)
+     * parent -> live USER child (dash vforkexec / OpenSSH session). */
     if ((u64Share & GJ_CLONE_VFORK) != 0ull) {
+        struct gj_thread *pCur;
+        struct gj_process *pSrc;
+        u64 u64Rip;
+        struct gj_cpu *pCpu;
+
         process_soft_inc(&g_u32SoftCloneVfork);
+        pCur = thread_current();
+        pSrc = g_pForkFromParent;
+        if (pSrc == NULL) {
+            pSrc = process_linux_src_from_current(pCur);
+        }
+        {
+            struct gj_thread *pDoorCli = process_linux_door_client();
+
+            if (pDoorCli != NULL) {
+                if (pSrc == NULL) {
+                    pSrc = pDoorCli->pProc;
+                }
+                if (pSrc == pDoorCli->pProc &&
+                    (pCur == NULL || process_thr_is_user(pCur) == 0)) {
+                    pCur = pDoorCli;
+                }
+            }
+        }
+        pCpu = cpu_current();
+        u64Rip = 0;
+        if (pCpu != NULL &&
+            process_fork_resume_rip_ok(pCpu->u64UserRip) != 0) {
+            u64Rip = pCpu->u64UserRip;
+        }
+        if (pCur != NULL && pCur->pProc != pSrc) {
+            if (u64Rip == 0 && pCur->u32SysUserValid != 0 &&
+                process_fork_resume_rip_ok(pCur->u64SysUserRip) != 0) {
+                u64Rip = pCur->u64SysUserRip;
+            }
+            pCur = NULL;
+        }
+        if (u64Rip == 0 && pCur != NULL) {
+            u64 u64Try;
+
+            u64Try = (pCur->u32SysUserValid != 0) ? pCur->u64SysUserRip
+                                                  : pCur->u64UserRip;
+            if (process_fork_resume_rip_ok(u64Try) != 0) {
+                u64Rip = u64Try;
+            }
+        }
+        if (u64Rip == 0 && pSrc != NULL &&
+            process_fork_resume_rip_ok(pSrc->u64UserSysRip) != 0) {
+            u64Rip = pSrc->u64UserSysRip;
+        }
+        if (pCur != NULL && pCur->pProc == pSrc &&
+            process_thr_is_user(pCur) != 0 && thread_current() != pCur) {
+            if (pCur->u32SysUserValid != 0 &&
+                process_fork_resume_rip_ok(pCur->u64SysUserRip) != 0) {
+                u64Rip = pCur->u64SysUserRip;
+            } else if (process_fork_resume_rip_ok(pCur->u64UserRip) != 0) {
+                u64Rip = pCur->u64UserRip;
+            }
+        }
+        {
+            int fUserParent;
+
+            fUserParent = 0;
+            if (g_pForkFromParent != NULL && g_pForkFromParent == pSrc) {
+                fUserParent = 1;
+            }
+            if (pCur != NULL && pCur->pProc == pSrc &&
+                process_thr_is_user(pCur) != 0) {
+                fUserParent = 1;
+            }
+            if ((fUserParent != 0 &&
+                 process_linux_parent_userld(pSrc, pCur, u64Rip) != 0) ||
+                process_linux_pcb_userld(pSrc) != 0 ||
+                process_linux_pcb_lo(pSrc) != 0 ||
+                process_userld_text_ok(u64Rip) != 0 ||
+                process_linux_text_lo(u64Rip) != 0) {
+                kprintf("process: soft fork clone vfork-like user child soft\n");
+                return process_linux_fork(u32Ppid, 0);
+            }
+        }
         kprintf("process: soft fork clone vfork-like soft\n");
         return process_linux_fork(u32Ppid, 1);
     }
@@ -2736,6 +3638,70 @@ process_linux_clone(u32 u32Ppid, u64 u64Flags)
     kprintf("process: soft fork clone fork-like flags=0x%lx soft\n",
             (unsigned long)u64Flags);
     return process_linux_fork(u32Ppid, 0);
+}
+
+struct gj_process *
+process_linux_live_user_child(u64 u64Rip, u64 u64Rsp)
+{
+    u32 i;
+    struct gj_process *pHit = NULL;
+    struct gj_process *pExact = NULL;
+    struct gj_process *pRsp = NULL;
+    u32 cHit = 0;
+    u32 cExact = 0;
+    u32 cRsp = 0;
+
+    for (i = 0; i < GJ_WAIT_SLOTS; i++) {
+        struct gj_process *pProc;
+        u64 u64ThrRip;
+
+        if (!g_aWait[i].u8Used || g_aWait[i].u8Reaped ||
+            g_aWait[i].u8Zombie) {
+            continue;
+        }
+        pProc = g_aWait[i].pProc;
+        if (pProc == NULL || pProc->u32Alive == 0u ||
+            pProc->u32Personality != 1u || pProc->u32StartThr == 0u) {
+            continue;
+        }
+        if (process_linux_pcb_userld(pProc) == 0 &&
+            process_linux_pcb_lo(pProc) == 0) {
+            continue;
+        }
+        pHit = pProc;
+        cHit++;
+        u64ThrRip = 0;
+        if (pProc->pUserThr != NULL && pProc->pUserThr->pProc == pProc) {
+            if (pProc->pUserThr->u32SysUserValid != 0) {
+                u64ThrRip = pProc->pUserThr->u64SysUserRip;
+            } else {
+                u64ThrRip = pProc->pUserThr->u64UserRip;
+            }
+        }
+        if (u64Rip != 0 && (pProc->u64UserSysRip == u64Rip ||
+                            pProc->u64StartEntry == u64Rip ||
+                            pProc->u64ExecEntry == u64Rip ||
+                            u64ThrRip == u64Rip) &&
+            (u64Rsp == 0 || pProc->u64UserSysRsp == 0 ||
+             pProc->u64UserSysRsp == u64Rsp)) {
+            pExact = pProc;
+            cExact++;
+        }
+        if (u64Rsp != 0 && pProc->u64UserSysRsp == u64Rsp) {
+            pRsp = pProc;
+            cRsp++;
+        }
+    }
+    if (cExact == 1u) {
+        return pExact;
+    }
+    if (cRsp == 1u) {
+        return pRsp;
+    }
+    if (cHit == 1u) {
+        return pHit;
+    }
+    return NULL;
 }
 
 i64
@@ -2790,6 +3756,23 @@ process_linux_exit_pid(u32 u32Pid, u32 u32Code)
     return -3; /* ESRCH */
 }
 
+int
+process_wait_pid_registered(u32 u32Pid)
+{
+    u32 i;
+
+    if (u32Pid == 0u) {
+        return 0;
+    }
+    for (i = 0; i < GJ_WAIT_SLOTS; i++) {
+        if (g_aWait[i].u8Used && !g_aWait[i].u8Reaped &&
+            g_aWait[i].u32Pid == u32Pid) {
+            return 1;
+        }
+    }
+    return 0;
+}
+
 u32
 process_wait_pid_of(struct gj_process *pProc)
 {
@@ -2818,9 +3801,26 @@ process_wait4_ppid(u32 u32Ppid, i64 i64Pid, i32 *pStatus, int nOptions)
     u32 attempt;
     int fNoHang = (nOptions & GJ_WAIT_WNOHANG) != 0;
     int fNoWait = (nOptions & GJ_WAIT_WNOWAIT) != 0;
-    /* Soft poll budget: enough yields for fork_child_exit_worker + shell poll. */
-    u32 u32MaxAttempts = fNoHang ? 1u : 256u;
+    struct gj_thread *pCurWait;
+    int fUserBlock = 0;
+    u32 u32MaxAttempts;
     int fLastHaveChild = 0;
+
+    pCurWait = thread_current();
+    if (process_thr_is_user(pCurWait) != 0) {
+        fUserBlock = 1;
+    }
+    /*
+     * WNOHANG: one pass. USER blocking wait: stay until zombie (dash/wait).
+     * Kernel smoke keeps a 256-yield budget so boot cannot hang.
+     */
+    if (fNoHang) {
+        u32MaxAttempts = 1u;
+    } else if (fUserBlock) {
+        u32MaxAttempts = 0xffffffffu;
+    } else {
+        u32MaxAttempts = 256u;
+    }
 
     /*
      * process: soft wait - wait4/waitid reaper enter
@@ -2935,22 +3935,26 @@ process_wait4_ppid(u32 u32Ppid, i64 i64Pid, i32 *pStatus, int nOptions)
                     (unsigned)i32Status);
             {
                 u32 j;
+                u32 u32ReapPpid = pS->u32Ppid;
+                struct gj_process *pReapParent;
 
+                pReapParent = (pS->pProc != NULL) ? pS->pProc->pParent : NULL;
                 for (j = 0; j < GJ_FORK_STUBS; j++) {
                     if (g_aForkUsed[j] && pS->pProc == &g_aForkStub[j]) {
                         g_aForkUsed[j] = 0;
                         break;
                     }
                 }
+                /* Soft: full slot scrub so pid reuse cannot see stale exit. */
+                pS->u8Used = 0;
+                pS->u8Zombie = 0;
+                pS->u8Reaped = 0;
+                pS->u32Exit = 0;
+                pS->u32Pid = 0;
+                pS->u32Ppid = 0;
+                pS->pProc = NULL;
+                process_wait_clear_sigchld(pReapParent, u32ReapPpid);
             }
-            /* Soft: full slot scrub so pid reuse cannot see stale exit. */
-            pS->u8Used = 0;
-            pS->u8Zombie = 0;
-            pS->u8Reaped = 0;
-            pS->u32Exit = 0;
-            pS->u32Pid = 0;
-            pS->u32Ppid = 0;
-            pS->pProc = NULL;
             return i64Ret;
         }
         fLastHaveChild = fHaveChild;
@@ -3047,7 +4051,13 @@ process_fork_soft(struct gj_process *pParent)
         return -22; /* EINVAL */
     }
     u32Ppid = process_soft_ensure_parent_pid(pParent);
-    i64Pid = process_linux_fork(u32Ppid, 0);
+    {
+        struct gj_process *pSaved = g_pForkFromParent;
+
+        g_pForkFromParent = pParent;
+        i64Pid = process_linux_fork(u32Ppid, 0);
+        g_pForkFromParent = pSaved;
+    }
     if (i64Pid > 0) {
         process_soft_fw_link_child(pParent, i64Pid);
         process_soft_inc(&g_u32SoftFwForkOk);
@@ -3073,7 +4083,13 @@ process_clone_soft(struct gj_process *pParent, u64 u64Flags)
         return -22; /* EINVAL */
     }
     u32Ppid = process_soft_ensure_parent_pid(pParent);
-    i64Pid = process_linux_clone(u32Ppid, u64Flags);
+    {
+        struct gj_process *pSaved = g_pForkFromParent;
+
+        g_pForkFromParent = pParent;
+        i64Pid = process_linux_clone(u32Ppid, u64Flags);
+        g_pForkFromParent = pSaved;
+    }
     if (i64Pid > 0) {
         process_soft_fw_link_child(pParent, i64Pid);
         process_soft_inc(&g_u32SoftFwForkOk);
@@ -3182,15 +4198,21 @@ process_fork_wait_soft_smoke(struct gj_process *pParent)
     i64 i64Pid;
     i64 i64Wr;
     int nStatus = 0;
+    u32 u32Ppid;
 
     /*
-     * Smoke: CLONE_VFORK -> immediate zombie, then wait (no deferred thr race).
+     * Smoke: fExitNow=1 immediate zombie, then wait (no USER-child race).
+     * Product vfork/clone still create a live USER child for user.ld.
      * First success -> process: soft fork-wait product-min PASS
      */
     if (pParent == NULL) {
         return -22;
     }
-    i64Pid = process_clone_soft(pParent, GJ_CLONE_VFORK);
+    u32Ppid = process_soft_ensure_parent_pid(pParent);
+    i64Pid = process_linux_fork(u32Ppid, 1);
+    if (i64Pid > 0) {
+        process_soft_fw_link_child(pParent, i64Pid);
+    }
     if (i64Pid <= 0) {
         kprintf("process: soft fork-wait product-min smoke fork fail r=%ld\n",
                 (long)i64Pid);

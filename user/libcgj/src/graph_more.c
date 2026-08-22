@@ -18,10 +18,13 @@
 #include <errno.h>
 #include <execinfo.h>
 #include <fcntl.h>
+#include <netgroup.h>
 #include <netinet/in.h>
+#include <nlist.h>
 #include <sched.h>
 #include <signal.h>
 #include <stdarg.h>
+#include <stddef.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -572,6 +575,190 @@ bindresvport(int nFd, struct sockaddr_in *pSin)
     return -1;
 }
 
+int
+bindresvport_sa(int nFd, struct sockaddr *pSa)
+{
+    struct sockaddr_storage ss;
+    struct sockaddr_in6 *p6;
+    socklen_t cb;
+    int nPort;
+
+    if (nFd < 0) {
+        errno = EBADF;
+        return -1;
+    }
+    if (pSa == NULL) {
+        memset(&ss, 0, sizeof(ss));
+        cb = (socklen_t)sizeof(ss);
+        if (getsockname(nFd, (struct sockaddr *)&ss, &cb) == 0 &&
+            ss.ss_family == AF_INET6) {
+            pSa = (struct sockaddr *)&ss;
+        } else {
+            return bindresvport(nFd, NULL);
+        }
+    }
+    if (pSa->sa_family == AF_INET || pSa->sa_family == 0) {
+        return bindresvport(nFd, (struct sockaddr_in *)pSa);
+    }
+    if (pSa->sa_family != AF_INET6) {
+        errno = EAFNOSUPPORT;
+        return -1;
+    }
+    p6 = (struct sockaddr_in6 *)pSa;
+    p6->sin6_family = AF_INET6;
+    for (nPort = 600; nPort < 1024; nPort++) {
+        p6->sin6_port = htons((uint16_t)nPort);
+        if (bind(nFd, (struct sockaddr *)p6,
+                 (socklen_t)sizeof(struct sockaddr_in6)) == 0) {
+            return 0;
+        }
+        if (errno != EADDRINUSE) {
+            return -1;
+        }
+    }
+    errno = EAGAIN;
+    return -1;
+}
+
+int
+rresvport_af(int *pPort, int nAf)
+{
+    struct sockaddr_storage ss;
+    struct sockaddr *pSa;
+    socklen_t cb;
+    uint16_t *pPortN;
+    int nFd;
+    int nWant;
+
+    if (pPort == NULL) {
+        errno = EFAULT;
+        return -1;
+    }
+    memset(&ss, 0, sizeof(ss));
+    pSa = (struct sockaddr *)&ss;
+    if (nAf == AF_INET) {
+        cb = (socklen_t)sizeof(struct sockaddr_in);
+        pPortN = &((struct sockaddr_in *)pSa)->sin_port;
+    } else if (nAf == AF_INET6) {
+        cb = (socklen_t)sizeof(struct sockaddr_in6);
+        pPortN = &((struct sockaddr_in6 *)pSa)->sin6_port;
+    } else {
+        errno = EPFNOSUPPORT;
+        return -1;
+    }
+    pSa->sa_family = (sa_family_t)nAf;
+    nFd = socket(nAf, SOCK_STREAM, 0);
+    if (nFd < 0) {
+        return -1;
+    }
+    nWant = *pPort;
+    if (nWant > 0 && nWant < IPPORT_RESERVED - 1) {
+        *pPortN = htons((uint16_t)nWant);
+        if (bind(nFd, pSa, cb) == 0) {
+            return nFd;
+        }
+        if (errno != EADDRINUSE) {
+            (void)close(nFd);
+            return -1;
+        }
+    }
+    if (bindresvport_sa(nFd, pSa) != 0) {
+        (void)close(nFd);
+        return -1;
+    }
+    cb = (socklen_t)sizeof(ss);
+    if (getsockname(nFd, pSa, &cb) == 0) {
+        if (pSa->sa_family == AF_INET) {
+            *pPort = (int)ntohs(((struct sockaddr_in *)pSa)->sin_port);
+        } else if (pSa->sa_family == AF_INET6) {
+            *pPort = (int)ntohs(((struct sockaddr_in6 *)pSa)->sin6_port);
+        }
+    }
+    return nFd;
+}
+
+int
+rresvport(int *pPort)
+{
+    return rresvport_af(pPort, AF_INET);
+}
+
+int
+getpeereid(int nFd, uid_t *pUid, gid_t *pGid)
+{
+    struct ucred cr;
+    socklen_t cb = (socklen_t)sizeof(cr);
+
+    memset(&cr, 0, sizeof(cr));
+    if (nFd < 0) {
+        errno = EBADF;
+        return -1;
+    }
+    if (getsockopt(nFd, SOL_SOCKET, SO_PEERCRED, &cr, &cb) != 0) {
+        return -1;
+    }
+    if (pUid != NULL) {
+        *pUid = cr.uid;
+    }
+    if (pGid != NULL) {
+        *pGid = cr.gid;
+    }
+    return 0;
+}
+
+static const char *g_szNetgr;
+
+void
+setnetgrent(const char *szNetgroup)
+{
+    g_szNetgr = szNetgroup;
+}
+
+void
+endnetgrent(void)
+{
+    g_szNetgr = NULL;
+}
+
+int
+getnetgrent(char **ppHost, char **ppUser, char **ppDomain)
+{
+    (void)g_szNetgr;
+    if (ppHost != NULL) {
+        *ppHost = NULL;
+    }
+    if (ppUser != NULL) {
+        *ppUser = NULL;
+    }
+    if (ppDomain != NULL) {
+        *ppDomain = NULL;
+    }
+    return 0;
+}
+
+int
+getnetgrent_r(char **ppHost, char **ppUser, char **ppDomain, char *szBuf,
+              size_t cb)
+{
+    (void)szBuf;
+    (void)cb;
+    return getnetgrent(ppHost, ppUser, ppDomain);
+}
+
+int
+innetgr(const char *szNetgroup, const char *szHost, const char *szUser,
+        const char *szDomain)
+{
+    (void)szHost;
+    (void)szUser;
+    (void)szDomain;
+    if (szNetgroup == NULL || szNetgroup[0] == '\0') {
+        return 0;
+    }
+    /* Empty netgroup table: not a member. OpenSSH treats -1 as a match. */
+    return 0;
+}
+
 long
 gethostid(void)
 {
@@ -646,4 +833,27 @@ int
 __adjtimex(struct timex *pBuf)
 {
     return adjtimex(pBuf);
+}
+
+int
+nlist(const char *szFilename, struct nlist *pNl)
+{
+    /*
+     * OpenSSH HAVE_NLIST is unset. Header still parses. Soft: no ELF
+     * symbol walk (that is nlist(3) on a.out, not product).
+     */
+    if (szFilename == NULL || pNl == NULL) {
+        errno = EINVAL;
+        return -1;
+    }
+    if (szFilename[0] == '\0') {
+        errno = ENOENT;
+        return -1;
+    }
+    pNl->n_type = 0;
+    pNl->n_other = 0;
+    pNl->n_desc = 0;
+    pNl->n_value = 0;
+    errno = ENOSYS;
+    return -1;
 }

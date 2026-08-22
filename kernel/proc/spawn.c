@@ -66,7 +66,7 @@
  *       -> kill/thr_exit -> G-PROC-5 H3 death (thr_exit before as_destroy)
  *     Absent embed: OPEN need=host_elf (stub park remains; Dual DoD OPEN).
  *     Soft residual != product TX/RX/BOT close; never invent stamp .76.
- *     bar=v2026.08.04.75 stamp-free.
+ *      stamp-free.
  *     greppable: "spawn: soft host_launch elf prefer"
  *     greppable: "spawn: soft host_launch elf prefer no_thrash"
  *     greppable: "spawn: soft residual host_elf"
@@ -141,7 +141,7 @@
  *     greppable: "spawn: soft host_launch elf stack"
  *     greppable: "spawn: soft host_launch elf thr"
  *     greppable: host_blob / Soft!=product / dual_dod OPEN / product_hosts=UDX
- *     bar=v2026.08.04.75 stamp-free; never invent .76.
+ *      stamp-free; never invent .76.
  *     ASCII Soft!=product only (no unicode Soft inequality glyph).
  *   C2 UDX launch residual (ASSURANCE_LITE class C2 product path; Soft!=product):
  *     Explicit C2 honesty: soft scaffold != product AC close.
@@ -370,7 +370,7 @@ static u32 g_cMintSoftBad;   /* soft post-mint verify FAIL */
  *   7 dual_dod_open    - soft residual never closes Dual DoD; stubs live
  * greppable: denser_arms=8 denser_ok= denser_min= host_blob denser
  * greppable: spawn: soft residual host_blob denser
- * product_hosts=UDX; Dual DoD OPEN; bar=v2026.08.04.75 stamp-free.
+ * product_hosts=UDX; Dual DoD OPEN;  stamp-free.
  * CRITICAL preserve host blob embeds ddi/rtl/xhci.
  *
  * denser2 multi-arm residual (W17 densify; Soft!=product; Dual DoD OPEN):
@@ -399,7 +399,7 @@ static u32 g_cMintSoftBad;   /* soft post-mint verify FAIL */
  *   7 soft_open_bar75  - denser3 min/arms; soft never closes Dual DoD
  * greppable: denser3_arms=8 denser3_ok= denser3_min= host_blob denser3
  * greppable: spawn: soft residual host_blob denser3
- * product_hosts=UDX; Dual DoD OPEN; bar=v2026.08.04.75 stamp-free.
+ * product_hosts=UDX; Dual DoD OPEN;  stamp-free.
  * CRITICAL preserve host blob embeds ddi/rtl/xhci (weak gj_*_elf_blob).
  *
  * denser4 multi-arm residual (W19 densify; Soft!=product; Dual DoD OPEN):
@@ -414,7 +414,7 @@ static u32 g_cMintSoftBad;   /* soft post-mint verify FAIL */
  *   7 soft_open_bar75_4   - denser4 min/arms; soft never closes Dual DoD
  * greppable: denser4_arms=8 denser4_ok= denser4_min= host_blob denser4
  * greppable: spawn: soft residual host_blob denser4
- * product_hosts=UDX; Dual DoD OPEN; bar=v2026.08.04.75 stamp-free.
+ * product_hosts=UDX; Dual DoD OPEN;  stamp-free.
  * CRITICAL preserve host blob embeds ddi/rtl/xhci (weak gj_*_elf_blob).
  *
  * denser5 multi-arm residual (W20 densify; Soft!=product; Dual DoD OPEN):
@@ -429,7 +429,7 @@ static u32 g_cMintSoftBad;   /* soft post-mint verify FAIL */
  *   7 soft_open_bar75_5   - denser5 min/arms; soft never closes Dual DoD
  * greppable: denser5_arms=8 denser5_ok= denser5_min= host_blob denser5
  * greppable: spawn: soft residual host_blob denser5
- * product_hosts=UDX; Dual DoD OPEN; bar=v2026.08.04.75 stamp-free.
+ * product_hosts=UDX; Dual DoD OPEN;  stamp-free.
  * CRITICAL preserve host blob embeds ddi/rtl/xhci (weak gj_*_elf_blob).
  *
  * denser6 multi-arm residual (W21 densify; Soft!=product; Dual DoD OPEN):
@@ -444,7 +444,7 @@ static u32 g_cMintSoftBad;   /* soft post-mint verify FAIL */
  *   7 soft_open_bar75_6   - denser6 min/arms; soft never closes Dual DoD
  * greppable: denser6_arms=8 denser6_ok= denser6_min= host_blob denser6
  * greppable: spawn: soft residual host_blob denser6
- * product_hosts=UDX; Dual DoD OPEN; bar=v2026.08.04.75 stamp-free.
+ * product_hosts=UDX; Dual DoD OPEN;  stamp-free.
  * CRITICAL preserve host blob embeds ddi/rtl/xhci (weak gj_*_elf_blob).
  * denser7 multi-arm residual (W22 densify; Soft!=product; Dual DoD OPEN):
  * Arms (GJ_SPAWN_HOST_BLOB_DENSE7_ARMS=8):
@@ -458,7 +458,7 @@ static u32 g_cMintSoftBad;   /* soft post-mint verify FAIL */
  *   7 soft_open_bar75_7   - denser7 min/arms; soft never closes Dual DoD
  * greppable: denser7_arms=8 denser7_ok= denser7_min= host_blob denser7
  * greppable: spawn: soft residual host_blob denser7
- * product_hosts=UDX; Dual DoD OPEN; bar=v2026.08.04.75 stamp-free.
+ * product_hosts=UDX; Dual DoD OPEN;  stamp-free.
  * CRITICAL preserve host blob embeds ddi/rtl/xhci (weak gj_*_elf_blob).
  *
  * denser8 multi-arm residual (W23 densify; Soft!=product; Dual DoD OPEN):
@@ -473,7 +473,7 @@ static u32 g_cMintSoftBad;   /* soft post-mint verify FAIL */
  *   7 soft_open_bar75_8   - denser8 min/arms; soft never closes Dual DoD
  * greppable: denser8_arms=8 denser8_ok= denser8_min= host_blob denser8
  * greppable: spawn: soft residual host_blob denser8
- * product_hosts=UDX; Dual DoD OPEN; bar=v2026.08.04.75 stamp-free.
+ * product_hosts=UDX; Dual DoD OPEN;  stamp-free.
  * CRITICAL preserve host blob embeds ddi/rtl/xhci (weak gj_*_elf_blob).
  * ASCII Soft!=product only (no unicode Soft inequality glyph).
  */
@@ -751,7 +751,7 @@ soft_note_live_peak(void)
  * (embed present + ring-3 product thr live), prefer product thr: exit
  * park stub immediately (no yield thrash loop). QoS already demotes stub
  * to BACKGROUND and product thr to DRIVER when prefer arms.
- * Soft!=product; Dual DoD stays OPEN until DUT product close.
+ * Soft!=product; Dual DoD stays OPEN until host USB path / interactive SSH login.
  * greppable: spawn: soft host_launch elf prefer
  * greppable: spawn: soft host_launch elf prefer no_thrash
  */
@@ -791,7 +791,7 @@ spawn_host_stub_entry(void *pArg)
                     "H3=thr_exit_before_as_destroy "
                     "product_host_launch=OPEN soft_ne_product=1 "
                     "dual=MIT_OR_Apache-2.0 G-AC-1 wave=%u "
-                    "bar=v2026.08.04.75\n",
+                    "\n",
                     (unsigned)pSlot->u8HostClass,
                     (unsigned)pSlot->u8HostDualDod,
                     (unsigned)pSlot->u16HostVend,
@@ -803,7 +803,7 @@ spawn_host_stub_entry(void *pArg)
                     "host_class=%u dual_dod=%u "
                     "product_host_launch=OPEN soft_ne_product=1 "
                     "H3=1 Dual_DoD=OPEN G-AC-1 wave=%u "
-                    "bar=v2026.08.04.75 PASS\n",
+                    " PASS\n",
                     (unsigned)pSlot->u8HostClass,
                     (unsigned)pSlot->u8HostDualDod,
                     GJ_SPAWN_SOFT_WAVE);
@@ -927,7 +927,7 @@ spawn_host_slot_tag(struct spawn_slot *pSlot,
  * Denser residual: used by elf_try_run + inventory live probe (host_blob densify).
  * greppable: host_blob / Soft!=product / dual_dod OPEN / product_hosts=UDX
  * greppable: spawn: soft residual host_blob / spawn: soft host_launch elf host_blob
- * bar=v2026.08.04.75 stamp-free; never invent .76.
+ *  stamp-free; never invent .76.
  */
 static int
 spawn_host_blob_get(u32 u32ClassIdx, const void **ppBlob, u64 *pcb)
@@ -1196,7 +1196,7 @@ spawn_host_elf_try_run(struct gj_process *pChild,
                 "product_host_launch=OPEN dual_dod OPEN dual_dod=%u "
                 "prefer_elf_thr=0 stub_park=1 no_thrash=0 H3=1 "
                 "hooks=spawn_host_blob_get soft_ne_product=1 Soft!=product "
-                "G-AC-1 wave=%u bar=v2026.08.04.75 "
+                "G-AC-1 wave=%u  "
                 "(Soft!=product; weak embed absent; Dual DoD OPEN; "
                 "host_blob miss; product_hosts=UDX; densify residual)\n",
                 pHost->szName, szPath, u32ClassIdx,
@@ -1212,7 +1212,7 @@ spawn_host_elf_try_run(struct gj_process *pChild,
             "weak=gj_ddi_host|gj_rtl8168_udx|gj_xhci_udx "
             "product_host_launch=OPEN dual_dod OPEN densify=1 "
             "soft_ne_product=1 Soft!=product G-AC-1 wave=%u "
-            "bar=v2026.08.04.75\n",
+            "\n",
             pHost->szName, szPath, (unsigned long)cb, u32ClassIdx,
             (unsigned)pHost->u8DualDod, GJ_SPAWN_SOFT_WAVE);
     u64SavedCr3 = cpu_read_cr3();
@@ -1239,7 +1239,7 @@ spawn_host_elf_try_run(struct gj_process *pChild,
             "entry=0x%lx cb=%lu embed=1 class_idx=%u dual_dod=%u "
             "product_hosts=UDX product_host_launch=OPEN dual_dod OPEN "
             "soft_ne_product=1 Soft!=product G-AC-1 wave=%u "
-            "bar=v2026.08.04.75\n",
+            "\n",
             pHost->szName, szPath, (unsigned long)info.u64Entry,
             (unsigned long)cb, u32ClassIdx, (unsigned)pHost->u8DualDod,
             GJ_SPAWN_SOFT_WAVE);
@@ -1266,7 +1266,7 @@ spawn_host_elf_try_run(struct gj_process *pChild,
             "entry=0x%lx cb=%lu embed=1 class_idx=%u dual_dod=%u "
             "product_hosts=UDX product_host_launch=OPEN dual_dod OPEN "
             "soft_ne_product=1 Soft!=product G-AC-1 wave=%u "
-            "bar=v2026.08.04.75\n",
+            "\n",
             pHost->szName, szPath, (unsigned long)info.u64Entry,
             (unsigned long)cb, u32ClassIdx, (unsigned)pHost->u8DualDod,
             GJ_SPAWN_SOFT_WAVE);
@@ -1292,7 +1292,7 @@ spawn_host_elf_try_run(struct gj_process *pChild,
             "stack_top=0x%lx stack_pages=%u class_idx=%u dual_dod=%u "
             "product_hosts=UDX product_host_launch=OPEN dual_dod OPEN "
             "soft_ne_product=1 Soft!=product G-AC-1 wave=%u "
-            "bar=v2026.08.04.75\n",
+            "\n",
             pHost->szName, szPath,
             (unsigned long)GJ_SPAWN_HOST_STACK_TOP, cStack, u32ClassIdx,
             (unsigned)pHost->u8DualDod, GJ_SPAWN_SOFT_WAVE);
@@ -1332,7 +1332,7 @@ spawn_host_elf_try_run(struct gj_process *pChild,
             "entry=0x%lx stack_top=0x%lx class_idx=%u dual_dod=%u "
             "product_hosts=UDX product_host_launch=OPEN dual_dod OPEN "
             "soft_ne_product=1 Soft!=product G-AC-1 wave=%u "
-            "bar=v2026.08.04.75\n",
+            "\n",
             pHost->szName, szPath, u32Thr,
             (unsigned long)info.u64Entry,
             (unsigned long)GJ_SPAWN_HOST_STACK_TOP, u32ClassIdx,
@@ -1343,7 +1343,7 @@ spawn_host_elf_try_run(struct gj_process *pChild,
      *   2) QoS DRIVER on product thr; BACKGROUND on park stub
      *   3) soft boost product thr (capped PI; Soft!=product)
      * Sample last thr id as the ring-3 host thr (not the park stub).
-     * Dual DoD OPEN; H3 death path unchanged; bar=v2026.08.04.75 stamp-free.
+     * Dual DoD OPEN; H3 death path unchanged;  stamp-free.
      */
     pSlot = spawn_slot_of(pChild);
     u32StubThr = 0u;
@@ -1377,7 +1377,7 @@ spawn_host_elf_try_run(struct gj_process *pChild,
             "H3=thr_exit_before_as_destroy product_host_launch=OPEN "
             "ddi_cap_mint=OPEN soft_ne_product=1 Soft!=product "
             "dual=MIT_OR_Apache-2.0 G-AC-1 wave=%u "
-            "bar=v2026.08.04.75 PASS\n",
+            " PASS\n",
             pHost->szName, szPath, (unsigned long)info.u64Entry, u32Thr,
             (unsigned long)GJ_SPAWN_HOST_STACK_TOP, (unsigned long)cb,
             (unsigned)pHost->u8DualDod, cStack, u32ClassIdx,
@@ -1391,7 +1391,7 @@ spawn_host_elf_try_run(struct gj_process *pChild,
             "stub_thr=%u qos_prefer=%u host_blob=1 "
             "product_hosts=UDX dual_dod OPEN "
             "H3=1 product_host_launch=OPEN soft_ne_product=1 Soft!=product "
-            "G-AC-1 wave=%u bar=v2026.08.04.75 PASS\n",
+            "G-AC-1 wave=%u  PASS\n",
             pHost->szName, u32Thr, u32ClassIdx,
             (unsigned)pHost->u8DualDod, g_u32SoftHostElfPrefer,
             g_u32SoftHostElfStubExit, u32StubThr,
@@ -1403,7 +1403,7 @@ spawn_host_elf_try_run(struct gj_process *pChild,
             "product_hosts=UDX dual_dod OPEN "
             "H3=1 Dual_DoD=OPEN product_host_launch=OPEN "
             "soft_ne_product=1 Soft!=product G-AC-1 wave=%u "
-            "bar=v2026.08.04.75 PASS\n",
+            " PASS\n",
             pHost->szName, u32Thr, u32StubThr,
             (unsigned)pHost->u8DualDod, GJ_SPAWN_SOFT_WAVE);
     if (u64SavedCr3 != 0ull) {
@@ -1528,7 +1528,7 @@ process_spawn_host_launch(struct gj_process *pParent, u32 u32ClassIdx,
             "elf_no_thrash=%u elf_qos_prefer=%u "
             "ddi_cap_mint=OPEN product_host_launch=OPEN "
             "soft_ne_product=1 Soft!=product dual=MIT_OR_Apache-2.0 G-AC-1 "
-            "wave=%u bar=v2026.08.04.75 PASS\n",
+            "wave=%u  PASS\n",
             u32ClassIdx, pHost->szName,
             (pHost->szRole != NULL) ? pHost->szRole : "?",
             (unsigned)pHost->u16Vend, (unsigned)pHost->u16Dev,
@@ -1668,7 +1668,7 @@ process_spawn_host_launch_by_pci(struct gj_process *pParent, u16 u16Vend,
  * Never hard-gates; diagnostics only. Residual lines: no stamp storms.
  * greppable: spawn: soft
  * greppable: host_blob / Soft!=product / dual_dod OPEN / product_hosts=UDX
- * bar=v2026.08.04.75 stamp-free; never invent .76.
+ *  stamp-free; never invent .76.
  */
 static void
 soft_inventory_log(const char *szVia)
@@ -1831,22 +1831,17 @@ soft_inventory_log(const char *szVia)
 
     /*
      * Dual DoD B residual honesty (Soft!=product; G-AC-1).
-     * Freestanding sshd.elf live spawn is main-path embed (default :22);
-     * this fixed process_spawn table is a separate G-PROC mint path.
-     * process_wait returns AGAIN + yields so eth accept can run while
-     * a parent soft-polls wait (pairs with sshd park yield+poll).
-     * product_sshd_tcp22 stays OPEN until DUT host proof.
+     * sshd_gj abandoned (not embedded). Product SSH is OpenSSH-portable.
+     * product_sshd_tcp22 stays OPEN until interactive SSH login.
      * Grep: spawn: soft sshd
      * Grep: spawn: soft dual_dod_b
      */
-    kprintf("spawn: soft sshd live_embed=main process_spawn_table=separate "
-            "default_port=22 wait_poll=AGAIN yield_on_again=1 "
-            "eth_accept=yield_friendly soft_ne_product=1 "
+    kprintf("spawn: soft sshd live_embed=0 sshd_gj=abandoned "
             "product_sshd_tcp22=OPEN dual_dod_b=OPEN G-AC-1=1 "
             "via=%s wave=%u (Soft!=product)\n",
             szViaSafe, GJ_SPAWN_SOFT_WAVE);
     kprintf("spawn: soft dual_dod_b residual=spawn_wait_poll "
-            "sshd_live=1 port=22 soft_ne_product=1 product=OPEN "
+            "sshd_live=0 port=22 soft_ne_product=1 product=OPEN "
             "wave=%u\n",
             GJ_SPAWN_SOFT_WAVE);
 
@@ -1979,7 +1974,7 @@ soft_inventory_log(const char *szVia)
             "ko_in_kernel=0 soft_ne_product=1 Soft!=product "
             "dual=MIT_OR_Apache-2.0 G-AC-1 via=%s wave=%u "
             "(Soft!=product; functional residual; not Dual DoD close; "
-            "host_blob densify; bar=v2026.08.04.75 stamp-free; "
+            "host_blob densify;  stamp-free; "
             "never invent .76)\n",
             g_u32SoftHostElfEmbed, g_u32SoftHostElfMiss,
             g_u32SoftHostElfProbeOk, g_u32SoftHostElfProbeFail,
@@ -2046,7 +2041,7 @@ soft_inventory_log(const char *szVia)
             "via=%s wave=%u "
             "(Soft!=product; host_blob densify; product_hosts=UDX; "
             "dual_dod OPEN; not Dual DoD close; not product AC; "
-            "bar=v2026.08.04.75 stamp-free; never invent .76)\n",
+            " stamp-free; never invent .76)\n",
             GJ_SPAWN_HOST_DDI_NAME, GJ_SPAWN_HOST_RTL_NAME,
             GJ_SPAWN_HOST_XHCI_NAME, GJ_SPAWN_HOST_CLASS_N,
             g_u32SoftHostElfEmbed, g_u32SoftHostElfMiss,
@@ -2064,7 +2059,7 @@ soft_inventory_log(const char *szVia)
      * Denser host_blob residual: live weak-embed probe + lean self-check.
      * Present/miss is honesty only (miss keeps Dual DoD OPEN + stub park).
      * Geometry/hook self-check is ok/N; never hard-gates product.
-     * Soft!=product; product_hosts=UDX; bar=v2026.08.04.75 stamp-free.
+     * Soft!=product; product_hosts=UDX;  stamp-free.
      */
     {
         u32 u32BlobOk;
@@ -2153,7 +2148,7 @@ soft_inventory_log(const char *szVia)
                     "product_hosts=UDX dual_dod OPEN "
                     "hooks=spawn_host_blob_get "
                     "soft_ne_product=1 Soft!=product G-AC-1 "
-                    "via=%s wave=%u bar=v2026.08.04.75\n",
+                    "via=%s wave=%u \n",
                     u32Idx,
                     (g_aHostCatalog[u32Idx].szName != NULL)
                         ? g_aHostCatalog[u32Idx].szName
@@ -2222,7 +2217,7 @@ soft_inventory_log(const char *szVia)
             "product_host_launch=OPEN H3=1 ko_in_kernel=0 "
             "freestanding_rtl=SKIP freestanding_xhci=SKIP "
             "soft_ne_product=1 Soft!=product dual=MIT_OR_Apache-2.0 G-AC-1 "
-            "via=%s wave=%u bar=v2026.08.04.75 "
+            "via=%s wave=%u  "
             "(Soft!=product; denser host_blob residual; product_hosts=UDX; "
             "dual_dod OPEN; not Dual DoD close; never invent .76)\n",
             GJ_SPAWN_HOST_DDI_NAME, GJ_SPAWN_HOST_RTL_NAME,
@@ -2252,7 +2247,7 @@ soft_inventory_log(const char *szVia)
             "H3=1 soft_ne_product=1 Soft!=product "
             "dual=MIT_OR_Apache-2.0 G-AC-1 "
             "lean_pass=%u logs=%u via=%s wave=%u "
-            "bar=v2026.08.04.75 "
+            " "
             "(Soft!=product; host_blob lean residual self-check; "
             "not product AC; not Dual DoD close)\n",
             u32BlobOk, GJ_SPAWN_HOST_BLOB_OK_N, u32BlobFailBits,
@@ -2265,7 +2260,7 @@ soft_inventory_log(const char *szVia)
             kprintf("spawn: soft residual host_blob lean PASS via=%s "
                     "ok=%u/%u fail_bits=0x0 product_hosts=UDX "
                     "dual_dod OPEN Soft!=product "
-                    "wave=%u bar=v2026.08.04.75\n",
+                    "wave=%u \n",
                     szViaSafe, u32BlobOk, GJ_SPAWN_HOST_BLOB_OK_N,
                     GJ_SPAWN_SOFT_WAVE);
         } else {
@@ -2283,7 +2278,7 @@ soft_inventory_log(const char *szVia)
          * Dual DoD OPEN; product_hosts=UDX; never hard-gates product.
          * greppable: spawn: soft residual host_blob denser
          * greppable: denser_arms= denser_ok= denser_min= host_blob denser
-         * bar=v2026.08.04.75 stamp-free; never invent .76.
+         *  stamp-free; never invent .76.
          * ASCII Soft!=product only.
          */
         {
@@ -2447,7 +2442,7 @@ soft_inventory_log(const char *szVia)
                     "freestanding_rtl=SKIP freestanding_xhci=SKIP "
                     "soft_residual_closes_dod=0 "
                     "soft_ne_product=1 Soft!=product dual=MIT_OR_Apache-2.0 "
-                    "G-AC-1 via=%s wave=%u bar=v2026.08.04.75 "
+                    "G-AC-1 via=%s wave=%u  "
                     "(Soft!=product; denser host_blob residual; "
                     "product_hosts=UDX; dual_dod OPEN; not Dual DoD close; "
                     "CRITICAL preserve host blob embeds ddi/rtl/xhci; "
@@ -2473,7 +2468,7 @@ soft_inventory_log(const char *szVia)
                         "embeds_preserve=1 ddi|rtl|xhci "
                         "keep_live_policy=embed_present never_kill_embed=1 "
                         "preserve_embeds=1 host_blob=1 "
-                        "wave=%u bar=v2026.08.04.75\n",
+                        "wave=%u \n",
                         szViaSafe, (unsigned)u32Dense,
                         (unsigned)GJ_SPAWN_HOST_BLOB_DENSE_MIN,
                         GJ_SPAWN_SOFT_WAVE);
@@ -2495,7 +2490,7 @@ soft_inventory_log(const char *szVia)
              * Soft!=product; Dual DoD OPEN; product_hosts=UDX; never hard-gates.
              * greppable: spawn: soft residual host_blob denser2
              * greppable: denser2_arms= denser2_ok= denser2_min= host_blob denser2
-             * bar=v2026.08.04.75 stamp-free; never invent .76.
+             *  stamp-free; never invent .76.
              * ASCII Soft!=product only.
              */
             {
@@ -2724,7 +2719,7 @@ soft_inventory_log(const char *szVia)
                         "freestanding_rtl=SKIP freestanding_xhci=SKIP "
                         "soft_residual_closes_dod=0 "
                         "soft_ne_product=1 Soft!=product dual=MIT_OR_Apache-2.0 "
-                        "G-AC-1 via=%s wave=%u bar=v2026.08.04.75 "
+                        "G-AC-1 via=%s wave=%u  "
                         "(Soft!=product; denser2 host_blob residual W17; "
                         "product_hosts=UDX; dual_dod OPEN; not Dual DoD close; "
                         "CRITICAL preserve host blob embeds ddi/rtl/xhci; "
@@ -2752,7 +2747,7 @@ soft_inventory_log(const char *szVia)
                             "embeds_preserve2=1 ddi|rtl|xhci "
                             "preserve_policy=1 never_kill_embed=1 "
                             "preserve_embeds=1 host_blob=1 denser=1 denser2=1 "
-                            "wave=%u bar=v2026.08.04.75\n",
+                            "wave=%u \n",
                             szViaSafe, (unsigned)u32Dense2,
                             (unsigned)GJ_SPAWN_HOST_BLOB_DENSE2_MIN,
                             GJ_SPAWN_SOFT_WAVE);
@@ -2774,7 +2769,7 @@ soft_inventory_log(const char *szVia)
                  * Soft!=product; Dual DoD OPEN; product_hosts=UDX; never hard-gates.
                  * greppable: spawn: soft residual host_blob denser3
                  * greppable: denser3_arms= denser3_ok= denser3_min= host_blob denser3
-                 * bar=v2026.08.04.75 stamp-free; never invent .76.
+                 *  stamp-free; never invent .76.
                  * ASCII Soft!=product only (no unicode Soft inequality glyph).
                  */
                 {
@@ -2984,7 +2979,7 @@ soft_inventory_log(const char *szVia)
                             "freestanding_rtl=SKIP freestanding_xhci=SKIP "
                             "soft_residual_closes_dod=0 "
                             "soft_ne_product=1 Soft!=product dual=MIT_OR_Apache-2.0 "
-                            "G-AC-1 via=%s wave=%u bar=v2026.08.04.75 "
+                            "G-AC-1 via=%s wave=%u  "
                             "(Soft!=product; denser3 host_blob residual W18; "
                             "product_hosts=UDX; dual_dod OPEN; not Dual DoD close; "
                             "CRITICAL preserve host blob embeds ddi/rtl/xhci; "
@@ -3013,7 +3008,7 @@ soft_inventory_log(const char *szVia)
                                 "embeds_preserve3=1 ddi|rtl|xhci "
                                 "denser_chain=1 never_kill_embed=1 "
                                 "preserve_embeds=1 host_blob=1 denser=1 denser2=1 denser3=1 "
-                                "wave=%u bar=v2026.08.04.75\n",
+                                "wave=%u \n",
                                 szViaSafe, (unsigned)u32Dense3,
                                 (unsigned)GJ_SPAWN_HOST_BLOB_DENSE3_MIN,
                                 GJ_SPAWN_SOFT_WAVE);
@@ -3035,7 +3030,7 @@ soft_inventory_log(const char *szVia)
                      * Soft!=product; Dual DoD OPEN; product_hosts=UDX; never hard-gates.
                      * greppable: spawn: soft residual host_blob denser4
                      * greppable: denser4_arms= denser4_ok= denser4_min= host_blob denser4
-                     * bar=v2026.08.04.75 stamp-free; never invent .76.
+                     *  stamp-free; never invent .76.
                      * ASCII Soft!=product only (no unicode Soft inequality glyph).
                      */
                     {
@@ -3279,7 +3274,7 @@ soft_inventory_log(const char *szVia)
                                 "freestanding_rtl=SKIP freestanding_xhci=SKIP "
                                 "soft_residual_closes_dod=0 "
                                 "soft_ne_product=1 Soft!=product dual=MIT_OR_Apache-2.0 "
-                                "G-AC-1 via=%s wave=%u bar=v2026.08.04.75 "
+                                "G-AC-1 via=%s wave=%u  "
                                 "(Soft!=product; denser4 host_blob residual W19; "
                                 "product_hosts=UDX; dual_dod OPEN; not Dual DoD close; "
                                 "CRITICAL preserve host blob embeds ddi/rtl/xhci; "
@@ -3312,7 +3307,7 @@ soft_inventory_log(const char *szVia)
                                     "denser_chain4=1 never_kill_embed=1 "
                                     "preserve_embeds=1 host_blob=1 "
                                     "denser=1 denser2=1 denser3=1 denser4=1 "
-                                    "wave=%u bar=v2026.08.04.75\n",
+                                    "wave=%u \n",
                                     szViaSafe, (unsigned)u32Dense4,
                                     (unsigned)GJ_SPAWN_HOST_BLOB_DENSE4_MIN,
                                     GJ_SPAWN_SOFT_WAVE);
@@ -3334,7 +3329,7 @@ soft_inventory_log(const char *szVia)
                          * Soft!=product; Dual DoD OPEN; product_hosts=UDX; never hard-gates.
                          * greppable: spawn: soft residual host_blob denser5
                          * greppable: denser5_arms= denser5_ok= denser5_min= host_blob denser5
-                         * bar=v2026.08.04.75 stamp-free; never invent .76.
+                         *  stamp-free; never invent .76.
                          * ASCII Soft!=product only (no unicode Soft inequality glyph).
                          */
                         {
@@ -3589,7 +3584,7 @@ soft_inventory_log(const char *szVia)
                                     "freestanding_rtl=SKIP freestanding_xhci=SKIP "
                                     "soft_residual_closes_dod=0 "
                                     "soft_ne_product=1 Soft!=product dual=MIT_OR_Apache-2.0 "
-                                    "G-AC-1 via=%s wave=%u bar=v2026.08.04.75 "
+                                    "G-AC-1 via=%s wave=%u  "
                                     "(Soft!=product; denser5 host_blob residual W20; "
                                     "product_hosts=UDX; dual_dod OPEN; not Dual DoD close; "
                                     "CRITICAL preserve host blob embeds ddi/rtl/xhci; "
@@ -3623,7 +3618,7 @@ soft_inventory_log(const char *szVia)
                                         "denser_chain5=1 never_kill_embed=1 "
                                         "preserve_embeds=1 host_blob=1 "
                                         "denser=1 denser2=1 denser3=1 denser4=1 denser5=1 "
-                                        "wave=%u bar=v2026.08.04.75\n",
+                                        "wave=%u \n",
                                         szViaSafe, (unsigned)u32Dense5,
                                         (unsigned)GJ_SPAWN_HOST_BLOB_DENSE5_MIN,
                                         GJ_SPAWN_SOFT_WAVE);
@@ -3645,7 +3640,7 @@ soft_inventory_log(const char *szVia)
                              * Soft!=product; Dual DoD OPEN; product_hosts=UDX; never hard-gates.
                              * greppable: spawn: soft residual host_blob denser6
                              * greppable: denser6_arms= denser6_ok= denser6_min= host_blob denser6
-                             * bar=v2026.08.04.75 stamp-free; never invent .76.
+                             *  stamp-free; never invent .76.
                              * ASCII Soft!=product only (no unicode Soft inequality glyph).
                              */
                             {
@@ -3898,7 +3893,7 @@ soft_inventory_log(const char *szVia)
                                         "freestanding_rtl=SKIP freestanding_xhci=SKIP "
                                         "soft_residual_closes_dod=0 "
                                         "soft_ne_product=1 Soft!=product dual=MIT_OR_Apache-2.0 "
-                                        "G-AC-1 via=%s wave=%u bar=v2026.08.04.75 "
+                                        "G-AC-1 via=%s wave=%u  "
                                         "(Soft!=product; denser6 host_blob residual W21; "
                                         "product_hosts=UDX; dual_dod OPEN; not Dual DoD close; "
                                         "CRITICAL preserve host blob embeds ddi/rtl/xhci; "
@@ -3932,7 +3927,7 @@ soft_inventory_log(const char *szVia)
                                             "denser_chain6=1 never_kill_embed=1 "
                                             "preserve_embeds=1 host_blob=1 "
                                             "denser=1 denser2=1 denser3=1 denser4=1 denser5=1 denser6=1 "
-                                            "wave=%u bar=v2026.08.04.75\n",
+                                            "wave=%u \n",
                                             szViaSafe, (unsigned)u32Dense6,
                                             (unsigned)GJ_SPAWN_HOST_BLOB_DENSE6_MIN,
                                             GJ_SPAWN_SOFT_WAVE);
@@ -3954,7 +3949,7 @@ soft_inventory_log(const char *szVia)
                                  * Soft!=product; Dual DoD OPEN; product_hosts=UDX; never hard-gates.
                                  * greppable: spawn: soft residual host_blob denser7
                                  * greppable: denser7_arms= denser7_ok= denser7_min= host_blob denser7
-                                 * bar=v2026.08.04.75 stamp-free; never invent .76.
+                                 *  stamp-free; never invent .76.
                                  * ASCII Soft!=product only (no unicode Soft inequality glyph).
                                  */
                                 {
@@ -4211,7 +4206,7 @@ soft_inventory_log(const char *szVia)
                                             "freestanding_rtl=SKIP freestanding_xhci=SKIP "
                                             "soft_residual_closes_dod=0 "
                                             "soft_ne_product=1 Soft!=product dual=MIT_OR_Apache-2.0 "
-                                            "G-AC-1 via=%s wave=%u bar=v2026.08.04.75 "
+                                            "G-AC-1 via=%s wave=%u  "
                                             "(Soft!=product; denser7 host_blob residual W22; "
                                             "product_hosts=UDX; dual_dod OPEN; not Dual DoD close; "
                                             "CRITICAL preserve host blob embeds ddi/rtl/xhci; "
@@ -4245,7 +4240,7 @@ soft_inventory_log(const char *szVia)
                                                 "denser_chain7=1 never_kill_embed=1 "
                                                 "preserve_embeds=1 host_blob=1 "
                                                 "denser=1 denser2=1 denser3=1 denser4=1 denser5=1 denser6=1 denser7=1 "
-                                                "wave=%u bar=v2026.08.04.75\n",
+                                                "wave=%u \n",
                                                 szViaSafe, (unsigned)u32Dense7,
                                                 (unsigned)GJ_SPAWN_HOST_BLOB_DENSE7_MIN,
                                                 GJ_SPAWN_SOFT_WAVE);
@@ -4267,7 +4262,7 @@ soft_inventory_log(const char *szVia)
                                      * Soft!=product; Dual DoD OPEN; product_hosts=UDX; never hard-gates.
                                      * greppable: spawn: soft residual host_blob denser8
                                      * greppable: denser8_arms= denser8_ok= denser8_min= host_blob denser8
-                                     * bar=v2026.08.04.75 stamp-free; never invent .76.
+                                     *  stamp-free; never invent .76.
                                      * ASCII Soft!=product only (no unicode Soft inequality glyph).
                                      */
                                     {
@@ -4540,7 +4535,7 @@ soft_inventory_log(const char *szVia)
                                                 "freestanding_rtl=SKIP freestanding_xhci=SKIP "
                                                 "soft_residual_closes_dod=0 "
                                                 "soft_ne_product=1 Soft!=product dual=MIT_OR_Apache-2.0 "
-                                                "G-AC-1 via=%s wave=%u bar=v2026.08.04.75 "
+                                                "G-AC-1 via=%s wave=%u  "
                                                 "(Soft!=product; denser8 host_blob residual W23; "
                                                 "product_hosts=UDX; dual_dod OPEN; not Dual DoD close; "
                                                 "CRITICAL preserve host blob embeds ddi/rtl/xhci; "
@@ -4574,7 +4569,7 @@ soft_inventory_log(const char *szVia)
                                                     "denser_chain8=1 never_kill_embed=1 "
                                                     "preserve_embeds=1 host_blob=1 "
                                                     "denser=1 denser2=1 denser3=1 denser4=1 denser5=1 denser6=1 denser7=1 denser8=1 "
-                                                    "wave=%u bar=v2026.08.04.75\n",
+                                                    "wave=%u \n",
                                                     szViaSafe, (unsigned)u32Dense8,
                                                     (unsigned)GJ_SPAWN_HOST_BLOB_DENSE8_MIN,
                                                     GJ_SPAWN_SOFT_WAVE);
@@ -4616,7 +4611,7 @@ soft_inventory_log(const char *szVia)
             "elf_prefer=%u elf_stub_exit=%u elf_no_thrash=%u "
             "host_blob embed=%u miss=%u dual_dod OPEN "
             "soft_ne_product=1 Soft!=product dual=MIT_OR_Apache-2.0 G-AC-1 "
-            "via=%s wave=%u bar=v2026.08.04.75\n",
+            "via=%s wave=%u \n",
             GJ_SPAWN_C2_PATH_STEPS,
             (unsigned)GJ_SPAWN_PROCESS_RIGHTS_CORE,
             (unsigned)GJ_SPAWN_PROCESS_RIGHTS_BASE,
@@ -4709,7 +4704,7 @@ soft_inventory_log(const char *szVia)
 
         /*
          * Per-host role map (C2 product-path residual; Soft!=product).
-         * ddi residual != Dual DoD close; A/B direction only until DUT proof.
+         * ddi residual != Dual DoD close; A/B OPEN until USB path / interactive SSH login.
          * Grep: spawn: soft residual c2_host_map
          */
         kprintf("spawn: soft residual c2_host_map class=C2 "
@@ -4876,7 +4871,7 @@ soft_inventory_log(const char *szVia)
             "wait_poll=AGAIN yield_on_again=1 "
             "H3=1 G-AC-1=1 Dual_DoD=OPEN "
             "soft_ne_product=1 Soft!=product dual=MIT_OR_Apache-2.0 "
-            "via=%s wave=%u bar=v2026.08.04.75\n",
+            "via=%s wave=%u \n",
             GJ_SPAWN_MAX, (unsigned)GJ_SPAWN_CNODE_SLOTS,
             GJ_SPAWN_HOST_CLASS_N, g_u32SoftHostLaunchOk,
             g_u32SoftHostElfRunOk, g_u32SoftHostElfEmbed,
@@ -5176,7 +5171,7 @@ soft_inventory_log(const char *szVia)
             "c2_logs=%u cap_ready=%u hook_logs=%u "
             "logs=%u (soft inventory only; not product gate; "
             "C2 UDX + host_hook + denser/denser2/denser3/denser4/denser5/denser6/denser7/denser8 host_blob residual W23; "
-            "Dual DoD OPEN; Soft!=product; bar=v2026.08.04.75 stamp-free; "
+            "Dual DoD OPEN; Soft!=product;  stamp-free; "
             "never invent .76; CRITICAL preserve embeds ddi/rtl/xhci)\n",
             GJ_SPAWN_SOFT_WAVE, szViaSafe, g_u32SoftSpawnEnter, g_cSpawned,
             g_cSpawnFail, cLive, g_u32SoftLivePeak, g_cMintSoft,

@@ -73,12 +73,12 @@
  *   both: product=UDX+ABI; hot+cold ABI + DDI; freestanding class SKIP;
  *         Cap mint OPEN; Dual DoD A/B remain OPEN (agent!=close)
  *
- * Dual DoD residual (C1/C2 UDX product; both OPEN until DUT proof):
- *   Dual DoD A — Linux-shaped USB via xhci_udx + DDI (OPEN)
- *   Dual DoD B — Linux-shaped NIC via rtl8168_udx + DDI (OPEN)
+ * Dual DoD residual (C1/C2 UDX product; both OPEN):
+ *   Dual DoD A — Linux-shaped USB via xhci_udx + DDI (OPEN until host USB path)
+ *   Dual DoD B — Linux-shaped NIC via rtl8168_udx + DDI (OPEN until interactive SSH login)
  * Soft residual lamps / inventory / greppable lines never close Dual DoD.
  * Soft!=product. No stamp storms. Stamp-free bar honesty.
- * Bar honesty v2026.08.04.75. NEVER bump GJ_IMAGE_VERSION from this unit.
+ * Fly residual v0.1.178. NEVER bump GJ_IMAGE_VERSION from this unit.
  * No invent intermediate image stamps. Not GJ_IMAGE_VERSION.
  *
  * Product residual (C2 umbrella; Soft!=product; Dual DoD B OPEN):
@@ -208,7 +208,7 @@ void udx_printk(const char *szFmt, ...);
  *
  * Soft residual order after init (normative honesty; Soft!=product):
  *   register → probe → run → quiesce → remove → unregister → exit
- * Dual DoD A (xhci_udx) / B (rtl8168_udx) remain OPEN until DUT proof.
+ * Dual DoD A (xhci_udx) / B (rtl8168_udx) remain OPEN until host USB path / interactive SSH login.
  * product_host residual: Linux-shaped userspace only; freestanding SKIP.
  * greppable residual: udx: soft residual register
  * greppable residual: udx: soft residual unregister

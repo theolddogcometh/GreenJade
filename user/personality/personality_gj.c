@@ -8,11 +8,17 @@
  *   ring-3 NATIVE process owns the cold personality door:
  *     gj_ipc_recv -> cold serve (libprotonrt) -> gj_ipc_reply
  *   replacing kernel kthread cold_personality_server as the default.
+ *   This cut: loop compiled, park opt-in; G-PERS attach still OPEN.
  *
  * Scaffold status (this TU only):
  *   - Links as freestanding ELF via user/init/user.ld + libgj
- *   - Soft phases only by default (PERSONALITY_DOOR_LOOP=0) so smoke cannot
- *     hang on IPC_RECV with no door binding
+ *   - Door loop body always compiled; park only if PERSONALITY_DOOR_LOOP=1
+ *   - Default PERSONALITY_DOOR_LOOP=0 so smoke cannot hang on IPC_RECV
+ *     with no door binding (kernel attach is outside this tree)
+ *   - Product G-PERS OPEN: kernel still owns cold default (kthread /
+ *     protonrt-server blob). OpenSSH needs a LINUX-personality process
+ *     whose cold NRs this door would serve; that attach is not this cut
+ *     (do not flip sshd_gj NATIVE net in kernel/main.c from here)
  *   - Soft once markers via native GJ_SYS_DEBUG_LOG (gj_debug_log)
  *
  * Soft markers (prefix-stable -- do not rename once smoke greps depend):
@@ -34,7 +40,7 @@
  * Soft!=product. Dual MIT OR Apache-2.0. G-AC-1 (no .ko product AC).
  * Soft residual != live door path / freestanding class drivers product.
  * Lean residual only -- no version stamp / no stamp storms / no commit.
- * bar3=OPEN. Dual DoD A/B = UDX product OPEN (not freestanding close).
+ * bar3=OPEN. Dual DoD A OPEN until host USB path; B OPEN until interactive SSH login.
  * Product residual (stamp-free bar v2026.08.04.75): product=UDX+sshd+stack
  *   Option C cold door hosts apps (sshd/netstackd) + UDX hosts (rtl/xhci).
  *
@@ -42,7 +48,7 @@
  *   Option C hybrid: hot kernel path + cold door personality for apps.
  *   Product drivers: userspace UDX/DDI hosts (rtl8168_udx / xhci_udx …).
  *   Product apps: Linux-shaped over hot+cold ABI (not freestanding thrash).
- *   Dual DoD A = Linux-shaped USB UDX OPEN; B = Linux-shaped NIC UDX OPEN.
+ *   Dual DoD A OPEN until host USB path; B OPEN until interactive SSH login.
  *   Freestanding class drivers SKIP default -- not Dual DoD close criteria.
  *   G-PERS-1/2/3 + G-COLD-1 doors normative; attach contract still OPEN.
  *   ABI-first host path -- not in-kernel .ko product (G-AC-1).
@@ -80,12 +86,12 @@
 #define PERS_REGS_FRAME  128u
 
 /*
- * Soft scaffold default: door loop compiled out so freestanding smoke cannot
- * hang on IPC_RECV with no client/door binding.
+ * Door loop is always compiled. Default does not park (smoke-safe).
+ * Product G-PERS attach is kernel-side and still OPEN; OpenSSH needs it.
  *
- * Enable product park only after cold-door attach:
+ * Park only after cold-door attach:
  *   -DPERSONALITY_DOOR_LOOP=1
- * (see README "Door attach contract").
+ * (see README "Door attach contract"). Flag alone is not G-PERS product.
  */
 #ifndef PERSONALITY_DOOR_LOOP
 #define PERSONALITY_DOOR_LOOP  0
@@ -132,7 +138,7 @@ regs_wire_zero(unsigned char *pFrame)
 }
 
 /*
- * Soft door_recv loop (product path).
+ * Soft door_recv loop (always compiled; park is opt-in).
  *
  * When PERSONALITY_DOOR_LOOP is 1 and boot has attached this task as the
  * cold personality door owner, this matches cold_personality_server /
@@ -140,11 +146,11 @@ regs_wire_zero(unsigned char *pFrame)
  * unless PERSONALITY_WOULD_RECV_CAP > 0 and soft recv-misses hit the cap
  * (smoke-safe escape only -- product leaves CAP at 0).
  *
- * Until then the body is compiled out so freestanding smoke cannot hang
- * on IPC_RECV with no client/door binding.
+ * Default main() does not call this, so smoke cannot hang on IPC_RECV.
+ * Kernel attach (G-PERS) is still OPEN; OpenSSH needs that attach.
+ * used: keep recv/serve/reply in the default ELF (park remains opt-in).
  */
-#if PERSONALITY_DOOR_LOOP
-static void
+static void __attribute__((used))
 personality_door_loop(void)
 {
     static unsigned char aFrame[PERS_REGS_FRAME];
@@ -221,31 +227,8 @@ personality_door_loop(void)
         }
     }
 }
-#else
-/*
- * Scaffold: door loop disabled (PERSONALITY_DOOR_LOOP=0 default).
- *
- * API already in gj/syscalls.h:
- *   gj_ipc_recv / gj_ipc_reply / gj_personality_serve / gj_yield
- *
- * Enable product park after cold-door attach (README "Door attach contract"):
- *   $(CC) ... -DPERSONALITY_DOOR_LOOP=1
- * Optional smoke-safe cap (soft-miss would_recv iterations then return):
- *   -DPERSONALITY_DOOR_LOOP=1 -DPERSONALITY_WOULD_RECV_CAP=64
- */
-static void
-personality_door_loop(void)
-{
-    /* Soft once: scaffold "serve ready" -- not product door serve. */
-    msg("personality-gj: soft serve ready\n");
 
-    /* Keep symbols referenced so the TU stays freestanding-link clean. */
-    (void)regs_wire_zero;
-    (void)PERS_REGS_FRAME;
-    (void)PERSONALITY_WOULD_RECV_CAP;
-}
-#endif
-
+#if PERSONALITY_DOOR_LOOP == 0
 /*
  * Lean soft residual inventory (never hard-gates product).
  * Exclusive residual under user/personality/ only.
@@ -409,7 +392,7 @@ personality_soft_residual_lean_once(void)
     /*
      * Grep: personality: soft udx_host
      * UDX driver host residual: product drivers are userspace UDX/DDI.
-     * Dual DoD A = xhci_udx USB OPEN; Dual DoD B = rtl8168_udx NIC OPEN.
+     * Dual DoD A = xhci_udx USB OPEN; Dual DoD B OPEN until interactive SSH login.
      * Not freestanding rtl/xhci thrash; not in-kernel .ko product AC.
      * Hosts live outside this tree; residual only (C0 deepen tokens).
      */
@@ -531,6 +514,7 @@ personality_soft_residual_lean_once(void)
         "stamp_free=1 storm=0 once=1 dual=MIT_OR_Apache-2.0 "
         "bar=v2026.08.04.75 g_pers_attach=OPEN live_path=0\n");
 }
+#endif /* PERSONALITY_DOOR_LOOP == 0 */
 
 /**
  * Scaffold entry body -- greppable soft phases for bring-up honesty.
@@ -538,9 +522,11 @@ personality_soft_residual_lean_once(void)
  *
  * Soft phases (default DOOR_LOOP=0 -- never blocks):
  *   1. personality: soft userspace scaffold PASS
- *   2. personality-gj: soft serve ready   (soft once via door_loop stub)
+ *   2. personality-gj: soft serve ready   (soft once; not product door)
  *   3. personality: soft residual lean PASS  (honesty + path + inventory +
  *      option_c + udx_host + apps + attach + g_pers + residual lean)
+ *
+ * DOOR_LOOP=1 parks in personality_door_loop (needs kernel attach; G-PERS OPEN).
  */
 int
 main(void)
@@ -548,18 +534,19 @@ main(void)
     /* Soft phase 1 -- ELF + DEBUG_LOG path alive (prefix-stable). */
     msg("personality: soft userspace scaffold PASS\n");
 
+#if PERSONALITY_DOOR_LOOP
     /*
-     * Soft phase 2 / product path:
-     *   DOOR_LOOP=0 -> soft once "soft serve ready", then residual lean
-     *   DOOR_LOOP=1 -> park on door (never returns unless WOULD_RECV_CAP>0)
+     * Park on the cold door. Not product G-PERS until kernel attach.
+     * OpenSSH still needs that attach; this flag is not Dual DoD close.
      */
     personality_door_loop();
+#else
+    /* Soft phase 2 -- scaffold complete; not product door serve. */
+    msg("personality-gj: soft serve ready\n");
 
-#if PERSONALITY_DOOR_LOOP == 0
     /*
      * Soft phase 3 -- exclusive residual lean (scaffold path only).
-     * Door park path never reaches here when DOOR_LOOP=1 product attach.
-     * Deepened residual: Option C + UDX hosts + apps + attach + G-PERS.
+     * Door park path never reaches here when DOOR_LOOP=1.
      */
     personality_soft_residual_lean_once();
 #endif

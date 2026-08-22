@@ -35,8 +35,8 @@
 #   product_host residual — rtl8168_udx (DoD B) / xhci_udx (DoD A) / ddi_host
 #   Dual DoD residual    — A (xhci_udx USB) / B (rtl8168_udx NIC) remain OPEN
 #   honesty residual     — pack PASS != product TX/RX/BOT != bar3 != Dual DoD
-#   stamp residual       — never bump GJ_IMAGE_VERSION; no invent .76; bar
-#                         honesty v2026.08.04.75 panel context only
+#   stamp residual       — never bump GJ_IMAGE_VERSION; no invent next N; bar
+#                         honesty v0.1.182 panel context only
 #   byte_match residual  — dual-land ESP|persist size equality per product host
 #   panel residual       — stamp-free extract IMAGE_VERSION from KERNEL.ELF (RO)
 #   functional residual  — denser ESP+persist dual-land catalog for DUT
@@ -54,7 +54,7 @@
 #   - Freestanding class drivers (kernel rtl8168 / xhci_msc) default SKIP
 #     (GJ_RTL8168_PROBE=0 · GJ_XHCI_MSC_PROBE=0). Residual opt-in only.
 #   - Staging UDX hosts != product TX/RX / BOT / bar3 closed.
-#   - pack PASS|SKIP != Dual DoD A/B close (both OPEN until DUT proof).
+#   - pack PASS|SKIP != Dual DoD A/B close (A until USB path; B until interactive SSH login).
 #   - dual-land ESP+persist pack != Dual DoD close (A/B OPEN).
 #   - denser product_host density N/3 != Dual DoD close != product TX/RX/BOT.
 #   - zero-byte placeholders count as SKIP (non-empty honesty).
@@ -74,7 +74,7 @@
 #   - greppable: stage-udx-drivers: soft residual panel=
 #   - greppable: stage-udx-drivers: soft functional residual
 # Dual MIT OR Apache-2.0. No GPL. Dual DoD A/B OPEN. Soft!=product.
-# Bar honesty v2026.08.04.75. NEVER bump GJ_IMAGE_VERSION. No invent .76.
+# Bar honesty v0.1.182. NEVER bump GJ_IMAGE_VERSION. No invent next N.
 set -eu
 root="$(CDPATH= cd -- "$(dirname "$0")/.." && pwd)"
 cd "$root"
@@ -413,7 +413,7 @@ drv_tree_n=$(find "$drv_dir" -type f ! -name 'MANIFEST.txt' ! -name 'UDX-STAGE.t
 	echo "# Soft!=product · G-AC-1: freestanding class SKIP default; pack != TX/RX/BOT"
 	echo "# Dual DoD A/B OPEN · pack PASS != Dual DoD close · stamp-free residual"
 	echo "# product=UDX+ABI · product_host residual denser · functional residual dual-land"
-	echo "# C2 scripts residual Soft!=product · bar honesty v2026.08.04.75 (no invent .76)"
+	echo "# C2 scripts residual Soft!=product · bar honesty v0.1.182 (no invent next N)"
 	echo "# denser: non-empty honesty · product_host_density N/3 · per-host bytes"
 	echo "# W10: dual-land byte_match + stamp-free panel extract (RO)"
 	echo "personality=${pers_n}"
@@ -440,8 +440,8 @@ drv_tree_n=$(find "$drv_dir" -type f ! -name 'MANIFEST.txt' ! -name 'UDX-STAGE.t
 	echo "panel_version=${panel_ver}"
 	echo "panel_title=${panel_title}"
 	echo "panel_source=${panel_src}"
-	echo "bar_honesty=v2026.08.04.75"
-	echo "no_invent=.76"
+	echo "bar_honesty=v0.1.182"
+	echo "no_invent=next_N"
 	if [ -d "$drv_dir" ]; then
 		ls -1 "$drv_dir" 2>/dev/null | while IFS= read -r line; do
 			echo "file=$line"
@@ -465,8 +465,8 @@ drv_tree_n=$(find "$drv_dir" -type f ! -name 'MANIFEST.txt' ! -name 'UDX-STAGE.t
 	echo "dual_dod_b=OPEN"
 	echo "soft_not_product=1"
 	echo "stamp_free=1"
-	echo "bar_honesty=v2026.08.04.75"
-	echo "no_invent=.76"
+	echo "bar_honesty=v0.1.182"
+	echo "no_invent=next_N"
 	echo ""
 	echo "Paths (this stick)"
 	echo "  EFI/GREENJADE/drivers/ddi_host"
@@ -568,7 +568,7 @@ Honesty (Soft!=product · G-AC-1 · C2 scripts residual · stamp-free)
     (GJ_RTL8168_PROBE=0 · GJ_XHCI_MSC_PROBE=0). Residual opt-in only — not DoD.
   - Staging these hosts != freestanding class-driver product PASS.
   - Staging != product TX/RX (rtl8168_udx) != product BOT/MSC (xhci_udx).
-  - pack PASS|SKIP != Dual DoD A/B close (both remain OPEN until DUT proof).
+  - pack PASS|SKIP != Dual DoD A/B close (A until USB path; B until interactive SSH login).
   - Dual DoD A (xhci_udx USB) OPEN · Dual DoD B (rtl8168_udx NIC) OPEN.
   - Functional residual dual-land (ESP+persist) pack != Dual DoD close.
   - denser product_host density N/3 != Dual DoD close != product TX/RX/BOT.
@@ -578,7 +578,7 @@ Honesty (Soft!=product · G-AC-1 · C2 scripts residual · stamp-free)
   - bar3 / Deck Top 50 remain OPEN until Steam client + matrix evidence.
   - Soft lamps / media pack != product complete.
   - stamp-free residual: NEVER bump GJ_IMAGE_VERSION from this stage script.
-  - Bar honesty v2026.08.04.75 panel context only — no invent .76.
+  - Bar honesty v0.1.182 panel context only — no invent next N.
 
 Build / stage (one-command operator path)
   make drivers-udx personality-gj  # ddi_host + rtl8168_udx + xhci_udx + G-PERS
@@ -670,7 +670,7 @@ Honesty (Soft!=product · G-AC-1 · C2 scripts residual · stamp-free)
   Functional residual dual-land (ESP+GJ-PERSIST/drivers) != Dual DoD close.
   Deck Top 50 remains NOT-TRIED until real client/title runs on GreenJade.
   stamp-free residual: NEVER bump GJ_IMAGE_VERSION from this stage script.
-  Bar honesty v2026.08.04.75 panel context only — no invent .76.
+  Bar honesty v0.1.182 panel context only — no invent next N.
 EOF
 
 # ---------------------------------------------------------------------------
@@ -749,7 +749,7 @@ if [ -n "$persist_root" ]; then
 		echo "# Generated by scripts/stage-udx-drivers.sh — MIT OR Apache-2.0"
 		echo "# Soft!=product · G-AC-1 · Dual DoD A/B OPEN · stamp-free residual"
 		echo "# product=UDX+ABI · denser dual-land mirror of ESP drivers/"
-		echo "# pack PASS != product TX/RX/BOT != Dual DoD close · no invent .76"
+		echo "# pack PASS != product TX/RX/BOT != Dual DoD close · no invent next N"
 		echo "source_esp=$drv_dir"
 		echo "persist_root=$persist_root"
 		echo "ddi_host=${persist_ddi_n}"
@@ -800,7 +800,7 @@ if [ -n "$persist_root" ]; then
 		echo "  Dual DoD A (xhci_udx USB) OPEN · B (rtl8168_udx NIC) OPEN."
 		echo "  Freestanding class SKIP (GJ_RTL8168_PROBE=0 · GJ_XHCI_MSC_PROBE=0)."
 		echo "  denser density N/3 != Dual DoD close (zero-byte = SKIP)."
-		echo "  Bar honesty v2026.08.04.75 — NEVER invent .76 / bump GJ_IMAGE_VERSION."
+		echo "  Bar honesty v0.1.182 — NEVER invent next N / bump GJ_IMAGE_VERSION."
 		echo ""
 		echo "Lab host after DUT run:"
 		echo "  sudo mount -L GJ-PERSIST /mnt/gj-persist"
@@ -833,8 +833,8 @@ fi
 	echo "stamp_free=1"
 	echo "functional_residual=1"
 	echo "denser_product_host=1"
-	echo "bar_honesty=v2026.08.04.75"
-	echo "no_invent=.76"
+	echo "bar_honesty=v0.1.182"
+	echo "no_invent=next_N"
 	echo ""
 	echo "Operator dual-land (lab):"
 	echo "  ./scripts/stage-udx-drivers.sh build/esp build/persist"
@@ -955,7 +955,7 @@ if [ -f "$drv_dir/UDX-STAGE.txt" ]; then
 		echo "panel_version=${panel_ver}"
 		echo "panel_title=${panel_title}"
 		echo "panel_source=${panel_src}"
-		echo "stamp_free=1 bar_honesty=v2026.08.04.75 no_invent=.76"
+		echo "stamp_free=1 bar_honesty=v0.1.182 no_invent=next_N"
 	} >>"$drv_dir/UDX-STAGE.txt"
 	if [ -n "$persist_root" ] && [ -d "${persist_root}/drivers" ]; then
 		cp -f "$drv_dir/UDX-STAGE.txt" "$persist_root/drivers/UDX-STAGE.txt" 2>/dev/null || true
@@ -994,11 +994,11 @@ echo "stage-udx-drivers: soft residual denser esp product_host density=${product
 echo "stage-udx-drivers: soft residual denser dual_land ddi_host=${ddi_dl} rtl8168_udx=${rtl_dl} xhci_udx=${xhci_dl}"
 echo "stage-udx-drivers: soft residual dual_land byte_match=${byte_match_st} ddi_host=${ddi_bm} rtl8168_udx=${rtl_bm} xhci_udx=${xhci_bm} n=${byte_match_n}/3"
 echo "stage-udx-drivers: soft residual panel=${panel_title} src=${panel_src} (stamp-free RO; Soft!=product)"
-echo "stage-udx-drivers: soft residual stamp-free (bar honesty v2026.08.04.75; NEVER bump GJ_IMAGE_VERSION; no invent .76)"
+echo "stage-udx-drivers: soft residual stamp-free (bar honesty v0.1.182 packed, not host-probed; NEVER bump GJ_IMAGE_VERSION; no invent next N)"
 echo "stage-udx-drivers: soft residual esp=${esp_st} ddi_host=${ddi_n} rtl8168_udx=${rtl_n} xhci_udx=${xhci_n} path=$drv_dir"
 echo "stage-udx-drivers: soft residual persist=${persist_st} ddi_host=${persist_ddi_n} rtl8168_udx=${persist_rtl_n} xhci_udx=${persist_xhci_n} path=${persist_root:-}"
 echo "stage-udx-drivers: soft residual dual_land=${dual_land_st} esp=${esp_st} persist=${persist_st} Soft!=product"
 echo "stage-udx-drivers: soft functional residual catalog path=harvest,ensure,densify,pack_esp,mirror_persist,inventory,product_host_catalog,honesty,dual_dod,byte_match,stamp-free"
 echo "stage-udx-drivers: soft functional residual step harvest=${func_harvest} ensure=${func_ensure} densify=${func_densify} pack_esp=${func_pack_esp} mirror_persist=${func_mirror_persist} inventory=${func_inventory} product_host_catalog=${func_product_host_catalog} honesty=${func_honesty} dual_dod=${func_dual_dod} byte_match=${func_byte_match} stamp=${func_stamp}"
 echo "stage-udx-drivers: soft functional residual PASS steps=${func_steps_ok}/${func_steps_total} dual_land=${dual_land_st} byte_match=${byte_match_st} product=UDX+ABI product_host_density=${product_host_n}/${product_host_total} dual_dod_a=OPEN dual_dod_b=OPEN Soft!=product"
-echo "stage-udx-drivers: soft functional residual (denser ESP+persist dual-land for DUT; pack != Dual DoD close; bar honesty v2026.08.04.75; no invent .76)"
+echo "stage-udx-drivers: soft functional residual (denser ESP+persist dual-land for DUT; pack != Dual DoD close; bar honesty v0.1.182; no invent next N)"

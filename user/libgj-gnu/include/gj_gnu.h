@@ -18,8 +18,8 @@
  *   batch1 scaffold   — optional src/graph_gnu_batch1.c; not linked today
  *   G-AC-1            — this SO is freestanding dual-license ELF, not a
  *                       Linux .ko product AC; no GPL source in tree
- *   Dual DoD A/B      — both OPEN until DUT proof; soft dynsym residual
- *                       lamps never close Dual DoD A (USB UDX) or B (NIC UDX)
+ *   Dual DoD A/B      — A OPEN until host USB path; B OPEN until interactive
+ *                       SSH login; soft dynsym residual lamps never close Dual DoD
  *   freestanding SKIP — kernel class drivers SKIP default; product path =
  *                       userspace UDX+ABI (not this SO's soft surface)
  *   stamp-free        — Bar honesty v2026.08.04.75. NEVER bump

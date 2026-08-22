@@ -52,8 +52,8 @@
  *
  * Product residual (C2; Dual DoD B OPEN; stamp-free bar v2026.08.04.75):
  *   product=UDX+sshd+stack — PCI residual seeds rtl8168_udx probe so
- *   netstackd + sshd can product-serve when Cap mint + wire land.
- *   Soft enable/regions/cfg residual != Dual DoD B wire close.
+ *   leftover netstackd + product sshd can product-serve (Dual DoD B hop is kernel net_tcp).
+ *   Soft enable/regions/cfg residual != Dual DoD B close (close = interactive SSH login).
  * greppable: udx: soft product residual product=UDX+sshd+stack
  * greppable: udx: pci soft product residual product=UDX+sshd+stack
  *
@@ -239,9 +239,8 @@ struct udx_pci_device_id {
  *   Dual DoD A (UDX USB): xhci_udx    @ UDX_PCI_G752_XHCI_*    — OPEN
  *   Dual DoD B (UDX NIC): rtl8168_udx @ UDX_PCI_G752_RTL8168_* — OPEN
  *
- * Close criteria live on product userspace UDX datapath + live cap mint
- * (MMIO_FRAME / IRQ Notification / DMA window), not soft enable/regions/
- * cfg residual, not freestanding class stages, not soft bind lamps.
+ * Close criteria: Dual DoD A host USB path (RS-off ≠ close); Dual DoD B
+ * host interactive SSH login. Soft bind lamps / cap mint ≠ close.
  * greppable: Dual_DoD_A=OPEN Dual_DoD_B=OPEN
  * greppable: udx: pci soft dual DoD
  * greppable: udx: pci soft dual_dod residual

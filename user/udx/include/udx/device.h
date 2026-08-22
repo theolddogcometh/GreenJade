@@ -124,7 +124,7 @@
 /*
  * Soft residual Cap / Dual DoD honesty constants (eng only; Soft!=product).
  * Always-0 mint flags: pBackend is opaque, never a product cap handle.
- * Dual DoD A/B remain OPEN (1) until DUT proof — soft attach never closes.
+ * Dual DoD A/B remain OPEN (1) until USB path / interactive SSH login — soft attach never closes.
  * No version stamp. No GPL. G-AC-1.
  * Grep: UDX_DEV_SOFT_CAP_MINT / UDX_DEV_SOFT_DOD_A_OPEN / DOD_B_OPEN
  * greppable: udx: device soft residual cap_none
@@ -372,7 +372,7 @@ udx_dev_soft_cap_mint(void)
 }
 
 /**
- * Soft residual Dual DoD A OPEN flag (xhci_udx). Always 1 until DUT proof.
+ * Soft residual Dual DoD A OPEN flag (xhci_udx). Always 1 until host USB path.
  * Soft attach / drvdata lamps never flip this closed.
  * greppable residual: udx: device soft residual dual_dod
  * greppable residual: udx: device soft residual product_host
@@ -384,7 +384,7 @@ udx_dev_soft_dod_a_open(void)
 }
 
 /**
- * Soft residual Dual DoD B OPEN flag (rtl8168_udx). Always 1 until DUT proof.
+ * Soft residual Dual DoD B OPEN flag (rtl8168_udx). Always 1 until interactive SSH login.
  * Soft attach / drvdata lamps never flip this closed.
  * greppable residual: udx: device soft residual dual_dod
  * greppable residual: udx: device soft residual product_host

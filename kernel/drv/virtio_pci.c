@@ -860,8 +860,12 @@ mmio_w32(volatile u8 *p, u32 u32V)
 static void
 mmio_w64(volatile u8 *p, u64 u64V)
 {
+    /* Two 32-bit stores: qemu-kvm common-cfg impl max_access_size is 4.
+     * An 8-byte KVM MMIO exit is dropped, so queue_desc/avail/used stay 0
+     * and used.idx never advances (gpu/blk timeout, net rx=0). */
     if (p) {
-        *(volatile u64 *)p = u64V;
+        mmio_w32(p, (u32)u64V);
+        mmio_w32(p + 4, (u32)(u64V >> 32));
     }
 }
 
@@ -988,16 +992,54 @@ q_ring_free(struct gj_virtq *pQ)
     }
 }
 
+static void
+alloc_zero_page_unskip(gj_paddr_t paSkip)
+{
+    while (paSkip != 0) {
+        gj_paddr_t paNext;
+
+        paNext = *(gj_paddr_t *)hhdm_to_virt(paSkip);
+        pmm_free(paSkip);
+        paSkip = paNext;
+    }
+}
+
+/*
+ * Virtq DMA must sit in the IOMMU identity window [0,1GiB).
+ * pmm_alloc_low is LIFO from the top of QEMU 2GiB RAM (still <4GiB), so the
+ * first pops are ~0x7ffd0000. Hold those in a page-chain until a GPA below
+ * 1GiB appears; an 8-slot skip list returns NOMEM while low pages remain.
+ */
 static gj_paddr_t
 alloc_zero_page(void)
 {
-    gj_paddr_t pa = pmm_alloc();
+    gj_paddr_t paSkip = 0;
+    gj_paddr_t pa;
+    u32 cSkip = 0;
 
-    if (pa == 0) {
-        return 0;
+    for (;;) {
+        pa = pmm_alloc_low();
+        if (pa == 0) {
+            pa = pmm_alloc();
+        }
+        if (pa == 0) {
+            break;
+        }
+        if (pa < 0x40000000ull) {
+            memset((void *)hhdm_to_virt(pa), 0, VIRTIO_PCI_PAGE_SIZE);
+            alloc_zero_page_unskip(paSkip);
+            return pa;
+        }
+        if (cSkip >= 524288u) {
+            pmm_free(pa);
+            break;
+        }
+        *(gj_paddr_t *)hhdm_to_virt(pa) = paSkip;
+        paSkip = pa;
+        cSkip++;
     }
-    memset((void *)hhdm_to_virt(pa), 0, VIRTIO_PCI_PAGE_SIZE);
-    return pa;
+    alloc_zero_page_unskip(paSkip);
+    return 0;
 }
 
 void
@@ -1662,7 +1704,7 @@ virtio_q_disable(struct gj_virtio_dev *pDev, u16 u16QIdx)
     }
     soft_inc(&g_u32SoftQDisable);
     mmio_w16(pDev->pCommon + VIRTIO_PCI_COMMON_Q_SELECT, u16QIdx);
-    mmio_w16(pDev->pCommon + VIRTIO_PCI_COMMON_Q_ENABLE, 0);
+    /* Modern virtio: queue_enable=0 is virtio_error (QEMU marks FAILED). */
 }
 
 gj_status_t
@@ -1708,9 +1750,8 @@ virtio_q_setup(struct gj_virtio_dev *pDev, struct gj_virtq *pQ, u16 u16QIdx,
     pQ->u16QueueIdx = u16QIdx;
     u16Want = u16Size;
 
-    /* Soft: disable before reprogramming (safe re-setup / probe retry). */
+    /* Select only. queue_enable=0 is virtio_error on qemu-kvm modern. */
     mmio_w16(pDev->pCommon + VIRTIO_PCI_COMMON_Q_SELECT, u16QIdx);
-    mmio_w16(pDev->pCommon + VIRTIO_PCI_COMMON_Q_ENABLE, 0);
 
     u16Max = mmio_r16(pDev->pCommon + VIRTIO_PCI_COMMON_Q_SIZE);
     if (u16Max == 0) {
@@ -2045,9 +2086,10 @@ virtio_q_poll_id(struct gj_virtq *pQ, u32 u32Spins, u32 *pOutId)
             u32 u32Len = pQ->pUsed->aRing[u16Slot].u32Len;
 
             pQ->u16LastUsed = (u16)(pQ->u16LastUsed + 1);
-            /* free descriptor chain */
+            /* free descriptor chain (bound by queue size; cyclic NEXT = hang) */
             {
                 u16 u16Cur = (u16)u32Id;
+                u32 cWalk = 0;
 
                 for (;;) {
                     u16 u16Next = pQ->pDesc[u16Cur].u16Next;
@@ -2056,7 +2098,11 @@ virtio_q_poll_id(struct gj_virtq *pQ, u32 u32Spins, u32 *pOutId)
                     pQ->pDesc[u16Cur].u16Next = pQ->u16FreeHead;
                     pQ->u16FreeHead = u16Cur;
                     pQ->u16NumFree++;
+                    cWalk++;
                     if ((u16Flags & GJ_VIRTQ_DESC_F_NEXT) == 0) {
+                        break;
+                    }
+                    if (cWalk > (u32)pQ->u16Size) {
                         break;
                     }
                     u16Cur = u16Next;

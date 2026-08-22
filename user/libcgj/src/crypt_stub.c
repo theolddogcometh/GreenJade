@@ -297,7 +297,7 @@ crypt(const char *szKey, const char *szSalt)
 char *
 crypt_r(const char *szKey, const char *szSalt, void *pData)
 {
-	/* glibc crypt_data is large; we only need modular output space. */
+	/* Hash at pData[0]; sizeof(struct crypt_data) is the floor. */
 	char *pOut = (char *)pData;
 
 	if (pOut == NULL) {
@@ -305,6 +305,18 @@ crypt_r(const char *szKey, const char *szSalt, void *pData)
 		return NULL;
 	}
 	return crypt_dispatch(szKey, szSalt, pOut, 256);
+}
+
+char *
+DES_crypt(const char *szKey, const char *szSalt)
+{
+	return crypt(szKey, szSalt);
+}
+
+char *
+des_crypt(const char *szKey, const char *szSalt)
+{
+	return crypt(szKey, szSalt);
 }
 
 char *

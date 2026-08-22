@@ -13,8 +13,8 @@
  *
  * Design notes
  * ------------
- * Backed by netstackd / net doors on GreenJade; bring-up may support loopback
- * and virtio-net paths first. sockaddr_storage is large enough for IPv6.
+ * Backed by kernel net doors on GreenJade (T0 virtio-net on QEMU; laptop
+ * rtl8168_udx). sockaddr_storage is large enough for IPv6.
  *
  * Non-goals
  * ---------
@@ -22,7 +22,7 @@
  * See docs/GLIBC_COMPAT.md.
  *
  * Soft residual lean (this unit; Soft!=product; G-AC-1; Dual DoD A/B OPEN):
- *   - net door/netstackd bring-up; not product Dual DoD B (UDX NIC) close
+ *   - net door bring-up; Dual DoD B OPEN until interactive SSH login
  *   - Soft!=product: libcgj sys/socket surface != UDX/DDI product close
  *   - product = UDX/DDI + hot/cold Linux ABI; freestanding rtl/USB SKIP
  *   - H1 no net_eth_poll from IRQ (host path); Dual DoD A/B OPEN
@@ -42,23 +42,51 @@ extern "C" {
 
 #define AF_UNSPEC 0
 #define AF_UNIX   1
+#define AF_LOCAL  AF_UNIX
 #define AF_INET   2
 #define AF_INET6  10
+
+#define PF_UNSPEC AF_UNSPEC
+#define PF_UNIX   AF_UNIX
+#define PF_LOCAL  AF_UNIX
+#define PF_INET   AF_INET
+#define PF_INET6  AF_INET6
 
 #define SOCK_STREAM 1
 #define SOCK_DGRAM  2
 #define SOCK_RAW    3
+#define SOCK_SEQPACKET 5
 #define SOCK_CLOEXEC 02000000
 #define SOCK_NONBLOCK 04000
 
 #define SOL_SOCKET 1
+#ifndef SOL_IP
+#define SOL_IP    0
+#endif
+#ifndef SOL_TCP
+#define SOL_TCP   6
+#endif
+#ifndef SOL_IPV6
+#define SOL_IPV6  41
+#endif
 #define SO_REUSEADDR 2
 #define SO_ERROR     4
 #define SO_RCVBUF    8
 #define SO_SNDBUF    7
 #define SO_KEEPALIVE 9
 #define SO_TYPE      3
+#define SO_BROADCAST 6
+#define SO_LINGER    13
+#define SO_REUSEPORT 15
+#define SO_PASSCRED  16
 #define SO_PEERCRED  17
+#define SO_RCVTIMEO  20
+#define SO_SNDTIMEO  21
+#define SO_BINDTODEVICE 25
+#define SO_ACCEPTCONN 30
+#define SO_PROTOCOL  38
+#define SO_DOMAIN    39
+#define SOMAXCONN    4096
 
 #define SHUT_RD   0
 #define SHUT_WR   1
@@ -97,6 +125,21 @@ typedef unsigned int   socklen_t;
 struct sockaddr {
     sa_family_t sa_family;
     char        sa_data[14];
+};
+
+/* Linux SO_PEERCRED (getpeereid / privsep). DUT overlay does not redeclare. */
+#ifndef _GJ_UCRED_DEFINED
+#define _GJ_UCRED_DEFINED
+struct ucred {
+    pid_t pid;
+    uid_t uid;
+    gid_t gid;
+};
+#endif
+
+struct linger {
+    int l_onoff;
+    int l_linger;
 };
 
 struct sockaddr_storage {

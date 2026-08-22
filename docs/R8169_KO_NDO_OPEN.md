@@ -2,7 +2,7 @@
 
 | Field | Value |
 |-------|--------|
-| **Status** | **Hostish net_device dual blob + diagnostic** (2026-08-04). Option B **call** still **not** implemented; gate **default 0** |
+| **Status** | **Abandoned leftover** (not linked). Option B **FORBIDDEN** as product. Dual DoD B hop is `rtl8168_udx` until interactive SSH login. |
 | **Gate (handoff)** | `GJ_SOFT_R8169_MMIO_HANDOFF` — **default 0** |
 | **Gate (Option B)** | `GJ_SOFT_R8169_KO_NDO_OPEN` — **default 0** (requires handoff gate **1**) |
 | **Companion** | [R8169_MMIO_HANDOFF.md](R8169_MMIO_HANDOFF.md) phase 3 · [PCI_DEV_SOFT_LAYOUT.md](PCI_DEV_SOFT_LAYOUT.md) Strategy A · [LINUX_MODULE_PATH.md](LINUX_MODULE_PATH.md) D7 |
@@ -108,7 +108,7 @@ So:
 
 | Item | Value |
 |------|--------|
-| Offset header | [`kernel/include/gj/linux_netdev_hostish_off.h`](../kernel/include/gj/linux_netdev_hostish_off.h) — kver **5.14.0-687.15.1.el9_8.x86_64** (2026-08-04) |
+| Offset header | [`abandoned/kernel/include/gj/linux_netdev_hostish_off.h`](../abandoned/kernel/include/gj/linux_netdev_hostish_off.h) — kver **5.14.0-687.15.1.el9_8.x86_64** (historical) |
 | Blob size | **`LINUX_NETDEV_HOSTISH_BLOB_BYTES = 0xc00`** ≥ **`SIZE_NET_DEVICE = 0xaf0`** |
 | Pool | **1** slot (static); dual object — soft inventory stays on soft struct |
 | Fill entry | `linux_netdev_soft_hostish_fill()` after soft `register_netdev` PASS (primary) and from ops diagnostic refresh |

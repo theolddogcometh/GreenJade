@@ -125,7 +125,12 @@ struct gj_elf_info {
  * Placed in high user band, away from PE 0x400000 and typical load biases.
  */
 #define GJ_LD_HANDOFF_VA    0x000000006ff00000ull
-#define GJ_LD_STACK_VA      0x000000006ff01000ull /* argc/argv/env/auxv block */
+/* Stack band base (just above handoff). First page is an unmapped guard.
+ * argc/argv live at the TOP page. RSP = that top VA so the call stack
+ * grows down through body pages, not into the handoff page. Glass 0.1.140
+ * dash #PF I=1: RSP at band base smashed handoff then fetched a wild RIP. */
+#define GJ_LD_STACK_VA      0x000000006ff01000ull
+#define GJ_LD_STACK_PAGES   64u /* 256 KiB grow-down body + top SysV page */
 #define GJ_LD_HANDOFF_MAGIC 0x444c4a47ull /* 'GJLD' little-endian */
 /* 16-byte AT_RANDOM blob on handoff page (past sizeof(gj_ld_handoff) ~1016) */
 #define GJ_LD_RANDOM_OFF    0x400ull
@@ -212,8 +217,14 @@ u32 elf_resolve_needed_vfs(const struct gj_elf_info *pInfo);
 u32 elf_load_needed_sos(struct gj_process *pProc, const struct gj_elf_info *pInfo);
 
 /**
+ * Live user RSP must be a published grow-down TOP above GJ_LD_STACK_VA.
+ * Band-base / 0 is 0.1.140 #PF I=1 class (handoff smash). Returns 1 if ok.
+ */
+int elf_stack_rsp_live_ok(u64 u64Rsp);
+
+/**
  * INTERP-first: set pProc start entry/stack; rewrite user threads of pProc.
- * u64Stack 0 -> GJ_LD_STACK_VA. Returns 0 on success.
+ * Requires a live-ok stack (published top). Returns 0 on success.
  * After this, first user thr enters ld-gj, not main.
  */
 gj_status_t elf_apply_interp_first(struct gj_process *pProc,
@@ -228,6 +239,16 @@ gj_status_t elf_apply_interp_first(struct gj_process *pProc,
 gj_status_t elf_publish_handoff(struct gj_process *pProc, const char *szPath,
                                 const struct gj_elf_info *pMain,
                                 const struct gj_elf_info *pInterp);
+
+/**
+ * Same as elf_publish_handoff, plus optional user argv/envp pointer
+ * arrays (Linux execve args). 0 means argc=1 path-only stack.
+ */
+gj_status_t elf_publish_handoff_argv(struct gj_process *pProc,
+                                     const char *szPath,
+                                     const struct gj_elf_info *pMain,
+                                     const struct gj_elf_info *pInterp,
+                                     u64 u64UserArgv, u64 u64UserEnvp);
 
 /**
  * Verify handoff page + AT_ENTRY mapping for ld-gj product path smoke.

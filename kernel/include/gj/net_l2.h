@@ -26,7 +26,7 @@
  * greppable: net_l2: soft tx busy retry ok ... (Soft!=product)
  * greppable: net_l2: soft tx fail residual ... (Soft!=product)
  * greppable: net_l2: soft tx handoff residual ... (Soft!=product)
- * greppable: net_l2: soft bridge hold14 freestanding wire ... (Soft!=product)
+ * leftover MAP: hold14 freestanding wire lamps (live 178 panel uses hold 5)
  * greppable: net_l2: soft rx residual freestanding ... (Soft!=product; dual DoD B)
  * greppable: net_l2: soft rx demux eth/tcp ... (Soft!=product; dual DoD B)
  * greppable: net_l2: soft bridge rx tally lean ... (Soft!=product; hold14; no flood)
@@ -44,8 +44,8 @@
  *   product=UDX+ABI; soft residual lean only (no dual DoD B freestanding
  *   rtl R-climb claim under SKIP; no freestanding RX/TX thrash). Under
  *   SKIP + backend=none: wire/owner=product_udx_abi lean honesty (not a
- *   freestanding wire claim). Dual DoD B OPEN need=UDX_OPEN (UDX owns
- *   product NIC; freestanding residual never closes DoD B). Soft!=product
+ *   freestanding wire claim). Dual DoD B OPEN until interactive SSH login
+ *   (UDX hop owns product NIC; freestanding residual never closes DoD B). Soft!=product
  *   * G-AC-1 * dual MIT OR Apache-2.0 * once/hard-cap.
  *   Grep: net_l2: freestanding rtl SKIP GJ_RTL8168_PROBE=0
  *   Grep: net_l2: soft residual freestanding rtl SKIP
@@ -66,8 +66,9 @@
  * soft note claims tx=product_udx_abi (not tx=freestanding).
  *
  * Soft ready handoff -> net_tcp listen (Dual DoD B residual):
- *   net_l2_ready()!=0 is freestanding usable-wire. net_tcp soft listen :22
- *   mints/holds only after ready. Handoff pending/FAULT -> ready=0
+ *   net_l2_ready()!=0 is freestanding usable-wire. net_tcp listen :22
+ *   mints/holds only after ready. Dual DoD B close is interactive SSH login.
+ *   Handoff pending/FAULT -> ready=0
  *   (fail-closed). Soft L2 bridge ON is copy-only != MMIO handoff and is
  *   not a ready substitute. Grep: net_l2: soft ready handoff listen
  *
@@ -141,9 +142,10 @@ void net_l2_refresh_mac(void);
 u32 net_l2_backend(void);
 
 /**
- * Non-zero if freestanding TX/RX path is usable.
- * Soft ready handoff residual (Dual DoD B): when non-zero, net_tcp may
- * mint/hold soft listen :22 (tcp_soft_ensure_listen22). Handoff pending
+ * Non-zero if TX/RX path is usable (virtio T0, rtl residual, or product
+ * UDX L2: backend=none + ETH_UDX_READY). Soft ready handoff residual
+ * (Dual DoD B): when non-zero, net_tcp may mint/hold soft listen :22
+ * (tcp_soft_ensure_listen22) including ETH_INJECT SYN. Handoff pending
  * or FAULT -> 0 (fail-closed; no dead :22 mint). Soft L2 bridge ON is
  * copy-only and is not a substitute for this ready bit.
  * Grep: net_l2: soft ready handoff listen (once / hard-cap).
@@ -156,6 +158,7 @@ int net_l2_ready(void);
  *   - rtl8168: pre-TX settle when ring OWN; sliced poll_hw; L2 busy re-try
  *     so single-try callers still deliver ARP/ICMP/TCP (soft l2_xmit / SYN-ACK)
  *   - virtio: freestanding T0 product path; soft counters only (no OWN settle)
+ *   - none + ETH_UDX_READY: enqueue ETH_TX_PULL (ARP/ICMP/TCP SYN-ACK)
  *   - busy exhaust -> SoftTxBusy (not SoftTxFail); -1 is not sticky
  *   - hard backend fail -> SoftTxFail immediately
  *   - handoff pending/FAULT -> SoftTxHandoffClosed fail-closed (!= busy)
@@ -209,7 +212,7 @@ void net_l2_ip(u8 *pIp);
  */
 void net_l2_udx_ready_identity(void);
 
-/** Soft name for STATUS ("virtio" / "rtl8168" / "none"). */
+/** Soft name for STATUS ("virtio" / "rtl8168" / "udx" / "none"). */
 const char *net_l2_name(void);
 
 /**

@@ -47,8 +47,12 @@ extern "C" {
 
 #define WEXITSTATUS(s)  (((s) >> 8) & 0xff)
 #define WTERMSIG(s)     ((s) & 0x7f)
+#define WSTOPSIG(s)     (((s) >> 8) & 0xff)
 #define WIFEXITED(s)    (WTERMSIG(s) == 0)
 #define WIFSIGNALED(s)  (((s) & 0x7f) != 0 && ((s) & 0x80) == 0)
+#define WIFSTOPPED(s)   (((s) & 0xff) == 0x7f)
+#define WIFCONTINUED(s) ((s) == 0xffff)
+#define WCOREDUMP(s)    ((s) & 0x80)
 
 typedef enum {
     P_ALL  = 0,

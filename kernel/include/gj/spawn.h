@@ -92,7 +92,7 @@ struct gj_process;
  * Named userspace UDX / driver host catalog (launch residual; Soft!=product).
  * process_spawn starts confined C hosts; DDI MMIO/IRQ/DMA cap mint remains
  * OPEN (not this unit). G-AC-1: userspace hosts only — never in-kernel .ko.
- * Dual DoD A = xhci_udx; Dual DoD B = rtl8168_udx. ddi_host_gj = DDI residual.
+ * Dual DoD A host = xhci_udx (OPEN until USB path); Dual DoD B host = rtl8168_udx (OPEN until interactive SSH login). ddi_host_gj = DDI residual.
  * Concurrent class hosts must fit fixed table: HOST_CLASS_N <= SPAWN_MAX.
  */
 #define GJ_SPAWN_HOST_CLASS_N            3u

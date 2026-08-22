@@ -58,7 +58,7 @@
  *   Soft residual != product multi-server confine (Soft!=product);
  * Product residual (stamp-free bar v2026.08.04.75; Soft!=product):
  *   greppable: libgj: soft product residual product=UDX+sshd+stack
- *   freestanding helpers link netstackd + sshd + UDX hosts; never DoD close;
+ *   freestanding helpers link leftover netstackd + sshd + UDX hosts; Dual DoD B hop is kernel net_tcp → sshd; never DoD close;
  */
 
 #define LIBGJ_SOFT_WAVE 70u

@@ -18,7 +18,7 @@
  *   Freestanding host/smoke soft surface for A0-shaped wine-class probes.
  *   Soft residual != product multi-server confine, != Dual DoD A/B close,
  *   != bar3, != Deck Top 50 PASS. Agent never closes Dual DoD.
- *   Dual DoD A (UDX USB) OPEN; Dual DoD B (UDX NIC) OPEN until DUT proof.
+ *   Dual DoD A (UDX USB) OPEN; Dual DoD B OPEN until interactive SSH login.
  *   Product path = hot+cold ABI + userspace UDX/DDI hosts (not this soft
  *   FD table depth alone). Kernel owners before fall-through:
  *   protonrt_cold_link / vfs_ram / net_lo / io_uring_min.

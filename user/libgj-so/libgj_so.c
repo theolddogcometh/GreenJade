@@ -49,7 +49,8 @@
  * ---------------------------------------------------------------------------
  * Soft deepen dynsyms enrich SysV DT_HASH only. Soft residual honesty never
  * closes Dual DoD A/B, never lights bar3, never is Linux .ko product AC.
- * Soft!=product; G-AC-1; Dual DoD A/B OPEN; dual MIT OR Apache-2.0.
+ * Soft!=product; G-AC-1; Dual DoD A OPEN until host USB path; Dual DoD B
+ * OPEN until interactive SSH login; dual MIT OR Apache-2.0.
  * ASCII Soft!=product only; no nested comments; no GJ_IMAGE_VERSION invent.
  * greppable: Soft!=product | libgj-so: soft residual | Dual DoD OPEN | G-AC-1
  * greppable: libgj-so: soft residual Soft!=product

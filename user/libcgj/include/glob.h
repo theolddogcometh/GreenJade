@@ -46,19 +46,34 @@ extern "C" {
 #define GLOB_APPEND   (1 << 5)
 #define GLOB_NOESCAPE (1 << 6)
 #define GLOB_PERIOD   (1 << 7)
+#define GLOB_MAGCHAR  (1 << 8)
+#define GLOB_ALTDIRFUNC (1 << 9) /* OpenSSH sftp-glob / GLOB_HAS_ALTDIRFUNC */
+#define GLOB_BRACE    (1 << 10)
+#define GLOB_NOMAGIC  (1 << 11)
 #define GLOB_TILDE    (1 << 12)
 #define GLOB_ONLYDIR  (1 << 13)
+#define GLOB_TILDE_CHECK (1 << 14)
 
 #define GLOB_NOSPACE 1
 #define GLOB_ABORTED 2
 #define GLOB_NOMATCH 3
 #define GLOB_NOSYS   4
 
+struct dirent;
+struct stat;
+
 typedef struct {
     size_t   gl_pathc;
     char   **gl_pathv;
     size_t   gl_offs;
     int      gl_flags;
+    void   (*gl_closedir)(void *);
+    struct dirent *(*gl_readdir)(void *);
+    void  *(*gl_opendir)(const char *);
+    int   (*gl_lstat)(const char *, struct stat *);
+    int   (*gl_stat)(const char *, struct stat *);
+    size_t   gl_matchc; /* BSD extra; OpenSSH sftp-glob */
+    struct stat **gl_statv;
 } glob_t;
 
 int  glob(const char *szPattern, int nFlags,

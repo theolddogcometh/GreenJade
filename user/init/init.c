@@ -559,11 +559,13 @@ soft_mmap_extra(void)
 static void
 soft_rootfs_paths(void)
 {
+    /* Product SSH = OpenSSH-portable; Dual DoD B OPEN. Soft probes only. */
     static const struct init_soft_path aPaths[] = {
         { "/etc/os-release", 0 },
         { "/etc/hostname", 0 },
         { "/etc/passwd", 0 },
         { "/etc/group", 0 },
+        { "/etc/ssh/sshd_config", 0 },
         { "/lib/ld-gj.so.1", 0 },
         { "/lib/libc.so.6", 0 },
         { "/lib/libgj-so.so.1", 0 },
@@ -572,17 +574,22 @@ soft_rootfs_paths(void)
         { "/bin/sh", 0 },
         { "/bin/greenjade-shell", 0 },
         { "/sbin/init", 0 },
-        { "/sbin/sshd", 0 },
+        { "/sbin/sshd", 0 }, /* leftover sshd_gj path */
         { "/sbin/vfsd", 0 },
         { "/sbin/storaged", 0 },
         { "/sbin/netstackd", 0 },
         { "/sbin/sessiond", 0 },
+        { "/usr/sbin/sshd", 0 },
+        { "/usr/libexec/sshd-session", 0 },
+        { "/usr/libexec/sshd-auth", 0 },
         { "/usr/bin/env", 0 },
         { "/tmp", 0 },
         { "/proc", 0 },
         { "/proc/self", 0 },
         { "/dev", 0 },
         { "/dev/null", 0 },
+        { "/dev/ptmx", 0 },
+        { "/dev/tty", 0 },
         { "/opt/steam", 0 },
     };
     unsigned i;

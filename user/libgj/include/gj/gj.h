@@ -41,18 +41,18 @@
  *   G-AC-1 = no Linux .ko product AC; no GPL source in tree
  *   Soft!=product always; agent never closes Dual DoD A/B
  *
- * Dual DoD residual (both OPEN until DUT proof; agent!=close):
- *   Dual DoD A - Linux-shaped USB via xhci_udx + DDI (OPEN)
- *   Dual DoD B - Linux-shaped NIC via rtl8168_udx + DDI (OPEN)
+ * Dual DoD residual (both OPEN; agent!=close):
+ *   Dual DoD A - Linux-shaped USB via xhci_udx + DDI (OPEN until host USB path)
+ *   Dual DoD B - Linux-shaped NIC via rtl8168_udx + DDI (OPEN until interactive SSH login)
  * Soft residual lamps / inventory / greppable lines never close Dual DoD.
  * Soft!=product. No stamp storms. Stamp-free bar honesty.
- * Bar honesty v2026.08.04.75. NEVER bump GJ_IMAGE_VERSION from this unit.
+ * Fly residual v0.1.178. NEVER bump GJ_IMAGE_VERSION from this unit.
  * No invent intermediate image stamps. Not GJ_IMAGE_VERSION.
  *
  * Product residual (C2 umbrella; Soft!=product; Dual DoD OPEN):
- *   product=UDX+sshd+stack — freestanding libgj.a links netstackd + sshd
- *   + UDX hosts over GJ_SYS_NET / GJ_SYS_DDI. Chain residual:
- *   rtl8168_udx → netstackd (stack) → sshd :22. Soft link != DoD close.
+ *   product=UDX+sshd+stack — freestanding libgj.a links sshd + UDX hosts
+ *   over GJ_SYS_NET / GJ_SYS_DDI. Chain residual:
+ *   rtl8168_udx → kernel net_tcp → sshd :22. Soft link != DoD close.
  * greppable: libgj: soft product residual product=UDX+sshd+stack
  *
  * Ownership boundary:
@@ -187,7 +187,7 @@ gj_libgj_hazard_residual(void)
  * Soft product residual seed toward product=UDX+sshd+stack.
  * Returns 1 always — catalog honesty only (Soft!=product; Dual DoD OPEN).
  * Freestanding link residual for netstackd + sshd + UDX hosts; never
- * claims Dual DoD B wire / host banner close. Bar v2026.08.04.75 stamp-free.
+ * claims Dual DoD B close (close = host interactive SSH login). Fly v0.1.178.
  * greppable residual: libgj: soft product residual product=UDX+sshd+stack
  * greppable residual: Soft!=product Dual DoD OPEN product=UDX+sshd+stack
  */

@@ -46,6 +46,7 @@ int flsll(long long n);
 void bzero(void *p, size_t cb);
 void bcopy(const void *pSrc, void *pDst, size_t cb);
 int  bcmp(const void *pA, const void *pB, size_t cb);
+int  timingsafe_bcmp(const void *pA, const void *pB, size_t cb);
 char *index(const char *sz, int ch);
 char *rindex(const char *sz, int ch);
 void swab(const void *pSrc, void *pDst, ssize_t cb);

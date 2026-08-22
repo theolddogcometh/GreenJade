@@ -803,7 +803,7 @@ soft_user_dma_residual_log(void)
 
     /*
      * --- 12. dual_dod_open residual honesty (law).
-     * Soft residual never closes Dual DoD A (USB) or B (sshd :22).
+     * Soft residual never closes Dual DoD A (USB) or B (interactive SSH login).
      * Product = userspace UDX MAP_BAR under private CR3 (G-AC-1).
      */
     u32C2Checks++;

@@ -150,6 +150,8 @@ int     access(const char *szPath, int nMode);
 char   *get_current_dir_name(void);
 char   *getlogin(void);
 int     getlogin_r(char *szBuf, size_t cb);
+int     setlogin(const char *szName); /* BSD; OpenSSH HAVE_SETLOGIN unset */
+void    setproctitle(const char *szFmt, ...); /* BSD; HAVE_SETPROCTITLE unset */
 
 /* ---- Path / filesystem ops ---------------------------------------------- */
 
@@ -185,6 +187,15 @@ unsigned int alarm(unsigned int u32Sec);
 int     pause(void);
 ssize_t getrandom(void *pBuf, size_t cb, unsigned int u32Flags);
 int     getentropy(void *pBuf, size_t cb);
+#ifndef GRND_NONBLOCK
+#define GRND_NONBLOCK 0x0001u
+#endif
+#ifndef GRND_RANDOM
+#define GRND_RANDOM   0x0002u
+#endif
+#ifndef GRND_INSECURE
+#define GRND_INSECURE 0x0004u
+#endif
 int     ftruncate(int nFd, off_t cbLen);
 int     truncate(const char *szPath, off_t cbLen);
 /* lockf declared in fcntl.h as well for apps that include either */
@@ -210,8 +221,8 @@ int     __clone(int (*fn)(void *), void *pStack, int nFlags, void *pArg, ...);
 int     sethostname(const char *szName, size_t cb);
 int     sched_yield(void);
 int     getpagesize(void);
-int     prctl(int nOption, unsigned long a2, unsigned long a3, unsigned long a4,
-              unsigned long a5);
+int     prctl(int nOption, ...); /* glibc-shaped; OpenSSH uses 2-arg DUMPABLE */
+int     getpt(void);
 int     getdtablesize(void);
 int     daemon(int nNochdir, int nNoclose);
 pid_t   setsid(void);
@@ -230,16 +241,111 @@ int     setdomainname(const char *szName, size_t cb);
 pid_t   tcgetpgrp(int nFd);
 int     tcsetpgrp(int nFd, pid_t pgrp);
 
-/* sysconf names (glibc-shaped subset; numbers match Linux) */
+/* sysconf names (glibc bits/confname.h numbers; Linux LP64). */
+#define _SC_ARG_MAX            0
+#define _SC_CHILD_MAX          1
+#define _SC_CLK_TCK            2
+#define _SC_NGROUPS_MAX        3
+#define _SC_OPEN_MAX           4
+#define _SC_STREAM_MAX         5
+#define _SC_TZNAME_MAX         6
+#define _SC_JOB_CONTROL        7
+#define _SC_SAVED_IDS          8
+#define _SC_REALTIME_SIGNALS   9
+#define _SC_PRIORITY_SCHEDULING 10
+#define _SC_TIMERS             11
+#define _SC_ASYNCHRONOUS_IO    12
+#define _SC_FSYNC              15
+#define _SC_MAPPED_FILES       16
+#define _SC_MEMLOCK            17
+#define _SC_MEMLOCK_RANGE      18
+#define _SC_MEMORY_PROTECTION  19
+#define _SC_MESSAGE_PASSING    20
+#define _SC_SEMAPHORES         21
+#define _SC_SHARED_MEMORY_OBJECTS 22
+#define _SC_AIO_LISTIO_MAX     23
+#define _SC_AIO_MAX            24
+#define _SC_AIO_PRIO_DELTA_MAX 25
+#define _SC_DELAYTIMER_MAX     26
+#define _SC_MQ_OPEN_MAX        27
+#define _SC_MQ_PRIO_MAX        28
+#define _SC_VERSION            29
 #define _SC_PAGESIZE           30
 #define _SC_PAGE_SIZE          _SC_PAGESIZE
-#define _SC_CLK_TCK            2
-#define _SC_NPROCESSORS_ONLN   84
-#define _SC_NPROCESSORS_CONF   83
-#define _SC_OPEN_MAX           4
-#define _SC_ARG_MAX            0
+#define _SC_RTSIG_MAX          31
+#define _SC_SEM_NSEMS_MAX      32
+#define _SC_SEM_VALUE_MAX      33
+#define _SC_SIGQUEUE_MAX       34
+#define _SC_TIMER_MAX          35
+#define _SC_BC_BASE_MAX        36
+#define _SC_BC_DIM_MAX         37
+#define _SC_BC_SCALE_MAX       38
+#define _SC_BC_STRING_MAX      39
+#define _SC_COLL_WEIGHTS_MAX   40
+#define _SC_EXPR_NEST_MAX      42
 #define _SC_LINE_MAX           43
+#define _SC_RE_DUP_MAX         44
+#define _SC_2_VERSION          46
+#define _SC_2_C_BIND           47
+#define _SC_2_C_DEV            48
+#define _SC_2_CHAR_TERM        95
+#define _SC_2_FORT_DEV         49
+#define _SC_2_FORT_RUN         50
+#define _SC_2_SW_DEV           51
+#define _SC_2_LOCALEDEF        52
+#define _SC_IOV_MAX            60
+#define _SC_UIO_MAXIOV         _SC_IOV_MAX
+#define _SC_THREADS            67
+#define _SC_THREAD_SAFE_FUNCTIONS 68
+#define _SC_GETGR_R_SIZE_MAX   69
+#define _SC_GETPW_R_SIZE_MAX   70
+#define _SC_LOGIN_NAME_MAX     71
+#define _SC_TTY_NAME_MAX       72
+#define _SC_THREAD_DESTRUCTOR_ITERATIONS 73
+#define _SC_THREAD_KEYS_MAX    74
+#define _SC_THREAD_STACK_MIN   75
+#define _SC_THREAD_THREADS_MAX 76
+#define _SC_THREAD_ATTR_STACKADDR 77
+#define _SC_THREAD_ATTR_STACKSIZE 78
+#define _SC_THREAD_PRIORITY_SCHEDULING 79
+#define _SC_THREAD_PRIO_INHERIT 80
+#define _SC_THREAD_PRIO_PROTECT 81
+#define _SC_THREAD_PROCESS_SHARED 82
+#define _SC_NPROCESSORS_CONF   83
+#define _SC_NPROCESSORS_ONLN   84
+#define _SC_PHYS_PAGES         85
+#define _SC_AVPHYS_PAGES       86
+#define _SC_ATEXIT_MAX         87
+#define _SC_PASS_MAX           88
+#define _SC_XOPEN_VERSION      89
+#define _SC_XOPEN_XCU_VERSION  90
+#define _SC_XOPEN_UNIX         91
+#define _SC_XOPEN_CRYPT        92
+#define _SC_XOPEN_ENH_I18N     93
+#define _SC_XOPEN_SHM          94
+#define _SC_XOPEN_REALTIME     129
+#define _SC_XOPEN_REALTIME_THREADS 130
+#define _SC_ADVISORY_INFO      132
+#define _SC_BARRIERS           133
+#define _SC_CLOCK_SELECTION    137
+#define _SC_CPUTIME            138
+#define _SC_THREAD_CPUTIME     139
+#define _SC_MONOTONIC_CLOCK    149
+#define _SC_READER_WRITER_LOCKS 153
+#define _SC_SPIN_LOCKS         154
+#define _SC_REGEXP             155
+#define _SC_SHELL              157
+#define _SC_SPAWN              159
+#define _SC_TIMEOUTS           164
+#define _SC_SYMLOOP_MAX        173
+#define _SC_2_PBS              168
 #define _SC_HOST_NAME_MAX      180
+#define _SC_TRACE              181
+#define _SC_TRACE_EVENT_FILTER 182
+#define _SC_TRACE_INHERIT      183
+#define _SC_TRACE_LOG          184
+#define _SC_IPV6               235
+#define _SC_RAW_SOCKETS        236
 #define _CS_PATH               0
 #define _CS_GNU_LIBC_VERSION   2
 
@@ -299,8 +405,10 @@ int     fexecve(int nFd, char *const aArgv[], char *const aEnvp[]);
 ssize_t getdents64(int nFd, void *pDirp, size_t cb);
 int     getdents(int nFd, void *pDirp, unsigned cb);
 int     issetugid(void); /* non-zero if process is "tainted" by setuid */
-void    strmode(mode_t mode, char *szBuf); /* BSD: mode → "drwxr-xr-x" */
+void    strmode(int nMode, char *szBuf); /* BSD: mode to "drwxr-xr-x" */
 long    syscall(long nNr, ...); /* raw Linux syscall; use sparingly */
+int     rresvport(int *pPort);
+int     rresvport_af(int *pPort, int nAf);
 
 #ifdef __cplusplus
 }

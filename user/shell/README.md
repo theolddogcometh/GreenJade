@@ -30,8 +30,11 @@ boot spawn live outside this tree.
 6. **Readline** — idle timeout in QEMU smoke → `readline idle PASS`; live serial → install mode (≤8 lines)
 7. **Aggregate PASS** lines (incl. soft-status group lines) + `vfs PASS` + `interactive PASS` + exit(0)
 
-Boot embed (parent): `kernel/proc/shell_embed.S` (`.incbin` of
-`build/user/shell.elf`). Kernel spawn markers include `shell: live spawn PASS`.
+Boot embed (parent): `kernel/proc/shell_embed.S` `.incbin`s
+`build/user/dash.elf` (product `/bin/sh`). This `shell.elf` is residual
+smoke only (`bin/greenjade-shell`). Fly **v0.1.184** (packed, not host-probed; Dual DoD **A/B OPEN**; never `USBCMD.RS=1`; **0.2.0** reserved) kernel spawn is isolate:
+`shell: live dash SKIP reason=user_pf_i1_isolate` (0.1.140 `#PF I=1`).
+Do not un-isolate this cut. Dual DoD A **OPEN** until host USB path. Dual DoD B **OPEN** until interactive SSH login.
 
 ## Soft status notes (scripted one-liners)
 
@@ -169,7 +172,7 @@ Failure lines: `greenjade-shell: cmd FAIL` + the failing line; exit codes
 Kernel companion (not from this directory):
 
 ```text
-shell: live spawn PASS
+shell: live dash SKIP reason=user_pf_i1_isolate
 ```
 
 ## Packaging (parent scripts)
@@ -214,7 +217,7 @@ Parent tree owns:
 
 - Makefile target `shell-gj` → `build/user/shell.elf`
 - `kernel/proc/shell_embed.S` (`.incbin` + blob symbols)
-- Boot spawn of the ELF after VFS is ready
+- Live dash spawn isolated (`user_pf_i1_isolate`). Do not un-isolate this cut.
 
 Do not treat this directory as owning Makefile or kernel edits.
 
@@ -222,4 +225,4 @@ See also: [ABI-first pivot](../../docs/ABI_FIRST_PIVOT.md) (product direction).
 
 ---
 
-**Project:** GreenJade pure-C microkernel · dual **MIT OR Apache-2.0** · Soft≠product · Dual DoD A/B **OPEN**. See [root README](../../README.md). Support: [Patreon — TheOldDog](https://www.patreon.com/cw/TheOldDog).
+**Project:** GreenJade pure-C microkernel · dual **MIT OR Apache-2.0** · Soft≠product · Dual DoD A **OPEN** until host USB path · Dual DoD B **OPEN** until interactive SSH login. Isolate ON (live dash SKIP). See [root README](../../README.md). Support: [Patreon — TheOldDog](https://www.patreon.com/cw/TheOldDog).

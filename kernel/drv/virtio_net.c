@@ -11,8 +11,8 @@
  *   No freestanding rtl work here (lab rtl is out of this exclusive unit).
  *   G-AC-1: no Linux .ko product AC; no GPL in-tree source.
  *   Functional TX/RX residual lean:
- *     - TX 2-desc chain + single fallback; ETH_MIN pad; second-chance reap
- *     - TX wire-byte tally (post-pad) + sticky last lens; busy after deep reap
+ *     - TX 2-desc chain + 2-slot bounce ping-pong; ETH_MIN pad; second-chance reap
+ *     - TX wire-byte tally (post-pad) + sticky last lens; busy if both slots live
  *     - RX multi-buf pool + MRG merge + refill; merge-seg / claim-miss tallies
  *     - housekeep: deeper TX reap when tight + silent link sample + refill
  *     - UDX avail_push TX also ETH_MIN pads (parity with kernel TX residual)
@@ -110,10 +110,17 @@ static u8  g_aRxSlotLive[GJ_VIRTIO_NET_RX_N]; /* 1 = on device */
 /* desc head -> RX slot (0xff free); set at post, consumed on poll_id */
 static u8  g_aRxHeadSlot[GJ_VIRTQ_MAX_SIZE];
 
-/* Kernel TX: 2-desc soft chain (hdr | payload) + single-desc fallback pack */
-static struct virtio_net_hdr g_TxHdr __attribute__((aligned(16)));
-static u8                    g_aTxPayload[1518] __attribute__((aligned(16)));
-static u8                    g_aTxPack[2048] __attribute__((aligned(16)));
+/* Kernel TX ping-pong bounce: never memcpy a slot whose desc is still on TX vq. */
+#define GJ_NET_TX_BOUNCE_N 2u
+static struct virtio_net_hdr g_aTxHdr[GJ_NET_TX_BOUNCE_N]
+    __attribute__((aligned(16)));
+static u8                    g_aTxPayload[GJ_NET_TX_BOUNCE_N][1518]
+    __attribute__((aligned(16)));
+static u8                    g_aTxPack[GJ_NET_TX_BOUNCE_N][2048]
+    __attribute__((aligned(16)));
+static u8                    g_aTxSlotLive[GJ_NET_TX_BOUNCE_N]; /* 1 = on TX vq */
+static u8                    g_aTxHeadSlot[GJ_VIRTQ_MAX_SIZE]; /* head -> slot */
+static u8                    g_u8TxSlotNext;
 
 /* Bounce pool for userspace AVAIL_PUSH (ring programming path) */
 #define GJ_NET_BOUNCE_N 8u
@@ -402,12 +409,13 @@ net_soft_residual_lean_ok(u32 *pOutChecks)
         GJ_NET_BOUNCE_SZ >= GJ_VIRTIO_NET_ETH_MIN) {
         u32Ok++;
     }
-    /* 13: kernel TX pack/payload residual buffers */
+    /* 13: kernel TX ping-pong bounce (hdr | payload | pack) per slot */
     u32Checks++;
-    if ((u32)sizeof(g_aTxPayload) >= GJ_VIRTIO_NET_ETH_MAX &&
-        (u32)sizeof(g_aTxPack) >=
+    if (GJ_NET_TX_BOUNCE_N >= 2u &&
+        (u32)sizeof(g_aTxPayload[0]) >= GJ_VIRTIO_NET_ETH_MAX &&
+        (u32)sizeof(g_aTxPack[0]) >=
             ((u32)sizeof(struct virtio_net_hdr) + GJ_VIRTIO_NET_ETH_MAX) &&
-        (u32)sizeof(g_TxHdr) == (u32)sizeof(struct virtio_net_hdr)) {
+        (u32)sizeof(g_aTxHdr[0]) == (u32)sizeof(struct virtio_net_hdr)) {
         u32Ok++;
     }
     /* 14: RX multi-buf BSS holds full pool */
@@ -432,9 +440,10 @@ net_soft_residual_lean_ok(u32 *pOutChecks)
     if (GJ_VIRTQ_MAX_SIZE >= 64u && GJ_VIRTQ_MAX_SIZE <= 1024u) {
         u32Ok++;
     }
-    /* 18: head->slot map table covers virtq max */
+    /* 18: head->slot map tables cover virtq max */
     u32Checks++;
-    if ((u32)sizeof(g_aRxHeadSlot) >= GJ_VIRTQ_MAX_SIZE) {
+    if ((u32)sizeof(g_aRxHeadSlot) >= GJ_VIRTQ_MAX_SIZE &&
+        (u32)sizeof(g_aTxHeadSlot) >= GJ_VIRTQ_MAX_SIZE) {
         u32Ok++;
     }
     /* 19: live free-desc watermark coherent when ready (silent) */
@@ -457,7 +466,8 @@ net_soft_residual_lean_ok(u32 *pOutChecks)
     /* 22: live/used slot tables sized to pools (silent residual geometry) */
     u32Checks++;
     if ((u32)sizeof(g_aRxSlotLive) == GJ_VIRTIO_NET_RX_N &&
-        (u32)sizeof(g_aBounceUsed) == GJ_NET_BOUNCE_N) {
+        (u32)sizeof(g_aBounceUsed) == GJ_NET_BOUNCE_N &&
+        (u32)sizeof(g_aTxSlotLive) == GJ_NET_TX_BOUNCE_N) {
         u32Ok++;
     }
 
@@ -696,6 +706,61 @@ rx_claim_head(u32 u32Head)
     return (int)u8Slot;
 }
 
+static void
+tx_claim_head(u32 u32Head)
+{
+    u8 u8Slot;
+
+    if (u32Head >= GJ_VIRTQ_MAX_SIZE) {
+        return;
+    }
+    u8Slot = g_aTxHeadSlot[u32Head];
+    g_aTxHeadSlot[u32Head] = 0xff;
+    if (u8Slot < GJ_NET_TX_BOUNCE_N) {
+        g_aTxSlotLive[u8Slot] = 0;
+    }
+}
+
+/* Reap TX used; drop inflight on the bounce slot whose desc left the vq. */
+static u32
+tx_reap(u32 u32Max)
+{
+    u32 n = 0;
+    u32 u32Id;
+
+    if (u32Max == 0) {
+        return 0;
+    }
+    while (n < u32Max) {
+        if (virtio_q_poll_id(&g_qTx, 1, &u32Id) < 0) {
+            break;
+        }
+        tx_claim_head(u32Id);
+        n++;
+    }
+    return n;
+}
+
+static int
+tx_pick_slot(void)
+{
+    u8 u8Slot;
+    u8 u8Alt;
+
+    u8Slot = g_u8TxSlotNext;
+    if (u8Slot >= GJ_NET_TX_BOUNCE_N) {
+        u8Slot = 0;
+    }
+    if (g_aTxSlotLive[u8Slot] == 0) {
+        return (int)u8Slot;
+    }
+    u8Alt = (u8)((u8Slot + 1u) % GJ_NET_TX_BOUNCE_N);
+    if (g_aTxSlotLive[u8Alt] == 0) {
+        return (int)u8Alt;
+    }
+    return -1;
+}
+
 /*
  * Probe path: find first net -> modern PCI caps -> features -> RX/TX qs ->
  * multi-buffer RX post. Leaves g_fReady=0 and g_pNet=NULL on any hard failure.
@@ -717,6 +782,9 @@ virtio_net_probe(void)
     stats_reset();
     memset(g_aRxSlotLive, 0, sizeof(g_aRxSlotLive));
     memset(g_aRxHeadSlot, 0xff, sizeof(g_aRxHeadSlot));
+    memset(g_aTxSlotLive, 0, sizeof(g_aTxSlotLive));
+    memset(g_aTxHeadSlot, 0xff, sizeof(g_aTxHeadSlot));
+    g_u8TxSlotNext = 0;
     memset(g_aBounceUsed, 0, sizeof(g_aBounceUsed));
     /* Allow one boot lamp on this probe attempt. */
     g_fSoftInvOnce = 0;
@@ -797,7 +865,11 @@ virtio_net_probe(void)
         return -1;
     }
 
-    /* Soft multi-buffer: post full RX pool (device-write) before DRIVER_OK */
+    virtio_set_status(g_pNet, (u8)(GJ_VIRTIO_S_ACKNOWLEDGE | GJ_VIRTIO_S_DRIVER |
+                                   GJ_VIRTIO_S_FEATURES_OK | GJ_VIRTIO_S_DRIVER_OK));
+    g_fReady = 1;
+    g_u32SoftProbeOk++;
+    /* DRIVER_OK first, then avail+kick (QEMU ignores kicks while !DRIVER_OK). */
     cPosted = rx_post_all();
     if (cPosted > 0) {
         net_kick(&g_qRx);
@@ -805,16 +877,10 @@ virtio_net_probe(void)
     } else {
         kprintf("virtio-net: initial RX post failed (tx-only until retry)\n");
     }
-    /* Product bring-up marker (one line). Soft!=product residual is separate. */
     kprintf("virtio-net: multi-buf rx_slots=%u posted=%u tx_chain=2desc "
             "eth_min=%u\n",
             (unsigned)GJ_VIRTIO_NET_RX_N, (unsigned)cPosted,
             (unsigned)GJ_VIRTIO_NET_ETH_MIN);
-
-    virtio_set_status(g_pNet, (u8)(GJ_VIRTIO_S_ACKNOWLEDGE | GJ_VIRTIO_S_DRIVER |
-                                   GJ_VIRTIO_S_FEATURES_OK | GJ_VIRTIO_S_DRIVER_OK));
-    g_fReady = 1;
-    g_u32SoftProbeOk++;
     /* Soft residual: sample link after DRIVER_OK (STATUS feature or assume). */
     soft_sample_link(g_pNet);
     note_free_min();
@@ -890,18 +956,20 @@ virtio_net_link_up(void)
  * Kernel TX product residual lean: prefer 2-desc chain (hdr device-R +
  * payload device-R). Fall back to single contiguous pack if the queue has
  * only one free descriptor. Short frames zero-padded to ETH_MIN (QEMU
- * SLIRP-friendly). Second-chance deeper reap before busy (retryable;
- * tx_busy != hard fail). Wire-byte tally is post-pad; u64TxBytes is
- * caller payload only.
+ * SLIRP-friendly). Ping-pong bounce: reap first, never copy a live slot,
+ * busy if both still on the TX vq. Second-chance deeper reap before busy
+ * (retryable; tx_busy != hard fail). Wire-byte tally is post-pad;
+ * u64TxBytes is caller payload only.
  */
 int
 virtio_net_tx(const void *pFrame, u32 cbLen)
 {
     gj_paddr_t paHdr;
     gj_paddr_t paPay;
-    i32 i32Done;
     u32 cbWire;
     u32 n;
+    int iSlot;
+    int iHead;
 
     if (!g_fReady || pFrame == NULL || cbLen == 0 ||
         cbLen > GJ_VIRTIO_NET_ETH_MAX) {
@@ -911,8 +979,8 @@ virtio_net_tx(const void *pFrame, u32 cbLen)
         return -1;
     }
 
-    /* Reap completed TX to free multi-desc chains (lean residual). */
-    n = virtio_q_reap(&g_qTx, 16);
+    /* Reap completed TX to free multi-desc chains and bounce slots. */
+    n = tx_reap(16);
     g_Stats.u32Reaps += n;
     g_Stats.u32TxReapBefore += n;
     note_free_min();
@@ -923,11 +991,23 @@ virtio_net_tx(const void *pFrame, u32 cbLen)
          * chains may free more than the first 16 used entries expose.
          * Still busy => retryable; Soft!=product tally only.
          */
-        n = virtio_q_reap(&g_qTx, 32);
+        n = tx_reap(32);
         g_Stats.u32Reaps += n;
         g_Stats.u32TxReapBefore += n;
         note_free_min();
         if (g_qTx.u16NumFree == 0) {
+            g_Stats.u32TxBusy++;
+            return -1;
+        }
+    }
+
+    iSlot = tx_pick_slot();
+    if (iSlot < 0) {
+        n = tx_reap(32);
+        g_Stats.u32Reaps += n;
+        g_Stats.u32TxReapBefore += n;
+        iSlot = tx_pick_slot();
+        if (iSlot < 0) {
             g_Stats.u32TxBusy++;
             return -1;
         }
@@ -943,16 +1023,19 @@ virtio_net_tx(const void *pFrame, u32 cbLen)
         g_Stats.u32TxPad++;
     }
 
-    memset(&g_TxHdr, 0, sizeof(g_TxHdr));
+    memset(&g_aTxHdr[iSlot], 0, sizeof(g_aTxHdr[iSlot]));
     /* V1 hdr: num_buffers unused on TX; leave 0 */
-    memset(g_aTxPayload, 0, cbWire);
-    memcpy(g_aTxPayload, pFrame, cbLen);
-    paHdr = buf_phys(&g_TxHdr);
-    paPay = buf_phys(g_aTxPayload);
+    memset(g_aTxPayload[iSlot], 0, cbWire);
+    memcpy(g_aTxPayload[iSlot], pFrame, cbLen);
+    paHdr = buf_phys(&g_aTxHdr[iSlot]);
+    paPay = buf_phys(g_aTxPayload[iSlot]);
 
-    if (g_qTx.u16NumFree >= 2 &&
-        virtio_q_add2(&g_qTx, paHdr, (u32)sizeof(g_TxHdr), 0, paPay, cbWire,
-                      0) >= 0) {
+    iHead = -1;
+    if (g_qTx.u16NumFree >= 2) {
+        iHead = virtio_q_add2(&g_qTx, paHdr, (u32)sizeof(g_aTxHdr[iSlot]), 0,
+                              paPay, cbWire, 0);
+    }
+    if (iHead >= 0) {
         g_Stats.u32TxMulti++;
     } else if (g_qTx.u16NumFree >= 1) {
         /* Single-desc fallback: hdr+payload packed */
@@ -960,14 +1043,15 @@ virtio_net_tx(const void *pFrame, u32 cbLen)
         u32 cbTotal;
         gj_paddr_t pa;
 
-        memset(g_aTxPack, 0, sizeof(g_aTxPack));
-        pHdr = (struct virtio_net_hdr *)(void *)g_aTxPack;
+        memset(g_aTxPack[iSlot], 0, sizeof(g_aTxPack[iSlot]));
+        pHdr = (struct virtio_net_hdr *)(void *)g_aTxPack[iSlot];
         memset(pHdr, 0, sizeof(*pHdr));
-        memcpy(g_aTxPack + sizeof(*pHdr), pFrame, cbLen);
+        memcpy(g_aTxPack[iSlot] + sizeof(*pHdr), pFrame, cbLen);
         /* Zero-pad remainder of ETH_MIN region when packing short frames. */
         cbTotal = (u32)sizeof(*pHdr) + cbWire;
-        pa = buf_phys(g_aTxPack);
-        if (virtio_q_add(&g_qTx, pa, cbTotal, 0) < 0) {
+        pa = buf_phys(g_aTxPack[iSlot]);
+        iHead = virtio_q_add(&g_qTx, pa, cbTotal, 0);
+        if (iHead < 0) {
             g_Stats.u32TxBusy++;
             return -1;
         }
@@ -977,18 +1061,21 @@ virtio_net_tx(const void *pFrame, u32 cbLen)
         return -1;
     }
 
+    g_aTxSlotLive[iSlot] = 1;
+    if ((u32)iHead < GJ_VIRTQ_MAX_SIZE) {
+        g_aTxHeadSlot[iHead] = (u8)iSlot;
+    }
+    g_u8TxSlotNext = (u8)(((u8)iSlot + 1u) % GJ_NET_TX_BOUNCE_N);
+
     net_kick(&g_qTx);
     note_free_min();
-    i32Done = virtio_q_poll(&g_qTx, 1000000u);
-    if (i32Done < 0) {
-        /*
-         * Soft: count timeout but keep historical success return - device may
-         * complete asynchronously; queue still holds the chain until reap.
-         */
-        g_Stats.u32TxTimeout++;
-    } else {
-        g_Stats.u32Reaps++;
-    }
+    /*
+     * Do not busy-wait used.idx (was 1e6 pause). QEMU50 froze the
+     * OpenSSH ppoll vCPU after the first SYN-ACK kick so POLLIN never
+     * ran. Reap leftover chains on the next TX. Dual DoD B OPEN.
+     */
+    n = tx_reap(8);
+    g_Stats.u32Reaps += n;
     g_Stats.u32TxCount++;
     g_Stats.u64TxBytes += (u64)cbLen;
     g_Stats.u64TxWireBytes += (u64)cbWire;
@@ -1028,7 +1115,7 @@ virtio_net_rx(void *pOut, u32 cbMax)
     }
 
     note_free_min();
-    i32Len = virtio_q_poll_id(&g_qRx, 1000u, &u32Id);
+    i32Len = virtio_q_poll_id(&g_qRx, 1u, &u32Id);
     if (i32Len < 0) {
         g_Stats.u32RxEmpty++;
         /* Opportunistic refill if pool drained (product RX residual lean). */
@@ -1099,7 +1186,7 @@ virtio_net_rx(void *pOut, u32 cbMax)
         u8 *pSeg;
         struct virtio_net_hdr *pSegHdr;
 
-        i32Seg = virtio_q_poll_id(&g_qRx, 10000u, &u32SegId);
+        i32Seg = virtio_q_poll_id(&g_qRx, 1u, &u32SegId);
         if (i32Seg < 0) {
             g_Stats.u32RxDrop++;
             break;
@@ -1172,12 +1259,12 @@ virtio_net_housekeep(void)
         return 0;
     }
     g_Stats.u32Housekeep++;
-    nTx = virtio_q_reap(&g_qTx, 16);
+    nTx = tx_reap(16);
     g_Stats.u32Reaps += nTx;
     /* Deeper TX reap when free is tight (2-desc chains need headroom). */
     u16TxFree = virtio_q_num_free(&g_qTx);
     if (u16TxFree < 4u) {
-        nExtra = virtio_q_reap(&g_qTx, 32);
+        nExtra = tx_reap(32);
         g_Stats.u32Reaps += nExtra;
         nTx += nExtra;
     }
@@ -1468,7 +1555,7 @@ virtio_net_desc_alloc(u16 u16Which)
         return -1;
     }
     pQ = (u16Which == 0) ? &g_qRx : &g_qTx;
-    n = virtio_q_reap(pQ, 8);
+    n = (u16Which == 1) ? tx_reap(8) : virtio_q_reap(pQ, 8);
     g_Stats.u32Reaps += n;
     head = virtio_q_alloc_desc(pQ);
     return head;
@@ -1610,12 +1697,12 @@ virtio_net_avail_push(u16 u16Which, const void *pBuf, u32 cbLen, int fWrite,
     }
     pQ = (u16Which == 0) ? &g_qRx : &g_qTx;
     /* Reap completed to free descs */
-    n = virtio_q_reap(pQ, 8);
+    n = (u16Which == 1) ? tx_reap(8) : virtio_q_reap(pQ, 8);
     g_Stats.u32Reaps += n;
     bounce_free_all_if_idle();
     slot = bounce_alloc();
     if (slot < 0) {
-        n = virtio_q_reap(pQ, 16);
+        n = (u16Which == 1) ? tx_reap(16) : virtio_q_reap(pQ, 16);
         g_Stats.u32Reaps += n;
         bounce_free_all_if_idle();
         slot = bounce_alloc();
@@ -1717,10 +1804,10 @@ virtio_net_used_reap(u16 u16Which, u32 u32Max)
         note_free_min();
     } else {
         /* TX used_reap: deeper second pass when free is still tight. */
-        n = virtio_q_reap(pQ, u32Limit);
+        n = tx_reap(u32Limit);
         g_Stats.u32Reaps += n;
         if (virtio_q_num_free(pQ) < 4u && u32Limit < 64u) {
-            u32 n2 = virtio_q_reap(pQ, 32);
+            u32 n2 = tx_reap(32);
             g_Stats.u32Reaps += n2;
             n += n2;
         }

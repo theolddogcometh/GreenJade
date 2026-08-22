@@ -77,6 +77,11 @@ extern "C" {
 
 #define LOG_MASK(pri) (1 << (pri))
 #define LOG_UPTO(pri) ((1 << ((pri) + 1)) - 1)
+#define LOG_PRIMASK   0x07
+#define LOG_PRI(p)    ((p) & LOG_PRIMASK)
+#define LOG_MAKEPRI(fac, pri) ((fac) | (pri))
+#define LOG_FACMASK   0x03f8
+#define LOG_FAC(p)    (((p) & LOG_FACMASK) >> 3)
 
 void openlog(const char *szIdent, int nOption, int nFacility);
 void closelog(void);

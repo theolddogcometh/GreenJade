@@ -58,8 +58,8 @@
  * class=C2 dual_dod_a=OPEN dual_dod_b=OPEN (Soft residual != Dual DoD close).
  * Soft!=product · dual MIT OR Apache-2.0 · no version stamp · storm=0.
  * Multi-line soft catalog flood removed; tallies fold into residual surface.
- * UDX multi-server confine product stays OPEN. Dual DoD B sshd :22 needs UDX NIC.
- * Bar honesty v2026.08.04.75 (stamp-free residual; NEVER invent .76).
+ * UDX multi-server confine product stays OPEN. Dual DoD B until interactive SSH login.
+ * Fly residual stamp-free; NEVER invent next N.
  * greppable: "elf: soft functional residual embed"
  * greppable: "elf: soft residual host_blob" | "elf: soft residual lean host_blob"
  * greppable: "elf: soft residual denser" | "elf: soft residual denser host_blob"
@@ -138,7 +138,7 @@
  * Matches GJ_USER_CODE_VA — high enough for live spawn, below handoff band.
  * Soft residual + geometry arms; never hard-gates product load alone.
  */
-#define GJ_ELF_HOST_EXEC_BASE 0x0000000001000000ull
+#define GJ_ELF_HOST_EXEC_BASE 0x0000000004000000ull
 /* Soft host path class residual (classify only; Soft!=product). */
 #define GJ_ELF_HOST_CLASS_NONE 0u
 #define GJ_ELF_HOST_CLASS_UDX  1u
@@ -505,7 +505,8 @@ elf_soft_entry_in_range(const struct gj_elf_info *pInfo)
 
 /**
  * Robust embed host load: PT_LOAD span collides with ld-gj handoff band?
- * Band is [GJ_LD_HANDOFF_VA, GJ_LD_STACK_VA + PAGE). Product hosts must
+ * Band is [GJ_LD_HANDOFF_VA, GJ_LD_STACK_VA + (PAGES+1)*PAGE) — handoff,
+ * unmapped guard at STACK_VA, grow-down body, SysV top. Product hosts must
  * never clobber handoff/stack when mapping embedded ELF. Soft residual +
  * product reject path use this. Soft!=product; Dual DoD A/B OPEN.
  */
@@ -523,11 +524,31 @@ elf_pt_load_handoff_collide(u64 u64SegVa, u64 u64Memsz)
         /* overflow treated as collide (reject) */
         return 1;
     }
-    u64BandEnd = GJ_LD_STACK_VA + (u64)GJ_PAGE_SIZE;
+    u64BandEnd = GJ_LD_STACK_VA +
+                 (u64)(GJ_LD_STACK_PAGES + 1u) * (u64)GJ_PAGE_SIZE;
     if (u64SegVa < u64BandEnd && u64SegEnd > GJ_LD_HANDOFF_VA) {
         return 1;
     }
     return 0;
+}
+
+int
+elf_stack_rsp_live_ok(u64 u64Rsp)
+{
+    u64 u64Max;
+
+    if (u64Rsp <= GJ_LD_STACK_VA) {
+        return 0;
+    }
+    if ((u64Rsp & ((u64)GJ_PAGE_SIZE - 1ull)) != 0ull) {
+        return 0;
+    }
+    u64Max = GJ_LD_STACK_VA +
+             (u64)(GJ_LD_STACK_PAGES + 1u) * (u64)GJ_PAGE_SIZE;
+    if (u64Rsp > u64Max) {
+        return 0;
+    }
+    return 1;
 }
 
 /**
@@ -755,13 +776,13 @@ elf_soft_udx_host_lean_check(void)
      * 11. sshd.elf freestanding ET_EXEC band (STRONGER FUNCTIONAL residual).
      * user.ld base @ GJ_ELF_HOST_EXEC_BASE; above PE 0x400000; page-aligned;
      * strictly below handoff so live spawn never collides with ld-gj page.
-     * Soft only — never Dual DoD close (DoD B needs UDX NIC for product :22).
+     * Soft only — never Dual DoD close (DoD B until interactive SSH login).
      */
     if ((GJ_ELF_HOST_EXEC_BASE & 0xfffull) == 0ull &&
         GJ_ELF_HOST_EXEC_BASE > 0x0000000000400000ull &&
         GJ_ELF_HOST_EXEC_BASE < GJ_LD_HANDOFF_VA &&
         GJ_ELF_HOST_EXEC_BASE < GJ_ELF_DYN_BIAS &&
-        GJ_ELF_HOST_EXEC_BASE == 0x0000000001000000ull) {
+        GJ_ELF_HOST_EXEC_BASE == 0x0000000004000000ull) {
         u32Ok++;
     }
 
@@ -1485,7 +1506,7 @@ elf_soft_inventory(const char *szVia)
     /*
      * Grep: elf: soft residual lean sshd
      * FUNCTIONAL residual for freestanding product sshd.elf load band.
-     * Soft!=product; Dual DoD B remains OPEN (needs UDX NIC for product :22).
+     * Soft!=product; Dual DoD B remains OPEN (until interactive SSH login).
      */
     kprintf("elf: soft residual lean sshd host=sshd.elf linux_shaped=0 "
             "freestanding_product_daemon=1 et_exec=1 direct_entry=1 "
@@ -3734,8 +3755,15 @@ elf_apply_interp_first(struct gj_process *pProc, const struct gj_elf_info *pMain
     if (pProc == NULL || pMain == NULL) {
         return GJ_ERR_INVAL;
     }
-    if (u64Stack == 0) {
-        u64Stack = GJ_LD_STACK_VA;
+    if (pProc->u64ExecStack != 0 &&
+        elf_stack_rsp_live_ok(pProc->u64ExecStack) != 0) {
+        /* Prefer SysV top published by elf_publish_handoff_argv. */
+        u64Stack = pProc->u64ExecStack;
+    } else if (elf_stack_rsp_live_ok(u64Stack) == 0) {
+        /* Band-base RSP is 0.1.140 #PF I=1 class — do not live-launch. */
+        kprintf("elf: interp_first stack isolate rsp=0x%lx Soft!=product\n",
+                (unsigned long)u64Stack);
+        return GJ_ERR_INVAL;
     }
     pProc->u64ExecStack = u64Stack;
     pProc->u32StartThr = 0;
@@ -3985,10 +4013,72 @@ elf_handoff_fill(struct gj_ld_handoff *pHo, const char *szPath,
     }
 }
 
+static u32
+elf_copy_user_cstr(char *pDst, u32 cbDst, u64 u64Src)
+{
+    u32 n;
+
+    if (pDst == NULL || cbDst == 0) {
+        return 0;
+    }
+    if (u64Src == 0) {
+        pDst[0] = '\0';
+        return 1;
+    }
+    n = 0;
+    while (n + 1u < cbDst) {
+        char ch = 0;
+
+        if (user_range_ok(u64Src + n, 1)) {
+            if (copy_from_user(&ch, u64Src + n, 1) != GJ_OK) {
+                break;
+            }
+        } else {
+            ch = *(const char *)(gj_vaddr_t)(u64Src + n);
+        }
+        pDst[n] = ch;
+        if (ch == '\0') {
+            return n + 1u;
+        }
+        n++;
+    }
+    pDst[n] = '\0';
+    return n + 1u;
+}
+
+static u32
+elf_read_user_u64(u64 u64Addr, u64 *pOut)
+{
+    if (pOut == NULL) {
+        return 0;
+    }
+    *pOut = 0;
+    if (u64Addr == 0) {
+        return 0;
+    }
+    if (user_range_ok(u64Addr, 8)) {
+        if (copy_from_user(pOut, u64Addr, 8) != GJ_OK) {
+            return 0;
+        }
+        return 1;
+    }
+    *pOut = *(const u64 *)(gj_vaddr_t)u64Addr;
+    return 1;
+}
+
 gj_status_t
 elf_publish_handoff(struct gj_process *pProc, const char *szPath,
                     const struct gj_elf_info *pMain,
                     const struct gj_elf_info *pInterp)
+{
+    return elf_publish_handoff_argv(pProc, szPath, pMain, pInterp, 0, 0);
+}
+
+gj_status_t
+elf_publish_handoff_argv(struct gj_process *pProc, const char *szPath,
+                         const struct gj_elf_info *pMain,
+                         const struct gj_elf_info *pInterp, u64 u64UserArgv,
+                         u64 u64UserEnvp)
 {
     struct gj_ld_handoff ho;
     gj_paddr_t pa;
@@ -4023,10 +4113,11 @@ elf_publish_handoff(struct gj_process *pProc, const char *szPath,
     cCopy = ho.cAuxv;
 
     /*
-     * INTERP-first stack block (SysV): argc, argv[], NULL, envp NULL, auxv...
-     * argv[0] points at path string stored later in the same page.
+     * SysV stack: argc/argv/env/auxv on the TOP page of a grow-down band.
+     * GJ_LD_STACK_VA is an unmapped guard. Body sits above it so push/call
+     * cannot smash GJ_LD_HANDOFF_VA (0.1.140 dash #PF I=1 class).
      */
-    ho.u64Stack = GJ_LD_STACK_VA;
+    ho.u64Stack = 0;
 
     if (process_as_ensure(pProc) != GJ_OK) {
         elf_soft_inc(&g_u32SoftHandoffFail);
@@ -4044,75 +4135,237 @@ elf_publish_handoff(struct gj_process *pProc, const char *szPath,
         elf_soft_inc(&g_u32SoftHandoffFail);
         return GJ_ERR_NOMEM;
     }
-    u64Saved = cpu_read_cr3();
-    cpu_load_cr3(vmm_kernel_cr3());
-    memset((void *)(gj_vaddr_t)pa, 0, GJ_PAGE_SIZE);
-    memcpy((void *)(gj_vaddr_t)pa, &ho, sizeof(ho));
-    /* AT_RANDOM 16 bytes at GJ_LD_RANDOM_OFF on handoff page */
     {
-        u8 *pRnd = (u8 *)(gj_vaddr_t)pa + (size_t)GJ_LD_RANDOM_OFF;
+        gj_paddr_t aBodyPa[GJ_LD_STACK_PAGES - 1u];
+        u32 cBody = 0;
+        u32 iBody;
+        u64 u64StackTop;
+        u32 u32Prot;
 
-        elf_seed_random16(pRnd, ho.u64Entry, ho.u64Base ^ ((u64)ho.cSo << 32));
-    }
-
-    /* Build stack page under kernel CR3 */
-    memset((void *)(gj_vaddr_t)paStack, 0, GJ_PAGE_SIZE);
-    pStack = (u64 *)(gj_vaddr_t)paStack;
-    /* Layout: [0]=argc [1]=argv0 [2]=0 [3]=0(env) then auxv pairs; path@0x200 */
-    pStack[0] = 1; /* argc */
-    pStack[1] = GJ_LD_STACK_VA + 0x200ull; /* argv[0] -> path string */
-    pStack[2] = 0; /* argv terminator */
-    pStack[3] = 0; /* env terminator */
-    o = 4;
-    for (i = 0; i < cCopy && o + 1u < 64u; i++) {
-        pStack[o++] = pProc->aAuxv[i * 2u];
-        pStack[o++] = pProc->aAuxv[i * 2u + 1u];
-    }
-    /* Ensure AT_NULL */
-    if (o < 2 || pStack[o - 2] != GJ_AT_NULL) {
-        pStack[o++] = GJ_AT_NULL;
-        pStack[o++] = 0;
-    }
-    {
-        char *szPathSlot = (char *)(gj_vaddr_t)paStack + 0x200;
-        size_t n = 0;
-
-        while (ho.szPath[n] != '\0' && n + 1 < 128u) {
-            szPathSlot[n] = ho.szPath[n];
-            n++;
+        for (iBody = 0; iBody < (GJ_LD_STACK_PAGES - 1u); iBody++) {
+            aBodyPa[iBody] = pmm_alloc();
+            if (aBodyPa[iBody] == 0) {
+                break;
+            }
+            cBody++;
         }
-        szPathSlot[n] = '\0';
-    }
-    cpu_load_cr3(u64Saved);
-    process_as_activate(pProc);
-    if (vmm_map_page((gj_vaddr_t)GJ_LD_HANDOFF_VA, pa,
-                     GJ_VMM_PROT_READ | GJ_VMM_PROT_WRITE | GJ_VMM_PROT_USER) !=
-        GJ_OK) {
-        pmm_free(pa);
-        pmm_free(paStack);
-        elf_soft_inc(&g_u32SoftHandoffFail);
-        return GJ_ERR_NOMEM;
-    }
-    if (vmm_map_page((gj_vaddr_t)GJ_LD_STACK_VA, paStack,
-                     GJ_VMM_PROT_READ | GJ_VMM_PROT_WRITE | GJ_VMM_PROT_USER) !=
-        GJ_OK) {
-        pmm_free(paStack);
-        /* handoff page stays; stack optional for verify */
-        ho.u64Stack = 0;
-    } else {
-        /* Patch handoff page stack field (already mapped) */
-        if (user_range_ok(GJ_LD_HANDOFF_VA +
-                              (u64)__builtin_offsetof(struct gj_ld_handoff,
-                                                      u64Stack),
-                          8)) {
-            u64 u64St = GJ_LD_STACK_VA;
-            (void)copy_to_user(GJ_LD_HANDOFF_VA +
-                                   (u64)__builtin_offsetof(struct gj_ld_handoff,
-                                                           u64Stack),
-                               &u64St, 8);
+        if (cBody == 0) {
+            pmm_free(pa);
+            pmm_free(paStack);
+            pProc->u64ExecStack = 0;
+            elf_soft_inc(&g_u32SoftHandoffFail);
+            return GJ_ERR_NOMEM;
         }
-        kprintf("elf: stack auxv va=0x%lx PASS\n",
-                (unsigned long)GJ_LD_STACK_VA);
+        /* Guard at GJ_LD_STACK_VA stays unmapped. Body starts one page up. */
+        u64StackTop = GJ_LD_STACK_VA + (u64)GJ_PAGE_SIZE +
+                      (u64)cBody * (u64)GJ_PAGE_SIZE;
+        ho.u64Stack = u64StackTop;
+        pProc->u64ExecStack = u64StackTop;
+
+        u64Saved = cpu_read_cr3();
+        cpu_load_cr3(vmm_kernel_cr3());
+        memset((void *)(gj_vaddr_t)pa, 0, GJ_PAGE_SIZE);
+        memcpy((void *)(gj_vaddr_t)pa, &ho, sizeof(ho));
+        /* AT_RANDOM 16 bytes at GJ_LD_RANDOM_OFF on handoff page */
+        {
+            u8 *pRnd = (u8 *)(gj_vaddr_t)pa + (size_t)GJ_LD_RANDOM_OFF;
+
+            elf_seed_random16(pRnd, ho.u64Entry,
+                              ho.u64Base ^ ((u64)ho.cSo << 32));
+        }
+        for (iBody = 0; iBody < cBody; iBody++) {
+            memset((void *)(gj_vaddr_t)aBodyPa[iBody], 0, GJ_PAGE_SIZE);
+        }
+
+        /* Build SysV top page under kernel CR3 */
+        memset((void *)(gj_vaddr_t)paStack, 0, GJ_PAGE_SIZE);
+        pStack = (u64 *)(gj_vaddr_t)paStack;
+        /*
+         * SysV: [argc][argv…][0][envp…][0][auxv pairs][AT_NULL,0]
+         * Strings at +0x200. User argv/envp when provided; else argc=1 path
+         * (OpenSSH DUT: kernel argv sshd -D -e so crt0 does not daemonize;
+         * kernel env OPENSSL_ia32cap=0 so libcrypto init uses portable C;
+         * OPENSSL_CONF=/dev/null so OpenSSL 3 does not autoload host
+         * --openssldir config. Dual DoD B OPEN).
+         */
+        {
+            char *pStr = (char *)(gj_vaddr_t)paStack + 0x200;
+            u32 cbStr = (u32)GJ_PAGE_SIZE - 0x200u;
+            u32 cbUsed = 0;
+            u32 cArg = 0;
+            u32 cEnv = 0;
+            u64 aArg[16];
+            u64 aEnv[8];
+            u32 iArg;
+            const char *const *pszKargv = NULL;
+            u32 cKargv = 0;
+            /* Kernel C strings; not user pointers (identity may sit in the
+             * user VA window). OpenSSH: -D no daemon, -e log stderr. */
+            static const char *const aKargvSshd[] = {
+                "/usr/sbin/sshd",
+                "-D",
+                "-e",
+            };
+            static const char *const aKenvSshd[] = {
+                "OPENSSL_ia32cap=0",
+                "OPENSSL_CONF=/dev/null",
+            };
+
+            if (u64UserArgv != 0) {
+                for (iArg = 0; iArg < 16u; iArg++) {
+                    u64 u64P = 0;
+
+                    if (elf_read_user_u64(u64UserArgv + (u64)iArg * 8ull,
+                                          &u64P) == 0 ||
+                        u64P == 0) {
+                        break;
+                    }
+                    aArg[cArg++] = u64P;
+                }
+            }
+            if (cArg == 0 && szUsePath != NULL &&
+                strcmp(szUsePath, "/usr/sbin/sshd") == 0) {
+                pszKargv = aKargvSshd;
+                cKargv = (u32)(sizeof(aKargvSshd) / sizeof(aKargvSshd[0]));
+                cArg = cKargv;
+            }
+            if (cArg == 0) {
+                aArg[0] = 0;
+                cArg = 1;
+            }
+            if (u64UserEnvp != 0) {
+                for (iArg = 0; iArg < 8u; iArg++) {
+                    u64 u64P = 0;
+
+                    if (elf_read_user_u64(u64UserEnvp + (u64)iArg * 8ull,
+                                          &u64P) == 0 ||
+                        u64P == 0) {
+                        break;
+                    }
+                    aEnv[cEnv++] = u64P;
+                }
+            }
+            pStack[0] = (u64)cArg;
+            o = 1;
+            for (iArg = 0; iArg < cArg && o < 48u; iArg++) {
+                u32 n;
+
+                if (pszKargv != NULL && iArg < cKargv) {
+                    const char *szK = pszKargv[iArg];
+
+                    n = 0;
+                    if (szK == NULL) {
+                        szK = "";
+                    }
+                    while (szK[n] != '\0' && cbUsed + n + 1u < cbStr) {
+                        pStr[cbUsed + n] = szK[n];
+                        n++;
+                    }
+                    pStr[cbUsed + n] = '\0';
+                    n++;
+                } else if (aArg[iArg] == 0) {
+                    n = 0;
+                    while (ho.szPath[n] != '\0' && cbUsed + n + 1u < cbStr) {
+                        pStr[cbUsed + n] = ho.szPath[n];
+                        n++;
+                    }
+                    pStr[cbUsed + n] = '\0';
+                    n++;
+                } else {
+                    n = elf_copy_user_cstr(pStr + cbUsed, cbStr - cbUsed,
+                                           aArg[iArg]);
+                }
+                pStack[o++] = u64StackTop + 0x200ull + (u64)cbUsed;
+                cbUsed += n;
+            }
+            pStack[o++] = 0;
+            /*
+             * sshd kargv + no user envp: kernel env strings after argv NULL.
+             * OPENSSL_ia32cap=0 clears asm cap bits (DUT libcrypto is
+             * linux-x86_64 with asm). OPENSSL_CONF=/dev/null skips OpenSSL 3
+             * autoload from a host-baked --openssldir. Dual DoD B OPEN.
+             */
+            if (pszKargv != NULL && u64UserEnvp == 0) {
+                u32 iEnv;
+                u32 cKenv = (u32)(sizeof(aKenvSshd) / sizeof(aKenvSshd[0]));
+
+                for (iEnv = 0; iEnv < cKenv && o < 56u &&
+                     cbUsed + 2u < cbStr; iEnv++) {
+                    const char *szK = aKenvSshd[iEnv];
+                    u32 n = 0;
+
+                    if (szK == NULL) {
+                        szK = "";
+                    }
+                    while (szK[n] != '\0' && cbUsed + n + 1u < cbStr) {
+                        pStr[cbUsed + n] = szK[n];
+                        n++;
+                    }
+                    pStr[cbUsed + n] = '\0';
+                    n++;
+                    pStack[o++] = u64StackTop + 0x200ull + (u64)cbUsed;
+                    cbUsed += n;
+                }
+            }
+            for (iArg = 0; iArg < cEnv && o < 56u && cbUsed + 2u < cbStr;
+                 iArg++) {
+                u32 n;
+
+                n = elf_copy_user_cstr(pStr + cbUsed, cbStr - cbUsed,
+                                       aEnv[iArg]);
+                pStack[o++] = u64StackTop + 0x200ull + (u64)cbUsed;
+                cbUsed += n;
+            }
+            pStack[o++] = 0;
+            (void)cbUsed;
+        }
+        for (i = 0; i < cCopy && o + 1u < 64u; i++) {
+            pStack[o++] = pProc->aAuxv[i * 2u];
+            pStack[o++] = pProc->aAuxv[i * 2u + 1u];
+        }
+        /* Ensure AT_NULL */
+        if (o < 2 || pStack[o - 2] != GJ_AT_NULL) {
+            pStack[o++] = GJ_AT_NULL;
+            pStack[o++] = 0;
+        }
+        cpu_load_cr3(u64Saved);
+        process_as_activate(pProc);
+        u32Prot = GJ_VMM_PROT_READ | GJ_VMM_PROT_WRITE | GJ_VMM_PROT_USER;
+        if (vmm_map_page((gj_vaddr_t)GJ_LD_HANDOFF_VA, pa, u32Prot) != GJ_OK) {
+            pmm_free(pa);
+            pmm_free(paStack);
+            for (iBody = 0; iBody < cBody; iBody++) {
+                pmm_free(aBodyPa[iBody]);
+            }
+            pProc->u64ExecStack = 0;
+            elf_soft_inc(&g_u32SoftHandoffFail);
+            return GJ_ERR_NOMEM;
+        }
+        for (iBody = 0; iBody < cBody; iBody++) {
+            if (vmm_map_page((gj_vaddr_t)(GJ_LD_STACK_VA + (u64)GJ_PAGE_SIZE +
+                                          (u64)iBody * (u64)GJ_PAGE_SIZE),
+                             aBodyPa[iBody], u32Prot) != GJ_OK) {
+                pmm_free(aBodyPa[iBody]);
+                aBodyPa[iBody] = 0;
+            }
+        }
+        if (vmm_map_page((gj_vaddr_t)u64StackTop, paStack, u32Prot) != GJ_OK) {
+            pmm_free(paStack);
+            ho.u64Stack = 0;
+            pProc->u64ExecStack = 0;
+        } else {
+            if (user_range_ok(GJ_LD_HANDOFF_VA +
+                                  (u64)__builtin_offsetof(struct gj_ld_handoff,
+                                                          u64Stack),
+                              8)) {
+                (void)copy_to_user(GJ_LD_HANDOFF_VA +
+                                       (u64)__builtin_offsetof(
+                                           struct gj_ld_handoff, u64Stack),
+                                   &u64StackTop, 8);
+            }
+            kprintf("elf: stack auxv va=0x%lx pages=%u grow_down=1 PASS\n",
+                    (unsigned long)u64StackTop, cBody + 1u);
+        }
     }
 
     /* Userspace open path for ld-gj freestanding probes */

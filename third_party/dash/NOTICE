@@ -1,0 +1,34 @@
+GreenJade third-party vendor notice
+===================================
+
+Package:          dash (Debian Almquist shell)
+Role:             /bin/sh POSIX shell — not product MIT/Apache-2.0
+Upstream:         http://gondor.apana.org.au/~herbert/dash/
+Git (canonical):  https://git.kernel.org/pub/scm/utils/dash/dash.git
+Tarball URL:      http://gondor.apana.org.au/~herbert/dash/files/dash-0.5.13.5.tar.gz
+Checksum URL:     http://gondor.apana.org.au/~herbert/dash/files/dash-0.5.13.5.tar.gz.sha512sum
+Version / tag:    0.5.13.5
+Fetched:          2026-08-14
+Vendor date:      2026-08-14
+
+Tarball SHA-256:  40090101a2a491f13e901d3d48e90414f26634628b9bfff35ff540363c227a7d
+Tarball SHA-512:  ae326c110713a9da6b7afb977ca6fd931793b03011f0a7aa2c42e873f116ed09448deea9ef5ca4515fe3afe24e210e0aaa580f7de89934edda9cf31ee44c94dd
+                  (matches Herbert Xu PGP-signed sha512sum)
+
+License file:     COPYING (kept)
+SPDX (imported):  BSD-3-Clause
+Also in tree:     src/bltin/test.c is public domain (header says so)
+
+VENDOR_STATUS:    OK — release snapshot imported; GPL files omitted
+
+Omitted (GPL — not imported):
+  compile              GPL-2.0-or-later WITH Autoconf-exception (Automake helper)
+  depcomp              GPL-2.0-or-later WITH Autoconf-exception (Automake helper)
+  missing              GPL-2.0-or-later WITH Autoconf-exception (Automake helper)
+  src/mksignames.c     GPL-2.0-or-later (GNU Bash host generator; not linked into dash)
+
+Upstream COPYING documents mksignames.c as GPL. That file is not in this tree.
+COPYING is retained unchanged as the upstream license file.
+
+This is not product kernel/user code. Port to the GreenJade ABI is later.
+No bash. Soft≠product.

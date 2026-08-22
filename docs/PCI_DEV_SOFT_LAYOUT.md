@@ -2,10 +2,10 @@
 
 | Field | Value |
 |-------|--------|
-| **Status** | **REAL probe soft PASS** proven (lab REAL+SOFT1 stable; prior EMU `PROBE … SOFT` / first `NETDEV SOFT 1`); freestanding still owns MMIO; **next** = D7 datapath / soft open · MMIO handoff |
+| **Status** | **Abandoned leftover** (not linked). Product NIC is `rtl8168_udx`. Dual DoD B **OPEN** until interactive SSH login. |
 | **Host oracle** | RHEL 9.8-class **5.14.0-687** x86_64 — `sizeof(pci_dev)` = **`0xb40`** (2880) |
-| **Offset header** | [`kernel/include/gj/linux_pci_hostish_off.h`](../kernel/include/gj/linux_pci_hostish_off.h) |
-| **Soft code** | [`kernel/include/gj/linux_pci_soft.h`](../kernel/include/gj/linux_pci_soft.h) · [`kernel/mm/linux_pci_soft.c`](../kernel/mm/linux_pci_soft.c) |
+| **Offset header** | [`abandoned/kernel/include/gj/linux_pci_hostish_off.h`](../abandoned/kernel/include/gj/linux_pci_hostish_off.h) |
+| **Soft code** | [`abandoned/kernel/include/gj/linux_pci_soft.h`](../abandoned/kernel/include/gj/linux_pci_soft.h) · [`abandoned/kernel/mm/linux_pci_soft.c`](../abandoned/kernel/mm/linux_pci_soft.c) |
 | **Law** | Dual **MIT OR Apache-2.0**; **no GPL source** in tree; host headers / staged `.ko` are **oracle only** |
 | **Honesty** | **Soft ≠ ABI-stable** — do **not** claim binary layout match to any Linux kver; **soft ≠ product** (**G-AC-1**) |
 

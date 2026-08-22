@@ -3,7 +3,7 @@
  * Copyright (c) 2026 Project GreenJade contributors
  *
  * GOP split-screen text console:
- *   hold pane (static milestones) | log pane (kprintf stream)
+ *   hold pane (STATUS top + STATE boot log bottom) | log pane (kprintf)
  *
  * Panel-path performance (G752, no COM1):
  *  - Direct row stores for glyphs (no per-pixel helper)
@@ -13,24 +13,20 @@
  *
  * FAULT STATUS pin (product halt only; lean; Soft!=product):
  *  - fb_console_trap sets sticky g_fFaultHold
- *  - hold rows 0 + 6..9 refuse later overwrite (lean vs prior 6..10)
+ *  - hold rows 0 + 1 refuse later overwrite (live pin)
  *  - LOG putchar drops after pin (flood must not fight FAULT visibility)
- *  - hold1 (name/PF bits from trap.c) + hold13/14 dual DoD stay writable
- *  - dual DoD B: last NET ... t/f/b/r on hold6 -> hold15 when that row paints;
- *    short STATUS pane (hold15 off-screen) parks the same snap on hold9
+ *  - hold1 isolate / FAULT RIP stays pinned with hold 0
+ *  - leftover MAP: hold6 NET snap to hold15/hold9 is leftover diagnose, not live pin
  * Grep: g_fFaultHold | FAULT PINNED | KERNEL FAULT | NET residual
  *
  * Dual DoD honesty lean (product=UDX; Soft!=product; never product PASS):
- *   Product Dual DoD A = UDX/DDI USB OPEN; Dual DoD B = UDX/DDI NIC OPEN.
+ *   Product Dual DoD A OPEN until host USB path; Dual DoD B OPEN until interactive SSH login.
  *   Soft/freestanding STATUS lamps never close A/B (not freestanding stage).
- * Residual honesty lamps (grep: dual DoD hold6 | dual DoD hold13 | dual DoD hold14):
- *   hold2  kernel TE/identity persist (mode tes tt slpt bus3 id1g) - Dual DoD B
- *          glass no-COM1; once-pin after te_arm; te_disarm once-updates same row
- *   hold6  net force-refresh t/f/b/r - dual DoD B residual diagnose only
- *   hold13 USB / usb_storage short STATUS - dual DoD A residual (soft class)
- *   hold14 L2 br + freestanding R mirror / UDX te_disarm fovw|wire (leave UDX)
- * Freestanding SKIP honesty lamps (dim paint; Soft!=product):
- *   hold8  mod r8169 SKIP...   hold12 mod xhci_pci SKIP...
+ * Residual honesty lamps (live 178 panel holds 1/3/4/5/7/8):
+ *   hold2  kernel TE/identity persist (mode tes tt slpt bus3 id1g)
+ *   hold6  UDX mac_rclm residual diagnose only
+ * leftover MAP (not live 178 panel): historical hold13 USB / hold14 L2 /
+ * hold8 r8169 SKIP / hold12 xhci_pci SKIP.
  *   Any hold text with SKIP paints dim (never warm PASS look).
  * product=UDX: dual_dod_a=OPEN_UDX dual_dod_b=OPEN_UDX; soft residual only.
  * NET/USB/l2 clip prefers counters (R0 / need= / rx=); drops " :22" before /r.
@@ -84,9 +80,13 @@
 #define FB_HEAD_FG   0x00FFFF00u /* headline */
 #define FB_FAULT_FG  0x00FF4040u /* FAULT pin - product halt only */
 #define FB_DIM       0x00606060u /* divider / labels */
+#define FB_STATE_FG  0x0078C8E0u /* boot-state history */
+#define FB_STATE_NOW 0x00D8F4FFu /* latest boot-state line */
 #define FB_SCALE     2u          /* 8x8 -> 16x16 */
 #define FB_MARGIN    6u
 #define FB_LINE_CAP  160u        /* line buffer for soft-noise filter */
+#define FB_STATE_LINES 20u
+#define FB_STATE_CHARS 80u
 
 static u64 g_u64Fb;
 static u32 g_u32Pitch;
@@ -110,6 +110,14 @@ static u32 g_u32HoldCols;
 static u32 g_u32HoldRows;
 static u32 g_u32LogCols;
 static u32 g_u32LogRows;
+static u32 g_u32StateX0;
+static u32 g_u32StateY0;
+static u32 g_u32StateW;
+static u32 g_u32StateH;
+static u32 g_u32StateCols;
+static u32 g_u32StateRows;
+static char g_aState[FB_STATE_LINES][FB_STATE_CHARS];
+static u32 g_u32StateN;
 static u32 g_u32Cx;
 static u32 g_u32Cy;
 static int g_fReady;
@@ -156,35 +164,17 @@ static u32 g_u32SoftLeanFail;
 static void fb_soft_residual_lean_once(void);
 
 /*
- * FAULT pin owns hold 0 + 6..9 (lean). hold15 sticky when NET residual
+ * FAULT pin owns hold 0 + 1 (live). Leftover comments used to say 0 + 6..9.
  * snapshotted. Soft!=product. Grep: fb_hold_line_is_fault_pin
  */
 static int
 fb_hold_line_is_fault_pin(u32 u32Line)
 {
-    if (u32Line == 0u) {
-        return 1;
-    }
-    if (u32Line >= 6u && u32Line <= 9u) {
-        return 1;
-    }
-    if (u32Line == 15u && g_fFaultNetSnap != 0) {
+    /* Sticky 0+1 only — leave TE / UDX / IP / DoD visible. */
+    if (u32Line == 0u || u32Line == 1u) {
         return 1;
     }
     return 0;
-}
-
-/* Content hold line L paints at visual row L+1 (row 0 = title). */
-static int
-fb_hold_line_visible(u32 u32Line)
-{
-    if (g_fReady == 0 || u32Line >= FB_HOLD_LINES) {
-        return 0;
-    }
-    if ((u32Line + 1u) >= g_u32HoldRows) {
-        return 0;
-    }
-    return 1;
 }
 
 /*
@@ -629,6 +619,41 @@ fb_hold_redraw_all(void)
     }
 }
 
+static void
+fb_state_redraw_all(void)
+{
+    u32 i;
+    u32 u32Vis;
+    u32 u32Start;
+    u32 u32Y;
+    u32 u32Color;
+
+    if (g_fReady == 0 || g_u32StateH == 0u) {
+        return;
+    }
+    fb_fill_rect(g_u32StateX0, g_u32StateY0, g_u32StateW, g_u32StateH, FB_BG);
+    fb_draw_str(g_u32StateX0 + FB_MARGIN, g_u32StateY0 + FB_MARGIN,
+                g_u32StateCols, "STATE (boot)", FB_DIM);
+    if (g_u32StateRows < 2u || g_u32StateN == 0u) {
+        return;
+    }
+    u32Vis = g_u32StateRows - 1u;
+    if (u32Vis > g_u32StateN) {
+        u32Vis = g_u32StateN;
+    }
+    u32Start = g_u32StateN - u32Vis;
+    for (i = 0; i < u32Vis; i++) {
+        u32Y = g_u32StateY0 + FB_MARGIN + (i + 1u) * g_u32CellH;
+        if ((u32Start + i + 1u) == g_u32StateN) {
+            u32Color = FB_STATE_NOW;
+        } else {
+            u32Color = FB_STATE_FG;
+        }
+        fb_draw_str(g_u32StateX0 + FB_MARGIN, u32Y, g_u32StateCols,
+                    g_aState[u32Start + i], u32Color);
+    }
+}
+
 /*
  * Write hold line unconditionally (used by trap after g_fFaultHold is set).
  * Public fb_console_hold refuses FAULT-pin rows once sticky. Soft!=product.
@@ -693,6 +718,23 @@ fb_hold_set_raw(u32 u32Line, const char *szText)
             u32Len = u32Cap;
         }
     }
+    /*
+     * Same text → no redraw. Hold7 IP and other once-pins were flashing
+     * because hot net_l2_ready / poll paths re-held identical strings.
+     */
+    if (g_aHold[u32Line][u32Len] == '\0') {
+        u32 fSame = 1u;
+
+        for (i = 0; i < u32Len; i++) {
+            if (g_aHold[u32Line][i] != pSrc[i]) {
+                fSame = 0u;
+                break;
+            }
+        }
+        if (fSame != 0u) {
+            return;
+        }
+    }
     for (i = 0; i < u32Len; i++) {
         g_aHold[u32Line][i] = pSrc[i];
     }
@@ -744,6 +786,9 @@ fb_draw_divider(void)
     } else {
         fb_fill_rect(0, g_u32LogY0 - 2u, g_u32W, 2u, FB_DIM);
     }
+    if (g_u32StateH != 0u) {
+        fb_fill_rect(g_u32StateX0, g_u32StateY0 - 2u, g_u32StateW, 2u, FB_DIM);
+    }
 }
 
 static void
@@ -779,6 +824,54 @@ fb_line_is_soft_noise(const char *sz)
     if (sz == NULL || sz[0] == '\0') {
         return 1; /* empty - nothing to paint */
     }
+    /*
+     * GOP is the glass photo. Drop residual/abandoned/heartbeat stamps.
+     * Live counters live on STATUS holds 4-7.
+     */
+    if (fb_prefix_eq(sz, "rtl8168_udx: product host park live") ||
+        fb_prefix_eq(sz, "rtl8168_udx: soft ") ||
+        fb_prefix_eq(sz, "rtl8168_udx: product l2 poll") ||
+        fb_prefix_eq(sz, "rtl8168_udx: product glass") ||
+        fb_prefix_eq(sz, "rtl8168_udx: product dig") ||
+        fb_prefix_eq(sz, "rtl8168_udx: product cache") ||
+        fb_prefix_eq(sz, "rtl8168_udx: product own_arm") ||
+        fb_prefix_eq(sz, "xhci_udx: product host park live") ||
+        fb_prefix_eq(sz, "xhci_udx: soft ") ||
+        fb_prefix_eq(sz, "linux_module:") ||
+        fb_prefix_eq(sz, "linux_ksym:") ||
+        fb_prefix_eq(sz, "linux_pci_soft:") ||
+        fb_prefix_eq(sz, "linux_netdev") ||
+        fb_prefix_eq(sz, "linux_dma_soft:") ||
+        fb_prefix_eq(sz, "linux_usb_soft:") ||
+        fb_prefix_eq(sz, "linux_phy_soft:") ||
+        fb_prefix_eq(sz, "linux_time_soft:") ||
+        fb_prefix_eq(sz, "main: soft ") ||
+        fb_prefix_eq(sz, "net_l2: soft ") ||
+        fb_prefix_eq(sz, "net_l2: freestanding") ||
+        fb_prefix_eq(sz, "fb_console: soft ") ||
+        fb_prefix_eq(sz, "soft: ") ||
+        fb_prefix_eq(sz, "coop: soft ") ||
+        fb_prefix_eq(sz, "xhci: freestanding") ||
+        fb_prefix_eq(sz, "PLATFORM_INFO op") ||
+        fb_prefix_eq(sz, "trap: string-as-code rate") ||
+        fb_prefix_eq(sz, "trap: #PF I=1 rate") ||
+        fb_prefix_eq(sz, "linux: ") ||
+        fb_prefix_eq(sz, "udx: ") ||
+        fb_prefix_eq(sz, "ddi_host:") ||
+        fb_prefix_eq(sz, "ddi_door:") ||
+        fb_prefix_eq(sz, "devmgr:") ||
+        fb_prefix_eq(sz, "iommu: ") ||
+        fb_prefix_eq(sz, "sshd: soft") ||
+        fb_prefix_eq(sz, "netstackd: soft") ||
+        fb_prefix_eq(sz, "net_eth: soft") ||
+        fb_prefix_eq(sz, "net_tcp: soft") ||
+        fb_prefix_eq(sz, "net_door: ") ||
+        fb_prefix_eq(sz, "rtl8168_udx: product host park") ||
+        fb_prefix_eq(sz, "xhci_udx: product host park") ||
+        fb_prefix_eq(sz, "rtl8168_udx: product program dens") ||
+        fb_prefix_eq(sz, "xhci_udx: product program dens")) {
+        return 1;
+    }
     for (p = sz; *p != '\0'; p++) {
         if (fb_prefix_eq(p, "soft_only=1") ||
             fb_prefix_eq(p, "soft_ne_product") ||
@@ -796,6 +889,9 @@ fb_line_is_soft_noise(const char *sz)
             const char *q = p + 6;
 
             if (fb_prefix_eq(q, "inventory") || fb_prefix_eq(q, "ret") ||
+                fb_prefix_eq(q, "densif") || fb_prefix_eq(q, "denser") ||
+                fb_prefix_eq(q, "catalog") || fb_prefix_eq(q, "functional") ||
+                fb_prefix_eq(q, "bind") || fb_prefix_eq(q, "found") ||
                 fb_prefix_eq(q, "deepen") || fb_prefix_eq(q, "exclusive") ||
                 fb_prefix_eq(q, "honesty") || fb_prefix_eq(q, "claim") ||
                 fb_prefix_eq(q, "ratio") || fb_prefix_eq(q, "path") ||
@@ -955,6 +1051,39 @@ fb_console_init(const struct gj_boot_info *pInfo)
         g_u32LogH = g_u32H - g_u32LogY0;
     }
 
+    /*
+     * Split the static pane in half: STATUS holds on top, STATE (boot)
+     * journal on the bottom. Skip the split on a too-short pane.
+     */
+    g_u32StateX0 = 0;
+    g_u32StateY0 = 0;
+    g_u32StateW = 0;
+    g_u32StateH = 0;
+    g_u32StateCols = 0;
+    g_u32StateRows = 0;
+    g_u32StateN = 0;
+    {
+        u32 u32MinHold = FB_MARGIN * 2u + g_u32CellH * 8u;
+        u32 u32MinState = FB_MARGIN * 2u + g_u32CellH * 4u;
+        u32 u32PaneH = g_u32HoldH;
+
+        if (u32PaneH >= (u32MinHold + u32MinState + 4u)) {
+            u32 u32Top = u32PaneH / 2u;
+
+            if (u32Top < u32MinHold) {
+                u32Top = u32MinHold;
+            }
+            if ((u32PaneH - u32Top) < (u32MinState + 2u)) {
+                u32Top = u32PaneH - (u32MinState + 2u);
+            }
+            g_u32HoldH = u32Top;
+            g_u32StateX0 = g_u32HoldX0;
+            g_u32StateY0 = g_u32HoldY0 + g_u32HoldH + 2u;
+            g_u32StateW = g_u32HoldW;
+            g_u32StateH = u32PaneH - g_u32HoldH - 2u;
+        }
+    }
+
     if (g_u32HoldW < FB_MARGIN * 2u + g_u32CellW ||
         g_u32LogW < FB_MARGIN * 2u + g_u32CellW) {
         return;
@@ -980,9 +1109,28 @@ fb_console_init(const struct gj_boot_info *pInfo)
         return;
     }
 
+    if (g_u32StateH != 0u) {
+        if (g_u32StateW < FB_MARGIN * 2u + g_u32CellW) {
+            g_u32StateH = 0;
+        } else {
+            g_u32StateCols = (g_u32StateW - FB_MARGIN * 2u) / g_u32CellW;
+            g_u32StateRows = (g_u32StateH - FB_MARGIN * 2u) / g_u32CellH;
+            if (g_u32StateRows > FB_STATE_LINES + 1u) {
+                g_u32StateRows = FB_STATE_LINES + 1u;
+            }
+            if (g_u32StateCols < 8u || g_u32StateRows < 3u) {
+                g_u32StateH = 0;
+                g_u32StateRows = 0;
+            }
+        }
+    }
+
     for (i = 0; i < FB_HOLD_LINES; i++) {
         g_aHold[i][0] = '\0';
         g_aHoldBright[i] = 0;
+    }
+    for (i = 0; i < FB_STATE_LINES; i++) {
+        g_aState[i][0] = '\0';
     }
 
     fb_fill_rect(0, 0, g_u32W, g_u32H, FB_BG);
@@ -992,20 +1140,13 @@ fb_console_init(const struct gj_boot_info *pInfo)
 
     g_u32LineLen = 0;
     fb_hold_redraw_all();
+    fb_state_redraw_all();
     fb_draw_divider();
     fb_log_clear();
 
-    fb_console_hold(0, "GreenJade panel (text-first)");
-    g_aHoldBright[0] = 1;
-    fb_hold_redraw_line(0);
-    /*
-     * Soft!=product lean boot residual on STATUS (overwritten by main phases).
-     * Dual DoD A/B stay OPEN_UDX (product=UDX hosts) - never freestanding PASS.
-     * Title alone carries GJ_IMAGE_VERSION (no stamp storms). G-AC-1.
-     * Grep: dual_dod_a=OPEN_UDX | dual_dod_b=OPEN_UDX | Soft!=product
-     */
-    fb_console_hold(1, "hold=static Soft!=product dual_dod=OPEN");
-    fb_console_hold(2, "product=UDX dual_dod_a=OPEN_UDX dual_dod_b=OPEN_UDX");
+    /* Title carries version. Content fills as TE / UDX / M0 land. */
+    fb_console_hold(8, "DoD A=OPEN B=OPEN");
+    fb_console_state("GOP up");
 
     /*
      * C0 exclusive soft residual lean once-lamp (stamp-free).
@@ -1070,16 +1211,74 @@ fb_console_write(const char *szText)
 }
 
 void
+fb_console_state(const char *szLine)
+{
+    u32 u32Len;
+    u32 i;
+    const char *p;
+
+    if (g_fReady == 0 || g_u32StateH == 0u || szLine == NULL) {
+        return;
+    }
+    p = szLine;
+    while (*p == ' ') {
+        p++;
+    }
+    if (*p == '\0') {
+        return;
+    }
+    u32Len = 0;
+    while (p[u32Len] != '\0' && p[u32Len] != '\n' && p[u32Len] != '\r') {
+        u32Len++;
+    }
+    if (u32Len >= FB_STATE_CHARS) {
+        u32Len = FB_STATE_CHARS - 1u;
+    }
+    if (g_u32StateN > 0u) {
+        u32 u32Prev = g_u32StateN - 1u;
+        u32 fSame = 1u;
+
+        if (g_aState[u32Prev][u32Len] != '\0') {
+            fSame = 0u;
+        } else {
+            for (i = 0; i < u32Len; i++) {
+                if (g_aState[u32Prev][i] != p[i]) {
+                    fSame = 0u;
+                    break;
+                }
+            }
+        }
+        if (fSame != 0u) {
+            return;
+        }
+    }
+    if (g_u32StateN >= FB_STATE_LINES) {
+        for (i = 0; i + 1u < FB_STATE_LINES; i++) {
+            u32 j;
+
+            for (j = 0; j < FB_STATE_CHARS; j++) {
+                g_aState[i][j] = g_aState[i + 1u][j];
+            }
+        }
+        g_u32StateN = FB_STATE_LINES - 1u;
+    }
+    for (i = 0; i < u32Len; i++) {
+        g_aState[g_u32StateN][i] = p[i];
+    }
+    g_aState[g_u32StateN][u32Len] = '\0';
+    g_u32StateN++;
+    fb_state_redraw_all();
+}
+
+void
 fb_console_hold(u32 u32Line, const char *szText)
 {
     if (g_fReady == 0 || u32Line >= FB_HOLD_LINES) {
         return;
     }
     /*
-     * Sticky FAULT pin: refuse overwrite of STATUS fault rows (0, 6-9)
-     * and hold15 NET residual when snapped. Soft force-refresh / mod lamps
-     * must not bury FAULT or dual DoD B R0 residual. hold1 + hold13/14 stay
-     * writable (dual DoD A residual + freestanding SKIP lamps still update).
+     * Sticky FAULT pin: refuse overwrite of STATUS fault rows (0, 1).
+     * Soft force-refresh / mod lamps must not bury FAULT. Live pin is 0+1.
      * Soft!=product; product=UDX. Grep: g_fFaultHold hold refuse
      */
     if (g_fFaultHold != 0 && fb_hold_line_is_fault_pin(u32Line) != 0) {
@@ -1162,16 +1361,6 @@ fb_append_digit_n(char **pq, char *pEnd, u32 u32Dig)
 }
 
 /*
- * True if hold6 looks like dual DoD B NET counters (for R0 residual snap).
- * Soft!=product. Grep: fb_hold6_is_net
- */
-static int
-fb_hold6_is_net(void)
-{
-    return fb_hold_str_is_net(g_aHold[6]);
-}
-
-/*
  * C0 exclusive soft residual lean once-lamp (stamp-free; Soft!=product).
  * Functional deepen arms densify a single greppable pair - never Dual DoD
  * close, never invent image version stamps, never stamp-storm.
@@ -1217,24 +1406,23 @@ fb_soft_residual_lean_once(void)
         szTitle[2] == 'A' && szTitle[3] == 'T' && szTitle[4] == 'U' &&
         szTitle[5] == 'S' && szVer != NULL && szVer[0] != '\0' &&
         FB_HOLD_CHARS >= 64u && FB_HOLD_LINES == 16u &&
-        FB_SOFT_LEAN_CHECKS == 4u) {
+        FB_SOFT_LEAN_CHECKS == 4u &&
+        fb_hold_line_is_fault_pin(0u) != 0 &&
+        fb_hold_line_is_fault_pin(1u) != 0) {
         u32TitleOk = 1u;
         u32Ok++;
     }
 
     /*
-     * Arm 2: FAULT pin contract (lean 0 + 6..9 sticky; hold1 free; hold15
-     * only sticky when NET residual snapped). Soft!=product.
+     * Arm 2: FAULT pin contract (live 0 + 1 sticky). Soft!=product.
      */
     u32Checks++;
     if (fb_hold_line_is_fault_pin(0u) != 0 &&
-        fb_hold_line_is_fault_pin(6u) != 0 &&
-        fb_hold_line_is_fault_pin(9u) != 0 &&
-        fb_hold_line_is_fault_pin(1u) == 0 &&
-        fb_hold_line_is_fault_pin(13u) == 0 &&
-        fb_hold_line_is_fault_pin(14u) == 0 &&
-        (g_fFaultNetSnap == 0 ? (fb_hold_line_is_fault_pin(15u) == 0)
-                              : (fb_hold_line_is_fault_pin(15u) != 0))) {
+        fb_hold_line_is_fault_pin(1u) != 0 &&
+        fb_hold_line_is_fault_pin(2u) == 0 &&
+        fb_hold_line_is_fault_pin(3u) == 0 &&
+        fb_hold_line_is_fault_pin(4u) == 0 &&
+        fb_hold_line_is_fault_pin(8u) == 0) {
         u32FaultOk = 1u;
         u32Ok++;
     }
@@ -1315,38 +1503,18 @@ fb_console_trap(u32 u32Vec, u64 u64Err, u64 u64Rip, u64 u64Cr2, u32 u32Thr,
                 u32 u32State)
 {
     char sz[FB_HOLD_CHARS];
-    char szNetSnap[FB_HOLD_CHARS];
     char *q;
     char *pEnd;
-    int fNetSnap;
-    u32 i;
 
     if (g_fReady == 0) {
         return;
     }
 
-    /*
-     * Dual DoD B R0 residual: snapshot last NET ... t/f/b/r before lean pin
-     * clobbers hold6 with err=. Soft!=product. Grep: NET residual
-     */
-    fNetSnap = 0;
-    if (fb_hold6_is_net() != 0) {
-        for (i = 0; i < FB_HOLD_CHARS; i++) {
-            szNetSnap[i] = g_aHold[6][i];
-            if (g_aHold[6][i] == '\0') {
-                break;
-            }
-        }
-        if (i >= FB_HOLD_CHARS) {
-            szNetSnap[FB_HOLD_CHARS - 1u] = '\0';
-        }
-        fNetSnap = 1;
-    }
+    (void)u64Err;
 
     /*
-     * Sticky pin first so concurrent soft hold/LOG paths cannot race the
-     * paint. Public hold refuses fault rows; raw path still writes here.
-     * LOG putchar drops after this. Soft!=product. Grep: g_fFaultHold
+     * Sticky pin 0+1. TE / UDX / IP / DoD on 2-8 stay visible.
+     * LOG putchar drops after this.
      */
     g_fFaultHold = 1;
     g_u32LineLen = 0;
@@ -1372,84 +1540,27 @@ fb_console_trap(u32 u32Vec, u64 u64Err, u64 u64Rip, u64 u64Cr2, u32 u32Thr,
     }
     fb_hold_set_raw(0, sz);
 
-    /*
-     * Lean pin detail on 6..9 (was 6..10). Frees hold10 for soft probe lamp
-     * residual (not sticky). hold13/14 dual DoD left intact. Soft!=product.
-     *   6 err=  7 rip=  8 cr2= + thr/state  9 HALTED (or NET residual fallback)
-     * Bound appends: never overflow FB_HOLD_CHARS (stamp-free residual).
-     */
-    q = sz;
-    fb_append_str_n(&q, pEnd, "err=0x");
-    fb_append_hex_n(&q, pEnd, u64Err, 16u);
-    if (q < pEnd) {
-        *q = '\0';
-    } else {
-        sz[FB_HOLD_CHARS - 1u] = '\0';
-    }
-    fb_hold_set_raw(6, sz);
-
+    /* hold1: rip / cr2 / thr — do not steal TE/UDX/IP. */
     q = sz;
     fb_append_str_n(&q, pEnd, "rip=0x");
     fb_append_hex_n(&q, pEnd, u64Rip, 16u);
-    if (q < pEnd) {
-        *q = '\0';
-    } else {
-        sz[FB_HOLD_CHARS - 1u] = '\0';
-    }
-    fb_hold_set_raw(7, sz);
-
-    q = sz;
-    fb_append_str_n(&q, pEnd, "cr2=0x");
+    fb_append_str_n(&q, pEnd, " cr2=0x");
     fb_append_hex_n(&q, pEnd, u64Cr2, 16u);
     fb_append_str_n(&q, pEnd, " thr=");
     if (u32Thr >= 10u) {
         fb_append_digit_n(&q, pEnd, (u32Thr / 10u) % 10u);
     }
     fb_append_digit_n(&q, pEnd, u32Thr % 10u);
-    fb_append_str_n(&q, pEnd, " st=");
-    if (u32State >= 10u) {
-        fb_append_digit_n(&q, pEnd, (u32State / 10u) % 10u);
-    }
-    fb_append_digit_n(&q, pEnd, u32State % 10u);
+    (void)u32State;
     if (q < pEnd) {
         *q = '\0';
     } else {
         sz[FB_HOLD_CHARS - 1u] = '\0';
     }
-    fb_hold_set_raw(8, sz);
+    fb_hold_set_raw(1, sz);
 
-    /*
-     * Dual DoD B R0 residual: park last NET t/f/b/r so trap clobber of hold6
-     * does not erase freestanding diagnose. Prefer hold15 when that row is
-     * on-pane; short STATUS (top/bottom GOP) parks the snap on lean hold9
-     * (still sticky 6..9). Title "FAULT PINNED" remains the halt cue.
-     * Soft!=product. Grep: NET residual | dual DoD B R0 | hold15
-     */
-    g_aHoldBright[9] = 1;
-    if (fNetSnap != 0 && fb_hold_line_visible(15u) != 0) {
-        /* ASCII only - 8x8 font has no em-dash (was rendering as ???). */
-        fb_hold_set_raw(9, "KERNEL FAULT - HALTED");
-        g_fFaultNetSnap = 1;
-        fb_hold_set_raw(15, szNetSnap);
-    } else if (fNetSnap != 0) {
-        /*
-         * hold15 off-screen (short top/bottom STATUS) - lean pin NET residual
-         * on hold9 (already sticky 6..9). Title stays FAULT PINNED halt cue.
-         * Grep: NET residual hold9 short pane
-         */
-        fb_hold_set_raw(9, szNetSnap);
-    } else {
-        fb_hold_set_raw(9, "KERNEL FAULT - HALTED");
-    }
-
-    /* Title -> FAULT PINNED; recolour lean fault rows red for clear pin. */
     fb_hold_redraw_title();
     fb_hold_redraw_line(0);
-    fb_hold_redraw_line(6);
-    fb_hold_redraw_line(7);
-    fb_hold_redraw_line(8);
-    fb_hold_redraw_line(9);
-    if (g_fFaultNetSnap != 0) {
-        fb_hold_redraw_line(15);
-    }
+    fb_hold_redraw_line(1);
+    fb_console_state("FAULT halted");
 }

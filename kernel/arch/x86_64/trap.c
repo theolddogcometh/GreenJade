@@ -534,9 +534,6 @@ trap_string_as_code_lamp(u64 u64Err, u64 u64Rip, u64 u64Cr2, int fUser)
     int fWild;
     u32 u32Ascii;
     const char *szClass;
-    char szHold[48];
-    char *q;
-    const char *p;
 
     /* Intel SDM #PF err bit4 = I/D (instruction fetch). */
     u32I = (u32)((u64Err >> 4) & 1ull);
@@ -612,38 +609,6 @@ trap_string_as_code_lamp(u64 u64Err, u64 u64Rip, u64 u64Cr2, int fUser)
         return;
     }
     g_u32PfI1ClassLogged = 1u;
-
-    /*
-     * Hold line 2: short I=1 class for G752 panel (no COM1) - KERNEL path
-     * only. Writable after FAULT pin (pin owns 0 + 6..10 only). User path:
-     * do NOT paint hold2 - trap_user_kill_honesty_soft owns hold2 as
-     * rip/thr/tag for photo-only diagnose (C3 no-COM1 residual). Soft!=product.
-     * Hand-built freestanding.
-     */
-    if (fUser == 0) {
-        q = szHold;
-        p = "I=1 ";
-        while (*p != '\0' && (u32)(q - szHold) < 40u) {
-            *q++ = *p++;
-        }
-        p = szClass;
-        while (*p != '\0' && (u32)(q - szHold) < 40u) {
-            *q++ = *p++;
-        }
-        if (fWild != 0) {
-            p = " lab=";
-            while (*p != '\0' && (u32)(q - szHold) < 40u) {
-                *q++ = *p++;
-            }
-            /* fixed lab exemplar hex - greppable 58240013 on STATUS */
-            p = "0x58240013";
-            while (*p != '\0' && (u32)(q - szHold) < 46u) {
-                *q++ = *p++;
-            }
-        }
-        *q = '\0';
-        fb_console_hold(2, szHold);
-    }
 
     /*
      * Single greppable line. Prefixes keep existing greps alive:
@@ -761,7 +726,7 @@ trap_kill_panel_tag_resolve(u32 u32Thr, u64 u64Rip, u64 u64Entry, u32 u32Fl,
         g_u64KillTagFallback++;
         return "pe32_u32";
     }
-    if (u64Class >= 0x1000000ull && u64Class < 0x2000000ull) {
+    if (u64Class >= 0x4000000ull && u64Class < 0x5000000ull) {
         if (pfFallback != NULL) {
             *pfFallback = 1;
         }
@@ -913,14 +878,10 @@ trap_user_kill_honesty_soft(u32 u32Vec, u64 u64Err, u64 u64Rip, u64 u64Cr2,
         }
     }
     *q = '\0';
-    fb_console_hold(1, sz);
+    fb_console_hold(0, sz);
 
     /*
-     * hold2: rip + thr + soft tag for DUTs without serial (G752 no-COM1).
-     * Never sticky KERNEL FAULT pin - thr still EXITED + schedule.
-     * STRONGER: always paint tag= (sticky soft tag or VA class fallback;
-     * tag=- only when no class). Owns hold2 on user path - I=1 class lamp
-     * must not clobber (C3 residual). greppable: trap: user kill panel | thr tag=
+     * hold1: rip+cr2+thr. Do not steal TE (2) or UDX xhci (3).
      */
     q = sz;
     szEnd = sz + (FB_HOLD_CHARS - 1u);
@@ -929,6 +890,11 @@ trap_user_kill_honesty_soft(u32 u32Vec, u64 u64Err, u64 u64Rip, u64 u64Cr2,
         *q++ = *p++;
     }
     trap_hold_append_hex(&q, szEnd, u64Rip, 16u);
+    p = " cr2=0x";
+    while (*p != '\0' && q < szEnd) {
+        *q++ = *p++;
+    }
+    trap_hold_append_hex(&q, szEnd, u64Cr2, 16u);
     p = " thr=";
     while (*p != '\0' && q < szEnd) {
         *q++ = *p++;
@@ -942,7 +908,6 @@ trap_user_kill_honesty_soft(u32 u32Vec, u64 u64Err, u64 u64Rip, u64 u64Cr2,
     if (q < szEnd) {
         *q++ = (char)('0' + (u32Thr % 10u));
     }
-    /* Always paint tag= for no-COM1 photo residual (Soft!=product). */
     p = " tag=";
     while (*p != '\0' && q < szEnd) {
         *q++ = *p++;
@@ -951,75 +916,11 @@ trap_user_kill_honesty_soft(u32 u32Vec, u64 u64Err, u64 u64Rip, u64 u64Cr2,
     while (*p != '\0' && q < szEnd) {
         *q++ = *p++;
     }
-    if ((u32Fl & GJ_THR_F_USER32_ENTRY) != 0) {
-        p = " u32";
-        while (*p != '\0' && q < szEnd) {
-            *q++ = *p++;
-        }
-    }
     *q = '\0';
-    fb_console_hold(2, sz);
-
-    /*
-     * hold3: cr2 first (photo priority), then err bits, then entry if room.
-     * C3 no-COM1 residual: rip/cr2/tag survive without serial. Soft!=product.
-     */
-    q = sz;
-    szEnd = sz + (FB_HOLD_CHARS - 1u);
-    p = "cr2=0x";
-    while (*p != '\0' && q < szEnd) {
-        *q++ = *p++;
-    }
-    trap_hold_append_hex(&q, szEnd, u64Cr2, 16u);
-    p = " err=0x";
-    while (*p != '\0' && q < szEnd) {
-        *q++ = *p++;
-    }
-    trap_hold_append_hex(&q, szEnd, u64Err, 4u);
-    if (u32Vec == 14u) {
-        u32P = (u32)(u64Err & 1ull);
-        u32W = (u32)((u64Err >> 1) & 1ull);
-        u32U = (u32)((u64Err >> 2) & 1ull);
-        u32I = (u32)((u64Err >> 4) & 1ull);
-        p = " P=";
-        while (*p != '\0' && q < szEnd) {
-            *q++ = *p++;
-        }
-        if (q < szEnd) {
-            *q++ = (char)('0' + (u32P & 1u));
-        }
-        p = " W=";
-        while (*p != '\0' && q < szEnd) {
-            *q++ = *p++;
-        }
-        if (q < szEnd) {
-            *q++ = (char)('0' + (u32W & 1u));
-        }
-        p = " U=";
-        while (*p != '\0' && q < szEnd) {
-            *q++ = *p++;
-        }
-        if (q < szEnd) {
-            *q++ = (char)('0' + (u32U & 1u));
-        }
-        p = " I=";
-        while (*p != '\0' && q < szEnd) {
-            *q++ = *p++;
-        }
-        if (q < szEnd) {
-            *q++ = (char)('0' + (u32I & 1u));
-        }
-    }
-    /* entry= only if headroom remains - never crowd out cr2/err. */
-    if ((u32)(szEnd - q) > 24u) {
-        p = " e=";
-        while (*p != '\0' && q < szEnd) {
-            *q++ = *p++;
-        }
-        trap_hold_append_hex(&q, szEnd, u64Entry, 16u);
-    }
-    *q = '\0';
-    fb_console_hold(3, sz);
+    fb_console_hold(1, sz);
+    (void)u64Entry;
+    (void)u32Fl;
+    (void)fTagFb;
 
     /* Compact FAULT detail - LOG when budget allows; never sticky halt pin. */
     if (g_u32FaultDetailLogged >= TRAP_FAULT_DETAIL_LOG_MAX) {
@@ -1084,7 +985,7 @@ trap_fault_status_pin(u32 u32Vec, u64 u64Err, u64 u64Rip, u64 u64Cr2,
     u32 u32Rsvd;
     u32 u32I;
 
-    /* STATUS pane - existing fb_console_trap API (hold 0,6-10). */
+    /* STATUS pane - existing fb_console_trap API (live pin hold 0+1). */
     fb_console_trap(u32Vec, u64Err, u64Rip, u64Cr2, u32Thr, u32State);
 
     if (u32Vec == 0xffffffffu) {

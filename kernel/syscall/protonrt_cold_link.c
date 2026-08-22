@@ -29,13 +29,16 @@
  *   socketpair (AF_UNIX wine-class), pipe/pipe2, epoll family soft-spin,
  *   eventfd, memfd_create - tallied into residual lean once-lamp only.
  *   C2 Dual DoD residual (this unit; Soft!=product; agent never closes):
- *   ioctl FIONREAD/FIONBIO/TIOCGWINSZ for ram+lo+tcp fds (UDX host devctl
- *   shape); sendfile/splice/tee/copy_file_range ram-in -> cold_net out
+ *   ioctl FIONREAD/FIONBIO for ram+lo+tcp fds (UDX host devctl
+ *   shape); stdio 0/1/2 + vfs_ram PTY/pipe tty-class for TCGETS/TCSETS
+ *   family/TIOCGWINSZ/TIOCSWINSZ (TCP -ENOTTY, not silent 0; not -EBADF
+ *   on stdin);
+ *   sendfile/splice/tee/copy_file_range ram-in -> cold_net out
  *   (sshd/file residual); fcntl F_GETFL/F_SETFL + soft O_NONBLOCK table
  *   for ram+lo+tcp (parity with ioctl FIONBIO; prior fcntl lo-only rejected
  *   tcp with -EBADF). Honesty lamps dual_dod_a=OPEN dual_dod_b=OPEN
  *   freestanding_skip=1 product_path=UDX_DDI+hot_cold_ABI. Dual DoD A/B
- *   stay OPEN until DUT proof.
+ *   stay OPEN until host USB path (A) / interactive SSH login (B).
  *   "bar3-adjacent" means ABI neighborhood games/Proton need - never a bar3
  *   claim, never Deck Top 50 PASS, never product DoD close. Comment law:
  *   Soft!=product (ASCII != only; never Softneq unicode); pure C block
@@ -59,6 +62,10 @@
  * greppable: protonrt: soft
  * greppable: cold_link: soft
  * greppable: protonrt: soft fork-wait wire PASS
+ * greppable: protonrt: soft wait4 rusage residual lean
+ * greppable: protonrt: soft rlimit residual lean
+ * greppable: protonrt: soft fcntl cloexec residual lean
+ * greppable: protonrt: soft kill wait-child residual lean
  * greppable: protonrt: soft poll block PASS
  * greppable: protonrt: soft init_module PASS|FAIL
  * greppable: protonrt: soft finit_module PASS|FAIL
@@ -76,18 +83,24 @@
  *   epoll_wait family -> vfs_ram_epoll_wait + soft-spin residual lean
  *   read/write on net fds -> gj_linux_cold_recv / gj_linux_cold_send
  *   ioctl FIONREAD/FIONBIO on ram+lo+tcp -> soft readiness / nonblock accept
+ *   ioctl TTY (TCGETS family / winsz) on fd 0/1/2 or vfs_ram PTY/pipe
+ *     -> soft fill; TCP -ENOTTY (not silent 0)
+ *   ioctl TIOCSCTTY/TIOCNOTTY USER*_ENTRY + stdio|ram -> 0; else -EPERM/-ENOTTY
+ *   ioctl TIOCGPTN/TIOCSPTLCK -> vfs_ram_ioctl (Unix98 PTY mux; not TIOCSCTTY)
+ *   ppoll arg3 wait sigmask: -EINTR if SIGCHLD pending and unblocked
  *   fcntl F_GETFL/F_SETFL on ram+lo+tcp -> soft O_NONBLOCK table residual
  *   sendfile/splice/tee/copy_file_range ram-in + net-out -> bounce + cold send
  *   socketpair/pipe/eventfd/memfd -> vfs_ram residual (Proton neighborhood)
  *   attach -> cold_ipc_set_service(protonrt_service) (cold_ipc path)
  *
  * Soft module path (init_module / finit_module / delete_module):
- *   bounce -> linux_module_load_mem + init_call; delete -> exit_call if loaded.
- * Soft!=product .ko AC (G-AC-1). Cold-classified NRs 175 / 176 / 313.
+ *   in-kernel .ko load is abandoned (G-AC-1). These NRs return -ENOSYS.
+ *   Product drivers = userspace UDX over hot+cold ABI.
  */
 #include <gj/cold_ipc.h>
 #include <gj/config.h>
 #include <gj/cpu.h>
+#include <gj/door.h>
 #include <gj/elf_load.h>
 #include <gj/error.h>
 #include <gj/file_lock.h>
@@ -95,8 +108,8 @@
 #include <gj/klog.h>
 #include <gj/linux_abi.h>
 #include <gj/linux_dispatch.h>
-#include <gj/linux_module.h>
 #include <gj/memobj.h>
+#include <gj/net_eth.h>
 #include <gj/net_lo.h>
 #include <gj/net_tcp.h>
 #include <gj/linux_cold_net.h>
@@ -235,6 +248,10 @@ static u8  g_fPrtSoftSendfileOnce;            /* sendfile residual once-lamp */
 static u8  g_fPrtSoftFcntlOnce;               /* fcntl residual once-lamp */
 static u8  g_fPrtSoftCopyFrOnce;              /* copy_file_range residual once-lamp */
 static u8  g_fPrtSoftDualDodOnce;             /* dual DoD honesty once-lamp */
+static u8  g_fPrtSoftWait4RusageOnce;         /* wait4 rusage fill once-lamp */
+static u8  g_fPrtSoftRlimitOnce;              /* rlimit residual once-lamp */
+static u8  g_fPrtSoftFcntlCloexecOnce;        /* fcntl CLOEXEC once-lamp */
+static u8  g_fPrtSoftKillWaitOnce;            /* kill wait-child once-lamp */
 
 /*
  * Soft fd open-flags residual (C2 Dual DoD residual deepen; Soft!=product).
@@ -368,23 +385,479 @@ protonrt_soft_fd_ready_mask(i64 i64Fd, u32 u32Want)
 }
 
 /**
+ * Calling USER thread: USER*_ENTRY still set, or first sysretq already
+ * cleared it (trampoline) while pfnEntry is NULL and a user RIP remains,
+ * or mid-syscall SysUserValid. Kernel death workers keep pfnEntry.
+ */
+static int
+protonrt_thr_is_user(const struct gj_thread *pThr)
+{
+    u32 u32UserFl = GJ_THR_F_USER_ENTRY | GJ_THR_F_USER32_ENTRY;
+
+    if (pThr == NULL || pThr->pProc == NULL) {
+        return 0;
+    }
+    if ((pThr->u32Flags & u32UserFl) != 0) {
+        return 1;
+    }
+    if (pThr->u32SysUserValid != 0) {
+        return 1;
+    }
+    if (pThr->pfnEntry == NULL && pThr->u64UserRip != 0) {
+        return 1;
+    }
+    return 0;
+}
+
+/*
+ * Doors kthread: in-flight USER client. schedule() saved that thr's
+ * sysuser; thread_exec_replace needs the TCB after trampoline cleared
+ * USER_ENTRY. NULL if SERVICE_FIRST (current is already the USER thr).
+ */
+static struct gj_thread *
+protonrt_door_client_user(void)
+{
+    struct gj_door *pDoor;
+    struct gj_thread *pCli;
+
+    pDoor = door_cold_personality();
+    if (pDoor == NULL) {
+        return NULL;
+    }
+    pCli = pDoor->pClient;
+    if (protonrt_thr_is_user(pCli) == 0) {
+        return NULL;
+    }
+    return pCli;
+}
+
+/**
+ * Calling USER PCB. Kernel-side / unbound -> NULL.
+ * execve/fork/wait bind here so a fork child is not g_pLinuxProc.
+ * Doors kthread: door pClient (OpenSSH session / dash), not the kthread PCB.
+ */
+static struct gj_process *
+protonrt_calling_user_proc(void)
+{
+    struct gj_thread *pCur = thread_current();
+    struct gj_thread *pCli;
+
+    if (protonrt_thr_is_user(pCur) != 0) {
+        return pCur->pProc;
+    }
+    pCli = protonrt_door_client_user();
+    if (pCli != NULL) {
+        return pCli->pProc;
+    }
+    return NULL;
+}
+
+/* Last USER SYSCALL PCB (SERVICE_FIRST). Doors kthread fork uses this. */
+static struct gj_process *g_pLastLinuxUserProc;
+
+/**
+ * Snapshot USER SYSCALL RIP/RSP onto the calling PCB (last-fields).
+ * process_linux_fork reads these when current is a cold kthread so a
+ * LINUX parent in [0x1000000, 0x1800000) still gets thread_create_user.
+ */
+static void
+protonrt_snap_user_syscall(void)
+{
+    struct gj_thread *pThr = thread_current();
+    struct gj_cpu *pCpu;
+    struct gj_process *pProc;
+    u64 u64Rip = 0;
+    u64 u64Rsp = 0;
+
+    pCpu = cpu_current();
+    if (pCpu != NULL) {
+        u64Rip = pCpu->u64UserRip;
+        u64Rsp = pCpu->u64UserRsp;
+    }
+    if (protonrt_thr_is_user(pThr) != 0) {
+        pProc = pThr->pProc;
+        if (pProc == NULL) {
+            return;
+        }
+        if (u64Rip == 0 && pThr->u32SysUserValid != 0) {
+            u64Rip = pThr->u64SysUserRip;
+            u64Rsp = pThr->u64SysUserRsp;
+        }
+        if (u64Rip == 0) {
+            u64Rip = pThr->u64UserRip;
+        }
+        if (u64Rsp == 0) {
+            u64Rsp = pThr->u64UserRsp;
+        }
+        if (u64Rip != 0) {
+            pProc->u64UserSysRip = u64Rip;
+        }
+        if (u64Rsp != 0) {
+            pProc->u64UserSysRsp = u64Rsp;
+        }
+        pProc->u32UserSysThr = pThr->u32Id;
+        pProc->pUserThr = pThr;
+        g_pLastLinuxUserProc = pProc;
+        return;
+    }
+    /*
+     * Doors kthread: pClient is the blocked USER thr. Stamp that PCB so
+     * LINUX [0x1000000, 0x1800000) fork still gets thread_create_user and
+     * execve can thread_exec_replace after trampoline cleared USER_ENTRY.
+     */
+    pThr = protonrt_door_client_user();
+    if (pThr != NULL) {
+        pProc = pThr->pProc;
+        if (u64Rip == 0 && pThr->u32SysUserValid != 0) {
+            u64Rip = pThr->u64SysUserRip;
+            u64Rsp = pThr->u64SysUserRsp;
+        }
+        if (u64Rip == 0) {
+            u64Rip = pThr->u64UserRip;
+        }
+        if (u64Rsp == 0) {
+            u64Rsp = pThr->u64UserRsp;
+        }
+        if (u64Rip != 0) {
+            pProc->u64UserSysRip = u64Rip;
+        }
+        if (u64Rsp != 0) {
+            pProc->u64UserSysRsp = u64Rsp;
+        }
+        pProc->u32UserSysThr = pThr->u32Id;
+        pProc->pUserThr = pThr;
+        g_pLastLinuxUserProc = pProc;
+        return;
+    }
+    /*
+     * Doors kthread, no pClient (queue path): GS USER_* may still be the
+     * blocked USER resume. Stamp the unique wait-registered USER child
+     * only when GS RIP matches that child (OpenSSH session execve).
+     * Parent poll RIP must not clobber the child's last-fields.
+     * Else stamp last LINUX user.ld so [0x1000000, 0x1800000) still
+     * gets thread_create_user.
+     */
+    pProc = process_linux_live_user_child(u64Rip, u64Rsp);
+    if (pProc != NULL) {
+        int fMatch = 0;
+
+        if (u64Rip != 0 && (pProc->u64UserSysRip == u64Rip ||
+                            pProc->u64StartEntry == u64Rip ||
+                            pProc->u64ExecEntry == u64Rip)) {
+            fMatch = 1;
+        }
+        if (u64Rsp != 0 && pProc->u64UserSysRsp == u64Rsp &&
+            (u64Rip >= 0x1000000ull && u64Rip < 0x5000000ull)) {
+            /* Session child stack vs parent poll stack. */
+            fMatch = 1;
+        }
+        if (pProc->u64UserSysRip == 0 &&
+            (u64Rip >= 0x1000000ull && u64Rip < 0x5000000ull)) {
+            fMatch = 1;
+        }
+        if (fMatch != 0) {
+            pProc->u64UserSysRip = u64Rip;
+            if (u64Rsp >= 0x1000000ull && u64Rsp < 0x80000000ull) {
+                pProc->u64UserSysRsp = u64Rsp;
+            }
+            g_pLastLinuxUserProc = pProc;
+            return;
+        }
+        /* Unique child exists; GS is parent poll. Do not clobber. */
+        if (g_pLastLinuxUserProc == pProc) {
+            return;
+        }
+    }
+    if (g_pLastLinuxUserProc == NULL ||
+        g_pLastLinuxUserProc->u32Alive == 0) {
+        return;
+    }
+    if (!(u64Rip >= 0x1000000ull && u64Rip < 0x5000000ull)) {
+        return;
+    }
+    pProc = g_pLastLinuxUserProc;
+    pProc->u64UserSysRip = u64Rip;
+    if (u64Rsp >= 0x1000000ull && u64Rsp < 0x80000000ull) {
+        pProc->u64UserSysRsp = u64Rsp;
+    }
+    g_pLastLinuxUserProc = pProc;
+}
+
+/**
+ * LINUX user text for USER execve. HEAD user.ld [0x1000000, 0x1800000)
+ * (dash/sh); OpenSSH ~11MiB at that base overflows 8MiB; 0x4000000
+ * window is the same ELF class. Reject ld-gj INTERP / PE32.
+ */
+static int
+protonrt_linux_user_text_ok(u64 u64Va)
+{
+    return (u64Va >= 0x1000000ull && u64Va < 0x5000000ull) ? 1 : 0;
+}
+
+static int
+protonrt_linux_text_lo(u64 u64Va)
+{
+    return (u64Va >= 0x1000000ull && u64Va < 0x1800000ull) ? 1 : 0;
+}
+
+static int
+protonrt_linux_stack_ok(u64 u64Rsp)
+{
+    return (u64Rsp >= 0x1000000ull && u64Rsp < 0x80000000ull) ? 1 : 0;
+}
+
+static int
+protonrt_linux_pcb_userld(const struct gj_process *pProc)
+{
+    if (pProc == NULL || pProc->u32Personality != 1u ||
+        pProc->u32Alive == 0) {
+        return 0;
+    }
+    if (protonrt_linux_user_text_ok(pProc->u64StartEntry) != 0 ||
+        protonrt_linux_user_text_ok(pProc->u64ExecEntry) != 0 ||
+        protonrt_linux_user_text_ok(pProc->u64UserSysRip) != 0 ||
+        protonrt_linux_text_lo(pProc->u64StartEntry) != 0 ||
+        protonrt_linux_text_lo(pProc->u64ExecEntry) != 0 ||
+        protonrt_linux_text_lo(pProc->u64UserSysRip) != 0) {
+        return 1;
+    }
+    if (protonrt_linux_stack_ok(pProc->u64UserSysRsp) != 0 ||
+        protonrt_linux_stack_ok(pProc->u64ExecStack) != 0) {
+        return 1;
+    }
+    return 0;
+}
+
+/**
+ * Doors kthread: last USER SYSCALL PCB if it is LINUX user.ld
+ * ([0x1000000, 0x1800000) or [0x4000000, 0x5000000)).
+ * Fork/vfork/clone only — not execve (wrong PCB if parent polled).
+ */
+static struct gj_process *
+protonrt_last_linux_userld_parent(void)
+{
+    if (protonrt_linux_pcb_userld(g_pLastLinuxUserProc) != 0) {
+        return g_pLastLinuxUserProc;
+    }
+    return NULL;
+}
+
+/**
+ * Parent PCB for fork/vfork/clone. Prefer the calling USER thr so a
+ * fork child is not g_pLinuxProc. A doors/queue kthread is LINUX-default
+ * and must not become the clone source when GS still holds a user.ld RIP
+ * ([0x1000000, 0x1800000) dash/sh or [0x4000000, 0x5000000) OpenSSH).
+ * Last snapped LINUX user.ld is that parent. Dual DoD B OPEN.
+ */
+static struct gj_process *
+protonrt_linux_fork_parent(void)
+{
+    struct gj_process *pParent;
+
+    pParent = protonrt_calling_user_proc();
+    if (pParent != NULL) {
+        return pParent;
+    }
+    /* Doors kthread: last LINUX user.ld USER SYSCALL (sshd / dash). */
+    pParent = protonrt_last_linux_userld_parent();
+    if (pParent != NULL) {
+        return pParent;
+    }
+    /*
+     * LINUX [0x1000000, 0x1800000) last-fields: still a USER-child
+     * parent when the snap PCB is g_pLinuxProc (dash/sh). Dual DoD B OPEN.
+     */
+    if (g_pLastLinuxUserProc != NULL &&
+        g_pLastLinuxUserProc->u32Alive != 0 &&
+        g_pLastLinuxUserProc->u32Personality == 1u &&
+        protonrt_linux_text_lo(g_pLastLinuxUserProc->u64StartEntry) != 0) {
+        return g_pLastLinuxUserProc;
+    }
+    if (g_pLastLinuxUserProc != NULL &&
+        g_pLastLinuxUserProc->u32Alive != 0 &&
+        g_pLastLinuxUserProc->u32Personality == 1u &&
+        protonrt_linux_text_lo(g_pLastLinuxUserProc->u64UserSysRip) != 0) {
+        return g_pLastLinuxUserProc;
+    }
+    return NULL;
+}
+
+/**
+ * Execve target PCB. Calling USER first so a fork session child is not
+ * g_pLinuxProc. Never the last-fork parent snap (parent poll vs child
+ * exec). thread_exec_replace only on that PCB.
+ */
+static struct gj_process *
+protonrt_linux_exec_proc(void)
+{
+    struct gj_process *pExec;
+    struct gj_cpu *pCpu;
+    u64 u64Rip = 0;
+    u64 u64Rsp = 0;
+
+    pExec = protonrt_calling_user_proc();
+    if (pExec != NULL) {
+        return pExec;
+    }
+    /*
+     * Doors/queue kthread: never the kthread PCB (LINUX-default). Unique
+     * wait-registered USER child (OpenSSH session) vs parent poll.
+     * thread_exec_replace only on that PCB.
+     */
+    pCpu = cpu_current();
+    if (pCpu != NULL) {
+        u64Rip = pCpu->u64UserRip;
+        u64Rsp = pCpu->u64UserRsp;
+    }
+    pExec = process_linux_live_user_child(u64Rip, u64Rsp);
+    if (pExec != NULL) {
+        return pExec;
+    }
+    /* Last snap only when GS RIP/RSP name that wait-registered child. */
+    if (g_pLastLinuxUserProc != NULL &&
+        process_wait_pid_of(g_pLastLinuxUserProc) != 0 &&
+        protonrt_linux_pcb_userld(g_pLastLinuxUserProc) != 0) {
+        if (u64Rip != 0 &&
+            (g_pLastLinuxUserProc->u64UserSysRip == u64Rip ||
+             g_pLastLinuxUserProc->u64StartEntry == u64Rip ||
+             g_pLastLinuxUserProc->u64ExecEntry == u64Rip) &&
+            (u64Rsp == 0 || g_pLastLinuxUserProc->u64UserSysRsp == 0 ||
+             g_pLastLinuxUserProc->u64UserSysRsp == u64Rsp)) {
+            return g_pLastLinuxUserProc;
+        }
+    }
+    return NULL;
+}
+
+/**
+ * USER execve: re-arm USER_ENTRY (trampoline cleared it) and
+ * thread_exec_replace only. Never thread_create_user (0.1.140 #PF I=1).
+ * Retargets the calling USER thr so sysretq lands on the new image.
+ * Stamps PCB last-fields so a later fork from [0x1000000, 0x1800000)
+ * still gets thread_create_user. Returns replace count (0 -> fail-close).
+ */
+static u32
+protonrt_exec_replace_user(struct gj_process *pExec, u64 u64Entry,
+                           u64 u64Stack)
+{
+    struct gj_cpu *pCpu;
+    struct gj_thread *pThr;
+    struct gj_thread *pUser;
+    u32 cRepl;
+    int fUser;
+
+    if (pExec == NULL) {
+        return 0;
+    }
+    pCpu = cpu_current();
+    pThr = thread_current();
+    fUser = (pThr != NULL && pThr->pProc == pExec &&
+             protonrt_thr_is_user(pThr) != 0);
+    if (fUser != 0) {
+        pExec->pUserThr = pThr;
+    }
+    pUser = pExec->pUserThr;
+    if (pUser != NULL &&
+        (pUser->u32State == GJ_THR_UNUSED ||
+         pUser->u32State == GJ_THR_EXITED || pUser->pProc != pExec)) {
+        pUser = NULL;
+        pExec->pUserThr = NULL;
+    }
+    if (pUser == NULL && fUser != 0) {
+        pUser = pThr;
+        pExec->pUserThr = pThr;
+    }
+    if (pUser == NULL && pThr != NULL && pThr->pProc == pExec &&
+        pThr->pfnEntry == NULL) {
+        pUser = pThr;
+        pExec->pUserThr = pThr;
+        fUser = 1;
+    }
+    if (pUser == NULL) {
+        pUser = protonrt_door_client_user();
+        if (pUser != NULL && pUser->pProc != pExec) {
+            pUser = NULL;
+        }
+        if (pUser != NULL) {
+            pExec->pUserThr = pUser;
+        }
+    }
+    if (pUser != NULL) {
+        pUser->u32Flags |= GJ_THR_F_USER_ENTRY;
+        pUser->pfnEntry = NULL;
+        if (u64Entry != 0 && elf_stack_rsp_live_ok(u64Stack) != 0) {
+            pUser->u64UserRip = u64Entry;
+            pUser->u64UserRsp = u64Stack;
+            pUser->u64SysUserRip = u64Entry;
+            pUser->u64SysUserRsp = u64Stack;
+            pUser->u32SysUserValid = 1;
+        }
+    }
+    /* thread_exec_replace only. Never thread_create_user (0.1.140 #PF I=1). */
+    cRepl = thread_exec_replace(pExec, u64Entry, u64Stack);
+    if (fUser != 0 && u64Entry != 0 &&
+        elf_stack_rsp_live_ok(u64Stack) != 0) {
+        if (pCpu != NULL) {
+            pCpu->u64UserRip = u64Entry;
+            pCpu->u64UserRsp = u64Stack;
+        }
+        pThr->u64UserRip = u64Entry;
+        pThr->u64UserRsp = u64Stack;
+        pThr->u64SysUserRip = u64Entry;
+        pThr->u64SysUserRsp = u64Stack;
+        pThr->u32SysUserValid = 1;
+        if (cRepl == 0) {
+            cRepl = 1;
+        }
+    }
+    if (cRepl == 0 && pUser != NULL && u64Entry != 0 &&
+        elf_stack_rsp_live_ok(u64Stack) != 0) {
+        /* Doors kthread: USER TCB retargeted; sysretq lands on new image. */
+        cRepl = 1;
+    }
+    if (cRepl != 0 && u64Entry != 0) {
+        pExec->u64UserSysRip = u64Entry;
+        if (u64Stack != 0) {
+            pExec->u64UserSysRsp = u64Stack;
+        }
+        if (pUser != NULL) {
+            pExec->u32UserSysThr = pUser->u32Id;
+        } else if (pThr != NULL && pThr->pProc == pExec) {
+            pExec->u32UserSysThr = pThr->u32Id;
+        }
+        g_pLastLinuxUserProc = pExec;
+    }
+    return cRepl;
+}
+
+/**
+ * Per-PCB cwd for USER; kernel smoke keeps the global "/".
+ */
+static char *
+protonrt_cwd_buf(void)
+{
+    struct gj_process *pUser = protonrt_calling_user_proc();
+
+    if (pUser != NULL) {
+        if (pUser->szCwd[0] == '\0') {
+            pUser->szCwd[0] = '/';
+            pUser->szCwd[1] = '\0';
+        }
+        return pUser->szCwd;
+    }
+    return g_szCwd;
+}
+
+/**
  * Soft: resolve parent PCB for fork/clone/wait cold wires.
- * Prefer g_pLinuxProc; fall back to current thread's process.
+ * Prefer the calling USER PCB so child wait/fork is not g_pLinuxProc.
+ * Doors kthread: last LINUX user.ld (same as fork parent). Kernel
+ * smoke with no user.ld parent returns NULL (unfiltered wait4).
  */
 static struct gj_process *
 protonrt_soft_parent(void)
 {
-    struct gj_process *p = g_pLinuxProc;
-    struct gj_thread *pCur;
-
-    if (p != NULL) {
-        return p;
-    }
-    pCur = thread_current();
-    if (pCur != NULL) {
-        return pCur->pProc;
-    }
-    return NULL;
+    return protonrt_linux_fork_parent();
 }
 
 /** Grep once: protonrt: soft fork-wait wire PASS */
@@ -1413,156 +1886,53 @@ promise_gate_cpath(void)
 
 /*
  * Soft Linux .ko load via finit/init/delete_module (cold NRs 175/176/313).
- * Bounce cap 2 MiB; vfs_ram regular-file fds for finit_module.
- * greppable: protonrt: soft init_module|finit_module|delete_module PASS|FAIL
+ * Abandoned: in-kernel .ko AC is not product (G-AC-1). Return -ENOSYS.
+ * greppable: protonrt: soft init_module|finit_module|delete_module ENOSYS
  */
-#define GJ_SOFT_MODULE_BOUNCE_MAX (2u * 1024u * 1024u)
-#define GJ_SOFT_MODULE_NAME_MAX   64u
-
-/** Map GJ_ERR_* (and soft init errno-class) -> Linux -errno for cold edge. */
-static i64
-soft_mod_st_to_linux(i64 i64St)
-{
-    if (i64St >= 0) {
-        return i64St;
-    }
-    if (i64St == (i64)GJ_ERR_INVAL) {
-        return -LINUX_EINVAL;
-    }
-    if (i64St == (i64)GJ_ERR_NOMEM) {
-        return -LINUX_ENOMEM;
-    }
-    if (i64St == (i64)GJ_ERR_NOENT) {
-        return -LINUX_ENOENT;
-    }
-    if (i64St == (i64)GJ_ERR_FAULT) {
-        return -LINUX_EFAULT;
-    }
-    if (i64St == (i64)GJ_ERR_BUSY) {
-        return -LINUX_EBUSY;
-    }
-    if (i64St == (i64)GJ_ERR_PERM) {
-        return -LINUX_EPERM;
-    }
-    if (i64St == (i64)GJ_ERR_NOSUPPORT) {
-        return -LINUX_ENOEXEC;
-    }
-    if (i64St == (i64)GJ_ERR_IO) {
-        return -LINUX_EIO;
-    }
-    /* Module init may return a Linux-style -errno directly. */
-    if (i64St >= (i64)(-4095) && i64St <= (i64)(-1)) {
-        return i64St;
-    }
-    return -LINUX_EINVAL;
-}
-
-/** Soft basename + strip trailing .ko -> module name (default softmod). */
-static void
-soft_mod_name_from_path(char *szOut, size_t cbOut, const char *szPath)
-{
-    const char *pBase;
-    const char *p;
-    size_t n;
-
-    if (szOut == NULL || cbOut == 0u) {
-        return;
-    }
-    szOut[0] = '\0';
-    if (szPath == NULL || szPath[0] == '\0') {
-        (void)strlcpy(szOut, "softmod", cbOut);
-        return;
-    }
-    pBase = szPath;
-    for (p = szPath; *p != '\0'; p++) {
-        if (*p == '/') {
-            pBase = p + 1;
-        }
-    }
-    if (pBase[0] == '\0') {
-        (void)strlcpy(szOut, "softmod", cbOut);
-        return;
-    }
-    n = 0;
-    while (pBase[n] != '\0' && (n + 1u) < cbOut) {
-        /* Strip ".ko" suffix soft */
-        if (pBase[n] == '.' && pBase[n + 1] == 'k' && pBase[n + 2] == 'o' &&
-            pBase[n + 3] == '\0') {
-            break;
-        }
-        szOut[n] = pBase[n];
-        n++;
-    }
-    szOut[n] = '\0';
-    if (n == 0u) {
-        (void)strlcpy(szOut, "softmod", cbOut);
-    }
-}
-
-/**
- * Allocate contiguous PMM pages for module bounce (HHDM VA).
- * *pPa / *pcPages filled for free; NULL on fail.
- */
-static void *
-soft_mod_bounce_alloc(size_t cb, gj_paddr_t *pPa, u32 *pcPages)
-{
-    u32 cPages;
-    u32 cPo2;
-    gj_paddr_t pa;
-
-    if (pPa == NULL || pcPages == NULL || cb == 0u ||
-        cb > (size_t)GJ_SOFT_MODULE_BOUNCE_MAX) {
-        return NULL;
-    }
-    cPages = (u32)((cb + (size_t)GJ_PAGE_SIZE - 1u) / (size_t)GJ_PAGE_SIZE);
-    if (cPages == 0u) {
-        cPages = 1u;
-    }
-    /* Prefer power-of-two for hierarchical freelist (<=512). */
-    cPo2 = 1u;
-    while (cPo2 < cPages && cPo2 < 512u) {
-        cPo2 <<= 1;
-    }
-    if (cPo2 >= cPages) {
-        cPages = cPo2;
-    }
-    pa = pmm_alloc_pages(cPages);
-    if (pa == 0) {
-        return NULL;
-    }
-    *pPa = pa;
-    *pcPages = cPages;
-    return (void *)(gj_vaddr_t)hhdm_to_virt(pa);
-}
-
-static void
-soft_mod_bounce_free(gj_paddr_t pa, u32 cPages)
-{
-    if (pa != 0 && cPages != 0u) {
-        pmm_free_pages(pa, cPages);
-    }
-}
-
-/** load_mem + init_call; maps status to Linux -errno. Source lamp = finit. */
+/** Abandoned in-kernel .ko load. Product drivers are userspace UDX. */
 static i64
 soft_mod_load_and_init(const void *pImg, size_t cb, const char *szName)
 {
-    i64 i64St;
-    const char *sz = szName;
+    (void)pImg;
+    (void)cb;
+    (void)szName;
+    return -(i64)LINUX_ENOSYS;
+}
 
-    if (sz == NULL || sz[0] == '\0') {
-        sz = "softmod";
+static void
+protonrt_path_join_cwd(char *szOut, size_t cbOut)
+{
+    char aRel[96];
+    char *szCwd;
+    size_t iC;
+    size_t iR;
+
+    if (szOut == NULL || cbOut == 0 || szOut[0] == '\0' || szOut[0] == '/') {
+        return;
     }
-    i64St = linux_module_load_mem_src(pImg, cb, sz, "finit");
-    if (i64St != 0) {
-        return soft_mod_st_to_linux(i64St);
+    for (iR = 0; iR + 1 < sizeof(aRel) && szOut[iR] != '\0'; iR++) {
+        aRel[iR] = szOut[iR];
     }
-    i64St = linux_module_init_call(sz);
-    if (i64St != 0) {
-        (void)linux_module_exit_call(sz);
-        return soft_mod_st_to_linux(i64St);
+    aRel[iR] = '\0';
+    szCwd = protonrt_cwd_buf();
+    iC = 0;
+    while (szCwd[iC] != '\0' && iC + 1 < cbOut) {
+        szOut[iC] = szCwd[iC];
+        iC++;
     }
-    return 0;
+    if (iC == 0 || szOut[iC - 1] != '/') {
+        if (iC + 1 < cbOut) {
+            szOut[iC] = '/';
+            iC++;
+        }
+    }
+    iR = 0;
+    while (aRel[iR] != '\0' && iC + 1 < cbOut) {
+        szOut[iC] = aRel[iR];
+        iC++;
+        iR++;
+    }
+    szOut[iC] = '\0';
 }
 
 static void
@@ -1587,10 +1957,12 @@ copy_path_from_arg(char *szOut, size_t cbOut, u64 u64Path)
             }
             szOut[i] = ch;
             if (ch == '\0') {
+                protonrt_path_join_cwd(szOut, cbOut);
                 return;
             }
         }
         szOut[cbOut - 1] = '\0';
+        protonrt_path_join_cwd(szOut, cbOut);
         return;
     }
     /* Kernel smoke path pointer */
@@ -1602,6 +1974,227 @@ copy_path_from_arg(char *szOut, size_t cbOut, u64 u64Path)
         }
         szOut[i] = '\0';
     }
+    protonrt_path_join_cwd(szOut, cbOut);
+}
+
+/*
+ * Product dash + OpenSSH 10.5 DUT embeds. vfs_ram is 32KiB; aImg[16384]
+ * cannot hold 8-11MiB ELFs. Required (not weak). Not gj_sshd_elf_blob.
+ */
+extern const u8 gj_shell_elf_blob[];
+extern const u8 gj_shell_elf_blob_end[];
+extern const u8 gj_openssh_sshd_session_elf_blob[];
+extern const u8 gj_openssh_sshd_session_elf_blob_end[];
+extern const u8 gj_openssh_sshd_auth_elf_blob[];
+extern const u8 gj_openssh_sshd_auth_elf_blob_end[];
+extern const u8 gj_openssh_sshd_elf_blob[];
+extern const u8 gj_openssh_sshd_elf_blob_end[];
+
+struct gj_exec_embed_ent {
+    const char *szPath;
+    const u8 *pBlob;
+    const u8 *pEnd;
+};
+
+static const char *
+protonrt_path_base(const char *szPath)
+{
+    const char *szBase;
+    size_t i;
+
+    if (szPath == NULL || szPath[0] == '\0') {
+        return "";
+    }
+    szBase = szPath;
+    for (i = 0; szPath[i] != '\0'; i++) {
+        if (szPath[i] == '/' && szPath[i + 1] != '\0') {
+            szBase = szPath + i + 1;
+        }
+    }
+    return szBase;
+}
+
+/*
+ * OpenSSH later-wall libexec. vfs_ram seeds 1-byte stubs so stat/X_OK
+ * pass; execve must not treat those stubs as a successful image.
+ */
+static int
+protonrt_exec_later_wall_path(const char *szPath)
+{
+    const char *szBase;
+
+    if (szPath == NULL || szPath[0] == '\0') {
+        return 0;
+    }
+    if (strcmp(szPath, "/usr/libexec/sshd-session") == 0 ||
+        strcmp(szPath, "/usr/libexec/sshd-auth") == 0) {
+        return 1;
+    }
+    szBase = protonrt_path_base(szPath);
+    if (strcmp(szBase, "sshd-session") == 0 ||
+        strcmp(szBase, "sshd-auth") == 0) {
+        return 1;
+    }
+    return 0;
+}
+
+static int
+protonrt_exec_embed_path_hit(const char *szPath, const char *szEnt)
+{
+    if (szPath == NULL || szEnt == NULL) {
+        return 0;
+    }
+    if (strcmp(szPath, szEnt) == 0) {
+        return 1;
+    }
+    if (protonrt_exec_later_wall_path(szEnt) == 0) {
+        return 0;
+    }
+    return (strcmp(protonrt_path_base(szPath), protonrt_path_base(szEnt)) == 0)
+               ? 1
+               : 0;
+}
+
+static const struct gj_exec_embed_ent g_aExecEmbed[] = {
+    { "/usr/libexec/sshd-session", gj_openssh_sshd_session_elf_blob,
+      gj_openssh_sshd_session_elf_blob_end },
+    { "/usr/libexec/sshd-auth", gj_openssh_sshd_auth_elf_blob,
+      gj_openssh_sshd_auth_elf_blob_end },
+    { "/bin/sh", gj_shell_elf_blob, gj_shell_elf_blob_end },
+    { "/bin/dash", gj_shell_elf_blob, gj_shell_elf_blob_end },
+    { "/usr/bin/sh", gj_shell_elf_blob, gj_shell_elf_blob_end },
+    { "/usr/bin/dash", gj_shell_elf_blob, gj_shell_elf_blob_end },
+    { "/usr/sbin/sshd", gj_openssh_sshd_elf_blob, gj_openssh_sshd_elf_blob_end },
+    { "/usr/bin/sshd", gj_openssh_sshd_elf_blob, gj_openssh_sshd_elf_blob_end },
+};
+
+/*
+ * Full-blob USER exec. thread_exec_replace only (never thread_create_user;
+ * 0.1.140 #PF). Returns 1 if image is not a usable ELF (caller maps that).
+ */
+static i64
+protonrt_exec_embed(struct gj_linux_regs *pRegs, const char *szPath,
+                    const u8 *pImg, u64 cbImg)
+{
+    struct gj_elf_info elf;
+    struct gj_process *pExec;
+    u64 u64Entry;
+    u64 u64Stack;
+    u64 u64ArgvPre;
+    u64 u64EnvpPre;
+    size_t iPath;
+    u32 cRepl;
+
+    if (pRegs == NULL || szPath == NULL || pImg == NULL || cbImg < 4ull) {
+        return 1;
+    }
+    if (pImg[0] != 0x7fu || pImg[1] != (u8)'E' || pImg[2] != (u8)'L' ||
+        pImg[3] != (u8)'F') {
+        return 1;
+    }
+    if (elf_probe_image(pImg, cbImg, &elf) != GJ_OK) {
+        return -8; /* ENOEXEC */
+    }
+    pExec = protonrt_linux_exec_proc();
+    if (pExec == NULL) {
+        kprintf("linux: execve %s embed cb=%lu "
+                "load=SKIP isolate Soft!=product\n",
+                szPath, (unsigned long)cbImg);
+        return -LINUX_EAGAIN;
+    }
+    pExec->u64InterpEntry = 0;
+    pExec->u32ExecFlags = elf.u32Flags;
+    pExec->cAuxv = 0;
+    elf_fill_auxv(pExec, &elf, NULL);
+    if (pRegs->u64Nr == LINUX_NR_execveat) {
+        u64ArgvPre = pRegs->u64Arg2;
+        u64EnvpPre = pRegs->u64Arg3;
+    } else {
+        u64ArgvPre = pRegs->u64Arg1;
+        u64EnvpPre = pRegs->u64Arg2;
+    }
+    if (elf_publish_handoff_argv(pExec, szPath, &elf, NULL, u64ArgvPre,
+                                 u64EnvpPre) != GJ_OK ||
+        elf_stack_rsp_live_ok(pExec->u64ExecStack) == 0) {
+        kprintf("linux: execve %s embed cb=%lu "
+                "load=SKIP stack isolate Soft!=product\n",
+                szPath, (unsigned long)cbImg);
+        return -LINUX_EAGAIN;
+    }
+    if ((elf.u32Flags & GJ_ELF_INFO_HAS_INTERP) != 0 ||
+        protonrt_linux_user_text_ok(elf.u64Entry) == 0) {
+        kprintf("linux: execve %s embed cb=%lu "
+                "load=SKIP isolate Soft!=product\n",
+                szPath, (unsigned long)cbImg);
+        return -LINUX_EAGAIN;
+    }
+    if (elf_load_image(pExec, pImg, cbImg, &elf) != GJ_OK) {
+        return -8;
+    }
+    pExec->u64ExecEntry = elf.u64Entry;
+    pExec->u64LoadBias = elf.u64Bias;
+    pExec->u32ExecFlags = elf.u32Flags;
+    for (iPath = 0;
+         iPath + 1 < sizeof(pExec->szExecPath) && szPath[iPath] != '\0';
+         iPath++) {
+        pExec->szExecPath[iPath] = szPath[iPath];
+    }
+    pExec->szExecPath[iPath] = '\0';
+    u64Entry = elf.u64Entry;
+    u64Stack = pExec->u64ExecStack;
+    if (elf_stack_rsp_live_ok(u64Stack) == 0) {
+        kprintf("linux: execve %s embed cb=%lu "
+                "rip=0x%lx sp=0x%lx replace=0 "
+                "live_thr=SKIP isolate Soft!=product\n",
+                szPath, (unsigned long)cbImg, (unsigned long)u64Entry,
+                (unsigned long)u64Stack);
+        return -LINUX_EAGAIN;
+    }
+    pExec->u64StartEntry = u64Entry;
+    pExec->u64InterpEntry = 0;
+    cRepl = protonrt_exec_replace_user(pExec, u64Entry, u64Stack);
+    kprintf("linux: execve %s embed cb=%lu "
+            "rip=0x%lx sp=0x%lx replace=%u\n",
+            szPath, (unsigned long)cbImg, (unsigned long)u64Entry,
+            (unsigned long)u64Stack, cRepl);
+    if (cRepl == 0) {
+        kprintf("linux: execve %s embed replace isolate Soft!=product\n",
+                szPath);
+        return -LINUX_EAGAIN;
+    }
+    return 0;
+}
+
+/* 1 = not an embed path (caller may use vfs). Else 0 or -errno. */
+static i64
+protonrt_exec_embed_try(struct gj_linux_regs *pRegs, const char *szPath)
+{
+    size_t iEnt;
+    u64 cbImg;
+    i64 i64Emb;
+
+    if (szPath == NULL || szPath[0] == '\0') {
+        return 1;
+    }
+    for (iEnt = 0; iEnt < (sizeof(g_aExecEmbed) / sizeof(g_aExecEmbed[0]));
+         iEnt++) {
+        if (protonrt_exec_embed_path_hit(szPath, g_aExecEmbed[iEnt].szPath) ==
+            0) {
+            continue;
+        }
+        cbImg = (u64)(g_aExecEmbed[iEnt].pEnd - g_aExecEmbed[iEnt].pBlob);
+        i64Emb = protonrt_exec_embed(pRegs, szPath, g_aExecEmbed[iEnt].pBlob,
+                                     cbImg);
+        if (i64Emb == 1) {
+            return -8; /* ENOEXEC: matched path, blob not ELF */
+        }
+        return i64Emb;
+    }
+    /* Later-wall: never fall through to vfs 1-byte stubs. */
+    if (protonrt_exec_later_wall_path(szPath) != 0) {
+        return -8;
+    }
+    return 1;
 }
 
 static i64
@@ -1619,6 +2212,8 @@ protonrt_service(struct gj_linux_regs *pRegs, void *pCtx)
         protonrt_soft_inventory_maybe_once();
         return -LINUX_EINVAL;
     }
+
+    protonrt_snap_user_syscall();
 
     /* Wave 15 soft enter inventory (never mutates service return). */
     protonrt_soft_note_enter(pRegs->u64Nr);
@@ -1691,6 +2286,23 @@ protonrt_service(struct gj_linux_regs *pRegs, void *pCtx)
     }
 
     case LINUX_NR_read:
+        /*
+         * Cold net (canonical tcp/lo or dup2 alias, including 0/1/2)
+         * before vfs and before stdio serial. OpenSSH dup2(accepted,0)
+         * must not hit COM1.
+         */
+        if (gj_linux_cold_fd_ok((i64)pRegs->u64Arg0)) {
+            struct gj_linux_regs sub;
+
+            protonrt_soft_inc(&g_u64PrtLeanRwNet);
+            memset(&sub, 0, sizeof(sub));
+            sub.u64Nr = LINUX_NR_recvfrom;
+            sub.u64Arg0 = pRegs->u64Arg0;
+            sub.u64Arg1 = pRegs->u64Arg1;
+            sub.u64Arg2 = pRegs->u64Arg2;
+            sub.u64Arg3 = 0; /* flags */
+            return gj_linux_cold_recv(&sub);
+        }
         if (vfs_ram_fd_ok((i64)pRegs->u64Arg0)) {
             cb = (size_t)pRegs->u64Arg2;
             if (cb > sizeof(aBuf)) {
@@ -1714,26 +2326,70 @@ protonrt_service(struct gj_linux_regs *pRegs, void *pCtx)
             return i64R;
         }
         /*
-         * Soft residual lean: STREAM/DGRAM read -> cold_net recv.
-         * Userspace driver / sshd-shaped hosts often use read(2) on sockets.
-         * Soft!=product. G-AC-1: UDX path not .ko product AC.
+         * Stdio 0/1/2: serial stdin for dash cmdloop. Kernel smoke must
+         * not block boot. USER yields while COM1 empty (sshd/UDX run).
+         * gj_linux_cold_fd_ok already claimed dup2 aliases above.
          */
-        if (net_tcp_fd_ok((i64)pRegs->u64Arg0) ||
-            net_lo_fd_ok((i64)pRegs->u64Arg0)) {
-            struct gj_linux_regs sub;
+        if (pRegs->u64Arg0 <= 2ull) {
+            u64 u64Dst = pRegs->u64Arg1;
+            u64 u64Want = pRegs->u64Arg2;
+            size_t iGot = 0;
+            u8 aIn[64];
 
-            protonrt_soft_inc(&g_u64PrtLeanRwNet);
-            memset(&sub, 0, sizeof(sub));
-            sub.u64Nr = LINUX_NR_recvfrom;
-            sub.u64Arg0 = pRegs->u64Arg0;
-            sub.u64Arg1 = pRegs->u64Arg1;
-            sub.u64Arg2 = pRegs->u64Arg2;
-            sub.u64Arg3 = 0; /* flags */
-            return gj_linux_cold_recv(&sub);
+            if (protonrt_calling_user_proc() == NULL) {
+                return 0;
+            }
+            if (u64Want == 0) {
+                return 0;
+            }
+            if (u64Dst == 0) {
+                return -LINUX_EFAULT;
+            }
+            if (u64Want > sizeof(aIn)) {
+                u64Want = sizeof(aIn);
+            }
+            while (serial_poll() == 0) {
+                thread_yield();
+            }
+            while (iGot < (size_t)u64Want && serial_poll() != 0) {
+                int nCh = serial_getchar();
+
+                if (nCh < 0) {
+                    break;
+                }
+                aIn[iGot] = (u8)nCh;
+                iGot++;
+                if (nCh == '\n' || nCh == '\r') {
+                    break;
+                }
+            }
+            if (iGot == 0) {
+                return 0;
+            }
+            if (user_range_ok(u64Dst, iGot)) {
+                if (copy_to_user(u64Dst, aIn, iGot) != GJ_OK) {
+                    return -LINUX_EFAULT;
+                }
+            } else {
+                memcpy((void *)(gj_vaddr_t)u64Dst, aIn, iGot);
+            }
+            return (i64)iGot;
         }
         break; /* fall through to stub */
 
     case LINUX_NR_write:
+        if (gj_linux_cold_fd_ok((i64)pRegs->u64Arg0)) {
+            struct gj_linux_regs sub;
+
+            protonrt_soft_inc(&g_u64PrtLeanRwNet);
+            memset(&sub, 0, sizeof(sub));
+            sub.u64Nr = LINUX_NR_sendto;
+            sub.u64Arg0 = pRegs->u64Arg0;
+            sub.u64Arg1 = pRegs->u64Arg1;
+            sub.u64Arg2 = pRegs->u64Arg2;
+            sub.u64Arg3 = 0; /* flags */
+            return gj_linux_cold_send(&sub);
+        }
         if (vfs_ram_fd_ok((i64)pRegs->u64Arg0)) {
             cb = (size_t)pRegs->u64Arg2;
             if (cb > sizeof(aBuf)) {
@@ -1751,23 +2407,6 @@ protonrt_service(struct gj_linux_regs *pRegs, void *pCtx)
                 memcpy(aBuf, (const void *)(gj_vaddr_t)pRegs->u64Arg1, cb);
             }
             return vfs_ram_write((i64)pRegs->u64Arg0, aBuf, cb);
-        }
-        /*
-         * Soft residual lean: STREAM/DGRAM write -> cold_net send.
-         * Soft!=product. G-AC-1 userspace host reach.
-         */
-        if (net_tcp_fd_ok((i64)pRegs->u64Arg0) ||
-            net_lo_fd_ok((i64)pRegs->u64Arg0)) {
-            struct gj_linux_regs sub;
-
-            protonrt_soft_inc(&g_u64PrtLeanRwNet);
-            memset(&sub, 0, sizeof(sub));
-            sub.u64Nr = LINUX_NR_sendto;
-            sub.u64Arg0 = pRegs->u64Arg0;
-            sub.u64Arg1 = pRegs->u64Arg1;
-            sub.u64Arg2 = pRegs->u64Arg2;
-            sub.u64Arg3 = 0; /* flags */
-            return gj_linux_cold_send(&sub);
         }
         break;
 
@@ -1930,8 +2569,10 @@ protonrt_service(struct gj_linux_regs *pRegs, void *pCtx)
          * No always-ready shortcuts. Soft!=product blocking:
          *   timeout==0  -> single readiness pass
          *   timeout>0   -> soft-spin with thread_yield + timer_jiffies budget
-         *   timeout<0 / ppoll NULL -> treat as non-block single pass here
-         *     (product infinite wait remains OPEN)
+         *   timeout<0 / ppoll NULL -> yield until a fd is ready
+         * Mixed set: vfs pipe/eventfd/signalfd park does not wake on
+         * net_tcp AcceptQ. If any fd is net_tcp / cold net, yield so
+         * the next pass runs gj_linux_cold_poll_mask (net_eth_poll).
          * greppable: protonrt: soft poll block PASS
          * Soft!=product. G-AC-1 userspace host poll reach.
          */
@@ -1941,14 +2582,18 @@ protonrt_service(struct gj_linux_regs *pRegs, void *pCtx)
         i64 i64TimeoutMs = 0;
         u32 u32SpinLeft = 0;
         u64 u64J0;
+        u64 u64WaitMask = 0;
         u32 u32Pass;
+        int fPark;
+        int fColdNet;
+        struct gj_process *pProc;
 
         protonrt_soft_inc(&g_u64PrtLeanPoll);
         if (nfds == 0) {
             return 0;
         }
-        if (nfds > 16u) {
-            nfds = 16u;
+        if (nfds > 128u) {
+            nfds = 128u;
         }
         if (pRegs->u64Arg0 == 0) {
             return -LINUX_EFAULT;
@@ -1984,8 +2629,27 @@ protonrt_service(struct gj_linux_regs *pRegs, void *pCtx)
                 }
             }
         } else {
-            /* ppoll NULL timespec: product infinite; soft single pass. */
-            i64TimeoutMs = 0;
+            /* ppoll NULL timespec: infinite wait (Linux). */
+            i64TimeoutMs = -1;
+        }
+
+        /*
+         * ppoll arg3: wait sigmask word 0 if non-NULL (Linux bit N-1).
+         * poll has no mask; 0 means every signal unblocked for EINTR.
+         * Failed 8-byte mask copy (OpenSSH &osigset on handoff stack
+         * ~0x6ff41000; user_range_ok is geometry-only) is empty extra
+         * mask, not -EFAULT: OpenSSH `if (ret == -1) continue` would
+         * skip AcceptQ forever. Still walk pollfds. Dual DoD B OPEN.
+         */
+        if (pRegs->u64Nr == LINUX_NR_ppoll && pRegs->u64Arg3 != 0) {
+            if (user_range_ok(pRegs->u64Arg3, 8)) {
+                if (copy_from_user(&u64WaitMask, pRegs->u64Arg3, 8) !=
+                    GJ_OK) {
+                    u64WaitMask = 0;
+                }
+            } else {
+                u64WaitMask = *(const u64 *)(gj_vaddr_t)pRegs->u64Arg3;
+            }
         }
 
         /*
@@ -2005,7 +2669,22 @@ protonrt_service(struct gj_linux_regs *pRegs, void *pCtx)
 
         u64J0 = timer_jiffies();
         for (u32Pass = 0;; u32Pass++) {
+            /*
+             * Walk pollfds before SIGCHLD EINTR. OpenSSH rt_sigaction(17)
+             * then ppoll; kernel-spawned siblings that exit (storaged,
+             * scsi_mid, UDX) can OR sticky pending on pid 1. A pre-walk
+             * EINTR skips gj_linux_cold_poll_mask / net_eth_poll and never
+             * sees AcceptQ ESTAB. Linux returns ready if fds are already
+             * ready. EINTR only after an empty walk. Dual DoD B OPEN.
+             */
             ready = 0;
+            fPark = 0;
+            fColdNet = 0;
+            /*
+             * One RX pump per pass before any revents store. Per-fd
+             * poll_mask can drain SYN after the listen fd already stored 0.
+             */
+            net_eth_poll();
             for (i = 0; i < nfds; i++) {
                 /* pollfd: int fd; short events; short revents - 8B x86_64 */
                 i32 fd = 0;
@@ -2036,15 +2715,35 @@ protonrt_service(struct gj_linux_regs *pRegs, void *pCtx)
                 if (fd < 0) {
                     revents = 0;
                 } else {
+                    if (vfs_ram_fd_poll_parkable((i64)fd) != 0) {
+                        fPark = 1;
+                    }
+                    if (net_tcp_fd_ok((i64)fd) != 0 ||
+                        gj_linux_cold_fd_ok((i64)fd) != 0) {
+                        fColdNet = 1;
+                    }
                     /*
                      * Residual lean: cold_net poll_mask first (SO_ERROR /
                      * half-close honesty), then vfs_ram (ram + net route).
                      * Soft!=product; no always-ready. Userspace driver host.
                      */
                     got = protonrt_soft_fd_ready_mask((i64)fd, want);
+                    if (got == 0 && fd >= 0 && fd <= 2 &&
+                        gj_linux_cold_fd_ok((i64)fd) == 0) {
+                        /* Stdio: serial. POLLOUT always; POLLIN if COM1. */
+                        if ((want & (u32)LINUX_POLLOUT) != 0) {
+                            got |= (u32)LINUX_POLLOUT;
+                        }
+                        if ((want & (u32)LINUX_POLLIN) != 0 &&
+                            serial_poll() != 0) {
+                            got |= (u32)LINUX_POLLIN;
+                        }
+                    }
                     if (got == 0 && !vfs_ram_fd_ok((i64)fd) &&
                         !net_lo_fd_ok((i64)fd) &&
-                        !net_tcp_fd_ok((i64)fd)) {
+                        !net_tcp_fd_ok((i64)fd) &&
+                        gj_linux_cold_fd_ok((i64)fd) == 0 &&
+                        (fd < 0 || fd > 2)) {
                         revents = (u16)LINUX_POLLERR;
                         goto prt_poll_store;
                     }
@@ -2069,15 +2768,63 @@ protonrt_service(struct gj_linux_regs *pRegs, void *pCtx)
                 }
             }
 
-            if (ready != 0 || i64TimeoutMs <= 0 || u32SpinLeft == 0) {
+            if (ready != 0) {
                 break;
             }
-            /* Soft-spin: yield so peer thr / net soft progress can run. */
+            if (i64TimeoutMs == 0) {
+                break;
+            }
+            pProc = protonrt_calling_user_proc();
+            if (pProc != NULL &&
+                (pProc->u64SigPending & (1ull << GJ_SIGCHLD)) != 0 &&
+                (u64WaitMask & (1ull << (GJ_SIGCHLD - 1u))) == 0) {
+                return -LINUX_EINTR;
+            }
+            if (i64TimeoutMs < 0) {
+                /*
+                 * vfs_ram_poll_park waits on pipe/eventfd/signalfd only.
+                 * OpenSSH ppoll(NULL) mixes listen TCP with lo/pipe;
+                 * AcceptQ would never wake that wait. Yield instead so
+                 * gj_linux_cold_poll_mask can run net_eth_poll.
+                 * Even pass: re-walk without yield. QEMU42/43 stored
+                 * revents=0 on fd 97 then eth_estab on a later pump;
+                 * yield often never resumed sshd so poll_mask never
+                 * saw AcceptQ. Dual DoD B OPEN.
+                 */
+                if (fPark != 0 && fColdNet == 0) {
+                    vfs_ram_poll_park();
+                } else {
+                    /*
+                     * Yield. schedule() marks RUNNING->RUNNABLE before
+                     * pick, so sshd is re-selected. QEMU52/53 no-yield
+                     * 99% after SYN 58B never HLT; virtio SYN-ACK used.idx
+                     * never completed. Pump is still the next poll_mask
+                     * -> net_eth_poll. Dual DoD B OPEN.
+                     */
+                    thread_yield();
+                    /*
+                     * Yield self-picks sshd (RUNNABLE-before-pick) so
+                     * idle never HLT. QEMU57 still 99% after SYN batch
+                     * n=3; virtio SYN-ACK used.idx needs a VM-exit.
+                     * Dual DoD B OPEN.
+                     */
+                    if (timer_ready()) {
+                        __asm__ volatile ("sti; hlt" ::: "memory");
+                    }
+                    continue;
+                }
+                (void)u32Pass;
+                continue;
+            }
+            /* Soft-spin: yield so peer thr / net / pipe writers can run. */
             thread_yield();
             if (u32SpinLeft > 0) {
                 u32SpinLeft--;
             }
-            /* Hard soft cap ~320ms @ GJ_TIMER_HZ=100 (Soft!=product block). */
+            if (u32SpinLeft == 0) {
+                break;
+            }
+            /* Hard soft cap ~320ms @ GJ_TIMER_HZ=100. */
             if ((timer_jiffies() - u64J0) > 32ull) {
                 break;
             }
@@ -2098,17 +2845,111 @@ protonrt_service(struct gj_linux_regs *pRegs, void *pCtx)
          * C2 Dual DoD residual: ioctl for UDX host / Linux-shaped apps.
          * Accept vfs_ram + net_lo + net_tcp (STREAM sockets used FIONREAD/
          * FIONBIO before cold_net was owner-checked; prior lo-only rejected
-         * tcp fds with -EBADF). Soft!=product. G-AC-1. Dual DoD A/B OPEN.
+         * tcp fds with -EBADF). Stdio 0/1/2 and vfs_ram PTY/pipe are
+         * tty-class for TCGETS/TCSETS family/TIOCGWINSZ/TIOCSWINSZ
+         * (OpenSSH ioctl(pty_fd>=3, TIOCSWINSZ); same soft 24x80 /
+         * TCGETS fill). TCP -ENOTTY for TTY cmds, not silent 0. Unknown
+         * fds -EBADF (not -EBADF on stdin). TIOCGPTN/TIOCSPTLCK dispatch
+         * to vfs_ram_ioctl (kernel arg buffer); do not fold into TIOCSCTTY.
+         * TIOCSCTTY/TIOCNOTTY: USER*_ENTRY
+         * + stdio|ram only (OpenSSH PTY slave); net -ENOTTY. Does not
+         * spawn dash. Unknown non-TTY cmds keep ram|net residual.
+         * Soft!=product. G-AC-1. Dual DoD A/B OPEN.
          * greppable: protonrt: soft ioctl residual lean
          */
         i64 i64Fd = (i64)pRegs->u64Arg0;
         u32 cmd = (u32)pRegs->u64Arg1;
         int fRam;
         int fNet;
+        int fStdio;
+        int fTtyCmd;
+
+        if (cmd == (u32)LINUX_TIOCGPTN || cmd == (u32)LINUX_TIOCSPTLCK ||
+            cmd == (u32)LINUX_TIOCGPTLCK) {
+            u32 u32Word = 0;
+            void *pKarg = NULL;
+            i64 i64R;
+
+            if (pRegs->u64Arg2 != 0) {
+                if (cmd == (u32)LINUX_TIOCSPTLCK) {
+                    if (user_range_ok(pRegs->u64Arg2, 4)) {
+                        if (copy_from_user(&u32Word, pRegs->u64Arg2, 4) !=
+                            GJ_OK) {
+                            return -LINUX_EFAULT;
+                        }
+                    } else {
+                        u32Word = *(const u32 *)(gj_vaddr_t)pRegs->u64Arg2;
+                    }
+                }
+                pKarg = &u32Word;
+            }
+            i64R = vfs_ram_ioctl(i64Fd, cmd, pKarg);
+            if (i64R == 0 && pKarg != NULL &&
+                (cmd == (u32)LINUX_TIOCGPTN ||
+                 cmd == (u32)LINUX_TIOCGPTLCK)) {
+                if (user_range_ok(pRegs->u64Arg2, 4)) {
+                    if (copy_to_user(pRegs->u64Arg2, &u32Word, 4) !=
+                        GJ_OK) {
+                        return -LINUX_EFAULT;
+                    }
+                } else {
+                    *(u32 *)(gj_vaddr_t)pRegs->u64Arg2 = u32Word;
+                }
+            }
+            return i64R;
+        }
 
         fRam = vfs_ram_fd_ok(i64Fd) ? 1 : 0;
         fNet = (net_lo_fd_ok(i64Fd) || net_tcp_fd_ok(i64Fd)) ? 1 : 0;
-        if (fRam == 0 && fNet == 0) {
+        fStdio = (i64Fd >= 0 && i64Fd <= 2) ? 1 : 0;
+        fTtyCmd = 0;
+        if (cmd == (u32)LINUX_TIOCGWINSZ || cmd == (u32)LINUX_TIOCSWINSZ ||
+            cmd == (u32)LINUX_TCGETS || cmd == (u32)LINUX_TCSETS ||
+            cmd == (u32)LINUX_TCSETSW || cmd == (u32)LINUX_TCSETSF ||
+            cmd == (u32)LINUX_TIOCGPGRP || cmd == (u32)LINUX_TIOCSPGRP) {
+            fTtyCmd = 1;
+        }
+        if (fTtyCmd != 0) {
+            /* Stdio or vfs_ram PTY/pipe; TCP stays -ENOTTY (not silent 0). */
+            if (fStdio == 0 && fRam == 0) {
+                if (fNet != 0) {
+                    return -LINUX_ENOTTY;
+                }
+                return -LINUX_EBADF;
+            }
+        } else if (cmd == (u32)LINUX_TIOCSCTTY ||
+                   cmd == (u32)LINUX_TIOCNOTTY) {
+            /*
+             * Controlling tty: OpenSSH ioctl(slave, TIOCSCTTY) after
+             * setsid. USER*_ENTRY PCB only. Stdio or ram (socketpair
+             * PTY). TCP -ENOTTY. No dash spawn. Signals OPEN.
+             */
+            struct gj_thread *pThr;
+            struct gj_process *pUser;
+
+            if (fNet != 0 && fRam == 0 && fStdio == 0) {
+                return -LINUX_ENOTTY;
+            }
+            if (fStdio == 0 && fRam == 0) {
+                return -LINUX_EBADF;
+            }
+            pThr = thread_current();
+            if (protonrt_thr_is_user(pThr) == 0) {
+                return -LINUX_EPERM;
+            }
+            pUser = pThr->pProc;
+            if (cmd == (u32)LINUX_TIOCSCTTY) {
+                u32 u32Pid = process_wait_pid_of(pUser);
+
+                if (pUser->u32Sid == 0) {
+                    pUser->u32Sid = (u32Pid != 0) ? u32Pid : 1u;
+                }
+                if (pUser->u32Pgid == 0) {
+                    pUser->u32Pgid = pUser->u32Sid;
+                }
+            }
+            return 0;
+        } else if (fRam == 0 && fNet == 0) {
             return -LINUX_EBADF;
         }
         protonrt_soft_inc(&g_u64PrtLeanIoctl);
@@ -2123,6 +2964,42 @@ protonrt_service(struct gj_linux_regs *pRegs, void *pCtx)
                     memcpy((void *)(gj_vaddr_t)pRegs->u64Arg2, aWs,
                            sizeof(aWs));
                 }
+            }
+            goto ioctl_residual_once;
+        }
+        if (cmd == (u32)LINUX_TIOCGPGRP) {
+            i32 i32Pgrp = 1;
+            struct gj_process *pUser = protonrt_calling_user_proc();
+
+            if (pUser != NULL && pUser->u32Pgid != 0) {
+                i32Pgrp = (i32)pUser->u32Pgid;
+            } else if (pUser != NULL) {
+                u32 u32Pid = process_wait_pid_of(pUser);
+
+                i32Pgrp = (i32)(u32Pid != 0 ? u32Pid : 1u);
+            }
+            if (pRegs->u64Arg2 != 0) {
+                if (user_range_ok(pRegs->u64Arg2, 4)) {
+                    (void)copy_to_user(pRegs->u64Arg2, &i32Pgrp, 4);
+                } else {
+                    *(i32 *)(gj_vaddr_t)pRegs->u64Arg2 = i32Pgrp;
+                }
+            }
+            goto ioctl_residual_once;
+        }
+        if (cmd == (u32)LINUX_TIOCSPGRP) {
+            i32 i32Pgrp = 0;
+            struct gj_process *pUser = protonrt_calling_user_proc();
+
+            if (pRegs->u64Arg2 != 0) {
+                if (user_range_ok(pRegs->u64Arg2, 4)) {
+                    (void)copy_from_user(&i32Pgrp, pRegs->u64Arg2, 4);
+                } else {
+                    i32Pgrp = *(const i32 *)(gj_vaddr_t)pRegs->u64Arg2;
+                }
+            }
+            if (i32Pgrp > 0 && pUser != NULL) {
+                pUser->u32Pgid = (u32)i32Pgrp;
             }
             goto ioctl_residual_once;
         }
@@ -2191,14 +3068,64 @@ protonrt_service(struct gj_linux_regs *pRegs, void *pCtx)
             goto ioctl_residual_once;
         }
         if (cmd == (u32)LINUX_FIONCLEX || cmd == (u32)LINUX_FIOCLEX) {
+            if (fRam != 0) {
+                i64 i64V = vfs_ram_fd_fl_get(i64Fd);
+
+                if (i64V >= 0) {
+                    u8 u8V = (u8)i64V;
+
+                    if (cmd == (u32)LINUX_FIOCLEX) {
+                        u8V |= (u8)VFS_FD_FL_CLOEXEC;
+                    } else {
+                        u8V &= (u8)~VFS_FD_FL_CLOEXEC;
+                    }
+                    (void)vfs_ram_fd_fl_set(i64Fd, u8V);
+                }
+            }
             goto ioctl_residual_once;
         }
-        if (cmd == (u32)LINUX_TCGETS || cmd == (u32)LINUX_TCSETS ||
+        if (cmd == (u32)LINUX_TCGETS) {
+            /*
+             * Soft 60-byte termios-ish fill so zsh/tcsh do not read stack
+             * garbage. ICANON|ECHO class + sane c_cc. Product termios OPEN.
+             */
+            if (pRegs->u64Arg2 != 0) {
+                u8 aTios[60];
+                u32 iT;
+
+                for (iT = 0; iT < sizeof(aTios); iT++) {
+                    aTios[iT] = 0;
+                }
+                aTios[1] = 0x01;  /* c_iflag ICRNL */
+                aTios[4] = 0x05;  /* c_oflag OPOST|ONLCR */
+                aTios[8] = 0xB0;  /* c_cflag CS8|CREAD|CLOCAL low */
+                aTios[9] = 0x08;
+                aTios[12] = 0x0B; /* c_lflag ISIG|ICANON|ECHO */
+                aTios[17] = 3;    /* VINTR ^C */
+                aTios[18] = 28;   /* VQUIT ^\ */
+                aTios[19] = 127;  /* VERASE DEL */
+                aTios[20] = 21;   /* VKILL ^U */
+                aTios[21] = 4;    /* VEOF ^D */
+                aTios[23] = 1;    /* VMIN */
+                aTios[25] = 17;   /* VSTART */
+                aTios[26] = 19;   /* VSTOP */
+                aTios[27] = 26;   /* VSUSP */
+                if (user_range_ok(pRegs->u64Arg2, sizeof(aTios))) {
+                    if (copy_to_user(pRegs->u64Arg2, aTios, sizeof(aTios)) !=
+                        GJ_OK) {
+                        return -LINUX_EFAULT;
+                    }
+                } else {
+                    memcpy((void *)(gj_vaddr_t)pRegs->u64Arg2, aTios,
+                           sizeof(aTios));
+                }
+            }
+            goto ioctl_residual_once;
+        }
+        if (cmd == (u32)LINUX_TCSETS ||
             cmd == (u32)LINUX_TCSETSW || cmd == (u32)LINUX_TCSETSF ||
-            cmd == (u32)LINUX_TIOCGPGRP || cmd == (u32)LINUX_TIOCSPGRP ||
-            cmd == (u32)LINUX_TIOCSCTTY || cmd == (u32)LINUX_TIOCNOTTY ||
             cmd == (u32)LINUX_TIOCSWINSZ) {
-            /* Soft TTY probe success for wine/libc; product termios OPEN. */
+            /* Soft TTY set on stdio|ram; product termios OPEN. */
             goto ioctl_residual_once;
         }
         /* Unknown ioctl: soft succeed for UDX/wine/libc probes. */
@@ -2245,9 +3172,9 @@ protonrt_service(struct gj_linux_regs *pRegs, void *pCtx)
          * Residual lean epoll_wait family (bar3-adjacent ABI surface).
          * Proton/game-shaped readiness demux over registered watches.
          * Soft!=product blocking:
-         *   timeout==0 / pwait2 timespec soft 0 -> single readiness pass
+         *   timeout==0 / pwait2 timespec 0 -> single readiness pass
          *   timeout>0  -> soft-spin yield + jiffies budget (poll-shaped)
-         *   timeout<0  -> soft single pass (product infinite OPEN)
+         *   timeout<0 / pwait2 NULL -> yield until ready
          * greppable: protonrt: soft epoll residual lean
          * Never claims bar3 / Deck Top 50 / product DoD. G-AC-1.
          */
@@ -2296,13 +3223,10 @@ protonrt_service(struct gj_linux_regs *pRegs, void *pCtx)
                     }
                 }
             } else {
-                i64TimeoutMs = 0; /* product infinite OPEN; soft single pass */
+                i64TimeoutMs = -1; /* pwait2 NULL timespec: infinite */
             }
         } else {
             i64TimeoutMs = (i64)(i32)pRegs->u64Arg3;
-            if (i64TimeoutMs < 0) {
-                i64TimeoutMs = 0; /* product infinite OPEN; soft single pass */
-            }
         }
 
         if (i64TimeoutMs > 0) {
@@ -2317,18 +3241,24 @@ protonrt_service(struct gj_linux_regs *pRegs, void *pCtx)
 
         u64J0 = timer_jiffies();
         for (u32Pass = 0;; u32Pass++) {
-            n = vfs_ram_epoll_wait((i64)pRegs->u64Arg0, aEv, nMax,
-                                   (int)i64TimeoutMs);
-            if (n != 0 || i64TimeoutMs <= 0 || u32SpinLeft == 0) {
+            n = vfs_ram_epoll_wait((i64)pRegs->u64Arg0, aEv, nMax, 0);
+            if (n != 0) {
+                break;
+            }
+            if (i64TimeoutMs == 0) {
                 break;
             }
             thread_yield();
-            if (u32SpinLeft > 0) {
-                u32SpinLeft--;
-            }
-            /* Hard soft cap ~320ms @ GJ_TIMER_HZ=100 (Soft!=product block). */
-            if ((timer_jiffies() - u64J0) > 32ull) {
-                break;
+            if (i64TimeoutMs > 0) {
+                if (u32SpinLeft > 0) {
+                    u32SpinLeft--;
+                }
+                if (u32SpinLeft == 0) {
+                    break;
+                }
+                if ((timer_jiffies() - u64J0) > 32ull) {
+                    break;
+                }
             }
             (void)u32Pass;
         }
@@ -2468,7 +3398,11 @@ protonrt_service(struct gj_linux_regs *pRegs, void *pCtx)
          * Accept vfs_ram + net_lo + net_tcp (prior lo-only rejected tcp with
          * -EBADF, same class as historical ioctl lo-only hole). Soft!=product.
          * F_GETFL/F_SETFL soft O_NONBLOCK table residual (parity FIONBIO).
-         * F_SETLK/F_GETLK/F_SETLKW via file_lock (ram only).
+         * Unused fd 0 F_GETFL/F_GETFD -> -EBADF so OpenSSH sanitise_stdfd
+         * open("/dev/null") lands on stdin (read(0) must not park on COM1).
+         * Unused fd 1/2 F_GETFL/F_GETFD -> success (O_RDWR) so sanitise
+         * leaves serial; write(1/2) already goes to serial_putchar.
+         * Dual DoD B OPEN. F_SETLK/F_GETLK/F_SETLKW via file_lock (ram only).
          * greppable: protonrt: soft fcntl residual lean
          * Dual DoD A/B OPEN; G-AC-1; not bar3.
          */
@@ -2476,25 +3410,102 @@ protonrt_service(struct gj_linux_regs *pRegs, void *pCtx)
         i64 i64Fd = (i64)pRegs->u64Arg0;
         int fRam;
         int fNet;
+        int fStdioSerial;
+        int fGetFlFd;
 
         fRam = vfs_ram_fd_ok(i64Fd) ? 1 : 0;
-        fNet = (net_lo_fd_ok(i64Fd) || net_tcp_fd_ok(i64Fd)) ? 1 : 0;
+        fNet = (net_lo_fd_ok(i64Fd) || net_tcp_fd_ok(i64Fd) ||
+                gj_linux_cold_fd_ok(i64Fd)) ? 1 : 0;
+        fStdioSerial = (i64Fd >= 0 && i64Fd <= 2 && fRam == 0 && fNet == 0)
+                           ? 1
+                           : 0;
+        fGetFlFd = (u32Cmd == (u32)LINUX_F_GETFD || u32Cmd == 1u ||
+                    u32Cmd == (u32)LINUX_F_GETFL || u32Cmd == 3u)
+                       ? 1
+                       : 0;
+        if (fGetFlFd != 0 && fStdioSerial != 0) {
+            if (i64Fd == 0) {
+                return -LINUX_EBADF;
+            }
+            protonrt_soft_inc(&g_u64PrtLeanFcntl);
+            if (u32Cmd == (u32)LINUX_F_GETFD || u32Cmd == 1u) {
+                return 0;
+            }
+            return (i64)LINUX_O_RDWR;
+        }
         if (fRam == 0 && fNet == 0) {
             return -LINUX_EBADF;
         }
         protonrt_soft_inc(&g_u64PrtLeanFcntl);
 
         if (u32Cmd == 0 /* F_DUPFD */ || u32Cmd == 1030 /* F_DUPFD_CLOEXEC */) {
+            i64 i64New;
+
             if (fRam == 0) {
                 return -LINUX_EBADF;
             }
-            return vfs_ram_dup_from(i64Fd, (i64)pRegs->u64Arg2);
+            i64New = vfs_ram_dup_from(i64Fd, (i64)pRegs->u64Arg2);
+            if (i64New >= 0 && u32Cmd == 1030u) {
+                i64 i64V = vfs_ram_fd_fl_get(i64New);
+
+                if (i64V >= 0) {
+                    (void)vfs_ram_fd_fl_set(i64New,
+                                            (u8)i64V | (u8)VFS_FD_FL_CLOEXEC);
+                }
+            }
+            return i64New;
         }
         if (u32Cmd == 1 /* F_GETFD */) {
-            goto fcntl_residual_once; /* FD_CLOEXEC off soft */
+            i64 i64Ret = 0;
+
+            if (fRam != 0) {
+                i64 i64V = vfs_ram_fd_fl_get(i64Fd);
+
+                if (i64V < 0) {
+                    return i64V;
+                }
+                if (((u8)i64V & (u8)VFS_FD_FL_CLOEXEC) != 0) {
+                    i64Ret = (i64)LINUX_FD_CLOEXEC;
+                }
+            }
+            if (g_fPrtSoftFcntlCloexecOnce == 0) {
+                g_fPrtSoftFcntlCloexecOnce = 1;
+                kprintf("protonrt: soft fcntl cloexec residual lean "
+                        "cmd=F_GETFD fd=%ld cloexec=%ld ram=%u "
+                        "Soft!=product g_ac_1=1 dual_dod_a=OPEN "
+                        "dual_dod_b=OPEN not_bar3=1\n",
+                        (long)i64Fd, (long)i64Ret, (unsigned)fRam);
+            }
+            return i64Ret;
         }
         if (u32Cmd == 2 /* F_SETFD */) {
-            goto fcntl_residual_once;
+            if (fRam != 0) {
+                i64 i64V = vfs_ram_fd_fl_get(i64Fd);
+                u8 u8V;
+
+                if (i64V < 0) {
+                    return i64V;
+                }
+                u8V = (u8)i64V;
+                if ((pRegs->u64Arg2 & (u64)LINUX_FD_CLOEXEC) != 0) {
+                    u8V |= (u8)VFS_FD_FL_CLOEXEC;
+                } else {
+                    u8V &= (u8)~VFS_FD_FL_CLOEXEC;
+                }
+                if (vfs_ram_fd_fl_set(i64Fd, u8V) != 0) {
+                    return -LINUX_EBADF;
+                }
+            }
+            if (g_fPrtSoftFcntlCloexecOnce == 0) {
+                g_fPrtSoftFcntlCloexecOnce = 1;
+                kprintf("protonrt: soft fcntl cloexec residual lean "
+                        "cmd=F_SETFD fd=%ld arg=0x%lx ram=%u "
+                        "Soft!=product g_ac_1=1 dual_dod_a=OPEN "
+                        "dual_dod_b=OPEN not_bar3=1\n",
+                        (long)i64Fd, (unsigned long)pRegs->u64Arg2,
+                        (unsigned)fRam);
+            }
+            return 0;
         }
         if (u32Cmd == (u32)LINUX_F_GETFL || u32Cmd == 3u /* F_GETFL */) {
             /*
@@ -2503,6 +3514,15 @@ protonrt_service(struct gj_linux_regs *pRegs, void *pCtx)
              */
             u32 u32Def = (fNet != 0) ? (u32)LINUX_O_RDWR : 0u;
             u32 u32Fl = protonrt_soft_fdfl_get(i64Fd, u32Def);
+
+            if (fRam != 0) {
+                i64 i64V = vfs_ram_fd_fl_get(i64Fd);
+
+                if (i64V >= 0 &&
+                    ((u8)i64V & (u8)VFS_FD_FL_NONBLOCK) != 0) {
+                    u32Fl |= (u32)LINUX_O_NONBLOCK;
+                }
+            }
 
             if (g_fPrtSoftFcntlOnce == 0) {
                 g_fPrtSoftFcntlOnce = 1;
@@ -2538,6 +3558,20 @@ protonrt_service(struct gj_linux_regs *pRegs, void *pCtx)
                 u32Keep |= (u32)LINUX_O_NONBLOCK;
             }
             protonrt_soft_fdfl_set(i64Fd, u32Keep);
+            if (fRam != 0) {
+                i64 i64V = vfs_ram_fd_fl_get(i64Fd);
+
+                if (i64V >= 0) {
+                    u8 u8V = (u8)i64V;
+
+                    if ((u32Keep & (u32)LINUX_O_NONBLOCK) != 0u) {
+                        u8V |= (u8)VFS_FD_FL_NONBLOCK;
+                    } else {
+                        u8V &= (u8)~VFS_FD_FL_NONBLOCK;
+                    }
+                    (void)vfs_ram_fd_fl_set(i64Fd, u8V);
+                }
+            }
             if (g_fPrtSoftFcntlOnce == 0) {
                 g_fPrtSoftFcntlOnce = 1;
                 /* Grep: protonrt: soft fcntl residual lean */
@@ -2586,7 +3620,6 @@ protonrt_service(struct gj_linux_regs *pRegs, void *pCtx)
             }
             return file_lock_set(i64Fd, &fl, u32Cmd == 7 /* SETLKW */);
         }
-    fcntl_residual_once:
         if (g_fPrtSoftFcntlOnce == 0) {
             g_fPrtSoftFcntlOnce = 1;
             /* Grep: protonrt: soft fcntl residual lean */
@@ -2896,9 +3929,11 @@ protonrt_service(struct gj_linux_regs *pRegs, void *pCtx)
         /*
          * sendfile(out, in, *off, count) residual lean (Soft!=product).
          * ram->ram via vfs_ram_sendfile; ram->net via bounce + cold_net
-         * send (sshd/file residual for Dual DoD cold ABI reach). G-AC-1.
+         * send (sshd/file leftover residual; Dual DoD B hop is kernel
+         * net_tcp → sshd.elf). G-AC-1.
          * greppable: protonrt: soft sendfile residual lean
-         * Dual DoD A/B OPEN; not freestanding wire; not bar3.
+         * Dual DoD A OPEN until host USB path; Dual DoD B OPEN until
+         * interactive SSH login; not freestanding wire; not bar3.
          */
         i64 i64Out = (i64)pRegs->u64Arg0;
         i64 i64In = (i64)pRegs->u64Arg1;
@@ -3478,11 +4513,12 @@ protonrt_service(struct gj_linux_regs *pRegs, void *pCtx)
         u64 u64Buf = pRegs->u64Arg0;
         u64 u64Size = pRegs->u64Arg1;
         size_t n = 0;
+        char *szCwd = protonrt_cwd_buf();
 
         if (u64Buf == 0 || u64Size < 2) {
             return -LINUX_EINVAL;
         }
-        while (g_szCwd[n] != '\0' && n + 1 < sizeof(g_szCwd)) {
+        while (szCwd[n] != '\0' && n + 1 < 96) {
             n++;
         }
         n++; /* include NUL */
@@ -3490,25 +4526,32 @@ protonrt_service(struct gj_linux_regs *pRegs, void *pCtx)
             return -LINUX_ERANGE;
         }
         if (user_range_ok(u64Buf, n)) {
-            if (copy_to_user(u64Buf, g_szCwd, n) != GJ_OK) {
+            if (copy_to_user(u64Buf, szCwd, n) != GJ_OK) {
                 return -LINUX_EFAULT;
             }
         } else {
-            memcpy((void *)(gj_vaddr_t)u64Buf, g_szCwd, n);
+            memcpy((void *)(gj_vaddr_t)u64Buf, szCwd, n);
         }
         /* Linux returns pointer on success for getcwd syscall */
         return (i64)u64Buf;
     }
 
     case LINUX_NR_dup:
-        return vfs_ram_dup((i64)pRegs->u64Arg0);
-
     case LINUX_NR_dup2:
-        return vfs_ram_dup2((i64)pRegs->u64Arg0, (i64)pRegs->u64Arg1);
+    case LINUX_NR_dup3: {
+        i64 i64St;
 
-    case LINUX_NR_dup3:
-        /* flags (CLOEXEC) ignored for bring-up */
+        /* Cold net first so dup2(accepted, 0/1/2) is not vfs EBADF. */
+        i64St = gj_linux_cold_dup2(pRegs);
+        if (i64St != -(i64)LINUX_EBADF) {
+            return i64St;
+        }
+        if (pRegs->u64Nr == LINUX_NR_dup) {
+            return vfs_ram_dup((i64)pRegs->u64Arg0);
+        }
+        /* dup3 flags (CLOEXEC) ignored for bring-up */
         return vfs_ram_dup2((i64)pRegs->u64Arg0, (i64)pRegs->u64Arg1);
+    }
 
     case LINUX_NR_readlinkat: {
         char aLink[64];
@@ -3689,6 +4732,37 @@ protonrt_service(struct gj_linux_regs *pRegs, void *pCtx)
                 *(i32 *)(gj_vaddr_t)pRegs->u64Arg1 = st;
             }
         }
+        /*
+         * wait4 rusage honesty (arg3): dash/zsh/tcsh wait3/wait4 + libc
+         * wait4() pass a struct rusage*. Prior residual ignored it (stack
+         * garbage). Zero-fill the public 144-byte x86_64 layout so scripts
+         * can detect success vs ENOSYS/garbage. Product child times OPEN.
+         * greppable: protonrt: soft wait4 rusage residual lean
+         * Soft!=product. G-AC-1. Dual DoD A/B OPEN.
+         */
+        if (r > 0 && pRegs->u64Arg3 != 0) {
+            u8 aRu[144];
+            u32 iRu;
+
+            for (iRu = 0; iRu < sizeof(aRu); iRu++) {
+                aRu[iRu] = 0;
+            }
+            if (user_range_ok(pRegs->u64Arg3, sizeof(aRu))) {
+                if (copy_to_user(pRegs->u64Arg3, aRu, sizeof(aRu)) != GJ_OK) {
+                    return -LINUX_EFAULT;
+                }
+            } else {
+                memset((void *)(gj_vaddr_t)pRegs->u64Arg3, 0, sizeof(aRu));
+            }
+            if (g_fPrtSoftWait4RusageOnce == 0) {
+                g_fPrtSoftWait4RusageOnce = 1;
+                kprintf("protonrt: soft wait4 rusage residual lean "
+                        "pid=%ld cb=144 zero=1 Soft!=product g_ac_1=1 "
+                        "dual_dod_a=OPEN dual_dod_b=OPEN "
+                        "product_path=UDX_DDI+hot_cold_ABI not_bar3=1\n",
+                        (long)r);
+            }
+        }
         if (r == -10) {
             return -LINUX_ECHILD;
         }
@@ -3709,7 +4783,6 @@ protonrt_service(struct gj_linux_regs *pRegs, void *pCtx)
         i64 i64Id = (i64)pRegs->u64Arg1;
         int nOpts = (int)pRegs->u64Arg3;
         u8 aInfo[128];
-        u32 i;
 
         pParent = protonrt_soft_parent();
         if (pParent != NULL) {
@@ -3735,22 +4808,10 @@ protonrt_service(struct gj_linux_regs *pRegs, void *pCtx)
         if (r <= 0) {
             return r;
         }
+        (void)nSiCode;
         if (pRegs->u64Arg2 != 0) {
-            for (i = 0; i < sizeof(aInfo); i++) {
-                aInfo[i] = 0;
-            }
-            /* si_signo=SIGCHLD(17), si_code, si_pid, si_status */
-            aInfo[0] = 17;
-            aInfo[4] = (u8)(nSiCode & 0xff);
-            {
-                u32 p = (u32)r;
-
-                aInfo[12] = (u8)(p & 0xffu);
-                aInfo[13] = (u8)((p >> 8) & 0xffu);
-                aInfo[14] = (u8)((p >> 16) & 0xffu);
-                aInfo[15] = (u8)((p >> 24) & 0xffu);
-            }
-            aInfo[24] = (u8)((st >> 8) & 0xffu);
+            linux_siginfo_sigchld_exited(aInfo, (u32)sizeof(aInfo), (u32)r,
+                                         (u32)((st >> 8) & 0xff));
             if (user_range_ok(pRegs->u64Arg2, sizeof(aInfo))) {
                 (void)copy_to_user(pRegs->u64Arg2, aInfo, sizeof(aInfo));
             } else {
@@ -3763,17 +4824,76 @@ protonrt_service(struct gj_linux_regs *pRegs, void *pCtx)
 
     case LINUX_NR_kill: {
         i64 i64Gate;
+        i64 i64Pid;
+        u32 u32Sig;
+        struct gj_linux_regs idRegs;
+        i64 i64Self;
+        i64 i64Pgid;
 
         /* Soft confine: PROC gates kill-shaped ambient ops. */
         i64Gate = confine_soft_promise_require(GJ_PROMISE_PROC);
         if (i64Gate != 0) {
             return i64Gate;
         }
-        /* Self-kill of pid 1/self -> allow as no-op for smoke */
-        if ((i64)pRegs->u64Arg0 <= 1) {
+        i64Pid = (i64)pRegs->u64Arg0;
+        u32Sig = (u32)pRegs->u64Arg1;
+        if (u32Sig > 0u && u32Sig < 64u) {
+            vfs_ram_signalfd_inject(u32Sig);
+        }
+        memset(&idRegs, 0, sizeof(idRegs));
+        i64Self = gj_linux_hot_getpid(&idRegs);
+        /* pid==1 / self: no-op. Product self-signal OPEN. */
+        if (i64Pid == 1 || (i64Self > 0 && i64Pid == i64Self)) {
             return 0;
         }
-        return -LINUX_ESRCH;
+        /* pid==0: own-pgrp broadcast accepted; do not walk pids. */
+        if (i64Pid == 0) {
+            return 0;
+        }
+        /*
+         * pid==-1: process-wide broadcast. Product broadcast OPEN.
+         * Fail-closed ESRCH (do not pretend every pid was signaled).
+         */
+        if (i64Pid == -1) {
+            return -LINUX_ESRCH;
+        }
+        if (i64Pid < 0) {
+            i64Pgid = gj_linux_hot_getpgid(&idRegs);
+            if (i64Pgid > 0 && (-i64Pid) == i64Pgid) {
+                return 0;
+            }
+            return -LINUX_ESRCH;
+        }
+        if (process_wait_pid_registered((u32)i64Pid) == 0) {
+            return -LINUX_ESRCH;
+        }
+        if (u32Sig == (u32)LINUX_SIGKILL || u32Sig == (u32)LINUX_SIGTERM) {
+            i64 i64St;
+
+            i64St = process_linux_exit_pid((u32)i64Pid, u32Sig);
+            if (g_fPrtSoftKillWaitOnce == 0) {
+                g_fPrtSoftKillWaitOnce = 1;
+                kprintf("protonrt: soft kill wait-child residual lean "
+                        "pid=%ld sig=%u st=%ld Soft!=product g_ac_1=1 "
+                        "dual_dod_a=OPEN dual_dod_b=OPEN "
+                        "sig_delivery=OPEN not_bar3=1\n",
+                        (long)i64Pid, u32Sig, (long)i64St);
+            }
+            if (i64St != 0) {
+                return -LINUX_ESRCH;
+            }
+            return 0;
+        }
+        /* Other signals: accepted, not delivered. Product sig delivery OPEN. */
+        if (g_fPrtSoftKillWaitOnce == 0) {
+            g_fPrtSoftKillWaitOnce = 1;
+            kprintf("protonrt: soft kill wait-child residual lean "
+                    "pid=%ld sig=%u accept_no_deliver=1 Soft!=product "
+                    "g_ac_1=1 dual_dod_a=OPEN dual_dod_b=OPEN "
+                    "sig_delivery=OPEN not_bar3=1\n",
+                    (long)i64Pid, u32Sig);
+        }
+        return 0;
     }
 
     case LINUX_NR_tkill:
@@ -3988,27 +5108,77 @@ protonrt_service(struct gj_linux_regs *pRegs, void *pCtx)
     case LINUX_NR_getrlimit:
     case LINUX_NR_setrlimit:
     case LINUX_NR_prlimit64: {
-        /* Bring-up: report generous soft/hard limits; ignore set. */
+        /*
+         * Resource-specific soft rlimits for dash/zsh/tcsh.
+         * NOFILE must not be 1 GiB (shells size fd tables from this).
+         * set/prlimit accept-and-ignore unless new pointer unreadable.
+         * Soft!=product. G-AC-1. Dual DoD A/B OPEN.
+         * greppable: protonrt: soft rlimit residual lean
+         */
         struct {
             u64 rlim_cur;
             u64 rlim_max;
         } lim;
+        struct {
+            u64 rlim_cur;
+            u64 rlim_max;
+        } ign;
         u64 u64New;
         u64 u64Old;
+        i32 i32Res;
 
         if (pRegs->u64Nr == LINUX_NR_prlimit64) {
+            i32Res = (i32)pRegs->u64Arg1;
             u64New = pRegs->u64Arg2;
             u64Old = pRegs->u64Arg3;
         } else if (pRegs->u64Nr == LINUX_NR_getrlimit) {
+            i32Res = (i32)pRegs->u64Arg0;
             u64New = 0;
             u64Old = pRegs->u64Arg1;
         } else {
+            i32Res = (i32)pRegs->u64Arg0;
             u64New = pRegs->u64Arg1;
             u64Old = 0;
         }
 
+        if (i32Res < 0 || i32Res > LINUX_RLIMIT_RTTIME) {
+            return -LINUX_EINVAL;
+        }
+        if (pRegs->u64Nr == LINUX_NR_setrlimit && u64New == 0) {
+            return -LINUX_EFAULT;
+        }
+        if (u64New != 0) {
+            if (user_range_ok(u64New, sizeof(ign))) {
+                if (copy_from_user(&ign, u64New, sizeof(ign)) != GJ_OK) {
+                    return -LINUX_EFAULT;
+                }
+            } else {
+                memcpy(&ign, (const void *)(gj_vaddr_t)u64New, sizeof(ign));
+            }
+            (void)ign; /* set ignored; product rlimit store OPEN */
+        }
+
         lim.rlim_cur = 1024ull * 1024ull * 1024ull; /* 1 GiB class */
         lim.rlim_max = lim.rlim_cur;
+        if (i32Res == LINUX_RLIMIT_NOFILE) {
+            lim.rlim_cur = 1024ull;
+            lim.rlim_max = 1024ull;
+        } else if (i32Res == LINUX_RLIMIT_NPROC) {
+            lim.rlim_cur = 256ull;
+            lim.rlim_max = 256ull;
+        } else if (i32Res == LINUX_RLIMIT_STACK) {
+            lim.rlim_cur = 8ull * 1024ull * 1024ull;
+            lim.rlim_max = lim.rlim_cur;
+        } else if (i32Res == LINUX_RLIMIT_CORE ||
+                   i32Res == LINUX_RLIMIT_NICE ||
+                   i32Res == LINUX_RLIMIT_RTPRIO) {
+            lim.rlim_cur = 0;
+            lim.rlim_max = 0;
+        } else if (i32Res == LINUX_RLIMIT_AS) {
+            lim.rlim_cur = LINUX_RLIM_INFINITY;
+            lim.rlim_max = LINUX_RLIM_INFINITY;
+        }
+
         if (u64Old != 0) {
             if (user_range_ok(u64Old, sizeof(lim))) {
                 if (copy_to_user(u64Old, &lim, sizeof(lim)) != GJ_OK) {
@@ -4018,7 +5188,15 @@ protonrt_service(struct gj_linux_regs *pRegs, void *pCtx)
                 memcpy((void *)(gj_vaddr_t)u64Old, &lim, sizeof(lim));
             }
         }
-        (void)u64New; /* set ignored */
+        if (g_fPrtSoftRlimitOnce == 0) {
+            g_fPrtSoftRlimitOnce = 1;
+            kprintf("protonrt: soft rlimit residual lean "
+                    "res=%d cur=%llu max=%llu Soft!=product g_ac_1=1 "
+                    "dual_dod_a=OPEN dual_dod_b=OPEN not_bar3=1\n",
+                    (int)i32Res,
+                    (unsigned long long)lim.rlim_cur,
+                    (unsigned long long)lim.rlim_max);
+        }
         return 0;
     }
 
@@ -4043,31 +5221,37 @@ protonrt_service(struct gj_linux_regs *pRegs, void *pCtx)
         } else if (vfs_ram_access(szPath, 0) != 0) {
             return -LINUX_ENOENT;
         }
-        n = 0;
-        while (szPath[n] != '\0' && n + 1 < sizeof(g_szCwd)) {
-            g_szCwd[n] = szPath[n];
-            n++;
-        }
-        g_szCwd[n] = '\0';
-        if (n == 0) {
-            g_szCwd[0] = '/';
-            g_szCwd[1] = '\0';
+        {
+            char *szCwd = protonrt_cwd_buf();
+
+            n = 0;
+            while (szPath[n] != '\0' && n + 1 < 96) {
+                szCwd[n] = szPath[n];
+                n++;
+            }
+            szCwd[n] = '\0';
+            if (n == 0) {
+                szCwd[0] = '/';
+                szCwd[1] = '\0';
+            }
         }
         return 0;
     }
 
     case LINUX_NR_fchdir: {
         size_t n;
+        char *szCwd;
 
         if (vfs_ram_fd_path((i64)pRegs->u64Arg0, szPath, sizeof(szPath)) != 0) {
             return -LINUX_EBADF;
         }
+        szCwd = protonrt_cwd_buf();
         n = 0;
-        while (szPath[n] != '\0' && n + 1 < sizeof(g_szCwd)) {
-            g_szCwd[n] = szPath[n];
+        while (szPath[n] != '\0' && n + 1 < 96) {
+            szCwd[n] = szPath[n];
             n++;
         }
-        g_szCwd[n] = '\0';
+        szCwd[n] = '\0';
         return 0;
     }
 
@@ -4111,7 +5295,8 @@ protonrt_service(struct gj_linux_regs *pRegs, void *pCtx)
          * Readiness via cold_net poll_mask then vfs_ram_poll_mask - same
          * residual as poll. Soft!=product. G-AC-1 userspace host reach.
          * Product multi-fd demux / infinite wait remains OPEN.
-         *   timeout==0 / NULL -> single readiness pass
+         *   timeout==0        -> single readiness pass
+         *   timeout NULL      -> yield until ready (Linux infinite)
          *   timeout>0         -> soft-spin yield + jiffies budget
          * greppable: protonrt: soft select residual lean
          * Never claims bar3 / Deck Top 50 / product DoD.
@@ -4133,6 +5318,7 @@ protonrt_service(struct gj_linux_regs *pRegs, void *pCtx)
         int fHaveR;
         int fHaveW;
         int fHaveE;
+        int fPark;
 
         protonrt_soft_inc(&g_u64PrtLeanSelect);
         if (pRegs->u64Arg0 > 1024ull) {
@@ -4195,9 +5381,11 @@ protonrt_service(struct gj_linux_regs *pRegs, void *pCtx)
 
         /*
          * Timeout: select timeval {sec,usec}; pselect6 timespec {sec,nsec}.
-         * Soft!=product: NULL / zero -> single pass; >0 soft-spin budget.
+         * Soft!=product: zero -> single pass; NULL -> infinite; >0 budget.
          */
-        if (pRegs->u64Arg4 != 0) {
+        if (pRegs->u64Arg4 == 0) {
+            i64TimeoutMs = -1;
+        } else {
             i64 i64Sec = 0;
             i64 i64Frac = 0;
 
@@ -4244,6 +5432,7 @@ protonrt_service(struct gj_linux_regs *pRegs, void *pCtx)
         u64J0 = timer_jiffies();
         for (u32Pass = 0;; u32Pass++) {
             u32Ready = 0;
+            fPark = 0;
             memset(aOutR, 0, sizeof(aOutR));
             memset(aOutW, 0, sizeof(aOutW));
             memset(aOutE, 0, sizeof(aOutE));
@@ -4272,6 +5461,9 @@ protonrt_service(struct gj_linux_regs *pRegs, void *pCtx)
                 if (u32Want == 0) {
                     continue;
                 }
+                if (vfs_ram_fd_poll_parkable((i64)u32Fd) != 0) {
+                    fPark = 1;
+                }
                 u32Got = protonrt_soft_fd_ready_mask((i64)u32Fd, u32Want);
                 if (fInR && (u32Got & (u32)LINUX_POLLIN) != 0) {
                     aOutR[u32Byte] |= u8Bit;
@@ -4289,14 +5481,28 @@ protonrt_service(struct gj_linux_regs *pRegs, void *pCtx)
                 }
             }
 
-            if (u32Ready != 0 || i64TimeoutMs <= 0 || u32SpinLeft == 0) {
+            if (u32Ready != 0) {
                 break;
+            }
+            if (i64TimeoutMs == 0) {
+                break;
+            }
+            if (i64TimeoutMs < 0) {
+                if (fPark != 0) {
+                    vfs_ram_poll_park();
+                } else {
+                    thread_yield();
+                }
+                (void)u32Pass;
+                continue;
             }
             thread_yield();
             if (u32SpinLeft > 0) {
                 u32SpinLeft--;
             }
-            /* Hard soft cap ~320ms @ GJ_TIMER_HZ=100 (Soft!=product block). */
+            if (u32SpinLeft == 0) {
+                break;
+            }
             if ((timer_jiffies() - u64J0) > 32ull) {
                 break;
             }
@@ -4647,11 +5853,12 @@ protonrt_service(struct gj_linux_regs *pRegs, void *pCtx)
 
     case LINUX_NR_fork: {
         /*
-         * Soft product-min: process_fork_soft when parent PCB available
-         * (links child for process_wait_soft reaping). Fallback linux_fork.
-         * greppable: protonrt: soft fork-wait wire PASS
+         * USER parent only (not g_pLinuxProc). LINUX in
+         * [0x1000000, 0x1800000) or [0x4000000, 0x5000000) gets a
+         * USER child via process_linux_fork; kernel smoke uses the
+         * death-worker fallback. greppable: protonrt: soft fork-wait wire PASS
          */
-        struct gj_process *pParent = protonrt_soft_parent();
+        struct gj_process *pParent = protonrt_linux_fork_parent();
 
         if (pParent != NULL) {
             protonrt_soft_fork_wait_wire_pass_once();
@@ -4660,26 +5867,64 @@ protonrt_service(struct gj_linux_regs *pRegs, void *pCtx)
         return process_linux_fork(1, 0);
     }
 
-    case LINUX_NR_vfork:
-        /* vfork: child runs first - mark zombie so parent wait sees exit */
-        return process_linux_fork(1, 1);
+    case LINUX_NR_vfork: {
+        /*
+         * Product vfork: runnable USER child (dash vforkexec / OpenSSH
+         * session). Shared-AS + parent-block until exec/exit remain OPEN.
+         * Kernel PE32 smoke still uses process_linux_fork(..., fExitNow=1).
+         */
+        struct gj_process *pParent = protonrt_linux_fork_parent();
+
+        if (pParent != NULL) {
+            protonrt_soft_fork_wait_wire_pass_once();
+            return process_fork_soft(pParent);
+        }
+        return process_linux_fork(1, 0);
+    }
 
     case LINUX_NR_clone:
     case LINUX_NR_clone3: {
         /*
-         * clone(flags, stack, ...): CLONE_THREAD -> same-pid thread spawn.
-         * Otherwise process_clone_soft when parent PCB available.
+         * clone(flags, stack, parent_tid, child_tid, tls) x86_64 public map.
+         * clone3: copy VER0 clone_args (stack+stack_size = SP).
+         * CLONE_THREAD -> same-pid thread spawn. Soft!=product.
          * greppable: protonrt: soft fork-wait wire PASS
          */
         u64 u64Flags = pRegs->u64Arg0;
+        u64 u64Stack = pRegs->u64Arg1;
+        u64 u64ParentTid = pRegs->u64Arg2;
+        u64 u64ChildTid = pRegs->u64Arg3;
+        u64 u64Tls = pRegs->u64Arg4;
         struct gj_process *pParent;
 
-        if (pRegs->u64Nr == LINUX_NR_clone3 && pRegs->u64Arg0 != 0) {
-            /* clone_args.flags at offset 0 */
-            if (user_range_ok(pRegs->u64Arg0, 8)) {
-                (void)copy_from_user(&u64Flags, pRegs->u64Arg0, 8);
+        if (pRegs->u64Nr == LINUX_NR_clone3) {
+            struct linux_clone_args args;
+            u64 cbArgs;
+
+            cbArgs = pRegs->u64Arg1;
+            if (pRegs->u64Arg0 == 0 || cbArgs < LINUX_CLONE_ARGS_SIZE_VER0) {
+                return -LINUX_EINVAL;
+            }
+            memset(&args, 0, sizeof(args));
+            if (cbArgs > (u64)sizeof(args)) {
+                cbArgs = (u64)sizeof(args);
+            }
+            if (user_range_ok(pRegs->u64Arg0, cbArgs)) {
+                if (copy_from_user(&args, pRegs->u64Arg0, cbArgs) != GJ_OK) {
+                    return -LINUX_EFAULT;
+                }
             } else {
-                u64Flags = *(const u64 *)(gj_vaddr_t)pRegs->u64Arg0;
+                memcpy(&args, (const void *)(gj_vaddr_t)pRegs->u64Arg0,
+                       (size_t)cbArgs);
+            }
+            u64Flags = args.u64Flags;
+            u64ParentTid = args.u64ParentTid;
+            u64ChildTid = args.u64ChildTid;
+            u64Tls = args.u64Tls;
+            if (args.u64Stack != 0 && args.u64StackSize != 0) {
+                u64Stack = args.u64Stack + args.u64StackSize;
+            } else {
+                u64Stack = args.u64Stack;
             }
         }
         if (u64Flags & GJ_CLONE_THREAD) {
@@ -4689,32 +5934,64 @@ protonrt_service(struct gj_linux_regs *pRegs, void *pCtx)
              * SYSCALL). Parent returns thread id; child starts with rax=0
              * (product: set child frame rax later).
              */
-            u64 u64Stack = pRegs->u64Arg1;
-            struct gj_process *pProc = g_pLinuxProc;
             struct gj_cpu *pCpu;
             struct gj_thread *pCur;
+            struct gj_process *pProc;
             u64 u64Entry;
             u32 thr;
 
             pCur = thread_current();
-            if (pProc == NULL && pCur != NULL) {
-                pProc = pCur->pProc;
-            }
+            pProc = protonrt_calling_user_proc();
             pCpu = cpu_current();
             u64Entry = (pCpu != NULL) ? pCpu->u64UserRip : 0;
+            if (u64Entry == 0 && pCur != NULL) {
+                if (pCur->u32SysUserValid != 0) {
+                    u64Entry = pCur->u64SysUserRip;
+                } else {
+                    u64Entry = pCur->u64UserRip;
+                }
+            }
             if (u64Stack != 0 && u64Entry != 0 && pProc != NULL) {
                 thr = thread_create_user(pProc, u64Entry, u64Stack);
                 if (thr != 0) {
+                    u32 u32Tid = thr;
+
+                    if ((u64Flags & LINUX_CLONE_PARENT_SETTID) != 0 &&
+                        u64ParentTid != 0) {
+                        if (user_range_ok(u64ParentTid, 4)) {
+                            (void)copy_to_user(u64ParentTid, &u32Tid, 4);
+                        } else {
+                            *(u32 *)(gj_vaddr_t)u64ParentTid = u32Tid;
+                        }
+                    }
+                    if ((u64Flags & LINUX_CLONE_CHILD_SETTID) != 0 &&
+                        u64ChildTid != 0) {
+                        if (user_range_ok(u64ChildTid, 4)) {
+                            (void)copy_to_user(u64ChildTid, &u32Tid, 4);
+                        } else {
+                            *(u32 *)(gj_vaddr_t)u64ChildTid = u32Tid;
+                        }
+                    }
+                    if ((u64Flags & LINUX_CLONE_CHILD_CLEARTID) != 0) {
+                        thread_set_clear_child_tid(thr, u64ChildTid);
+                    }
+                    if ((u64Flags & LINUX_CLONE_SETTLS) != 0) {
+                        thread_set_fs_base(thr, u64Tls);
+                    }
                     kprintf("linux: clone thread thr=%u entry=0x%lx\n", thr,
                             (unsigned long)u64Entry);
                     return (i64)thr;
                 }
                 return -11; /* EAGAIN */
             }
+            /* clone3 THREAD without stack is EINVAL (not a soft 0). */
+            if (pRegs->u64Nr == LINUX_NR_clone3) {
+                return -LINUX_EINVAL;
+            }
             /* No stack/entry (kernel-side smoke): soft success */
             return 0;
         }
-        pParent = protonrt_soft_parent();
+        pParent = protonrt_linux_fork_parent();
         if (pParent != NULL) {
             protonrt_soft_fork_wait_wire_pass_once();
             return process_clone_soft(pParent, u64Flags);
@@ -4744,13 +6021,39 @@ protonrt_service(struct gj_linux_regs *pRegs, void *pCtx)
         static u8 aInterp[65536];
         struct gj_elf_info elf;
         struct gj_elf_info elfInterp;
+        struct gj_process *pExec;
         /* Embedded product ld-gj (optional; prefer when vfs stub is tiny) */
         extern const u8 gj_ld_gj_elf_blob[];
         extern const u8 gj_ld_gj_elf_blob_end[];
 
+        pExec = protonrt_linux_exec_proc();
+        if (pExec == NULL) {
+            /*
+             * Kernel smoke only. A live LINUX user.ld parent (sshd/dash)
+             * must not exec into g_pLinuxProc; session child uses
+             * thread_exec_replace on its own PCB (0.1.140 #PF).
+             */
+            if (protonrt_linux_pcb_userld(g_pLastLinuxUserProc) != 0) {
+                return -LINUX_EAGAIN;
+            }
+            pExec = g_pLinuxProc;
+        }
         copy_path_from_arg(szPath, sizeof(szPath), u64Path);
         if (szPath[0] == '\0') {
             return -LINUX_EFAULT;
+        }
+        /*
+         * Dash /bin/sh and OpenSSH 10.5 sshd / sshd-session / sshd-auth
+         * are kernel embeds (g_aExecEmbed). vfs_ram 32KiB and aImg[16384]
+         * cannot hold DUT ELFs. Before vfs. thread_exec_replace only.
+         * Later-wall: sshd-session / sshd-auth never vfs 1-byte stubs.
+         */
+        {
+            i64 i64Emb = protonrt_exec_embed_try(pRegs, szPath);
+
+            if (i64Emb != 1) {
+                return i64Emb;
+            }
         }
         i64Fd = vfs_ram_open(szPath, 0);
         if (i64Fd < 0) {
@@ -4769,15 +6072,15 @@ protonrt_service(struct gj_linux_regs *pRegs, void *pCtx)
         n = vfs_ram_read(i64Fd, aImg, sizeof(aImg));
         (void)vfs_ram_close(i64Fd);
         if (n >= 4 && aImg[0] == 0x7fu && aImg[1] == (u8)'E' &&
-            aImg[2] == (u8)'L' && aImg[3] == (u8)'F' && g_pLinuxProc != NULL) {
+            aImg[2] == (u8)'L' && aImg[3] == (u8)'F' && pExec != NULL) {
             int fInterpLoaded = 0;
 
             if (elf_probe_image(aImg, (u64)n, &elf) != GJ_OK) {
                 return -8; /* ENOEXEC */
             }
-            g_pLinuxProc->u64InterpEntry = 0;
-            g_pLinuxProc->u32ExecFlags = elf.u32Flags;
-            g_pLinuxProc->cAuxv = 0;
+            pExec->u64InterpEntry = 0;
+            pExec->u32ExecFlags = elf.u32Flags;
+            pExec->cAuxv = 0;
             /* Resolve DT_NEEDED against vfs before map (ld-gj path) */
             if (elf.u16Needed > 0) {
                 u32 cRes = elf_resolve_needed_vfs(&elf);
@@ -4823,9 +6126,9 @@ protonrt_service(struct gj_linux_regs *pRegs, void *pCtx)
                             (unsigned long)cbEmbed);
                 }
                 if (nI >= 4 && aInterp[0] == 0x7fu &&
-                    elf_load_image(g_pLinuxProc, aInterp, (u64)nI, &elfInterp) ==
+                    elf_load_image(pExec, aInterp, (u64)nI, &elfInterp) ==
                         GJ_OK) {
-                    g_pLinuxProc->u64InterpEntry = elfInterp.u64Entry;
+                    pExec->u64InterpEntry = elfInterp.u64Entry;
                     fInterpLoaded = 1;
                     kprintf("linux: execve INTERP loaded entry=0x%lx%s\n",
                             (unsigned long)elfInterp.u64Entry,
@@ -4841,44 +6144,147 @@ protonrt_service(struct gj_linux_regs *pRegs, void *pCtx)
              * resolve across objects during main relocate.
              */
             {
-                u32 cSo = elf_load_needed_sos(g_pLinuxProc, &elf);
+                u32 cSo = elf_load_needed_sos(pExec, &elf);
 
-                g_pLinuxProc->cNeededLoaded = cSo;
+                pExec->cNeededLoaded = cSo;
                 if (cSo > 0) {
                     kprintf("linux: execve SO map PASS n=%u\n", cSo);
                 }
             }
-            if (elf_load_image(g_pLinuxProc, aImg, (u64)n, &elf) == GJ_OK) {
+            if (elf_load_image(pExec, aImg, (u64)n, &elf) == GJ_OK) {
                 size_t iPath;
 
-                g_pLinuxProc->u64ExecEntry = elf.u64Entry;
-                g_pLinuxProc->u64LoadBias = elf.u64Bias;
-                g_pLinuxProc->u32ExecFlags = elf.u32Flags;
+                pExec->u64ExecEntry = elf.u64Entry;
+                pExec->u64LoadBias = elf.u64Bias;
+                pExec->u32ExecFlags = elf.u32Flags;
                 /* Remember path for AT_EXECFN / ld-gj handoff */
-                for (iPath = 0; iPath + 1 < sizeof(g_pLinuxProc->szExecPath) &&
+                for (iPath = 0; iPath + 1 < sizeof(pExec->szExecPath) &&
                                 szPath[iPath] != '\0';
                      iPath++) {
-                    g_pLinuxProc->szExecPath[iPath] = szPath[iPath];
+                    pExec->szExecPath[iPath] = szPath[iPath];
                 }
-                g_pLinuxProc->szExecPath[iPath] = '\0';
-                elf_fill_auxv(g_pLinuxProc, &elf,
+                pExec->szExecPath[iPath] = '\0';
+                elf_fill_auxv(pExec, &elf,
                               fInterpLoaded ? &elfInterp : NULL);
-                if (elf_publish_handoff(g_pLinuxProc, szPath, &elf,
-                                        fInterpLoaded ? &elfInterp : NULL) ==
-                    GJ_OK) {
-                    kprintf("linux: execve handoff PASS\n");
-                    if (elf_ld_handoff_verify(g_pLinuxProc) == GJ_OK) {
-                        /* ld-gj: handoff PASS already printed */
+                {
+                    u64 u64Argv;
+                    u64 u64Envp;
+
+                    if (pRegs->u64Nr == LINUX_NR_execveat) {
+                        u64Argv = pRegs->u64Arg2;
+                        u64Envp = pRegs->u64Arg3;
+                    } else {
+                        u64Argv = pRegs->u64Arg1;
+                        u64Envp = pRegs->u64Arg2;
+                    }
+                    if (elf_publish_handoff_argv(
+                            pExec, szPath, &elf,
+                            fInterpLoaded ? &elfInterp : NULL, u64Argv,
+                            u64Envp) == GJ_OK) {
+                        kprintf("linux: execve handoff PASS\n");
+                        if (elf_ld_handoff_verify(pExec) == GJ_OK) {
+                            /* ld-gj: handoff PASS already printed */
+                        }
                     }
                 }
-                /* INTERP-first: entry=ld-gj, SP=handoff stack */
-                (void)elf_apply_interp_first(
-                    g_pLinuxProc, &elf, fInterpLoaded ? &elfInterp : NULL,
-                    GJ_LD_STACK_VA);
+                /*
+                 * USER execve (OpenSSH session child / dash): thread_exec_replace
+                 * only. Never thread_create_user (0.1.140 #PF I=1). Kernel
+                 * smoke may still spawn via elf_apply_interp_first.
+                 * greppable: linux: execve replace
+                 */
+                {
+                    struct gj_thread *pThr = thread_current();
+                    u64 u64Entry;
+                    u64 u64Stack = pExec->u64ExecStack;
+                    u32 cRepl;
+                    int fUser;
+
+                    if (fInterpLoaded != 0 && elfInterp.u64Entry != 0) {
+                        u64Entry = elfInterp.u64Entry;
+                    } else {
+                        u64Entry = elf.u64Entry;
+                    }
+                    pExec->u64StartEntry = u64Entry;
+                    fUser = (pThr != NULL && pThr->pProc == pExec &&
+                             protonrt_thr_is_user(pThr) != 0);
+                    if (fUser == 0 && pExec != NULL) {
+                        int fLo;
+                        int fChild;
+
+                        fLo = (protonrt_linux_text_lo(pExec->u64StartEntry) !=
+                                   0 ||
+                               protonrt_linux_text_lo(pExec->u64ExecEntry) !=
+                                   0 ||
+                               protonrt_linux_text_lo(pExec->u64UserSysRip) !=
+                                   0);
+                        fChild = (process_wait_pid_of(pExec) != 0 ||
+                                  pExec->u32StartThr != 0 ||
+                                  protonrt_linux_exec_proc() == pExec);
+                        /*
+                         * Fork USER child / LINUX [0x1000000, 0x1800000):
+                         * thread_exec_replace only (never thread_create_user;
+                         * 0.1.140 #PF I=1). g_pLinuxProc smoke stays
+                         * elf_apply_interp_first unless pcb_lo.
+                         */
+                        if (fLo != 0 ||
+                            (pExec != g_pLinuxProc && fChild != 0)) {
+                            if (fLo != 0 ||
+                                protonrt_linux_pcb_userld(pExec) != 0 ||
+                                protonrt_linux_user_text_ok(
+                                    pExec->u64StartEntry) != 0 ||
+                                protonrt_linux_user_text_ok(
+                                    pExec->u64ExecEntry) != 0 ||
+                                protonrt_linux_user_text_ok(
+                                    pExec->u64UserSysRip) != 0 ||
+                                pExec->u32StartThr != 0 ||
+                                process_wait_pid_of(pExec) != 0) {
+                                fUser = 1;
+                            }
+                        }
+                    }
+                    if (fUser != 0) {
+                        if (elf_stack_rsp_live_ok(u64Stack) == 0) {
+                            kprintf("linux: execve replace isolate "
+                                    "rip=0x%lx sp=0x%lx Soft!=product\n",
+                                    (unsigned long)u64Entry,
+                                    (unsigned long)u64Stack);
+                            return -LINUX_EAGAIN;
+                        }
+                        cRepl = protonrt_exec_replace_user(pExec, u64Entry,
+                                                           u64Stack);
+                        if (cRepl == 0) {
+                            kprintf("linux: execve replace isolate "
+                                    "rip=0x%lx sp=0x%lx Soft!=product\n",
+                                    (unsigned long)u64Entry,
+                                    (unsigned long)u64Stack);
+                            return -LINUX_EAGAIN;
+                        }
+                        kprintf("linux: execve replace rip=0x%lx sp=0x%lx\n",
+                                (unsigned long)u64Entry,
+                                (unsigned long)u64Stack);
+                    } else {
+                        /* Kernel smoke only. USER/fork child never here. */
+                        (void)elf_apply_interp_first(
+                            pExec, &elf,
+                            fInterpLoaded ? &elfInterp : NULL, u64Stack);
+                        if (elf_stack_rsp_live_ok(u64Stack) == 0) {
+                            kprintf("linux: execve replace isolate "
+                                    "rip=0x%lx sp=0x%lx Soft!=product\n",
+                                    (unsigned long)u64Entry,
+                                    (unsigned long)u64Stack);
+                        } else {
+                            kprintf("linux: execve replace rip=0x%lx "
+                                    "sp=0x%lx\n",
+                                    (unsigned long)u64Entry,
+                                    (unsigned long)u64Stack);
+                        }
+                    }
+                }
                 kprintf("linux: execve ELF entry=0x%lx start=0x%lx auxv=%u\n",
                         (unsigned long)elf.u64Entry,
-                        (unsigned long)g_pLinuxProc->u64StartEntry,
-                        g_pLinuxProc->cAuxv);
+                        (unsigned long)pExec->u64StartEntry,
+                        pExec->cAuxv);
                 if (elf.u32Flags & GJ_ELF_INFO_HAS_INTERP) {
                     kprintf("linux: execve INTERP PASS\n");
                 }
@@ -4888,14 +6294,18 @@ protonrt_service(struct gj_linux_regs *pRegs, void *pCtx)
                 if (elf.u32Flags & GJ_ELF_INFO_SYM_OK) {
                     kprintf("linux: execve SYM PASS\n");
                 }
-                if (g_pLinuxProc->cAuxv > 0) {
+                if (pExec->cAuxv > 0) {
                     kprintf("linux: execve auxv PASS\n");
                 }
                 return 0;
             }
             return -8; /* ENOEXEC */
         }
-        /* Non-ELF: soft success if path was openable */
+        /* Non-ELF: soft success if path was openable. Later-wall: never
+         * a 1-byte vfs stub as successful execve. */
+        if (protonrt_exec_later_wall_path(szPath) != 0) {
+            return -8;
+        }
         return 0;
     }
 
@@ -4929,7 +6339,9 @@ protonrt_service(struct gj_linux_regs *pRegs, void *pCtx)
     case LINUX_NR_close_range: {
         /*
          * close_range(first, last, flags): close inclusive fd range.
-         * Residual lean: cold_net close (tcp+lo soft clear) then vfs_ram.
+         * FDs are global: skip live net_tcp / net_lo so closefrom
+         * close_range(3,~0) cannot destroy listen :22 (fd 96).
+         * Still close vfs_ram in range. last cap 127.
          * Soft!=product. G-AC-1 userspace host reach.
          */
         u32 u32First = (u32)pRegs->u64Arg0;
@@ -4947,6 +6359,9 @@ protonrt_service(struct gj_linux_regs *pRegs, void *pCtx)
             struct gj_linux_regs sub;
             i64 i64St;
 
+            if (net_tcp_fd_ok((i64)i) || net_lo_fd_ok((i64)i)) {
+                continue;
+            }
             memset(&sub, 0, sizeof(sub));
             sub.u64Nr = LINUX_NR_close;
             sub.u64Arg0 = (u64)i;
@@ -4962,159 +6377,20 @@ protonrt_service(struct gj_linux_regs *pRegs, void *pCtx)
     }
 
     /*
-     * Soft module load path (Option C cold). Soft!=product .ko AC (G-AC-1).
-     * init_module(umod, len, uargs) / finit_module(fd, uargs, flags) /
-     * delete_module(name, flags). Bounce <=2 MiB -> load_mem + init_call.
-     * greppable: protonrt: soft init_module|finit_module|delete_module PASS|FAIL
+     * Abandoned in-kernel .ko AC (G-AC-1). Product drivers = UDX.
+     * greppable: protonrt: soft init_module|finit_module|delete_module ENOSYS
      */
-    case LINUX_NR_init_module: {
-        /* init_module(void *umod, unsigned long len, const char *uargs) */
-        u64 u64Umod = pRegs->u64Arg0;
-        u64 u64Len = pRegs->u64Arg1;
-        size_t cb;
-        void *pBounce;
-        gj_paddr_t paBounce = 0;
-        u32 cPages = 0;
-        i64 i64R;
-        char szName[GJ_SOFT_MODULE_NAME_MAX];
+    case LINUX_NR_init_module:
+        (void)pRegs;
+        return soft_mod_load_and_init(NULL, 0, NULL);
 
-        (void)pRegs->u64Arg2; /* uargs soft-ignored (params OPEN) */
-        if (u64Umod == 0 || u64Len == 0) {
-            kprintf("protonrt: soft init_module FAIL\n");
-            return -LINUX_EINVAL;
-        }
-        if (u64Len > (u64)GJ_SOFT_MODULE_BOUNCE_MAX) {
-            kprintf("protonrt: soft init_module FAIL\n");
-            return -LINUX_EFBIG;
-        }
-        cb = (size_t)u64Len;
-        pBounce = soft_mod_bounce_alloc(cb, &paBounce, &cPages);
-        if (pBounce == NULL) {
-            kprintf("protonrt: soft init_module FAIL\n");
-            return -LINUX_ENOMEM;
-        }
-        if (user_range_ok(u64Umod, (u64)cb)) {
-            if (copy_from_user(pBounce, u64Umod, cb) != GJ_OK) {
-                soft_mod_bounce_free(paBounce, cPages);
-                kprintf("protonrt: soft init_module FAIL\n");
-                return -LINUX_EFAULT;
-            }
-        } else {
-            /* Kernel-smoke pointer path */
-            memcpy(pBounce, (const void *)(gj_vaddr_t)u64Umod, cb);
-        }
-        (void)strlcpy(szName, "softmod", sizeof(szName));
-        i64R = soft_mod_load_and_init(pBounce, cb, szName);
-        soft_mod_bounce_free(paBounce, cPages);
-        if (i64R != 0) {
-            kprintf("protonrt: soft init_module FAIL\n");
-            return i64R;
-        }
-        kprintf("protonrt: soft init_module PASS\n");
-        return 0;
-    }
+    case LINUX_NR_finit_module:
+        (void)pRegs;
+        return soft_mod_load_and_init(NULL, 0, NULL);
 
-    case LINUX_NR_finit_module: {
-        /*
-         * finit_module(int fd, const char *uargs, int flags)
-         * vfs_ram fd only: read file -> bounce <=2 MiB -> load_mem + init_call.
-         */
-        i64 i64Fd = (i64)pRegs->u64Arg0;
-        size_t cb = 0;
-        size_t cbGot = 0;
-        void *pBounce;
-        gj_paddr_t paBounce = 0;
-        u32 cPages = 0;
-        i64 i64R;
-        i64 i64N;
-        char szPath[96];
-        char szName[GJ_SOFT_MODULE_NAME_MAX];
-        u8 aStat[144];
-        i64 i64Size = 0;
-
-        (void)pRegs->u64Arg1; /* uargs soft-ignored */
-        (void)pRegs->u64Arg2; /* flags soft-ignored */
-        if (i64Fd < 0 || !vfs_ram_fd_ok(i64Fd)) {
-            kprintf("protonrt: soft finit_module FAIL\n");
-            return -LINUX_EBADF;
-        }
-        /* Size from fstat st_size (Linux x86_64 layout offset 48). */
-        memset(aStat, 0, sizeof(aStat));
-        i64R = vfs_ram_fstat(i64Fd, aStat, sizeof(aStat));
-        if (i64R != 0) {
-            kprintf("protonrt: soft finit_module FAIL\n");
-            return i64R;
-        }
-        memcpy(&i64Size, aStat + 48, sizeof(i64Size));
-        if (i64Size <= 0) {
-            /* Empty or unknown: try read until cap (soft). */
-            i64Size = (i64)GJ_SOFT_MODULE_BOUNCE_MAX;
-        }
-        if ((u64)i64Size > (u64)GJ_SOFT_MODULE_BOUNCE_MAX) {
-            kprintf("protonrt: soft finit_module FAIL\n");
-            return -LINUX_EFBIG;
-        }
-        cb = (size_t)i64Size;
-        pBounce = soft_mod_bounce_alloc(cb, &paBounce, &cPages);
-        if (pBounce == NULL) {
-            kprintf("protonrt: soft finit_module FAIL\n");
-            return -LINUX_ENOMEM;
-        }
-        /* Rewind soft; product preserves offset OPEN. */
-        (void)vfs_ram_lseek(i64Fd, 0, 0);
-        while (cbGot < cb) {
-            i64N = vfs_ram_read(i64Fd, (u8 *)pBounce + cbGot, cb - cbGot);
-            if (i64N < 0) {
-                soft_mod_bounce_free(paBounce, cPages);
-                kprintf("protonrt: soft finit_module FAIL\n");
-                return i64N;
-            }
-            if (i64N == 0) {
-                break;
-            }
-            cbGot += (size_t)i64N;
-        }
-        if (cbGot == 0u) {
-            soft_mod_bounce_free(paBounce, cPages);
-            kprintf("protonrt: soft finit_module FAIL\n");
-            return -LINUX_EINVAL;
-        }
-        szPath[0] = '\0';
-        (void)vfs_ram_fd_path(i64Fd, szPath, sizeof(szPath));
-        soft_mod_name_from_path(szName, sizeof(szName), szPath);
-        i64R = soft_mod_load_and_init(pBounce, cbGot, szName);
-        soft_mod_bounce_free(paBounce, cPages);
-        if (i64R != 0) {
-            kprintf("protonrt: soft finit_module FAIL\n");
-            return i64R;
-        }
-        kprintf("protonrt: soft finit_module PASS\n");
-        return 0;
-    }
-
-    case LINUX_NR_delete_module: {
-        /* delete_module(const char *name, int flags) - soft exit_call if loaded */
-        char szName[GJ_SOFT_MODULE_NAME_MAX];
-        i64 i64R;
-
-        (void)pRegs->u64Arg1; /* flags soft-ignored */
-        copy_path_from_arg(szName, sizeof(szName), pRegs->u64Arg0);
-        if (szName[0] == '\0') {
-            kprintf("protonrt: soft delete_module FAIL\n");
-            return -LINUX_ENOENT;
-        }
-        if (!linux_module_loaded(szName)) {
-            kprintf("protonrt: soft delete_module FAIL\n");
-            return -LINUX_ENOENT;
-        }
-        i64R = linux_module_exit_call(szName);
-        if (i64R != 0) {
-            kprintf("protonrt: soft delete_module FAIL\n");
-            return soft_mod_st_to_linux(i64R);
-        }
-        kprintf("protonrt: soft delete_module PASS\n");
-        return 0;
-    }
+    case LINUX_NR_delete_module:
+        (void)pRegs;
+        return -(i64)LINUX_ENOSYS;
 
     default:
         break;

@@ -20,7 +20,7 @@
 #   After pack this script prints: expected panel "STATUS (static) v…"
 #   Soft!=product: stamp confirms which image is flashed — not product PASS.
 #   Stamp residual: pack never bumps GJ_IMAGE_VERSION (reads KERNEL.ELF only).
-#   Fly bar is config.h (current: 0.1.97 (semver; 0.2.0 when net works)). Bump only on real flash cuts.
+#   Fly bar is config.h (current: 0.1.178; 0.2.0 reserved). Bump only on real flash cuts.
 #
 # Soft residual deepen (C2 scripts residual Soft!=product; G-AC-1;
 # dual MIT OR Apache-2.0; Dual DoD A/B OPEN; stamp-free residual):
@@ -32,7 +32,7 @@
 #   freestanding residual — class SKIP default (not Dual DoD close)
 #   Dual DoD residual    — A (xhci_udx USB) / B (rtl8168_udx NIC+sshd wire) OPEN
 #   honesty residual     — pack PASS != product TX/RX/BOT != bar3 != Dual DoD
-#   product honesty      — Soft!=product on hwtest img: media pack != L3 close
+#   product honesty      — Soft!=product on hwtest img: media pack != Dual DoD close
 #   stamp residual       — image_version from KERNEL.ELF only (no bump here)
 # greppable: make-hwtest-img: soft residual dual_dod
 # greppable: make-hwtest-img: soft residual product=UDX+ABI
@@ -140,13 +140,17 @@ echo "make-hwtest-img: stage-udx-drivers dual-land ESP+GJ-PERSIST (UDX hosts)...
 ./scripts/stage-udx-drivers.sh "$esp_dir" "$persist_dir" >/dev/null 2>&1 || \
 	echo "make-hwtest-img: soft-miss stage-udx dual-land (hosts may SKIP; Soft!=product)" >&2
 
-# Soft ensure sshd.elf on ESP user/ when build artifact exists (DUT pack path).
-# Kernel also embeds sshd for live spawn; staged ELF is operator dual path.
-# Soft!=product: pack/embed sshd.elf != Dual DoD B close (needs UDX NIC wire).
-if [ ! -f "$esp_dir/EFI/GREENJADE/user/sshd.elf" ] && [ -f build/user/sshd.elf ]; then
-	mkdir -p "$esp_dir/EFI/GREENJADE/user"
-	cp -f build/user/sshd.elf "$esp_dir/EFI/GREENJADE/user/sshd.elf"
-	echo "make-hwtest-img: soft ensure user/sshd.elf staged (Soft!=product; not Dual DoD B)"
+# OpenSSH DUT on ESP user/sshd.elf when stage-esp left it empty.
+# Same ELF as kernel .incbin (build/openssh-dut/sshd). Never copy
+# abandoned sshd_gj (build/user/sshd.elf). Soft!=product: pack != Dual DoD B.
+if [ ! -f "$esp_dir/EFI/GREENJADE/user/sshd.elf" ]; then
+	if [ -f build/openssh-dut/sshd ]; then
+		mkdir -p "$esp_dir/EFI/GREENJADE/user"
+		cp -f build/openssh-dut/sshd "$esp_dir/EFI/GREENJADE/user/sshd.elf"
+		echo "make-hwtest-img: soft ensure user/sshd.elf from build/openssh-dut/sshd (Soft!=product; not Dual DoD B)"
+	else
+		echo "make-hwtest-img: warn: skip user/sshd.elf (no build/openssh-dut/sshd; sshd_gj not packed)" >&2
+	fi
 fi
 
 # Option 2: prebuilt Steam tree onto GJ-PERSIST (primary durable payload)
@@ -210,9 +214,9 @@ Steam (option 2 — no dpkg on GreenJade)
   On stick:  steam/STATUS (READY or SKELETON), steam/usr/bin/steam when READY
 
 SSH remote debug (Grok / operator)
-  Freestanding sshd.elf is default-on at boot (embed + staged user/sshd.elf).
-  Soft listen :22 / pack PASS != Dual DoD B close (product :22 on laptop
-  wire closes only via UDX NIC path rtl8168_udx). Soft!=product · G-AC-1.
+  sshd_gj is abandoned (not embedded). Product SSH is OpenSSH-portable;
+  DUT sshd.elf is staged only when that ELF exists. Pack PASS != Dual DoD B
+  (close = host interactive SSH login). Soft!=product · G-AC-1.
   Lab-host OpenSSH remains for serial bridge:
 
     sudo /path/to/knano/scripts/hwtest-ssh-setup.sh
@@ -384,13 +388,8 @@ if [ -d build/linux-drivers ]; then
 	esp_fw=0
 	esp_fw_n=0
 	fw_plain="build/linux-drivers/firmware_plain/rtl_nic"
-	if [ ! -d "$fw_plain" ] || [ -z "$(ls -A "$fw_plain"/rtl8168*.fw 2>/dev/null || true)" ]; then
-		# Best-effort decompress from staged .xz if embed script not yet run
-		if [ -x scripts/embed-linux-fw.sh ] || [ -f scripts/embed-linux-fw.sh ]; then
-			chmod +x scripts/embed-linux-fw.sh 2>/dev/null || true
-			./scripts/embed-linux-fw.sh >/dev/null 2>&1 || true
-		fi
-	fi
+	# Do not run embed-linux-fw.sh — it rewrites kernel/ sources
+	# (abandoned in-kernel fw embed). ESP fw copy is optional.
 	if [ -d "$fw_plain" ]; then
 		for f in "$fw_plain"/rtl8168*.fw; do
 			[ -f "$f" ] || continue
@@ -468,8 +467,8 @@ UDX product hosts (userspace; Soft!=product · G-AC-1 — pack != TX/RX/BOT):
       GJ-PERSIST: drivers/ (dual-land mirror) + drivers/MANIFEST.txt
       Prefer: make drivers-udx before make hwtest-img
 sshd pack path (Soft!=product — pack/embed != Dual DoD B close):
-      ESP user/sshd.elf (staged) + KERNEL embed live spawn default-on :22
-      Product laptop :22 closes only via UDX NIC (rtl8168_udx) wire proof
+      ESP user/sshd.elf (OpenSSH DUT when present; sshd_gj abandoned)
+      Dual DoD B close is host interactive SSH login (rtl8168_udx hop)
 Freestanding class SKIP (default; residual opt-in only — not product):
       kernel rtl8168 / xhci_msc · GJ_RTL8168_PROBE=0 · GJ_XHCI_MSC_PROBE=0
 Linux modules (host-collected; Soft!=product; G-AC-1):
@@ -844,7 +843,7 @@ if [ "$ddi_pack" = "SKIP" ] || [ "$rtl_pack" = "SKIP" ] || [ "$xhci_pack" = "SKI
 	echo "make-hwtest-img: udx soft-miss (run make drivers-udx then re-pack; Soft!=product)" >&2
 fi
 if [ "$sshd_pack" = "SKIP" ]; then
-	echo "make-hwtest-img: sshd soft-miss user/sshd.elf absent (make sshd-gj; Soft!=product)" >&2
+	echo "make-hwtest-img: sshd SKIP (sshd_gj abandoned; OpenSSH DUT not staged)" >&2
 fi
 
 # Thin rootfs-full snapshot on ESP (sbin/bin/usr/lib/etc — no opt/steam bulk)
@@ -1029,8 +1028,8 @@ echo "  Steam:  docs/STEAM_HWTEST.md  (make steam-fetch for READY tree)"
 echo "  Note:   READY/media != Steam client run; Top-50 remains NOT-TRIED"
 echo "  Soft!=product: image version stamp != product complete != bar3 close"
 echo "  Soft!=product · G-AC-1: UDX pack != product TX/RX/BOT; freestanding class not product"
-echo "  Soft!=product: sshd pack/embed PASS != Dual DoD B close (needs UDX NIC wire)"
-echo "  Dual DoD: A/B OPEN (UDX USB/NIC) — pack != Dual DoD close; L3 host probes required"
+echo "  Soft!=product: sshd pack/embed PASS != Dual DoD B close (close = interactive SSH login)"
+echo "  Dual DoD: A OPEN until USB path; B OPEN until interactive SSH login — pack != close"
 echo "make-hwtest-img: soft residual dual_dod A=OPEN B=OPEN product_udx=1 freestanding_skip=1"
 echo "make-hwtest-img: soft residual udx pack ddi_host=${ddi_pack} rtl8168_udx=${rtl_pack} xhci_udx=${xhci_pack}"
 echo "make-hwtest-img: soft residual udx dual_land=${dual_land}"

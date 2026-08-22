@@ -7,8 +7,8 @@
 | **License** | **MIT OR Apache-2.0** — **no GPL**, no Linux source |
 | **Role** | Userspace **Dual DoD B** product residual host vs [libudx](../../udx/) |
 | **QEMU T0 net** | **virtio-net** on QEMU/CI. Laptop wire is this UDX host |
-| **Dual DoD B** | **OPEN** until host **sshd :22**. **L3 ARP + ping proven** (2026-08-14) on lab **10.200.125.50** |
-| **Fly bar** | Match kernel `GJ_IMAGE_VERSION` (**STATUS (static) v0.1.136**) |
+| **Dual DoD B** | **OPEN** until host **interactive SSH login**. Banner / :22 / ARP / ping / PK_OK / SUCCESS ≠ close. **L3 ARP + ping proven** (2026-08-14) on lab **10.200.125.50** |
+| **Fly bar** | Match kernel `GJ_IMAGE_VERSION` (**STATUS (static) v0.1.184**; packed, not host-probed). Dual DoD **A/B OPEN**. **0.2.0** reserved |
 
 ## Honesty (read first)
 
@@ -17,7 +17,7 @@ This tree is the **Linux-shaped userspace NIC host** for Dual DoD **B** (hot+col
 | Rule | Meaning |
 |------|---------|
 | **product=UDX+ABI** | Product NIC path = userspace Linux-shaped host over UDX/DDI (MMIO/IRQ/DMA **caps**), not freestanding `.c` in kernel |
-| **freestanding SKIP** | `kernel/drv/rtl8168.c` default **SKIP** (`GJ_RTL8168_PROBE=0`) — lab only, **not** product |
+| **freestanding SKIP** | `abandoned/kernel/drv/rtl8168.c` default **SKIP** (`GJ_RTL8168_PROBE=0`) — not linked, **not** product |
 | **Soft!=product** | Soft residual lamps / catalogs / soft MAP-IRQ-DMA != product wire ownership |
 | **G-AC-1** | No Linux `.ko` runs in kernel as product AC |
 
@@ -33,7 +33,7 @@ This tree is the **Linux-shaped userspace NIC host** for Dual DoD **B** (hot+col
 - **bind != wire**: host inject / freestanding `bind_by_id` residual is not wire handoff. Userspace probe residual **never claims freestanding wire**.
 - **Product direction:** this UDX host (plus ABI/DDI caps) is the laptop NIC path. Freestanding rtl is **SKIP by default** (`GJ_RTL8168_PROBE=0`) — not product.
 - Lean residual: **no version stamp**, no multi-KiB kprintf floods, no stamp storms.
-- Soft residual stages still dominate host inject demos. **Laptop L3 ARP/ping is proven**; Dual DoD B remains **OPEN** until sshd **:22** (agent≠close).
+- Soft residual stages still dominate host inject demos. **Laptop L3 ARP/ping is proven**; Dual DoD B remains **OPEN** until host **interactive SSH login** (agent≠close).
 - Is **not** in-kernel `r8169.ko` product (**G-AC-1**).
 - Greppable soft lamps are **not** HCL product close and **not** bar3.
 
@@ -69,7 +69,7 @@ Greppable product lamps (≠ Dual DoD B close):
 | `rtl8168_udx: product l2 poll inject_fail` | ETH_INJECT n≤0 once-lamp (still re-arms) |
 | `rtl8168_udx: product l2 poll tx_own_stuck` | TX frame ready but desc Own stuck |
 
-**Soft≠product. Dual DoD B L3 ARP/ping proven on DUT (2026-08-14). Dual DoD B stays OPEN until sshd :22 host banner. Never claim Dual DoD closed from lamps alone.**
+**Soft≠product. Dual DoD B L3 ARP/ping proven on DUT (2026-08-14). Dual DoD B stays OPEN until host interactive SSH login. Banner ≠ close. Never claim Dual DoD closed from lamps alone.**
 
 **RX desc residual (public 8168/8111B-class):** Own fill advertises `Buffer_Size` = page (4096, ×8) matching FORCE32 DMA (glass FOVW had `opts0=0x80000800` = OWN+2 KiB while page was 4 KiB); EOR only on last slot; opts2 zeroed; store-barrier+clflush before TE\|RE. When Own clears, bits 13:0 are `Frame_Length` (includes FCS) — reclaim strips 4 B before inject; RES skips inject. Soft≠product; Dual DoD B OPEN.
 
@@ -150,7 +150,7 @@ T0 product NIC on GreenJade remains **virtio-net**. Real NIC product path is **u
 
 - IDs from **public PCI** (`vendor 0x10ec`, `device 0x8168`).
 - Register **names** only from **public** Realtek documentation / widely published maps (e.g. `IntrStatus`, `IntrMask`, `ChipCmd`, `TxConfig`, `RxConfig`, `TNPDS`, `RDSAR`).
-- **Do not** paste Linux `r8169.c`, Realtek GPL out-of-tree blobs, or GreenJade `kernel/drv/rtl8168.c`.
+- **Do not** paste Linux `r8169.c`, Realtek GPL out-of-tree blobs, or GreenJade `abandoned/kernel/drv/rtl8168.c`.
 - Caps / IOMMU / hard IRQ stay inside UDX — never minted in this driver.
 
 ## BAR note (soft)
@@ -295,12 +295,12 @@ API: `udx_host_inject_pci(0x10ec, 0x8168, bus, devfn, irq, aBarLen, aBarMem, &pP
 - No MSI-X product path
 - No claim of G752VT LAN product support / Dual DoD B **closed**
 - No in-kernel `r8169.ko` product AC (**G-AC-1**)
-- Lab L3 ARP/ping **proven** (2026-08-14). sshd **:22** still DUT residual — dual_dod_b=**OPEN**
+- Lab L3 ARP/ping **proven** (2026-08-14). Dual DoD B **OPEN** until host **interactive SSH login**. Banner / :22 / PK_OK / SUCCESS ≠ close.
 
 **License:** MIT OR Apache-2.0 only — **no GPL**, no Linux source paste.
 
-*Userspace UDX host for laptop NIC class IDs — product=UDX+ABI; freestanding product=SKIP; Soft!=product; G-AC-1; product_program/own_handoff/l2_poll write on real_ddi+gate; laptop ARP/ping L3 proven; Dual DoD B OPEN until sshd :22; QEMU T0 remains virtio.*
+*Userspace UDX host for laptop NIC class IDs — product=UDX+ABI; freestanding product=SKIP; Soft!=product; G-AC-1; product_program/own_handoff/l2_poll write on real_ddi+gate; laptop ARP/ping L3 proven; Dual DoD B OPEN until interactive SSH login; QEMU T0 remains virtio.*
 
 ---
 
-**Project:** GreenJade · Soft≠product · Dual DoD A/B **OPEN**. [root README](../../../README.md). Support: [Patreon — TheOldDog](https://www.patreon.com/cw/TheOldDog).
+**Project:** GreenJade · Soft≠product · Dual DoD A **OPEN** until host USB path · Dual DoD B **OPEN** until interactive SSH login. [root README](../../../README.md). Support: [Patreon — TheOldDog](https://www.patreon.com/cw/TheOldDog).

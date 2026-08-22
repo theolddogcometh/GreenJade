@@ -21,9 +21,9 @@
  *
  * Non-goals
  * ---------
- * Floating strtod/strtof (SSE/ABI policy may omit doubles on some paths);
- * full multibyte conversion (see <wchar.h>). drand48/erand48 omitted when
- * double returns need SSE under SysV — integer rand48 remains.
+ * Full C99 hex-float / locale numeric; strtod is decimal + exponent bring-up
+ * for OpenSSH convtime. Full multibyte conversion lives in <wchar.h>.
+ * drand48/erand48 are declared; implementations live in rand48.c / batch88.
  *
  * Soft residual lean (this unit; Soft!=product; G-AC-1; Dual DoD A/B OPEN):
  *   - freelist heap + env/exit bring-up; soft float conversion residual
@@ -119,7 +119,15 @@ int    rand(void);
 int    rand_r(unsigned int *pSeed);
 void   srandom(unsigned int uSeed);
 long   random(void);
-struct random_data;
+struct random_data {
+    int32_t *fptr;
+    int32_t *rptr;
+    int32_t *state;
+    int      rand_type;
+    int      rand_deg;
+    int      rand_sep;
+    int32_t *end_ptr;
+};
 int    srandom_r(unsigned int uSeed, struct random_data *pBuf);
 int    random_r(struct random_data *pBuf, int32_t *pResult);
 char  *initstate(unsigned int uSeed, char *szState, size_t n);
@@ -145,8 +153,8 @@ const char *gnu_get_libc_release(void);
 /* gnu_get_libc_* implemented in graph_batch12.c */
 
 /*
- * POSIX rand48 integer APIs. drand48/erand48 omitted: double return needs
- * SSE under SysV ABI on some freestanding configs.
+ * POSIX rand48. Integer paths in rand48.c; drand48/erand48 in graph_batch88
+ * (libcgj -msse2 SysV double return). Dual DoD B OPEN.
  */
 struct drand48_data;
 void   srand48(long nSeed);
@@ -156,7 +164,11 @@ long   lrand48(void);
 long   nrand48(unsigned short aXsubi[3]);
 long   mrand48(void);
 long   jrand48(unsigned short aXsubi[3]);
-/* drand48/erand48 omitted: double return needs SSE under SysV ABI */
+double drand48(void);
+double erand48(unsigned short aXsubi[3]);
+int    drand48_r(struct drand48_data *pBuf, double *pResult);
+int    erand48_r(unsigned short aXsubi[3], struct drand48_data *pBuf,
+                 double *pResult);
 int    srand48_r(long nSeed, struct drand48_data *pBuf);
 int    seed48_r(unsigned short aSeed16v[3], struct drand48_data *pBuf);
 int    lcong48_r(unsigned short aParam[7], struct drand48_data *pBuf);
@@ -178,6 +190,24 @@ long   strtol(const char *sz, char **ppEnd, int nBase);
 unsigned long strtoul(const char *sz, char **ppEnd, int nBase);
 long long strtoll(const char *sz, char **ppEnd, int nBase);
 unsigned long long strtoull(const char *sz, char **ppEnd, int nBase);
+double strtod(const char *sz, char **ppEnd);
+float  strtof(const char *sz, char **ppEnd);
+long double strtold(const char *sz, char **ppEnd);
+double atof(const char *sz);
+double __isoc99_strtod(const char *sz, char **ppEnd);
+float  __isoc99_strtof(const char *sz, char **ppEnd);
+long double __isoc99_strtold(const char *sz, char **ppEnd);
+double __isoc23_strtod(const char *sz, char **ppEnd);
+float  __isoc23_strtof(const char *sz, char **ppEnd);
+long double __isoc23_strtold(const char *sz, char **ppEnd);
+#ifndef MB_CUR_MAX
+#define MB_CUR_MAX 4
+#endif
+int    mblen(const char *pS, size_t n);
+int    mbtowc(wchar_t *pWc, const char *pS, size_t n);
+int    wctomb(char *pS, wchar_t wc);
+size_t mbstowcs(wchar_t *pDst, const char *szSrc, size_t cLen);
+size_t wcstombs(char *pDst, const wchar_t *szSrc, size_t cb);
 /* C23 binary-compatible aliases (same semantics as strto* above) */
 long   __isoc23_strtol(const char *sz, char **ppEnd, int nBase);
 unsigned long __isoc23_strtoul(const char *sz, char **ppEnd, int nBase);
@@ -207,6 +237,7 @@ int      grantpt(int nFd);
 int      unlockpt(int nFd);
 char    *ptsname(int nFd);
 int      ptsname_r(int nFd, char *szBuf, size_t cb);
+int      getpt(void); /* GNU: posix_openpt(O_RDWR|O_NOCTTY) */
 
 /* Internal: seed environ from aux stack (called by __libc_start_main). */
 void   _libcgj_env_init(char **envp);

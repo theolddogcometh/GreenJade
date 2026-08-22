@@ -34,15 +34,51 @@ cp -f build/GreenJade.efi "$out/EFI/BOOT/BOOTX64.EFI"
 cp -f build/greenjade.elf "$out/EFI/GREENJADE/KERNEL.ELF"
 
 # Freestanding userspace ELFs for product tree (ESP payload; kernel embeds
-# still provide boot live-spawn for init/shell/sshd/scsi_mid/hda_client/…)
+# still provide boot live-spawn for init/shell/scsi_mid/hda_client/…)
+# Product SSH is OpenSSH-portable DUT — do not copy abandoned sshd_gj
+# (build/user/sshd.elf). Dual DoD B OPEN.
 user_n=0
-for f in init.elf shell.elf sessiond.elf netstackd.elf sshd.elf storaged.elf \
+for f in init.elf dash.elf shell.elf sessiond.elf netstackd.elf storaged.elf \
          vfsd.elf scsi_mid.elf hda_client.elf; do
     if [ -f "build/user/$f" ]; then
         cp -f "build/user/$f" "$out/EFI/GREENJADE/user/$f"
         user_n=$((user_n + 1))
     fi
 done
+# Never leave abandoned sshd_gj as user/sshd.elf (prior ESP / build/user).
+rm -f "$out/EFI/GREENJADE/user/sshd.elf"
+# OpenSSH DUT = build/openssh-dut/sshd (kernel .incbin of the same ELF).
+# Stage as user/sshd.elf and rootfs-shaped usr/sbin + libexec helpers.
+# Missing DUT ELFs: warn only — KERNEL.ELF must still pack. Dual DoD B OPEN.
+mkdir -p "$out/EFI/GREENJADE/usr/sbin" "$out/EFI/GREENJADE/usr/libexec"
+sshd_src=""
+if [ -f build/openssh-dut/sshd ]; then
+    sshd_src=build/openssh-dut/sshd
+fi
+if [ -n "$sshd_src" ]; then
+    cp -f "$sshd_src" "$out/EFI/GREENJADE/user/sshd.elf"
+    chmod +x "$out/EFI/GREENJADE/user/sshd.elf"
+    user_n=$((user_n + 1))
+    cp -f "$sshd_src" "$out/EFI/GREENJADE/usr/sbin/sshd"
+    chmod +x "$out/EFI/GREENJADE/usr/sbin/sshd"
+else
+    echo "stage-esp: warn: missing build/openssh-dut/sshd (OpenSSH DUT; Dual DoD B OPEN)" >&2
+fi
+if [ -f build/openssh-dut/sshd-session ]; then
+    cp -f build/openssh-dut/sshd-session "$out/EFI/GREENJADE/usr/libexec/sshd-session"
+    chmod +x "$out/EFI/GREENJADE/usr/libexec/sshd-session"
+else
+    echo "stage-esp: warn: missing build/openssh-dut/sshd-session (OpenSSH DUT; Dual DoD B OPEN)" >&2
+fi
+if [ -f build/openssh-dut/sshd-auth ]; then
+    cp -f build/openssh-dut/sshd-auth "$out/EFI/GREENJADE/usr/libexec/sshd-auth"
+    chmod +x "$out/EFI/GREENJADE/usr/libexec/sshd-auth"
+else
+    echo "stage-esp: warn: missing build/openssh-dut/sshd-auth (OpenSSH DUT; Dual DoD B OPEN)" >&2
+fi
+if [ -f build/user/sshd.elf ]; then
+    echo "stage-esp: warn: ignoring build/user/sshd.elf (abandoned sshd_gj; not product SSH)" >&2
+fi
 # Cold personality + UDX driver-host artifacts (soft; missing OK).
 # Prefer first: make drivers-udx personality-gj
 #   → build/user/personality.elf
@@ -56,7 +92,7 @@ done
 #   on EFI/GREENJADE/drivers/{ddi_host,rtl8168_udx,xhci_udx}. Soft-miss OK.
 #   Dual DoD A/B OPEN — staged UDX pack != product TX/RX/BOT != bar3.
 #   Stamp-free: IMAGE_VERSION from KERNEL.ELF only (never hardcode flash bar).
-#   Bar honesty v2026.08.04.75 panel context only — never invent .76.
+#   Bar honesty v0.1.182 packed, not host-probed — never invent next N.
 #
 # Soft residual deepen (C2 scripts residual Soft!=product; G-AC-1;
 # Dual DoD A/B OPEN; stamp-free residual):
@@ -64,9 +100,9 @@ done
 #   udx pack residual    — stage-udx-drivers harvest ddi_host/rtl/xhci
 #   dual_land residual   — ESP drivers/ + optional persist mirror (W10 denser)
 #   freestanding residual — class SKIP default (not Dual DoD close)
-#   Dual DoD residual    — A/B OPEN until DUT proof
+#   Dual DoD residual    — A/B OPEN until USB path / interactive SSH login
 #   honesty residual     — stage PASS != product TX/RX/BOT != bar3 != Dual DoD
-#   stamp residual       — IMAGE_VERSION from KERNEL.ELF only; no invent .76
+#   stamp residual       — IMAGE_VERSION from KERNEL.ELF only; no invent next N
 # greppable: stage-esp: soft residual dual_dod
 # greppable: stage-esp: soft residual product=UDX+ABI
 # greppable: stage-esp: soft residual freestanding class SKIP
@@ -177,9 +213,14 @@ Manual ESP copy:
 2. Copy this tree onto the ESP:
      EFI/BOOT/BOOTX64.EFI
      EFI/GREENJADE/KERNEL.ELF
-     EFI/GREENJADE/user/*.elf   (init, shell, sessiond, netstackd, sshd,
+     EFI/GREENJADE/user/*.elf   (init, shell, sessiond, netstackd,
                                  storaged, vfsd, scsi_mid, hda_client,
+                                 sshd.elf = OpenSSH DUT when present,
                                  personality.elf when built)
+     EFI/GREENJADE/usr/sbin/sshd
+     EFI/GREENJADE/usr/libexec/sshd-session
+     EFI/GREENJADE/usr/libexec/sshd-auth
+         (OpenSSH DUT when build/openssh-dut present; not sshd_gj)
      EFI/GREENJADE/lib/*        (ld-gj, libcgj libc.so.6, libgj-so/gnu)
      EFI/GREENJADE/drivers/*    (UDX hosts: ddi_host, rtl8168_udx, xhci_udx,
                                  udx_skeleton; make drivers-udx)
@@ -187,7 +228,8 @@ Manual ESP copy:
      EFI/GREENJADE/LAPTOP.txt   (G752VT USB boot steps)
 3. Firmware boot: select "EFI Boot" / BOOTX64.EFI (or set BootOrder).
 4. Expect serial: GJ-EFI, KERNEL.ELF loaded, M0 OK; soft product markers
-   (sshd/scsi_mid/hda_client live spawn) when embeds run.
+   (scsi_mid/hda_client live spawn) when embeds run. OpenSSH DUT is
+   staged; kernel sshd live spawn remains SKIP until embed. Dual DoD B OPEN.
 5. Soft-scan a serial capture (always exit 0):
      ./scripts/gj-product-summary.sh logs/serial-….txt
    Hard product keys (exit 1 on miss):
@@ -201,8 +243,10 @@ Bring-up status (product surface — honest):
   - Multiboot SMP + OVMF UEFI + stage-esp + install-img / hwtest-img
   - PE32/CS32 int80 Wine surface + Hybrid Linux x86_64 ABI (Option C)
   - ELF dynlinker: INTERP-first, ld-gj, multi-SO SysV/GNU hash+bloom
-  - Product embeds: sshd (default-on :22), scsi_mid, hda_client (kernel
-    multi-stream PASS != Steam audio)
+  - OpenSSH DUT staged (usr/sbin/sshd + libexec helpers); kernel live
+    spawn still SKIP until embed; Dual DoD B OPEN
+  - Product embeds: scsi_mid, hda_client (kernel multi-stream PASS !=
+    Steam audio)
   - ESP packages freestanding user ELFs + lib/ + UDX drivers/ hosts
   - Freestanding class (rtl8168 / xhci_msc) default SKIP — product = UDX
   - Soft!=product · G-AC-1: staged hosts != TX/RX/BOT != bar3; no .ko product AC
@@ -224,6 +268,10 @@ EOF
     echo "  EFI/GREENJADE/INSTALL.txt DRIVERS.txt LAPTOP.txt"
     echo "  EFI/GREENJADE/user/"
     ls -la "$out/EFI/GREENJADE/user/" 2>/dev/null || true
+    if [ -d "$out/EFI/GREENJADE/usr" ]; then
+        echo "  EFI/GREENJADE/usr/sbin + usr/libexec (OpenSSH DUT)"
+        ls -la "$out/EFI/GREENJADE/usr/sbin" "$out/EFI/GREENJADE/usr/libexec" 2>/dev/null || true
+    fi
     if [ -d "$out/EFI/GREENJADE/drivers" ]; then
         echo "  EFI/GREENJADE/drivers/"
         ls -la "$out/EFI/GREENJADE/drivers/" 2>/dev/null || true
@@ -243,7 +291,7 @@ if [ ! -f "$out/EFI/GREENJADE/user/init.elf" ]; then
 fi
 # Soft inventory: product ELFs present vs missing (do not hard-fail optional)
 soft_miss=""
-for f in shell.elf sshd.elf scsi_mid.elf hda_client.elf sessiond.elf \
+for f in dash.elf shell.elf scsi_mid.elf hda_client.elf sessiond.elf \
          netstackd.elf storaged.elf vfsd.elf; do
     if [ ! -f "$out/EFI/GREENJADE/user/$f" ]; then
         soft_miss="${soft_miss} $f"
@@ -318,7 +366,7 @@ echo "stage-esp: soft residual product=UDX+ABI product_host=ddi_host+rtl8168_udx
 echo "stage-esp: soft residual freestanding class SKIP"
 echo "stage-esp: soft residual dual_dod A=OPEN B=OPEN (stage PASS != Dual DoD close)"
 echo "stage-esp: soft residual panel=${_img_title} (stamp-free RO; Soft!=product)"
-echo "stage-esp: soft residual stamp-free (bar honesty v2026.08.04.75; NEVER bump GJ_IMAGE_VERSION; no invent .76)"
+echo "stage-esp: soft residual stamp-free (bar honesty v0.1.182 packed, not host-probed; NEVER bump GJ_IMAGE_VERSION; no invent next N)"
 echo "  Soft!=product: stamp confirms flash identity only (not product PASS / bar3)"
 echo "  Soft!=product · G-AC-1: UDX pack != product TX/RX/BOT; freestanding class not product"
 echo "  Dual DoD A/B OPEN (UDX); stamp-free IMAGE_VERSION from KERNEL.ELF only"

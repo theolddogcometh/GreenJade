@@ -2,7 +2,8 @@
  * SPDX-License-Identifier: MIT OR Apache-2.0
  * Copyright (c) 2026 Project GreenJade contributors
  *
- * IPv4 TCP over virtio-net + loopback pairs for product sshd / netstackd.
+ * IPv4 TCP over virtio-net, UDX L2 (ETH_INJECT / ETH_TX_PULL), and
+ * loopback pairs for product sshd / netstackd.
  * Pure C11, dual-licensed (MIT OR Apache-2.0). Soft!=product · G-AC-1.
  *
  * Features: SYN handshake, ordered RX, multi-segment TX, advertised window,
@@ -40,8 +41,8 @@
  *
  * C1 residual deepen (Soft!=product; Dual DoD OPEN; agent!=close):
  *   class=C1 lab dual DoD residual for sshd :22 over stack + soft listen.
- *   dual_dod_a=OPEN dual_dod_b=OPEN product_sshd_tcp22=OPEN until DUT host
- *   banner + UDX owns wire. freestanding_class=SKIP (no freestanding rtl
+ *   dual_dod_a=OPEN dual_dod_b=OPEN product_sshd_tcp22=OPEN until host
+ *   interactive SSH login. Banner != login. freestanding_class=SKIP (no freestanding rtl
  *   R0 product track). Soft residual lean once self-check catalogs socket
  *   path + H1 thr-only poll + thrash-strip + multi-seg bulk + lab_ip/:22.
  *   Soft residual != Dual DoD close. stamp-free · G-AC-1 · no GPL.
@@ -53,18 +54,18 @@
  *   stack (never IRQ). Dual DoD A/B remain OPEN (agent!=close).
  *   STRONGER denser wire22 residual: multi-arm :22 listen/accept path honesty
  *   (ensure|listen|acceptq|accept|accept_eagain_heal|eth_estab_rehook|
- *   listen_close_rehook|poll|poll_mask). product_sshd_tcp22=OPEN until DUT.
+ *   listen_close_rehook|poll|poll_mask). product_sshd_tcp22=OPEN until interactive SSH login.
  *   denser arms: h1_poll|listen22|accept22|rehook_heal|dual_dod_open|
  *   product_sshd_open. Soft residual != Dual DoD close. H2 once (no stamp
  *   storms). Soft!=product.
  *   Denser H1 thr-only sublocks (thr|stack|stamp) + denser path sublocks
  *   (ensure|listen|acceptq|accept|heal|rehook). H1 eth poll from door thr only
- *   (net_tcp_poll never IRQ). Dual DoD OPEN.
+ *   (net_tcp_poll never IRQ). Dual DoD OPEN until interactive SSH login.
  *   greppable: net_tcp: soft residual wire22 | wire_handoff+tcp22
  *   greppable: net_tcp: soft residual wire22 denser | denser=1 | denser_arms
- *   greppable: stack=eth|tcp|door|:22 | W11 Dual DoD B FUNCTIONAL
- *   greppable: listen_accept_path_honesty | until_DUT | H2=once
- *   greppable: product_sshd_tcp22=OPEN | dual_dod_b=OPEN | until_DUT
+ *   greppable: stack=eth|tcp|door|:22 | W11 Dual DoD B FUNCTIONAL leftover MAP
+ *   greppable: listen_accept_path_honesty | leftover MAP | H2=once
+ *   greppable: product_sshd_tcp22=OPEN | dual_dod_b=OPEN | leftover MAP
  *   greppable: denser_h1_sub | denser_path_sub | thr-only door eth poll
  *
  * Multi-segment TX (product / netstackd 3000 B bulk smoke):
@@ -118,6 +119,7 @@
  * greppable: stamp-free bar v2026.08.04.75 | never invent .76
  */
 #include <gj/klog.h>
+#include <gj/net_door.h>
 #include <gj/net_l2.h>
 #include <gj/net_tcp.h>
 #include <gj/string.h>
@@ -224,7 +226,7 @@
  * denser wire22 :22 listen/accept path honesty residual (ensure|listen|
  * acceptq|accept|accept_eagain_heal|eth_estab_rehook|listen_close_rehook) ·
  * multi-arm denser=1 (h1_poll|listen22|accept22|rehook_heal|dual_dod_open|
- * product_sshd_open) · product_sshd_tcp22=OPEN until DUT honesty ·
+ * product_sshd_open) · product_sshd_tcp22=OPEN until interactive SSH login ·
  * H2 once wire22 residual. Soft!=product · G-AC-1 · agent!=close · Dual DoD OPEN.
  */
 #define TCP_SOFT_DEEPEN_AREAS 82u
@@ -232,12 +234,12 @@
  * C1 residual lean self-check arm count (static contract; Soft!=product).
  * Not a version/wave stamp. Dual DoD A/B remain OPEN (agent!=close).
  * W11: +1 wire handoff + :22 stack residual arm (denser multi-arm listen/accept
- * path honesty; product_sshd_tcp22=OPEN until DUT; H2 once).
+ * path honesty; product_sshd_tcp22=OPEN until interactive SSH login; H2 once).
  */
 #define TCP_LEAN_CHECKS 11u
 /*
  * W11 Dual DoD B denser wire22 residual (Soft!=product; Dual DoD OPEN;
- * product_sshd_tcp22=OPEN until DUT; stamp-free bar v2026.08.04.75; never .76).
+ * product_sshd_tcp22=OPEN until interactive SSH login; stamp-free bar leftover).
  * Multi-arm denser for soft :22 listen/accept path honesty over eth|tcp|door.
  * H1 thr-only net_tcp_poll (run-loop / door thr only; never IRQ). agent!=close.
  * Arms: h1_poll | listen22 | accept22 | rehook_heal | dual_dod_open |
@@ -271,7 +273,7 @@ typedef char tcp_soft_poll_stamp_lean[(TCP_SOFT_POLL_STAMP_MAX > 0u &&
 				       TCP_SOFT_POLL_STAMP_MAX <= 2u)
 					  ? 1
 					  : -1];
-/* W11 denser wire22 compile-true (Soft!=product Dual DoD OPEN until DUT). */
+/* W11 denser wire22 compile-true (Soft!=product Dual DoD OPEN until interactive SSH login). */
 typedef char tcp_wire22_stack[(TCP_WIRE22_STACK == 1u &&
 			       TCP_SOFT_SSH_PORT == 22u) ? 1 : -1];
 typedef char tcp_wire22_dense[(TCP_WIRE22_DENSE == 1u &&
@@ -306,38 +308,9 @@ typedef char tcp_wire22_lean_n[(TCP_LEAN_CHECKS == 11u) ? 1 : -1];
 #define FL_PSH 0x08
 #define FL_ACK 0x10
 
-/* Synced from net_l2 (virtio QEMU or rtl8168 lab static). */
+/* Synced from net_l2 (virtio QEMU, rtl8168 lab static, or UDX lab pin). */
 static u8 g_aOurMac[6] = { 0x52, 0x54, 0x00, 0x12, 0x34, 0x56 };
 static u8 g_aOurIp[4] = { 10, 0, 2, 15 };
-
-/*
- * Pull guest IP/MAC from net_l2 whenever a backend is selected.
- * Ready==0 (handoff pending / not up) still exposes the programmed lab IP
- * so SYN demux does not compare against stale QEMU 10.0.2.15 on rtl8168.
- * On rtl8168, force lab 10.200.125.50 if L2 returned something else (bind
- * path and eth demux must never use SLIRP 10.0.2.15 on G752). Soft!=product.
- */
-static void
-tcp_sync_l2_identity(void)
-{
-	if (net_l2_backend() != GJ_NET_L2_NONE) {
-		net_l2_mac(g_aOurMac);
-		net_l2_ip(g_aOurIp);
-	} else if (net_l2_ready() != 0) {
-		net_l2_mac(g_aOurMac);
-		net_l2_ip(g_aOurIp);
-	}
-	/* rtl lab: never demux/bind against stale QEMU guest IP. Soft!=product. */
-	if (net_l2_backend() == GJ_NET_L2_RTL8168) {
-		if (g_aOurIp[0] != TCP_LAB_IP0 || g_aOurIp[1] != TCP_LAB_IP1 ||
-		    g_aOurIp[2] != TCP_LAB_IP2 || g_aOurIp[3] != TCP_LAB_IP3) {
-			g_aOurIp[0] = TCP_LAB_IP0;
-			g_aOurIp[1] = TCP_LAB_IP1;
-			g_aOurIp[2] = TCP_LAB_IP2;
-			g_aOurIp[3] = TCP_LAB_IP3;
-		}
-	}
-}
 
 /* True if dest IPv4 is lab 10.200.125.50 (Dual DoD B). Soft!=product. */
 static int
@@ -352,7 +325,7 @@ tcp_ip_is_lab(const u8 *pIp4)
 		   : 0;
 }
 
-/* Force g_aOurIp to lab static (G752 freestanding demux). Soft!=product. */
+/* Force g_aOurIp to lab static (G752 / UDX lab demux). Soft!=product. */
 static void
 tcp_force_lab_ip(void)
 {
@@ -363,11 +336,51 @@ tcp_force_lab_ip(void)
 }
 
 /*
- * Soft demux residual: is IPv4 dest ours for freestanding eth?
+ * Product UDX L2 live: backend=none + ETH_UDX_READY (net_l2_ready).
+ * Freestanding rtl SKIP default. Soft!=product Dual DoD B.
+ */
+static int
+tcp_udx_l2_live(void)
+{
+	return (net_l2_backend() == GJ_NET_L2_NONE && net_l2_ready() != 0)
+		   ? 1
+		   : 0;
+}
+
+/*
+ * Pull guest IP/MAC from net_l2 whenever a backend is selected or UDX L2
+ * is live (ETH_UDX_READY under freestanding rtl SKIP). Ready==0 (handoff
+ * pending / not up) still exposes the programmed lab IP so SYN demux does
+ * not compare against stale QEMU 10.0.2.15. Force lab 10.200.125.50 on
+ * rtl / UDX / already-lab so bind + eth demux never stick on SLIRP.
+ * Soft!=product.
+ */
+static void
+tcp_sync_l2_identity(void)
+{
+	if (net_l2_backend() != GJ_NET_L2_NONE) {
+		net_l2_mac(g_aOurMac);
+		net_l2_ip(g_aOurIp);
+	} else if (net_l2_ready() != 0) {
+		net_l2_mac(g_aOurMac);
+		net_l2_ip(g_aOurIp);
+	}
+	/* Lab pin: rtl residual, UDX L2, or already-lab identity. Soft!=product. */
+	if (net_l2_backend() == GJ_NET_L2_RTL8168 || tcp_udx_l2_live() != 0 ||
+	    tcp_ip_is_lab(g_aOurIp) != 0) {
+		if (g_aOurIp[0] != TCP_LAB_IP0 || g_aOurIp[1] != TCP_LAB_IP1 ||
+		    g_aOurIp[2] != TCP_LAB_IP2 || g_aOurIp[3] != TCP_LAB_IP3) {
+			tcp_force_lab_ip();
+		}
+	}
+}
+
+/*
+ * Soft demux residual: is IPv4 dest ours for eth / UDX inject?
  * Dual DoD B - dest lab 10.200.125.50 always accepted (force identity)
  * so host SYN is not dropped when L2 still surfaces QEMU 10.0.2.15
- * mid-handoff or after R0->RX return. rtl / lab-identity path forces
- * lab then rechecks. No kprintf (lean hot path). Soft!=product.
+ * mid-handoff or after R0->RX return. rtl / UDX / lab-identity path
+ * forces lab then rechecks. No kprintf (lean hot path). Soft!=product.
  * Returns 1 = accept frame into TCP demux, 0 = not ours.
  */
 static int
@@ -377,8 +390,8 @@ tcp_dest_is_ours(const u8 *pDip)
 		return 0;
 	}
 	/*
-	 * Lab dest always ours on freestanding Dual DoD B path - force
-	 * identity so SYN-ACK / banner TX use 10.200.125.50, not SLIRP.
+	 * Lab dest always ours on Dual DoD B path - force identity so
+	 * SYN-ACK / banner TX use 10.200.125.50, not SLIRP.
 	 */
 	if (tcp_ip_is_lab(pDip) != 0) {
 		tcp_force_lab_ip();
@@ -389,11 +402,11 @@ tcp_dest_is_ours(const u8 *pDip)
 		return 1;
 	}
 	/*
-	 * rtl or already-lab identity: force 10.200.125.50 then recheck
-	 * so frames arriving while L2 still reports QEMU guest IP still
-	 * demux when dest is the lab static. Soft!=product.
+	 * rtl / UDX / already-lab: force 10.200.125.50 then recheck so
+	 * ETH_INJECT frames still demux when dest is the lab static.
+	 * Soft!=product.
 	 */
-	if (net_l2_backend() == GJ_NET_L2_RTL8168 ||
+	if (net_l2_backend() == GJ_NET_L2_RTL8168 || tcp_udx_l2_live() != 0 ||
 	    tcp_ip_is_lab(g_aOurIp) != 0) {
 		tcp_force_lab_ip();
 		if (memcmp(pDip, g_aOurIp, 4) == 0 ||
@@ -781,9 +794,10 @@ tcp_soft_print(int fForce)
  * thrash-strip rtx bounds + multi-seg bulk room + soft stamp caps + lab
  * :22 / lab_ip honesty + W11 wire handoff + multi-arm denser :22
  * listen/accept path honesty residual. Soft residual != Dual DoD close
- * (agent!=close). product_sshd_tcp22=OPEN until DUT. H2 once (no stamp
- * storms). No version/wave stamp. G-AC-1 · freestanding_class=SKIP.
- * stamp-free bar v2026.08.04.75; never invent .76.
+ * (agent!=close). product_sshd_tcp22=OPEN until interactive SSH login.
+ * Packed SUCCESS wait is leftover MAP, not Dual DoD B close. H2 once
+ * (no stamp storms). No version/wave stamp. G-AC-1 · freestanding_class=SKIP.
+ * stamp-free bar leftover MAP (not THIS-cut fly v0.1.178).
  * greppable: net_tcp: soft residual lean
  * greppable: net_tcp: soft residual wire22 | wire_handoff+tcp22
  * greppable: net_tcp: soft residual wire22 denser | denser=1 | denser_arms
@@ -1001,7 +1015,7 @@ tcp_soft_residual_lean_once(void)
 		u32W22Dod = 1u;
 		u32W22Dense++;
 	}
-	/* arm5: product_sshd_tcp22=OPEN until DUT (Soft!=product; G-AC-1). */
+	/* arm5: product_sshd_tcp22=OPEN until interactive SSH login. */
 	if (TCP_WIRE22_DENSE == 1u && TCP_SOFT_SSH_PORT == 22u &&
 	    TCP_WIRE22_DENSE_MIN == TCP_WIRE22_DENSE_ARMS &&
 	    u32SshPortOk != 0u && u32LabIpOk != 0u) {
@@ -1464,6 +1478,13 @@ tcp_tx_raw(u32 s, u8 flags, u32 seq, const u8 *pPay, u32 cbPay)
 		return -1;
 	}
 	tcp_sync_l2_identity();
+	/*
+	 * Wire TX is not virtio-only. net_l2_ready covers virtio T0, rtl
+	 * residual, and product UDX L2 (backend=none + ETH_UDX_READY) so
+	 * SYN-ACK enqueues ETH_TX_PULL the same way ICMP echo replies do.
+	 * virtio_net_ready is a T0 fallback if L2 init lags probe.
+	 * Soft!=product Dual DoD B.
+	 */
 	if (net_l2_ready() == 0 && !virtio_net_ready()) {
 		return -1;
 	}
@@ -1555,79 +1576,33 @@ tcp_tx(u32 s, u8 flags, const u8 *pPay, u32 cbPay)
 	int r;
 
 	/*
-	 * Coalesce (banner-once correctness): eth data already soft-armed
-	 * or unacked in-flight (banner under TX ring full / ARP-ICMP
-	 * pressure / first-fail soft-accept). Do not queue a second data
-	 * segment - pure POLL multi-pass flushes the arm. Prevents double
-	 * SSH-2.0-GreenJade_sshd when userspace retries SEND of the product
-	 * id (or re-sends while first soft-accept is still in-flight, or
-	 * after a successful TX before peer ACK when SndNxt already past
-	 * RtxSeq). Gap B deepen: any :22 unacked eth data arm (not only
-	 * busy / seq==RtxSeq / small len) blocks additional data until
-	 * SndUna catches up - last-seg rtx holds one arm; multi-seg bulk
-	 * still advances once peer ACKs. Gap B: :22 also coalesces when
-	 * busy-armed or SEND retries the armed RtxSeq even if una briefly
-	 * matches nxt (banner-once hardness under soft-accept race), and
-	 * when :22 holds any valid data arm with RtxLen>0 (wire may have
-	 * landed but peer ACK not yet - still no second product id).
-	 * Gap B: :22 banner-once also blocks when prior BusyN still live
-	 * (ACK race under soft-accept + pure POLL) - never a second
-	 * SSH-2.0-GreenJade_sshd. Gap B deepen: any :22 live data RtxValid
-	 * with RtxLen>0 coalesces unconditionally (banner-once hardness).
+	 * Banner-once: coalesce only a SEND that overlaps the armed
+	 * segment (retry of SSH-2.0-GreenJade_sshd). New data at SndNxt
+	 * (KEXINIT / ECDH_REPLY) must go out — 0.1.147 host ssh -v got
+	 * the banner then hung because :22 coalesced every later SEND.
 	 * Soft!=product.
-	 * Returns TX-fail so net_tcp_send yields -EAGAIN / partial (no fake
-	 * progress). Soft!=product.
 	 */
 	if (!(flags & FL_SYN) && cbPay > 0u && !g_aT[s].u8IsLoop &&
 	    g_aT[s].u8RtxValid && !g_aT[s].u8RtxSyn &&
-	    g_aT[s].u32RtxLen > 0u &&
-	    (g_aT[s].u32SndNxt > g_aT[s].u32SndUna ||
-	     (g_aT[s].u16Lport == (u16)TCP_SOFT_SSH_PORT &&
-	      (g_aT[s].u8RtxBusy != 0u || seq == g_aT[s].u32RtxSeq ||
-	       g_aT[s].u32RtxLen > 0u || g_aT[s].u8RtxBusyN != 0u ||
-	       g_aT[s].u32RtxCount != 0u)))) {
-		u32 u32InF = g_aT[s].u32SndNxt - g_aT[s].u32SndUna;
-		int fCoalesce = 0;
+	    g_aT[s].u32RtxLen > 0u) {
+		u32 u32ArmedEnd = g_aT[s].u32RtxSeq + g_aT[s].u32RtxLen;
+		int fOverlap = 0;
 
-		/*
-		 * Coalesce when: busy-armed, SEND at same RtxSeq (retry of
-		 * armed id), any :22 unacked data arm, or :22 any live
-		 * data arm (banner-once - further data would double the
-		 * product id under soft-accept / pure POLL flush). Soft!=product.
-		 */
-		if (g_aT[s].u16Lport == (u16)TCP_SOFT_SSH_PORT) {
-			/*
-			 * Gap B banner-once harden: :22 with any live data arm
-			 * always coalesces - pure POLL rtx is the only flush
-			 * path; userspace SEND retries must not emit a second
-			 * SSH-2.0-GreenJade_sshd under ARP/ICMP soft-accept.
-			 * Soft!=product.
-			 */
-			fCoalesce = 1;
-		} else if (g_aT[s].u8RtxBusy != 0u) {
-			fCoalesce = 1;
-		} else if (seq == g_aT[s].u32RtxSeq) {
-			fCoalesce = 1;
-		} else if (g_aT[s].u32SndNxt > g_aT[s].u32SndUna &&
-			   g_aT[s].u32RtxLen <= 64u) {
-			/* Non-:22 small unacked arm - still coalesce. */
-			fCoalesce = 1;
+		if (seq == g_aT[s].u32RtxSeq) {
+			fOverlap = 1;
+		} else if (seq < u32ArmedEnd &&
+			   (seq + cbPay) > g_aT[s].u32RtxSeq) {
+			fOverlap = 1;
 		}
-		if (fCoalesce != 0) {
-			/*
-			 * Gap B denser residual: :22 coalesce tries busy-shot
-			 * flush of the already-armed banner eth_seg before
-			 * re-busy return - freestanding TX ring may free
-			 * mid-SEND under ARP/ICMP; pure POLL multi-pass is
-			 * the residual path if still busy. Banner-once:
-			 * never emit a second product id. Soft!=product.
-			 * Grep: net_tcp: soft eth_seg tx_busy coalesce
-			 */
-			if (g_aT[s].u16Lport == (u16)TCP_SOFT_SSH_PORT &&
-			    g_aT[s].u32RtxLen > 0u &&
-			    !g_aT[s].u8RtxSyn) {
+		if (fOverlap != 0) {
+			if (g_aT[s].u16Lport == (u16)TCP_SOFT_SSH_PORT) {
 				int nCo = -1;
 				u32 u32Shot;
+
+				if (tcp_udx_l2_live() != 0 &&
+				    net_door_udx_tx_pending() != 0u) {
+					return -1;
+				}
 
 				for (u32Shot = 0;
 				     u32Shot < TCP_RTX_BUSY_SHOTS;
@@ -1645,37 +1620,26 @@ tcp_tx(u32 s, u8 flags, const u8 *pPay, u32 cbPay)
 					}
 				}
 				if (nCo >= 0) {
-					/*
-					 * Armed banner landed mid-coalesce -
-					 * mark landed; silent on residual.
-					 * Soft!=product · stack-safe.
-					 */
 					g_aT[s].u32RtxTick = now_ms();
 					tcp_rtx_mark_landed(s);
-					/* Hot residual: silence coalesce rtx stamp. */
-					/* No second banner - SEND yields. */
 					return -1;
 				}
 			}
-			/*
-			 * Keep busy so poll interval 0; do not advance SndNxt.
-			 * :22 always re-busy under coalesce (banner-once pure
-			 * POLL flush density under ARP/ICMP). Soft!=product.
-			 */
-			if (g_aT[s].u16Lport == (u16)TCP_SOFT_SSH_PORT ||
-			    g_aT[s].u32SndNxt > g_aT[s].u32SndUna ||
-			    g_aT[s].u8RtxBusy != 0u ||
-			    seq == g_aT[s].u32RtxSeq) {
-				g_aT[s].u8RtxBusy = 1;
-			}
+			g_aT[s].u8RtxBusy = 1;
 			g_aT[s].u32RtxTick = now_ms();
 			if (g_aT[s].u8RtxBusyN < 255u) {
 				g_aT[s].u8RtxBusyN++;
 			}
-			/* Hot residual: silence coalesce tx_busy stamps. */
-			(void)u32InF;
 			return -1;
 		}
+		/*
+		 * New data at SndNxt (KEXINIT) after a landed banner: do
+		 * not EAGAIN just because the banner is still unacked.
+		 * 0.1.156 host: python/ssh saw SSH-2.0-GreenJade_sshd and
+		 * no type 20 — this wait blocked the next segment.
+		 * 0.1.148 was overwrite of aRtx at the banner seq (overlap
+		 * above). Next-seq pipeline is honest TCP. Soft!=product.
+		 */
 	}
 
 	r = tcp_tx_raw(s, flags, seq, pPay, cbPay);
@@ -1738,83 +1702,35 @@ tcp_tx(u32 s, u8 flags, const u8 *pPay, u32 cbPay)
 		}
 	}
 	if (r < 0) {
-		/*
-		 * Freestanding eth data TX fail (banner / bulk under ARP/ICMP):
-		 * arm last-seg rtx so net_tcp_poll flushes once the TX ring
-		 * drains - mirror SYN path. Soft-accept the armed bytes:
-		 * advance SndNxt (in-flight) and return nArm so userspace
-		 * banner SEND completes; pure POLL multi-pass lands the seg
-		 * without a second SEND that would double-queue the id.
-		 * Gap B denser: :22 first-fail BUSY_SHOTS lean retry after soft-accept
-		 * arm so freestanding TX pressure may land banner mid-SEND
-		 * before pure POLL residual. Soft!=product.
-		 */
 		if (cbPay > 0u && !(flags & FL_SYN) && !g_aT[s].u8IsLoop &&
 		    pPay != 0) {
-			u32 nArm = cbPay > TCP_MSS ? TCP_MSS : cbPay;
+			u32 nTry = cbPay > TCP_MSS ? TCP_MSS : cbPay;
 
-			memcpy(g_aT[s].aRtx, pPay, nArm);
-			g_aT[s].u32RtxLen = nArm;
-			g_aT[s].u32RtxSeq = seq;
-			g_aT[s].u32RtxTick = now_ms();
-			if (!g_aT[s].u8RtxValid) {
-				g_aT[s].u32RtxCount = 0;
-			}
-			g_aT[s].u8RtxValid = 1;
-			g_aT[s].u8RtxSyn = 0;
-			g_aT[s].u8RtxBusy = 1;
-			if (g_aT[s].u8RtxBusyN < 255u) {
-				g_aT[s].u8RtxBusyN++;
-			}
 			/*
-			 * In-flight soft: SndNxt past armed payload. Poll rtx
-			 * success only advances when SndNxt == RtxSeq (legacy
-			 * path); after soft-accept it skips re-advance.
-			 * Soft!=product.
-			 */
-			g_aT[s].u32SndNxt = seq + nArm;
-			/*
-			 * Gap B: freestanding :22 banner first-fail busy-shot
-			 * under ARP/ICMP - land mid-SEND when ring frees.
-			 * Soft!=product. Grep: net_tcp: soft eth_seg tx_busy
+			 * :22 busy-shot only. Do not soft-accept (return nTry
+			 * with no enqueue) — 0.1.152/154 sshd printed PASS
+			 * and never retried. Soft!=product.
 			 */
 			if (g_aT[s].u16Lport == (u16)TCP_SOFT_SSH_PORT) {
-				int nHex = -1;
 				u32 u32Shot;
 
 				for (u32Shot = 0;
 				     u32Shot < TCP_RTX_BUSY_SHOTS;
 				     u32Shot++) {
-					nHex = tcp_tx_raw(
-						s, (u8)(FL_ACK | FL_PSH),
-						g_aT[s].u32RtxSeq,
-						g_aT[s].aRtx,
-						g_aT[s].u32RtxLen);
-					if (nHex >= 0) {
+					r = tcp_tx_raw(
+						s, (u8)(FL_ACK | FL_PSH), seq,
+						pPay, nTry);
+					if (r >= 0) {
 						break;
 					}
-					if (g_aT[s].u8RtxBusyN < 255u) {
-						g_aT[s].u8RtxBusyN++;
-					}
-				}
-				if (nHex >= 0) {
-					g_aT[s].u32RtxTick = now_ms();
-					tcp_rtx_mark_landed(s);
-					/* Hot residual: silence first-fail hex land. */
-					return (int)nArm;
 				}
 			}
-			/* Hot residual: silence first-fail arm tx_busy stamps. */
-			return (int)nArm;
-		}
-		/*
-		 * Bare FIN TX fail (SHUT_WR half-close under eth busy): soft-
-		 * accept FinSent + arm empty-payload rtx so net_tcp_poll flushes
-		 * FIN|ACK (RtxLen=0, !RtxSyn). sshd/userspace session end path.
-		 * Soft!=product · functional thrash-strip (BUSY_SHOTS lean).
-		 */
-		if ((flags & FL_FIN) != 0u && cbPay == 0u &&
-		    g_aT[s].u8IsLoop == 0u) {
+			if (r < 0) {
+				return -11;
+			}
+			/* busy-shot enqueued: SndNxt / last-seg below */
+		} else if ((flags & FL_FIN) != 0u && cbPay == 0u &&
+			   g_aT[s].u8IsLoop == 0u) {
 			g_aT[s].u32RtxSeq = seq;
 			g_aT[s].u32RtxLen = 0;
 			g_aT[s].u32RtxTick = now_ms();
@@ -1852,8 +1768,9 @@ tcp_tx(u32 s, u8 flags, const u8 *pPay, u32 cbPay)
 				}
 			}
 			return 0; /* half-close residual: FinSent soft-accepted */
+		} else {
+			return r;
 		}
-		return r;
 	}
 	if (flags & FL_FIN) {
 		g_aT[s].u32SndNxt++;
@@ -2277,6 +2194,31 @@ net_tcp_poll_mask(i64 i64Fd, u32 u32Want)
 	pSock = &g_aT[u32Slot];
 
 	/*
+	 * Product listen is fd 97 (TCP_FD_BASE+1 = slot 1). QEMU45/46:
+	 * eth_estab AcceptQ on slots 0/2 while poll_mask(97) stayed 0
+	 * if slot 1 lost u8Listening. ESTABLISHED AcceptQ on :22 is
+	 * POLLIN for the :22 listen slot anyway. Dual DoD B OPEN.
+	 */
+	if (pSock->u8ShutRd == 0u &&
+	    (pSock->u16Lport == (u16)TCP_SOFT_SSH_PORT || u32Slot == 1u)) {
+		u32 j;
+
+		for (j = 0; j < TCP_MAX; j++) {
+			if (j == u32Slot) {
+				continue;
+			}
+			if (g_aT[j].u8Used != 0u &&
+			    g_aT[j].u8AcceptQ != 0u &&
+			    g_aT[j].u8State == ST_ESTABLISHED &&
+			    g_aT[j].u16Lport == (u16)TCP_SOFT_SSH_PORT) {
+				u32Got |= TCP_POLLIN;
+				pSock->i16Peer = (i16)j;
+				break;
+			}
+		}
+	}
+
+	/*
 	 * Listener: POLLIN when accept() would not EAGAIN (ESTABLISHED only).
 	 * Functional residual (sshd :22 product path): heal pending via
 	 * reparent on :22, then rehook i16Peer to oldest ESTABLISHED AcceptQ
@@ -2320,6 +2262,38 @@ net_tcp_poll_mask(i64 i64Fd, u32 u32Want)
 				if (tcp_listen_rehook_ready(u32Slot) != 0) {
 					u32Got |= TCP_POLLIN;
 				}
+			}
+			/*
+			 * Belt: ESTABLISHED AcceptQ on this port is POLLIN
+			 * even if the child still has leftover u8Listening
+			 * (rehook_ready skips those). OpenSSH ppoll never
+			 * saw POLLIN after eth_estab acceptq=1. Dual DoD B
+			 * OPEN.
+			 */
+			if ((u32Got & TCP_POLLIN) == 0u) {
+				u32 j;
+
+				for (j = 0; j < TCP_MAX; j++) {
+					if (j == u32Slot) {
+						continue;
+					}
+					if (g_aT[j].u8Used == 0u ||
+					    g_aT[j].u8AcceptQ == 0u ||
+					    g_aT[j].u16Lport !=
+						pSock->u16Lport ||
+					    g_aT[j].u8State !=
+						ST_ESTABLISHED) {
+						continue;
+					}
+					u32Got |= TCP_POLLIN;
+					g_aT[u32Slot].i16Peer = (i16)j;
+					break;
+				}
+			}
+			if ((u32Got & TCP_POLLIN) == 0u &&
+			    pSock->u8Pending != 0u &&
+			    tcp_listen_rehook_ready(u32Slot) != 0) {
+				u32Got |= TCP_POLLIN;
 			}
 		}
 	} else {
@@ -2400,6 +2374,21 @@ net_tcp_poll_mask(i64 i64Fd, u32 u32Want)
 	return (u32Got & (TCP_POLLERR | TCP_POLLHUP)) | (u32Got & u32Want);
 }
 
+int
+net_tcp_acceptq_estab22(void)
+{
+	u32 j;
+
+	for (j = 0; j < TCP_MAX; j++) {
+		if (g_aT[j].u8Used != 0u && g_aT[j].u8AcceptQ != 0u &&
+		    g_aT[j].u8State == ST_ESTABLISHED &&
+		    g_aT[j].u16Lport == (u16)TCP_SOFT_SSH_PORT) {
+			return 1;
+		}
+	}
+	return 0;
+}
+
 i64
 net_tcp_bind(i64 fd, u16 port)
 {
@@ -2416,22 +2405,23 @@ net_tcp_bind(i64 fd, u16 port)
 	 * on stale QEMU 10.0.2.15 under handoff churn. Soft!=product.
 	 */
 	tcp_sync_l2_identity();
-	if (net_l2_backend() == GJ_NET_L2_RTL8168 ||
+	if (net_l2_backend() == GJ_NET_L2_RTL8168 || tcp_udx_l2_live() != 0 ||
 	    tcp_ip_is_lab(g_aOurIp) != 0) {
 		tcp_force_lab_ip();
 	}
 	g_aT[s].u16Lport = port;
 	tcp_soft_bump(&g_soft.u64BindOk);
 	/* Grep: net_tcp: soft bind lab_ip - ONE line, no wave. Soft!=product. */
-	if (net_l2_backend() == GJ_NET_L2_RTL8168 ||
+	if (net_l2_backend() == GJ_NET_L2_RTL8168 || tcp_udx_l2_live() != 0 ||
 	    tcp_ip_is_lab(g_aOurIp) != 0) {
 		if (tcp_soft_event_ok()) {
 			kprintf("net_tcp: soft bind port=%u "
 				"lab_ip=%u.%u.%u.%u backend=%s fd=%lld "
-				"(Soft!=product)\n",
+				"product_net_owns_wire=%u (Soft!=product)\n",
 				(unsigned)port, g_aOurIp[0], g_aOurIp[1],
 				g_aOurIp[2], g_aOurIp[3], net_l2_name(),
-				(long long)fd);
+				(long long)fd,
+				(unsigned)tcp_udx_l2_live());
 		}
 	}
 	tcp_soft_maybe_log(0);
@@ -2472,6 +2462,11 @@ net_tcp_listen(i64 fd, int backlog)
 	g_aT[s].u8ShutRd = 0; /* re-arm after SHUT_RD stop residual */
 	g_aT[s].u8Listening = 1;
 	g_aT[s].u8State = ST_LISTEN;
+	/*
+	 * Product/eth listen is never loop-only. Loopback self-smoke uses
+	 * child sockets; :22 must accept host SYN on UDX/ETH. Soft!=product.
+	 */
+	g_aT[s].u8IsLoop = 0;
 	/* Product listen on :22 is not soft-mint (demux prefers it). Soft!=product. */
 	g_aT[s].u8SoftMint = 0;
 	/*
@@ -2479,14 +2474,18 @@ net_tcp_listen(i64 fd, int backlog)
 	 * ownership (pending + i16Peer hint) then free soft mint so eth
 	 * demux/accept share one backlog. Soft!=product · sshd over stack.
 	 */
-	if (g_aT[s].u16Lport == (u16)TCP_SOFT_SSH_PORT &&
-	    g_i32SoftListen22 >= 0 && (u32)g_i32SoftListen22 < TCP_MAX &&
-	    (u32)g_i32SoftListen22 != s) {
-		u32 u32Soft = (u32)g_i32SoftListen22;
+	if (g_aT[s].u16Lport == (u16)TCP_SOFT_SSH_PORT) {
+		u32 u32I;
 
-		if (g_aT[u32Soft].u8Used && g_aT[u32Soft].u8SoftMint) {
-			u8 u8Xfer = g_aT[u32Soft].u8Pending;
+		for (u32I = 0; u32I < TCP_MAX; u32I++) {
+			u8 u8Xfer;
 
+			if (u32I == s || g_aT[u32I].u8Used == 0u ||
+			    g_aT[u32I].u8SoftMint == 0u ||
+			    g_aT[u32I].u16Lport != (u16)TCP_SOFT_SSH_PORT) {
+				continue;
+			}
+			u8Xfer = g_aT[u32I].u8Pending;
 			if (u8Xfer > 0u) {
 				u32 u32Sum =
 				    (u32)g_aT[s].u8Pending + (u32)u8Xfer;
@@ -2495,12 +2494,12 @@ net_tcp_listen(i64 fd, int backlog)
 				    (u8)(u32Sum > 255u ? 255u : u32Sum);
 			}
 			if (g_aT[s].i16Peer < 0 &&
-			    g_aT[u32Soft].i16Peer >= 0) {
-				g_aT[s].i16Peer = g_aT[u32Soft].i16Peer;
+			    g_aT[u32I].i16Peer >= 0) {
+				g_aT[s].i16Peer = g_aT[u32I].i16Peer;
 			}
-			memset(&g_aT[u32Soft], 0, sizeof(g_aT[u32Soft]));
-			g_i32SoftListen22 = -1;
+			memset(&g_aT[u32I], 0, sizeof(g_aT[u32I]));
 		}
+		g_i32SoftListen22 = -1;
 	}
 	/*
 	 * AcceptQ reparent residual: after soft xfer (or soft already closed
@@ -2542,6 +2541,7 @@ net_tcp_listen(i64 fd, int backlog)
 
 		tcp_sync_l2_identity();
 		if (net_l2_backend() == GJ_NET_L2_RTL8168 ||
+		    tcp_udx_l2_live() != 0 ||
 		    tcp_ip_is_lab(g_aOurIp) != 0) {
 			tcp_force_lab_ip();
 		}
@@ -2549,22 +2549,25 @@ net_tcp_listen(i64 fd, int backlog)
 		/* Grep: net_tcp: soft listen :22 (product; Soft!=product) */
 		kprintf("net_tcp: soft listen :22 fd=%lld backlog=%u "
 			"ip=%u.%u.%u.%u lab_ip=%d backend=%s soft_mint=0 "
-			"ready=%d listen_accept_path_honesty=1 "
+			"ready=%d listen=:22 product_net_owns_wire=%u "
+			"soft_listen_ne_host_banner=1 "
+			"listen_accept_path_honesty=1 "
 			"product_sshd_tcp22=OPEN until_DUT=1 "
 			"wire_handoff+tcp22=1 denser=1 denser_arms=%u "
-			"(Soft!=product; after L2 ready preferred; denser "
+			"(Soft!=product; eth/UDX not virtio-only; denser "
 			"multi-arm wire22 :22 listen/accept path honesty; "
 			"!=host_banner_proof)\n",
 			(long long)fd, (unsigned)g_aT[s].u8Backlog,
 			g_aOurIp[0], g_aOurIp[1], g_aOurIp[2], g_aOurIp[3],
 			fLabIp, net_l2_name(), net_l2_ready(),
+			(unsigned)tcp_udx_l2_live(),
 			(unsigned)TCP_WIRE22_DENSE_ARMS);
 		g_u8SoftListen22Logged = 1;
 		/*
 		 * Honesty once-lamp: soft/product table listen is not DUT host
 		 * nc/ssh banner proof (G-AC-1 Soft!=product). Soft residual.
 		 * denser multi-arm wire22 :22 listen/accept path honesty; H2 once.
-		 * product_sshd_tcp22=OPEN until DUT. Soft residual != Dual DoD close.
+		 * product_sshd_tcp22=OPEN until interactive SSH login. Soft residual != Dual DoD close.
 		 * greppable: net_tcp: soft honesty listen_not_banner
 		 * greppable: listen_accept_path_honesty | until_DUT | H2=once
 		 * greppable: denser=1 | denser_arms | product_sshd_tcp22=OPEN
@@ -2576,6 +2579,8 @@ net_tcp_listen(i64 fd, int backlog)
 				g_u8ListenHonestyOnce = 1;
 				kprintf("net_tcp: soft honesty "
 					"listen_not_banner port=22 "
+					"listen=:22 product_net_owns_wire=%u "
+					"soft_listen_ne_host_banner=1 "
 					"listen_accept_path_honesty=1 "
 					"product_sshd_tcp22=OPEN until_DUT=1 "
 					"wire_handoff+tcp22=1 denser=1 "
@@ -2587,6 +2592,7 @@ net_tcp_listen(i64 fd, int backlog)
 					"!= host banner proof; denser multi-arm "
 					"wire22 :22 listen/accept path honesty; "
 					"not Dual DoD close)\n",
+					(unsigned)tcp_udx_l2_live(),
 					(unsigned)TCP_WIRE22_DENSE_ARMS);
 			}
 		}
@@ -2877,7 +2883,7 @@ net_tcp_accept(i64 fd)
 	 * Residual: eth :22 AcceptQ -> banner path taken (Dual DoD B).
 	 * Soft accept residual != host banner proof. Soft!=product.
 	 * denser wire22 :22 listen/accept path honesty; product_sshd_tcp22
-	 * remains OPEN until DUT host banner proof. Soft residual != Dual DoD close.
+	 * remains OPEN until interactive SSH login. Soft residual != Dual DoD close.
 	 * Grep: net_tcp: soft accept residual taken
 	 * greppable: listen_accept_path_honesty | until_DUT | product_sshd_tcp22=OPEN
 	 */
@@ -3563,7 +3569,7 @@ net_tcp_input(const u8 *pFrame, u32 cb)
 	if (tcp_ip_is_lab(pIp + 16) != 0) {
 		tcp_soft_bump(&g_soft.u64InputLabDemux);
 	}
-	if (net_l2_backend() == GJ_NET_L2_RTL8168 ||
+	if (net_l2_backend() == GJ_NET_L2_RTL8168 || tcp_udx_l2_live() != 0 ||
 	    tcp_ip_is_lab(g_aOurIp) != 0) {
 		tcp_soft_bump(&g_soft.u64InputDemuxForce);
 	}
@@ -3614,6 +3620,7 @@ net_tcp_input(const u8 *pFrame, u32 cb)
 	if (dport == (u16)TCP_SOFT_SSH_PORT) {
 		tcp_soft_ensure_listen22();
 		if (net_l2_backend() == GJ_NET_L2_RTL8168 ||
+		    tcp_udx_l2_live() != 0 ||
 		    tcp_ip_is_lab(pIp + 16) != 0) {
 			tcp_force_lab_ip();
 		}
@@ -3671,6 +3678,7 @@ net_tcp_input(const u8 *pFrame, u32 cb)
 	    dport == (u16)TCP_SOFT_SSH_PORT) {
 		tcp_soft_ensure_listen22();
 		if (net_l2_backend() == GJ_NET_L2_RTL8168 ||
+		    tcp_udx_l2_live() != 0 ||
 		    tcp_ip_is_lab(pIp + 16) != 0) {
 			tcp_force_lab_ip();
 		}
@@ -3845,7 +3853,7 @@ net_tcp_input(const u8 *pFrame, u32 cb)
 		g_aT[ns].i16Peer = -1;
 		u32Isn = g_aT[ns].u32SndNxt;
 		u32Ack = g_aT[ns].u32RcvNxt;
-		/* SYN-ACK via net_l2_tx (rtl/virtio); rtx armed in tcp_tx. */
+		/* SYN-ACK via net_l2_tx (rtl/virtio/UDX ETH_TX_PULL). */
 		nTx = tcp_tx((u32)ns, (u8)(FL_SYN | FL_ACK), 0, 0);
 		/*
 		 * Gap B: :22 first SYN-ACK busy-shot under ARP/ICMP busy -
@@ -3891,18 +3899,29 @@ net_tcp_input(const u8 *pFrame, u32 cb)
 		 * Hot demux residual stays silent after TCP_SOFT_EVENT_MAX.
 		 * Soft!=product.
 		 */
-		if (tcp_soft_event_ok()) {
-			kprintf("net_tcp: soft eth_syn port=%u sport=%u "
-				"slot=%d seq=%u ack=%u tx=%d "
-				"rip=%u.%u.%u.%u our=%u.%u.%u.%u "
-				"pending=%u busy=%u (Soft!=product)\n",
-				(unsigned)dport, (unsigned)sport, ns,
-				(unsigned)u32Isn, (unsigned)u32Ack, nTx,
-				g_aT[ns].aRip[0], g_aT[ns].aRip[1],
-				g_aT[ns].aRip[2], g_aT[ns].aRip[3],
-				g_aOurIp[0], g_aOurIp[1], g_aOurIp[2],
-				g_aOurIp[3], (unsigned)g_aT[ls].u8Pending,
-				(unsigned)g_aT[ns].u8RtxBusy);
+		/*
+		 * Do not kprintf on this SYN path. QEMU49 froze after the
+		 * second eth_syn lamp the same way 42-48 froze after
+		 * eth_estab. Dual DoD B OPEN.
+		 */
+		(void)nTx;
+		(void)u32Isn;
+		(void)u32Ack;
+		(void)tcp_soft_event_ok();
+		if (tcp_udx_l2_live() != 0) {
+			static u8 s_fUdxSynLamp;
+
+			if (s_fUdxSynLamp == 0u) {
+				s_fUdxSynLamp = 1u;
+				/* Grep: net_tcp: soft udx eth_syn */
+				kprintf("net_tcp: soft udx eth_syn "
+					"backend=none path=rtl8168_udx "
+					"port=%u tx=%d dual_dod_b=OPEN_UDX "
+					"ETH_INJECT=1 ETH_TX_PULL=1 "
+					"(Soft!=product; SYN->listen; "
+					"SYN-ACK enqueue like ICMP)\n",
+					(unsigned)dport, nTx);
+			}
 		}
 		return 1;
 	}
@@ -3946,6 +3965,11 @@ net_tcp_input(const u8 *pFrame, u32 cb)
 			g_aT[cs].u8RtxBusyN = 0;
 			g_u32Accepts++;
 			/*
+			 * One ident writer: sshd SEND owns SSH-2.0-GreenJade_sshd.
+			 * Gap C kernel banner spent the first data seq so
+			 * userspace KEXINIT EAGAIN'd (0.1.150/151 host).
+			 */
+			/*
 			 * Functional STRONGER (sshd :22 product path):
 			 * AcceptQ child just became ESTABLISHED - reparent +
 			 * rehook every same-port live listener (eth prefer)
@@ -3974,17 +3998,13 @@ net_tcp_input(const u8 *pFrame, u32 cb)
 			 * Grep: net_tcp: ESTABLISHED / soft eth_estab
 			 * Event-capped ONE line (no twin / no wave). Soft!=product.
 			 */
-			if (tcp_soft_event_ok()) {
-				kprintf("net_tcp: soft eth_estab port=%u "
-					"sport=%u slot=%d acceptq=%u "
-					"rip=%u.%u.%u.%u "
-					"(Soft!=product; eth_estab_rehook)\n",
-					(unsigned)g_aT[cs].u16Lport,
-					(unsigned)g_aT[cs].u16Rport, cs,
-					(unsigned)g_aT[cs].u8AcceptQ,
-					g_aT[cs].aRip[0], g_aT[cs].aRip[1],
-					g_aT[cs].aRip[2], g_aT[cs].aRip[3]);
-			}
+			/*
+			 * Do not kprintf on this path. QEMU42-48: this lamp
+			 * was the last serial line; ppoll never returned
+			 * POLLIN. Rehook above is the product work. Dual
+			 * DoD B OPEN.
+			 */
+			(void)tcp_soft_event_ok();
 		}
 	} else if (g_aT[cs].u8State == ST_SYN_RCVD && (flags & FL_ACK) &&
 		   g_aT[cs].u8IsLoop && ack == g_aT[cs].u32SndNxt &&
@@ -4040,23 +4060,31 @@ net_tcp_input(const u8 *pFrame, u32 cb)
 	    g_aT[cs].u8State == ST_FIN_WAIT1 ||
 	    g_aT[cs].u8State == ST_FIN_WAIT2) {
 		/*
-		 * In-order only; advance RcvNxt by bytes actually buffered.
-		 * pay_len is IP-total-derived (not eth pad); push_rx clamps.
-		 * Multi-seg peers retransmit if we ACK less than offered.
+		 * In-window prefix: exact RcvNxt, or overlap after a partial
+		 * ACK (OpenSSH KEXINIT is often > TCP_MSS; 0.1.167 clamped
+		 * to 1024 then dropped the tail / type 30 as OOO).
+		 * push_rx clamps to ring room. Do not cap RX at TX MSS.
 		 */
-		if (pay_len && seq == g_aT[cs].u32RcvNxt &&
+		if (pay_len != 0u &&
 		    (g_aT[cs].u8State == ST_ESTABLISHED ||
-		     g_aT[cs].u8State == ST_SYN_RCVD)) {
-			u32 cbTake = pay_len;
+		     g_aT[cs].u8State == ST_SYN_RCVD) &&
+		    (seq == g_aT[cs].u32RcvNxt ||
+		     (u32)(g_aT[cs].u32RcvNxt - seq) < pay_len)) {
+			u32 u32Off = 0u;
+			u32 cbTake;
 			int got;
 
-			if (cbTake > TCP_MSS) {
-				cbTake = TCP_MSS; /* one segment bound */
+			if (seq != g_aT[cs].u32RcvNxt) {
+				u32Off = g_aT[cs].u32RcvNxt - seq;
 			}
-			got = push_rx((u32)cs, pFrame + pay_off, cbTake);
+			cbTake = pay_len - u32Off;
+			got = push_rx((u32)cs, pFrame + pay_off + u32Off,
+				      cbTake);
 			if (got > 0) {
 				g_aT[cs].u32RcvNxt += (u32)got;
 				tcp_soft_bump(&g_soft.u64InputData);
+				(void)tcp_tx((u32)cs, FL_ACK, 0, 0);
+			} else if (u32Off != 0u) {
 				(void)tcp_tx((u32)cs, FL_ACK, 0, 0);
 			}
 		}
@@ -4091,9 +4119,11 @@ net_tcp_input(const u8 *pFrame, u32 cb)
  * Soft ensure: after net_l2 ready, a listen socket on :22 always exists for
  * eth accept (Dual DoD B). Mints a soft listener if product sshd has not
  * bound yet; product listen supersedes idle soft mint. Always re-syncs lab
- * IP (10.200.125.50 on rtl) so demux/SYN-ACK never stick on stale QEMU
- * 10.0.2.15 after L2 ready. When RX returns after R0, ready-edge + any
- * :22 demux path re-enter here so listen is present before AcceptQ match.
+ * IP (10.200.125.50 on rtl / UDX) so demux/SYN-ACK never stick on stale
+ * QEMU 10.0.2.15 after L2 ready. backend=none + ETH_UDX_READY is live
+ * wire (ETH_INJECT SYN) — not virtio-only. When RX returns after R0,
+ * ready-edge + any :22 demux path re-enter here so listen is present
+ * before AcceptQ match.
  * Grep: net_tcp: soft listen :22
  * Soft!=product. Lean: one-shot / stamp-capped lamps only (no multi-KiB).
  */
@@ -4109,16 +4139,17 @@ tcp_soft_ensure_listen22(void)
 	int fLabIp;
 	int fForceLab;
 
-	/* Always refresh identity - lab IP force on rtl even before ready. */
+	/* Always refresh identity - lab IP force on rtl/UDX even before ready. */
 	tcp_sync_l2_identity();
 	u32Be = net_l2_backend();
 	fReady = net_l2_ready();
 	/*
-	 * Force lab when rtl backend OR identity already lab (handoff may
-	 * report virtio/none briefly while frames still target lab static).
-	 * Soft!=product · Dual DoD B demux residual.
+	 * Force lab when rtl, product UDX L2 (backend=none), or identity
+	 * already lab (handoff may report virtio/none briefly while frames
+	 * still target lab static). Soft!=product · Dual DoD B demux residual.
 	 */
 	fForceLab = (u32Be == GJ_NET_L2_RTL8168 ||
+		     u32Be == GJ_NET_L2_NONE ||
 		     tcp_ip_is_lab(g_aOurIp) != 0)
 			? 1
 			: 0;
@@ -4126,11 +4157,16 @@ tcp_soft_ensure_listen22(void)
 		tcp_force_lab_ip();
 	}
 	fLabIp = tcp_ip_is_lab(g_aOurIp);
-	/* Wait until L2 has a backend; ready preferred for eth accept path. */
-	if (u32Be == GJ_NET_L2_NONE) {
+	/*
+	 * backend=none is product UDX L2 when net_l2_ready (ETH_UDX_READY).
+	 * Do not treat "not virtio" as no-wire — that dropped host SYN
+	 * after ETH_INJECT (ARP/ICMP already demux). Soft!=product Dual DoD B.
+	 * greppable: backend=none | ETH_INJECT | path=rtl8168_udx
+	 */
+	if (u32Be == GJ_NET_L2_NONE && fReady == 0) {
 		/*
-		 * No backend yet: if identity is already lab (prior rtl),
-		 * keep forced lab for demux when RX returns. Soft!=product.
+		 * No UDX arm yet: keep forced lab for demux when inject
+		 * later arrives. Do not mint a dead :22. Soft!=product.
 		 */
 		if (fForceLab != 0) {
 			tcp_force_lab_ip();
@@ -4183,7 +4219,7 @@ tcp_soft_ensure_listen22(void)
 		/* Re-pull L2 + force lab IP after ready (stale QEMU IP). */
 		tcp_sync_l2_identity();
 		/* Explicit lab force on rtl / lab-identity (ready-edge). Soft!=product. */
-		if (u32Be == GJ_NET_L2_RTL8168 ||
+		if (u32Be == GJ_NET_L2_RTL8168 || tcp_udx_l2_live() != 0 ||
 		    tcp_ip_is_lab(g_aOurIp) != 0) {
 			tcp_force_lab_ip();
 		}
@@ -4205,7 +4241,7 @@ tcp_soft_ensure_listen22(void)
 		 * from poll must not stamp-storm). Soft!=product · lean poll.
 		 */
 		tcp_sync_l2_identity();
-		if (u32Be == GJ_NET_L2_RTL8168 ||
+		if (u32Be == GJ_NET_L2_RTL8168 || tcp_udx_l2_live() != 0 ||
 		    tcp_ip_is_lab(g_aOurIp) != 0) {
 			tcp_force_lab_ip();
 		}
@@ -4268,6 +4304,8 @@ tcp_soft_ensure_listen22(void)
 			kprintf("net_tcp: soft listen :22 ok fd=%u slot=%d "
 				"ip=%u.%u.%u.%u lab_ip=%d backend=%s "
 				"soft_mint=0 pending=%u ready=1 "
+				"listen=:22 product_net_owns_wire=%u "
+				"soft_listen_ne_host_banner=1 "
 				"listen_accept_path_honesty=1 "
 				"product_sshd_tcp22=OPEN until_DUT=1 "
 				"wire_handoff+tcp22=1 H2=once "
@@ -4277,7 +4315,8 @@ tcp_soft_ensure_listen22(void)
 				(unsigned)(TCP_FD_BASE + (u32)nLs), nLs,
 				g_aOurIp[0], g_aOurIp[1], g_aOurIp[2],
 				g_aOurIp[3], fLabIp, net_l2_name(),
-				(unsigned)g_aT[nLs].u8Pending);
+				(unsigned)g_aT[nLs].u8Pending,
+				(unsigned)tcp_udx_l2_live());
 			g_u8SoftListen22Logged = 1;
 		}
 		return;
@@ -4299,6 +4338,8 @@ tcp_soft_ensure_listen22(void)
 			kprintf("net_tcp: soft listen :22 ok fd=%u slot=%d "
 				"ip=%u.%u.%u.%u lab_ip=%d backend=%s "
 				"soft_mint=1 pending=%u ready=1 "
+				"listen=:22 product_net_owns_wire=%u "
+				"soft_listen_ne_host_banner=1 "
 				"listen_accept_path_honesty=1 "
 				"product_sshd_tcp22=OPEN until_DUT=1 "
 				"wire_handoff+tcp22=1 H2=once "
@@ -4307,7 +4348,8 @@ tcp_soft_ensure_listen22(void)
 				(unsigned)(TCP_FD_BASE + (u32)nSoft), nSoft,
 				g_aOurIp[0], g_aOurIp[1], g_aOurIp[2],
 				g_aOurIp[3], fLabIp, net_l2_name(),
-				(unsigned)g_aT[nSoft].u8Pending);
+				(unsigned)g_aT[nSoft].u8Pending,
+				(unsigned)tcp_udx_l2_live());
 			g_u8SoftListen22Logged = 1;
 		}
 		return;
@@ -4347,7 +4389,10 @@ tcp_soft_ensure_listen22(void)
 	if (tcp_soft_poll_stamp_ok()) {
 		kprintf("net_tcp: soft listen :22 fd=%u slot=%d backlog=%u "
 			"ip=%u.%u.%u.%u lab_ip=%d backend=%s soft_mint=1 "
-			"pending=%u ready=1 listen_accept_path_honesty=1 "
+			"pending=%u ready=1 listen=:22 "
+			"product_net_owns_wire=%u "
+			"soft_listen_ne_host_banner=1 "
+			"listen_accept_path_honesty=1 "
 			"product_sshd_tcp22=OPEN until_DUT=1 "
 			"wire_handoff+tcp22=1 H2=once "
 			"(Soft!=product; eth accept ensure after L2; denser "
@@ -4356,9 +4401,16 @@ tcp_soft_ensure_listen22(void)
 			(unsigned)(TCP_FD_BASE + (u32)nMint), nMint,
 			(unsigned)g_aT[nMint].u8Backlog, g_aOurIp[0],
 			g_aOurIp[1], g_aOurIp[2], g_aOurIp[3], fLabIp,
-			net_l2_name(), (unsigned)g_aT[nMint].u8Pending);
+			net_l2_name(), (unsigned)g_aT[nMint].u8Pending,
+			(unsigned)tcp_udx_l2_live());
 	}
 	g_u8SoftListen22Logged = 1;
+}
+
+void
+net_tcp_ensure_listen22(void)
+{
+	tcp_soft_ensure_listen22();
 }
 
 /*
@@ -4750,6 +4802,15 @@ net_tcp_poll(void)
 				}
 				if (u32Int != 0u &&
 				    (t - g_aT[u32Slot].u32RtxTick) < u32Int) {
+					continue;
+				}
+				/*
+				 * A copy already waits for ETH_TX_PULL.
+				 * Re-enqueue would fill the door and starve
+				 * ICMP (glass 0.1.163 ping death after :22).
+				 */
+				if (tcp_udx_l2_live() != 0 &&
+				    net_door_udx_tx_pending() != 0u) {
 					continue;
 				}
 				if (g_aT[u32Slot].u8RtxSyn) {

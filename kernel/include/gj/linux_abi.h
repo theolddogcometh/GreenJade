@@ -436,7 +436,7 @@
 #define LINUX_NR_fchmodat        268
 #define LINUX_NR_chown            92
 #define LINUX_NR_lchown           94
-#define LINUX_NR_umask            95
+#define LINUX_NR_umask            95  /* HOT: shell/libc create-mask (was PATH_NONE) */
 #define LINUX_NR_getxattr        191  /* COLD: xattr residual apps */
 #define LINUX_NR_lgetxattr       192
 #define LINUX_NR_fgetxattr       193
@@ -478,7 +478,7 @@
 #define LINUX_NR_getresuid       118
 #define LINUX_NR_setresgid       119
 #define LINUX_NR_getresgid       120
-#define LINUX_NR_getpgid         121
+#define LINUX_NR_getpgid         121  /* HOT: musl/glibc getpgrp() -> getpgid(0) */
 #define LINUX_NR_setfsuid        122
 #define LINUX_NR_setfsgid        123
 
@@ -857,6 +857,29 @@
 #define LINUX_F_GET_SEALS    1034
 #define LINUX_FD_CLOEXEC     1
 
+/*
+ * getrlimit/setrlimit/prlimit64 resource ids (public Linux x86_64).
+ * ABI-stable numbers only. Soft values live in protonrt_cold_link.
+ * greppable: LINUX_RLIMIT_
+ */
+#define LINUX_RLIMIT_CPU        0
+#define LINUX_RLIMIT_FSIZE      1
+#define LINUX_RLIMIT_DATA       2
+#define LINUX_RLIMIT_STACK      3
+#define LINUX_RLIMIT_CORE       4
+#define LINUX_RLIMIT_RSS        5
+#define LINUX_RLIMIT_NPROC      6
+#define LINUX_RLIMIT_NOFILE     7
+#define LINUX_RLIMIT_MEMLOCK    8
+#define LINUX_RLIMIT_AS         9
+#define LINUX_RLIMIT_LOCKS     10
+#define LINUX_RLIMIT_SIGPENDING 11
+#define LINUX_RLIMIT_MSGQUEUE  12
+#define LINUX_RLIMIT_NICE      13
+#define LINUX_RLIMIT_RTPRIO    14
+#define LINUX_RLIMIT_RTTIME    15
+#define LINUX_RLIM_INFINITY    (~0ULL)
+
 /* memfd / F_ADD_SEALS seal bits (public; cold memfd + mseal residual) */
 #define LINUX_F_SEAL_SEAL         0x0001
 #define LINUX_F_SEAL_SHRINK       0x0002
@@ -897,6 +920,10 @@
 #define LINUX_WALL       0x40000000
 #define LINUX_WCLONE     0x80000000
 
+/* kill(2) signo subset (public; cold kill residual) */
+#define LINUX_SIGKILL  9
+#define LINUX_SIGTERM 15
+
 /* clone(2) flag subset (public sched.h values; soft product / PE32 / clone3) */
 #define LINUX_CSIGNAL              0x000000ff
 #define LINUX_CLONE_VM             0x00000100
@@ -923,6 +950,58 @@
 #define LINUX_CLONE_NEWPID         0x20000000
 #define LINUX_CLONE_NEWNET         0x40000000
 #define LINUX_CLONE_IO             0x80000000u
+
+/*
+ * clone3(2) args VER0 (public linux/sched.h layout through tls).
+ * Offsets are ABI: flags@0 pidfd@8 child_tid@16 parent_tid@24
+ * exit_signal@32 stack@40 stack_size@48 tls@56. Size < 64 is EINVAL.
+ * greppable: linux_clone_args | LINUX_CLONE_ARGS_SIZE_VER0
+ */
+#define LINUX_CLONE_ARGS_SIZE_VER0 64u
+
+struct linux_clone_args {
+    u64 u64Flags;
+    u64 u64Pidfd;
+    u64 u64ChildTid;
+    u64 u64ParentTid;
+    u64 u64ExitSignal;
+    u64 u64Stack;
+    u64 u64StackSize;
+    u64 u64Tls;
+};
+
+_Static_assert(sizeof(struct linux_clone_args) == LINUX_CLONE_ARGS_SIZE_VER0,
+               "linux_clone_args VER0 is 64 bytes");
+
+/*
+ * x86_64 siginfo_t SIGCHLD (CLD_EXITED): signo@0 errno@4 code@8 pad@12
+ * pid@16 uid@20 status@24. waitid writes this; waitpid via waitid needs it.
+ */
+#define LINUX_SI_SIGCHLD   17
+#define LINUX_CLD_EXITED   1
+#define LINUX_P_ALL        0u
+#define LINUX_P_PID        1u
+#define LINUX_P_PGID       2u
+
+static inline void
+linux_siginfo_sigchld_exited(u8 *pInfo, u32 cb, u32 u32Pid, u32 u32Exit)
+{
+    u32 i;
+
+    if (pInfo == 0 || cb < 28u) {
+        return;
+    }
+    for (i = 0; i < cb; i++) {
+        pInfo[i] = 0;
+    }
+    pInfo[0] = (u8)LINUX_SI_SIGCHLD;
+    pInfo[8] = (u8)LINUX_CLD_EXITED;
+    pInfo[16] = (u8)(u32Pid & 0xffu);
+    pInfo[17] = (u8)((u32Pid >> 8) & 0xffu);
+    pInfo[18] = (u8)((u32Pid >> 16) & 0xffu);
+    pInfo[19] = (u8)((u32Pid >> 24) & 0xffu);
+    pInfo[24] = (u8)(u32Exit & 0xffu);
+}
 
 /* arch_prctl codes (x86_64 public; hot arch_prctl) */
 #define LINUX_ARCH_SET_GS 0x1001
@@ -1053,7 +1132,26 @@
 /* common ioctl request numbers used by soft TTY/cold paths + UDX hosts */
 #define LINUX_TIOCGWINSZ  0x5413
 #define LINUX_TIOCSWINSZ  0x5414
+#define LINUX_TIOCSTI     0x5412      /* insert one byte into PTY input */
+#define LINUX_TIOCMGET    0x5415      /* modem bits (int *) */
+#define LINUX_TIOCMBIS    0x5416
+#define LINUX_TIOCMBIC    0x5417
+#define LINUX_TIOCMSET    0x5418
+#define LINUX_TIOCM_LE    0x0001
+#define LINUX_TIOCM_DTR   0x0002
+#define LINUX_TIOCM_RTS   0x0004
+#define LINUX_TIOCM_ST    0x0008
+#define LINUX_TIOCM_SR    0x0010
+#define LINUX_TIOCM_CTS   0x0020
+#define LINUX_TIOCM_CAR   0x0040
+#define LINUX_TIOCM_RNG   0x0080
+#define LINUX_TIOCM_DSR   0x0100
+#define LINUX_TIOCM_CD    LINUX_TIOCM_CAR
+#define LINUX_TIOCM_RI    LINUX_TIOCM_RNG
+#define LINUX_TIOCGSOFTCAR 0x5419     /* CLOCAL as int 0/1 */
+#define LINUX_TIOCSSOFTCAR 0x541A
 #define LINUX_FIONREAD    0x541B
+#define LINUX_TIOCINQ     LINUX_FIONREAD /* input queue bytes (alias) */
 #define LINUX_FIONBIO     0x5421
 #define LINUX_FIONCLEX    0x5450
 #define LINUX_FIOCLEX     0x5451
@@ -1061,10 +1159,50 @@
 #define LINUX_TCSETS      0x5402
 #define LINUX_TCSETSW     0x5403
 #define LINUX_TCSETSF     0x5404
+#define LINUX_TCGETA      0x5405      /* old struct termio */
+#define LINUX_TCSETA      0x5406
+#define LINUX_TCSETAW     0x5407
+#define LINUX_TCSETAF     0x5408
+#define LINUX_TCSBRK      0x5409      /* arg: 0 = break, 1 = drain (tcdrain) */
+#define LINUX_TCSBRKP     0x5425      /* POSIX tcsendbreak; arg = duration */
+#define LINUX_TCXONC      0x540A      /* arg: 0..3 = TCOOFF/TCOON/TCIOFF/TCION */
+#define LINUX_TCFLSH      0x540B      /* arg: 0=IFLUSH 1=OFLUSH 2=IOFLUSH */
+#define LINUX_TIOCEXCL    0x540C
+#define LINUX_TIOCNXCL    0x540D
 #define LINUX_TIOCGPGRP   0x540F
 #define LINUX_TIOCSPGRP   0x5410
+#define LINUX_TIOCOUTQ    0x5411      /* output queue bytes (int *) */
 #define LINUX_TIOCSCTTY   0x540E
+#define LINUX_TIOCPKT     0x5420      /* packet mode on Unix98 master */
 #define LINUX_TIOCNOTTY   0x5422
+#define LINUX_TIOCSETD    0x5423      /* line discipline (int *); N_TTY=0 */
+#define LINUX_TIOCGETD    0x5424
+#define LINUX_N_TTY       0
+#define LINUX_TIOCSBRK    0x5427      /* set break (PTY: no-op 0) */
+#define LINUX_TIOCCBRK    0x5428      /* clear break */
+#define LINUX_TIOCGSID    0x5429      /* session id of ctty (pid_t *) */
+/* Unix98 PTY mux (asm-generic _IOR/_IOW 'T' 0x30/0x31/0x32/0x36/0x38/0x39/0x40; _IO 'T' 0x41). */
+#define LINUX_TIOCGPTN    0x80045430u /* _IOR('T', 0x30, unsigned); N = minor 128:N/136:N */
+#define LINUX_TIOCSPTLCK  0x40045431u /* _IOW('T', 0x31, int) */
+#define LINUX_TIOCGDEV    0x80045432u /* _IOR('T', 0x32, unsigned); slave rdev 136:N */
+#define LINUX_UNIX98_PTY_MASTER_MAJOR 128u /* fstat of allocated ptmx master */
+#define LINUX_UNIX98_PTY_SLAVE_MAJOR  136u /* /dev/pts/N */
+#define LINUX_TTYAUX_MAJOR            5u   /* /dev/tty, /dev/console, /dev/ptmx mux */
+#define LINUX_PTMX_MINOR              2u
+#define LINUX_TIOCSIG     0x40045436u /* _IOW('T', 0x36, int); arg is signo */
+#define LINUX_TIOCVHANGUP 0x5437      /* hangup this tty */
+#define LINUX_TIOCGPKT    0x80045438u /* _IOR('T', 0x38, int) */
+#define LINUX_TIOCGPTLCK  0x80045439u /* _IOR('T', 0x39, int) */
+#define LINUX_TIOCGEXCL   0x80045440u /* _IOR('T', 0x40, int) */
+#define LINUX_TIOCGPTPEER 0x5441u     /* _IO('T', 0x41); arg = open flags */
+#define LINUX_TIOCPKT_DATA       0x00
+#define LINUX_TIOCPKT_FLUSHREAD  0x01
+#define LINUX_TIOCPKT_FLUSHWRITE 0x02
+#define LINUX_TIOCPKT_STOP       0x04
+#define LINUX_TIOCPKT_START      0x08
+#define LINUX_TIOCPKT_DOSTOP     0x10
+#define LINUX_TIOCPKT_NOSTOP     0x20
+#define LINUX_TIOCPKT_IOCTL      0x40
 
 /*
  * Linux x86_64 calling convention at syscall entry (apps + UDX hosts):

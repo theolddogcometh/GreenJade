@@ -24,8 +24,8 @@
  *
  * Soft residual (C2 libcgj resolv.h; Soft!=product; G-AC-1; Dual DoD A/B OPEN):
  *   soft     = __res_state + res_init/res_query/res_search stubs (no real DNS
- *              in libc; DNS may live in netstackd later)
- *   product  = Dual DoD B = rtl8168_udx + DDI + netstackd (OPEN); freestanding SKIP
+ *              in libc; leftover netstackd :7777 is not Dual DoD B)
+ *   product  = Dual DoD B = rtl8168_udx → net_tcp → sshd (OPEN until interactive SSH login)
  *   honesty  = resolv soft != product DNS close; agent PASS != Dual DoD close;
  *              stamp-free bar honesty (no version stamp); G-AC-1 no .ko AC
  *   law      = dual MIT OR Apache-2.0; no GPL; H1 no net_eth_poll from IRQ;

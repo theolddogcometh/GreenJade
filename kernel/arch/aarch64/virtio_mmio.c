@@ -796,6 +796,7 @@ aarch64_uart_put_hex((unsigned long)VIRTIO_SOFT_WAVE);
 
     /* Grep: aarch64: virtio soft honesty */
     aarch64_uart_puts("aarch64: virtio soft honesty product_kernel=OPEN "
+                      "soft_only=1 wave=");
     aarch64_uart_put_hex((unsigned long)VIRTIO_SOFT_WAVE);
     aarch64_uart_puts("\n");
 

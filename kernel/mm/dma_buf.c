@@ -47,7 +47,7 @@
  *
  * UDX/DDI helpers (coherent / map_single / window_ok / ddi_*) residual only.
  * Soft!=product: no VT-d grant / no live DMA window cap mint / no IOTLB.
- * soft PASS != DUT arping R-climb / :22; soft PASS != product UDX DMA caps.
+ * soft PASS != DUT arping R-climb / interactive SSH login; soft PASS != product UDX DMA caps.
  * Fail logs hard-capped (DMA_BUF_FAIL_LOG_CAP). No stamp storms. No version stamp.
  * G-AC-1: not Linux DMA API complete; not in-kernel .ko product.
  *

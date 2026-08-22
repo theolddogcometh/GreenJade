@@ -4,9 +4,8 @@
 # Generate optional kernel .S embed stubs for staged plain Linux .ko blobs.
 #
 # Purpose (ABI / module-path development only):
-#   Materialize kernel/proc/*_mod_blob.S that .incbin a plain ELF .ko from
-#   build/linux-drivers/modules/ — same pattern as init_embed.S / storaged_embed.S.
-#   Coordinator wires objects into the kernel link; this script only emits .S.
+#   Materialize abandoned/kernel/proc/*_mod_blob.S that .incbin a plain ELF .ko.
+#   FORBIDDEN without an explicit operator sentence this turn. Not product-linked.
 #
 # Honesty:
 #   - Host .ko are often GPL. They are NOT GreenJade product code.
@@ -27,7 +26,7 @@
 # Env:
 #   GJ_LINUX_DRIVERS   — staging root (default: build/linux-drivers)
 #   GJ_LINUX_MOD_MAX   — max uncompressed bytes (default: 524288 = 512 KiB)
-#   GJ_LINUX_EMBED_OUT — dir for generated .S (default: kernel/proc)
+#   GJ_LINUX_EMBED_OUT — dir for generated .S (default: abandoned/kernel/proc)
 #
 # Outputs (when size OK):
 #   kernel/proc/r8169_mod_blob.S
@@ -38,9 +37,8 @@
 #     symbols: gj_usb_storage_ko_blob / gj_usb_storage_ko_blob_end
 #   kernel/proc/linux_mod_embed.S  — tiny pattern note (always refresh)
 #
-# Makefile: r8169_mod_blob.S is always linked; xhci_pci_mod_blob.S and
-# usb_storage_mod_blob.S are linked only if the generated .S exists
-# (weak symbols in main.c otherwise). Soft≠product.
+# Makefile: these blobs are NOT product-linked. Tree lives under abandoned/.
+# Soft≠product. G-AC-1. Do not invent 179.
 #
 # Greppable: embed-linux-mod: PASS | SKIP | FAIL
 #
@@ -50,7 +48,7 @@ cd "$root"
 
 drv="${GJ_LINUX_DRIVERS:-build/linux-drivers}"
 max="${GJ_LINUX_MOD_MAX:-524288}"
-out_dir="${GJ_LINUX_EMBED_OUT:-kernel/proc}"
+out_dir="${GJ_LINUX_EMBED_OUT:-abandoned/kernel/proc}"
 # shellcheck disable=SC2086
 mods="${*:-r8169}"
 

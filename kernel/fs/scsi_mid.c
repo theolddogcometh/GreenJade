@@ -28,7 +28,7 @@
  *   - Freestanding MSC SKIP (not freestanding xHCI MSC product path)
  *   - Product USB = xhci_udx (UDX/DDI Dual DoD A) - not this mid residual
  *   - Product mid = userspace scsi_mid (G-AC-1: no .ko product AC)
- *   - Dual DoD A/B remain OPEN until DUT proof; soft lamps never close
+ *   - Dual DoD A/B remain OPEN until USB path / interactive SSH login; soft lamps never close
  *     Dual DoD (dual_dod_a=OPEN_UDX path=xhci_udx; dual_dod_b=OPEN;
  *     soft_no_close=1). This residual is C0 interim mid only.
  *   - No version stamps, no stamp storms, no hard-gates, no GPL

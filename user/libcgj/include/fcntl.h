@@ -23,7 +23,7 @@
  *
  * Soft residual (C2 libcgj fcntl.h; Soft!=product; G-AC-1; Dual DoD A/B OPEN):
  *   soft     = open/openat/openat2/fcntl/creat/flock/lockf/fallocate/posix_fadvise
- *              + splice/tee/vmsplice; O_*/F_*/AT_*/RESOLVE_* Linux numbers
+ *              + splice/tee/vmsplice; O_* F_* AT_* RESOLVE_* Linux numbers
  *   product  = hybrid ABI open path via doors/VFS; not freestanding class
  *   honesty  = flag catalog != product FS completeness; agent PASS != Dual DoD
  *              close; stamp-free bar honesty (no version stamp); G-AC-1 no .ko AC
@@ -40,14 +40,30 @@
 #define O_RDONLY    0
 #define O_WRONLY    1
 #define O_RDWR      2
+#ifndef O_ACCMODE
+#define O_ACCMODE   3
+#endif
 #define O_CREAT     0100
 #define O_EXCL      0200
 #define O_NOCTTY    0400
 #define O_TRUNC     01000
 #define O_APPEND    02000
 #define O_NONBLOCK  04000
+#define O_DSYNC     010000
+#define O_ASYNC     020000
 #define O_DIRECTORY 0200000
+#define O_NOFOLLOW  0400000
+#define O_DIRECT    040000
+#define O_NOATIME   01000000
 #define O_CLOEXEC   02000000
+#define O_SYNC      04010000
+#define O_RSYNC     O_SYNC
+#define O_PATH      010000000
+#define O_TMPFILE   020200000
+#define O_NDELAY    O_NONBLOCK
+#ifndef O_LARGEFILE
+#define O_LARGEFILE 0
+#endif
 
 /* ---- *at(2) dirfd / symlink flags -------------------------------------- */
 
@@ -55,6 +71,7 @@
 #define AT_SYMLINK_NOFOLLOW 0x100
 #define AT_REMOVEDIR        0x200
 #define AT_SYMLINK_FOLLOW   0x400
+#define AT_NO_AUTOMOUNT     0x800
 #define AT_EMPTY_PATH       0x1000
 #define AT_EACCESS          0x200
 
@@ -86,6 +103,21 @@ struct open_how {
 #define F_GETLK     5
 #define F_SETLK     6
 #define F_SETLKW    7
+#define F_SETOWN    8
+#define F_GETOWN    9
+#define F_SETSIG    10
+#define F_GETSIG    11
+#define F_GETLK64   12
+#define F_SETLK64   13
+#define F_SETLKW64  14
+#define F_SETOWN_EX 15
+#define F_GETOWN_EX 16
+#define F_OFD_GETLK 36
+#define F_OFD_SETLK 37
+#define F_OFD_SETLKW 38
+#define F_DUPFD_CLOEXEC 1030 /* Linux; OpenSSH privsep / fd passing */
+#define F_SETPIPE_SZ    1031
+#define F_GETPIPE_SZ    1032
 #define FD_CLOEXEC  1
 
 #define F_RDLCK 0

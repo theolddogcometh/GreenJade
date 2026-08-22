@@ -40,7 +40,7 @@
  *   synchronize_irq soft no-op because thr-only: handlers run
  *   synchronously in dispatch (no separate hard-IRQ thread to park).
  *   Product hosts (rtl8168_udx / xhci_udx) are thr-only table+fire
- *   until product Notification cap mint (OPEN).
+ *   (Notification cap mint remains OPEN; Dual DoD B close is interactive SSH login).
  *   != kernel linux_time_soft request_threaded_irq primary+thread_fn.
  *   thr_only=1 hard_primary=0 hard_irq_thread=0 soft_ne_product=1
  *   H1=no_net_eth_poll DoD_A=OPEN DoD_B=OPEN freestanding_class=SKIP.

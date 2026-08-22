@@ -15,11 +15,11 @@
 #     (GJ_RTL8168_PROBE=0 · GJ_XHCI_MSC_PROBE=0); residual opt-in only.
 #   - Product path = userspace UDX hosts (ddi_host / rtl8168_udx / xhci_udx)
 #     over hot+cold ABI/DDI — not freestanding class drivers, not .ko product AC.
-#   - Dual DoD A (USB UDX) / B (NIC UDX) remain OPEN until DUT proof.
+#   - Dual DoD A remain OPEN until host USB path; B until interactive SSH login.
 #   - bar3 / Deck Top 50 remain OPEN until Steam client + matrix evidence.
 #   - Stamp-free script: does not bump GJ_IMAGE_VERSION / invent stamps;
 #     flash identity is KERNEL.ELF / gj-image-version only (Soft!=product).
-#   - Bar honesty v2026.08.04.75 panel context only — never invent .76.
+#   - Bar honesty v0.1.182 packed, not host-probed — never invent next N.
 #   - Soft-scan serial (exit 0): ./scripts/gj-product-summary.sh <log>
 #   - Hard product keys:        ./scripts/gj-quick-keys.sh <log>
 #
@@ -30,7 +30,7 @@
 #   freestanding residual — class SKIP default (not Dual DoD close)
 #   Dual DoD residual    — A/B OPEN; rootfs pack != UDX product close
 #   honesty residual     — product_bins count != Dual DoD / bar3 / product AC
-#   stamp residual       — never bump GJ_IMAGE_VERSION; no invent .76
+#   stamp residual       — never bump GJ_IMAGE_VERSION; no invent next N
 # greppable: stage-rootfs: soft residual dual_dod
 # greppable: stage-rootfs: soft residual product=UDX+ABI
 # greppable: stage-rootfs: soft residual freestanding class SKIP
@@ -55,13 +55,30 @@ rm -rf "$out"
 mkdir -p "$out/bin" "$out/sbin" "$out/etc" "$out/tmp" "$out/var/tmp" \
          "$out/usr/bin" "$out/usr/sbin" "$out/usr/lib" "$out/lib" "$out/proc" \
          "$out/dev" "$out/dev/shm" "$out/mnt" "$out/var/log" "$out/etc/ssh" \
-         "$out/root" "$out/etc/greenjade"
+         "$out/root" "$out/etc/greenjade" \
+         "$out/var/empty" "$out/var/run" "$out/usr/libexec"
+# OpenSSH-portable fatal-without layout (sshd_gj abandoned; do not copy).
+# /var/empty: privsep chroot — root-owned, not group/world-writable.
+# /var/run: pid dir. /etc/ssh: config dir. /usr/libexec: sshd-session / sshd-auth.
+# HostKey: host-libc ssh-keygen into /etc/ssh when present (not DUT keygen).
+# sshd_config + /etc/group staged when missing (packed != Dual DoD B close).
+# Dual DoD B remains OPEN (host keys != interactive SSH login).
+chmod 0755 "$out/var/empty" "$out/var/run" "$out/etc/ssh" "$out/usr/libexec"
+# Staging host may not be root; DUT must still see uid 0 on /var/empty.
+chown root:root "$out/var/empty" 2>/dev/null || true
 
 cp -f build/user/init.elf "$out/sbin/init"
-cp -f build/user/shell.elf "$out/bin/sh"
-cp -f build/user/shell.elf "$out/bin/greenjade-shell"
-# Product shell also as usr/bin for FHS-shaped lookup
-cp -f build/user/shell.elf "$out/usr/bin/sh" 2>/dev/null || true
+# Product /bin/sh is vendored dash (libcgj). Old smoke stays greenjade-shell.
+if [ ! -f build/user/dash.elf ]; then
+	echo "stage-rootfs: FAIL need build/user/dash.elf (make dash)" >&2
+	exit 1
+fi
+cp -f build/user/dash.elf "$out/bin/sh"
+cp -f build/user/dash.elf "$out/bin/dash"
+cp -f build/user/dash.elf "$out/usr/bin/sh" 2>/dev/null || true
+if [ -f build/user/shell.elf ]; then
+	cp -f build/user/shell.elf "$out/bin/greenjade-shell"
+fi
 cp -f build/user/sessiond.elf "$out/usr/bin/sessiond" 2>/dev/null || true
 cp -f build/user/netstackd.elf "$out/usr/bin/netstackd" 2>/dev/null || true
 cp -f build/user/storaged.elf "$out/usr/bin/storaged" 2>/dev/null || true
@@ -75,26 +92,63 @@ if [ -f build/user/hda_client.elf ]; then
 	cp -f build/user/hda_client.elf "$out/usr/bin/hda_client"
 	cp -f build/user/hda_client.elf "$out/bin/hda_client"
 fi
-# Product sshd — freestanding ELF, enabled by default on live/hwtest boot
-if [ -f build/user/sshd.elf ]; then
-	cp -f build/user/sshd.elf "$out/usr/sbin/sshd"
-	cp -f build/user/sshd.elf "$out/sbin/sshd"
-	mkdir -p "$out/etc/ssh"
-	cat >"$out/etc/ssh/sshd_config" <<'SSHEOF'
-# GreenJade product sshd (freestanding). Port 22; pubkey preferred.
+# Product SSH is OpenSSH-portable (Linux ABI). Copy DUT ELFs when present.
+# Do not copy abandoned sshd_gj (abandoned/user/sshd/ → build/user/sshd.elf).
+# Staging binaries != interactive SSH login; Dual DoD B remains OPEN.
+if [ -f build/openssh-dut/sshd ]; then
+	cp -f build/openssh-dut/sshd "$out/usr/sbin/sshd"
+	chmod +x "$out/usr/sbin/sshd"
+fi
+if [ -f build/openssh-dut/sshd-session ]; then
+	cp -f build/openssh-dut/sshd-session "$out/usr/libexec/sshd-session"
+	chmod +x "$out/usr/libexec/sshd-session"
+fi
+if [ -f build/openssh-dut/sshd-auth ]; then
+	cp -f build/openssh-dut/sshd-auth "$out/usr/libexec/sshd-auth"
+	chmod +x "$out/usr/libexec/sshd-auth"
+fi
+# Host-libc OpenSSH only (build/openssh/ssh-keygen). Not DUT ssh-keygen.
+# Packed HostKey != Dual DoD B close.
+if [ -x build/openssh/ssh-keygen ] && \
+   [ ! -f "$out/etc/ssh/ssh_host_ed25519_key" ]; then
+	build/openssh/ssh-keygen -t ed25519 \
+		-f "$out/etc/ssh/ssh_host_ed25519_key" -N ''
+	chmod 600 "$out/etc/ssh/ssh_host_ed25519_key"
+	chmod 644 "$out/etc/ssh/ssh_host_ed25519_key.pub"
+fi
+# Packed sshd_config != interactive SSH login; Dual DoD B remains OPEN.
+# PrivilegeSeparation stays default — do not invent sandbox.
+# No Subsystem sftp unless a sftp-server binary is staged.
+if [ ! -f "$out/etc/ssh/sshd_config" ]; then
+	cat >"$out/etc/ssh/sshd_config" <<'EOF'
+# OpenSSH-portable 10.5 DUT (packed config != Dual DoD B close)
 Port 22
-Protocol 2
-PermitRootLogin prohibit-password
-PasswordAuthentication no
+HostKey /etc/ssh/ssh_host_ed25519_key
+PidFile none
+PermitRootLogin yes
 PubkeyAuthentication yes
-AuthorizedKeysFile /etc/ssh/authorized_keys
-X11Forwarding no
-SSHEOF
-	if [ -f build/hwtest-keys/id_ed25519.pub ]; then
-		cp -f build/hwtest-keys/id_ed25519.pub "$out/etc/ssh/authorized_keys"
-	else
-		: >"$out/etc/ssh/authorized_keys"
-	fi
+PasswordAuthentication no
+KbdInteractiveAuthentication no
+AuthorizedKeysFile .ssh/authorized_keys
+PrintMotd no
+UseDNS no
+# OpenSSH 10.5 trio on DUT
+# do not set sftp subsystem unless the binary is staged
+EOF
+	chmod 644 "$out/etc/ssh/sshd_config"
+fi
+# Root authorized_keys from lab hwtest pubkey when present; skip if missing.
+mkdir -p "$out/root/.ssh"
+chmod 700 "$out/root/.ssh"
+if [ -f build/hwtest-keys/id_ed25519.pub ] && \
+   [ ! -f "$out/root/.ssh/authorized_keys" ]; then
+	cp -f build/hwtest-keys/id_ed25519.pub "$out/root/.ssh/authorized_keys"
+	chmod 600 "$out/root/.ssh/authorized_keys"
+fi
+# sshd privsep shell: not a login shell, not sshd_gj, not dash.
+if [ ! -e "$out/usr/sbin/nologin" ]; then
+	printf '%s\n' '#!/bin/sh' 'exit 1' >"$out/usr/sbin/nologin"
+	chmod 0755 "$out/usr/sbin/nologin"
 fi
 
 # Dynlinker scaffold (PT_INTERP target for product Steam/glibc path)
@@ -142,9 +196,20 @@ cat >"$out/etc/hostname" <<'EOF'
 greenjade
 EOF
 
+# sshd uid/gid 74 matches libcgj pwd_grp privsep user (home /var/empty).
 cat >"$out/etc/passwd" <<'EOF'
 root:x:0:0:root:/root:/bin/sh
+sshd:x:74:74:sshd:/var/empty:/usr/sbin/nologin
 EOF
+
+if [ ! -f "$out/etc/group" ]; then
+	cat >"$out/etc/group" <<'EOF'
+root:x:0:
+sshd:x:74:
+jay:x:1000:
+EOF
+	chmod 644 "$out/etc/group"
+fi
 
 cat >"$out/etc/issue" <<'EOF'
 GreenJade \n \l
@@ -176,9 +241,9 @@ GJ_FREESTANDING_CLASS_SKIP=1
 # GJ_RTL8168_PROBE=0 · GJ_XHCI_MSC_PROBE=0 — product path = UDX hosts
 # Dual DoD A=USB UDX (xhci_udx) · B=NIC UDX (rtl8168_udx) — both OPEN
 # Stamp-free: rootfs pack does not own GJ_IMAGE_VERSION (KERNEL.ELF identity only)
-# Bar honesty v2026.08.04.75 panel context — never invent .76
+# Bar honesty v0.1.182 packed, not host-probed — never invent next N
 GJ_STAMP_FREE=1
-GJ_BAR_HONESTY=v2026.08.04.75
+GJ_BAR_HONESTY=v0.1.182
 GJ_PRODUCT_PATH=UDX+ABI
 EOF
 
@@ -193,13 +258,21 @@ lib/libgj-gnu.so.1     — GNU-hash product SO (gj_gnu_export)
 lib/libc.so.6          — clean-room libcgj (glibc-shaped; see docs/GLIBC_COMPAT.md)
 usr/bin/sessiond       — compositor server ELF
 usr/bin/netstackd      — net server ELF
-usr/sbin/sshd          — freestanding SSH daemon (port 22, on by default)
+usr/sbin/sshd          — OpenSSH-portable DUT (build/openssh-dut/sshd; not sshd_gj)
+usr/libexec/sshd-session — OpenSSH-portable DUT helper (if build/openssh-dut present)
+usr/libexec/sshd-auth  — OpenSSH-portable DUT helper (if build/openssh-dut present)
 usr/bin/storaged       — storage server ELF
 usr/bin/vfsd           — block-backed VFS server (store door + named cache)
 usr/sbin/scsi_mid      — freestanding SCSI mid (also kernel-embedded live spawn)
 usr/bin/hda_client     — freestanding HDA client (kernel multi-stream != Steam audio)
-etc/ssh/sshd_config    — freestanding sshd config
-etc/ssh/authorized_keys — hwtest ed25519 pubkey when present
+etc/ssh                — OpenSSH config dir (ssh_host_ed25519_key via host-libc ssh-keygen)
+etc/ssh/sshd_config    — OpenSSH-portable 10.5 DUT (Port 22; packed != interactive login)
+etc/passwd             — root + sshd uid 74 (libcgj pwd_grp)
+etc/group              — root:x:0: sshd:x:74: jay:x:1000:
+usr/sbin/nologin       — privsep non-shell (#!/bin/sh; exit 1; not sshd_gj)
+root/.ssh              — 700; authorized_keys if build/hwtest-keys/id_ed25519.pub exists
+var/empty              — OpenSSH privsep chroot (root-owned)
+var/run                — OpenSSH pid dir
 etc/greenjade/product.env — soft inventory flags (Soft!=product)
 opt/steam/             — staged Steam bootstrap (option 2; make steam-fetch)
 usr/bin/steam          — thin launcher → /opt/steam or GJ-PERSIST/steam
@@ -214,7 +287,7 @@ Honesty (Soft!=product · G-AC-1 · Dual DoD OPEN · stamp-free)
     (GJ_RTL8168_PROBE=0 · GJ_XHCI_MSC_PROBE=0); residual opt-in only.
   - Product path = userspace UDX (ddi_host / rtl8168_udx / xhci_udx)
     over hot+cold ABI/DDI — not freestanding class, not .ko product AC.
-  - Dual DoD A (USB UDX) / B (NIC UDX) remain OPEN until DUT proof.
+  - Dual DoD A remain OPEN until host USB path; B until interactive SSH login.
   - bar3 / Deck Top 50 remain OPEN until Steam client + matrix evidence.
   - Stamp-free: this tree does not bump GJ_IMAGE_VERSION; flash identity
     is KERNEL.ELF / ./scripts/gj-image-version.sh only (Soft!=product).
@@ -253,13 +326,13 @@ sz=$(du -sk "$out" | awk '{print $1}')
 echo "stage-rootfs: PASS files=$n size_kb=$sz product_bins=$prod_n path=$out"
 echo "stage-rootfs: Soft!=product · G-AC-1 — freestanding rootfs pack != product TX/RX/BOT != bar3"
 echo "stage-rootfs: freestanding class SKIP (GJ_RTL8168_PROBE=0 · GJ_XHCI_MSC_PROBE=0 residual opt-in)"
-echo "stage-rootfs: Dual DoD A/B OPEN (UDX USB/NIC) — product_bins soft inventory only"
+echo "stage-rootfs: Dual DoD A/B OPEN (A until USB path; B until interactive SSH login) — product_bins soft inventory only"
 echo "stage-rootfs: stamp-free — no GJ_IMAGE_VERSION bump; flash identity is KERNEL.ELF only"
 echo "stage-rootfs: soft residual product_bins=${prod_n} (pack presence only; not Dual DoD close)"
 echo "stage-rootfs: soft residual product=UDX+ABI product_host=ddi_host+rtl8168_udx+xhci_udx"
 echo "stage-rootfs: soft residual freestanding class SKIP"
 echo "stage-rootfs: soft residual dual_dod A=OPEN B=OPEN (rootfs pack != Dual DoD close)"
-echo "stage-rootfs: soft residual stamp-free (bar honesty v2026.08.04.75; NEVER bump GJ_IMAGE_VERSION; no invent .76)"
+echo "stage-rootfs: soft residual stamp-free (bar honesty v0.1.182 packed, not host-probed; NEVER bump GJ_IMAGE_VERSION; no invent next N)"
 echo "  Soft!=product: product_bins=$prod_n pack presence != Dual DoD close != Steam Top-50"
 echo "  Soft!=product · G-AC-1: UDX hosts (not this tree) own product TX/RX/BOT path"
 echo "  bar3: OPEN (client launch + Deck Top 50 still NOT-TRIED)"

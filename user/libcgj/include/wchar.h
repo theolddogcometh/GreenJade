@@ -21,7 +21,7 @@
  * Full ISO 10646 locale multibyte state machines for every encoding.
  *
  * Soft residual (C2 libcgj header; Soft!=product; G-AC-1; Dual DoD A/B OPEN):
- *   soft path  = wcs*/wmem*/mbrtowc/fwprintf UTF-8/C-locale bring-up
+ *   soft path  = wcs* wmem* mbrtowc/fwprintf UTF-8/C-locale bring-up
  *   product    = full locale multibyte product state machines (OPEN)
  *   catalog    = WEOF + wide string/memory + conversion + wide stdio +
  *                open_wmemstream soft surface

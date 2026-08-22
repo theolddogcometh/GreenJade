@@ -29,7 +29,7 @@
  *   Product path class C2: door HBA when READY (virtio-scsi T0) + mid policy;
  *   product drivers/storage direction = UDX/DDI+ABI (not soft LUN alone).
  *   Soft LUN / soft inventory != product multi-server confine / Dual DoD close.
- *   Dual DoD A/B remain OPEN (this residual does not close USB/NIC product).
+ *   Dual DoD A/B remain OPEN (A until host USB path; B until interactive SSH login).
  *   H1/H2/H3 honesty: no net_eth_poll; lean once-lamps (no stamp storm);
  *   thr-exit death order stays kernel door residual (daemon exits clean).
  *   Soft!=product. G-AC-1 (no Linux .ko product AC). Dual MIT OR Apache-2.0.

@@ -1,13 +1,14 @@
-# netstackd (product)
+# netstackd (leftover smoke)
 
-Userspace network stack host for GreenJade — freestanding live daemon + host
-UDP-echo smoke. Middle of Dual DoD **B** chain:
+Userspace network-door smoke for GreenJade — freestanding live daemon + host
+UDP-echo. **Not** Dual DoD **B** mid-hop. Fly **v0.1.184** (packed, not host-probed; Dual DoD **A/B OPEN**; **0.2.0** reserved) product `:22` is:
 
 ```text
-rtl8168_udx (UDX NIC residual) → netstackd (this) → sshd :22
+rtl8168_udx → kernel net_tcp → sshd.elf :22
 ```
 
-**Soft!=product.** Dual DoD B **L3 ARP + ping proven** (2026-08-14) on lab **10.200.125.50**. Dual DoD B stays **OPEN** until host sshd **:22**.
+This ELF listens **`:7777`**, then RELEASE + exit. Soft≠product. Dual DoD B stays
+**OPEN** until host **interactive SSH login** (banner / :22 / PK_OK / SUCCESS ≠ close).
 
 ## License
 
@@ -18,14 +19,14 @@ path; **no GPL**.
 
 | Binary | Build | Role |
 |--------|-------|------|
-| `build/user/netstackd.elf` | `make netstackd-gj` | Freestanding product daemon (net door, TCP multi-seg, virtio ring + soft door) |
+| `build/user/netstackd.elf` | `make netstackd-gj` | Leftover smoke (`:7777`, then RELEASE). Not Dual DoD B. |
 | `build/netstackd` | `make netstackd` | Host POSIX UDP-echo smoke |
 
 - Kernel (interim doors): `net_lo` (UDP/dgram), **`net_tcp`** (IPv4 TCP over virtio-net + loopback pairs), `net_eth` (ARP/ICMP/UDP echo).
 - UDX ready residual: lab IP **10.200.125.50** + `LAB_MAC_UDX` pin when freestanding rtl **SKIP** (`net_l2: soft udx ready`).
 - Freestanding `netstackd-gj`: door CLAIM, dgram echo, **TCP listen/accept/send/recv**, **multi-segment TX/RX**, virtio ring path, **soft door deepen**.
 - Product direction: own more of the stack in this process; kernel retains IRQ/DMA windows; laptop wire via **rtl8168_udx** thr L2 inject/pull.
-- **Live product path:** embedded ELF spawned at boot (`netstackd: live spawn PASS` + freestanding `netstackd-gj: live path PASS`).
+- **Live leftover smoke:** embedded ELF spawned at boot (`netstackd: live spawn PASS` + freestanding `netstackd-gj: live path PASS`). Soft≠product. Dual DoD B stays **OPEN**.
 
 ## Layout
 
@@ -262,4 +263,4 @@ See also: [ABI-first pivot](../../docs/ABI_FIRST_PIVOT.md) (product direction).
 
 ---
 
-**Project:** GreenJade · Soft≠product · Dual DoD A/B **OPEN**. [root README](../../README.md). Support: [Patreon — TheOldDog](https://www.patreon.com/cw/TheOldDog).
+**Project:** GreenJade · Soft≠product · Dual DoD A **OPEN** until host USB path · Dual DoD B **OPEN** until interactive SSH login. leftover netstackd :7777 is not Dual DoD B. [root README](../../README.md). Support: [Patreon — TheOldDog](https://www.patreon.com/cw/TheOldDog).

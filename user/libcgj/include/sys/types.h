@@ -45,7 +45,7 @@ typedef int           pid_t;
 typedef unsigned      uid_t;
 typedef unsigned      gid_t;
 typedef long          off_t;
-typedef unsigned long mode_t;
+typedef unsigned int  mode_t; /* Linux LP64: unsigned int, not long */
 typedef unsigned long dev_t;
 typedef unsigned long ino_t;
 typedef unsigned long nlink_t;
@@ -57,6 +57,30 @@ typedef int           clockid_t;
 typedef unsigned long useconds_t;
 typedef unsigned      id_t;
 typedef int           key_t;
+
+/* BSD / historic aliases OpenSSH expects (HAVE_FD_MASK, u_int32_t). */
+#ifndef __u_char_defined
+typedef unsigned char  u_char;
+typedef unsigned short u_short;
+typedef unsigned int   u_int;
+typedef unsigned long  u_long;
+#define __u_char_defined
+#endif
+#ifndef __BIT_TYPES_DEFINED__
+typedef uint8_t        u_int8_t;
+typedef uint16_t       u_int16_t;
+typedef uint32_t       u_int32_t;
+typedef uint64_t       u_int64_t;
+#define __BIT_TYPES_DEFINED__
+#endif
+#ifndef _CADDR_T_DEFINED
+typedef char *caddr_t;
+#define _CADDR_T_DEFINED
+#endif
+#ifndef _GJ_FD_MASK_DEFINED
+typedef unsigned long fd_mask;
+#define _GJ_FD_MASK_DEFINED
+#endif
 
 #ifdef __cplusplus
 }

@@ -2,7 +2,7 @@
 
 | Field | Value |
 |-------|--------|
-| **Status** | **Dual DoD (TODO Current track):** **A** Linux USB module path on laptop **OPEN** until DUT proof (xHCI **SKIP BUILTIN** · soft `linux_usb_soft` seed +33 `usb_*`/`scsi_*`; MSC may still FAIL KSYM on generics e.g. `sg_nents`; freestanding stage-15 still TO — not a module-path close). **B** sshd TCP **:22** is **OPEN** until DUT proof and is **not** this doc’s close (see TODO). Net: freestanding **ICMP proven earlier**; **recent boots R0/R1 regression**; hybrid **SOFT gate0**. Image: **STATUS (static) vYYYY.MM.DD.N** via `GJ_IMAGE_VERSION`. Soft ≠ product; **G-AC-1**; dual **MIT OR Apache-2.0**; bar3 only [STEAM_BAR3_STATUS.md](STEAM_BAR3_STATUS.md) |
+| **Status** | **Abandoned leftover** (not linked). **Dual DoD (TODO Current track):** **A** `xhci_udx` USB path **OPEN** (this doc is leftover module-path / ksym eng, not A close; never `USBCMD.RS=1`). **B** **OPEN** until host **interactive SSH login** (not this doc’s close). Image: **STATUS (static) v0.1.184** via `GJ_IMAGE_VERSION` — packed, not host-probed. **0.2.0** reserved. Soft ≠ product; **G-AC-1**; dual **MIT OR Apache-2.0**; bar3 only [STEAM_BAR3_STATUS.md](STEAM_BAR3_STATUS.md) |
 | **DUT class** | Laptop real-HW (G752VT primary; same steps for other Intel x86_64) |
 | **Law** | Dual **MIT OR Apache-2.0** source tree; **no GPL source in tree** |
 | **Strategy** | [ABI_FIRST_PIVOT.md](ABI_FIRST_PIVOT.md) — not freestanding class-driver thrash |
@@ -24,20 +24,20 @@
 | **G-AC-1** | **No Linux `.ko` binary runs in the kernel as product.** Soft load / REAL probe / hybrid lamps are eng only — never Steam/bar3 product AC. |
 | **Product** | **Hot + cold Linux ABI** + **Linux-shaped drivers in userspace** (**UDX/DDI**). Product NIC is **not** in-kernel `r8169.ko`. |
 | **Soft residual** | Soft **`RUN_INIT=0`** / **`freestanding_no_exec`** (SKIP exec of staged `.ko` **init in kernel**) is **engineering residual** — “do not execute `.ko` init in-kernel” — **not** “never use Linux drivers.” Userspace Linux-shaped hosts remain allowed and are the product path. |
-| **Lab freestanding rtl** | In-kernel `rtl8168.c` / freestanding wire = **interim dual DoD B** lab net until UDX owns the wire. Not product NIC. |
+| **Lab freestanding rtl** | In-kernel `rtl8168.c` **SKIP** (`./abandoned`). Dual DoD **B** is `rtl8168_udx` + **interactive SSH login**. Not product NIC. |
 | **This doc’s track** | Collect → stage → soft loader/ksym → eng load/probe/datapath experiments. **Soft ≠ product.** |
 
 ---
 
-## Wave note — 2026-08-04 (dual DoD · module path = DoD A)
+## Wave note — 2026-08-04 (leftover MAP · module path ≠ Dual DoD A close)
 
-**Dual DoD (normative: [TODO.md](TODO.md) § Current track):** **A** this doc — Linux USB drivers path on laptop **OPEN** until DUT proof while freestanding stage-15 / xHCI **SKIP BUILTIN** / MSC soft seed (usb+scsi ksym; remaining generics). **B** sshd TCP **:22** on **lab freestanding** net (interim rtl) — **OPEN** until DUT proof; tracked in TODO, not closed by module soft lamps; **not** “product = in-kernel `r8169.ko`.” Soft ≠ product · **G-AC-1** · dual **MIT OR Apache-2.0**.
+**Dual DoD (normative: [TODO.md](TODO.md) § Current track):** **A** `xhci_udx` host USB path **OPEN**. This doc is leftover ksym / module-path eng — **not** Dual DoD A close. **B** **OPEN** until host **interactive SSH login**; not closed by module soft lamps; **not** “product = in-kernel `r8169.ko`.” Soft ≠ product · **G-AC-1** · dual **MIT OR Apache-2.0**.
 
-**Lab evidence (G752):** greppable STATUS / serial lamps below. Confirm image cut via **STATUS (static) v…** / `GJ_IMAGE_VERSION` (no test-panel photo IDs).
+**Lab evidence (G752):** greppable STATUS / serial lamps below. Fly **v0.1.184** packed, not host-probed (Dual DoD **A/B OPEN**; never `USBCMD.RS=1`; **0.2.0** reserved). Host lamps below are **historical (0.1.180)** unless restamped. Confirm image cut via **STATUS (static) v…** / `GJ_IMAGE_VERSION` (no test-panel photo IDs).
 
 | STATUS / lamp | Value |
 |---------------|--------|
-| **image** | **STATUS (static) vYYYY.MM.DD.N** (`GJ_IMAGE_VERSION`) |
+| **image** | **STATUS (static) v0.1.184** (`GJ_IMAGE_VERSION`) — packed, not host-probed |
 | **probe** | `PROBE SOFT` at **gate0** (typical) |
 | **NET** | freestanding **ICMP proven earlier** · guest **10.200.125.50** · hybrid **SOFT gate0**; **recent boots R0/R1 regression** |
 | **USB freestanding** | Stage 15 GET_CONFIG TO (lab path; ≠ DoD A close) |
@@ -46,10 +46,10 @@
 
 | Item | Fact |
 |------|------|
-| **DoD A (USB module)** | **OPEN** until DUT proof — soft usbcore seed live; need remaining generics + modular HC / real datapath |
+| **DoD A (USB module)** | **OPEN** until host USB path — this doc is abandoned-module history; product USB is **xhci_udx** (RS-off park). Soft usbcore seed ≠ close |
 | **NIC hybrid** | Soft eng live; **gate0 SOFT** (no REAL BAR); prior hybrid 4a eng when RX live |
 | **USB module** | xHCI **SKIP BUILTIN**; `linux_usb_soft` seed; remaining miss ~`sg_nents` |
-| **DoD B (sshd :22)** | **OPEN** until DUT proof — earlier ICMP ≠ TCP :22 ([TODO.md](TODO.md)) |
+| **DoD B (interactive SSH login)** | **OPEN** until host **interactive SSH login** — banner / :22 / ICMP ≠ close ([TODO.md](TODO.md)) |
 | **Prior 4a / ICMP** | `HYBRID WIRE=FS SOFT=R8169` · L2 RX live once · freestanding ICMP once |
 | **Not proven** | Full `.ko` wire (4b); USB MSC via module; product AC; continuous ICMP every boot |
 | **Honesty** | **Soft ≠ product.** Hybrid eng ≠ product. **G-AC-1.** Dual **MIT OR Apache-2.0**. |
@@ -129,7 +129,7 @@ Lab evidence: soft `pci_device_id` was **32 B**; RHEL **9.8** rows are **40 B** 
 | **No GPL source in tree** | Never paste Linux `r8169.c` / `xhci-*.c` / kernel trees into knano. |
 | **Staged `.ko` are host binaries** | Often GPL-bound; operator/dev media for **ABI + module-path eng**. **Not** dual-license product source. |
 | **G-AC-1 (product AC)** | **No Linux `.ko` runs in the kernel as product.** Steam/bar3 / shipping acceptance is **not** “we ship or exec GPL `.ko` in-kernel.” Product class-driver story = **hot+cold Linux ABI** + **Linux-SHAPED UDX/DDI userspace** (+ dual-license out-of-tree). |
-| **Product NIC** | **Not** in-kernel `r8169.ko` owning the wire. Lab freestanding `rtl8168` = interim dual **DoD B** only. |
+| **Product NIC** | **Not** in-kernel `r8169.ko` owning the wire. Dual DoD **B** is `rtl8168_udx` until host **interactive SSH login**. |
 | **`RUN_INIT=0` / `freestanding_no_exec`** | Soft SKIP **exec** of `.ko` init **in kernel** — eng residual aligned with G-AC-1. **Not** “never use Linux drivers”; product still hosts Linux-shaped drivers in **userspace**. |
 | **Module path = engineering track** | Collect → stage → soft loader/ksym → soft load/probe → iterative ksym → eng datapath experiments. Most of this is still **OPEN**. Soft ≠ product. |
 | **Not freestanding thrash** | In-kernel `rtl8168` / `xhci_msc` stage numbers are **lab honesty only**, not the primary laptop **product** driver strategy. |
@@ -278,7 +278,7 @@ sudo umount /mnt/gj-esp
 
 Design constraints:
 
-1. **Not freestanding thrash** — do not grow in-kernel `rtl8168.c` / `xhci_msc.c` as the **product** NIC/USB path. Lab freestanding rtl remains interim dual **DoD B** only; product NIC ≠ in-kernel `r8169.ko`.  
+1. **Not freestanding thrash** — do not grow in-kernel `rtl8168.c` / `xhci_msc.c` as the **product** NIC/USB path. Freestanding rtl **SKIP**; Dual DoD **B** is UDX + **interactive SSH login**; product NIC ≠ in-kernel `r8169.ko`.  
 2. **Not GPL source in tree** — implement clean-room loader/ksym; modules remain **operator-collected binaries**.  
 3. **Fail closed** — unresolved symbol → refuse load with greppable reason; no silent half-init.  
 4. **G-AC-1** — soft path may **SKIP exec** of `.ko` init in kernel (`freestanding_no_exec` / `RUN_INIT=0`). That residual is **eng**, not a ban on Linux-shaped **userspace** drivers.  
@@ -356,7 +356,7 @@ After load-time resolve (r8169 **180** strong und names all hit ksym; G752 lab e
 
 | TU | Role |
 |----|------|
-| `kernel/mm/linux_ksym.c` | Starter empty stubs (~272 names); capacity `LINUX_KSYM_MAX` |
+| `abandoned/kernel/mm/linux_ksym.c` | Leftover empty stubs (~272 names); **not linked** |
 | `linux_pci_soft` | PCI register/config/irq/resource soft bodies |
 | `linux_dma_soft` | DMA / ioremap / pcim / kmalloc / firmware HIT\|MISS |
 | `linux_netdev_soft` | netdev / NAPI / skb / (post-probe) rtnl + eth_* |
@@ -434,7 +434,7 @@ Two tracks — do not collapse claims:
 |-------|------|-------------|
 | **A — UDX + Linux ABI (product)** | Hot+cold ABI; `GJ_SYS_DDI=103`; `rtl8168_udx` / `xhci_udx` clean-room / dual-license **userspace** hosts | **Yes, product path** under **G-AC-1**; TX/RX / BOT still **OPEN** until evidence |
 | **B — Linux module path** (this doc) | Collect / stage / soft loader / ksym / soft load-probe eng | **Engineering / ABI** only; GPL binaries on media ≠ tree source; **no** `.ko` **in-kernel** product AC (**G-AC-1**) |
-| **Lab freestanding rtl** | In-kernel `rtl8168.c` wire / hybrid SOFT gate0 | **Interim dual DoD B** only — **not** product NIC; product NIC ≠ in-kernel `r8169.ko` |
+| **Lab freestanding rtl** | In-kernel `rtl8168.c` wire / hybrid SOFT gate0 | **SKIP** — **not** Dual DoD B; product NIC = `rtl8168_udx` |
 | **Soft residual** | `RUN_INIT=0` / `freestanding_no_exec` | Eng: SKIP `.ko` init **exec in kernel** — **not** “never use Linux drivers” |
 
 Operators may run **both** eng tracks: wave D lamps prove DDI/UDX wiring; module path proves hostability surfaces. Product ship story stays **userspace UDX/DDI + ABI**. Neither module soft lamps nor freestanding stages close bar3.
@@ -457,7 +457,7 @@ Use this checklist for the **module path**. Mark each row honestly.
 | **D4** | **`finit_module` / media boot path** | Staged media load or finit; greppable PASS/FAIL | **PARTIAL** — ESP `r8169.ko` + UEFI → `source=media`; embed fallback; GJ-PERSIST ext4 unread; finit vfs_ram-only. Soft≠product. §D4 media honesty |
 | **D5** | **Module loads** | Staged module `init` return 0 | **SOFT DONE** — r8169 INIT=0 on G752 (embed proven; media code path live, await lab panel/serial) |
 | **D6** | **Probe binds PCI** | Real `.ko` probe hostish `pci_dev` | **SOFT DONE** (REAL+SOFT1 stable; soft ≠ product) |
-| **D7** | **Net datapath** | Link + TX/RX; freestanding ↔ soft handoff | **OPEN** — freestanding **ICMP proven earlier**; **recent boots R0/R1** regression under hybrid **SOFT gate0**; handoff gate1 · Option B · phase4 still OPEN ([R8169_MMIO_HANDOFF.md](R8169_MMIO_HANDOFF.md)). Dual DoD **B** (:22) still OPEN. |
+| **D7** | **Net datapath** | Link + TX/RX; freestanding ↔ soft handoff | **OPEN** — freestanding **ICMP proven earlier**; **recent boots R0/R1** regression under hybrid **SOFT gate0**; handoff gate1 · Option B · phase4 still OPEN ([R8169_MMIO_HANDOFF.md](R8169_MMIO_HANDOFF.md)). Dual DoD **B** (interactive SSH login) still OPEN. |
 | **D8** | **USB datapath** | Bound xHCI: host controller runs; device path (e.g. MSC/HID) functional beyond soft lamp | **OPEN** — xHCI **SKIP BUILTIN**; soft **usbcore+scsi seed** (+33 stubs) advances MSC reloc past `usb_*`/`scsi_*`; first remaining miss **`sg_nents`** (or next non-USB generic). Soft load INIT=0 still ≠ stick. Freestanding **GET_CONFIG FAIL TO p21/s4**. Soft ≠ product. §D8 |
 | **D9** | **ksym honesty** | Docs/logs list remaining unresolved surface for full `r8169` / `xhci_hcd`; iterative resolve, no freestanding thrash substitute | **OPEN** (process) |
 | **D10** | **License honesty** | No GPL **source** in knano; staged `.ko` not claimed as dual-license product AC / bar3 close | **DONE** (policy) |
@@ -635,5 +635,5 @@ make linux-hwtest-img
 *Dual MIT OR Apache-2.0. Soft ≠ product. **G-AC-1:** no Linux `.ko` **runs in kernel** as product. Bar3 only STEAM_BAR3_STATUS.*  
 *Product = hot+cold Linux ABI + Linux-shaped drivers in **userspace** (UDX/DDI). Product NIC ≠ in-kernel `r8169.ko`.*  
 *`RUN_INIT=0` / `freestanding_no_exec` = eng residual (no in-kernel `.ko` init exec), **not** “never use Linux drivers.”*  
-*Lab freestanding rtl = interim dual DoD B. Module path = eng only.*  
-*2026-08-04: dual DoD **A** USB OPEN · **B** :22 OPEN until DUT proof. Net: freestanding ICMP proven earlier; recent boots R0/R1 regression; hybrid SOFT gate0. Image STATUS (static) v… via GJ_IMAGE_VERSION. PROBE SOFT · GET_CONFIG TO · usb-storage soft seed +33 usb_*/scsi_* (~sg_nents) · xHCI SKIP BUILTIN. D7/D8 OPEN. Soft ≠ product. No test-panel photo IDs.*
+*Lab freestanding rtl = SKIP (not Dual DoD B). Module path = eng only.*  
+*Fly **v0.1.184**: packed, not host-probed. Dual DoD **A** USB OPEN (never `USBCMD.RS=1`) · **B** OPEN until host **interactive SSH login**. **0.2.0** reserved. Soft ≠ product. No test-panel photo IDs.*

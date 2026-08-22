@@ -1,0 +1,4 @@
+# Public-relations writer — drafts only; never publish
+description = "GreenJade Patreon and X drafts in M0-OK voice; fail-closed claims"
+default_capability_mode = "read-write"
+reasoning_effort = "high"

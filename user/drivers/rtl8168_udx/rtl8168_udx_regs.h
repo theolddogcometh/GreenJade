@@ -11,17 +11,17 @@
  * PCI BAR inventories. Not a silicon certification matrix.
  *
  * CLEAN-ROOM: do not paste Linux r8169.c, Realtek GPL blobs, or
- * kernel/drv/rtl8168.c. Soft residual only -- never product TX/RX claim.
+ * abandoned/kernel/drv/rtl8168.c. Soft residual only -- never product TX/RX claim.
  *
  * Product path (Dual DoD B direction — Linux-shaped NIC via UDX):
  *   Userspace UDX+ABI+DDI host for 10ec:8168; caps for MMIO/IRQ/DMA.
- *   Freestanding kernel/drv/rtl8168.c is SKIP by default
- *   (GJ_RTL8168_PROBE=0) -- not product. Soft!=product. G-AC-1.
- *   Dual DoD B = OPEN (wire / lab IP / stack / sshd not closed here).
+ *   Freestanding abandoned/kernel/drv/rtl8168.c is SKIP by default
+ *   (GJ_RTL8168_PROBE=0) -- not linked, not product. Soft!=product. G-AC-1.
+ *   Dual DoD B OPEN until interactive SSH login. Banner / PK_OK / SUCCESS ≠ close.
  *
  * Product residual (C2; Dual DoD B OPEN; stamp-free bar v2026.08.04.75):
  *   product=UDX+sshd+stack — public reg names only; never program silicon.
- *   Chain residual: this host (rtl8168_udx) → netstackd → sshd :22.
+ *   Chain residual: this host (rtl8168_udx) → kernel net_tcp → sshd :22.
  *   Soft never_tx_rx / never_program residual != Dual DoD B wire close.
  * greppable: rtl8168_udx_regs: soft product residual product=UDX+sshd+stack
  * greppable: Soft!=product Dual DoD B OPEN product=UDX+sshd+stack
@@ -494,7 +494,7 @@
 /*
  * Product model honesty (names only; never a version stamp).
  * product = userspace Linux-shaped host over hot+cold ABI + DDI/UDX.
- * Freestanding kernel/drv/rtl8168.c default SKIP (GJ_RTL8168_PROBE=0).
+ * Freestanding abandoned/kernel/drv/rtl8168.c default SKIP (GJ_RTL8168_PROBE=0).
  * Soft residual != product AC. G-AC-1: no Linux .ko product.
  */
 #define RTL_SOFT_PRODUCT_UDX_ABI     1u /* product path = UDX+ABI+DDI */

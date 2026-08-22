@@ -32,11 +32,11 @@
  *   - Soft inventory: ONE short line at init / cold; cadence permanent no-op
  *   - Rate-limit PASS/FAIL lamps (CAP=4; no stamp storms; stamp-free)
  *   - Soft residual lean once: H1 thr-only + handoff/lab/fs_to_udx self-check
- *   - BAR stamp-free residual (v2026.08.04.75 context); never invent .76;
+ *   - BAR stamp-free residual; never invent next N;
  *     never bump GJ_IMAGE_VERSION from this unit.
- *   - W11 Dual DoD B FUNCTIONAL residual (Soft!=product; stamp-free bar
- *     v2026.08.04.75; never invent .76): wire handoff + :22 stack for product
- *     sshd. Eth demux TCP dport 22 soft tally (tcp22_seen) + consume honesty
+ *   - W11 Dual DoD B FUNCTIONAL residual (Soft!=product): wire handoff +
+ *     tcp22_seen for product sshd. Dual DoD B close is interactive SSH login.
+ *     Eth demux TCP dport 22 soft tally (tcp22_seen) + consume honesty
  *     (tcp22_demux when net_tcp_input accepts dport 22) feeds stack honesty
  *     into net_tcp_input; H1 thr-only poll owns drain (never IRQ). Dual DoD
  *     A/B remain OPEN (agent!=close). Product wire owner stays UDX+ABI (G-AC-1).
@@ -86,14 +86,19 @@
 #include <gj/virtio_net.h>
 
 /*
- * Guest identity - filled from net_l2 after probe (virtio QEMU 10.0.2.15 or
- * residual lab pin 10.200.125.50). Defaults match QEMU until net_l2_init +
- * net_eth_apply_l2_identity(). Soft!=product.
+ * Guest identity. Product UDX/lab (backend=none, Dual DoD B OPEN) pins the
+ * G752 DUT station MAC 2C:56:DC:0B:6A:13 and 10.200.125.50 so ARP SHA is
+ * not stale QEMU before net_l2 ready / SET_MAC. Virtio T0 overwrites from
+ * net_l2 after probe (52:54:00:12:34:56 / 10.0.2.15). Soft!=product.
  */
-static u8 g_aOurMac[6] = { 0x52, 0x54, 0x00, 0x12, 0x34, 0x56 };
-static u8 g_aOurIp[4] = { 10, 0, 2, 15 };
-/* Lab static IPv4 pin for residual rtl backend identity only. Soft!=product. */
+static u8 g_aOurMac[6] = { 0x2c, 0x56, 0xdc, 0x0b, 0x6a, 0x13 };
+static u8 g_aOurIp[4] = { 10, 200, 125, 50 };
+/* Lab static IPv4 pin (G752 DUT). Soft!=product Dual DoD B OPEN. */
 static const u8 g_aLabIp[4] = { 10, 200, 125, 50 };
+/* Lab station MAC (host arping SHA on 10.200.125.50). Soft!=product. */
+static const u8 g_aLabMac[6] = { 0x2c, 0x56, 0xdc, 0x0b, 0x6a, 0x13 };
+/* Stale QEMU SLIRP station; never ARP SHA on UDX/lab. Soft!=product. */
+static const u8 g_aQemuMac[6] = { 0x52, 0x54, 0x00, 0x12, 0x34, 0x56 };
 static u32 g_u32IdSyncChg;
 static u32 g_u32IdSyncChgLamp;
 
@@ -296,6 +301,40 @@ net_eth_ip_is_lab(const u8 *pIp)
     return 1;
 }
 
+/** Non-zero if MAC is all-zero (pre-UDX / unset station). Soft!=product. */
+static int
+net_eth_mac_is_zero(const u8 *pMac)
+{
+    u32 i;
+
+    if (pMac == NULL) {
+        return 1;
+    }
+    for (i = 0; i < 6u; i++) {
+        if (pMac[i] != 0u) {
+            return 0;
+        }
+    }
+    return 1;
+}
+
+/** Non-zero if MAC is stale QEMU SLIRP 52:54:00:12:34:56. Soft!=product. */
+static int
+net_eth_mac_is_stale_qemu(const u8 *pMac)
+{
+    u32 i;
+
+    if (pMac == NULL) {
+        return 1;
+    }
+    for (i = 0; i < 6u; i++) {
+        if (pMac[i] != g_aQemuMac[i]) {
+            return 0;
+        }
+    }
+    return 1;
+}
+
 /** Force guest IPv4 to lab pin (ARP/ICMP demux). Soft!=product. */
 static void
 net_eth_force_lab_ip(void)
@@ -307,42 +346,78 @@ net_eth_force_lab_ip(void)
     }
 }
 
+/** Force guest MAC to lab DUT station (ARP SHA). Soft!=product. */
+static void
+net_eth_force_lab_mac(void)
+{
+    u32 i;
+
+    for (i = 0; i < 6u; i++) {
+        g_aOurMac[i] = g_aLabMac[i];
+    }
+}
+
 /**
- * Residual lab pin want: rtl backend (opt-in freestanding residual) OR
- * identity already lab (handoff churn / UDX lab demux hold) OR product UDX
- * soft ready under freestanding rtl SKIP (backend=none + net_l2_ready).
- * Soft!=product. greppable: lab_ip=10.200.125.50 | lab_force demux
+ * Residual lab pin want: rtl backend OR product UDX (backend=none) OR
+ * identity already lab (handoff churn). Do not wait for ETH_UDX_READY —
+ * first inject ARP SHA must not stay QEMU. Soft!=product Dual DoD B OPEN.
+ * greppable: lab_ip=10.200.125.50 | lab_force demux
  */
 static int
 net_eth_want_lab_pin(void)
 {
-    if (net_l2_backend() == GJ_NET_L2_RTL8168) {
+    u32 u32Be;
+
+    u32Be = net_l2_backend();
+    /* T0 virtio keeps SLIRP even if BSS was the lab pin. */
+    if (u32Be == GJ_NET_L2_VIRTIO) {
+        return 0;
+    }
+    if (u32Be == GJ_NET_L2_RTL8168 || u32Be == GJ_NET_L2_NONE) {
         return 1;
     }
     if (net_eth_ip_is_lab(g_aOurIp) != 0) {
         return 1;
     }
-    /*
-     * UDX soft ready residual: backend=none + ETH_UDX_READY arm.
-     * Pin lab so who-has/ICMP match 10.200.125.50 before first inject.
-     * Soft!=product Dual DoD B OPEN. Use door flag (not net_l2_ready) to
-     * avoid ready handoff side-effects from demux path.
-     */
-    if (net_l2_backend() == GJ_NET_L2_NONE) {
-        extern int net_door_udx_ready(void);
-
-        if (net_door_udx_ready() != 0) {
-            return 1;
-        }
-    }
     return 0;
 }
 
 /**
- * Pull MAC/IP from net_l2. Residual: pin lab IP so who-has/ICMP match TPA/dst
- * under rtl residual, already-lab identity, or handoff churn toward product
- * UDX wire ownership of lab 10.200.125.50. Not freestanding R-climb thrash.
- * Soft!=product. Called from net_eth_poll (run-loop only) before RX demux. H1.
+ * Adopt L2 station MAC, or pin lab DUT MAC when L2 is unset/QEMU on the
+ * UDX/lab path. Prefer a published non-QEMU station (SET_MAC / IDR).
+ * Soft!=product Dual DoD B OPEN.
+ */
+static void
+net_eth_adopt_station_mac(int fWantLab)
+{
+    u8 aMacPrev[6];
+    u32 i;
+    int fMacZero;
+    int fMacQemu;
+
+    for (i = 0; i < 6u; i++) {
+        aMacPrev[i] = g_aOurMac[i];
+    }
+    net_l2_mac(g_aOurMac);
+    fMacZero = net_eth_mac_is_zero(g_aOurMac);
+    fMacQemu = net_eth_mac_is_stale_qemu(g_aOurMac);
+    if (fWantLab != 0 && (fMacZero != 0 || fMacQemu != 0)) {
+        net_eth_force_lab_mac();
+        return;
+    }
+    if (fMacZero != 0) {
+        for (i = 0; i < 6u; i++) {
+            g_aOurMac[i] = aMacPrev[i];
+        }
+    }
+}
+
+/**
+ * Pull MAC/IP from net_l2. Residual: pin lab IP + DUT MAC so who-has SHA
+ * matches TPA/dst under rtl residual, backend=none UDX, already-lab, or
+ * handoff churn toward product UDX ownership of 10.200.125.50. Not
+ * freestanding R-climb thrash. Soft!=product. Called from net_eth_poll
+ * (run-loop only) before RX demux. H1.
  */
 static void
 net_eth_sync_l2(void)
@@ -354,46 +429,24 @@ net_eth_sync_l2(void)
     int fForcedLab;
     int fWantLab;
 
+    fWantLab = net_eth_want_lab_pin();
     if (net_l2_backend() == GJ_NET_L2_NONE && net_l2_ready() == 0) {
         /*
-         * No freestanding backend (default SKIP): hold lab identity if already
-         * lab so demux is primed when product UDX L2 later owns wire.
-         * Leave QEMU SLIRP default alone until L2 selects virtio T0.
+         * No freestanding backend (default SKIP): pin lab IP + DUT MAC so
+         * UDX inject ARP SHA is not stale QEMU before L2 ready / SET_MAC.
+         * Virtio T0 is backend=virtio and does not take this arm.
          * Soft!=product; dual_dod_b=OPEN need=UDX_OPEN. greppable: lab_force
          */
-        if (net_eth_ip_is_lab(g_aOurIp) != 0) {
-            net_eth_force_lab_ip();
-        }
+        net_eth_force_lab_ip();
+        net_eth_adopt_station_mac(1);
         return;
     }
     for (i = 0; i < 4u; i++) {
         aIpPrev[i] = g_aOurIp[i];
     }
-    {
-        u8 aMacPrev[6];
-        int fMacZero;
-
-        for (i = 0; i < 6u; i++) {
-            aMacPrev[i] = g_aOurMac[i];
-        }
-        net_l2_mac(g_aOurMac);
-        /* Do not clobber eth residual MAC with all-zero L2 (pre-UDX pin). */
-        fMacZero = 1;
-        for (i = 0; i < 6u; i++) {
-            if (g_aOurMac[i] != 0u) {
-                fMacZero = 0;
-                break;
-            }
-        }
-        if (fMacZero != 0) {
-            for (i = 0; i < 6u; i++) {
-                g_aOurMac[i] = aMacPrev[i];
-            }
-        }
-    }
+    net_eth_adopt_station_mac(fWantLab);
     net_l2_ip(aIpNew);
     fForcedLab = 0;
-    fWantLab = net_eth_want_lab_pin();
     /*
      * Residual identity pin: rtl8168 lab residual OR already-lab hold
      * (handoff may briefly report stale QEMU / none while frames target lab)
@@ -437,19 +490,11 @@ net_eth_sync_l2(void)
     }
 }
 
-/** L2 TX + optional soft netdev bridge TX note (no double send). Soft!=product. */
+/** L2 TX. Product path is net_l2 (virtio T0 or UDX). Soft!=product. */
 static int
 net_eth_l2_tx(const void *pFrame, u32 cbLen)
 {
-    int nSt;
-    extern int linux_netdev_soft_l2_bridge_enabled(void);
-    extern void linux_netdev_soft_l2_note_tx(int fOk);
-
-    nSt = net_l2_tx(pFrame, cbLen);
-    if (linux_netdev_soft_l2_bridge_enabled() != 0) {
-        linux_netdev_soft_l2_note_tx(nSt == 0 ? 1 : 0);
-    }
-    return nSt;
+    return net_l2_tx(pFrame, cbLen);
 }
 
 /** Short pause between reply tries - no rtl poll_hw thrash. Soft!=product. */
@@ -1627,9 +1672,12 @@ net_eth_init(void)
         net_l2_mac(g_aOurMac);
         net_l2_ip(g_aOurIp);
     }
-    if (net_l2_backend() == GJ_NET_L2_RTL8168 ||
-        net_eth_ip_is_lab(g_aOurIp) != 0) {
+    if (net_eth_want_lab_pin() != 0) {
         net_eth_force_lab_ip();
+        if (net_eth_mac_is_zero(g_aOurMac) != 0 ||
+            net_eth_mac_is_stale_qemu(g_aOurMac) != 0) {
+            net_eth_force_lab_mac();
+        }
     }
     kprintf("net_eth: ARP/UDP/ICMP-echo helpers (IP %u.%u.%u.%u) poll_max=%u "
             "tx_tries=%u (Soft!=product; lean residual; thrash-stripped; "
@@ -1721,14 +1769,17 @@ net_eth_apply_l2_identity(void)
         kprintf("net_eth: apply_l2 SKIP (no L2 backend)\n");
         return;
     }
-    if (net_l2_backend() == GJ_NET_L2_RTL8168 ||
-        net_eth_ip_is_lab(g_aOurIp) != 0) {
+    if (net_eth_want_lab_pin() != 0) {
         if (net_eth_ip_is_lab(g_aOurIp) == 0) {
             kprintf("net_eth: apply_l2 force lab_ip %u.%u.%u.%u -> "
                     "10.200.125.50 (Soft!=product; who-has demux; "
                     "lab_force; product=UDX)\n",
                     g_aOurIp[0], g_aOurIp[1], g_aOurIp[2], g_aOurIp[3]);
             net_eth_force_lab_ip();
+        }
+        if (net_eth_mac_is_zero(g_aOurMac) != 0 ||
+            net_eth_mac_is_stale_qemu(g_aOurMac) != 0) {
+            net_eth_force_lab_mac();
         }
         kprintf("net_eth: apply_l2 lab_ip=10.200.125.50 ok "
                 "(Soft!=product; lab_demux=1; dual_dod_b=OPEN_UDX)\n");
@@ -2366,6 +2417,9 @@ handle_frame(const u8 *pFrame, u32 cb)
 /**
  * UDX host thr-poll RX residual: inject one L2 frame into demux.
  * Dual DoD B path=rtl8168_udx product_udx_abi. Soft!=product.
+ * TCP SYN is not virtio-only: handle_frame -> net_tcp_input -> :22
+ * listen (ensure after ETH_UDX_READY); SYN-ACK via net_l2_tx ->
+ * ETH_TX_PULL (same enqueue as ICMP echo reply). Soft!=product.
  * greppable: net_eth: soft udx inject
  */
 int
@@ -2377,23 +2431,40 @@ net_eth_input_frame(const void *pFrame, u32 cb)
         return 0;
     }
     /*
-     * Lab pin + L2 UDX identity before demux so ARP/ICMP match
-     * 10.200.125.50 and soft demux MAC is non-zero. Soft!=product.
+     * Lab pin + L2 UDX identity before demux so ARP/ICMP/TCP:22 match
+     * 10.200.125.50 and ARP SHA is the lab DUT MAC (not stale QEMU).
+     * Soft!=product Dual DoD B OPEN.
      */
     if (net_l2_backend() == GJ_NET_L2_NONE) {
         net_l2_udx_ready_identity();
     }
     net_eth_force_lab_ip();
     net_eth_sync_l2();
+    if (net_eth_mac_is_zero(g_aOurMac) != 0 ||
+        net_eth_mac_is_stale_qemu(g_aOurMac) != 0) {
+        net_eth_force_lab_mac();
+    }
     if (s_fUdxInjLamp == 0u) {
         s_fUdxInjLamp = 1u;
         kprintf("net_eth: soft udx inject first len=%u "
                 "path=rtl8168_udx owner=product_udx_abi "
                 "lab_ip=10.200.125.50 dual_dod_b=OPEN_UDX "
-                "freestanding_class=SKIP Soft!=product G-AC-1\n",
+                "tcp22_demux=1 freestanding_class=SKIP "
+                "Soft!=product G-AC-1\n",
                 (unsigned)cb);
     }
-    return handle_frame((const u8 *)pFrame, cb);
+    {
+        int nOk;
+
+        nOk = handle_frame((const u8 *)pFrame, cb);
+        /*
+         * Tick TCP rtx/ensure on the inject path (not virtio RX drain).
+         * SYN-ACK / banner last-seg retry land before ETH_TX_PULL in
+         * the same rtl8168_udx l2_poll. Soft!=product Dual DoD B.
+         */
+        net_tcp_poll();
+        return nOk;
+    }
 }
 
 static u32
@@ -2572,9 +2643,13 @@ net_eth_poll(void)
     u32Ready = net_l2_ready() != 0 ? 1u : net_eth_soft_link_sample();
     if (u32Ready == 0u) {
         net_eth_soft_inc(&g_u32PollsNoDev);
-        /* Lab pin hold while waiting for UDX/ freestanding ready residual. */
+        /* Lab pin hold while waiting for UDX/freestanding ready residual. */
         if (net_eth_want_lab_pin() != 0) {
             net_eth_force_lab_ip();
+            if (net_eth_mac_is_zero(g_aOurMac) != 0 ||
+                net_eth_mac_is_stale_qemu(g_aOurMac) != 0) {
+                net_eth_force_lab_mac();
+            }
         }
         net_tcp_poll();
         net_eth_soft_maybe_cadence();
@@ -2588,19 +2663,6 @@ net_eth_poll(void)
             break;
         }
         (void)handle_frame(aRx, (u32)i32N);
-        /*
-         * Soft Linux netdev bridge: copy freestanding RX into soft skb path
-         * when bridge enabled. Soft!=product; freestanding handle_frame remains
-         * demux. G-AC-1: soft path is not product wire owner (product=UDX).
-         */
-        {
-            extern int linux_netdev_soft_l2_bridge_enabled(void);
-            extern void linux_netdev_soft_l2_feed_rx(const void *p, u32 cb);
-
-            if (linux_netdev_soft_l2_bridge_enabled() != 0) {
-                linux_netdev_soft_l2_feed_rx(aRx, (u32)i32N);
-            }
-        }
         if (s_fFirstRxLamp == 0u) {
             s_fFirstRxLamp = 1u;
             kprintf("net_eth: soft rx demux first len=%u "
@@ -2621,7 +2683,24 @@ net_eth_poll(void)
         net_eth_soft_inc(&g_u32PollsEmpty);
     }
 
+    if (s_fFirstRxLamp != 0u) {
+        static u8 s_fAfterFirstBatch;
+
+        if (s_fAfterFirstBatch == 0u) {
+            s_fAfterFirstBatch = 1u;
+            kprintf("net_eth: soft rx batch after_first n=%u\n",
+                    (unsigned)u32Batch);
+        }
+    }
     net_tcp_poll();
+    if (s_fFirstRxLamp != 0u) {
+        static u8 s_fAfterFirstTcpPoll;
+
+        if (s_fAfterFirstTcpPoll == 0u) {
+            s_fAfterFirstTcpPoll = 1u;
+            kprintf("net_eth: soft tcp_poll after_first\n");
+        }
+    }
     net_eth_soft_maybe_cadence();
 }
 

@@ -6,8 +6,9 @@
 # Purpose (ABI / module-path lab only):
 #   Decompress staged build/linux-drivers/firmware/rtl_nic/*.fw.xz (or plain .fw)
 #   into build/linux-drivers/firmware_plain/rtl_nic/, then generate:
-#     kernel/proc/rtl_nic_fw_blob.S          — .incbin blobs + end symbols
-#     kernel/include/gj/linux_fw_soft_tab.inc — C table rows for soft lookup
+#     abandoned/kernel/proc/rtl_nic_fw_blob.S
+#     abandoned/kernel/include/gj/linux_fw_soft_tab.inc
+# FORBIDDEN without an explicit operator sentence. Not product-linked.
 #
 # Soft ≠ product. Host firmware blobs are often under linux-firmware license
 # terms; they are NOT GreenJade product code and are not claimed as G-AC-1.
@@ -34,8 +35,8 @@ max="${GJ_LINUX_FW_MAX:-2097152}"
 glob="${GJ_LINUX_FW_GLOB:-rtl8168*.fw}"
 plain="$drv/firmware_plain/rtl_nic"
 src_dir="$drv/firmware/rtl_nic"
-out_s="kernel/proc/rtl_nic_fw_blob.S"
-out_inc="kernel/include/gj/linux_fw_soft_tab.inc"
+out_s="abandoned/kernel/proc/rtl_nic_fw_blob.S"
+out_inc="abandoned/kernel/include/gj/linux_fw_soft_tab.inc"
 
 mkdir -p "$plain" "$(dirname "$out_s")" "$(dirname "$out_inc")"
 

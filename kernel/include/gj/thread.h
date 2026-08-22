@@ -177,6 +177,8 @@ struct gj_thread {
     u64                 u64SysUserRsp;
     u64                 u64SysUserRflags;
     u32                 u32SysUserValid;
+    u64                 u64ClearChildTid; /* set_tid_address; 0 = none */
+    u64                 u64FsBase;        /* IA32_FS_BASE (SETTLS / SET_FS) */
     u8                  aStack[GJ_THR_STACK_SIZE] __attribute__((aligned(16)));
     u8                  aKstack[GJ_THR_KSTACK_SIZE] __attribute__((aligned(16)));
 };
@@ -216,6 +218,18 @@ const char *thread_soft_tag_get(u32 u32ThrId);
 u64 thread_user_entry_get(u32 u32ThrId);
 /** GJ_THR_F_* or 0 if thr unknown. */
 u32 thread_flags_get(u32 u32ThrId);
+
+/** clone CHILD_CLEARTID: store clear_child_tid on that thr (0 if unknown). */
+void thread_set_clear_child_tid(u32 u32ThrId, u64 u64Ctid);
+
+/** SYS_exit / thread_exit: store 0 at CTID and wake one private waiter. */
+void thread_clear_child_tid_wake(struct gj_thread *pThr);
+
+/** Live USER/USER32 threads bound to pProc (not UNUSED/EXITED). */
+u32 thread_user_live_count(const struct gj_process *pProc);
+
+/** clone SETTLS: store IA32_FS_BASE for that thr (applied on schedule). */
+void thread_set_fs_base(u32 u32ThrId, u64 u64FsBase);
 
 /**
  * After execve: rewrite all user-entry threads of pProc to (entry, stack).

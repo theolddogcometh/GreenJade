@@ -40,7 +40,7 @@
  *   GJ_NET_OP_POLL -> net_eth_poll advances freestanding eth (L2 demux +
  *   tcp input/rtx). Door thr stack only - never IRQ/timer (H1). Soft
  *   always 0; ACCEPT empty soft EAGAIN (-11). dual_dod_b=OPEN_UDX
- *   product_sshd_tcp22=OPEN until DUT host banner + UDX owns wire.
+ *   product_sshd_tcp22=OPEN until host interactive SSH login. Banner != login.
  *   Emission: init lamp + first-call residual once. Never re-dump on
  *   STATS/QUEUE_INFO/RING_STATE/POLL (no stamp storms). No version stamp.
  *   FUNCTIONAL residual net door ops (sshd/UDX; Soft!=product; STRONGER):
@@ -446,7 +446,7 @@ static u8 g_fSoftLean;     /* one-shot lean residual gate */
  *   ETH_TX_PULL → host park drains demux replies for UDX DMA TX
  * greppable: ETH_INJECT | ETH_TX_PULL | ETH_UDX_READY | udx_tx_soft
  */
-#define NET_DOOR_UDX_TX_SLOTS  8u
+#define NET_DOOR_UDX_TX_SLOTS  32u
 #define NET_DOOR_UDX_TX_MAX    1514u
 static u8  g_fUdxReady;    /* product UDX host armed L2 soft */
 static u8  g_fUdxReadyLamp;
@@ -808,8 +808,9 @@ net_door_soft_residual_once(void)
 
     /*
      * Grep: net_door: soft residual functional catalog
-     * STRONGER FUNCTIONAL catalog (sshd pipeline + UDX host + yield trio).
-     * Dual DoD OPEN; Soft!=product; no version stamp; agent!=close.
+     * STRONGER FUNCTIONAL leftover catalog (sshd pipeline + UDX host).
+     * Dual DoD B hop is kernel net_tcp → sshd.elf (not leftover netstackd).
+     * Dual DoD OPEN until USB path (A) / interactive SSH login (B).
      */
     kprintf("net_door: soft residual functional catalog Soft!=product "
             "STRONGER=1 product_dod_b=UDX dual_dod_b=OPEN_UDX "
@@ -1993,7 +1994,7 @@ net_door_call(u32 u32Op, u64 u64Arg1, u64 u64Arg2, u64 u64Arg3)
     case GJ_NET_OP_BIND: {
         /*
          * Soft residual: port 22 marks sshd interim :22 (Soft!=product).
-         * dual_dod_b=OPEN_UDX product_sshd_tcp22=OPEN until DUT host banner.
+         * dual_dod_b=OPEN_UDX product_sshd_tcp22=OPEN until interactive SSH login.
          * Product DoD B = UDX not freestanding rtl (G-AC-1).
          */
         i64 i64R;
@@ -2042,7 +2043,7 @@ net_door_call(u32 u32Op, u64 u64Arg1, u64 u64Arg2, u64 u64Arg3)
     case GJ_NET_OP_ACCEPT: {
         /*
          * sshd interim park: empty accept is soft EAGAIN (-11), not hard-fail.
-         * sshd yield loop POLL+ACCEPT; Soft!=product until host banner.
+         * sshd yield loop POLL+ACCEPT; Soft!=product until interactive SSH login.
          * Product DoD B = UDX not freestanding rtl (G-AC-1).
          * Functional residual: accept22_ok + eagain path tallies.
          */
@@ -2730,13 +2731,23 @@ net_door_call(u32 u32Op, u64 u64Arg1, u64 u64Arg2, u64 u64Arg3)
         if (u64Arg1 != 0ull) {
             g_fUdxReady = 1u;
             net_l2_udx_ready_identity();
+            /*
+             * Wire :22 listen onto product UDX L2 (backend=none).
+             * Product sshd BIND/LISTEN may already hold :22; this mints
+             * if not, so ETH_INJECT SYN is accepted and SYN-ACK can
+             * ETH_TX_PULL. Soft!=product. != host banner.
+             */
+            net_tcp_ensure_listen22();
             if (g_fUdxReadyLamp == 0u) {
                 g_fUdxReadyLamp = 1u;
                 kprintf("net_door: soft ETH_UDX_READY arm=1 "
                         "path=rtl8168_udx owner=product_udx_abi "
-                        "lab_ip=10.200.125.50 dual_dod_b=OPEN_UDX "
+                        "lab_ip=10.200.125.50 listen=:22 "
+                        "product_net_owns_wire=1 "
+                        "soft_listen_ne_host_banner=1 "
+                        "dual_dod_b=OPEN_UDX "
                         "freestanding_rtl=SKIP Soft!=product G-AC-1 "
-                        "(l2 identity pin; Soft!=product)\n");
+                        "(l2 identity pin + :22 ensure; Soft!=product)\n");
             }
         } else {
             g_fUdxReady = 0u;
@@ -2765,13 +2776,20 @@ net_door_call(u32 u32Op, u64 u64Arg1, u64 u64Arg2, u64 u64Arg3)
     }
     case GJ_NET_OP_ETH_INJECT: {
         /*
-         * UDX thr-poll RX residual → demux. Soft!=product Dual DoD B.
+         * UDX thr-poll RX residual → demux (ARP/ICMP/TCP:22).
+         * TCP SYN is not virtio-only: net_eth_input_frame ->
+         * net_tcp_input / ensure :22; SYN-ACK net_l2_tx -> ETH_TX_PULL.
+         * Require ETH_UDX_READY so SYN/ARP is not half-applied with no TX.
+         * Soft!=product Dual DoD B.
          * greppable: ETH_INJECT | net_eth: soft udx inject
          */
         u8 aFrame[NET_DOOR_UDX_TX_MAX];
         u32 cb;
         int nOk;
 
+        if (g_fUdxReady == 0u) {
+            return net_door_soft_done(GJ_ERR_NODEV);
+        }
         cb = (u32)u64Arg2;
         if (u64Arg1 == 0ull || cb < 14u || cb > NET_DOOR_UDX_TX_MAX) {
             return net_door_soft_done(GJ_ERR_INVAL);
@@ -2824,8 +2842,9 @@ net_door_call(u32 u32Op, u64 u64Arg1, u64 u64Arg2, u64 u64Arg3)
             }
             return net_door_soft_done(0);
         }
+        /* Caller max would truncate: keep the full Ethernet frame queued. */
         if (cb > u32Max) {
-            cb = u32Max;
+            return net_door_soft_done(GJ_ERR_INVAL);
         }
         if (user_range_ok(u64Arg1, cb)) {
             if (copy_to_user(u64Arg1, g_aUdxTx[iSlot], cb) != GJ_OK) {
@@ -2860,6 +2879,12 @@ int
 net_door_udx_ready(void)
 {
     return (g_fUdxReady != 0u) ? 1 : 0;
+}
+
+u32
+net_door_udx_tx_pending(void)
+{
+    return g_u32UdxTxN;
 }
 
 int

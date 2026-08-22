@@ -252,8 +252,10 @@ i64 gj_linux_hot_setsid(struct gj_linux_regs *pRegs);
 i64 gj_linux_hot_setgroups(struct gj_linux_regs *pRegs);
 i64 gj_linux_hot_getgroups(struct gj_linux_regs *pRegs);
 i64 gj_linux_hot_getpgrp(struct gj_linux_regs *pRegs);
+i64 gj_linux_hot_getpgid(struct gj_linux_regs *pRegs);
 i64 gj_linux_hot_getppid(struct gj_linux_regs *pRegs);
 i64 gj_linux_hot_getsid(struct gj_linux_regs *pRegs);
+i64 gj_linux_hot_umask(struct gj_linux_regs *pRegs);
 
 /* Memory locking / pkeys (soft product) */
 i64 gj_linux_hot_mlock(struct gj_linux_regs *pRegs);

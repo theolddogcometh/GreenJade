@@ -59,7 +59,8 @@
  *   vfsd-gj: soft door PASS | soft door soft-skip
  * Diagnostics only — never hard-fail live path PASS.
  * Honesty: soft inventory Soft!=product multi-server confine (OPEN).
- * C2 product residual: product=UDX/DDI+ABI; Dual DoD OPEN; G-AC-1 (no .ko AC).
+ * C2 product residual: product=UDX/DDI+ABI; Dual DoD A OPEN until host USB
+ * path; Dual DoD B OPEN until interactive SSH login; G-AC-1 (no .ko AC).
  * H1 eth_poll=0 (this TU); H2 stamp_storm=0 lean once-lamps; H3 N/A death.
  * Stamp-free residual — never bump GJ_IMAGE_VERSION.
  *

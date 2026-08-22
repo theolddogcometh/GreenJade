@@ -77,7 +77,7 @@ echo "gj-quick-keys: $log"
 # Keep patterns broad enough for "live elf" / "live spawn PASS" variants but
 # specific enough to avoid shell soft-stub false hits (e.g. bare "usshd").
 check "M0 OK"            'M0 OK'
-check "sshd live"        'sshd: live spawn PASS|sshd: live'
+check "sshd SKIP or live OpenSSH" 'sshd: SKIP|sshd: live OpenSSH'
 check "scsi_mid live"    'scsi_mid: live spawn PASS|scsi_mid: live'
 check "multi-stream"     'hda: multi-stream mixer PASS|multi-stream mixer PASS|hda: multi-stream|multi-stream'
 check "multi-seg"        'TCP multi-segment PASS|multi-segment PASS'

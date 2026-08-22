@@ -7,7 +7,8 @@
 | **Match** | PCI `8086:a12f` (G752VT 100 Series / C230 xHCI) · optional class `0x0c0330` |
 | **Runtime** | Links **libudx** (`user/udx/`) - Linux-shaped `probe` / `quiesce` / `remove` |
 | **Dual DoD A** | **OPEN** — RS-off product program; BOT/MSC stick **not** closed |
-| **Fly bar** | Match kernel `GJ_IMAGE_VERSION` (**STATUS (static) v0.1.136**) |
+| **Scratchpad clamp** | `XHCI_PROD_SPAD_PAGES_CLAMP` **64** (a12f typically 31). **USBCMD.RS=0**. Dual DoD A **OPEN** (`need=usbcmd_rs`). |
+| **Fly bar** | Match kernel `GJ_IMAGE_VERSION` (**STATUS (static) v0.1.184**; packed, not host-probed). Dual DoD **A/B OPEN**. Never `USBCMD.RS=1`. **0.2.0** reserved |
 | **Program** | real_ddi+gate: halt if RS/HCH running, public xECP walk + USBLEGSUP OS handshake (missing → `usblegsup=0` continue; timeout → SKIP), then scratchpad DCBAA[0] + once RS-off `CONFIG`/`DCBAAP`/`CRCR`/`ERST*` + `IMAN.IE` IR0 + post-IMAN IRQ_BIND + command-ring doorbell name/fail-close + once-read public PORTSC CCS (`product program PASS`); never set `USBCMD.RS`; never ring doorbell while halted; never write PORTSC; `doorbell=OPEN` · `need=usbcmd_rs` |
 | **Freestanding MSC** | **SKIP** default (`GJ_XHCI_MSC_PROBE=0`) — not product |
 
@@ -15,7 +16,7 @@
 
 | Path | Where | Claim |
 |------|--------|--------|
-| **Freestanding lab MSC** | `kernel/drv/xhci_msc.c` | Soft / lab scaffold only - **default OFF** (`GJ_XHCI_MSC_PROBE=0`); **not** product; **do not thrash** from this tree |
+| **Freestanding lab MSC** | `abandoned/kernel/drv/xhci_msc.c` | Soft / lab scaffold only - **default OFF** (`GJ_XHCI_MSC_PROBE=0`); **not linked**; **not** product; **do not thrash** from this tree |
 | **This tree** | `user/drivers/xhci_udx/` | **Userspace Linux-shaped driver host** against UDX - soft open/MAP + **prefer real DDI bind** (8086:a12f; inject fallback) + **DMA ring residual** + **IOMMU grant residual** + cap/params/ports + **op residual** + **cap-ext residual** + BOT stub + **EP0/config/CDB residual** + **DDI caps residual** + **product residual catalog/densify** + **program gate honesty** (`never_program=1` unless proven real_ddi+gate) + **residual lean once-lamps** (Dual DoD A C1/C2 lean; **OPEN**) |
 | **In-kernel `.ko` USB** | Soft module path eng only | **G-AC-1**: no `usb_storage.ko` (or any `.ko`) init in kernel as product AC |
 | **BOT / stick log / MSC** | Neither path here as product | Soft residual lamps **!=** CBW/CSW / GET_DESC wire / SET_CONFIG / SCSI CDB / stick log |
@@ -89,7 +90,7 @@ the xHCI module path - [docs/LINUX_MODULE_PATH.md](../../../docs/LINUX_MODULE_PA
     missing → lamp `usblegsup=0` and continue; present → OS/BIOS semaphore
     handshake (xHCI 7.1, bounded wait); timeout or OS bit not sticky →
     `product program SKIP`. Then if `HCSPARAMS2` MaxScratchpadBufs==0 lamp
-    `scratchpad=0` and continue; if >0 alloc FORCE32 array+pages (clamp 16),
+    `scratchpad=0` and continue; if >0 alloc FORCE32 array+pages (clamp 64),
     write `DCBAA[0]`=array PA; alloc fail or need>clamp → `product program SKIP`.
     Then once write public `CONFIG.MaxSlotsEn` → `DCBAAP` → `CRCR.RCS` →
     `ERSTSZ`/`ERSTBA`/`ERDP` → optional public `IMODI=4000` (1 ms) →
@@ -179,7 +180,7 @@ Soft DDI caps catalog != product MMIO/IRQ/DMA mint. Soft product catalog != prod
 | `xhci_udx: product program doorbell` / `doorbell=OPEN` / `never_ring_while_halted=1` / `need=usbcmd_rs` | Name + fail-close command-ring doorbell (`DBOFF`; `doorbell[0]`=slot 0). Read-only. Missing/OOR → `SKIP reason=dboff_missing\|dboff_oor`, continue. Never ring while halted. Never write if RS=0. |
 | `xhci_udx: product program portsc` / `ports=` / `ccs=` / `ccs_n=` / `never_portsc_write=1` / `reason=portsc_oor` | After PASS: once-read PORTSC[1..MaxPorts] CCS only (xHCI 5.4.8). `ccs=`=any stick present; `ccs_n=`=CCS count. Op/port OOR → SKIP reason, continue. Never write PORTSC. Serial lamp + hold3 `ccs=0\|1\|?` (glass, no-COM1). |
 | `xhci_udx: product program status hold` / `hold3=` / `UDX xhci PASS` / `UDX xhci SKIP` | Once-pin STATUS hold3 after PORTSC observe: `UDX xhci PASS rs=0 iman=N irq=WORD ccs=N` (or SKIP `reason=…` unchanged). Never hold0/2/6/14/15. |
-| `xhci_udx: product program scratchpad` / `scratchpad=` / `dcbaa0=` | HCSPARAMS2 MaxScratchpadBufs: 0 continue; >0 FORCE32 array+pages + DCBAA[0]; alloc fail / need>16 → SKIP |
+| `xhci_udx: product program scratchpad` / `scratchpad=` / `dcbaa0=` | HCSPARAMS2 MaxScratchpadBufs: 0 continue; >0 FORCE32 array+pages + DCBAA[0]; alloc fail / need>64 → SKIP |
 | `xhci_udx: product program halt` / `rs_was=` / `HCH_after=` | Fail-closed halt before silicon writes (`USBCMD.RS=0` only; bounded HCH; never HCRST this gate) |
 | `xhci_udx: product program usblegsup` / `usblegsup=` / `xecp_walk=` | Public xECP walk + USBLEGSUP OS handshake (missing=`usblegsup=0` continue; present=OS/BIOS semaphores; timeout → SKIP) |
 | `xhci_udx: soft ddi prefer` / `soft prefer real DDI` / `prefer_real_ddi=1` | Prefer GJ_SYS_DDI bind_by_id over inject-only (`chain=SCAN,GET,OPEN,MAP_BAR`) |
@@ -305,7 +306,7 @@ Product program (real_ddi+gate only) walks xECP for USBLEGSUP (missing=`usblegsu
 
 - Specs + public PCI IDs / manuals only (xHCI Spec + USB 2.0 Ch.9 names).
 - **Do not** paste Linux `xhci-*.c` / `xhci_hcd` / `usb-storage` or any GPL tree.
-- **Do not** edit `kernel/drv/xhci_msc.c` from this dual-license host path.
+- **Do not** edit `abandoned/kernel/drv/xhci_msc.c` from this dual-license host path.
 - Caps, IOMMU, hard IRQ stay inside UDX - never in this driver `.c`.
 - Soft host inject != product MMIO/IRQ/DMA grants from devmgr.
 - Soft open/MAP / DMA ring / IOMMU / op residual / bot stage / EP0 / config / CDB / DDI caps / product densify catalog **PASS** != product stick access.
@@ -318,4 +319,4 @@ Product program (real_ddi+gate only) walks xECP for USBLEGSUP (missing=`usblegsu
 
 ---
 
-**Project:** GreenJade · Soft≠product · Dual DoD A/B **OPEN**. [root README](../../../README.md). Support: [Patreon — TheOldDog](https://www.patreon.com/cw/TheOldDog).
+**Project:** GreenJade · Soft≠product · Dual DoD A **OPEN** until host USB path · Dual DoD B **OPEN** until interactive SSH login. [root README](../../../README.md). Support: [Patreon — TheOldDog](https://www.patreon.com/cw/TheOldDog).

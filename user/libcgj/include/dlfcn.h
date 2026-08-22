@@ -21,7 +21,7 @@
  * Full glibc namespace / auditor / dlmopen isolation semantics on day one.
  *
  * Soft residual (C2 libcgj dlfcn.h; Soft!=product; G-AC-1; Dual DoD A/B OPEN):
- *   soft     = dlopen/dlsym/dlvsym/dlclose/dlerror/dladdr*/dlinfo/dlmopen + RTLD_*
+ *   soft     = dlopen/dlsym/dlvsym/dlclose/dlerror/dladdr/dlinfo/dlmopen + RTLD_*
  *              sentinels; real load owned by ld-gj (soft-fill OK when absent)
  *   product  = ld-gj dynlink + staged libc.so.6 graphs; not freestanding class
  *   honesty  = decls != full auditor/namespace product; agent PASS != Dual DoD
@@ -54,7 +54,7 @@ void  *dlsym(void *pHandle, const char *szSymbol);
 void  *dlvsym(void *pHandle, const char *szSymbol, const char *szVersion);
 int    dlclose(void *pHandle);
 char  *dlerror(void);
-int    dladdr(const void *pAddr, void *pInfo /* Dl_info * */);
+int    dladdr(const void *pAddr, void *pInfo); /* pInfo is Dl_info */
 int    dladdr1(const void *pAddr, void *pInfo, void **ppExtra, int nFlags);
 int    dlinfo(void *pHandle, int nRequest, void *pArg);
 void  *dlmopen(long nNs, const char *szFile, int nMode);

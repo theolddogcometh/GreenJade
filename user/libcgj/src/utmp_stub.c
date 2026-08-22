@@ -2,14 +2,20 @@
  * SPDX-License-Identifier: MIT OR Apache-2.0
  * Copyright (c) 2026 Project GreenJade contributors
  *
- * utmp / utmpx — freestanding in-memory session table fill-in.
- * Soft deepen: timestamps on put/logwtmp; getutmp/getutmpx convert;
- * DEAD_PROCESS clear; BOOT_TIME seed.
+ * utmp / utmpx — in-memory table plus file-backed wtmp/utmp.
+ * OpenSSH USE_LOGIN (HAVE_LOGIN) records via login/logout/logwtmp.
+ * Dual DoD B OPEN.
  */
 #include <errno.h>
+#include <fcntl.h>
+#include <lastlog.h>
+#include <paths.h>
+#include <pwd.h>
 #include <stddef.h>
 #include <string.h>
+#include <sys/types.h>
 #include <time.h>
+#include <unistd.h>
 #include <utmp.h>
 #include <utmpx.h>
 
@@ -73,6 +79,48 @@ copy_field(char *szDst, size_t cbDst, const char *szSrc)
 		n = cbDst - 1;
 	}
 	memcpy(szDst, szSrc, n);
+}
+
+static void
+ut_write_all(int nFd, const void *pBuf, size_t cb)
+{
+	const unsigned char *p = (const unsigned char *)pBuf;
+	size_t cbLeft = cb;
+
+	while (cbLeft > 0) {
+		ssize_t nW;
+
+		nW = write(nFd, p, cbLeft);
+		if (nW <= 0) {
+			return;
+		}
+		p += (size_t)nW;
+		cbLeft -= (size_t)nW;
+	}
+}
+
+/* Rewrite utmp image (slot table). Best-effort; missing dir is OK. */
+static void
+ut_flush_utmp(void)
+{
+	int nFd;
+	int nFlags;
+
+	if (g_szUtmpPath[0] == '\0') {
+		return;
+	}
+	nFlags = O_WRONLY | O_CREAT | O_TRUNC;
+#ifdef O_CLOEXEC
+	nFlags |= O_CLOEXEC;
+#endif
+	nFd = open(g_szUtmpPath, nFlags, 0644);
+	if (nFd < 0) {
+		return;
+	}
+	if (g_cUsed > 0) {
+		ut_write_all(nFd, g_aTab, (size_t)g_cUsed * sizeof(g_aTab[0]));
+	}
+	(void)close(nFd);
 }
 
 void
@@ -168,6 +216,7 @@ pututline(const struct utmp *pUt)
 			    sizeof(g_aTab[i].ut_id)) == 0) {
 			g_aTab[i] = st;
 			g_stLast = st;
+			ut_flush_utmp();
 			return &g_aTab[i];
 		}
 		/* Also replace same line for USER/LOGIN */
@@ -179,6 +228,7 @@ pututline(const struct utmp *pUt)
 			    sizeof(g_aTab[i].ut_line)) == 0) {
 			g_aTab[i] = st;
 			g_stLast = st;
+			ut_flush_utmp();
 			return &g_aTab[i];
 		}
 	}
@@ -188,7 +238,9 @@ pututline(const struct utmp *pUt)
 	}
 	g_aTab[g_cUsed] = st;
 	g_stLast = st;
-	return &g_aTab[g_cUsed++];
+	g_cUsed++;
+	ut_flush_utmp();
+	return &g_aTab[g_cUsed - 1];
 }
 
 int
@@ -211,13 +263,78 @@ utmpname(const char *szFile)
 	return 0;
 }
 
+/* Lastlog(5) slot file: uid * sizeof(struct lastlog). Soft create. */
+static void
+ut_lastlog_put(const struct utmp *pUt)
+{
+	struct lastlog ll;
+	struct passwd *pPw;
+	int nFd;
+	int nFlags;
+	off_t off;
+	const char *szPath;
+
+	if (pUt == NULL || pUt->ut_user[0] == '\0') {
+		return;
+	}
+	pPw = getpwnam(pUt->ut_user);
+	if (pPw == NULL) {
+		return;
+	}
+#ifdef _PATH_LASTLOG
+	szPath = _PATH_LASTLOG;
+#else
+	szPath = "/var/log/lastlog";
+#endif
+	memset(&ll, 0, sizeof(ll));
+	ll.ll_time = pUt->ut_tv.tv_sec;
+	copy_field(ll.ll_line, sizeof(ll.ll_line), pUt->ut_line);
+	copy_field(ll.ll_host, sizeof(ll.ll_host), pUt->ut_host);
+	nFlags = O_WRONLY | O_CREAT;
+#ifdef O_CLOEXEC
+	nFlags |= O_CLOEXEC;
+#endif
+	nFd = open(szPath, nFlags, 0644);
+	if (nFd < 0) {
+		return;
+	}
+	off = (off_t)pPw->pw_uid * (off_t)sizeof(ll);
+	if (lseek(nFd, off, SEEK_SET) != off) {
+		(void)close(nFd);
+		return;
+	}
+	ut_write_all(nFd, &ll, sizeof(ll));
+	(void)close(nFd);
+}
+
 void
 updwtmp(const char *szFile, const struct utmp *pUt)
 {
-	(void)szFile;
-	if (pUt != NULL) {
-		(void)pututline(pUt);
+	int nFd;
+	int nFlags;
+	const char *szPath;
+
+	if (pUt == NULL) {
+		return;
 	}
+	szPath = szFile;
+	if (szPath == NULL || szPath[0] == '\0') {
+#ifdef _PATH_WTMP
+		szPath = _PATH_WTMP;
+#else
+		szPath = "/var/log/wtmp";
+#endif
+	}
+	nFlags = O_WRONLY | O_CREAT | O_APPEND;
+#ifdef O_CLOEXEC
+	nFlags |= O_CLOEXEC;
+#endif
+	nFd = open(szPath, nFlags, 0644);
+	if (nFd < 0) {
+		return;
+	}
+	ut_write_all(nFd, pUt, sizeof(*pUt));
+	(void)close(nFd);
 }
 
 void
@@ -236,6 +353,12 @@ login(const struct utmp *pUt)
 		ut_stamp(&st);
 	}
 	(void)pututline(&st);
+#ifdef _PATH_WTMP
+	updwtmp(_PATH_WTMP, &st);
+#else
+	updwtmp("/var/log/wtmp", &st);
+#endif
+	ut_lastlog_put(&st);
 }
 
 int
@@ -252,6 +375,12 @@ logout(const char *szLine)
 			g_aTab[i].ut_type = DEAD_PROCESS;
 			g_aTab[i].ut_user[0] = '\0';
 			ut_stamp(&g_aTab[i]);
+			ut_flush_utmp();
+#ifdef _PATH_WTMP
+			updwtmp(_PATH_WTMP, &g_aTab[i]);
+#else
+			updwtmp("/var/log/wtmp", &g_aTab[i]);
+#endif
 			return 1;
 		}
 	}
@@ -264,7 +393,11 @@ logwtmp(const char *szLine, const char *szName, const char *szHost)
 	struct utmp u;
 
 	memset(&u, 0, sizeof(u));
-	u.ut_type = USER_PROCESS;
+	if (szName != NULL && szName[0] != '\0') {
+		u.ut_type = USER_PROCESS;
+	} else {
+		u.ut_type = DEAD_PROCESS;
+	}
 	copy_field(u.ut_line, sizeof(u.ut_line), szLine);
 	copy_field(u.ut_user, sizeof(u.ut_user), szName);
 	copy_field(u.ut_host, sizeof(u.ut_host), szHost);
@@ -279,10 +412,17 @@ logwtmp(const char *szLine, const char *szName, const char *szHost)
 		}
 	}
 	ut_stamp(&u);
-	(void)pututline(&u);
+#ifdef _PATH_WTMP
+	updwtmp(_PATH_WTMP, &u);
+#else
+	updwtmp("/var/log/wtmp", &u);
+#endif
 }
 
-/* ---- utmpx thin wrappers over utmp table -------------------------------- */
+/* ---- utmpx: convert; layouts differ (timeval vs two ints) -------------- */
+
+static struct utmpx g_stUtx;
+static struct lastlogx g_stLastx;
 
 void
 setutxent(void)
@@ -299,25 +439,69 @@ endutxent(void)
 struct utmpx *
 getutxent(void)
 {
-	return (struct utmpx *)getutent();
+	struct utmp *pUt;
+
+	pUt = getutent();
+	if (pUt == NULL) {
+		return NULL;
+	}
+	getutmpx(pUt, &g_stUtx);
+	return &g_stUtx;
 }
 
 struct utmpx *
 getutxid(const struct utmpx *pId)
 {
-	return (struct utmpx *)getutid((const struct utmp *)pId);
+	struct utmp stId;
+	struct utmp *pUt;
+
+	if (pId == NULL) {
+		return NULL;
+	}
+	getutmp(pId, &stId);
+	pUt = getutid(&stId);
+	if (pUt == NULL) {
+		return NULL;
+	}
+	getutmpx(pUt, &g_stUtx);
+	return &g_stUtx;
 }
 
 struct utmpx *
 getutxline(const struct utmpx *pLine)
 {
-	return (struct utmpx *)getutline((const struct utmp *)pLine);
+	struct utmp stLine;
+	struct utmp *pUt;
+
+	if (pLine == NULL) {
+		return NULL;
+	}
+	getutmp(pLine, &stLine);
+	pUt = getutline(&stLine);
+	if (pUt == NULL) {
+		return NULL;
+	}
+	getutmpx(pUt, &g_stUtx);
+	return &g_stUtx;
 }
 
 struct utmpx *
 pututxline(const struct utmpx *pUtx)
 {
-	return (struct utmpx *)pututline((const struct utmp *)pUtx);
+	struct utmp st;
+	struct utmp *pUt;
+
+	if (pUtx == NULL) {
+		errno = EINVAL;
+		return NULL;
+	}
+	getutmp(pUtx, &st);
+	pUt = pututline(&st);
+	if (pUt == NULL) {
+		return NULL;
+	}
+	getutmpx(pUt, &g_stUtx);
+	return &g_stUtx;
 }
 
 int
@@ -384,4 +568,131 @@ getutmpx(const struct utmp *pUt, struct utmpx *pUtx)
 	pUtx->ut_tv.tv_sec = pUt->ut_tv.tv_sec;
 	pUtx->ut_tv.tv_usec = pUt->ut_tv.tv_usec;
 	memcpy(pUtx->ut_addr_v6, pUt->ut_addr_v6, sizeof(pUtx->ut_addr_v6));
+}
+
+void
+logwtmpx(const char *szLine, const char *szName, const char *szHost)
+{
+	struct utmpx ux;
+
+	memset(&ux, 0, sizeof(ux));
+	if (szName != NULL && szName[0] != '\0') {
+		ux.ut_type = USER_PROCESS;
+	} else {
+		ux.ut_type = DEAD_PROCESS;
+	}
+	copy_field(ux.ut_line, sizeof(ux.ut_line), szLine);
+	copy_field(ux.ut_user, sizeof(ux.ut_user), szName);
+	copy_field(ux.ut_host, sizeof(ux.ut_host), szHost);
+	if (szLine != NULL) {
+		size_t n = strlen(szLine);
+		size_t k = (n > 4) ? n - 4 : 0;
+		size_t j = 0;
+
+		while (szLine[k] != '\0' && j < sizeof(ux.ut_id)) {
+			ux.ut_id[j++] = szLine[k++];
+		}
+	}
+	{
+		time_t t = time(NULL);
+
+		if (t == (time_t)-1) {
+			t = 0;
+		}
+		ux.ut_tv.tv_sec = t;
+		ux.ut_tv.tv_usec = 0;
+	}
+#ifdef _PATH_WTMP
+	updwtmpx(_PATH_WTMP, &ux);
+#else
+	updwtmpx("/var/log/wtmp", &ux);
+#endif
+}
+
+static int
+ll_read_slot(uid_t uid, struct lastlog *pLl)
+{
+	int nFd;
+	int nFlags;
+	off_t off;
+	const char *szPath;
+	unsigned char *p;
+	size_t cbLeft;
+
+#ifdef _PATH_LASTLOG
+	szPath = _PATH_LASTLOG;
+#else
+	szPath = "/var/log/lastlog";
+#endif
+	nFlags = O_RDONLY;
+#ifdef O_CLOEXEC
+	nFlags |= O_CLOEXEC;
+#endif
+	nFd = open(szPath, nFlags);
+	if (nFd < 0) {
+		return -1;
+	}
+	off = (off_t)uid * (off_t)sizeof(*pLl);
+	if (lseek(nFd, off, SEEK_SET) != off) {
+		(void)close(nFd);
+		return -1;
+	}
+	memset(pLl, 0, sizeof(*pLl));
+	p = (unsigned char *)pLl;
+	cbLeft = sizeof(*pLl);
+	while (cbLeft > 0) {
+		ssize_t nR = read(nFd, p, cbLeft);
+
+		if (nR < 0) {
+			(void)close(nFd);
+			return -1;
+		}
+		if (nR == 0) {
+			break;
+		}
+		p += (size_t)nR;
+		cbLeft -= (size_t)nR;
+	}
+	(void)close(nFd);
+	if (cbLeft == sizeof(*pLl)) {
+		return -1;
+	}
+	return 0;
+}
+
+struct lastlogx *
+getlastlogx(uid_t uid, struct lastlogx *pLl)
+{
+	struct lastlog ll;
+	struct lastlogx *pOut;
+
+	pOut = (pLl != NULL) ? pLl : &g_stLastx;
+	if (ll_read_slot(uid, &ll) != 0) {
+		return NULL;
+	}
+	if (ll.ll_time == 0 && ll.ll_line[0] == '\0') {
+		return NULL;
+	}
+	memset(pOut, 0, sizeof(*pOut));
+	pOut->ll_tv.tv_sec = ll.ll_time;
+	pOut->ll_tv.tv_usec = 0;
+	memcpy(pOut->ll_line, ll.ll_line, sizeof(pOut->ll_line));
+	memcpy(pOut->ll_host, ll.ll_host, sizeof(pOut->ll_host));
+	return pOut;
+}
+
+struct lastlogx *
+getlastlogxbyname(const char *szName, struct lastlogx *pLl)
+{
+	struct passwd *pPw;
+
+	if (szName == NULL || szName[0] == '\0') {
+		errno = EINVAL;
+		return NULL;
+	}
+	pPw = getpwnam(szName);
+	if (pPw == NULL) {
+		return NULL;
+	}
+	return getlastlogx(pPw->pw_uid, pLl);
 }

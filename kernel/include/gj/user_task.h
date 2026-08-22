@@ -66,12 +66,12 @@
  * Windows stay inside the canonical user band [GJ_USER_VA_BASE, GJ_USER_VA_END).
  * Stack grows down from *_STACK_TOP; code is RX soft-verified pages.
  */
-#define GJ_USER_CODE_VA       0x0000000001000000ull
-#define GJ_USER_STACK_TOP     0x0000000001100000ull
+#define GJ_USER_CODE_VA       0x0000000004000000ull
+#define GJ_USER_STACK_TOP     0x0000000004100000ull
 #define GJ_USER_STACK_PAGES   4u
 #define GJ_USER_CODE_PAGES    4u /* soft max multi-page trampoline / door blob */
-#define GJ_PERS_CODE_VA       0x0000000001200000ull
-#define GJ_PERS_STACK_TOP     0x0000000001300000ull
+#define GJ_PERS_CODE_VA       0x0000000004200000ull
+#define GJ_PERS_STACK_TOP     0x0000000004300000ull
 #define GJ_PERS_STACK_PAGES   GJ_USER_STACK_PAGES
 #define GJ_PERS_CODE_PAGES    GJ_USER_CODE_PAGES
 

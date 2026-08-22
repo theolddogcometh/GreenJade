@@ -5,11 +5,11 @@
  * Map ring-3 trampoline + stack; enter via sysret.
  * Personality window hosts freestanding protonrt door server (G-PERS).
  *
- * VA layout (high enough to clear kernel identity BSS):
- *   ring3 code  @ GJ_USER_CODE_VA   (0x0100_0000)
- *   ring3 stack @ GJ_USER_STACK_TOP (0x0110_0000, grows down)
- *   pers  code  @ GJ_PERS_CODE_VA   (0x0120_0000)
- *   pers  stack @ GJ_PERS_STACK_TOP (0x0130_0000, grows down)
+ * VA layout (high enough to clear kernel identity BSS / OpenSSH embeds):
+ *   ring3 code  @ GJ_USER_CODE_VA   (0x0400_0000)
+ *   ring3 stack @ GJ_USER_STACK_TOP (0x0410_0000, grows down)
+ *   pers  code  @ GJ_PERS_CODE_VA   (0x0420_0000)
+ *   pers  stack @ GJ_PERS_STACK_TOP (0x0430_0000, grows down)
  *
  * Host ELF thr entry contract (FUNCTIONAL residual; Soft!=product):
  *   After process_spawn_host_launch + elf_load, UDX host thr enters at
@@ -168,7 +168,7 @@ static int g_fPersMapped;
  */
 #define USER_SOFT_FUNC_STEP_COUNT 16u
 /* Freestanding host ET_EXEC base (matches elf_load GJ_ELF_HOST_EXEC_BASE). */
-#define USER_SOFT_HOST_EXEC_BASE 0x0000000001000000ull
+#define USER_SOFT_HOST_EXEC_BASE 0x0000000004000000ull
 /* Host thr stack top (matches spawn GJ_SPAWN_HOST_STACK_TOP; thr=82 .78). */
 #define USER_SOFT_HOST_STACK_TOP 0x000000007F000000ull
 /* Host thr stack pages (matches spawn GJ_SPAWN_HOST_STACK_PAGES). */
@@ -482,7 +482,7 @@ user_soft_host_elf_thr_func_check(void)
 
     /*
      * 2: host thr stack top contract (spawn product host; thr=82 class).
-     * Distinct from ring3 smoke GJ_USER_STACK_TOP (0x1100000 / 4 pages).
+     * Distinct from ring3 smoke GJ_USER_STACK_TOP (0x4100000 / 4 pages).
      */
     if (USER_SOFT_HOST_STACK_TOP == 0x000000007F000000ull &&
         USER_SOFT_HOST_STACK_TOP > GJ_PERS_STACK_TOP &&

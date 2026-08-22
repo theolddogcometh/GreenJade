@@ -24,12 +24,8 @@
 #   meta/RAW-OK.txt — relative paths of every plain ELF produced
 #   firmware/ meta/ NEEDED-DRIVERS.txt — as before
 #
-# Optional embed (coordinator wires objs; not default kernel link):
-#   ./scripts/embed-linux-mod.sh              # r8169 → kernel/proc/r8169_mod_blob.S
-#   ./scripts/embed-linux-fw.sh               # rtl8168*.fw → soft request_firmware HIT
-#   ./scripts/embed-linux-mod.sh xhci_pci     # only if plain .ko staged (often SKIP:
-#                                             # host xHCI is builtin — no .ko)
-#   ./scripts/embed-linux-mod.sh usb-storage  # often PRESENT on el9 while HC builtin
+# Optional embed is FORBIDDEN without an explicit operator sentence.
+# Default dest is abandoned/kernel/proc (not product-linked).
 #
 # G752VT xHCI note (PCI 8086:a12f):
 #   Preferred modules: xhci_pci + xhci_hcd (+ usbcore stack).
@@ -565,20 +561,6 @@ echo "  greppable: collect-linux-drivers: PASS"
 echo "  greppable: collect-linux-drivers: xhci 8086:a12f xhci_pci=$xhci_pci_st"
 echo "  greppable: collect-linux-drivers: usb_storage=$usb_storage_st"
 
-# Soft firmware embed for request_firmware HIT (rtl8168*.fw → kernel .incbin).
-# Soft≠product; optional — empty table if xz missing / xzcat absent.
-if [ -x "$root/scripts/embed-linux-fw.sh" ] || [ -f "$root/scripts/embed-linux-fw.sh" ]; then
-	chmod +x "$root/scripts/embed-linux-fw.sh" 2>/dev/null || true
-	GJ_LINUX_DRIVERS="$out" "$root/scripts/embed-linux-fw.sh" || \
-		echo "collect-linux-drivers: warn embed-linux-fw soft-failed (MISS path remains)" >&2
-fi
-
-# Optional USB MSC soft embed when usb-storage.ko staged (leaf; HC often builtin).
-# Soft≠product; weak link via Makefile if kernel/proc/usb_storage_mod_blob.S exists.
-if [ "$usb_storage_st" = "PRESENT" ]; then
-	if [ -x "$root/scripts/embed-linux-mod.sh" ] || [ -f "$root/scripts/embed-linux-mod.sh" ]; then
-		chmod +x "$root/scripts/embed-linux-mod.sh" 2>/dev/null || true
-		GJ_LINUX_DRIVERS="$out" "$root/scripts/embed-linux-mod.sh" usb-storage || \
-			echo "collect-linux-drivers: warn embed usb-storage soft-failed" >&2
-	fi
-fi
+# In-kernel .ko / rtl_nic fw embeds were moved to ./abandoned and are
+# not linked. Do not regenerate kernel/proc/*_blob.S here.
+echo "collect-linux-drivers: skip kernel embed (abandoned; media-only collect)"

@@ -123,6 +123,8 @@
     (GJ_CLONE_NEWNS | GJ_CLONE_NEWCGROUP | GJ_CLONE_NEWUTS | GJ_CLONE_NEWIPC | \
      GJ_CLONE_NEWUSER | GJ_CLONE_NEWPID | GJ_CLONE_NEWNET)
 
+struct gj_thread; /* opaque last-field USER TCB (exec_replace) */
+
 /*
  * Root meta object installed in CNode slot 0 after bootstrap.
  * Kernel-internal links: self process + this process CNode (not the pager).
@@ -175,6 +177,13 @@ struct gj_process {
     u32                  u32Promises;   /* allowed bits when confined */
     u64                  u64Cr3;         /* 0 = use BSP/boot CR3 (G-AS-1) */
     u64                  u64AnonNext;    /* per-AS mmap cursor (default 1G) */
+    u64                  u64BrkBase;     /* Linux brk heap base (0 = unset) */
+    u64                  u64BrkCur;      /* Linux brk heap break */
+    u32                  u32Pgid;        /* Linux-shaped process group */
+    u32                  u32Sid;         /* Linux-shaped session id */
+#define GJ_PROC_NSIG 32u
+#define GJ_SIGCHLD   17u /* Linux-shaped; aSigHandler index + pending bit */
+    u64                  aSigHandler[GJ_PROC_NSIG]; /* sa_handler; no sigframe */
     /* Last execve image facts (auxv / dynlinker handoff - G-ELF) */
     u64                  u64ExecEntry;   /* main binary entry (post-bias) */
     u64                  u64InterpEntry; /* PT_INTERP entry or 0 */
@@ -188,6 +197,7 @@ struct gj_process {
 #define GJ_PROC_AUXV_MAX 24u
     u64                  aAuxv[GJ_PROC_AUXV_MAX * 2u]; /* key,value,... */
     char                 szExecPath[128]; /* last execve path (AT_EXECFN) */
+    char                 szCwd[96];       /* Linux getcwd/chdir (per PCB) */
     /* Regions: views onto memory objects (G-MO) - fixed table for bring-up */
 #define GJ_PROC_REGION_MAX 32u
     struct {
@@ -214,13 +224,33 @@ struct gj_process {
         u64 u64Rip;
         u64 u64Cr2;
     } excPort;
+    /*
+     * Soft pending mask (bit N = signal N). SIGCHLD is ORed when a wait
+     * child exits and parent aSigHandler[GJ_SIGCHLD] is a user VA
+     * (not 0/SIG_DFL, not 1/SIG_IGN). No sigframe / no deliver this cut.
+     */
+    u64                  u64SigPending;
+    /*
+     * Last USER SYSCALL resume (fork child rax=0 at this RIP/RSP).
+     * Last-field only: doors cold path may run on a kthread; protonrt
+     * snapshots so LINUX [0x1000000, 0x1800000) (and 0x4000000 OpenSSH)
+     * still gets a thread_create_user child. pUserThr is that USER TCB
+     * so execve can thread_exec_replace after trampoline cleared
+     * USER_ENTRY (never thread_create_user on exec; 0.1.140 #PF).
+     * Dual DoD B OPEN.
+     */
+    u64                  u64UserSysRip;
+    u64                  u64UserSysRsp;
+    u32                  u32UserSysThr;
+    struct gj_thread    *pUserThr;
 };
 
 /* ---- Bootstrap / lifecycle ---------------------------------------------- */
 
 /**
  * Initialize process + CNode over caller-provided storage.
- * Zeros pager, regions, exec facts, excPort; sets u32Alive=1,
+ * Zeros pager, regions, exec facts, excPort, u64SigPending, user-sys
+ * last-fields (RIP/RSP/thr + pUserThr); sets u32Alive=1,
  * personality=linux (1), promises=ALL ambient, anon cursor 0x40000000.
  * Slot 0 left INVALID until bootstrap_root_meta. Pager empty (gen 0).
  * NULL args: no-op.
@@ -353,6 +383,8 @@ u32  process_wait_register(struct gj_process *pChild, u32 u32Ppid);
 /**
  * Mark process exited (zombie) with code. Updates PCB u32Alive/exit and
  * wait-slot zombie flag. Soft: re-note updates exit code if already zombie.
+ * If parent aSigHandler[GJ_SIGCHLD] is a user VA (not 0/1), OR SIGCHLD
+ * into parent u64SigPending. No sigframe this cut.
  * Grep: process: zombie
  */
 void process_wait_note_exit(struct gj_process *pChild, u32 u32Code);
@@ -372,7 +404,8 @@ void process_wait_forget(struct gj_process *pProc);
  * Soft product (ABI-first for shell/sshd later):
  *   - WNOHANG + live child -> 0 (poll-friendly; waitid maps here)
  *   - WNOHANG + zombie -> pid + status, slot reaped
- *   - Blocking: yields until zombie or soft poll budget; live after budget -> 0
+ *   - Blocking USER: yields until zombie (never return 0; dash wait)
+ *   - Blocking kernel smoke: yields until zombie or 256-yield budget -> 0
  *     (never false ECHILD while children still registered)
  * greppable: process: soft wait
  */
@@ -406,25 +439,41 @@ void process_death(struct gj_process *pProc, u32 u32ExitCode);
 
 /**
  * Linux fork/vfork-shaped: create stub child PCB, register wait4 pid.
- * fExitNow: immediately process_death (vfork). Else schedule deferred exit
- * worker (yields) so parent wait4 / waitid WNOHANG can see live then zombie.
- * Returns usable child pid (>=100) or -EAGAIN (-11) / -ENOMEM (-12).
- * Not a full AS/CNode clone (G-PROC-4); product path is process_spawn.
- * Soft incomplete: child does not run user code; shell/sshd later need spawn.
- * greppable: process: soft fork
+ * fExitNow: immediately process_death (kernel vfork-smoke / PE32).
+ * Else: LINUX personality parent in user.ld [0x1000000, 0x1800000)
+ * (dash/sh) or [0x4000000, 0x5000000) (OpenSSH/init; live SYSCALL
+ * RIP/RSP, thr user/sysuser, or start/exec) gets a ring-3 USER
+ * child at that return (rax=0 via cpu_enter_user), not the kthread death
+ * worker. execve uses thread_exec_replace on that USER child
+ * (never thread_create_user on exec; 0.1.140 #PF). Fallback death worker:
+ * kernel-side smoke without a user.ld LINUX parent. Returns child pid
+ * (>=100) or -EAGAIN/-ENOMEM. Not a full AS/CNode clone (G-PROC-4).
+ * Shared-AS vfork OPEN. Dual DoD B OPEN.
+ * greppable: process: soft fork | process: linux_fork user child
  */
 i64 process_linux_fork(u32 u32Ppid, int fExitNow);
 
 /**
  * Soft clone(2)-shaped flag decode -> fork-like wait child.
  *   flags 0 / share bits only -> process_linux_fork(ppid, 0)  [usable pid]
- *   CLONE_VFORK               -> process_linux_fork(ppid, 1)
+ *   CLONE_VFORK               -> LINUX parent in [0x1000000, 0x1800000) or
+ *                                 [0x4000000, 0x5000000): live USER child
+ *                                 (dash vforkexec / OpenSSH session child)
+ *                                 else process_linux_fork(ppid, 1) kernel smoke
  *   CLONE_THREAD             -> -EINVAL (needs stack/entry; cold path)
  *   NEW* namespace bits       -> -EINVAL (not product multi-ns)
  * Parent reaps with process_wait4 / waitid + WNOHANG.
  * greppable: process: soft fork
  */
 i64 process_linux_clone(u32 u32Ppid, u64 u64Flags);
+
+/**
+ * Unique live wait-registered USER fork child (u32StartThr != 0).
+ * Doors execve: OpenSSH session child vs parent poll. NULL if none or
+ * more than one. Optional resume RIP/RSP tightens when several exist.
+ * Dual DoD B OPEN. execve uses thread_exec_replace only.
+ */
+struct gj_process *process_linux_live_user_child(u64 u64Rip, u64 u64Rsp);
 
 /** Look up wait-table pid for a process pointer (0 if unregistered). */
 u32 process_wait_pid_of(struct gj_process *pProc);
@@ -442,6 +491,12 @@ i64 process_wait4_ppid(u32 u32Ppid, i64 i64Pid, i32 *pStatus, int nOptions);
  * Returns 0 or -ESRCH if pid not found.
  */
 i64 process_linux_exit_pid(u32 u32Pid, u32 u32Code);
+
+/**
+ * Non-zero if wait-table has an unreaped slot for this Linux-shaped pid
+ * (live or zombie). 0 if unused / reaped / pid 0. Soft kill lookup.
+ */
+int process_wait_pid_registered(u32 u32Pid);
 
 /**
  * Soft wait-table observability (reaper deepen).
@@ -472,7 +527,9 @@ u32 process_wait_reparent(u32 u32OldPpid, u32 u32NewPpid);
  * Soft fork from parent PCB: reliable child pid (>=100) return.
  * Ensures soft parent identity (wait-table pid or soft parent map 2..99) so
  * process_wait_soft can filter children without requiring parent death-wipe
- * registration. Links child->pParent. Deferred exit worker (usable WNOHANG).
+ * registration. Links child->pParent. LINUX parent in
+ * [0x1000000, 0x1800000) or [0x4000000, 0x5000000): USER child
+ * (usable WNOHANG + execve replace). Else deferred death worker.
  * Returns child pid or -EAGAIN/-ENOMEM/-EINVAL.
  * greppable: process: soft fork-wait product-min
  */
@@ -480,7 +537,9 @@ i64 process_fork_soft(struct gj_process *pParent);
 
 /**
  * Soft clone from parent PCB (flag map same as process_linux_clone).
- * CLONE_VFORK -> immediate zombie; share bits -> fork-like; THREAD/NS -> -EINVAL.
+ * CLONE_VFORK -> LINUX [0x1000000,0x1800000)/[0x4000000,0x5000000):
+ * live USER child; else immediate zombie.
+ * Share bits -> fork-like; THREAD/NS -> -EINVAL.
  * greppable: process: soft fork-wait product-min
  */
 i64 process_clone_soft(struct gj_process *pParent, u64 u64Flags);

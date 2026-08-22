@@ -48,7 +48,7 @@
  * Soft API honesty:
  *   soft path = freestanding pure-C helpers + cold inventory accessors
  *   product   = UDX/DDI Dual DoD A/B (OPEN; not claimed by this header)
- *   Dual DoD  = A (xhci_udx) / B (rtl8168_udx) remain OPEN
+ *   Dual DoD  = A (xhci_udx USB path OPEN) / B (interactive SSH login OPEN)
  * greppable: libgj: soft residual lean
  * greppable: libgj: soft residual inventory
  * greppable: libgj: soft residual deepen
@@ -427,7 +427,7 @@ const char *gj_string_soft_honesty(void);
 const char *gj_string_soft_residual(void);
 /**
  * Greppable "libgj: soft product residual product=UDX+sshd+stack ...".
- * Soft!=product; Dual DoD OPEN; stamp-free bar v2026.08.04.75.
+ * Soft!=product; Dual DoD OPEN until USB path / interactive SSH login. Fly v0.1.178.
  */
 const char *gj_string_soft_product_residual(void);
 

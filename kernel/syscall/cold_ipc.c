@@ -760,7 +760,7 @@ residual_note_once(void)
     /*
      * Grep: cold_ipc: residual dual_dod
      * Grep: cold_ipc: soft residual dual_dod
-     * Dual DoD A/B direction honesty - OPEN until DUT UDX host proof.
+     * Dual DoD A/B direction honesty - OPEN until USB path / interactive SSH login.
      * Soft residual lamps != Dual DoD close (agent != close).
      */
     kprintf("cold_ipc: residual dual_dod "

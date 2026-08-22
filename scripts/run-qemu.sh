@@ -21,6 +21,9 @@
 #   GJ_SMP              vCPUs (default 1)
 #   GJ_MEM              RAM size (default 2G)
 #   GJ_INTEL_IOMMU=1    attach -device intel-iommu,intremap=on
+#   GJ_HOSTFWD          user-netdev hostfwd spec (default
+#                       tcp:127.0.0.1:2222-:22). Set 0 / off to disable.
+#                       T0 virtio-net only; Dual DoD B remains OPEN.
 #
 # After a run, soft-scan serial with:
 #   ./scripts/gj-product-summary.sh /tmp/gj.log   # soft exit 0 (deep inventory)
@@ -138,6 +141,14 @@ fi
 
 echo "run-qemu: using $QEMU_BIN smp=$GJ_SMP mem=$GJ_MEM" >&2
 
+# T0 virtio-net hostfwd (QEMU user net ≠ laptop rtl8168_udx). Dual DoD B OPEN.
+GJ_HOSTFWD="${GJ_HOSTFWD-tcp:127.0.0.1:2222-:22}"
+NETDEV_ARGS="user,id=n0"
+if [ -n "$GJ_HOSTFWD" ] && [ "$GJ_HOSTFWD" != "0" ] && [ "$GJ_HOSTFWD" != "off" ]; then
+    NETDEV_ARGS="user,id=n0,hostfwd=${GJ_HOSTFWD}"
+    echo "run-qemu: hostfwd ${GJ_HOSTFWD} (T0 virtio; Dual DoD B OPEN)" >&2
+fi
+
 # Soft T1 NVMe: only attach when the QEMU build includes the model (not all
 # RHEL qemu-kvm splits ship -device nvme). Probe via soft_have_dev; skip soft.
 NVME_ARGS=""
@@ -159,7 +170,7 @@ exec "$QEMU_BIN" $QEMU_L_ARGS \
     -cdrom "$iso_file" \
     -boot d \
     -device virtio-net-pci,netdev=n0 \
-    -netdev user,id=n0 \
+    -netdev "$NETDEV_ARGS" \
     -device virtio-gpu-pci \
     -device virtio-keyboard-pci \
     -drive if=none,id=vd0,file="$disk_file",format=raw \

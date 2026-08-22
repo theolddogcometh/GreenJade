@@ -33,6 +33,10 @@ sp_seed(const char *szName, const char *szPw)
 {
 	int i;
 
+	if (szName == NULL || szPw == NULL || szName[0] == '\0' ||
+	    szPw[0] == '\0') {
+		return;
+	}
 	for (i = 0; i < SP_MAX; i++) {
 		if (!g_aTab[i].used) {
 			size_t n0;
@@ -74,7 +78,8 @@ sp_upsert(const struct spwd *pSp)
 	size_t n0;
 	size_t n1;
 
-	if (pSp == NULL || pSp->sp_namp == NULL || pSp->sp_pwdp == NULL) {
+	if (pSp == NULL || pSp->sp_namp == NULL || pSp->sp_pwdp == NULL ||
+	    pSp->sp_namp[0] == '\0' || pSp->sp_pwdp[0] == '\0') {
 		return -1;
 	}
 	for (i = 0; i < SP_MAX; i++) {
@@ -146,6 +151,9 @@ sp_init(void)
 	sp_seed("root", "*");
 	/* Soft nobody for desktop multi-user soft path. */
 	sp_seed("nobody", "!");
+	/* Lab user + sshd privsep: locked, not empty (no ambient auth). */
+	sp_seed("jay", "*");
+	sp_seed("sshd", "!");
 	/* Optional host /etc/shadow overlay (best-effort). */
 	sp_load_file("/etc/shadow");
 	g_iCursor = 0;
@@ -212,7 +220,8 @@ int
 putspent(const struct spwd *pSp, FILE *pF)
 {
 	if (pSp == NULL || pF == NULL || pSp->sp_namp == NULL ||
-	    pSp->sp_pwdp == NULL) {
+	    pSp->sp_pwdp == NULL || pSp->sp_namp[0] == '\0' ||
+	    pSp->sp_pwdp[0] == '\0') {
 		errno = EINVAL;
 		return -1;
 	}
@@ -280,7 +289,7 @@ sgetspent(const char *szLine)
 		}
 		p++;
 	}
-	if (n < 2 || fields[0][0] == '\0') {
+	if (n < 2 || fields[0][0] == '\0' || fields[1][0] == '\0') {
 		errno = EINVAL;
 		return NULL;
 	}
@@ -339,6 +348,69 @@ fgetspent(FILE *pF)
 		}
 		return sgetspent(aLine);
 	}
+}
+
+static int
+sp_pack(struct spwd *pSp, char *szBuf, size_t cb, const struct spwd *pSrc,
+	struct spwd **ppResult)
+{
+	size_t n1;
+	size_t n2;
+
+	if (ppResult != NULL) {
+		*ppResult = NULL;
+	}
+	if (pSp == NULL || szBuf == NULL || pSrc == NULL || cb < 2) {
+		return ERANGE;
+	}
+	n1 = strlen(pSrc->sp_namp) + 1;
+	n2 = strlen(pSrc->sp_pwdp) + 1;
+	if (n1 + n2 > cb) {
+		return ERANGE;
+	}
+	memcpy(szBuf, pSrc->sp_namp, n1);
+	memcpy(szBuf + n1, pSrc->sp_pwdp, n2);
+	*pSp = *pSrc;
+	pSp->sp_namp = szBuf;
+	pSp->sp_pwdp = szBuf + n1;
+	if (ppResult != NULL) {
+		*ppResult = pSp;
+	}
+	return 0;
+}
+
+int
+getspent_r(struct spwd *pSp, char *szBuf, size_t cb, struct spwd **ppResult)
+{
+	struct spwd *p;
+
+	p = getspent();
+	if (p == NULL) {
+		if (ppResult != NULL) {
+			*ppResult = NULL;
+		}
+		return 0;
+	}
+	return sp_pack(pSp, szBuf, cb, p, ppResult);
+}
+
+int
+fgetspent_r(FILE *pF, struct spwd *pSp, char *szBuf, size_t cb,
+	    struct spwd **ppResult)
+{
+	struct spwd *p;
+
+	if (ppResult != NULL) {
+		*ppResult = NULL;
+	}
+	if (pF == NULL) {
+		return EINVAL;
+	}
+	p = fgetspent(pF);
+	if (p == NULL) {
+		return 0;
+	}
+	return sp_pack(pSp, szBuf, cb, p, ppResult);
 }
 
 int

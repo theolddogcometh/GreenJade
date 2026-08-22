@@ -35,9 +35,9 @@
 #   flash residual       — dd GPT image to DUT stick (DESTROYS target)
 #   udx pack residual    — verify ESP drivers/ inventory post-write (operator)
 #   freestanding residual — class SKIP default (not Dual DoD close)
-#   Dual DoD residual    — A/B OPEN until DUT proof; flash write != DoD close
+#   Dual DoD residual    — A OPEN until USB path; B until interactive SSH login; flash write != DoD close
 #   honesty residual     — flash PASS != product TX/RX/BOT != bar3 != Dual DoD
-#   stamp residual       — read GJ_IMAGE_VERSION from pack/ELF only; never invent .76
+#   stamp residual       — read GJ_IMAGE_VERSION from pack/ELF only; never invent next N
 # greppable: install-hwtest-usb: soft residual dual_dod
 # greppable: install-hwtest-usb: soft residual product=UDX+ABI
 # greppable: install-hwtest-usb: soft residual freestanding class SKIP
@@ -47,11 +47,11 @@
 # greppable: install-hwtest-usb: soft residual udx dual_land
 # greppable: install-hwtest-usb: soft residual panel=
 # greppable: install-hwtest-usb: soft residual post_verify=
-# Bar honesty v2026.08.04.75 panel context only — no invent .76.
+# Bar honesty v0.1.178 panel context only — no invent next N.
 #
 # Post-write (lab host + DUT):
 #   1. Boot DUT UEFI → GreenJade BOOTX64.EFI  (serial: GJ-EFI / M0 OK)
-#   2. Panel: STATUS (static) vYYYY.MM.DD.N  must match pack/flash report
+#   2. Panel: STATUS (static) v0.1.N  must match pack/flash report
 #   3. Logs:  sudo mount -t ext4 -L GJ-PERSIST /mnt/gj-persist  →  logs/
 #   4. Lab SSH (serial bridge): sudo bash /mnt/gj-persist/ssh/enable-lab-ssh.sh
 #      or: sudo ./scripts/hwtest-ssh-setup.sh
@@ -111,7 +111,7 @@ if [ -f "/sys/block/$sys_name/size" ]; then
 fi
 
 # Flash identity (stamp-free RO) — prefer packed image ESP, then host ELF.
-# NEVER bump GJ_IMAGE_VERSION; bar honesty v2026.08.04.75; no invent .76.
+# NEVER bump GJ_IMAGE_VERSION; bar honesty v0.1.178; no invent next N.
 chmod +x scripts/gj-image-version.sh 2>/dev/null || true
 img_ver=unknown
 img_status_title="STATUS (static) vunknown"
@@ -162,6 +162,35 @@ echo "install-hwtest-usb: soft residual panel=${img_status_title} src=${img_ver_
 echo "install-hwtest-usb: soft residual udx pack pre ddi_host=${pre_ddi} rtl8168_udx=${pre_rtl} xhci_udx=${pre_xhci} (img ESP; Soft!=product)"
 echo "install-hwtest-usb: TARGET=$dev (ALL DATA WILL BE ERASED)"
 
+# Desktop automounts (GNOME/KDE) sit under /run/media/<user>/, not on $dev
+# until findmnt catches up. sudo makes $USER=root — prefer jay / SUDO_USER.
+unmount_lab_media() {
+	_u="${SUDO_USER:-}"
+	if [ -z "$_u" ] || [ "$_u" = "root" ]; then
+		_u=jay
+	fi
+	echo "install-hwtest-usb: umount /run/media/${_u}/*"
+	umount /run/media/"${_u}"/* 2>/dev/null || true
+	if [ "$_u" != "jay" ]; then
+		umount /run/media/jay/* 2>/dev/null || true
+	fi
+	echo "install-hwtest-usb: umount GJ-PERSIST"
+	umount -L GJ-PERSIST 2>/dev/null || true
+	umount /mnt/gj-persist 2>/dev/null || umount -l /mnt/gj-persist 2>/dev/null || true
+	if command -v findmnt >/dev/null 2>&1; then
+		_tgts=$(findmnt -rn -o LABEL,TARGET 2>/dev/null | while read -r lab tgt; do
+			if [ "$lab" = "GJ-PERSIST" ] || [ "$lab" = "GREENJADE" ]; then
+				printf '%s\n' "$tgt"
+			fi
+		done)
+		for tgt in $_tgts; do
+			[ -n "$tgt" ] || continue
+			echo "install-hwtest-usb: umount $tgt (label)"
+			umount "$tgt" 2>/dev/null || umount -l "$tgt" 2>/dev/null || true
+		done
+	fi
+}
+
 # Must unmount before dd: writing while automount holds old vfat leaves a live
 # wrong FS in the kernel (I/O errors, missing steam/STATUS, lsblk still "vfat").
 unmount_target() {
@@ -192,6 +221,7 @@ unmount_target() {
 		blockdev --flushbufs "$_d" 2>/dev/null || true
 	fi
 }
+unmount_lab_media
 unmount_target "$dev"
 
 if findmnt -rn -o SOURCE 2>/dev/null | grep -E "^${dev}(p?[0-9]+)?\$" >/dev/null 2>&1; then
@@ -308,6 +338,8 @@ if mount -t ext4 -L GJ-PERSIST "$_mnt_persist" 2>/dev/null \
 	umount "$_mnt_persist" 2>/dev/null || umount -l "$_mnt_persist" 2>/dev/null || true
 fi
 rmdir "$_mnt_esp" "$_mnt_persist" 2>/dev/null || true
+# Automount often remounts GREENJADE / GJ-PERSIST after partprobe.
+unmount_lab_media
 # dual_land flash residual
 if { [ "$post_ddi" = "PASS" ] || [ "$post_rtl" = "PASS" ] || [ "$post_xhci" = "PASS" ]; } \
 	&& { [ "$post_persist_ddi" = "PASS" ] || [ "$post_persist_rtl" = "PASS" ] || [ "$post_persist_xhci" = "PASS" ]; }; then
@@ -357,7 +389,7 @@ echo "  Steam: if STATUS=SKELETON: sudo make steam-to-persist"
 echo "  Note:  READY/media != Steam client; Top-50 stays NOT-TRIED until DUT run"
 echo "  Soft!=product: version identity / soft greps != product complete != bar3 close"
 echo "  Soft!=product · G-AC-1: UDX pack != product TX/RX/BOT; freestanding class SKIP default"
-echo "  Dual DoD: A/B OPEN (UDX USB/NIC) — flash write != Dual DoD close; L3 host probes required"
+echo "  Dual DoD: A OPEN until USB path; B OPEN until interactive SSH login — flash != close"
 echo "  stamp-free: read GJ_IMAGE_VERSION from pack/ELF only — never invent/bump here"
 echo "  class: freestanding SKIP (GJ_RTL8168_PROBE=0 · GJ_XHCI_MSC_PROBE=0 residual opt-in)"
 echo "install-hwtest-usb: soft residual flash wrote=${img} -> ${dev}"
@@ -368,7 +400,7 @@ echo "install-hwtest-usb: soft residual panel=${img_status_title} src=${img_ver_
 echo "install-hwtest-usb: soft residual dual_dod A=OPEN B=OPEN (flash != Dual DoD close)"
 echo "install-hwtest-usb: soft residual product=UDX+ABI product_host=ddi_host+rtl8168_udx+xhci_udx"
 echo "install-hwtest-usb: soft residual freestanding class SKIP"
-echo "install-hwtest-usb: soft residual stamp-free (bar honesty v2026.08.04.75; NEVER bump GJ_IMAGE_VERSION; no invent .76)"
+echo "install-hwtest-usb: soft residual stamp-free (bar honesty v0.1.178; NEVER bump GJ_IMAGE_VERSION; no invent next N)"
 echo "  greppable: install-hwtest-usb: soft residual dual_dod"
 echo "  greppable: install-hwtest-usb: soft residual product=UDX+ABI"
 echo "  greppable: install-hwtest-usb: soft residual freestanding class SKIP"

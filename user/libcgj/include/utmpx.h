@@ -23,7 +23,7 @@
  * until the hybrid ABI path is wired. See docs/GLIBC_COMPAT.md.
  *
  * Soft residual (C2 libcgj header; Soft!=product; G-AC-1; Dual DoD A/B OPEN):
- *   soft path  = getutx*/pututx*/updwtmpx soft fill (often empty/ENOSYS)
+ *   soft path  = getutxent/pututxline/updwtmpx soft fill (often empty/ENOSYS)
  *   product    = full utmpx accounting product (OPEN; not closed here)
  *   catalog    = EMPTY..ACCOUNTING + struct utmpx + getutmp/getutmpx bridge
  *   honesty    = Soft!=product; soft empty table != product multi-user mint
@@ -72,7 +72,7 @@ struct utmpx {
     long    ut_session;
     struct timeval ut_tv;
     int     ut_addr_v6[4];
-    char    __unused[20];
+    char    __gj_unused[20];
 };
 
 struct utmpx *getutxent(void);
@@ -85,6 +85,8 @@ int           utmpxname(const char *szFile);
 void          updwtmpx(const char *szFile, const struct utmpx *pUtx);
 void          getutmp(const struct utmpx *pUtx, struct utmp *pUt);
 void          getutmpx(const struct utmp *pUt, struct utmpx *pUtx);
+void          logwtmpx(const char *szLine, const char *szName,
+                       const char *szHost);
 
 #ifdef __cplusplus
 }

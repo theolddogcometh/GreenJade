@@ -4,7 +4,7 @@
 
 # GreenJade
 
-**A pure-C microkernel desktop OS** — dual-licensed **MIT OR Apache-2.0**, no GPL in the tree.
+**A pure-C microkernel desktop OS** — dual-licensed **MIT OR Apache-2.0**, no GPL in the **product core**.
 
 GreenJade is a from-scratch OS kernel and userspace personality aimed at a **general-purpose desktop / workstation**. The kernel stays small on purpose: programs only get the access they are given, talk through the OS on purpose, and drivers live in **userspace** over a Linux-shaped ABI (so a flaky NIC driver need not take down the whole machine). Clean-room path toward desktop software and eventually **Steam via Proton** — without pasting a GPL kernel into the product core.
 
@@ -26,7 +26,7 @@ If you just cloned the repo: a normal host toolchain and QEMU are enough to buil
 | **Adoption bar** | **Steam Deck Top 50** via Proton on real hardware — **target**, not claimed done |
 | **Hardware bar** | **≥ 1 TiB RAM**, SMP, SAS/SCSI (product goals; bring-up runs on modest QEMU) |
 | **Style** | Hungarian notation — [STYLE.md](STYLE.md) |
-| **Assurance** | [docs/ASSURANCE_LITE.md](docs/ASSURANCE_LITE.md) — Soft≠product · G-AC-1 · Dual DoD L3 = host probes on stamped image · `make assurance-check` |
+| **Assurance** | [docs/ASSURANCE_LITE.md](docs/ASSURANCE_LITE.md) — Soft≠product · G-AC-1 · Dual DoD **L3** = host probes on stamped image. `make assurance-check` is **L1 only** (not Dual DoD close). |
 | **Support** | [Patreon — TheOldDog](https://www.patreon.com/cw/TheOldDog) — optional funding for hardware digs and late-night boots |
 
 ---
@@ -72,7 +72,7 @@ make stage-rootfs   # rootfs layout
 make install-img    # GPT install image (local build only)
 make live-iso       # hybrid Multiboot2+EFI test ISO (local build only)
 make hwtest-img     # dual-partition hardware-test image
-make sshd-gj        # freestanding product sshd
+make openssh-host   # host OpenSSH 10.5p1 (not DUT)
 make udx            # host UDX driver runtime
 make license        # coarse GPL guard
 ```
@@ -100,7 +100,7 @@ Product direction is **ABI-first** (Linux-shaped **userspace** drivers over hot+
 | **Soft module path** | Host-collected `.ko` via ksym (eng) | **Soft ≠ product**; **G-AC-1** no `.ko` product AC |
 | **Freestanding class** | `rtl8168` / `xhci_msc` | **SKIP** default (`GJ_RTL8168_PROBE=0` · `GJ_XHCI_MSC_PROBE=0`) |
 | **T0 product net (QEMU)** | **virtio-net** | QEMU/CI. Laptop wire is **UDX** (`rtl8168_udx`) |
-| **Fly bar** | `GJ_IMAGE_VERSION` | Semver fly stamp — **STATUS (static) v0.1.136**; **0.2.0** reserved for Dual DoD B close (sshd **:22**) |
+| **Fly bar** | `GJ_IMAGE_VERSION` | Semver fly stamp — **STATUS (static) v0.1.184**; Dual DoD **A** park RS-off · **B** exec TX drain after 183 Sending command (login OPEN); **0.2.0** reserved |
 
 **First DUT:** ASUS ROG **G752VT** — NIC `10ec:8168`, xHCI `8086:a12f`, lab static **10.200.125.50**.
 
@@ -108,10 +108,10 @@ Product direction is **ABI-first** (Linux-shaped **userspace** drivers over hot+
 
 | # | Goal | Path | Status |
 |---|------|------|--------|
-| **A** | Linux-shaped USB | `xhci_udx` + DDI | **OPEN** — RS-off product program (halt / USBLEGSUP / scratchpad / rings / IMAN); never `USBCMD.RS=1`; BOT/MSC SKIP |
-| **B** | Linux-shaped NIC + stack + sshd | `rtl8168_udx` → netstackd → sshd | **OPEN** until host **sshd :22** banner. **L3 ARP + ping proven** (2026-08-14) on laptop UDX wire / lab **10.200.125.50**. Soft lamps ≠ close |
+| **A** | Linux-shaped USB | `xhci_udx` + DDI | **OPEN** — RS-off park (177 host `PASS rs=0`); never `USBCMD.RS=1`; USB path OPEN |
+| **B** | Linux-shaped NIC + stack + sshd | `rtl8168_udx` → kernel `net_tcp` → `sshd.elf` | **OPEN** for **interactive login**. SUCCESS proven on **0.1.178**. **0.1.183** host: `Sending command: true` **PASS**; exec 124. Fly **0.1.184** packed, not host-probed. GOP isolate. Soft lamps ≠ close |
 
-**Lab status (honest):** Fly **v0.1.136**. Product `rtl8168_udx` owns the G752 wired NIC (`10ec:8168`): TNPDS/RDSAR/TE\|RE, Own, thr-poll inject/TX pull. Operator **arping and ping return** on **10.200.125.50**. Historical freestanding ICMP is **not** this track (freestanding rtl **SKIP**). Soft listen **:22** ≠ product host banner — Dual DoD B stays **OPEN** until `nc`/`ssh` sees the product id. Soft ≠ product; **G-AC-1**. Backlog: [docs/TODO.md](docs/TODO.md) · [docs/ASSURANCE_LITE.md](docs/ASSURANCE_LITE.md).
+**Lab status (honest):** Fly **v0.1.184** packed, not host-probed (Dual DoD **A** park RS-off · **B** exec TX drain after 183 Sending command; GOP isolate; login OPEN). Dual DoD A **OPEN** until host USB path · Dual DoD B **OPEN** until interactive SSH login. Soft ≠ product; **G-AC-1**. Backlog: [docs/TODO.md](docs/TODO.md) · [docs/ASSURANCE_LITE.md](docs/ASSURANCE_LITE.md).
 
 ```sh
 make collect-linux-drivers   # host .ko → build/linux-drivers/ (+ NEEDED-DRIVERS)
@@ -120,22 +120,21 @@ sudo ./scripts/install-hwtest-usb.sh /dev/sdX
 # after boot (lab): panel STATUS (static) v… ; arping / ping 10.200.125.50 ; nc -v -w 3 10.200.125.50 22
 ```
 
-On boot, GOP **STATUS (STATIC)** holds track module path (soft):
+On boot, GOP **left pane** is split: top **STATUS (static)** holds, bottom **STATE (boot)** (high-level phases). Right pane is the fast **LOG**. Holds are live product only:
 
 | Hold | Example |
 |------|---------|
-| 7 | `ksym n=…` |
-| 8 | `mod r8169 … init=0` (or `SKIP load=0`) |
-| 9 | `netdev soft N` (want ≥1) |
-| 10 | `probe 10ec:8168 soft` \| `real` \| `miss` |
-| 11 | `pci reg=… match=…` |
-| 12–13 | xHCI soft SKIP when host `xhci_pci` is **builtin**; USB MSC / `usb_storage need=usbcore` |
-| 2 | kernel TE persist (`TE mode=… tes= tt=ML slpt=`) |
-| 3 | `UDX xhci PASS … ccs=` (RS-off program; Dual DoD A OPEN) |
-| 14 | `UDX te_disarm fovw own= rok= fovw= c=` (UDX wire dig) |
-| 14–15 (soft residual) | L2 bridge · hybrid wire=fs soft=r8169 |
+| title | `STATUS (static) v0.1.184` |
+| 1 | `M0 OK dash SKIP isolate` |
+| 2 | `TE mode=… tes= tt=ML slpt=` |
+| 3 | `UDX xhci PASS rs=0 … ccs=1` (Dual DoD A **OPEN**; RS-off ≠ USB path) |
+| 4 | `UDX inj= tx= lnk=` |
+| 5 | `UDX te_disarm wire own= rok= fovw=` |
+| 6 | `UDX mac_rclm …` |
+| 7 | `IP 10.200.125.50 :22` |
+| 8 | `DoD A=OPEN B=OPEN` |
 
-Gate0 hybrid skips real `r8169` probe on the live BAR (EMU soft netdev + freestanding wire). Real hostish probe is gated ([docs/PCI_DEV_SOFT_LAYOUT.md](docs/PCI_DEV_SOFT_LAYOUT.md) · [docs/R8169_MMIO_HANDOFF.md](docs/R8169_MMIO_HANDOFF.md)).
+Abandoned in-kernel rtl/xhci_msc/linux_*_soft live in `./abandoned` (not linked).
 
 ---
 

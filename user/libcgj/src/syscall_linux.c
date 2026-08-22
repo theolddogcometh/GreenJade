@@ -15,6 +15,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/epoll.h>
+#include <sys/select.h>
 #include <sys/mman.h>
 #include <mqueue.h>
 #include <sys/inotify.h>
@@ -29,6 +30,7 @@
 #include <sys/uio.h>
 #include <sys/utsname.h>
 #include <sys/wait.h>
+#include <termios.h>
 #include <time.h>
 #include <unistd.h>
 
@@ -43,6 +45,7 @@
 #define NR_fstat           5
 #define NR_lstat           6
 #define NR_poll            7
+#define NR_select         23
 #define NR_ppoll         271
 #define NR_sendfile       40
 #define NR_timerfd_create 283
@@ -666,11 +669,25 @@ setgroups(size_t nSize, const gid_t *pList)
 int
 initgroups(const char *szUser, gid_t gid)
 {
-    gid_t aG[1];
+    gid_t aG[64];
+    int nGids = (int)(sizeof(aG) / sizeof(aG[0]));
+    int nGot;
 
-    (void)szUser; /* bring-up: no /etc/group */
-    aG[0] = gid;
-    return setgroups(1, aG);
+    nGot = getgrouplist(szUser, gid, aG, &nGids);
+    if (nGot >= 0) {
+        nGids = nGot;
+    } else if (nGids < 1) {
+        aG[0] = gid;
+        nGids = 1;
+    } else if (nGids > (int)(sizeof(aG) / sizeof(aG[0]))) {
+        nGids = (int)(sizeof(aG) / sizeof(aG[0]));
+        (void)getgrouplist(szUser, gid, aG, &nGids);
+    }
+    if (nGids < 1) {
+        aG[0] = gid;
+        nGids = 1;
+    }
+    return setgroups((size_t)nGids, aG);
 }
 
 int
@@ -749,6 +766,7 @@ sbrk(intptr_t i64Delta)
 {
     static uintptr_t uCur;
     uintptr_t uOld;
+    uintptr_t uReq;
     long r;
 
     if (uCur == 0) {
@@ -763,9 +781,15 @@ sbrk(intptr_t i64Delta)
     if (i64Delta == 0) {
         return (void *)uOld;
     }
-    r = sys6(NR_brk, (long)(uCur + (uintptr_t)i64Delta), 0, 0, 0, 0, 0);
+    uReq = uCur + (uintptr_t)i64Delta;
+    r = sys6(NR_brk, (long)uReq, 0, 0, 0, 0, 0);
     if (r < 0 && r > -4096) {
         errno = (int)(-r);
+        return (void *)(intptr_t)-1;
+    }
+    /* Kernel brk may return the old break on grow fail, not -errno. */
+    if (i64Delta > 0 && ((uintptr_t)r < uReq || (uintptr_t)r == uOld)) {
+        errno = ENOMEM;
         return (void *)(intptr_t)-1;
     }
     uCur = (uintptr_t)r;
@@ -814,11 +838,61 @@ madvise(void *pAddr, size_t cb, int nAdvice)
                              nAdvice, 0, 0, 0));
 }
 
+static int
+open_apply_fdflags(int nFd, int nDropped)
+{
+    if (nFd < 0) {
+        return nFd;
+    }
+    if ((nDropped & O_CLOEXEC) != 0) {
+        (void)fcntl(nFd, F_SETFD, FD_CLOEXEC);
+    }
+    if ((nDropped & O_NONBLOCK) != 0) {
+        int nFl = fcntl(nFd, F_GETFL);
+
+        if (nFl >= 0) {
+            (void)fcntl(nFd, F_SETFL, nFl | O_NONBLOCK);
+        }
+    }
+    return nFd;
+}
+
+static int
+open_at_fallback(int nDfd, const char *szPath, int nFlags, int nMode)
+{
+    long r;
+    int nTry = nFlags;
+    int nDrop = 0;
+
+    if (szPath == NULL) {
+        errno = EFAULT;
+        return -1;
+    }
+    for (;;) {
+        r = sys6(NR_openat, nDfd, (long)(uintptr_t)szPath, nTry, nMode, 0, 0);
+        if (r < 0 && r > -4096 && (int)(-r) == ENOSYS) {
+            if (nDfd != AT_FDCWD) {
+                return (int)sys_ret(r);
+            }
+            r = sys6(NR_open, (long)(uintptr_t)szPath, nTry, nMode, 0, 0, 0);
+        }
+        if (!(r < 0 && r > -4096 && (int)(-r) == EINVAL &&
+              (nTry & (O_CLOEXEC | O_NONBLOCK)) != 0)) {
+            break;
+        }
+        nDrop |= nTry & (O_CLOEXEC | O_NONBLOCK);
+        nTry &= ~(O_CLOEXEC | O_NONBLOCK);
+    }
+    if (r < 0) {
+        return (int)sys_ret(r);
+    }
+    return open_apply_fdflags((int)r, nDrop);
+}
+
 int
 open(const char *szPath, int nFlags, ...)
 {
     int nMode = 0;
-    long r;
 
     if (nFlags & O_CREAT) {
         va_list ap;
@@ -827,15 +901,13 @@ open(const char *szPath, int nFlags, ...)
         nMode = va_arg(ap, int);
         va_end(ap);
     }
-    r = sys6(NR_openat, AT_FDCWD, (long)(uintptr_t)szPath, nFlags, nMode, 0, 0);
-    return (int)sys_ret(r);
+    return open_at_fallback(AT_FDCWD, szPath, nFlags, nMode);
 }
 
 int
 openat(int nDfd, const char *szPath, int nFlags, ...)
 {
     int nMode = 0;
-    long r;
 
     if (nFlags & O_CREAT) {
         va_list ap;
@@ -844,8 +916,7 @@ openat(int nDfd, const char *szPath, int nFlags, ...)
         nMode = va_arg(ap, int);
         va_end(ap);
     }
-    r = sys6(NR_openat, nDfd, (long)(uintptr_t)szPath, nFlags, nMode, 0, 0);
-    return (int)sys_ret(r);
+    return open_at_fallback(nDfd, szPath, nFlags, nMode);
 }
 
 int
@@ -859,13 +930,43 @@ fcntl(int nFd, int nCmd, ...)
 {
     long arg = 0;
     va_list ap;
+    int fArg;
 
+    fArg = (nCmd == F_DUPFD || nCmd == F_DUPFD_CLOEXEC ||
+            nCmd == F_SETFD || nCmd == F_SETFL ||
+            nCmd == F_GETLK || nCmd == F_SETLK || nCmd == F_SETLKW ||
+            nCmd == F_SETOWN || nCmd == F_SETPIPE_SZ ||
+            nCmd == F_GETLK64 || nCmd == F_SETLK64 || nCmd == F_SETLKW64 ||
+            nCmd == F_OFD_GETLK || nCmd == F_OFD_SETLK ||
+            nCmd == F_OFD_SETLKW || nCmd == F_SETOWN_EX ||
+            nCmd == F_GETOWN_EX);
     va_start(ap, nCmd);
-    if (nCmd == F_DUPFD || nCmd == F_SETFD || nCmd == F_SETFL ||
-        nCmd == F_GETLK || nCmd == F_SETLK || nCmd == F_SETLKW) {
+    if (fArg) {
         arg = va_arg(ap, long);
     }
     va_end(ap);
+    if (nCmd == F_DUPFD_CLOEXEC) {
+        long r;
+        int nNew;
+
+        r = sys6(NR_fcntl, nFd, nCmd, arg, 0, 0, 0);
+        if (!(r < 0 && r > -4096 &&
+              ((int)(-r) == EINVAL || (int)(-r) == ENOSYS))) {
+            return (int)sys_ret(r);
+        }
+        nNew = fcntl(nFd, F_DUPFD, arg);
+        if (nNew < 0) {
+            return -1;
+        }
+        if (fcntl(nNew, F_SETFD, FD_CLOEXEC) != 0) {
+            int nErr = errno;
+
+            (void)close(nNew);
+            errno = nErr;
+            return -1;
+        }
+        return nNew;
+    }
     return (int)sys_ret(sys6(NR_fcntl, nFd, nCmd, arg, 0, 0, 0));
 }
 
@@ -919,26 +1020,52 @@ fstat(int nFd, struct stat *pSt)
 int
 fstatat(int nDfd, const char *szPath, struct stat *pSt, int nFlags)
 {
+    long r;
+
     if (szPath == NULL || pSt == NULL) {
         errno = EINVAL;
         return -1;
     }
-    return (int)sys_ret(sys6(NR_newfstatat, nDfd, (long)(uintptr_t)szPath,
-                             (long)(uintptr_t)pSt, nFlags, 0, 0));
+    r = sys6(NR_newfstatat, nDfd, (long)(uintptr_t)szPath, (long)(uintptr_t)pSt,
+             nFlags, 0, 0);
+    if (r < 0 && r > -4096 && (int)(-r) == ENOSYS && nDfd == AT_FDCWD) {
+        if ((nFlags & AT_SYMLINK_NOFOLLOW) != 0) {
+            r = sys6(NR_lstat, (long)(uintptr_t)szPath, (long)(uintptr_t)pSt, 0,
+                     0, 0, 0);
+        } else {
+            r = sys6(NR_stat, (long)(uintptr_t)szPath, (long)(uintptr_t)pSt, 0,
+                     0, 0, 0);
+        }
+    }
+    return (int)sys_ret(r);
 }
 
 int
 stat(const char *szPath, struct stat *pSt)
 {
-    return (int)sys_ret(sys6(NR_newfstatat, AT_FDCWD, (long)(uintptr_t)szPath,
-                             (long)(uintptr_t)pSt, 0, 0, 0));
+    long r;
+
+    r = sys6(NR_newfstatat, AT_FDCWD, (long)(uintptr_t)szPath,
+             (long)(uintptr_t)pSt, 0, 0, 0);
+    if (r < 0 && r > -4096 && (int)(-r) == ENOSYS) {
+        r = sys6(NR_stat, (long)(uintptr_t)szPath, (long)(uintptr_t)pSt, 0, 0, 0,
+                 0);
+    }
+    return (int)sys_ret(r);
 }
 
 int
 lstat(const char *szPath, struct stat *pSt)
 {
-    return (int)sys_ret(sys6(NR_newfstatat, AT_FDCWD, (long)(uintptr_t)szPath,
-                             (long)(uintptr_t)pSt, AT_SYMLINK_NOFOLLOW, 0, 0));
+    long r;
+
+    r = sys6(NR_newfstatat, AT_FDCWD, (long)(uintptr_t)szPath,
+             (long)(uintptr_t)pSt, AT_SYMLINK_NOFOLLOW, 0, 0);
+    if (r < 0 && r > -4096 && (int)(-r) == ENOSYS) {
+        r = sys6(NR_lstat, (long)(uintptr_t)szPath, (long)(uintptr_t)pSt, 0, 0, 0,
+                 0);
+    }
+    return (int)sys_ret(r);
 }
 
 int
@@ -991,8 +1118,13 @@ readlink(const char *szPath, char *szBuf, size_t cb)
 int
 mkdirat(int nDfd, const char *szPath, mode_t mode)
 {
-    return (int)sys_ret(sys6(NR_mkdirat, nDfd, (long)(uintptr_t)szPath,
-                             (long)mode, 0, 0, 0));
+    long r;
+
+    r = sys6(NR_mkdirat, nDfd, (long)(uintptr_t)szPath, (long)mode, 0, 0, 0);
+    if (r < 0 && r > -4096 && (int)(-r) == ENOSYS && nDfd == AT_FDCWD) {
+        return mkdir(szPath, mode);
+    }
+    return (int)sys_ret(r);
 }
 
 int
@@ -1254,6 +1386,9 @@ fchdir(int nFd)
     return (int)sys_ret(sys6(NR_fchdir, nFd, 0, 0, 0, 0, 0));
 }
 
+int __gj_pts_known(int nFd);
+int __gj_pts_name(int nFd, char *szBuf, size_t cb);
+
 int
 ttyname_r(int nFd, char *szBuf, size_t cb)
 {
@@ -1309,16 +1444,18 @@ ttyname_r(int nFd, char *szBuf, size_t cb)
     }
     n = readlink(aLink, aPath, sizeof(aPath) - 1);
     if (n < 0) {
-        /* bring-up fallback name */
-        const char *szDef = "/dev/tty";
-        size_t cbDef = 8;
-
-        if (cbDef + 1 > cb) {
-            return ERANGE;
+        if (__gj_pts_name(nFd, szBuf, cb) == 0) {
+            return 0;
         }
+        /* bring-up fallback name */
         {
+            const char *szDef = "/dev/tty";
+            size_t cbDef = 8;
             size_t k;
 
+            if (cbDef + 1 > cb) {
+                return ERANGE;
+            }
             for (k = 0; k < cbDef; k++) {
                 szBuf[k] = szDef[k];
             }
@@ -1372,13 +1509,52 @@ getcwd(char *szBuf, size_t cb)
 int
 pipe(int aFd[2])
 {
-    return (int)sys_ret(sys6(NR_pipe2, (long)(uintptr_t)aFd, 0, 0, 0, 0, 0));
+    long r;
+
+    if (aFd == NULL) {
+        errno = EFAULT;
+        return -1;
+    }
+    r = sys6(NR_pipe2, (long)(uintptr_t)aFd, 0, 0, 0, 0, 0);
+    if (r < 0 && r > -4096 && (int)(-r) == ENOSYS) {
+        r = sys6(NR_pipe, (long)(uintptr_t)aFd, 0, 0, 0, 0, 0);
+    }
+    return (int)sys_ret(r);
 }
 
 int
 pipe2(int aFd[2], int nFlags)
 {
-    return (int)sys_ret(sys6(NR_pipe2, (long)(uintptr_t)aFd, nFlags, 0, 0, 0, 0));
+    long r;
+
+    if (aFd == NULL) {
+        errno = EFAULT;
+        return -1;
+    }
+    r = sys6(NR_pipe2, (long)(uintptr_t)aFd, nFlags, 0, 0, 0, 0);
+    if (r < 0 && r > -4096 &&
+        ((int)(-r) == ENOSYS || ((int)(-r) == EINVAL && nFlags != 0))) {
+        if (pipe(aFd) != 0) {
+            return -1;
+        }
+        if ((nFlags & O_CLOEXEC) != 0) {
+            (void)fcntl(aFd[0], F_SETFD, FD_CLOEXEC);
+            (void)fcntl(aFd[1], F_SETFD, FD_CLOEXEC);
+        }
+        if ((nFlags & O_NONBLOCK) != 0) {
+            int nFl0 = fcntl(aFd[0], F_GETFL);
+            int nFl1 = fcntl(aFd[1], F_GETFL);
+
+            if (nFl0 >= 0) {
+                (void)fcntl(aFd[0], F_SETFL, nFl0 | O_NONBLOCK);
+            }
+            if (nFl1 >= 0) {
+                (void)fcntl(aFd[1], F_SETFL, nFl1 | O_NONBLOCK);
+            }
+        }
+        return 0;
+    }
+    return (int)sys_ret(r);
 }
 
 int
@@ -1455,7 +1631,13 @@ execve(const char *szPath, char *const aArgv[], char *const aEnvp[])
 int
 execv(const char *szPath, char *const aArgv[])
 {
-    return execve(szPath, aArgv, (char *const *)0);
+    extern char **environ;
+    static char *s_aEmpty[1];
+    char *const *pEnv;
+
+    s_aEmpty[0] = NULL;
+    pEnv = (environ != NULL) ? environ : s_aEmpty;
+    return execve(szPath, aArgv, pEnv);
 }
 
 pid_t
@@ -1893,8 +2075,26 @@ gettimeofday(struct timeval *pTv, void *pTz)
 int
 isatty(int nFd)
 {
-    /* Bring-up: fd 0/1/2 treated as tty when no TIOCGWINSZ */
-    return (nFd >= 0 && nFd <= 2) ? 1 : 0;
+    struct termios t;
+    int nSaved;
+
+    if (nFd < 0) {
+        errno = EBADF;
+        return 0;
+    }
+    nSaved = errno;
+    if (tcgetattr(nFd, &t) == 0) {
+        errno = nSaved;
+        return 1;
+    }
+    if (__gj_pts_known(nFd)) {
+        errno = nSaved;
+        return 1;
+    }
+    if (errno != EBADF) {
+        errno = ENOTTY;
+    }
+    return 0;
 }
 
 unsigned int
@@ -2037,8 +2237,90 @@ shm_unlink(const char *szName)
 int
 poll(struct pollfd *pFds, nfds_t nFds, int nTimeoutMs)
 {
-    return (int)sys_ret(sys6(NR_poll, (long)(uintptr_t)pFds, (long)nFds,
-                             (long)nTimeoutMs, 0, 0, 0));
+    long r;
+    nfds_t iFd;
+    int nMax = 0;
+    int nReady = 0;
+    fd_set rs;
+    fd_set ws;
+    fd_set es;
+    struct timeval tv;
+    struct timeval *pTv = NULL;
+
+    /* Linux x86_64 NR_poll (7). */
+    r = sys6(NR_poll, (long)(uintptr_t)pFds, (long)nFds, (long)nTimeoutMs, 0, 0,
+             0);
+    if (!(r < 0 && r > -4096 && (int)(-r) == ENOSYS)) {
+        return (int)sys_ret(r);
+    }
+
+    /* ENOSYS: Linux x86_64 NR_select (23), not the libcgj select() wrapper. */
+    if (nFds > 0 && pFds == NULL) {
+        errno = EFAULT;
+        return -1;
+    }
+    FD_ZERO(&rs);
+    FD_ZERO(&ws);
+    FD_ZERO(&es);
+    for (iFd = 0; iFd < nFds; iFd++) {
+        int nFd;
+
+        pFds[iFd].revents = 0;
+        nFd = pFds[iFd].fd;
+        if (nFd < 0) {
+            continue;
+        }
+        if (nFd >= FD_SETSIZE) {
+            pFds[iFd].revents = POLLNVAL;
+            nReady++;
+            continue;
+        }
+        if ((pFds[iFd].events & (POLLIN | POLLHUP | POLLRDNORM | POLLRDHUP)) !=
+            0) {
+            FD_SET(nFd, &rs);
+        }
+        if ((pFds[iFd].events & (POLLOUT | POLLWRNORM)) != 0) {
+            FD_SET(nFd, &ws);
+        }
+        if ((pFds[iFd].events & POLLPRI) != 0) {
+            FD_SET(nFd, &es);
+        }
+        if (nFd + 1 > nMax) {
+            nMax = nFd + 1;
+        }
+    }
+    if (nTimeoutMs >= 0) {
+        tv.tv_sec = nTimeoutMs / 1000;
+        tv.tv_usec = (long)(nTimeoutMs % 1000) * 1000L;
+        pTv = &tv;
+    }
+    r = sys6(NR_select, nMax, (long)(uintptr_t)&rs, (long)(uintptr_t)&ws,
+             (long)(uintptr_t)&es, (long)(uintptr_t)pTv, 0);
+    if (r < 0) {
+        return (int)sys_ret(r);
+    }
+    for (iFd = 0; iFd < nFds; iFd++) {
+        int nFd = pFds[iFd].fd;
+        short nRe = pFds[iFd].revents;
+
+        if (nFd < 0 || nFd >= FD_SETSIZE) {
+            continue;
+        }
+        if (FD_ISSET(nFd, &rs)) {
+            nRe = (short)(nRe | POLLIN | POLLRDNORM);
+        }
+        if (FD_ISSET(nFd, &ws)) {
+            nRe = (short)(nRe | POLLOUT | POLLWRNORM);
+        }
+        if (FD_ISSET(nFd, &es)) {
+            nRe = (short)(nRe | POLLPRI);
+        }
+        pFds[iFd].revents = nRe;
+        if (nRe != 0) {
+            nReady++;
+        }
+    }
+    return nReady;
 }
 
 int
@@ -2048,6 +2330,7 @@ ppoll(struct pollfd *pFds, nfds_t nFds, const struct timespec *pTs,
     long r;
     size_t cbMask = 8; /* kernel often takes 8; glibc uses sizeof(sigset_t) */
 
+    /* Linux x86_64 NR_ppoll (271); ENOSYS falls back to poll(). */
     r = sys6(NR_ppoll, (long)(uintptr_t)pFds, (long)nFds, (long)(uintptr_t)pTs,
              (long)(uintptr_t)pSigmask, (long)cbMask, 0);
     if (r < 0 && r > -4096 && (int)(-r) == ENOSYS) {
@@ -2338,22 +2621,72 @@ ioctl(int nFd, unsigned long u64Req, ...)
     return (int)sys_ret(sys6(NR_ioctl, nFd, (long)u64Req, (long)arg, 0, 0, 0));
 }
 
+static int
+sock_apply_type_flags(int nFd, int nFlags)
+{
+    if (nFd < 0) {
+        return nFd;
+    }
+    if ((nFlags & SOCK_CLOEXEC) != 0) {
+        (void)fcntl(nFd, F_SETFD, FD_CLOEXEC);
+    }
+    if ((nFlags & SOCK_NONBLOCK) != 0) {
+        int nFl = fcntl(nFd, F_GETFL);
+
+        if (nFl >= 0) {
+            (void)fcntl(nFd, F_SETFL, nFl | O_NONBLOCK);
+        }
+    }
+    return nFd;
+}
+
 int
 socket(int nDomain, int nType, int nProtocol)
 {
-    return (int)sys_ret(sys6(NR_socket, nDomain, nType, nProtocol, 0, 0, 0));
+    int nFlags = nType & (SOCK_CLOEXEC | SOCK_NONBLOCK);
+    int nBase = nType & ~nFlags;
+    long r;
+
+    /* Linux x86_64 NR_socket (41). Type flags since 2.6.27; GJ may EINVAL. */
+    r = sys6(NR_socket, nDomain, nType, nProtocol, 0, 0, 0);
+    if (!(r < 0 && r > -4096 && nFlags != 0 &&
+          ((int)(-r) == EINVAL || (int)(-r) == ENOSYS))) {
+        return (int)sys_ret(r);
+    }
+    r = sys6(NR_socket, nDomain, nBase, nProtocol, 0, 0, 0);
+    if (r < 0) {
+        return (int)sys_ret(r);
+    }
+    return sock_apply_type_flags((int)r, nFlags);
 }
 
 int
 socketpair(int nDomain, int nType, int nProtocol, int aSv[2])
 {
-    return (int)sys_ret(sys6(NR_socketpair, nDomain, nType, nProtocol,
-                             (long)(uintptr_t)aSv, 0, 0));
+    int nFlags = nType & (SOCK_CLOEXEC | SOCK_NONBLOCK);
+    int nBase = nType & ~nFlags;
+    long r;
+
+    r = sys6(NR_socketpair, nDomain, nType, nProtocol,
+             (long)(uintptr_t)aSv, 0, 0);
+    if (!(r < 0 && r > -4096 && nFlags != 0 &&
+          ((int)(-r) == EINVAL || (int)(-r) == ENOSYS))) {
+        return (int)sys_ret(r);
+    }
+    r = sys6(NR_socketpair, nDomain, nBase, nProtocol,
+             (long)(uintptr_t)aSv, 0, 0);
+    if (r < 0) {
+        return (int)sys_ret(r);
+    }
+    (void)sock_apply_type_flags(aSv[0], nFlags);
+    (void)sock_apply_type_flags(aSv[1], nFlags);
+    return 0;
 }
 
 int
 bind(int nFd, const struct sockaddr *pAddr, socklen_t cbAddr)
 {
+    /* Linux x86_64 NR_bind (49). */
     return (int)sys_ret(sys6(NR_bind, nFd, (long)(uintptr_t)pAddr, (long)cbAddr,
                              0, 0, 0));
 }
@@ -2361,12 +2694,14 @@ bind(int nFd, const struct sockaddr *pAddr, socklen_t cbAddr)
 int
 listen(int nFd, int nBacklog)
 {
+    /* Linux x86_64 NR_listen (50). */
     return (int)sys_ret(sys6(NR_listen, nFd, nBacklog, 0, 0, 0, 0));
 }
 
 int
 accept(int nFd, struct sockaddr *pAddr, socklen_t *pCbAddr)
 {
+    /* Linux x86_64 NR_accept (43). */
     return (int)sys_ret(sys6(NR_accept, nFd, (long)(uintptr_t)pAddr,
                              (long)(uintptr_t)pCbAddr, 0, 0, 0));
 }
@@ -2378,24 +2713,15 @@ accept4(int nFd, struct sockaddr *pAddr, socklen_t *pCbAddr, int nFlags)
 
     r = sys6(NR_accept4, nFd, (long)(uintptr_t)pAddr, (long)(uintptr_t)pCbAddr,
              nFlags, 0, 0);
-    if (r < 0 && r > -4096 && (int)(-r) == ENOSYS) {
+    if (r < 0 && r > -4096 &&
+        ((int)(-r) == ENOSYS || ((int)(-r) == EINVAL && nFlags != 0))) {
         int nNew;
 
         nNew = accept(nFd, pAddr, pCbAddr);
         if (nNew < 0) {
             return -1;
         }
-        if ((nFlags & SOCK_CLOEXEC) != 0) {
-            (void)fcntl(nNew, F_SETFD, FD_CLOEXEC);
-        }
-        if ((nFlags & SOCK_NONBLOCK) != 0) {
-            int nFl = fcntl(nNew, F_GETFL);
-
-            if (nFl >= 0) {
-                (void)fcntl(nNew, F_SETFL, nFl | O_NONBLOCK);
-            }
-        }
-        return nNew;
+        return sock_apply_type_flags(nNew, nFlags);
     }
     return (int)sys_ret(r);
 }
@@ -2403,6 +2729,7 @@ accept4(int nFd, struct sockaddr *pAddr, socklen_t *pCbAddr, int nFlags)
 int
 connect(int nFd, const struct sockaddr *pAddr, socklen_t cbAddr)
 {
+    /* Linux x86_64 NR_connect (42). */
     return (int)sys_ret(sys6(NR_connect, nFd, (long)(uintptr_t)pAddr,
                              (long)cbAddr, 0, 0, 0));
 }
@@ -2657,6 +2984,7 @@ shutdown(int nFd, int nHow)
 int
 setsockopt(int nFd, int nLevel, int nOpt, const void *pVal, socklen_t cbVal)
 {
+    /* Linux x86_64 NR_setsockopt (54). */
     return (int)sys_ret(sys6(NR_setsockopt, nFd, nLevel, nOpt,
                              (long)(uintptr_t)pVal, (long)cbVal, 0));
 }
@@ -2950,7 +3278,11 @@ eventfd_write(int nFd, uint64_t u64Val)
     return (n == (ssize_t)sizeof(u64Val)) ? 0 : -1;
 }
 
-/* getentropy: OpenBSD/glibc shape over getrandom */
+/*
+ * getentropy: POSIX max is 256. OpenSSL RAND may still call larger via the
+ * weak symbol; EIO is not a fallthrough (errno != ENOSYS), so RAND then
+ * skips syscall getrandom. ENOSYS on cb>256 lets that path run.
+ */
 int
 getentropy(void *pBuf, size_t cb)
 {
@@ -2963,7 +3295,7 @@ getentropy(void *pBuf, size_t cb)
         return -1;
     }
     if (cb > 256) {
-        errno = EIO;
+        errno = ENOSYS;
         return -1;
     }
     while (off < cb) {
@@ -3009,21 +3341,148 @@ long
 sysconf(int nName)
 {
     switch (nName) {
-    case _SC_PAGESIZE:
+    case _SC_ARG_MAX:
+        return 131072L;
+    case _SC_CHILD_MAX:
         return 4096L;
     case _SC_CLK_TCK:
         return 100L;
+    case _SC_NGROUPS_MAX:
+        return 65536L; /* OpenSSH groupaccess.c; Linux NGROUPS_MAX */
     case _SC_OPEN_MAX:
         return 1024L;
-    case _SC_ARG_MAX:
-        return 131072L;
+    case _SC_STREAM_MAX:
+        return 16L;
+    case _SC_TZNAME_MAX:
+        return 6L;
+    case _SC_JOB_CONTROL:
+    case _SC_SAVED_IDS:
+    case _SC_REALTIME_SIGNALS:
+    case _SC_PRIORITY_SCHEDULING:
+    case _SC_TIMERS:
+    case _SC_ASYNCHRONOUS_IO:
+    case _SC_FSYNC:
+    case _SC_MAPPED_FILES:
+    case _SC_MEMLOCK:
+    case _SC_MEMLOCK_RANGE:
+    case _SC_MEMORY_PROTECTION:
+    case _SC_SEMAPHORES:
+    case _SC_SHARED_MEMORY_OBJECTS:
+    case _SC_THREADS:
+    case _SC_THREAD_SAFE_FUNCTIONS:
+    case _SC_THREAD_ATTR_STACKADDR:
+    case _SC_THREAD_ATTR_STACKSIZE:
+    case _SC_THREAD_PRIORITY_SCHEDULING:
+    case _SC_THREAD_PROCESS_SHARED:
+    case _SC_XOPEN_UNIX:
+    case _SC_XOPEN_CRYPT:
+    case _SC_XOPEN_ENH_I18N:
+    case _SC_XOPEN_SHM:
+    case _SC_2_C_BIND:
+    case _SC_2_CHAR_TERM:
+    case _SC_ADVISORY_INFO:
+    case _SC_BARRIERS:
+    case _SC_CLOCK_SELECTION:
+    case _SC_CPUTIME:
+    case _SC_THREAD_CPUTIME:
+    case _SC_MONOTONIC_CLOCK:
+    case _SC_READER_WRITER_LOCKS:
+    case _SC_SPIN_LOCKS:
+    case _SC_REGEXP:
+    case _SC_SHELL:
+    case _SC_SPAWN:
+    case _SC_TIMEOUTS:
+    case _SC_IPV6:
+    case _SC_RAW_SOCKETS:
+        return 1L;
+    case _SC_MESSAGE_PASSING:
+    case _SC_MQ_OPEN_MAX:
+    case _SC_AIO_MAX:
+    case _SC_AIO_LISTIO_MAX:
+    case _SC_THREAD_THREADS_MAX:
+    case _SC_2_C_DEV:
+    case _SC_2_FORT_DEV:
+    case _SC_2_FORT_RUN:
+    case _SC_2_SW_DEV:
+    case _SC_2_LOCALEDEF:
+    case _SC_2_PBS:
+    case _SC_TRACE:
+    case _SC_TRACE_EVENT_FILTER:
+    case _SC_TRACE_INHERIT:
+    case _SC_TRACE_LOG:
+    case _SC_XOPEN_REALTIME:
+    case _SC_XOPEN_REALTIME_THREADS:
+        return -1L; /* unlimited or not provided */
+    case _SC_VERSION:
+    case _SC_2_VERSION:
+        return 200809L;
+    case _SC_PAGESIZE:
+        return 4096L;
+    case _SC_RTSIG_MAX:
+        return 32L;
+    case _SC_SEM_NSEMS_MAX:
+        return 256L;
+    case _SC_SEM_VALUE_MAX:
+        return 2147483647L;
+    case _SC_SIGQUEUE_MAX:
+        return 32L;
+    case _SC_TIMER_MAX:
+        return 32L;
+    case _SC_DELAYTIMER_MAX:
+        return 32L;
+    case _SC_MQ_PRIO_MAX:
+        return 32768L;
+    case _SC_AIO_PRIO_DELTA_MAX:
+        return 20L;
+    case _SC_BC_BASE_MAX:
+        return 99L;
+    case _SC_BC_DIM_MAX:
+        return 99L;
+    case _SC_BC_SCALE_MAX:
+        return 99L;
+    case _SC_BC_STRING_MAX:
+        return 1000L;
+    case _SC_COLL_WEIGHTS_MAX:
+        return 255L;
+    case _SC_EXPR_NEST_MAX:
+        return 32L;
     case _SC_LINE_MAX:
         return 2048L;
-    case _SC_HOST_NAME_MAX:
-        return 64L;
+    case _SC_RE_DUP_MAX:
+        return 32767L;
+    case _SC_IOV_MAX:
+        return 1024L;
+    case _SC_GETGR_R_SIZE_MAX:
+    case _SC_GETPW_R_SIZE_MAX:
+        return 1024L;
+    case _SC_LOGIN_NAME_MAX:
+        return 256L;
+    case _SC_TTY_NAME_MAX:
+        return 32L;
+    case _SC_THREAD_DESTRUCTOR_ITERATIONS:
+        return 4L;
+    case _SC_THREAD_KEYS_MAX:
+        return 1024L;
+    case _SC_THREAD_STACK_MIN:
+        return 16384L;
     case _SC_NPROCESSORS_ONLN:
     case _SC_NPROCESSORS_CONF:
-        return 1L; /* bring-up default; product: parse online count */
+        return 1L;
+    case _SC_PHYS_PAGES:
+    case _SC_AVPHYS_PAGES:
+        return 262144L; /* 1 GiB / 4 KiB bring-up */
+    case _SC_ATEXIT_MAX:
+        return 32L;
+    case _SC_PASS_MAX:
+        return 256L;
+    case _SC_XOPEN_VERSION:
+        return 700L;
+    case _SC_XOPEN_XCU_VERSION:
+        return 4L;
+    case _SC_SYMLOOP_MAX:
+        return 40L;
+    case _SC_HOST_NAME_MAX:
+        return 64L;
     default:
         errno = EINVAL;
         return -1L;
@@ -3167,9 +3626,20 @@ clock_settime(clockid_t clk, const struct timespec *pTs)
 }
 
 int
-prctl(int nOption, unsigned long a2, unsigned long a3, unsigned long a4,
-      unsigned long a5)
+prctl(int nOption, ...)
 {
+    va_list ap;
+    unsigned long a2;
+    unsigned long a3;
+    unsigned long a4;
+    unsigned long a5;
+
+    va_start(ap, nOption);
+    a2 = va_arg(ap, unsigned long);
+    a3 = va_arg(ap, unsigned long);
+    a4 = va_arg(ap, unsigned long);
+    a5 = va_arg(ap, unsigned long);
+    va_end(ap);
     return (int)sys_ret(sys6(NR_prctl, nOption, (long)a2, (long)a3, (long)a4,
                              (long)a5, 0));
 }

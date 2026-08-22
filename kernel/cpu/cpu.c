@@ -32,6 +32,7 @@
 #include <gj/thread.h>
 #include <gj/vmm.h>
 
+#define MSR_FS_BASE        0xC0000100u
 #define MSR_GS_BASE        0xC0000101u
 #define MSR_KERNEL_GS_BASE 0xC0000102u
 
@@ -303,6 +304,67 @@ cpu_gs_init(struct gj_cpu *pCpu)
     wrmsr(MSR_KERNEL_GS_BASE, 0);
 }
 
+#define CR0_MP           (1ull << 1)
+#define CR0_EM           (1ull << 2)
+#define CR0_NE           (1ull << 5)
+#define CR4_OSFXSR       (1ull << 9)
+#define CR4_OSXMMEXCPT   (1ull << 10)
+#define CR4_OSXSAVE      (1ull << 18)
+#define CPUID1_ECX_XSAVE (1u << 26) /* CPU XSAVE/XSETBV; OSXSAVE (27) is CR4 */
+#define CPUID1_ECX_AVX   (1u << 28)
+
+/**
+ * Enable x87 + SSE2 on this CPU (CR0/CR4 + fninit).
+ * After OSFXSR: if CPUID.1 XSAVE, CR4.OSXSAVE then XSETBV XCR0.
+ * OpenSSL ia32cap XGETBV; Dual DoD B OPEN.
+ */
+static void
+cpu_enable_fpu(void)
+{
+    u64 u64Cr0;
+    u64 u64Cr4;
+    u32 u32Eax;
+    u32 u32Ebx;
+    u32 u32Ecx;
+    u32 u32Edx;
+    u32 u32Xcr0Lo;
+    u32 u32Xcr0Hi;
+
+    __asm__ volatile ("mov %%cr0, %0" : "=r"(u64Cr0));
+    u64Cr0 &= ~CR0_EM;
+    u64Cr0 |= CR0_MP | CR0_NE;
+    __asm__ volatile ("mov %0, %%cr0" : : "r"(u64Cr0) : "memory");
+
+    __asm__ volatile ("mov %%cr4, %0" : "=r"(u64Cr4));
+    u64Cr4 |= CR4_OSFXSR | CR4_OSXMMEXCPT;
+    __asm__ volatile ("mov %0, %%cr4" : : "r"(u64Cr4) : "memory");
+
+    /* OpenSSL ia32cap XGETBV; Dual DoD B OPEN. */
+    __asm__ volatile ("cpuid"
+                      : "=a"(u32Eax), "=b"(u32Ebx), "=c"(u32Ecx), "=d"(u32Edx)
+                      : "a"(1u), "c"(0u));
+    (void)u32Eax;
+    (void)u32Ebx;
+    (void)u32Edx;
+    /* XSAVE (26), not OSXSAVE (27): bit 27 mirrors CR4; writing OSXSAVE
+     * without XSAVE #GPs. */
+    if ((u32Ecx & CPUID1_ECX_XSAVE) != 0) {
+        u64Cr4 |= CR4_OSXSAVE;
+        __asm__ volatile ("mov %0, %%cr4" : : "r"(u64Cr4) : "memory");
+        u32Xcr0Lo = 0x3u; /* x87 + SSE */
+        if ((u32Ecx & CPUID1_ECX_AVX) != 0) {
+            u32Xcr0Lo = 0x7u; /* x87 + SSE + YMM */
+        }
+        u32Xcr0Hi = 0u;
+        __asm__ volatile ("xsetbv"
+                          :
+                          : "c"(0u), "a"(u32Xcr0Lo), "d"(u32Xcr0Hi)
+                          : "memory");
+    }
+
+    __asm__ volatile ("fninit" : : : "memory");
+}
+
 void
 cpu_init_bsp(void)
 {
@@ -342,6 +404,7 @@ cpu_init_bsp(void)
     cpu_soft_note_online(0);
     cpu_soft_inc(&g_u32SoftPublishStatic); /* BSP is static slot 0 */
     cpu_gs_init(pCpu);
+    cpu_enable_fpu();
     /* Greppable: cpu: BSP ... */
     kprintf("cpu: BSP id=0 percpu=%p kstack=%lx cr3=%lx static_max=%u max=%u\n",
             (void *)pCpu, (unsigned long)pCpu->u64KernelRsp,
@@ -459,6 +522,7 @@ cpu_init_ap(u32 u32CpuId)
     pCpu->u64Cr3 = cpu_read_cr3();
     pCpu->pCurrent = NULL;
     cpu_gs_init(pCpu);
+    cpu_enable_fpu();
     if (g_u32NOnline < GJ_MAX_CPUS) {
         g_u32NOnline++;
     }
@@ -967,4 +1031,10 @@ cpu_load_cr3(u64 u64Cr3)
     }
     __asm__ volatile ("mov %0, %%cr3" : : "r"(u64Cr3) : "memory");
     pCpu->u64Cr3 = u64Cr3;
+}
+
+void
+cpu_set_fs_base(u64 u64Base)
+{
+    wrmsr(MSR_FS_BASE, u64Base);
 }

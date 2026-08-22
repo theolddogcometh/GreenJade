@@ -9,7 +9,7 @@
  * -----
  * getaddrinfo/freeaddrinfo/gai_strerror/getnameinfo and hostent/servent
  * shapes for numeric and localhost resolution without shipping a full DNS
- * client in libc (DNS may live in netstackd later).
+ * client in libc (DNS is leftover; Dual DoD B hop is kernel net_tcp → sshd).
  *
  * Design notes
  * ------------
@@ -23,7 +23,7 @@
  * Soft residual (C2 libcgj netdb.h; Soft!=product; G-AC-1; Dual DoD A/B OPEN):
  *   soft     = getaddrinfo/freeaddrinfo/gai_strerror/getnameinfo + hostent/servent;
  *              numeric + localhost soft resolve; other names may EAI_NONAME
- *   product  = Dual DoD B = rtl8168_udx + DDI + netstackd (OPEN); freestanding SKIP
+ *   product  = Dual DoD B = rtl8168_udx → net_tcp → sshd (OPEN until interactive SSH login)
  *   honesty  = resolver soft != product DNS/stack close; agent PASS != Dual DoD
  *              close; stamp-free bar honesty (no version stamp); G-AC-1 no .ko AC
  *   law      = dual MIT OR Apache-2.0; no GPL; H1 no net_eth_poll from IRQ;
@@ -44,7 +44,23 @@ extern "C" {
 #define AI_PASSIVE     0x0001
 #define AI_CANONNAME   0x0002
 #define AI_NUMERICHOST 0x0004
+#define AI_V4MAPPED    0x0008
+#define AI_ALL         0x0010
+#define AI_ADDRCONFIG  0x0020
 #define AI_NUMERICSERV 0x0400
+
+#define NI_NUMERICHOST 1
+#define NI_NUMERICSERV 2
+#define NI_NOFQDN      4
+#define NI_NAMEREQD    8
+#define NI_DGRAM       16
+
+#ifndef NI_MAXHOST
+#define NI_MAXHOST 1025
+#endif
+#ifndef NI_MAXSERV
+#define NI_MAXSERV 32
+#endif
 
 #define EAI_BADFLAGS  -1
 #define EAI_NONAME    -2
@@ -55,8 +71,9 @@ extern "C" {
 #define EAI_SYSTEM    -11
 #define EAI_OVERFLOW  -12
 #define EAI_NODATA    -5
-#define EAI_SERVICE   -8
 #define EAI_SOCKTYPE  -7
+#define EAI_SERVICE   -8
+#define EAI_ADDRFAMILY -9
 
 struct addrinfo {
     int              ai_flags;
@@ -174,6 +191,19 @@ int              getnetbyaddr_r(uint32_t uNet, int nType, struct netent *pResult
                                 int *pHErr);
 void             herror(const char *szStr);
 const char      *hstrerror(int nErr);
+
+/* NIS netgroup (OpenSSH auth-rhosts; NULL host/user/domain = wildcard) */
+int  innetgr(const char *szNetgroup, const char *szHost, const char *szUser,
+             const char *szDomain);
+void setnetgrent(const char *szNetgroup);
+void endnetgrent(void);
+int  getnetgrent(char **ppHost, char **ppUser, char **ppDomain);
+int  getnetgrent_r(char **ppHost, char **ppUser, char **ppDomain, char *szBuf,
+                   size_t cb);
+
+/* Privileged bind helpers (OpenSSH HAVE_RRESVPORT_AF) */
+int rresvport(int *pPort);
+int rresvport_af(int *pPort, int nAf);
 
 #ifdef __cplusplus
 }

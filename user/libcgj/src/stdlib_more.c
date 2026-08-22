@@ -5,6 +5,7 @@
  * getsubopt + getgrouplist — desktop link surface.
  */
 #include <errno.h>
+#include <grp.h>
 #include <stddef.h>
 #include <string.h>
 #include <sys/types.h>
@@ -75,54 +76,54 @@ getsubopt(char **ppOptionp, char *const *ppTokens, char **ppValuep)
 int
 getgrouplist(const char *szUser, gid_t gid, gid_t *pGroups, int *pNgids)
 {
-    int nNeed = 1;
-    gid_t aExtra[16];
-    int nExtra = 0;
+    gid_t aNeed[64];
+    int nNeed = 0;
     int i;
+    struct group *pGr;
 
-    (void)szUser; /* bring-up: no /etc/group; soft primary + getgroups */
     if (pNgids == NULL) {
         errno = EINVAL;
         return -1;
     }
-    /* Soft deepen: include supplementary groups from the kernel when present. */
-    nExtra = getgroups((int)(sizeof(aExtra) / sizeof(aExtra[0])), aExtra);
-    if (nExtra < 0) {
-        nExtra = 0;
-    }
-    nNeed = 1;
-    for (i = 0; i < nExtra; i++) {
-        if (aExtra[i] != gid) {
-            nNeed++;
+    aNeed[nNeed++] = gid;
+    if (szUser != NULL && szUser[0] != '\0') {
+        setgrent();
+        while ((pGr = getgrent()) != NULL && nNeed < 64) {
+            int fMem = 0;
+            char **pp;
+
+            if (pGr->gr_gid == gid) {
+                fMem = 1;
+            }
+            for (pp = pGr->gr_mem; !fMem && pp != NULL && *pp != NULL; pp++) {
+                if (strcmp(*pp, szUser) == 0) {
+                    fMem = 1;
+                }
+            }
+            if (fMem) {
+                int fDup = 0;
+
+                for (i = 0; i < nNeed; i++) {
+                    if (aNeed[i] == pGr->gr_gid) {
+                        fDup = 1;
+                        break;
+                    }
+                }
+                if (!fDup) {
+                    aNeed[nNeed++] = pGr->gr_gid;
+                }
+            }
         }
+        endgrent();
     }
     if (*pNgids < nNeed) {
         *pNgids = nNeed;
         return -1;
     }
     if (pGroups != NULL) {
-        int nOut = 0;
-
-        pGroups[nOut++] = gid;
-        for (i = 0; i < nExtra && nOut < nNeed; i++) {
-            int j;
-            int fDup = 0;
-
-            if (aExtra[i] == gid) {
-                continue;
-            }
-            for (j = 0; j < nOut; j++) {
-                if (pGroups[j] == aExtra[i]) {
-                    fDup = 1;
-                    break;
-                }
-            }
-            if (!fDup) {
-                pGroups[nOut++] = aExtra[i];
-            }
+        for (i = 0; i < nNeed; i++) {
+            pGroups[i] = aNeed[i];
         }
-        *pNgids = nOut;
-        return nOut;
     }
     *pNgids = nNeed;
     return nNeed;

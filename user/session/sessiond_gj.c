@@ -77,8 +77,8 @@
  *                        (rtl8168_udx / xhci_udx …); freestanding class SKIP;
  *                        session door ownership path is product for A1 session
  *                        smoke only; multi-server confine remains OPEN.
- *   dual_dod residual  — Dual DoD A/B remain OPEN until DUT proof; soft lamps
- *                        never close Dual DoD. Soft!=product.
+ *   dual_dod residual  — Dual DoD A OPEN until host USB path; B OPEN until
+ *                        interactive SSH login. Soft lamps never close Dual DoD.
  *   G-AC-1 residual    — no Linux .ko product AC; no GPL in this TU.
  * Bar honesty v2026.08.04.75 stamp-free. NEVER bump GJ_IMAGE_VERSION here.
  * No invent intermediate image stamps. Not GJ_IMAGE_VERSION.

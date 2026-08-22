@@ -11,8 +11,8 @@
  *     product residual catalog → quiesce/remove.
  *   Dual DoD B product *direction* (Linux-shaped NIC host over DDI/UDX).
  *   Soft OPEN+MAP / ring / product catalog / IRQ / work / wire handoff —
- *   not product TX/RX. Freestanding owns the wire interim (lab DoD B eth).
- *   Product = UDX/DDI + hot/cold ABI. Dual DoD B remains OPEN (agent!=close).
+ *   not product TX/RX. Freestanding class SKIP. Laptop wire hop is this UDX host.
+ *   Product = UDX/DDI + hot/cold ABI. Dual DoD B OPEN until interactive SSH login.
  *   T0 product net = virtio. Soft!=product. G-AC-1: no .ko product AC.
  *   TX/RX remains OPEN.
  *
@@ -20,7 +20,7 @@
  *   Register program from public PCI IDs + publicly documented Realtek
  *   register *names* / coarse layout only (RTL8111B/8168B Registers
  *   DataSheet-class maps). Do NOT copy Linux r8169.c,
- *   in-tree kernel/drv/rtl8168.c, or any GPL source.
+ *   abandoned/kernel/drv/rtl8168.c, or any GPL source.
  *
  * BAR / DDI NOTE
  *   Silicon-common primary MMIO is often BAR2 (memory).
@@ -59,7 +59,7 @@
  *     never_program=0 write=1 wire_owner=udx product_handoff=1.
  *     thr-poll l2_poll: ETH_INJECT + tx_pull + densified own_stuck dig.
  *     Soft residual catalogs remain soft residual (never_program=1 class).
- *     Dual DoD B OPEN until DUT L3 (lab IP / stack / sshd :22). agent!=close.
+ *     Dual DoD B OPEN until interactive SSH login. L3 / :22 / PK_OK / SUCCESS ≠ close.
  *   STRONGER functional residual densify when caps residual present:
  *     densify real DDI open/map and program_gate (prefer_real_ddi=1;
  *     real_ddi=1 on bind_path=ddi; real_ddi densify once-lamp).
@@ -215,8 +215,8 @@
  * PRODUCT vs FREESTANDING
  *   Product = userspace UDX+ABI+DDI + hot/cold Linux ABI
  *   (Linux-shaped host; MMIO/IRQ/DMA caps). Dual DoD B OPEN (agent!=close).
- *   product=UDX+sshd+stack residual: this host → netstackd → sshd :22.
- *   Freestanding kernel/drv/rtl8168.c default SKIP (GJ_RTL8168_PROBE=0).
+ *   product=UDX+sshd+stack residual: this host → kernel net_tcp → sshd :22.
+ *   Freestanding abandoned/kernel/drv/rtl8168.c default SKIP (GJ_RTL8168_PROBE=0).
  *   Soft!=product. G-AC-1: no Linux .ko product AC.
  *   Userspace host probe residual never claims freestanding wire.
  *
@@ -239,7 +239,7 @@
 /*
  * Soft ABI residual (C2 Dual DoD B product residual deepen; exclusive .c).
  * Product path = UDX/DDI + hot/cold Linux ABI. Catalog names only.
- * Dual DoD B lab goal surface: lab IP / stack / sshd (OPEN until DUT proof).
+ * Dual DoD B lab goal surface: interactive SSH login (L3 / :22 / PK_OK / SUCCESS ≠ close).
  * dual_dod_b=OPEN always (agent never closes Dual DoD). Soft!=product.
  * greppable: rtl8168_udx: soft abi residual / soft abi step=
  * greppable: soft abi residual honesty / sshd=OPEN / lab_ip=OPEN
@@ -941,7 +941,7 @@ rtl8168_soft_denser_residual_verdict(const struct rtl8168_soft *pSoft)
         }
     }
 
-    /* denser residual multi-arm count (always bar .75; never_program held). */
+    /* denser residual multi-arm count (never_program held). */
     u32Arms = u32Open + u32Map + u32Ring + u32Prog + u32Wire + u32Func +
               u32Caps + u32BasesClean;
     u32DenserOk = 0u;
@@ -974,175 +974,17 @@ rtl8168_soft_denser_residual_verdict(const struct rtl8168_soft *pSoft)
         szVerdict = "MISS";
     }
 
-    udx_printk("rtl8168_udx: soft denser residual "
-               "denser_prove=%u denser_residual=%u denser=1 "
-               "denser_arms=%u/%u denser_min=%u denser_ok=%u "
-               "always_bar=%u always bar .75 "
-               "densify_program_wire_chain=%u densify_prefer_real_ddi=%u "
-               "densify_pwc_prefer_real=%u densify_wire_claim=%u "
-               "densify_triad=%u denser_order_steps=%u "
-               "denser_program=1 denser_wire=1 denser_chain=1 "
-               "denser_prefer_real_ddi=%u denser_wire_claim=%u "
-               "open=%u map=%u ring=%u prog=%u wire_ho=%u func=%u caps=%u "
-               "bases_clean=%u prefer_real_ddi=%u real_ddi=%u bind_path=%s "
-               "order=tnpds_lo,tnpds_hi,rdsar_lo,rdsar_hi,te_re "
-               "would_write=0 write=0 arm=0 "
-               "never_tnpds=1 never_rdsar=1 never_te_re=1 "
-               "never_program=1 never_program_held=%u never_tx_rx=1 "
-               "product_mint=0 product_handoff=0 wire_claim=OPEN "
-               "wire=freestanding bind_ne_wire=1 never_claim_fs_wire=1 "
-               "product=UDX+ABI product=UDX+sshd+stack chain=%s "
-               "lab_ip residual OPEN lab_ip=10.200.125.50 "
-               "lab_ip=OPEN stack=OPEN sshd=OPEN "
-               "dual_dod_b=OPEN agent_ne_close=1 claim_class=C2 "
-               "denser residual != Dual DoD close "
-               "bar=v2026.08.04.75 stamp_free=%u never_invent=.76 "
-               "Soft!=product G-AC-1\n",
-               (unsigned)RTL_SOFT_DENSER_PROVE,
-               (unsigned)RTL_SOFT_DENSER_RESIDUAL,
-               (unsigned)u32Arms, (unsigned)RTL_SOFT_DENSER_ARMS_MAX,
-               (unsigned)RTL_SOFT_DENSER_ARMS_MIN, (unsigned)u32DenserOk,
-               (unsigned)RTL_SOFT_DENSER_ALWAYS_BAR,
-               (unsigned)RTL_SOFT_DENSIFY_PWC,
-               (unsigned)RTL_SOFT_DENSIFY_PREFER_REAL,
-               (unsigned)RTL_SOFT_DENSIFY_PWC_PREFER,
-               (unsigned)RTL_SOFT_DENSIFY_WIRE_CLAIM,
-               (unsigned)RTL_SOFT_DENSIFY_TRIAD,
-               (unsigned)RTL_SOFT_PROG_ORDER_COUNT,
-               (unsigned)RTL_SOFT_DENSIFY_PREFER_REAL,
-               (unsigned)RTL_SOFT_DENSIFY_WIRE_CLAIM,
-               (unsigned)u32Open, (unsigned)u32Map, (unsigned)u32Ring,
-               (unsigned)u32Prog, (unsigned)u32Wire, (unsigned)u32Func,
-               (unsigned)u32Caps, (unsigned)u32BasesClean,
-               (unsigned)u32PreferReal, (unsigned)u32RealDdi, szBindPath,
-               (unsigned)RTL_SOFT_NEVER_PROGRAM_HELD,
-               RTL_SOFT_PRODUCT_CHAIN,
-               (unsigned)RTL_SOFT_BAR_STAMP_FREE);
-
-    /* greppable: rtl8168_udx: soft denser residual arms */
-    udx_printk("rtl8168_udx: soft denser residual arms denser=1 "
-               "denser_arms=%u/%u denser_min=%u denser_ok=%u "
-               "arm_open=%u arm_map=%u arm_ring=%u arm_prog=%u "
-               "arm_wire=%u arm_func=%u arm_caps=%u arm_bases_clean=%u "
-               "arms=open,map,ring,prog,wire,func,caps,bases_clean "
-               "never_program=1 never_program_held=%u never_tnpds=1 "
-               "never_rdsar=1 never_te_re=1 would_write=0 write=0 arm=0 "
-               "product_mint=0 dual_dod_b=OPEN always bar .75 "
-               "bar=v2026.08.04.75 stamp_free=%u Soft!=product G-AC-1\n",
-               (unsigned)u32Arms, (unsigned)RTL_SOFT_DENSER_ARMS_MAX,
-               (unsigned)RTL_SOFT_DENSER_ARMS_MIN, (unsigned)u32DenserOk,
-               (unsigned)u32Open, (unsigned)u32Map, (unsigned)u32Ring,
-               (unsigned)u32Prog, (unsigned)u32Wire, (unsigned)u32Func,
-               (unsigned)u32Caps, (unsigned)u32BasesClean,
-               (unsigned)RTL_SOFT_NEVER_PROGRAM_HELD,
-               (unsigned)RTL_SOFT_BAR_STAMP_FREE);
-
-    /* greppable: rtl8168_udx: soft denser residual lean */
-    udx_printk("rtl8168_udx: soft denser residual lean denser=1 "
-               "denser_prove=%u denser_residual=%u denser_ok=%u "
-               "denser_arms=%u/%u never_program_held=%u never_program=1 "
-               "never_tnpds=1 never_rdsar=1 never_te_re=1 "
-               "product_mint=0 would_write=0 write=0 "
-               "prefer_real_ddi=1 real_ddi=%u bind_path=%s "
-               "dual_dod_b=OPEN agent_ne_close=1 always bar .75 "
-               "bar=v2026.08.04.75 stamp_free=%u never_invent=.76 "
-               "Soft!=product G-AC-1\n",
-               (unsigned)RTL_SOFT_DENSER_PROVE,
-               (unsigned)RTL_SOFT_DENSER_RESIDUAL,
-               (unsigned)u32DenserOk,
-               (unsigned)u32Arms, (unsigned)RTL_SOFT_DENSER_ARMS_MAX,
-               (unsigned)RTL_SOFT_NEVER_PROGRAM_HELD,
-               (unsigned)u32RealDdi, szBindPath,
-               (unsigned)RTL_SOFT_BAR_STAMP_FREE);
-
-    udx_printk("rtl8168_udx: soft denser residual prove "
-               "ok=%u denser_prove=%u denser_residual=%u denser_ok=%u "
-               "denser_arms=%u/%u denser_min=%u "
-               "never_program_held=%u never_program=1 "
-               "never_tnpds=1 never_rdsar=1 never_te_re=1 "
-               "product_mint=0 would_write=0 write=0 arm=0 "
-               "bases_clean=%u program_gate_behind=product_mint "
-               "densify_program_wire_chain=%u densify_prefer_real_ddi=%u "
-               "densify_pwc_prefer_real=%u densify_triad=%u "
-               "prefer_real_ddi=1 real_ddi=%u bind_path=%s "
-               "dual_dod_b=OPEN agent_ne_close=1 always bar .75 "
-               "bar=v2026.08.04.75 stamp_free=%u never_invent=.76 "
-               "Soft!=product G-AC-1\n",
-               (unsigned)u32Pass,
-               (unsigned)RTL_SOFT_DENSER_PROVE,
-               (unsigned)RTL_SOFT_DENSER_RESIDUAL,
-               (unsigned)u32DenserOk,
-               (unsigned)u32Arms, (unsigned)RTL_SOFT_DENSER_ARMS_MAX,
-               (unsigned)RTL_SOFT_DENSER_ARMS_MIN,
-               (unsigned)RTL_SOFT_NEVER_PROGRAM_HELD,
-               (unsigned)u32BasesClean,
-               (unsigned)RTL_SOFT_DENSIFY_PWC,
-               (unsigned)RTL_SOFT_DENSIFY_PREFER_REAL,
-               (unsigned)RTL_SOFT_DENSIFY_PWC_PREFER,
-               (unsigned)RTL_SOFT_DENSIFY_TRIAD,
-               (unsigned)u32RealDdi, szBindPath,
-               (unsigned)RTL_SOFT_BAR_STAMP_FREE);
-
-    /*
-     * greppable: rtl8168_udx: soft denser residual hold
-     * denser residual always never_program held (no TNPDS/RDSAR/TE|RE write).
-     * always bar .75; product_mint=0; dual_dod_b=OPEN; Soft!=product.
-     */
-    udx_printk("rtl8168_udx: soft denser residual hold denser_hold=%u denser=1 "
-               "denser residual always never_program held "
-               "never_program held=1 never_program_held=%u never_program=1 "
-               "never_tnpds=1 never_rdsar=1 never_te_re=1 "
-               "would_write=0 write=0 arm=0 bases_clean=%u "
-               "product_mint=0 dual_dod_b=OPEN agent_ne_close=1 "
-               "denser residual != Dual DoD close always bar .75 "
-               "bar=v2026.08.04.75 stamp_free=%u never_invent=.76 "
-               "Soft!=product G-AC-1\n",
-               (unsigned)RTL_SOFT_DENSER_HOLD,
-               (unsigned)RTL_SOFT_NEVER_PROGRAM_HELD,
-               (unsigned)u32BasesClean,
-               (unsigned)RTL_SOFT_BAR_STAMP_FREE);
-
-    /* greppable: rtl8168_udx: soft denser residual VERDICT */
+    /* One GOP line (H2). No bar=v2026 token — wrap tails were the flood. */
     udx_printk("rtl8168_udx: soft denser residual VERDICT %s "
-               "denser_prove=%u denser_residual=%u denser_hold=%u denser=1 "
-               "denser_ok=%u denser_arms=%u/%u denser_min=%u "
-               "never_program_held=%u never_program held=1 never_program=1 "
-               "never_tnpds=1 never_rdsar=1 never_te_re=1 "
-               "product_mint=0 would_write=0 write=0 arm=0 "
-               "bases_clean=%u open=%u map=%u ring=%u "
-               "prog=%u wire_ho=%u func=%u caps=%u "
-               "densify_program_wire_chain=%u densify_prefer_real_ddi=%u "
-               "densify_pwc_prefer_real=%u denser_wire_claim=%u "
-               "prefer_real_ddi=1 real_ddi=%u bind_path=%s "
-               "order=tnpds_lo,tnpds_hi,rdsar_lo,rdsar_hi,te_re "
-               "wire claim residual OPEN wire_claim=OPEN "
-               "product_udx_owns_wire=OPEN until=DUT "
-               "product=UDX+sshd+stack chain=%s "
-               "lab_ip residual OPEN lab_ip=10.200.125.50 "
-               "dual_dod_b=OPEN agent_ne_close=1 claim_class=C2 "
-               "denser residual always never_program held "
-               "denser residual != Dual DoD close always bar .75 "
-               "bar=v2026.08.04.75 stamp_free=%u never_invent=.76 "
+               "denser_ok=%u denser_arms=%u/%u "
+               "never_program=1 dual_dod_b=OPEN "
                "Soft!=product G-AC-1\n",
-               szVerdict,
-               (unsigned)RTL_SOFT_DENSER_PROVE,
-               (unsigned)RTL_SOFT_DENSER_RESIDUAL,
-               (unsigned)RTL_SOFT_DENSER_HOLD,
-               (unsigned)u32DenserOk,
-               (unsigned)u32Arms, (unsigned)RTL_SOFT_DENSER_ARMS_MAX,
-               (unsigned)RTL_SOFT_DENSER_ARMS_MIN,
-               (unsigned)RTL_SOFT_NEVER_PROGRAM_HELD,
-               (unsigned)u32BasesClean,
-               (unsigned)u32Open, (unsigned)u32Map, (unsigned)u32Ring,
-               (unsigned)u32Prog, (unsigned)u32Wire, (unsigned)u32Func,
-               (unsigned)u32Caps,
-               (unsigned)RTL_SOFT_DENSIFY_PWC,
-               (unsigned)RTL_SOFT_DENSIFY_PREFER_REAL,
-               (unsigned)RTL_SOFT_DENSIFY_PWC_PREFER,
-               (unsigned)RTL_SOFT_DENSIFY_WIRE_CLAIM,
-               (unsigned)u32RealDdi, szBindPath,
-               RTL_SOFT_PRODUCT_CHAIN,
-               (unsigned)RTL_SOFT_BAR_STAMP_FREE);
+               szVerdict, (unsigned)u32DenserOk, (unsigned)u32Arms,
+               (unsigned)RTL_SOFT_DENSER_ARMS_MAX);
+    (void)u32PreferReal;
+    (void)u32Pass;
+    (void)u32RealDdi;
+    (void)szBindPath;
 }
 
 /**
@@ -3898,7 +3740,7 @@ rtl8168_soft_txrx_residual(struct rtl8168_soft *pSoft)
 /**
  * Soft ABI residual — hot/cold Linux ABI + UDX/DDI + sshd path surface.
  * C2 Dual DoD B product residual deepen: product = UDX/DDI + hot/cold ABI.
- * Dual DoD B lab goal: UDX owns wire for lab IP / stack / sshd (OPEN).
+ * Dual DoD B lab goal: interactive SSH login (L3 / :22 / PK_OK / SUCCESS ≠ close).
  * Catalog only; never claims Dual DoD close; never product TX/RX.
  * greppable: rtl8168_udx: soft abi residual
  * greppable: rtl8168_udx: soft abi step=
@@ -6209,7 +6051,7 @@ main(int argc, char **argv)
  *
  * Own stays host (0) on all descriptors: TE|RE arm does not DMA until
  * product Own handoff + RX/TX buffers (TX/RX still OPEN). Dual DoD B
- * remains OPEN until DUT L3 (lab IP / stack / sshd :22). agent!=close.
+ * remains OPEN until interactive SSH login. L3 / :22 / PK_OK / SUCCESS ≠ close.
  *
  * greppable: rtl8168_udx: product program
  * greppable: rtl8168_udx: product program PASS
@@ -6892,6 +6734,30 @@ rtl8168_product_cache_dig_for_cpu(struct rtl8168_soft *pSoft)
 }
 
 /**
+ * Invalidate TX desc lines before sampling OWN.
+ * Glass 0.1.163: inj climbed, tx=0. Stale CPU OWN=1 skips ETH_TX_PULL
+ * the same way stale RX Own hid writeback.
+ * Soft!=product Dual DoD B OPEN.
+ */
+static void
+rtl8168_product_tx_sync_for_cpu(struct rtl8168_soft *pSoft)
+{
+    u32 u32N;
+
+    if (pSoft == NULL || pSoft->pTxDesc == NULL) {
+        return;
+    }
+    u32N = pSoft->u32TxSlots;
+    if (u32N > RTL_SOFT_TX_SLOTS) {
+        u32N = RTL_SOFT_TX_SLOTS;
+    }
+    rtl8168_product_clflush_va(
+        pSoft->pTxDesc,
+        (size_t)(u32N * (u32)sizeof(struct rtl8168_soft_desc)));
+    __asm__ volatile("mfence" ::: "memory");
+}
+
+/**
  * Arm RX Own=1 after TNPDS/RDSAR programmed (v0.1.106 order dig).
  * greppable: rtl8168_udx: product own_arm
  */
@@ -6986,18 +6852,18 @@ rtl8168_product_fault_pin(u32 fRstOk, u32 fMdioOk, u32 fLnkOk, u32 u32Bar)
     aPin[26] = '=';
     aPin[27] = (char)('0' + (u32Bar % 10u));
     aPin[28] = '\0';
-    (void)udx_dma_panel_hold(15u, aPin);
+    (void)udx_dma_panel_hold(6u, aPin);
 }
 
 /*
- * Dual DoD B persist: STATUS hold14 (glass 0.1.122 Own/ROK/FOVW).
+ * Dual DoD B persist: leftover hold14 MAP (glass 0.1.122 Own/ROK/FOVW). Live 178 panel uses holds 1/3/4/5/7/8.
  * Extends live "UDX te_disarm fovw|wire" — one visual row, once only.
  * Do not steal hold0 title / hold2 TE / hold3 xhci / hold6 NET / hold15 mac.
  * Morning G752 often has no COM1; serial fovw_te / wire_dig / te_disarm
  * is not enough. Values from product observe only (never invent).
  * Soft!=product Dual DoD B OPEN. agent!=close.
  */
-#define RTL8168_GLASS_STATUS_HOLD  14u
+#define RTL8168_GLASS_STATUS_HOLD  5u
 
 /* Once-only STATUS pin (no stamp storms). Soft!=product Dual DoD B OPEN. */
 static u8 g_fGlassStatusHoldOnce;
@@ -7092,6 +6958,76 @@ rtl8168_product_glass_hold_once(u32 u32Own, u32 fRok, u32 fFovw, u32 fCookie,
                "hold14=\"%s\" once=1 Soft!=product dual_dod_b=OPEN "
                "(G752 no-COM1 Own/ROK/FOVW persist; vs hold2 TE)\n",
                aPin);
+}
+
+/* STATUS hold9: live inj/tx/lnk. No GOP kprintf (0.1.140 LOG wrap). */
+#define RTL8168_LIVE_STATUS_HOLD  4u
+
+static u32
+rtl8168_live_hold_dec(char *sz, u32 cb, u32 u32Off, u32 u32Val)
+{
+    char aDig[10];
+    u32 n = 0u;
+
+    if (sz == NULL || cb == 0u) {
+        return 0u;
+    }
+    if (u32Off >= cb) {
+        sz[cb - 1u] = '\0';
+        return cb - 1u;
+    }
+    if (u32Val == 0u) {
+        if ((u32Off + 1u) < cb) {
+            sz[u32Off++] = '0';
+        }
+        sz[u32Off] = '\0';
+        return u32Off;
+    }
+    while (u32Val != 0u && n < 10u) {
+        aDig[n++] = (char)('0' + (u32Val % 10u));
+        u32Val /= 10u;
+    }
+    while (n > 0u && (u32Off + 1u) < cb) {
+        n--;
+        sz[u32Off++] = aDig[n];
+    }
+    sz[u32Off] = '\0';
+    return u32Off;
+}
+
+static void
+rtl8168_live_status_pin(const struct rtl8168_soft *pSoft)
+{
+    static u32 s_u32Inj = 0xffffffffu;
+    static u32 s_u32Tx = 0xffffffffu;
+    static u32 s_u32Lnk = 0xffffffffu;
+    char aPin[40];
+    u32 u32Off;
+    u32 u32Inj;
+    u32 u32Tx;
+    u32 u32Lnk;
+
+    if (pSoft == NULL) {
+        return;
+    }
+    u32Inj = pSoft->u32Inject;
+    u32Tx = pSoft->u32TxPull;
+    u32Lnk = ((pSoft->u8PhySt & RTL_PHYST_LINKOK) != 0u) ? 1u : 0u;
+    if (u32Inj == s_u32Inj && u32Tx == s_u32Tx && u32Lnk == s_u32Lnk) {
+        return;
+    }
+    s_u32Inj = u32Inj;
+    s_u32Tx = u32Tx;
+    s_u32Lnk = u32Lnk;
+    aPin[0] = '\0';
+    u32Off = 0u;
+    rtl8168_glass_hold_cat(aPin, (u32)sizeof(aPin), &u32Off, "UDX inj=");
+    u32Off = rtl8168_live_hold_dec(aPin, (u32)sizeof(aPin), u32Off, u32Inj);
+    rtl8168_glass_hold_cat(aPin, (u32)sizeof(aPin), &u32Off, " tx=");
+    u32Off = rtl8168_live_hold_dec(aPin, (u32)sizeof(aPin), u32Off, u32Tx);
+    rtl8168_glass_hold_cat(aPin, (u32)sizeof(aPin), &u32Off, " lnk=");
+    (void)rtl8168_live_hold_dec(aPin, (u32)sizeof(aPin), u32Off, u32Lnk);
+    (void)udx_dma_panel_hold(RTL8168_LIVE_STATUS_HOLD, aPin);
 }
 
 /**
@@ -7266,6 +7202,164 @@ rtl8168_product_rx_rearm_after_link(struct rtl8168_soft *pSoft)
                ((pSoft->u8ChipCmd & RTL_CMD_TE) != 0u) ? 1u : 0u,
                ((pSoft->u8ChipCmd & RTL_CMD_RE) != 0u) ? 1u : 0u,
                (unsigned)u16Isr);
+}
+
+/*
+ * Once: ChipCmd RST + RDSAR/TNPDS + Own + TE|RE. Glass 0.1.145: FOVW
+ * te_disarm left Own-all and ROK=0, so the ROK-gated copy never ran and
+ * host arping stayed 0. Call after te_disarm on Own-all+LNK (no ROK wait).
+ * Soft!=product Dual DoD B OPEN.
+ */
+static void
+rtl8168_product_mac_reclaim_once(struct rtl8168_soft *pSoft)
+{
+    static u8 s_fMacReclaimLamp;
+    u32 iWait;
+    u8  u8Cmd;
+    u8  u8PhyRc;
+    u16 u16Cplus;
+    u32 u32TxLo;
+    u32 u32TxHi;
+    u32 u32RxLo;
+    u32 u32RxHi;
+    u32 u32RdsRb;
+    u32 u32RdsMatch;
+    u32 fLinkRc;
+
+    if (pSoft == NULL || pSoft->pRegs == NULL || s_fMacReclaimLamp != 0u) {
+        return;
+    }
+    u8PhyRc = udx_readb(pSoft->pRegs, RTL_REG_PHYSTATUS);
+    fLinkRc = ((u8PhyRc & RTL_PHYST_LINKOK) != 0u) ? 1u : 0u;
+    if (fLinkRc == 0u) {
+        s_fMacReclaimLamp = 1u;
+        udx_printk("rtl8168_udx: product l2 poll mac_reclaim "
+                   "SKIP linkok=0 Soft!=product dual_dod_b=OPEN "
+                   "(CR RST would thrash PHY; fix link first)\n");
+        (void)udx_dma_panel_hold(6u, "UDX mac_rclm skip lnk=0");
+        return;
+    }
+    s_fMacReclaimLamp = 1u;
+    udx_writeb(pSoft->pRegs, RTL_REG_CHIPCMD, (u8)RTL_CMD_RST);
+    udx_mmio_flush(pSoft->pRegs);
+    for (iWait = 0u; iWait < 2000000u; iWait++) {
+        __asm__ volatile("pause" ::: "memory");
+        u8Cmd = udx_readb(pSoft->pRegs, RTL_REG_CHIPCMD);
+        if ((u8Cmd & RTL_CMD_RST) == 0u) {
+            break;
+        }
+    }
+    u8Cmd = udx_readb(pSoft->pRegs, RTL_REG_CHIPCMD);
+    /*
+     * CR RST rewinds the NIC TX cursor to TNPDS. Host TX ring must be
+     * Own=0 + EOR last again or ETH_TX_PULL sees stale OWN and never
+     * programs (glass 0.1.163 inj=771 tx=0 after mac_rclm).
+     */
+    if (pSoft->pTxDesc != NULL) {
+        u32 iTx;
+        u32 u32Ntx;
+
+        u32Ntx = pSoft->u32TxSlots;
+        if (u32Ntx == 0u || u32Ntx > RTL_SOFT_TX_SLOTS) {
+            u32Ntx = RTL_SOFT_TX_SLOTS;
+        }
+        for (iTx = 0u; iTx < u32Ntx; iTx++) {
+            pSoft->pTxDesc[iTx].u32Opts1 = 0u;
+            pSoft->pTxDesc[iTx].u32Opts2 = 0u;
+            pSoft->pTxDesc[iTx].u32AddrLo = 0u;
+            pSoft->pTxDesc[iTx].u32AddrHi = 0u;
+        }
+        pSoft->pTxDesc[u32Ntx - 1u].u32Opts1 = RTL_DESC_EOR;
+        pSoft->u32TxSlots = u32Ntx;
+        pSoft->u32SoftTxIdx = 0u;
+        rtl8168_product_clflush_va(
+            pSoft->pTxDesc,
+            (size_t)(u32Ntx * (u32)sizeof(struct rtl8168_soft_desc)));
+    }
+    u16Cplus = udx_readw(pSoft->pRegs, RTL_REG_CPLUSCMD);
+    u16Cplus = (u16)(u16Cplus &
+                     (u16)~(RTL_CPLUS_RXVLAN | RTL_CPLUS_RXCHKSUM));
+    u16Cplus = (u16)(u16Cplus | (u16)RTL_CPLUS_PCIMULRW);
+    udx_writew(pSoft->pRegs, RTL_REG_CPLUSCMD, u16Cplus);
+    {
+        u32 u32Rcr;
+        u32 u32Mar;
+
+        udx_writew(pSoft->pRegs, RTL_REG_RMS, (u16)0x1ff8u);
+        u32Rcr = (RTL_RCR_AAP | RTL_RCR_APM | RTL_RCR_AB | RTL_RCR_AM);
+        u32Rcr |= (0x7u << RTL_RCR_MXDMA_SHIFT);
+        u32Rcr |= (0x7u << RTL_RCR_RXFTH_SHIFT);
+        udx_writel(pSoft->pRegs, RTL_REG_RCR, u32Rcr);
+        u32Mar = 0xffffffffu;
+        udx_writel(pSoft->pRegs, RTL_REG_MAR0, u32Mar);
+        udx_writel(pSoft->pRegs, RTL_REG_MAR4, u32Mar);
+        udx_writeb(pSoft->pRegs, RTL_REG_MTPS, (u8)0x0cu);
+    }
+    u32TxLo = (u32)((u64)pSoft->dmaTx & 0xffffffffull);
+    u32TxHi = (u32)(((u64)pSoft->dmaTx >> 32) & 0xffffffffull);
+    u32RxLo = (u32)((u64)pSoft->dmaRx & 0xffffffffull);
+    u32RxHi = (u32)(((u64)pSoft->dmaRx >> 32) & 0xffffffffull);
+    udx_writel(pSoft->pRegs, RTL_REG_TNPDS, u32TxLo);
+    udx_writel(pSoft->pRegs, RTL_REG_TNPDS_HI, u32TxHi);
+    udx_writel(pSoft->pRegs, RTL_REG_RDSAR, u32RxLo);
+    udx_writel(pSoft->pRegs, RTL_REG_RDSAR_HI, u32RxHi);
+    udx_mmio_flush(pSoft->pRegs);
+    rtl8168_product_own_arm_rx(pSoft);
+    if (pSoft->pPdev != NULL) {
+        (void)udx_pci_set_master(pSoft->pPdev);
+    }
+    udx_writeb(pSoft->pRegs, RTL_REG_CHIPCMD, (u8)RTL_CMD_TE_RE);
+    udx_mmio_flush(pSoft->pRegs);
+    pSoft->u16IntrMask = (u16)RTL_PRODUCT_IRQ_BITS;
+    udx_writew(pSoft->pRegs, RTL_REG_INTR_MASK, pSoft->u16IntrMask);
+    u32RdsRb = udx_readl(pSoft->pRegs, RTL_REG_RDSAR);
+    u32RdsMatch = (u32RdsRb == u32RxLo) ? 1u : 0u;
+    u8Cmd = udx_readb(pSoft->pRegs, RTL_REG_CHIPCMD);
+    udx_printk(
+        "rtl8168_udx: product l2 poll mac_reclaim "
+        "rst_clear=%u chipcmd=0x%02x te=%u re=%u "
+        "rdsar=0x%08x want=0x%08x rds_match=%u "
+        "Soft!=product dual_dod_b=OPEN "
+        "(once CR RST+reprogram after te_disarm; no ROK wait)\n",
+        ((u8Cmd & RTL_CMD_RST) == 0u) ? 1u : 0u,
+        (unsigned)u8Cmd,
+        ((u8Cmd & RTL_CMD_TE) != 0u) ? 1u : 0u,
+        ((u8Cmd & RTL_CMD_RE) != 0u) ? 1u : 0u,
+        (unsigned)u32RdsRb, (unsigned)u32RxLo,
+        (unsigned)u32RdsMatch);
+    {
+        char aPin[32];
+        u32 fTeRe = ((u8Cmd & RTL_CMD_TE_RE) == RTL_CMD_TE_RE) ? 1u : 0u;
+
+        aPin[0] = 'U';
+        aPin[1] = 'D';
+        aPin[2] = 'X';
+        aPin[3] = ' ';
+        aPin[4] = 'm';
+        aPin[5] = 'a';
+        aPin[6] = 'c';
+        aPin[7] = '_';
+        aPin[8] = 'r';
+        aPin[9] = 'c';
+        aPin[10] = 'l';
+        aPin[11] = 'm';
+        aPin[12] = ' ';
+        aPin[13] = 'r';
+        aPin[14] = 'd';
+        aPin[15] = 's';
+        aPin[16] = '=';
+        aPin[17] = (char)('0' + (u32RdsMatch & 1u));
+        aPin[18] = ' ';
+        aPin[19] = 't';
+        aPin[20] = 'e';
+        aPin[21] = '_';
+        aPin[22] = 'r';
+        aPin[23] = 'e';
+        aPin[24] = '=';
+        aPin[25] = (char)('0' + (fTeRe & 1u));
+        aPin[26] = '\0';
+        (void)udx_dma_panel_hold(6u, aPin);
+    }
 }
 
 static void
@@ -7576,6 +7670,10 @@ rtl8168_product_l2_poll(struct rtl8168_soft *pSoft)
                        (unsigned)pSoft->u32IommuRdsOk,
                        (unsigned)fRdsMatch);
         }
+        /* 0.1.145 glass: ROK never, so ROK-gated reclaim never ran. */
+        if (fOwnAll != 0u && fLnk != 0u) {
+            rtl8168_product_mac_reclaim_once(pSoft);
+        }
         /*
          * Persist hold14 once: glass 0.1.122 Own/ROK/FOVW (no COM1).
          * Extends "UDX te_disarm fovw" with own= rok= fovw= c=.
@@ -7812,7 +7910,7 @@ rtl8168_product_l2_poll(struct rtl8168_soft *pSoft)
                     aPin[39] = '=';
                     aPin[40] = (char)('0' + (u32Cookie & 1u));
                     aPin[41] = '\0';
-                    (void)udx_dma_panel_hold(14u, aPin);
+                    (void)udx_dma_panel_hold(5u, aPin);
                     udx_printk("rtl8168_udx: product dig STATUS pin "
                                "hold14=\"%s\" rdsar=0x%08x dma_rx_lo=0x%08x "
                                "Soft!=product dual_dod_b=OPEN\n",
@@ -7835,153 +7933,12 @@ rtl8168_product_l2_poll(struct rtl8168_soft *pSoft)
                            (long)nTeOff);
             }
             /*
-             * MAC reclaim once: ChipCmd RST + re-bases/Own/TE|RE.
-             * Glass v0.1.114: LNK=0 after mac_rclm — CR RST kills PHY
-             * path when link already down. Only reclaim when LINKOK=1
-             * and Own still stuck (ring latch dig). Soft!=product.
+             * MAC reclaim once (same helper as FOVW/wire Own-all).
              * greppable: rtl8168_udx: product l2 poll mac_reclaim
              */
             if (u32OwnStill == u32N) {
-                static u8 s_fMacReclaimLamp;
-                u32 iWait;
-                u8  u8Cmd;
-                u8  u8PhyRc;
-                u16 u16Cplus;
-                u32 u32TxLo;
-                u32 u32TxHi;
-                u32 u32RxLo;
-                u32 u32RxHi;
-                u32 u32RdsRb;
-                u32 u32RdsMatch;
-                u32 fLinkRc;
-
-                u8PhyRc = udx_readb(pSoft->pRegs, RTL_REG_PHYSTATUS);
-                fLinkRc =
-                    ((u8PhyRc & RTL_PHYST_LINKOK) != 0u) ? 1u : 0u;
-                if (s_fMacReclaimLamp == 0u && pSoft->pRegs != NULL &&
-                    fLinkRc == 0u) {
-                    s_fMacReclaimLamp = 1u;
-                    udx_printk("rtl8168_udx: product l2 poll mac_reclaim "
-                               "SKIP linkok=0 Soft!=product dual_dod_b=OPEN "
-                               "(CR RST would thrash PHY; fix link first)\n");
-                    (void)udx_dma_panel_hold(15u, "UDX mac_rclm skip lnk=0");
-                } else if (s_fMacReclaimLamp == 0u &&
-                           pSoft->pRegs != NULL && fLinkRc != 0u) {
-                    s_fMacReclaimLamp = 1u;
-                    /* Hold TE|RE off then pulse RST. */
-                    udx_writeb(pSoft->pRegs, RTL_REG_CHIPCMD,
-                               (u8)RTL_CMD_RST);
-                    udx_mmio_flush(pSoft->pRegs);
-                    for (iWait = 0u; iWait < 2000000u; iWait++) {
-                        __asm__ volatile("pause" ::: "memory");
-                        u8Cmd = udx_readb(pSoft->pRegs, RTL_REG_CHIPCMD);
-                        if ((u8Cmd & RTL_CMD_RST) == 0u) {
-                            break;
-                        }
-                    }
-                    u8Cmd = udx_readb(pSoft->pRegs, RTL_REG_CHIPCMD);
-                    /* C+CR after RST (public A-1). */
-                    u16Cplus = udx_readw(pSoft->pRegs, RTL_REG_CPLUSCMD);
-                    u16Cplus = (u16)(u16Cplus &
-                                     (u16)~(RTL_CPLUS_RXVLAN |
-                                            RTL_CPLUS_RXCHKSUM));
-                    u16Cplus = (u16)(u16Cplus | (u16)RTL_CPLUS_PCIMULRW);
-                    udx_writew(pSoft->pRegs, RTL_REG_CPLUSCMD, u16Cplus);
-                    /* RCR accept-all + RMS max. */
-                    {
-                        u32 u32Rcr;
-                        u32 u32Mar;
-
-                        udx_writew(pSoft->pRegs, RTL_REG_RMS, (u16)0x1ff8u);
-                        u32Rcr = (RTL_RCR_AAP | RTL_RCR_APM | RTL_RCR_AB |
-                                  RTL_RCR_AM);
-                        u32Rcr |= (0x7u << RTL_RCR_MXDMA_SHIFT);
-                        u32Rcr |= (0x7u << RTL_RCR_RXFTH_SHIFT);
-                        udx_writel(pSoft->pRegs, RTL_REG_RCR, u32Rcr);
-                        u32Mar = 0xffffffffu;
-                        udx_writel(pSoft->pRegs, RTL_REG_MAR0, u32Mar);
-                        udx_writel(pSoft->pRegs, RTL_REG_MAR4, u32Mar);
-                        udx_writeb(pSoft->pRegs, RTL_REG_MTPS, (u8)0x0cu);
-                    }
-                    /* Bases then Own. */
-                    u32TxLo =
-                        (u32)((u64)pSoft->dmaTx & 0xffffffffull);
-                    u32TxHi =
-                        (u32)(((u64)pSoft->dmaTx >> 32) & 0xffffffffull);
-                    u32RxLo =
-                        (u32)((u64)pSoft->dmaRx & 0xffffffffull);
-                    u32RxHi =
-                        (u32)(((u64)pSoft->dmaRx >> 32) & 0xffffffffull);
-                    udx_writel(pSoft->pRegs, RTL_REG_TNPDS, u32TxLo);
-                    udx_writel(pSoft->pRegs, RTL_REG_TNPDS_HI, u32TxHi);
-                    udx_writel(pSoft->pRegs, RTL_REG_RDSAR, u32RxLo);
-                    udx_writel(pSoft->pRegs, RTL_REG_RDSAR_HI, u32RxHi);
-                    udx_mmio_flush(pSoft->pRegs);
-                    rtl8168_product_own_arm_rx(pSoft);
-                    if (pSoft->pPdev != NULL) {
-                        (void)udx_pci_set_master(pSoft->pPdev);
-                    }
-                    udx_writeb(pSoft->pRegs, RTL_REG_CHIPCMD,
-                               (u8)RTL_CMD_TE_RE);
-                    udx_mmio_flush(pSoft->pRegs);
-                    pSoft->u16IntrMask = (u16)RTL_PRODUCT_IRQ_BITS;
-                    udx_writew(pSoft->pRegs, RTL_REG_INTR_MASK,
-                               pSoft->u16IntrMask);
-                    u32RdsRb = udx_readl(pSoft->pRegs, RTL_REG_RDSAR);
-                    u32RdsMatch = (u32RdsRb == u32RxLo) ? 1u : 0u;
-                    u8Cmd = udx_readb(pSoft->pRegs, RTL_REG_CHIPCMD);
-                    udx_printk(
-                        "rtl8168_udx: product l2 poll mac_reclaim "
-                        "rst_clear=%u chipcmd=0x%02x te=%u re=%u "
-                        "rdsar=0x%08x want=0x%08x rds_match=%u "
-                        "Soft!=product dual_dod_b=OPEN "
-                        "(once CR RST+reprogram; no BMCR; "
-                        "if inject later → need RST to latch ring)\n",
-                        ((u8Cmd & RTL_CMD_RST) == 0u) ? 1u : 0u,
-                        (unsigned)u8Cmd,
-                        ((u8Cmd & RTL_CMD_TE) != 0u) ? 1u : 0u,
-                        ((u8Cmd & RTL_CMD_RE) != 0u) ? 1u : 0u,
-                        (unsigned)u32RdsRb, (unsigned)u32RxLo,
-                        (unsigned)u32RdsMatch);
-                    {
-                        char aPin[32];
-                        u32 fTeRe = ((u8Cmd & RTL_CMD_TE_RE) ==
-                                     RTL_CMD_TE_RE)
-                                        ? 1u
-                                        : 0u;
-
-                        aPin[0] = 'U';
-                        aPin[1] = 'D';
-                        aPin[2] = 'X';
-                        aPin[3] = ' ';
-                        aPin[4] = 'm';
-                        aPin[5] = 'a';
-                        aPin[6] = 'c';
-                        aPin[7] = '_';
-                        aPin[8] = 'r';
-                        aPin[9] = 'c';
-                        aPin[10] = 'l';
-                        aPin[11] = 'm';
-                        aPin[12] = ' ';
-                        aPin[13] = 'r';
-                        aPin[14] = 'd';
-                        aPin[15] = 's';
-                        aPin[16] = '=';
-                        aPin[17] = (char)('0' + (u32RdsMatch & 1u));
-                        aPin[18] = ' ';
-                        aPin[19] = 't';
-                        aPin[20] = 'e';
-                        aPin[21] = '_';
-                        aPin[22] = 'r';
-                        aPin[23] = 'e';
-                        aPin[24] = '=';
-                        aPin[25] = (char)('0' + (fTeRe & 1u));
-                        aPin[26] = '\0';
-                        (void)udx_dma_panel_hold(15u, aPin);
-                    }
-                }
+                rtl8168_product_mac_reclaim_once(pSoft);
             }
-        }
         if (s_fRokNoInjLamp == 0u && u32OwnStill == u32N) {
             u32 u32SlotW0 = 0u;
             u32 u32SlotW1 = 0u;
@@ -8121,6 +8078,7 @@ rtl8168_product_l2_poll(struct rtl8168_soft *pSoft)
                     (unsigned long)nBus3TeWire,
                     (unsigned)pSoft->u32IommuRdsOk);
             }
+            rtl8168_product_mac_reclaim_once(pSoft);
             /*
              * Fallback persist if FOVW path missed (no COM1 still).
              * Once-only; no-ops when fovw_te already pinned hold14.
@@ -8202,7 +8160,7 @@ rtl8168_product_l2_poll(struct rtl8168_soft *pSoft)
                     (char)('0' + ((u32Cookie0 == 0xdeadbeefu) ? 1u
                                                              : 0u));
                 aPin[25] = '\0';
-                (void)udx_dma_panel_hold(15u, aPin);
+                (void)udx_dma_panel_hold(6u, aPin);
             }
         }
         if (s_fOwnStuckLamp == 0u && pSoft->u32OwnStuck >= 0x10000u) {
@@ -8479,7 +8437,7 @@ rtl8168_product_l2_poll(struct rtl8168_soft *pSoft)
                         aPin[37] =
                             (char)('0' + (u32OwnStill % 10u));
                         aPin[38] = '\0';
-                        (void)udx_dma_panel_hold(14u, aPin);
+                        (void)udx_dma_panel_hold(5u, aPin);
                     }
                 }
             }
@@ -8661,70 +8619,134 @@ rtl8168_product_l2_poll(struct rtl8168_soft *pSoft)
         }
     }
 
-    /* TX pull: demux ARP/ICMP/TCP replies → Own=1 + TPPoll. */
-    n = gj_net_eth_tx_pull(aTxFrame, sizeof(aTxFrame));
-    if (n >= 14 && (u32)n <= RTL_SOFT_TX_BOUNCE_BYTES &&
-        pSoft->pTxDesc != NULL && pSoft->pTxBounce != NULL) {
-        u32 u32Tx;
-        u32 u32Opts;
-        udx_dma_addr_t dmaTxb;
+    /*
+     * TX pull: demux ARP/ICMP/TCP → Own=1 + TPPoll.
+     * One bounce buffer: any TX OWN means DMA still holds that payload —
+     * do not dequeue (0.1.152/153 pull-then-drop ate the SSH ident) and
+     * do not program a second desc (would overwrite the in-flight frame).
+     * Clflush TX OWN first (stale OWN=1 skips forever; glass 0.1.163 tx=0).
+     * Soft!=product Dual DoD B OPEN.
+     */
+    n = 0;
+    {
+        u32 fTxBusy = 0u;
+        u32 u32Ntx;
+        u32 iTx;
 
-        u32Tx = pSoft->u32SoftTxIdx % pSoft->u32TxSlots;
-        if ((pSoft->pTxDesc[u32Tx].u32Opts1 & RTL_DESC_OWN) == 0u) {
-            (void)gj_memcpy(pSoft->pTxBounce, aTxFrame, (size_t)n);
-            dmaTxb = pSoft->dmaTxBounce;
-            pSoft->pTxDesc[u32Tx].u32AddrLo =
-                (u32)((u64)dmaTxb & 0xffffffffull);
-            pSoft->pTxDesc[u32Tx].u32AddrHi =
-                (u32)(((u64)dmaTxb >> 32) & 0xffffffffull);
-            u32Opts = RTL_DESC_OWN | RTL_DESC_FS | RTL_DESC_LS |
-                      ((u32)n & RTL_DESC_TX_LEN_MASK);
-            if (u32Tx + 1u == pSoft->u32TxSlots) {
-                u32Opts |= RTL_DESC_EOR;
-            }
-            pSoft->pTxDesc[u32Tx].u32Opts1 = u32Opts;
-            pSoft->pTxDesc[u32Tx].u32Opts2 = 0u;
-            pSoft->u32SoftTxIdx = u32Tx + 1u;
-            pSoft->u32TxPull++;
-            if (pSoft->pPdev != NULL && pSoft->pPdev->pDev != NULL) {
-                udx_dma_sync_single_for_device(
-                    pSoft->pPdev->pDev, pSoft->dmaTxBounce,
-                    (size_t)RTL_SOFT_TX_BOUNCE_BYTES, UDX_DMA_TO_DEVICE);
-                udx_dma_sync_single_for_device(
-                    pSoft->pPdev->pDev, pSoft->dmaRing,
-                    (size_t)RTL_SOFT_RING_BYTES, UDX_DMA_BIDIRECTIONAL);
-            }
-            /* Public TPPoll NPQ kick (product thr-poll; Soft!=product). */
-            udx_writeb(pSoft->pRegs, RTL_REG_TPPOLL, (u8)RTL_TPPOLL_NPQ);
-            udx_mmio_flush(pSoft->pRegs);
-            if (s_fPollLamp == 0u) {
-                s_fPollLamp = 1u;
-            }
-            if (s_fTxLamp == 0u) {
-                s_fTxLamp = 1u;
-                udx_printk("rtl8168_udx: product l2 poll TX "
-                           "len=%u tppoll=1 path=rtl8168_udx "
-                           "dual_dod_b=OPEN Soft!=product G-AC-1\n",
-                           (unsigned)n);
-            }
-        } else {
+        u32Ntx = pSoft->u32TxSlots;
+        if (u32Ntx > RTL_SOFT_TX_SLOTS) {
+            u32Ntx = RTL_SOFT_TX_SLOTS;
+        }
+        if (pSoft->pTxDesc != NULL && u32Ntx != 0u) {
+            rtl8168_product_tx_sync_for_cpu(pSoft);
             /*
-             * Frame available from demux but TX desc Own stuck (device
-             * never reclaimed). Once-lamp dig; Soft!=product.
-             * greppable: rtl8168_udx: product l2 poll tx_own_stuck
+             * In-flight only after a programmed pull. Leftover OWN after
+             * CR RST is not DMA (glass 0.1.166 tx=0: zero-then-recheck
+             * dropped the first ETH_TX_PULL). First frame overwrites slot 0.
              */
-            pSoft->u32TxPullSkip++;
-            if (s_fTxOwnStuckLamp == 0u) {
-                s_fTxOwnStuckLamp = 1u;
-                udx_printk("rtl8168_udx: product l2 poll tx_own_stuck "
-                           "tx_idx=%u opts=0x%x len=%u "
-                           "tx_pull=%u tx_pull_skip=%u "
-                           "Soft!=product dual_dod_b=OPEN\n",
-                           (unsigned)u32Tx,
-                           (unsigned)pSoft->pTxDesc[u32Tx].u32Opts1,
-                           (unsigned)n,
-                           (unsigned)pSoft->u32TxPull,
-                           (unsigned)pSoft->u32TxPullSkip);
+            if (pSoft->u32TxPull != 0u) {
+                for (iTx = 0u; iTx < u32Ntx; iTx++) {
+                    if ((pSoft->pTxDesc[iTx].u32Opts1 & RTL_DESC_OWN) != 0u) {
+                        fTxBusy = 1u;
+                        break;
+                    }
+                }
+            }
+        }
+        if (fTxBusy != 0u) {
+            /* leave kernel ETH_TX queue; remind NIC */
+            if (pSoft->pRegs != NULL) {
+                udx_writeb(pSoft->pRegs, RTL_REG_TPPOLL, (u8)RTL_TPPOLL_NPQ);
+                udx_mmio_flush(pSoft->pRegs);
+            }
+        } else if (pSoft->pTxDesc != NULL && pSoft->pTxBounce != NULL &&
+                   u32Ntx != 0u) {
+            n = gj_net_eth_tx_pull(aTxFrame, sizeof(aTxFrame));
+        }
+        if (n >= 14 && (u32)n <= RTL_SOFT_TX_BOUNCE_BYTES &&
+            pSoft->pTxDesc != NULL && pSoft->pTxBounce != NULL &&
+            u32Ntx != 0u) {
+            u32 u32Tx;
+            u32 u32Opts;
+            udx_dma_addr_t dmaTxb;
+            u32 fProgOk;
+
+            if (pSoft->u32TxPull == 0u) {
+                for (iTx = 0u; iTx < u32Ntx; iTx++) {
+                    pSoft->pTxDesc[iTx].u32Opts1 = 0u;
+                    pSoft->pTxDesc[iTx].u32Opts2 = 0u;
+                    pSoft->pTxDesc[iTx].u32AddrLo = 0u;
+                    pSoft->pTxDesc[iTx].u32AddrHi = 0u;
+                }
+                pSoft->pTxDesc[u32Ntx - 1u].u32Opts1 = RTL_DESC_EOR;
+                pSoft->u32SoftTxIdx = 0u;
+            }
+            u32Tx = pSoft->u32SoftTxIdx % u32Ntx;
+            fProgOk = ((pSoft->pTxDesc[u32Tx].u32Opts1 & RTL_DESC_OWN) == 0u)
+                          ? 1u
+                          : 0u;
+            if (pSoft->u32TxPull == 0u) {
+                fProgOk = 1u;
+            }
+            if (fProgOk != 0u) {
+                (void)gj_memcpy(pSoft->pTxBounce, aTxFrame, (size_t)n);
+                dmaTxb = pSoft->dmaTxBounce;
+                pSoft->pTxDesc[u32Tx].u32AddrLo =
+                    (u32)((u64)dmaTxb & 0xffffffffull);
+                pSoft->pTxDesc[u32Tx].u32AddrHi =
+                    (u32)(((u64)dmaTxb >> 32) & 0xffffffffull);
+                u32Opts = RTL_DESC_OWN | RTL_DESC_FS | RTL_DESC_LS |
+                          ((u32)n & RTL_DESC_TX_LEN_MASK);
+                if (u32Tx + 1u == u32Ntx) {
+                    u32Opts |= RTL_DESC_EOR;
+                }
+                pSoft->pTxDesc[u32Tx].u32Opts1 = u32Opts;
+                pSoft->pTxDesc[u32Tx].u32Opts2 = 0u;
+                pSoft->u32SoftTxIdx = u32Tx + 1u;
+                pSoft->u32TxPull++;
+                if (pSoft->pPdev != NULL && pSoft->pPdev->pDev != NULL) {
+                    udx_dma_sync_single_for_device(
+                        pSoft->pPdev->pDev, pSoft->dmaTxBounce,
+                        (size_t)RTL_SOFT_TX_BOUNCE_BYTES, UDX_DMA_TO_DEVICE);
+                    udx_dma_sync_single_for_device(
+                        pSoft->pPdev->pDev, pSoft->dmaRing,
+                        (size_t)RTL_SOFT_RING_BYTES, UDX_DMA_BIDIRECTIONAL);
+                }
+                rtl8168_product_clflush_va(
+                    &pSoft->pTxDesc[u32Tx],
+                    sizeof(struct rtl8168_soft_desc));
+                /* Public TPPoll NPQ kick (product thr-poll; Soft!=product). */
+                udx_writeb(pSoft->pRegs, RTL_REG_TPPOLL, (u8)RTL_TPPOLL_NPQ);
+                udx_mmio_flush(pSoft->pRegs);
+                if (s_fPollLamp == 0u) {
+                    s_fPollLamp = 1u;
+                }
+                if (s_fTxLamp == 0u) {
+                    s_fTxLamp = 1u;
+                    udx_printk("rtl8168_udx: product l2 poll TX "
+                               "len=%u tppoll=1 path=rtl8168_udx "
+                               "dual_dod_b=OPEN Soft!=product G-AC-1\n",
+                               (unsigned)n);
+                }
+            } else {
+                /*
+                 * Frame available from demux but TX desc Own stuck (device
+                 * never reclaimed). Once-lamp dig; Soft!=product.
+                 * greppable: rtl8168_udx: product l2 poll tx_own_stuck
+                 */
+                pSoft->u32TxPullSkip++;
+                if (s_fTxOwnStuckLamp == 0u) {
+                    s_fTxOwnStuckLamp = 1u;
+                    udx_printk("rtl8168_udx: product l2 poll tx_own_stuck "
+                               "tx_idx=%u opts=0x%x len=%u "
+                               "tx_pull=%u tx_pull_skip=%u "
+                               "Soft!=product dual_dod_b=OPEN\n",
+                               (unsigned)u32Tx,
+                               (unsigned)pSoft->pTxDesc[u32Tx].u32Opts1,
+                               (unsigned)n,
+                               (unsigned)pSoft->u32TxPull,
+                               (unsigned)pSoft->u32TxPullSkip);
+                }
             }
         }
     }
@@ -8754,6 +8776,7 @@ rtl8168_product_l2_poll(struct rtl8168_soft *pSoft)
             }
         }
     }
+}
 }
 #endif /* !UDX_HOST_LIBC — thr-poll L2 bridge freestanding only */
 
@@ -8858,7 +8881,7 @@ rtl8168_product_phyar_recover(struct rtl8168_soft *pSoft, u32 fAllowMacRst)
                    "phyar=0x%08x chipcmd=0x%02x Soft!=product "
                    "dual_dod_b=OPEN\n",
                    (unsigned)u32Cmd, (unsigned)u8Cmd);
-        (void)udx_dma_panel_hold(15u, "UDX mdio Flag STUCK");
+        (void)udx_dma_panel_hold(6u, "UDX mdio Flag STUCK");
     }
     return 0;
 }
@@ -9177,7 +9200,7 @@ rtl8168_product_phy_link_bringup(struct rtl8168_soft *pSoft, u32 fHardRst)
                 aPin[18] = '=';
                 aPin[19] = '0';
                 aPin[20] = '\0';
-                (void)udx_dma_panel_hold(15u, aPin);
+                (void)udx_dma_panel_hold(6u, aPin);
             }
         }
     }
@@ -9940,7 +9963,7 @@ rtl8168_product_program_try(struct rtl8168_soft *pSoft)
  * Option 3: after soft bind PASS + program_gate, product_program_try writes
  * TNPDS/RDSAR/TE|RE (product_mint=1) for Dual DoD B product UDX wire path.
  * Product path remains userspace UDX+ABI+hot/cold; freestanding rtl SKIP
- * (GJ_RTL8168_PROBE=0). Dual DoD B OPEN until DUT L3. Soft!=product. G-AC-1.
+ * (GJ_RTL8168_PROBE=0). Dual DoD B OPEN until interactive SSH login. Soft!=product. G-AC-1.
  */
 int
 rtl8168_udx_freestanding_start(void)
@@ -10074,7 +10097,7 @@ rtl8168_udx_freestanding_start(void)
          * Option 3 product program: when real_ddi + program_gate, write
          * TNPDS/RDSAR/TE|RE and flip wire_owner→udx. Soft residual catalogs
          * above keep never_program=1 as soft residual class law.
-         * Dual DoD B remains OPEN until DUT L3 (agent!=close).
+         * Dual DoD B remains OPEN until interactive SSH login (agent!=close).
          */
         (void)rtl8168_product_program_try(pSoft);
         udx_printk("rtl8168_udx: soft probe PASS stage=%u freestanding=1 "
@@ -10176,7 +10199,7 @@ rtl8168_udx_freestanding_start(void)
 /**
  * Freestanding ELF entry (product host launch / stage-esp / user.ld).
  * Option 3: freestanding_start → real DDI bind → product_program_try
- * (TNPDS/RDSAR/TE|RE when program_gate). Dual DoD B OPEN until DUT L3.
+ * (TNPDS/RDSAR/TE|RE when program_gate). Dual DoD B OPEN until interactive SSH login.
  *
  * DUT .81: host SYS_EXIT 0 after soft probe PASS — process death H3 tears
  * AS/MAP before wire/sshd can use the NIC. Product keep_live: park thr
@@ -10192,7 +10215,6 @@ int
 main(int argc, char **argv)
 {
     udx_status_t st;
-    u32 u32ParkN;
 
     (void)argc;
     (void)argv;
@@ -10227,32 +10249,15 @@ main(int argc, char **argv)
     if (g_rtlSoft.u32FProductProg != 0u && g_rtlSoft.u32FOwnHandoff == 0u) {
         (void)rtl8168_product_own_handoff(&g_rtlSoft);
     }
-    u32ParkN = 0u;
+    rtl8168_live_status_pin(&g_rtlSoft);
     for (;;) {
         /* Thr-poll RX reclaim → ETH_INJECT; demux TX → Own + TPPoll. */
         if (g_rtlSoft.u32FOwnHandoff != 0u) {
             rtl8168_product_l2_poll(&g_rtlSoft);
         }
         (void)gj_net_poll(); /* advance eth/tcp residual when frames inject */
+        rtl8168_live_status_pin(&g_rtlSoft);
         gj_yield();
-        u32ParkN++;
-        /* Once-lamp every ~2^16 yields — no stamp storm. */
-        if ((u32ParkN & 0xffffu) == 0u) {
-            udx_printk("rtl8168_udx: product host park live "
-                       "keep_live=1 yields=%u own_handoff=%u "
-                       "rx_poll=%u inject=%u tx_pull=%u "
-                       "physt=0x%02x linkok=%u "
-                       "dual_dod_b=OPEN Soft!=product\n",
-                       (unsigned)u32ParkN,
-                       (unsigned)g_rtlSoft.u32FOwnHandoff,
-                       (unsigned)g_rtlSoft.u32RxPoll,
-                       (unsigned)g_rtlSoft.u32Inject,
-                       (unsigned)g_rtlSoft.u32TxPull,
-                       (unsigned)g_rtlSoft.u8PhySt,
-                       ((g_rtlSoft.u8PhySt & RTL_PHYST_LINKOK) != 0u)
-                           ? 1u
-                           : 0u);
-        }
     }
     /* not reached */
     return 0;

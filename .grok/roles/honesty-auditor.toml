@@ -1,0 +1,4 @@
+# Honesty auditor — read-only Dual DoD / stamp / claim review
+description = "Read-only GreenJade honesty auditor (Soft≠product, G-AC-1, Dual DoD wording, fly stamp)"
+default_capability_mode = "read-only"
+reasoning_effort = "high"

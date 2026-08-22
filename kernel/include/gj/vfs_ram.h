@@ -13,7 +13,7 @@
  * Capacity (vfs_ram.c - soft product limits, not ABI):
  *   VFS_MAX_FILES 64, VFS_MAX_FDS 96, path ≤128, file data ≤32 KiB
  *   (room for packaged ld-gj.so.1 ~30 KiB + small ELFs)
- *   pipes 16x2 KiB; eventfd/epoll/timerfd/signalfd/inotify fixed tables
+ *   pipes 16x2 KiB; Unix98 pty 4 (pipe rings); eventfd/epoll/timerfd/signalfd/inotify fixed tables
  *
  * Block mounts (optional, after device probe):
  *   vfs_ram_mount_blk  -> /dev/vda over virtio-blk (sector R/W)
@@ -21,6 +21,16 @@
  *
  * FD policy:
  *   open returns fd ≥ 3 or -errno; kinds RAM/BLK/SCSI/PIPE/EVENTFD/...
+ *   /dev/null is a seeded char node (read EOF, write discard)
+ *   /dev/tty: after TIOCSCTTY (or a unique live slave) open is that slave;
+ *   else a seeded char (not ENOENT; read EOF, write discard). Dual DoD B OPEN.
+ *   /dev/ptmx and /dev/pts/ptmx are Unix98 multiplexers (not RAM files):
+ *   open allocates a pipe-ring pair (locked) and publishes /dev/pts/N;
+ *   TIOCGPTN reports N while locked (minor of master 128:N / slave 136:N);
+ *   TIOCSPTLCK 0 unlocks; open /dev/pts/N is the slave if unlocked else
+ *   -EIO. Mux node fstat/stat is 5:2; open master fd is 128:N. Last
+ *   master close unpublishes N and hangs the slave (Linux Unix98).
+ *   Product SSH = OpenSSH-portable, not abandoned sshd_gj. Dual DoD B OPEN.
  *   poll/epoll readiness via vfs_ram_poll_mask (Linux-shaped ERR/HUP bits);
  *   net_lo (64..79) / net_tcp (96..111) routed out of table for mixed sets
  *
@@ -32,6 +42,12 @@
 
 /** Seed default paths/files and clear FD tables. Safe to re-call soft. */
 void vfs_ram_init(void);
+
+/**
+ * Allow pipe/eventfd/signalfd/poll park. Off until M0 so kmain hybrid
+ * smoke cannot thread_block+schedule away from bring-up (0.1.165 hang).
+ */
+void vfs_ram_park_enable(void);
 
 /**
  * Mount virtio-blk (if ready) as /dev/vda - open/read/write/lseek over sectors.
@@ -49,6 +65,12 @@ void vfs_ram_mount_scsi(void);
  * Open path (absolute preferred). Returns fd >= 3 or negative Linux errno.
  * fCreate: create empty file if missing (O_CREAT-like). Directories need
  * mkdir first for DIR kind; block/scsi nodes appear after mount_*.
+ * /dev/ptmx and /dev/pts/ptmx allocate a Unix98 master (locked pipe rings)
+ * and publish /dev/pts/N; TIOCGPTN reports N (128:N/136:N) while locked;
+ * unlock with vfs_ram_ioctl TIOCSPTLCK 0. /dev/pts/N is the slave if
+ * unlocked. Last master close unpublishes N (open then -ENOENT). Dual DoD B OPEN.
+ * /dev/tty is the ctty slave when one is set, else a seeded char (not ENOENT).
+ * Product SSH = OpenSSH, not sshd_gj. Dual DoD B OPEN.
  */
 i64 vfs_ram_open(const char *szPath, int fCreate);
 
@@ -61,6 +83,54 @@ i64 vfs_ram_write(i64 i64Fd, const void *pBuf, size_t cb);
 /** Close fd; releases pipe/eventfd/epoll watches as needed. */
 i64 vfs_ram_close(i64 i64Fd);
 
+/**
+ * Unix98 PTY ioctls. pArg is a kernel buffer unless noted as by-value.
+ * Master-only mux: TIOCGPTN, TIOCSPTLCK, TIOCGPTLCK, TIOCGPTPEER,
+ *   TIOCPKT, TIOCGPKT, TIOCSIG (SIGINT/QUIT/TSTP by value; delivery OPEN).
+ *   TIOCGPTN/TIOCSPTLCK also match type 'T' + nr (size/dir optional).
+ * Both ends: TIOCGDEV (unsigned slave rdev, UNIX98 136:N; ttyname);
+ *   TIOCGWINSZ / TIOCSWINSZ (struct winsize, 4 x u16);
+ *   TCGETS / TCSETS / TCSETSW / TCSETSF (60-byte glibc-shaped termios);
+ *   TCGETA / TCSETA / TCSETAW / TCSETAF (17-byte old termio);
+ *   TIOCGPGRP / TIOCSPGRP (int pgid; 0 -> -ENOTTY; set <=0 -> -EINVAL);
+ *   TIOCGSID (int sid; 0 -> -ENOTTY until TIOCSCTTY);
+ *   TIOCSCTTY / TIOCNOTTY (sid+pgrp; arg 1 steals; /dev/tty aliases slave);
+ *   FIOCLEX / FIONCLEX (any live ram fd);
+ *   TCFLSH (arg 0/1/2 by value); TCSBRK / TCSBRKP / TCXONC (arg by value);
+ *   TIOCEXCL / TIOCNXCL / TIOCGEXCL; TIOCVHANGUP; FIONREAD/TIOCINQ; TIOCOUTQ;
+ *   TIOCMGET / TIOCMBIS / TIOCMBIC / TIOCMSET (int modem bits);
+ *   TIOCSBRK / TIOCCBRK (no-op 0; PTY has no wire);
+ *   TIOCSTI (one input byte); TIOCGETD / TIOCSETD (N_TTY=0 only);
+ *   TIOCGSOFTCAR / TIOCSSOFTCAR (CLOCAL as int 0/1).
+ * Master write = slave input (ICRNL/IUCLC/IXON/ISIG-drop/ICANON+ECHO/IUTF8);
+ * slave write = output (OPOST ONLCR/OCRNL/OLCUC/ONLRET). VEOL2. VMIN wait.
+ * ISIG delivery OPEN. Dual DoD B OPEN.
+ * u32Cmd LINUX_TIOCGPTN: write unsigned N to *pArg (works while locked).
+ *   N is Unix98 index (master 128:N / slave 136:N). NULL / non-pointer
+ *   (addr < 4096) -> -EFAULT. Master-only (Unix98). (Re)publishes
+ *   /dev/pts/N as S_IFCHR so ptsname/stat succeed while locked.
+ * u32Cmd LINUX_TIOCSPTLCK: lock!=0 / unlock==0 from *(int *)pArg
+ *   (NULL / addr<4096 except by-value 1 -> -EFAULT; by-value 1 locks).
+ *   Unlock (re)publishes N; slave open while locked -> -EIO.
+ * u32Cmd LINUX_TIOCGDEV: write unsigned slave rdev (136:N) to *pArg (both ends).
+ * u32Cmd LINUX_TIOCGPTLCK: write lock (int 0/1) to *pArg (NULL / <4096 -> -EFAULT).
+ * u32Cmd LINUX_TIOCGPTPEER: Linux _IO flags by value; a kernel int *
+ *   is also accepted (NULL -> 0). Returns a new slave fd or -errno.
+ *   Locked pair / gone master -> -EIO / -ENOENT (Linux).
+ * u32Cmd LINUX_TIOCPKT: packet mode from *(int *)pArg (0 off, else on).
+ * u32Cmd LINUX_TIOCGPKT: write packet mode (int 0/1) to *pArg.
+ * Master read with TIOCPKT on prefixes TIOCPKT_DATA (0) or a pending
+ * control byte (FLUSHREAD/FLUSHWRITE/STOP/START/IOCTL). Control-only
+ * reads return 1.
+ * Returns 0, a new fd (TIOCGPTPEER), or -errno. Non-PTY -> -ENOTTY.
+ *
+ * New pairs start locked (Linux Unix98). TIOCGPTN works while locked.
+ * Product SSH = OpenSSH-portable on this ABI, not abandoned sshd_gj.
+ * Dual DoD B OPEN. protonrt still owns LINUX_NR_ioctl and must dispatch
+ * these cmds here; this unit does not register the NR.
+ */
+i64 vfs_ram_ioctl(i64 i64Fd, u32 u32Cmd, void *pArg);
+
 /** Lseek: whence 0=SET 1=CUR 2=END. Returns new offset or -errno. */
 i64 vfs_ram_lseek(i64 i64Fd, i64 i64Off, int nWhence);
 
@@ -70,15 +140,34 @@ int vfs_ram_fd_ok(i64 i64Fd);
 /**
  * Create a connected pipe pair (socketpair-shaped / pipe2).
  * Writes aFds[0] and aFds[1] (kernel buffer or caller array).
- * Returns 0 or -errno. nFlags soft-ignored for bring-up.
+ * Returns 0 or -errno.
+ * nFlags: LINUX_O_CLOEXEC (0x80000) and LINUX_O_NONBLOCK (0x800) stored
+ * on both fds as VFS_FD_FL_*; other bits ignored.
  */
 i64 vfs_ram_pipe2(i32 *pFds, int nFlags);
 
+/*
+ * Compact fd flags (live on vfs_fd.u8Fl). CLOEXEC/NONBLOCK for fcntl
+ * F_GETFD/F_SETFD and pipe2. Not raw Linux O_* (those do not fit in u8).
+ */
+#define VFS_FD_FL_CLOEXEC  0x01u
+#define VFS_FD_FL_NONBLOCK 0x02u
+
+/** Compact flags or -EBADF. */
+i64 vfs_ram_fd_fl_get(i64 i64Fd);
+/** Store compact flags. Returns 0 or -EBADF. */
+i64 vfs_ram_fd_fl_set(i64 i64Fd, u8 u8Fl);
+
 /**
  * AF_UNIX socketpair shape: same as pipe2 for bring-up (bidirectional ring).
- * domain/type/protocol ignored except type must be SOCK_STREAM (1).
+ * type low 8 bits SOCK_STREAM (1) or SOCK_DGRAM (2); SOCK_NONBLOCK/CLOEXEC ok.
  */
 i64 vfs_ram_socketpair(int nDomain, int nType, int nProtocol, i32 *pFds);
+
+/** Infinite poll/select: park until a pipe/eventfd kick. Soft!=product. */
+void vfs_ram_poll_park(void);
+/** Non-zero if fd is a pipe or eventfd (parkable for poll -1). */
+int vfs_ram_fd_poll_parkable(i64 i64Fd);
 
 /** eventfd2-shaped counter fd (flags ignored for bring-up). Returns fd or -errno. */
 i64 vfs_ram_eventfd2(u32 u32Init, int nFlags);

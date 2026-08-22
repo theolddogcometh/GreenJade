@@ -2,17 +2,19 @@
  * SPDX-License-Identifier: MIT OR Apache-2.0
  * Copyright (c) 2026 Project GreenJade contributors
  *
- * PTY surface — freestanding soft fill-in.
- * Soft deepen: prefer /dev/ptmx; else socketpair bidirectional soft PTY;
- * per-fd pts name table; login_tty setsid + stdio dup.
+ * PTY surface — Unix98 /dev/ptmx via posix_openpt (TIOCGPTN, TIOCSPTLCK);
+ * socketpair fallback; ptsname ioctl then table; login_tty TIOCSCTTY + dup.
  */
 #include <errno.h>
 #include <fcntl.h>
 #include <stddef.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/ioctl.h>
 #include <sys/socket.h>
+#include <sys/stat.h>
 #include <sys/types.h>
+#include <termios.h>
 #include <unistd.h>
 
 #ifndef O_CLOEXEC
@@ -30,8 +32,15 @@
 
 #define PTS_TAB 16
 #define PTS_NAME 32
+#ifndef TIOCGPTN
+#define TIOCGPTN 0x80045430u /* Linux _IOR('T', 0x30, unsigned int) */
+#endif
+#ifndef TIOCSPTLCK
+#define TIOCSPTLCK 0x40045431u /* Linux _IOW('T', 0x31, int) */
+#endif
 
 struct pts_ent {
+	int fUsed;
 	int nFd;
 	int nSerial;
 	char aName[PTS_NAME];
@@ -45,6 +54,9 @@ int openpty(int *pAmaster, int *pAslave, char *szName, const void *pTermp,
 int forkpty(int *pAmaster, char *szName, const void *pTermp,
 	    const void *pWinp);
 int login_tty(int nFd);
+char *ptsname(int nFd);
+int __gj_pts_known(int nFd);
+int __gj_pts_name(int nFd, char *szBuf, size_t cb);
 
 static void
 itoa_dec(char *sz, size_t cb, int nVal)
@@ -92,16 +104,16 @@ pts_register(int nFd, int nSerial, const char *szName)
 {
 	int i;
 	int nFree = -1;
+	size_t j;
 
 	if (nFd < 0) {
 		return;
 	}
+	/* fUsed: fd 0 (login_tty stdin) is a valid pts, not a free slot. */
 	for (i = 0; i < PTS_TAB; i++) {
-		if (g_aPts[i].nFd == nFd) {
+		if (g_aPts[i].fUsed && g_aPts[i].nFd == nFd) {
 			g_aPts[i].nSerial = nSerial;
 			if (szName != NULL) {
-				size_t j;
-
 				for (j = 0; szName[j] != '\0' &&
 					    j + 1 < PTS_NAME;
 				     j++) {
@@ -111,19 +123,20 @@ pts_register(int nFd, int nSerial, const char *szName)
 			}
 			return;
 		}
-		if (g_aPts[i].nFd == 0 && g_aPts[i].aName[0] == '\0' &&
-		    nFree < 0) {
+		if (!g_aPts[i].fUsed && nFree < 0) {
 			nFree = i;
 		}
 	}
 	if (nFree < 0) {
 		nFree = nSerial % PTS_TAB;
+		if (nFree < 0) {
+			nFree = 0;
+		}
 	}
+	g_aPts[nFree].fUsed = 1;
 	g_aPts[nFree].nFd = nFd;
 	g_aPts[nFree].nSerial = nSerial;
 	if (szName != NULL) {
-		size_t j;
-
 		for (j = 0; szName[j] != '\0' && j + 1 < PTS_NAME; j++) {
 			g_aPts[nFree].aName[j] = szName[j];
 		}
@@ -138,8 +151,12 @@ pts_lookup(int nFd)
 {
 	int i;
 
+	if (nFd < 0) {
+		return NULL;
+	}
 	for (i = 0; i < PTS_TAB; i++) {
-		if (g_aPts[i].nFd == nFd && g_aPts[i].aName[0] != '\0') {
+		if (g_aPts[i].fUsed && g_aPts[i].nFd == nFd &&
+		    g_aPts[i].aName[0] != '\0') {
 			return g_aPts[i].aName;
 		}
 	}
@@ -167,45 +184,97 @@ copy_name(char *szDst, const char *szSrc, size_t cbMax)
 	szDst[i] = '\0';
 }
 
+static int
+pts_resolve(int nFd, char *szBuf, size_t cb)
+{
+	unsigned uPn = 0;
+	char aTmp[PTS_NAME];
+	const char *szPts;
+	size_t cbName;
+
+	if (nFd < 0) {
+		errno = EBADF;
+		return -1;
+	}
+	if (szBuf == NULL || cb == 0) {
+		errno = EINVAL;
+		return -1;
+	}
+	if (ioctl(nFd, TIOCGPTN, &uPn) == 0) {
+		fmt_pts_name(aTmp, sizeof(aTmp), (int)uPn);
+		pts_register(nFd, (int)uPn, aTmp);
+		szPts = aTmp;
+	} else {
+		szPts = pts_lookup(nFd);
+		if (szPts == NULL) {
+			errno = ENOTTY;
+			return -1;
+		}
+	}
+	cbName = strlen(szPts);
+	if (cbName + 1 > cb) {
+		errno = ERANGE;
+		return -1;
+	}
+	memcpy(szBuf, szPts, cbName + 1);
+	return 0;
+}
+
+static void
+pty_apply(int nSlave, const void *pTermp, const void *pWinp)
+{
+	if (nSlave < 0) {
+		return;
+	}
+	if (pTermp != NULL) {
+		(void)tcsetattr(nSlave, TCSANOW, (const struct termios *)pTermp);
+	}
+	if (pWinp != NULL) {
+		(void)ioctl(nSlave, TIOCSWINSZ, pWinp);
+	}
+}
+
 int
 openpty(int *pAmaster, int *pAslave, char *szName, const void *pTermp,
 	const void *pWinp)
 {
 	int aFd[2];
 	int n;
+	int nMaster;
 
-	(void)pTermp;
-	(void)pWinp;
 	if (pAmaster == NULL || pAslave == NULL) {
 		errno = EINVAL;
 		return -1;
 	}
-	/* Prefer real ptmx when the host/kernel provides it. */
-	{
-		int m = open("/dev/ptmx", O_RDWR | O_NOCTTY | O_CLOEXEC);
+	/* posix_openpt owns ptmx + TIOCGPTN; socketpair fallback below. */
+	nMaster = posix_openpt(O_RDWR | O_NOCTTY | O_CLOEXEC);
+	if (nMaster >= 0) {
+		if (grantpt(nMaster) == 0 && unlockpt(nMaster) == 0) {
+			char *szNm = ptsname(nMaster);
+			int nSlave;
 
-		if (m >= 0) {
-			if (grantpt(m) == 0 && unlockpt(m) == 0) {
-				char *nm = ptsname(m);
-				int s;
+			if (szNm != NULL) {
+				nSlave = open(szNm, O_RDWR | O_NOCTTY);
+				if (nSlave >= 0) {
+					unsigned uPn = 0;
+					int nSerial = 0;
 
-				if (nm != NULL) {
-					s = open(nm, O_RDWR | O_NOCTTY);
-					if (s >= 0) {
-						*pAmaster = m;
-						*pAslave = s;
-						pts_register(m, 0, nm);
-						pts_register(s, 0, nm);
-						if (szName != NULL) {
-							copy_name(szName, nm,
-								  32);
-						}
-						return 0;
+					*pAmaster = nMaster;
+					*pAslave = nSlave;
+					if (ioctl(nMaster, TIOCGPTN,
+						  &uPn) == 0) {
+						nSerial = (int)uPn;
 					}
+					pts_register(nSlave, nSerial, szNm);
+					if (szName != NULL) {
+						copy_name(szName, szNm, 32);
+					}
+					pty_apply(nSlave, pTermp, pWinp);
+					return 0;
 				}
 			}
-			(void)close(m);
 		}
+		(void)close(nMaster);
 	}
 	/*
 	 * Soft PTY: bidirectional socketpair (full-duplex). Fall back to
@@ -229,6 +298,7 @@ openpty(int *pAmaster, int *pAslave, char *szName, const void *pTermp,
 			copy_name(szName, aTmp, 32);
 		}
 	}
+	pty_apply(aFd[1], pTermp, pWinp);
 	errno = 0;
 	return 0;
 }
@@ -273,13 +343,27 @@ login_tty(int nFd)
 		return -1;
 	}
 	(void)setsid();
-	/*
-	 * Soft: TIOCSCTTY not required on freestanding; stdio dup is enough
-	 * for shell/session bring-up.
-	 */
+	{
+		int nSaved = errno;
+
+		if (ioctl(nFd, TIOCSCTTY, 0) < 0 && errno != ENOTTY &&
+		    errno != ENOSYS && errno != EINVAL && errno != EPERM) {
+			return -1;
+		}
+		errno = nSaved;
+	}
 	if (dup2(nFd, STDIN_FILENO) < 0 || dup2(nFd, STDOUT_FILENO) < 0 ||
 	    dup2(nFd, STDERR_FILENO) < 0) {
 		return -1;
+	}
+	{
+		char aName[PTS_NAME];
+
+		if (pts_resolve(nFd, aName, sizeof(aName)) == 0) {
+			pts_register(STDIN_FILENO, 0, aName);
+			pts_register(STDOUT_FILENO, 0, aName);
+			pts_register(STDERR_FILENO, 0, aName);
+		}
 	}
 	if (nFd > STDERR_FILENO) {
 		(void)close(nFd);
@@ -295,7 +379,21 @@ posix_openpt(int nFlags)
 	int n;
 
 	m = open("/dev/ptmx", nFlags);
+	if (m < 0) {
+		m = open("/dev/pts/ptmx", nFlags);
+	}
 	if (m >= 0) {
+		char aTmp[PTS_NAME];
+		unsigned uPn = 0;
+
+		if (ioctl(m, TIOCGPTN, &uPn) == 0) {
+			fmt_pts_name(aTmp, sizeof(aTmp), (int)uPn);
+			pts_register(m, (int)uPn, aTmp);
+		} else {
+			n = ++g_nPtsSerial;
+			fmt_pts_name(aTmp, sizeof(aTmp), n);
+			pts_register(m, n, aTmp);
+		}
 		return m;
 	}
 	/* Soft: socketpair end as master-shaped fd */
@@ -329,20 +427,63 @@ posix_openpt(int nFlags)
 int
 grantpt(int nFd)
 {
+	char *szNm;
+
 	if (nFd < 0) {
 		errno = EBADF;
 		return -1;
 	}
+	szNm = ptsname(nFd);
+	if (szNm != NULL) {
+		(void)chmod(szNm, 0620);
+	}
+	errno = 0;
 	return 0;
 }
 
 int
 unlockpt(int nFd)
 {
+	int nZero = 0;
+	int nSaved;
+
 	if (nFd < 0) {
 		errno = EBADF;
 		return -1;
 	}
+	nSaved = errno;
+	if (ioctl(nFd, TIOCSPTLCK, &nZero) == 0) {
+		return 0;
+	}
+	if (errno == ENOTTY || errno == ENOSYS || errno == EINVAL ||
+	    errno == EIO) {
+		errno = nSaved;
+		return 0;
+	}
+	return -1;
+}
+
+int
+__gj_pts_known(int nFd)
+{
+	return pts_lookup(nFd) != NULL;
+}
+
+int
+__gj_pts_name(int nFd, char *szBuf, size_t cb)
+{
+	const char *p;
+
+	if (szBuf == NULL || cb == 0) {
+		errno = EINVAL;
+		return -1;
+	}
+	p = pts_lookup(nFd);
+	if (p == NULL) {
+		errno = ENOTTY;
+		return -1;
+	}
+	copy_name(szBuf, p, cb);
 	return 0;
 }
 
@@ -350,43 +491,21 @@ char *
 ptsname(int nFd)
 {
 	static char aName[PTS_NAME];
-	const char *p;
 
-	if (nFd < 0) {
-		errno = EBADF;
+	if (pts_resolve(nFd, aName, sizeof(aName)) != 0) {
 		return NULL;
 	}
-	p = pts_lookup(nFd);
-	if (p != NULL) {
-		copy_name(aName, p, sizeof(aName));
-		errno = 0;
-		return aName;
-	}
-	/* Soft fixed name when fd not registered. */
-	fmt_pts_name(aName, sizeof(aName), 0);
-	errno = 0;
 	return aName;
 }
 
 int
 ptsname_r(int nFd, char *szBuf, size_t cb)
 {
-	char *p;
-	size_t n;
+	return pts_resolve(nFd, szBuf, cb);
+}
 
-	if (szBuf == NULL || cb == 0) {
-		errno = EINVAL;
-		return -1;
-	}
-	p = ptsname(nFd);
-	if (p == NULL) {
-		return -1;
-	}
-	n = strlen(p);
-	if (n + 1 > cb) {
-		errno = ERANGE;
-		return -1;
-	}
-	memcpy(szBuf, p, n + 1);
-	return 0;
+int
+getpt(void)
+{
+	return posix_openpt(O_RDWR | O_NOCTTY);
 }

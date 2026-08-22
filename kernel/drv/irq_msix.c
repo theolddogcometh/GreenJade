@@ -1510,8 +1510,8 @@ irq_msix_soft_dual_dod_residual(void)
         return 0u;
     }
     /*
-     * Honesty residual: Dual DoD A (USB UDX / 8086:a12f) / B (NIC UDX /
-     * 10ec:8168) OPEN until DUT. Soft residual != DoD close. Soft!=product.
+     * Honesty residual: Dual DoD A (USB UDX / 8086:a12f) OPEN until host USB
+     * path; B (NIC UDX / 10ec:8168) OPEN until interactive SSH login.
      * never freestanding product close; product_hosts=UDX.
      */
     u32Ready = (g_fReady != 0) ? 1u : 0u;

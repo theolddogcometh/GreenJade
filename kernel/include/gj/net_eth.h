@@ -25,8 +25,8 @@
  *
  * Guest identity (not DHCP client):
  *   QEMU virtio: MAC 52:54:00:12:34:56, IPv4 10.0.2.15
- *   lab residual pin (if L2 backend is rtl): static 10.200.125.50
- *   (identity only; freestanding SKIP; not R0 rabbit hole)
+ *   laptop Dual DoD B pin: static 10.200.125.50 (rtl8168_udx hop;
+ *   L2 backend=none; identity only; freestanding SKIP)
  *
  * Greppable product markers (keep stable; Soft!=product):
  *   net_eth: ARP/UDP/ICMP-echo helpers
@@ -39,8 +39,8 @@
  *   poll_own=thr_stack | freestanding_class=SKIP | product=UDX
  *   lab_ip=10.200.125.50
  *   lean residual (virtio T0 + product UDX L2)
- *   W11 Dual DoD B FUNCTIONAL: wire handoff + :22 stack (tcp22_seen);
- *   thr_only H1 poll; Dual DoD OPEN; stamp-free bar v2026.08.04.75.
+ *   W11 Dual DoD B FUNCTIONAL: wire handoff + tcp22_seen (listen leftover);
+ *   thr_only H1 poll; Dual DoD OPEN until interactive SSH login.
  * greppable: wire_handoff+tcp22 | tcp22_seen | stack=eth|tcp|door|:22
  *
  * Soft!=product. G-AC-1 (no in-kernel .ko product AC).
@@ -85,6 +85,8 @@ void net_eth_poll(void);
  * Inject one L2 frame into demux (UDX host thr-poll RX residual).
  * Same demux as net_l2_rx path (ARP/ICMP/UDP7/TCP:22). Soft!=product.
  * Dual DoD B: path=rtl8168_udx product_udx_abi; freestanding_class=SKIP.
+ * TCP SYN to lab :22 is not virtio-only — net_tcp_input + ensure listen
+ * after ETH_UDX_READY; SYN-ACK TX is net_l2_tx → ETH_TX_PULL.
  * greppable: net_eth: soft udx inject | path=rtl8168_udx
  * Returns 1 if demux touched, 0 if drop/short.
  */

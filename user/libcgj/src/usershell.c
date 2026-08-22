@@ -8,6 +8,7 @@
 #include <stddef.h>
 #include <stdint.h>
 #include <string.h>
+#include <ttyent.h>
 #include <unistd.h>
 
 #define US_MAX   32
@@ -110,4 +111,82 @@ endusershell(void)
     g_fLoaded = 0;
     g_cShells = 0;
     g_fUseFallback = 0;
+}
+
+static struct ttyent g_tty;
+static char g_aTyGetty[] = "/sbin/getty";
+static char g_aTyType[] = "linux";
+static int g_fTtyOpen;
+static int g_iTty;
+
+/* Loginrec ut_line names (no /dev prefix). Soft table, not /etc/ttys. */
+static const char *const g_aTyNames[] = {
+    "console",
+    "tty1", "tty2", "tty3", "tty4", "tty5", "tty6",
+    "ttyS0", "ttyS1",
+    "pts/0", "pts/1", "pts/2", "pts/3",
+    "pts/4", "pts/5", "pts/6", "pts/7",
+    "pts/8", "pts/9", "pts/10", "pts/11",
+    "pts/12", "pts/13", "pts/14", "pts/15",
+    NULL
+};
+
+int
+setttyent(void)
+{
+    g_fTtyOpen = 1;
+    g_iTty = 0;
+    return 1;
+}
+
+int
+endttyent(void)
+{
+    g_fTtyOpen = 0;
+    g_iTty = 0;
+    return 1;
+}
+
+struct ttyent *
+getttyent(void)
+{
+    if (!g_fTtyOpen) {
+        (void)setttyent();
+    }
+    if (g_aTyNames[g_iTty] == NULL) {
+        return NULL;
+    }
+    g_tty.ty_name = (char *)(uintptr_t)g_aTyNames[g_iTty];
+    g_tty.ty_getty = g_aTyGetty;
+    g_tty.ty_type = g_aTyType;
+    g_tty.ty_status = TTY_ON | TTY_SECURE;
+    g_tty.ty_window = NULL;
+    g_tty.ty_comment = NULL;
+    g_iTty++;
+    return &g_tty;
+}
+
+struct ttyent *
+getttynam(const char *szName)
+{
+    struct ttyent *p;
+
+    if (szName == NULL) {
+        return NULL;
+    }
+    (void)setttyent();
+    while ((p = getttyent()) != NULL) {
+        if (strcmp(p->ty_name, szName) == 0) {
+            (void)endttyent();
+            return p;
+        }
+    }
+    (void)endttyent();
+    return NULL;
+}
+
+int
+ttyslot(void)
+{
+    return 1;
 }

@@ -13,6 +13,7 @@
 | **License** | **MIT OR Apache-2.0** |
 | **Priority order** | **1. Security → 2. Performance → 3. Portability → 4. Readability** |
 | **Live track (2026-08)** | [TODO.md](TODO.md) § *Current track* · [ABI_FIRST_PIVOT.md](ABI_FIRST_PIVOT.md) · [LINUX_MODULE_PATH.md](LINUX_MODULE_PATH.md) |
+| **Fly (Dual DoD A/B)** | **v0.1.184** packed, not host-probed. Dual DoD **A/B OPEN**. |
 | **Bar3 status** | [STEAM_BAR3_STATUS.md](STEAM_BAR3_STATUS.md) only |
 
 This document is what you implement against. Architecture policy lives in `GREENJADE_KERNEL_SPEC.md`; **this file is concrete**.
@@ -35,7 +36,7 @@ knano/
 │   ├── GREENJADE_KERNEL_SPEC.md
 │   ├── IMPLEMENTATION.md   # this file
 │   └── TODO.md
-├── third_party/            # MIT/Apache only; empty until provenanced
+├── third_party/            # MIT, Apache-2.0, BSD-2/3, ISC, CC0/PD, LicenseRef-zsh; each NOTICE + PROVENANCE row
 │   └── PROVENANCE.md
 ├── tools/                  # host tools (C preferred)
 │   └── (later: mkimage, etc.)

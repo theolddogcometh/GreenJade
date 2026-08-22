@@ -12,7 +12,7 @@ against this library; capabilities, IOMMU, and hard IRQ stay hidden.
 | **Library** | `make udx` → `build/libudx.a` |
 | **Host demo** | `make udx-example` → `build/udx_skeleton` |
 | **G-AC-1** | No Linux `.ko` product AC; Soft!=product |
-| **Dual DoD** | **A/B OPEN** — hosts: `rtl8168_udx` (NIC), `xhci_udx` (USB) |
+| **Dual DoD** | **A OPEN** until host USB path; **B OPEN** until interactive SSH login |
 | **Support** | [Patreon — TheOldDog](https://www.patreon.com/cw/TheOldDog) |
 
 ## Product direction (normative honesty)

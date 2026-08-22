@@ -968,7 +968,12 @@ cpu_enter_user(u64 u64Entry, u64 u64Stack)
      * sysretq: rcx=rip, r11=rflags, rsp=user stack.
      * Soft residual: RFLAGS IF via GJ_CPU_SOFT_RFLAGS_IF (value-stable).
      */
+    /*
+     * rax=0 on first ring-3 land: ELF _start ignores rax; fork/vfork
+     * children must see 0. sysretq does not load rax from GS.
+     */
     __asm__ volatile (
+        "xor %%eax, %%eax\n\t"
         "swapgs\n\t"
         "mov %0, %%rsp\n\t"
         "mov %2, %%r11\n\t" /* IF (soft residual constant) */
@@ -976,7 +981,7 @@ cpu_enter_user(u64 u64Entry, u64 u64Stack)
         "sysretq\n\t"
         :
         : "r"(u64Stack), "r"(u64Entry), "i"(GJ_CPU_SOFT_RFLAGS_IF)
-        : "rcx", "r11", "memory"
+        : "rcx", "r11", "rax", "memory"
     );
     for (;;) {
         __asm__ volatile ("hlt");

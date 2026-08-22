@@ -21,12 +21,12 @@
  * (session_door / net_door / store_door / vfs_door). Freestanding product path
  * only — not a libc (see gj/string.h for helpers; do not merge with libcgj).
  * Soft!=product (ASCII). G-AC-1: no Linux .ko product AC.
- * Dual DoD A/B OPEN (UDX USB/NIC). Soft DDI lamps do not close Dual DoD.
+ * Dual DoD A/B OPEN (A until USB path; B until interactive SSH login). Soft DDI lamps do not close Dual DoD.
  * Greppable: Soft!=product, G-AC-1, Dual DoD OPEN, GJ_SYS_DDI, gj_ddi
  *
  * Product residual (C2; stamp-free bar v2026.08.04.75; Soft!=product):
  *   product=UDX+sshd+stack — net door (GJ_SYS_NET) + DDI (GJ_SYS_DDI)
- *   seed the freestanding chain: rtl8168_udx → netstackd → sshd :22.
+ *   seed the freestanding chain: rtl8168_udx → kernel net_tcp → sshd :22.
  *   Thin wrappers only; never claim Dual DoD close / Cap mint product.
  * greppable: gj_syscalls: soft product residual product=UDX+sshd+stack
  * greppable: Soft!=product Dual DoD OPEN product=UDX+sshd+stack
@@ -115,10 +115,11 @@ extern "C" {
 /**
  * Net door: arg0=GJ_NET_OP_*; see net_door.h / ops below.
  * Product residual seed (Soft!=product; Dual DoD B OPEN):
- *   freestanding netstackd + sshd use GJ_SYS_NET for CLAIM/SOCKET/BIND/
+ *   freestanding leftover netstackd + product sshd use GJ_SYS_NET for CLAIM/SOCKET/BIND/
  *   LISTEN/ACCEPT/SEND/RECV + virtio/UDX ring ops. product=UDX+sshd+stack
  *   chain = rtl8168_udx → stack (this door) → sshd :22. Soft door success
- *   != Dual DoD B close; T0 product net = virtio until UDX owns wire.
+ *   != Dual DoD B close (close = interactive SSH login). T0 QEMU = virtio-net;
+ *   laptop wire = rtl8168_udx. Fly v0.1.178.
  * greppable: GJ_SYS_NET product=UDX+sshd+stack Dual_DoD_B=OPEN
  */
 #define GJ_SYS_NET               96
@@ -262,7 +263,7 @@ struct gj_mem_place_out {
  * v2026.08.04.75): product=UDX+sshd+stack uses these ops for:
  *   stack host — CLAIM/SOCKET/BIND/SEND/RECV/TCP multi-seg + ring export
  *   sshd       — LISTEN/ACCEPT/SEND/RECV on :22 over product net
- * Soft door green != UDX wire owner / Dual DoD B close (agent!=close).
+ * Soft door green != Dual DoD B close (close = interactive SSH login).
  * greppable: gj_syscalls: soft product residual product=UDX+sshd+stack
  */
 #define GJ_NET_OP_POLL        1u /* pump RX/TX soft progress; → events/0 */

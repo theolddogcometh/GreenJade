@@ -1390,6 +1390,8 @@ aarch64_uart_puts(" (retflankangle honesty; Soft!=product)\n");
 /* Grep: aarch64: gic: soft retfaceangle — Wave 66 exclusive faceangle stamp */
 aarch64_uart_puts("aarch64: gic: soft retfaceangle exclusive=1 soft_ne_product=1 "
                    "product_kernel=OPEN wave=");
+aarch64_uart_put_hex((unsigned long)GIC_SOFT_WAVE);
+aarch64_uart_puts(" (retfaceangle stamp; Soft!=product)\n");
 /*
  * ---- Wave 67 exclusive complementary surfaces (never reshape primary).
  * Return surfaces only — soft inventory; never hard-gates product paths.

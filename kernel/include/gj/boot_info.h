@@ -170,7 +170,8 @@ struct gj_boot_info {
      * UEFI stub may LoadFile \linux-drivers\modules\r8169.ko into
      * AllocatePages(LOADER_DATA) before ExitBootServices. Phys ptr is
      * identity-mapped; PMM must reserve the span so freelist does not
-     * reuse it before soft linux_module source=media consumes it.
+     * reuse it. leftover MAP: abandoned linux_module consume is not
+     * product-linked (G-AC-1). Never product AC.
      * Zero when Multiboot or file absent. Never product AC.
      */
     u64  u64SoftMediaPhys;  /* phys base of soft .ko blob (0 if none) */

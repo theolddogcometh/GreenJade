@@ -14,8 +14,12 @@
  */
 #include <arpa/inet.h>
 #include <errno.h>
+#include <netinet/in.h>
 #include <stdint.h>
 #include <string.h>
+
+const struct in6_addr in6addr_any = IN6ADDR_ANY_INIT;
+const struct in6_addr in6addr_loopback = IN6ADDR_LOOPBACK_INIT;
 
 /* IPv6 address layout when AF_INET6 used without full in6_addr header */
 struct gj_in6 {

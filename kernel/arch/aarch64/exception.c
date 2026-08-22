@@ -444,7 +444,7 @@ aarch64_uart_put_hex((unsigned long)EXC_SOFT_WAVE);
                       "unit=exception.c only rate_limited=0 soft_only=1\n");
 
     /* Grep: aarch64: exception soft honesty */
-    aarch64_uart_puts("aarch64: exception soft honesty product_kernel=OPEN "
+    aarch64_uart_puts("aarch64: exception soft honesty product_kernel=OPEN ");
     aarch64_uart_put_hex((unsigned long)EXC_SOFT_WAVE);
     aarch64_uart_puts("\n");
 

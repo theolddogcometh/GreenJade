@@ -208,6 +208,9 @@ struct gj_thread *cpu_current_thread(void);
  */
 void cpu_load_cr3(u64 u64Cr3);
 
+/** Program IA32_FS_BASE (clone SETTLS / arch_prctl ARCH_SET_FS). */
+void cpu_set_fs_base(u64 u64Base);
+
 /** Read live CR3 from the CPU (not only the soft shadow). */
 u64  cpu_read_cr3(void);
 

@@ -36,6 +36,84 @@
 extern "C" {
 #endif
 
+/* Linux x86 tty/socket ioctls OpenSSH sshpty/channels use. */
+#ifndef TIOCSCTTY
+#define TIOCSCTTY  0x540E
+#endif
+#ifndef TIOCGPGRP
+#define TIOCGPGRP  0x540F
+#endif
+#ifndef TIOCSPGRP
+#define TIOCSPGRP  0x5410
+#endif
+#ifndef TIOCGWINSZ
+#define TIOCGWINSZ 0x5413
+#endif
+#ifndef TIOCSWINSZ
+#define TIOCSWINSZ 0x5414
+#endif
+#ifndef TIOCNOTTY
+#define TIOCNOTTY  0x5422
+#endif
+#ifndef TIOCSBRK
+#define TIOCSBRK   0x5427
+#endif
+#ifndef TIOCCBRK
+#define TIOCCBRK   0x5428
+#endif
+#ifndef TCGETS
+#define TCGETS  0x5401
+#endif
+#ifndef TCSETS
+#define TCSETS  0x5402
+#endif
+#ifndef TCSETSW
+#define TCSETSW 0x5403
+#endif
+#ifndef TCSETSF
+#define TCSETSF 0x5404
+#endif
+#ifndef TCSBRK
+#define TCSBRK  0x5409
+#endif
+#ifndef TCXONC
+#define TCXONC  0x540A
+#endif
+#ifndef TCFLSH
+#define TCFLSH  0x540B
+#endif
+#ifndef TIOCGSID
+#define TIOCGSID   0x5429
+#endif
+#ifndef TIOCGPTN
+#define TIOCGPTN   0x80045430u
+#endif
+#ifndef TIOCSPTLCK
+#define TIOCSPTLCK 0x40045431u
+#endif
+#ifndef TIOCGPTPEER
+#define TIOCGPTPEER 0x5441 /* Linux _IO('T', 0x41) */
+#endif
+#ifndef FIONREAD
+#define FIONREAD   0x541B
+#endif
+#ifndef FIONBIO
+#define FIONBIO    0x5421
+#endif
+
+#ifndef _GJ_OPENSSH_WINSIZE
+#define _GJ_OPENSSH_WINSIZE 1
+#endif
+#ifndef _GJ_WINSIZE_DEFINED
+#define _GJ_WINSIZE_DEFINED
+struct winsize {
+    unsigned short ws_row;
+    unsigned short ws_col;
+    unsigned short ws_xpixel;
+    unsigned short ws_ypixel;
+};
+#endif
+
 int ioctl(int nFd, unsigned long u64Req, ...);
 
 #ifdef __cplusplus

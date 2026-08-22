@@ -100,35 +100,41 @@ timespec_getres(struct timespec *pTs, int nBase)
 
 /* ---- setproctitle / setlogin -------------------------------------------- */
 
+#ifndef PR_SET_NAME
+#define PR_SET_NAME 15
+#endif
+
 void
 setproctitle(const char *szFmt, ...)
 {
-    /* greppable: CGJ_GRAPH_BATCH24_SOFT_NULL */
-    if (szFmt == NULL) {
-        errno = EFAULT;
-        return -1;
-    }
-
+    char aName[16];
     va_list ap;
+    const char *p;
 
-    (void)szFmt;
+    if (szFmt == NULL) {
+        return;
+    }
     va_start(ap, szFmt);
+    (void)vsnprintf(aName, sizeof(aName), szFmt, ap);
     va_end(ap);
-    /* bring-up: no argv rewrite surface yet */
+    aName[sizeof(aName) - 1u] = '\0';
+    p = aName;
+    if (p[0] == '-') {
+        p++;
+    }
+    /* Linux comm is 16 bytes including NUL. Dual DoD B OPEN. */
+    (void)prctl(PR_SET_NAME, p);
 }
 
-int
+__attribute__((weak)) int
 setlogin(const char *szName)
 {
-    /* greppable: CGJ_GRAPH_BATCH24_SOFT_NULL */
     if (szName == NULL) {
-        errno = EFAULT;
+        errno = EINVAL;
         return -1;
     }
-
     (void)szName;
-    errno = EPERM;
-    return -1;
+    return 0;
 }
 
 /* ---- BSD signal surface ------------------------------------------------- */
@@ -1564,7 +1570,7 @@ freehostent(struct hostent *pHe)
     /* greppable: CGJ_GRAPH_BATCH24_SOFT_NULL */
     if (pHe == NULL) {
         errno = EFAULT;
-        return -1;
+        return;
     }
 
     (void)pHe;

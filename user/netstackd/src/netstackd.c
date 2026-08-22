@@ -4,7 +4,7 @@
  *
  * netstackd — userspace network stack host (A1 host smoke).
  * Product direction: virtio T0 + UDX/DDI userspace over hot+cold ABI
- * (Dual DoD B NIC path stays OPEN until rtl8168_udx owns wire).
+ * (Dual DoD B stays OPEN until interactive SSH login; this ELF is leftover :7777).
  * Here we exercise a software loopback table (UDP echo) until kernel
  * door is handed off. Host POSIX smoke only (not freestanding live).
  * Soft!=product: host lo PASS != Dual DoD A/B close; G-AC-1 (no .ko

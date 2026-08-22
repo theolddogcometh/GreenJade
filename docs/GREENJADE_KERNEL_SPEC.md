@@ -81,7 +81,7 @@ Security first does **not** mean ignore speed: it means the secure design is fix
 **Project license for original GreenJade code:** **MIT OR Apache-2.0** dual license  
 (`SPDX-License-Identifier: MIT OR Apache-2.0`). Recipients may use either.
 
-**Copying rule:** if it was not written here, it may enter the tree **only** if its license is MIT or Apache-2.0 (or public domain / CC0 treated as equivalent for this policy). Re-license is **not** magic: do not re-license GPL as MIT.
+**Copying rule:** product kernel/user is written here under **MIT OR Apache-2.0**. `third_party/` may also hold provenanced **BSD-2/3**, **ISC**, **CC0/public domain**, and **zsh’s MIT-like licence** (`LicenseRef-zsh`) — each with `NOTICE` + a `PROVENANCE.md` row. Re-license is **not** magic: do not re-license GPL as MIT. **No GPL/LGPL/AGPL/CDDL.**
 
 File headers:
 
@@ -656,7 +656,7 @@ No inheritance. No RTTI. No method sugar.
 | **Clean-room** reimplementation of Linux/POSIX **behavior** and ABIs under MIT OR Apache-2.0 | **Copying** GPL/LGPL/AGPL (or other copyleft) **source** into the tree |
 | Reading public docs, man pages, ABI descriptions, hardware manuals | Pasting Linux/`glibc`/BusyBox/coreutils **code** |
 | Growing a Linux-**compatible** userspace personality for apps/Proton | “Re-license” GPL as MIT (not legal magic) |
-| MIT/Apache third-party only | Linking GPL libraries into the product TCB |
+| Provenanced third-party: MIT, Apache-2.0, BSD-2/3, ISC, CC0/PD, LicenseRef-zsh | Linking GPL libraries into the product TCB |
 
 **Linux ABI is not banned.** Compatibility is a **product choice** (especially for Deck Top 50 / Proton). The ban is **copyleft code**, not “ideas that look like Linux.”
 
@@ -666,7 +666,7 @@ No inheritance. No RTTI. No method sugar.
 | Kernel syscalls | Native GJ mechanism; optional **clean-room Linux syscall personality** in userspace or thin translation layer |
 | Linux app ABI | **In scope via clean-room**; **depth driven by Deck Top 50** matrix FAILs |
 | **Proton personality** | **Accepted** primary game path — [PROTON_PERSONALITY.md](PROTON_PERSONALITY.md) v1.6; **not** SteamOS; **no GPL source** |
-| Shell/utils | Rewrite or MIT/Apache only — **no GPL coreutils** |
+| Shell/utils | Vendor **BSD / LicenseRef-zsh** (`third_party/` dash, zsh, tcsh) or rewrite under MIT/Apache — **no bash, no GPL coreutils** |
 
 ---
 
@@ -691,7 +691,7 @@ No inheritance. No RTTI. No method sugar.
 |---------|-------------|
 | `LICENSE` | Dual **MIT OR Apache-2.0** at root |
 | Per-file SPDX | `SPDX-License-Identifier: MIT` or `Apache-2.0` |
-| `third_party/` | Only MIT/Apache; each with `NOTICE` / provenance |
+| `third_party/` | MIT, Apache-2.0, BSD-2/3, ISC, CC0/public domain, and zsh’s MIT-like licence (`LicenseRef-zsh`); each import has `NOTICE` + a `PROVENANCE.md` row. Product kernel/user remains dual MIT OR Apache-2.0. Still reject GPL/LGPL/AGPL/CDDL. |
 | CI scanner | Fail build on GPL/LGPL/AGPL keywords in licenses |
 | Link check | No linking GPL libraries |
 | Contributor DCO | Certify original work or MIT/Apache rights |

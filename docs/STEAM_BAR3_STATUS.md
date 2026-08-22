@@ -6,9 +6,9 @@
 
 | Field | Value |
 |-------|--------|
-| **Date** | 2026-08-03 |
+| **Date** | 2026-08-03 (wave diary; fly now **v0.1.184** packed, not host-probed) |
 | **Wave** | GreenJade ABI-first + module-path (honesty refresh) |
-| **Bar3** | **OPEN** |
+| **Bar3** | **OPEN** — NOT-TRIED × 50. Dual DoD A/B are **not** bar3. |
 | **Deck Top 50** | **NOT-TRIED × 50** (no title PASS) |
 | **Soft inventory** | **READY** (host media only — `./scripts/steam-bar3-check.sh`) |
 | **Soft continuum** | CREATE-ONLY graph wire (high-water scan via `./scripts/gj-continuum-makefile-snippet.sh --max`) — **not** client run |
@@ -77,7 +77,7 @@ Soft inventory (agent honesty) includes: file counts (capped), launcher kind, bo
 |------|--------|---------------|
 | Steam option 2+3 media path | **wired** | fetch / stage / host-prep / hwtest pack |
 | Host soft check | **done** | `steam-bar3-check.sh` → READY \| SKELETON \| MISSING |
-| Product **sshd** live | **done** | boot spawn TCP :22 |
+| Product **sshd** live | leftover MAP | boot spawn listen :22; Dual DoD B OPEN until interactive SSH login |
 | **scsi_mid** live embed | **done** | virtio-scsi path |
 | **HDA multi-stream** | **kernel PASS** | not Steam audio / not game PCM |
 | **io_uring min rings** | **shipped PASS** | `io_uring: min rings ready`; setup/enter/register soft surface; **not** full SQE for games |

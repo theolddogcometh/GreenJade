@@ -23,9 +23,9 @@
  * until the hybrid ABI path is wired. See docs/GLIBC_COMPAT.md.
  *
  * Soft residual (C2 libcgj header; Soft!=product; G-AC-1; Dual DoD A/B OPEN):
- *   soft path  = getut*/putut*/login/logout soft fill (often empty/ENOSYS)
+ *   soft path  = getutent/pututline/login/logout soft fill (often empty/ENOSYS)
  *   product    = full utmp accounting product (OPEN; not closed here)
- *   catalog    = EMPTY..ACCOUNTING + struct utmp + get/set/end/put + login*
+ *   catalog    = EMPTY..ACCOUNTING + struct utmp + get/set/end/put + login family
  *   honesty    = Soft!=product; soft empty table != product multi-user mint
  *   Bar honesty v2026.08.04.75. NEVER bump GJ_IMAGE_VERSION from this unit.
  * greppable: libcgj: soft residual utmp
@@ -75,12 +75,19 @@ struct utmp {
         int tv_usec;
     } ut_tv;
     int     ut_addr_v6[4];
-    char    __unused[20];
+    char    __gj_unused[20];
 };
 
 #define ut_name ut_user
 #define ut_time ut_tv.tv_sec
 #define ut_addr ut_addr_v6[0]
+
+/* Linux lastlog(5) LP64 record: 32-bit ll_time (TIME64_COMPAT32). */
+struct lastlog {
+    int  ll_time;
+    char ll_line[UT_LINESIZE];
+    char ll_host[UT_HOSTSIZE];
+};
 
 struct utmp *getutent(void);
 void         setutent(void);

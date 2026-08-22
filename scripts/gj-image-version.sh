@@ -5,7 +5,7 @@
 #
 # Compile-time stamp lives in kernel/include/gj/config.h and is baked into
 # KERNEL.ELF / build/greenjade.elf as the panel title:
-#   STATUS (static) v0.1.N   (semver series; 0.2.0 when networking works)
+#   STATUS (static) v0.1.N   (semver series; 0.2.0 reserved, do not ship)
 # Serial also prints: main: image version=0.1.N
 # Legacy date stamps (YYYY.MM.DD.N) still extract if present in old media.
 #
@@ -23,11 +23,12 @@
 # not Dual DoD close, not UDX product AC. Freestanding class SKIP defaults and
 # freestanding_no_exec are orthogonal process law (see gj-assurance-check).
 #
-# Flash bar honesty (lab): stamp e.g. v0.1.97 names the deliverable.
-# L1 make assurance-check PASS != Dual DoD A/B close. Dual DoD OPEN until L3
-# host probes on this stamp after flash. Soft!=product · test what you fly.
+# Flash bar honesty (lab): stamp e.g. v0.1.178 names the deliverable.
+# L1 make assurance-check PASS != Dual DoD A/B close. Dual DoD OPEN until
+# host USB path (A) and interactive SSH login (B). Soft!=product · test what you fly.
 # Stamp-free residual: this script never bumps GJ_IMAGE_VERSION / never invents
 # the next N; it only extracts identity from ELF/config.h (read-only).
+# Never treat stale build/esp as fly identity (pack proof is extracted img ESP).
 set -eu
 root="$(CDPATH= cd -- "$(dirname "$0")/.." && pwd)"
 cd "$root"
@@ -108,9 +109,6 @@ src=missing
 ver=""
 if ver=$(extract_from_elf "$elf"); then
 	src="elf:$elf"
-elif [ -f build/esp/EFI/GREENJADE/KERNEL.ELF ] \
-	&& ver=$(extract_from_elf build/esp/EFI/GREENJADE/KERNEL.ELF); then
-	src="elf:build/esp/EFI/GREENJADE/KERNEL.ELF"
 elif ver=$(extract_from_config); then
 	src="config.h"
 else
@@ -139,8 +137,8 @@ report)
 	echo "  product path: userspace UDX+ABI · virtio T0 until UDX owns wire (G-AC-1)"
 	echo "  freestanding: class SKIP defaults (GJ_RTL8168_PROBE=0 · GJ_XHCI_MSC_PROBE=0)"
 	echo "  freestanding: freestanding_no_exec RUN_INIT=0 (not product AC)"
-	echo "  Dual DoD: OPEN — L3 = host probes on this stamp; L1 alone never closes"
-	echo "  assurance: test what you fly — Dual DoD L3 = host probes on this stamp"
+	echo "  Dual DoD: OPEN — A until USB path; B until interactive SSH login; L1 never closes"
+	echo "  assurance: test what you fly — banner / PK_OK / SUCCESS != Dual DoD B close"
 	echo "  L1 only:   make assurance-check PASS != Dual DoD A/B close"
 	echo "  stamp-free: extract only; never bump GJ_IMAGE_VERSION / invent next N"
 	echo "  process:   docs/ASSURANCE_LITE.md · ./scripts/gj-assurance-check.sh"

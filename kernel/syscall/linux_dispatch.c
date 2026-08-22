@@ -67,6 +67,7 @@
 #include <gj/klog.h>
 #include <gj/linux_dispatch.h>
 #include <gj/syscall.h>
+#include <gj/thread.h>
 #include <gj/wow64.h>
 
 typedef i64 (*gj_linux_hot_fn_t)(struct gj_linux_regs *pRegs);
@@ -1072,7 +1073,7 @@ soft_residual_lean_once(void)
 
     /*
      * Grep: linux: dispatch soft residual dual_dod
-     * C2 Dual DoD residual twin - OPEN until DUT UDX host proof.
+     * C2 Dual DoD residual twin - OPEN until USB path / interactive SSH login.
      * Soft residual lamps != Dual DoD close (agent != close).
      * Product hosts = userspace UDX/DDI over hot/cold ABI; freestanding SKIP.
      * Never closes Dual DoD A/B from this unit.
@@ -1223,8 +1224,10 @@ gj_linux_dispatch_init(void)
     set_hot(LINUX_NR_setgroups, gj_linux_hot_setgroups);
     set_hot(LINUX_NR_getgroups, gj_linux_hot_getgroups);
     set_hot(LINUX_NR_getpgrp, gj_linux_hot_getpgrp);
+    set_hot(LINUX_NR_getpgid, gj_linux_hot_getpgid);
     set_hot(LINUX_NR_getppid, gj_linux_hot_getppid);
     set_hot(LINUX_NR_getsid, gj_linux_hot_getsid);
+    set_hot(LINUX_NR_umask, gj_linux_hot_umask);
     set_hot(LINUX_NR_mlock, gj_linux_hot_mlock);
     set_hot(LINUX_NR_munlock, gj_linux_hot_munlock);
     set_hot(LINUX_NR_mlockall, gj_linux_hot_mlockall);
@@ -1550,11 +1553,51 @@ gj_linux_classify(u64 u64Nr)
     return ePath;
 }
 
+/*
+ * Overnight sshd syscall lamp. Cap 256. Soft!=product. Dual DoD B OPEN.
+ * Entry prints ret_later; sshd_sys_note prints i64Ret on the same counter.
+ */
+static u32 g_u32SshdSysCap;
+static u32 g_u32SshdSysRet;
+
+static void
+sshd_sys_note(struct gj_linux_regs *pRegs)
+{
+    struct gj_thread *pThr;
+    const char *szTag;
+
+    if (pRegs == NULL) {
+        return;
+    }
+    if (g_u32SshdSysRet >= g_u32SshdSysCap || g_u32SshdSysRet >= 256u) {
+        return;
+    }
+    pThr = thread_current();
+    if (pThr == NULL) {
+        return;
+    }
+    szTag = thread_soft_tag_get(pThr->u32Id);
+    if (szTag == NULL) {
+        return;
+    }
+    if (szTag[0] != 's' || szTag[1] != 's' || szTag[2] != 'h' ||
+        szTag[3] != 'd' || szTag[4] != '\0') {
+        return;
+    }
+    kprintf("sshd: sys nr=%lu a0=%lx ret=%ld\n",
+            (unsigned long)pRegs->u64Nr,
+            (unsigned long)pRegs->u64Arg0,
+            (long)pRegs->i64Ret);
+    g_u32SshdSysRet++;
+}
+
 void
 gj_linux_syscall_dispatch(struct gj_linux_regs *pRegs)
 {
     enum gj_linux_path ePath;
     gj_linux_hot_fn_t pfnHot;
+    struct gj_thread *pThr;
+    const char *szTag;
     u32 u32Nr;
 
     if (pRegs == NULL) {
@@ -1562,6 +1605,18 @@ gj_linux_syscall_dispatch(struct gj_linux_regs *pRegs)
         soft_inc(&g_u32SoftPathNullGuard);
         soft_inventory_maybe_once();
         return;
+    }
+    pThr = thread_current();
+    if (pThr != NULL && g_u32SshdSysCap < 256u) {
+        szTag = thread_soft_tag_get(pThr->u32Id);
+        if (szTag != NULL &&
+            szTag[0] == 's' && szTag[1] == 's' && szTag[2] == 'h' &&
+            szTag[3] == 'd' && szTag[4] == '\0') {
+            kprintf("sshd: sys nr=%lu a0=%lx ret_later\n",
+                    (unsigned long)pRegs->u64Nr,
+                    (unsigned long)pRegs->u64Arg0);
+            g_u32SshdSysCap++;
+        }
     }
     g_class.u64Entries++;
     g_class.u64LastNr = pRegs->u64Nr;
@@ -1593,6 +1648,7 @@ gj_linux_syscall_dispatch(struct gj_linux_regs *pRegs)
         g_class.u64LastRet = (u64)pRegs->i64Ret;
         soft_note_ret(pRegs->i64Ret);
         soft_inventory_maybe_once();
+        sshd_sys_note(pRegs);
         return;
     }
     u32Nr = (u32)pRegs->u64Nr;
@@ -1611,6 +1667,7 @@ gj_linux_syscall_dispatch(struct gj_linux_regs *pRegs)
                 g_class.u64LastRet = (u64)pRegs->i64Ret;
                 soft_note_ret(pRegs->i64Ret);
                 soft_inventory_maybe_once();
+                sshd_sys_note(pRegs);
                 return;
             }
             g_class.u64HotDeferCold++;
@@ -1638,6 +1695,7 @@ gj_linux_syscall_dispatch(struct gj_linux_regs *pRegs)
             g_class.u64LastRet = (u64)pRegs->i64Ret;
             soft_note_ret(pRegs->i64Ret);
             soft_inventory_maybe_once();
+            sshd_sys_note(pRegs);
             return;
         }
         /* Legacy direct cold hook (tests / early bring-up). */
@@ -1650,6 +1708,7 @@ gj_linux_syscall_dispatch(struct gj_linux_regs *pRegs)
             g_class.u64LastRet = (u64)pRegs->i64Ret;
             soft_note_ret(pRegs->i64Ret);
             soft_inventory_maybe_once();
+            sshd_sys_note(pRegs);
             return;
         }
         g_stats.u64Enosys++;
@@ -1660,6 +1719,7 @@ gj_linux_syscall_dispatch(struct gj_linux_regs *pRegs)
         g_class.u64LastRet = (u64)pRegs->i64Ret;
         soft_note_ret(pRegs->i64Ret);
         soft_inventory_maybe_once();
+        sshd_sys_note(pRegs);
         return;
     }
 
@@ -1670,6 +1730,7 @@ gj_linux_syscall_dispatch(struct gj_linux_regs *pRegs)
     g_class.u64LastRet = (u64)pRegs->i64Ret;
     soft_note_ret(pRegs->i64Ret);
     soft_inventory_maybe_once();
+    sshd_sys_note(pRegs);
 }
 
 void

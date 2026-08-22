@@ -24,8 +24,8 @@
  *   CLOSE soft handle free / grant forget (not product Phase-A revoke)
  *
  * product path (OPEN — not claimed by soft residual or this catalog):
- *   Dual DoD A = UDX USB  — xhci_udx    (8086:a12f) datapath / BOT-MSC
- *   Dual DoD B = UDX NIC  — rtl8168_udx (10ec:8168) TX/RX
+ *   Dual DoD A OPEN until host USB path (xhci_udx; RS-off ≠ close)
+ *   Dual DoD B OPEN until interactive SSH login (rtl8168_udx hop)
  *   mint OPEN: MMIO_FRAME cap · IRQ→Notification cap · DMA window cap
  *   Soft SCAN/GET/OPEN/MAP_BAR lamps + life= mask never close Dual DoD A/B.
  *   Compile-time residual: UDX_DDI_DOD_A_OPEN=1 UDX_DDI_DOD_B_OPEN=1
@@ -50,8 +50,8 @@
  *
  * Product residual (C2; Dual DoD B OPEN; stamp-free bar v2026.08.04.75):
  *   product=UDX+sshd+stack — DDI bind residual seeds rtl8168_udx so
- *   netstackd (stack) + sshd (:22) can product-serve when Cap mint lands.
- *   Soft SCAN/GET/OPEN/MAP_BAR != wire / Dual DoD B close (agent!=close).
+ *   leftover netstackd + product sshd can product-serve (Dual DoD B hop is kernel net_tcp).
+ *   Soft SCAN/GET/OPEN/MAP_BAR != Dual DoD B close (close = interactive SSH login).
  * greppable: udx: soft product residual product=UDX+sshd+stack
  *
  * G752 first bind targets (inventory / HCL; Dual DoD seed IDs):
@@ -165,9 +165,8 @@
  *   Dual DoD A (UDX USB): xhci_udx    @ UDX_DDI_G752_XHCI_*    — OPEN
  *   Dual DoD B (UDX NIC): rtl8168_udx @ UDX_DDI_G752_RTL8168_* — OPEN
  *
- * Close criteria live on product userspace UDX datapath + live cap mint
- * (MMIO_FRAME / IRQ Notification / DMA window), not soft door notes,
- * not freestanding class stages, not life= residual masks.
+ * Close criteria: Dual DoD A host USB path (RS-off ≠ close); Dual DoD B
+ * host interactive SSH login. Soft door notes / cap mint lamps ≠ close.
  * Lamps / LIFE_* / bind PASS never flip UDX_DDI_DOD_*_OPEN to closed.
  * greppable: Dual_DoD_A=OPEN Dual_DoD_B=OPEN dual_dod_open=1
  */
@@ -177,7 +176,7 @@
 /*
  * Soft residual Cap / Dual DoD honesty constants (eng only; Soft!=product).
  * Always-0 mint/server/confine flags match host soft residual lean emit.
- * Dual DoD A/B remain OPEN (1) until DUT proof closes them — soft door
+ * Dual DoD A/B remain OPEN (1) until USB path / interactive SSH login — soft door
  * residual, life= masks, and bind PASS lamps alone never flip these.
  * Product hosts retain OPEN handle (close=0 on bind PASS).
  * never freestanding rtl/usb class re-enable (G-AC-1; no .ko product).

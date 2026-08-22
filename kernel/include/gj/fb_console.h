@@ -6,10 +6,12 @@
  * Pure C11 freestanding. Dual MIT OR Apache-2.0.
  *
  * Layout (wide panels - left | right):
- *   LEFT  - static "hold" status (milestones, XHCI, timer, result)
+ *   LEFT  - static pane, split in half horizontally:
+ *             top    STATUS holds (title + live product rows)
+ *             bottom STATE (boot) — high-level boot journal
  *   RIGHT - flying scroll log (kprintf / console_putchar stream)
  *
- * Narrow panels fall back to top (hold) / bottom (scroll).
+ * Narrow panels: top (holds) / mid (STATE) / bottom (scroll).
  * Soft: never hard-gates boot. No-op until fb_console_init succeeds.
  * Colour progress bars are intentionally unused (text-first panel path).
  */
@@ -26,48 +28,30 @@
  * Content uses lines 0..N-1. 16 is enough for milestones + Linux module
  * path (7-12) + dual-DoD holds + NET/R residual spare.
  *
- * Hold index map (boot / panel path - see main.c / net_eth / xhci / linux_netdev_soft):
- *   0  headline (bright) / FAULT  — do not clobber title via hold0 after boot
- *   1  phase
- *   2  kernel TE/identity persist (after iommu_vtd_te_arm ~main TE path PASS)
- *      e.g. TE mode=hw tes=1 tt=ML slpt=1 rdy bus3 id1g
- *      once-pin only; te_disarm once-updates same row (not UDX hold14)
- *      early boot: "phase: PCI / IOMMU / xHCI" until TE bring-up
- *      user-kill trap overwrites hold2 with rip/thr/tag (FAULT photo)
- *   3  USB MSC detail
- *   4  USB MSC ready/fail
- *   5  timer / M0
- *   6  NET counters + force refresh (dual DoD B residual lamp; Soft!=product)
- *      e.g. NET name IP UP t0/f0/b0/r0 :22  - t/f/b/r freestanding diagnose only;
- *      /r is R0 (RX dead vs climb). Live STATUS != Dual DoD B close (product=UDX).
- *   7  ksym n=N                 (Linux module path soft)
- *   8  mod r8169 init=...|FAIL|SKIP  (freestanding SKIP lamp; Soft!=product; dim)
- *   9  netdev soft N | unres=...  · on FAULT + short pane: NET residual fallback
- *  10  probe 10ec:8168 soft|miss
- *  11  pci reg=N match=M        (r8169 soft path lamp; Soft!=product)
- *  12  mod xhci_pci ... | SKIP builtin  (freestanding SKIP lamp; Soft!=product; dim)
- *  13  USB / usb_storage lamp (dual DoD A residual; Soft!=product; never product PASS)
- *      e.g. USB linux OPEN builtin | usb_storage need=usbcore | LOAD ok | probe a12f
- *  14  L2 br / freestanding R mirror + live UDX product pins (do not clobber)
- *      e.g. l2 br rx=N tx=M · UDX te_disarm fovw|wire · UDX mac / mdio
- *      kernel TE snapshot lives on hold2 — never steal UDX hold14
- *  15  live UDX product pins / HYBRID wire=... · FAULT: last NET t/f/b/r
+ * Hold index map (glass — live product only; abandoned .ko/rtl/xhci_msc gone):
+ *   0  empty / FAULT vec= / user kill
+ *   1  M0 OK dash SKIP isolate  · FAULT/user-kill rip+cr2
+ *   2  TE (iommu_vtd once; te_disarm updates)
+ *   3  UDX xhci (scratchpad SKIP / product)
+ *   4  UDX inj= tx= lnk=        (rtl8168_udx live)
+ *   5  UDX own rok fovw c=      (rtl8168_udx glass)
+ *   6  UDX mac_rclm / te_re
+ *   7  IP 10.200.125.50 :22
+ *   8  DoD A=OPEN B=OPEN
+ *   9..15 unused (do not write abandoned r8169/ksym/xhci_pci lamps)
  *
  * Dual DoD honesty lean (product=UDX; Soft!=product; G-AC-1):
- *   Product Dual DoD A = Linux-shaped USB via UDX/DDI  - OPEN until DUT proof
- *   Product Dual DoD B = Linux-shaped NIC via UDX/DDI  - OPEN until DUT proof
+ *   Product Dual DoD A = Linux-shaped USB via UDX/DDI  - OPEN until host USB path
+ *   Product Dual DoD B = Linux-shaped NIC via UDX/DDI  - OPEN until interactive SSH login
  *   Soft/freestanding STATUS lamps never close Dual DoD A/B (not freestanding stage).
  * Grep dual DoD residual lamps (honesty only; never product PASS):
  *   dual DoD hold2  - kernel TE/identity persist (mode tes tt slpt bus3 id1g)
- *   dual DoD hold6  - net refresh (t/f/b/r / :22); freestanding diagnose != B close
- *   dual DoD hold13 - USB/usb_storage soft path; LOAD/OPEN != stick datapath PASS
- *   dual DoD hold14 - soft L2 bridge + freestanding R mirror / UDX te_disarm pins
- * Freestanding SKIP honesty lamps (dim paint; Soft!=product):
- *   hold8  mod r8169 SKIP...  - freestanding NIC class residual (GJ_RTL8168_PROBE=0)
- *   hold12 mod xhci_pci SKIP... - freestanding USB class residual (not xhci_udx close)
+ *   dual DoD hold6  - UDX mac_rclm residual; freestanding diagnose != B close
+ * leftover MAP (not live 178 panel): historical hold13 USB / hold14 L2 /
+ * hold8 r8169 SKIP / hold12 xhci_pci SKIP. Live 178 uses holds 1/3/4/5/7/8.
  *   Any hold text containing " SKIP" / "SKIP " paints dim (never warm PASS look).
  * product=UDX (user drivers): dual_dod_a=OPEN_UDX dual_dod_b=OPEN_UDX;
- * soft SKIP + hold6/13/14 are honesty residual only (never product DoD close).
+ * leftover hold13/14 MAP is honesty residual only (never product DoD close).
  * Long honesty stamps stay on kprintf (LOG filters soft flood); STATUS stays short.
  * Title keeps "STATUS (static) v" GJ_IMAGE_VERSION once (test what you fly).
  * No stamp storms: single title string + short hold lines only (no version spam).
@@ -77,12 +61,11 @@
  * USB / usb_storage / l2 tails keep counters under clip. Grep: fb_hold_net_clip
  *
  * FAULT STATUS pin (fb_console_trap / g_fFaultHold - product halt only; lean):
- *   Sticky after trap: rows 0 + 6..9 refuse later hold overwrite; LOG putchar
+ *   Sticky after trap: rows 0 + 1 refuse later hold overwrite; LOG putchar
  *   drops so soft/product flood cannot fight FAULT visibility (G752 no COM1).
  *   Title becomes "STATUS FAULT PINNED v" GJ_IMAGE_VERSION; fault rows paint red.
- *   Soft!=product. hold1 (name/PF from trap.c) and dual DoD hold13/14 stay writable.
- *   Dual DoD B residual: last hold6 NET ... t/f/b/r -> hold15 when visible; else
- *   hold9 (short STATUS pane). R0 diagnose survives hold6 clobber.
+ *   Soft!=product. Live pin is 0+1 (leftover comments used to say 0+6..9).
+ *   leftover MAP: hold6 NET snap to hold15/hold9 is leftover diagnose, not live pin.
  * Grep: g_fFaultHold | FAULT PINNED | KERNEL FAULT | dual DoD B R0 | NET residual
  * Grep: STATUS (static) v | GJ_IMAGE_VERSION | product=UDX | Soft!=product
  * Grep: freestanding SKIP | dual_dod_a=OPEN_UDX | dual_dod_b=OPEN_UDX
@@ -115,13 +98,20 @@ void fb_console_putchar(char chOut);
 void fb_console_write(const char *szText);
 
 /**
+ * Append one high-level boot-state line on the bottom of the static pane.
+ * Consecutive duplicates are dropped. No-op until fb_console_init succeeds.
+ * This is not Dual DoD close. Soft!=product.
+ */
+void fb_console_state(const char *szLine);
+
+/**
  * Set one static hold line (0 .. FB_HOLD_LINES-1). Redraws that line only.
  * Copies at most FB_HOLD_CHARS-1 printable chars (stops at CR/LF); NUL-terminates.
  * Dual DoD residual NET/l2/USB store+paint prefer counters under clip so
  * R0 / need= / rx= stay honest. NULL clears the line.
  * Soft!=product: dual-DoD short strings on 6/13/14 are honesty lamps only -
  * never Dual DoD A/B close (product=UDX OPEN). Freestanding SKIP text paints dim.
- * After fb_console_trap: rows 0 + 6..9 sticky; hold15 sticky if NET residual.
+ * After fb_console_trap: rows 0 + 1 sticky (live pin).
  */
 void fb_console_hold(u32 u32Line, const char *szText);
 
@@ -133,7 +123,7 @@ void fb_console_status(const char *szLine);
 
 /**
  * Pin a kernel trap onto the static STATUS pane (product halt path; lean).
- * Sticky g_fFaultHold: hold 0 + 6..9 refuse later overwrite; LOG paint drops
+ * Sticky g_fFaultHold: hold 0 + 1 refuse later overwrite; LOG paint drops
  * so soft flood cannot bury FAULT. Last dual DoD B NET t/f/b/r on hold6 is
  * snapshotted to hold15 when visible, else hold9 (short pane R0 residual).
  * Safe if console not ready. Soft!=product.

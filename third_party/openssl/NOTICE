@@ -1,0 +1,36 @@
+GreenJade third-party vendor notice
+===================================
+
+Package:          OpenSSL (libcrypto / libssl)
+Role:             libcrypto for OpenSSH-portable — not product MIT/Apache dual
+Upstream:         https://openssl-library.org/source/
+Git (canonical):  https://github.com/openssl/openssl
+Tarball URL:      https://github.com/openssl/openssl/releases/download/openssl-3.5.7/openssl-3.5.7.tar.gz
+Checksum URL:     https://github.com/openssl/openssl/releases/download/openssl-3.5.7/openssl-3.5.7.tar.gz.sha256
+Version / tag:    3.5.7 (LTS; upstream EOL 08 Apr 2030)
+Fetched:          2026-08-21
+Vendor date:      2026-08-21
+
+Tarball SHA-256:  a8c0d28a529ca480f9f36cf5792e2cd21984552a3c8e4aa11a24aa31aeac98e8
+                  (matches GitHub release openssl-3.5.7.tar.gz.sha256)
+
+License file:     LICENSE.txt (kept)
+SPDX (imported):  Apache-2.0
+Upstream:         OpenSSL 3.0+ is Apache License 2.0 only.
+                  OpenSSL 1.1.1 and earlier used OpenSSL + SSLeay (not this tree).
+
+VENDOR_STATUS:    OK — 3.5 LTS snapshot imported; GPL-dual Perl helper omitted
+
+Omitted (GPL — not imported):
+  external/perl/Text-Template-1.56/
+      Perl dual GPL-1-or-later OR Artistic. Host `perl Configure` may use
+      a distro Text::Template. Not linked into libcrypto. Do not restore.
+
+Why 3.5 LTS (security first):
+  OpenSSH-portable 10.5 requires ECC in libcrypto, including NIST P-521.
+  Upstream marks --without-openssl EXPERIMENTAL. Product SSH uses this
+  supported libcrypto, not the reduced internal-crypto build.
+  3.5 is LTS through 2030. Not 1.1.1 (old license + EOL). Not 4.0 (shorter EOL).
+
+This is not product kernel/user code. Port to the GreenJade ABI is later.
+Soft≠product. Dual DoD A/B stay OPEN.

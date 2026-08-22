@@ -2739,7 +2739,7 @@ soft_c2_product_path_residual_once(void)
 
     /*
      * Dual DoD OPEN residual honesty (law): soft residual never closes
-     * Dual DoD A (USB path) or Dual DoD B (sshd :22 lab). Soft scaffold
+     * Dual DoD A (USB path) or Dual DoD B (interactive SSH login). Soft scaffold
      * != product AC; G-AC-1 no .ko; product maps stay userspace.
      */
     u32Checks++;

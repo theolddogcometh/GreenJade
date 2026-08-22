@@ -2,7 +2,8 @@
  * SPDX-License-Identifier: MIT OR Apache-2.0
  * Copyright (c) 2026 Project GreenJade contributors
  *
- * Minimal IPv4 TCP over virtio-net + loopback pairs (sshd / netstackd).
+ * Minimal IPv4 TCP over virtio-net, UDX L2 (ETH_INJECT / ETH_TX_PULL),
+ * and loopback pairs (sshd / netstackd).
  * Pure C11 freestanding, dual MIT OR Apache-2.0. Clean-room - no GPL stack.
  *
  * Features (bring-up product path):
@@ -31,7 +32,7 @@
  * Userspace / ABI socket residual (lean; Soft!=product; G-AC-1):
  *   listen/accept/shutdown/name/rtx for cold Linux personality + sshd over
  *   stack (mirror net_lo shapes). Not freestanding rtl R0 deepen thrash.
- *   Product NIC = UDX+ABI. Soft listen :22 != host banner proof.
+ *   Product NIC = UDX+ABI. Soft listen :22 != interactive SSH login.
  *   Functional thrash-strip: lean rtx multi-pass only (no micro/nano/pico).
  *   listen: re-arm after SHUT_RD; soft→product AcceptQ transfer on :22.
  *   accept: ESTABLISHED FIFO; name-ready getsockname/getpeername.
@@ -92,6 +93,14 @@ i64 net_tcp_bind(i64 i64Fd, u16 u16Port);
  * Soft listen :22 != host banner proof (honesty; G-AC-1).
  */
 i64 net_tcp_listen(i64 i64Fd, int nBacklog);
+
+/**
+ * Hold/mint :22 listen after L2 ready (virtio, rtl, or UDX ETH_UDX_READY).
+ * Product listen supersedes soft mint. Soft!=product. != host banner.
+ * Call from ETH_UDX_READY so laptop wire (backend=none) is not virtio-only.
+ * greppable: net_tcp: soft listen :22 | product_net_owns_wire
+ */
+void net_tcp_ensure_listen22(void);
 
 /**
  * connect: loopback pair to local listener on port (SYN handshake soft).
@@ -169,6 +178,9 @@ int net_tcp_fd_ok(i64 i64Fd);
  */
 u32 net_tcp_poll_mask(i64 i64Fd, u32 u32Want);
 
+/** 1 if any ESTABLISHED AcceptQ child is on TCP port 22. Dual DoD B OPEN. */
+int net_tcp_acceptq_estab22(void);
+
 /**
  * Demux IPv4 TCP frame (full eth frame from net_eth_poll run-loop).
  * Returns 1 if consumed (ours), 0 if ignored / bad args.
@@ -176,9 +188,11 @@ u32 net_tcp_poll_mask(i64 i64Fd, u32 u32Want);
  * Soft demux residual (Dual DoD B; Soft!=product):
  *   dest 10.200.125.50 always accepted (force lab identity) so host
  *   SYN is not dropped when L2 still surfaces QEMU 10.0.2.15 mid-handoff
- *   or after R0->RX return; rtl/lab-identity force + recheck for non-lab
- *   dest match; any :22 to ours re-ensures soft/product listen after
- *   L2 ready before AcceptQ match (product claims :22 still wins);
+ *   or after R0->RX return; rtl/UDX/lab-identity force + recheck for
+ *   non-lab dest match; backend=none + ETH_UDX_READY is a live wire
+ *   (not virtio-only) so ETH_INJECT SYN reaches :22 listen; any :22 to
+ *   ours re-ensures soft/product listen after L2 ready before AcceptQ
+ *   match (product claims :22 still wins);
  *   SHUT_RD listeners skipped. Soft listen != host banner proof.
  * Hot path: silent tallies only on accept/miss (no kprintf storm;
  * event-capped eth_syn/estab lamps only). Soft!=product · lean residual.

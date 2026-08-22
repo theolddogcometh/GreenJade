@@ -323,6 +323,7 @@ platform_power_reboot(void)
 
     kprintf("platform_power: reboot path=kbc+cf9 Soft!=product\n");
     fb_console_hold(0, "SHUTDOWN: reboot (Ctrl+Alt+Del / fallback)");
+    fb_console_state("reboot");
     /* Drain IBF then pulse reset via 8042. */
     for (i = 0; i < 100000u; i++) {
         if ((inb(PS2_STATUS) & PS2_ST_IBF) == 0u) {
@@ -353,6 +354,7 @@ platform_power_shutdown(void)
     kprintf("platform_power: shutdown path=acpi_s5 acpi_ok=%u Soft!=product\n",
             (unsigned)g_fAcpiOk);
     fb_console_hold(0, "SHUTDOWN: power button / S5");
+    fb_console_state("shutdown S5");
 
     if (g_fAcpiOk != 0u && g_u16Pm1aCnt != 0u) {
         /*

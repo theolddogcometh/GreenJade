@@ -19,8 +19,8 @@
  * Product direction (DDI/UDX userspace; not freestanding class drivers):
  *   inventory -> find_by_id -> window_note -> ddi_door SCAN/GET/OPEN/MAP_BAR
  *   -> UDX hosts (rtl8168_udx / xhci_udx) -> MMIO/IRQ/DMA cap mint OPEN
- * Soft inventory seeds that path only. Dual DoD A/B product close is UDX
- * bind proof - soft lamps alone do not close. G-AC-1: no Linux .ko product.
+ * Soft inventory seeds that path only. Dual DoD A close is host USB path;
+ * B close is interactive SSH login. Soft lamps / bind proof do not close. G-AC-1: no Linux .ko product.
  * Product hosts = UDX. Match graph = OPEN (soft residual != product match).
  * See docs/DDI_SOFT.md, UDX_LINUX_PORTER.md, ABI_FIRST_PIVOT.md,
  * SECURITY_CORE_DESIGN.md (caps / IOMMU / IRQ Notification).

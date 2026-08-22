@@ -71,7 +71,7 @@ extern "C" {
 
 /*
  * Soft Cap / Dual DoD residual honesty (eng only; Soft!=product).
- * Always-0 mint/server/confine; Dual DoD A/B remain OPEN until DUT proof.
+ * Always-0 mint/server/confine; Dual DoD A/B remain OPEN until USB path / interactive SSH login.
  * soft_ne_product=1 is the claim-class law (Soft!=product ASCII).
  * greppable: gj_vk_icd: soft residual honesty / dual_dod / Soft!=product
  */

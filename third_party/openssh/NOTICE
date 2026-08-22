@@ -1,0 +1,36 @@
+GreenJade third-party vendor notice
+===================================
+
+Package:          OpenSSH Portable
+Role:             product SSH daemon on the Linux ABI — not product MIT/Apache dual
+Upstream:         https://www.openssh.com/portable.html
+Git (canonical):  https://github.com/openssh/openssh-portable
+Tarball URL:      https://cdn.openbsd.org/pub/OpenBSD/OpenSSH/portable/openssh-10.5p1.tar.gz
+Version / tag:    10.5p1 (2026-08-11)
+Fetched:          2026-08-21
+Vendor date:      2026-08-21
+
+Tarball SHA-256 (hex):  d44d28a839ea9daf969cc69150fde59910b2b39361dad81a3bd6cbd19218db11
+Tarball SHA-256 (b64):  1E0oqDnqna+WnMaRUP3lmRCys5Nh2tgaO9bL0ZIY2xE=
+                  (matches https://www.openssh.org/txt/release-10.5)
+
+License file:     LICENCE (kept)
+SPDX (imported):  BSD-2-Clause AND BSD-3-Clause AND ISC AND LicenseRef-OpenSSH
+Upstream:         “OpenSSH contains no GPL code.” (LICENCE)
+
+VENDOR_STATUS:    OK — portable 10.5p1 imported; GPL Autoconf helpers omitted
+
+Omitted (GPL — not imported):
+  config.guess     GPL-3.0-or-later (FSF)
+  config.sub       GPL-3.0-or-later (FSF)
+  .github/         CI only (not needed)
+
+libcrypto:        third_party/openssl 3.5.7 (Apache-2.0 LTS). OpenSSH 10.5
+                  requires ECC including NISTP521 in libcrypto. Do not ship
+                  --without-openssl as product (upstream: EXPERIMENTAL).
+
+install-sh is X11/MIT (kept).
+
+This is not product kernel/user code. GJ glue lives in user/openssh/.
+user/sshd/sshd_gj.c stays a frozen NATIVE lab probe. Soft≠product.
+Dual DoD A/B stay OPEN until host interactive SSH login via this daemon.

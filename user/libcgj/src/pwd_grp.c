@@ -2,7 +2,7 @@
  * SPDX-License-Identifier: MIT OR Apache-2.0
  * Copyright (c) 2026 Project GreenJade contributors
  *
- * passwd/group soft fill: synthetic root + optional /etc/passwd|/etc/group
+ * passwd/group soft fill: synthetic root/sshd/jay + optional /etc/passwd
  * scan. fgetpwent/putpwent/getpwent_r live in graph batches — keep those out.
  */
 #include <errno.h>
@@ -15,10 +15,50 @@
 #include <unistd.h>
 
 static char g_szRoot[] = "root";
+static char g_szSshd[] = "sshd";
+static char g_szJay[] = "jay";
+static char g_szTty[] = "tty";
+static char g_szNobody[] = "nobody";
 static char g_szX[] = "x";
 static char g_szHome[] = "/";
+static char g_szJayHome[] = "/home/jay";
+static char g_szSshdHome[] = "/var/empty";
+static char g_szNobodyHome[] = "/nonexistent";
 static char g_szShell[] = "/bin/sh";
+static char g_szNologin[] = "/usr/sbin/nologin";
 static char *g_aEmptyMem[] = { NULL };
+static char *g_aJayMem[] = { g_szJay, NULL };
+
+struct pw_syn {
+    char *szName;
+    uid_t uid;
+    gid_t gid;
+    char *szGecos;
+    char *szDir;
+    char *szShell;
+};
+
+struct gr_syn {
+    char  *szName;
+    gid_t  gid;
+    char **ppMem;
+};
+
+/* Bring-up table only: root + sshd privsep + lab user jay. Not NSS. */
+static const struct pw_syn g_aPwSyn[] = {
+    { g_szRoot, 0, 0, g_szRoot, g_szHome, g_szShell },
+    { g_szSshd, 74, 74, g_szSshd, g_szSshdHome, g_szNologin },
+    { g_szJay, 1000, 1000, g_szJay, g_szJayHome, g_szShell },
+    { g_szNobody, 65534, 65534, g_szNobody, g_szNobodyHome, g_szNologin }
+};
+
+static const struct gr_syn g_aGrSyn[] = {
+    { g_szRoot, 0, g_aEmptyMem },
+    { g_szTty, 5, g_aEmptyMem }, /* OpenSSH pty_setowner */
+    { g_szSshd, 74, g_aEmptyMem },
+    { g_szJay, 1000, g_aJayMem },
+    { g_szNobody, 65534, g_aEmptyMem }
+};
 
 static struct passwd g_pw = {
     g_szRoot, g_szX, 0, 0, g_szRoot, g_szHome, g_szShell
@@ -30,6 +70,8 @@ static FILE *g_pPwFile;
 static FILE *g_pGrFile;
 static int g_fPwSynthetic;
 static int g_fGrSynthetic;
+static int g_iPwSyn;
+static int g_iGrSyn;
 static int g_fPwDone;
 static int g_fGrDone;
 
@@ -38,6 +80,8 @@ static char g_aPwLine[512];
 static char g_aGrLine[512];
 static char *g_aGrMem[32];
 static char g_aGrMemNames[256];
+static char g_aSetLogin[32];
+static int g_fSetLogin;
 
 static int
 copy_field(char **ppDst, char *szBuf, size_t *pOff, size_t cb, const char *szSrc)
@@ -203,6 +247,10 @@ parse_pw_line(char *szLine, struct passwd *pPw)
             *nl = '\0';
         }
     }
+    /* Fail closed: empty passwd field is ambient auth. Not a user. */
+    if (szPass[0] == '\0') {
+        return -1;
+    }
     pPw->pw_name = szName;
     pPw->pw_passwd = szPass;
     pPw->pw_uid = (uid_t)strtoul(szUid, NULL, 10);
@@ -295,26 +343,84 @@ parse_gr_line(char *szLine, struct group *pGr)
 }
 
 static struct passwd *
-synthetic_pw(uid_t uid)
+passwd_from_syn(const struct pw_syn *pSyn)
 {
-    g_pw.pw_name = g_szRoot;
+    g_pw.pw_name = pSyn->szName;
     g_pw.pw_passwd = g_szX;
-    g_pw.pw_uid = uid;
-    g_pw.pw_gid = (uid == 0) ? 0 : getgid();
-    g_pw.pw_gecos = g_szRoot;
-    g_pw.pw_dir = g_szHome;
-    g_pw.pw_shell = g_szShell;
+    g_pw.pw_uid = pSyn->uid;
+    g_pw.pw_gid = pSyn->gid;
+    g_pw.pw_gecos = pSyn->szGecos;
+    g_pw.pw_dir = pSyn->szDir;
+    g_pw.pw_shell = pSyn->szShell;
     return &g_pw;
 }
 
 static struct group *
-synthetic_gr(gid_t gid)
+group_from_syn(const struct gr_syn *pSyn)
 {
-    g_gr.gr_name = g_szRoot;
+    g_gr.gr_name = pSyn->szName;
     g_gr.gr_passwd = g_szX;
-    g_gr.gr_gid = gid;
-    g_gr.gr_mem = g_aEmptyMem;
+    g_gr.gr_gid = pSyn->gid;
+    g_gr.gr_mem = pSyn->ppMem;
     return &g_gr;
+}
+
+static const struct pw_syn *
+pw_syn_by_uid(uid_t uid)
+{
+    size_t iSyn;
+
+    for (iSyn = 0; iSyn < sizeof(g_aPwSyn) / sizeof(g_aPwSyn[0]); iSyn++) {
+        if (g_aPwSyn[iSyn].uid == uid) {
+            return &g_aPwSyn[iSyn];
+        }
+    }
+    return NULL;
+}
+
+static const struct pw_syn *
+pw_syn_by_name(const char *szName)
+{
+    size_t iSyn;
+
+    if (szName == NULL) {
+        return NULL;
+    }
+    for (iSyn = 0; iSyn < sizeof(g_aPwSyn) / sizeof(g_aPwSyn[0]); iSyn++) {
+        if (strcmp(g_aPwSyn[iSyn].szName, szName) == 0) {
+            return &g_aPwSyn[iSyn];
+        }
+    }
+    return NULL;
+}
+
+static const struct gr_syn *
+gr_syn_by_gid(gid_t gid)
+{
+    size_t iSyn;
+
+    for (iSyn = 0; iSyn < sizeof(g_aGrSyn) / sizeof(g_aGrSyn[0]); iSyn++) {
+        if (g_aGrSyn[iSyn].gid == gid) {
+            return &g_aGrSyn[iSyn];
+        }
+    }
+    return NULL;
+}
+
+static const struct gr_syn *
+gr_syn_by_name(const char *szName)
+{
+    size_t iSyn;
+
+    if (szName == NULL) {
+        return NULL;
+    }
+    for (iSyn = 0; iSyn < sizeof(g_aGrSyn) / sizeof(g_aGrSyn[0]); iSyn++) {
+        if (strcmp(g_aGrSyn[iSyn].szName, szName) == 0) {
+            return &g_aGrSyn[iSyn];
+        }
+    }
+    return NULL;
 }
 
 struct passwd *
@@ -334,11 +440,15 @@ getpwuid(uid_t uid)
         }
         (void)fclose(pF);
     }
-    if (uid != 0 && uid != getuid()) {
-        errno = 0;
-        return NULL;
+    {
+        const struct pw_syn *pSyn = pw_syn_by_uid(uid);
+
+        if (pSyn != NULL) {
+            return passwd_from_syn(pSyn);
+        }
     }
-    return synthetic_pw(uid);
+    errno = 0;
+    return NULL;
 }
 
 struct passwd *
@@ -363,11 +473,15 @@ getpwnam(const char *szName)
         }
         (void)fclose(pF);
     }
-    if (strcmp(szName, "root") != 0) {
-        errno = 0;
-        return NULL;
+    {
+        const struct pw_syn *pSyn = pw_syn_by_name(szName);
+
+        if (pSyn != NULL) {
+            return passwd_from_syn(pSyn);
+        }
     }
-    return synthetic_pw(0);
+    errno = 0;
+    return NULL;
 }
 
 struct passwd *
@@ -382,6 +496,7 @@ getpwent(void)
         g_pPwFile = fopen("/etc/passwd", "r");
         if (g_pPwFile == NULL) {
             g_fPwSynthetic = 1;
+            g_iPwSyn = 0;
         }
     }
     if (g_pPwFile != NULL) {
@@ -396,10 +511,12 @@ getpwent(void)
         g_fPwDone = 1;
         return NULL;
     }
-    /* Synthetic single-entry stream. */
-    if (g_fPwSynthetic == 1) {
-        g_fPwSynthetic = 2;
-        return synthetic_pw(0);
+    if (g_fPwSynthetic) {
+        if (g_iPwSyn < (int)(sizeof(g_aPwSyn) / sizeof(g_aPwSyn[0]))) {
+            return passwd_from_syn(&g_aPwSyn[g_iPwSyn++]);
+        }
+        g_fPwDone = 1;
+        return NULL;
     }
     g_fPwDone = 1;
     return NULL;
@@ -413,6 +530,7 @@ setpwent(void)
         g_pPwFile = NULL;
     }
     g_fPwSynthetic = 0;
+    g_iPwSyn = 0;
     g_fPwDone = 0;
 }
 
@@ -487,11 +605,15 @@ getgrgid(gid_t gid)
         }
         (void)fclose(pF);
     }
-    if (gid != 0 && gid != getgid()) {
-        errno = 0;
-        return NULL;
+    {
+        const struct gr_syn *pSyn = gr_syn_by_gid(gid);
+
+        if (pSyn != NULL) {
+            return group_from_syn(pSyn);
+        }
     }
-    return synthetic_gr(gid);
+    errno = 0;
+    return NULL;
 }
 
 struct group *
@@ -516,11 +638,15 @@ getgrnam(const char *szName)
         }
         (void)fclose(pF);
     }
-    if (strcmp(szName, "root") != 0) {
-        errno = 0;
-        return NULL;
+    {
+        const struct gr_syn *pSyn = gr_syn_by_name(szName);
+
+        if (pSyn != NULL) {
+            return group_from_syn(pSyn);
+        }
     }
-    return synthetic_gr(0);
+    errno = 0;
+    return NULL;
 }
 
 struct group *
@@ -535,6 +661,7 @@ getgrent(void)
         g_pGrFile = fopen("/etc/group", "r");
         if (g_pGrFile == NULL) {
             g_fGrSynthetic = 1;
+            g_iGrSyn = 0;
         }
     }
     if (g_pGrFile != NULL) {
@@ -549,9 +676,12 @@ getgrent(void)
         g_fGrDone = 1;
         return NULL;
     }
-    if (g_fGrSynthetic == 1) {
-        g_fGrSynthetic = 2;
-        return synthetic_gr(0);
+    if (g_fGrSynthetic) {
+        if (g_iGrSyn < (int)(sizeof(g_aGrSyn) / sizeof(g_aGrSyn[0]))) {
+            return group_from_syn(&g_aGrSyn[g_iGrSyn++]);
+        }
+        g_fGrDone = 1;
+        return NULL;
     }
     g_fGrDone = 1;
     return NULL;
@@ -565,6 +695,7 @@ setgrent(void)
         g_pGrFile = NULL;
     }
     g_fGrSynthetic = 0;
+    g_iGrSyn = 0;
     g_fGrDone = 0;
 }
 
@@ -622,16 +753,39 @@ getgrnam_r(const char *szName, struct group *pGrp, char *szBuf, size_t cb,
     return 0;
 }
 
+int
+setlogin(const char *szName)
+{
+    size_t n;
+
+    if (szName == NULL) {
+        errno = EINVAL;
+        return -1;
+    }
+    n = strlen(szName);
+    if (n >= sizeof(g_aSetLogin)) {
+        n = sizeof(g_aSetLogin) - 1;
+    }
+    memcpy(g_aSetLogin, szName, n);
+    g_aSetLogin[n] = '\0';
+    g_fSetLogin = 1;
+    return 0;
+}
+
 char *
 getlogin(void)
 {
-    char *p = getenv("LOGNAME");
+    char *p;
 
+    if (g_fSetLogin && g_aSetLogin[0] != '\0') {
+        return g_aSetLogin;
+    }
+    p = getenv("LOGNAME");
     if (p == NULL) {
         p = getenv("USER");
     }
     if (p == NULL || p[0] == '\0') {
-        return (char *)"user";
+        return g_szJay;
     }
     return p;
 }
@@ -652,4 +806,239 @@ getlogin_r(char *szBuf, size_t cb)
     }
     memcpy(szBuf, p, n + 1);
     return 0;
+}
+
+int
+setpassent(int nStayopen)
+{
+    (void)nStayopen;
+    setpwent();
+    return 1;
+}
+
+int
+setgroupent(int nStayopen)
+{
+    (void)nStayopen;
+    setgrent();
+    return 1;
+}
+
+#define GJ_IDCACHE 8
+
+struct uid_cache {
+    int   fUsed;
+    uid_t uid;
+    char  szName[32];
+};
+
+struct gid_cache {
+    int   fUsed;
+    gid_t gid;
+    char  szName[32];
+};
+
+static struct uid_cache g_aUidCache[GJ_IDCACHE];
+static struct gid_cache g_aGidCache[GJ_IDCACHE];
+static unsigned g_uUidClock;
+static unsigned g_uGidClock;
+
+static void
+fmt_id(char *sz, size_t cb, unsigned long u)
+{
+    char aDig[16];
+    int n = 0;
+    size_t o = 0;
+
+    if (cb == 0) {
+        return;
+    }
+    if (u == 0UL) {
+        aDig[n++] = '0';
+    } else {
+        while (u > 0UL && n < 16) {
+            aDig[n++] = (char)('0' + (int)(u % 10UL));
+            u /= 10UL;
+        }
+    }
+    while (n > 0 && o + 1 < cb) {
+        sz[o++] = aDig[--n];
+    }
+    sz[o] = '\0';
+}
+
+char *
+user_from_uid(uid_t uid, int nNouser)
+{
+    struct passwd *pPw;
+    unsigned i;
+    unsigned iSlot;
+
+    for (i = 0; i < GJ_IDCACHE; i++) {
+        if (g_aUidCache[i].fUsed && g_aUidCache[i].uid == uid) {
+            return g_aUidCache[i].szName;
+        }
+    }
+    pPw = getpwuid(uid);
+    if (pPw == NULL || pPw->pw_name == NULL) {
+        if (nNouser) {
+            return NULL;
+        }
+    }
+    iSlot = g_uUidClock % GJ_IDCACHE;
+    g_uUidClock++;
+    g_aUidCache[iSlot].fUsed = 1;
+    g_aUidCache[iSlot].uid = uid;
+    if (pPw != NULL && pPw->pw_name != NULL) {
+        size_t n = strlen(pPw->pw_name);
+
+        if (n >= sizeof(g_aUidCache[iSlot].szName)) {
+            n = sizeof(g_aUidCache[iSlot].szName) - 1;
+        }
+        memcpy(g_aUidCache[iSlot].szName, pPw->pw_name, n);
+        g_aUidCache[iSlot].szName[n] = '\0';
+    } else {
+        fmt_id(g_aUidCache[iSlot].szName, sizeof(g_aUidCache[iSlot].szName),
+               (unsigned long)uid);
+    }
+    return g_aUidCache[iSlot].szName;
+}
+
+char *
+group_from_gid(gid_t gid, int nNogroup)
+{
+    struct group *pGr;
+    unsigned i;
+    unsigned iSlot;
+
+    for (i = 0; i < GJ_IDCACHE; i++) {
+        if (g_aGidCache[i].fUsed && g_aGidCache[i].gid == gid) {
+            return g_aGidCache[i].szName;
+        }
+    }
+    pGr = getgrgid(gid);
+    if (pGr == NULL || pGr->gr_name == NULL) {
+        if (nNogroup) {
+            return NULL;
+        }
+    }
+    iSlot = g_uGidClock % GJ_IDCACHE;
+    g_uGidClock++;
+    g_aGidCache[iSlot].fUsed = 1;
+    g_aGidCache[iSlot].gid = gid;
+    if (pGr != NULL && pGr->gr_name != NULL) {
+        size_t n = strlen(pGr->gr_name);
+
+        if (n >= sizeof(g_aGidCache[iSlot].szName)) {
+            n = sizeof(g_aGidCache[iSlot].szName) - 1;
+        }
+        memcpy(g_aGidCache[iSlot].szName, pGr->gr_name, n);
+        g_aGidCache[iSlot].szName[n] = '\0';
+    } else {
+        fmt_id(g_aGidCache[iSlot].szName, sizeof(g_aGidCache[iSlot].szName),
+               (unsigned long)gid);
+    }
+    return g_aGidCache[iSlot].szName;
+}
+
+int
+uid_from_user(const char *szName, uid_t *pUid)
+{
+    struct passwd *pPw;
+
+    if (szName == NULL || pUid == NULL) {
+        errno = EINVAL;
+        return -1;
+    }
+    pPw = getpwnam(szName);
+    if (pPw == NULL) {
+        return -1;
+    }
+    *pUid = pPw->pw_uid;
+    return 0;
+}
+
+int
+gid_from_group(const char *szName, gid_t *pGid)
+{
+    struct group *pGr;
+
+    if (szName == NULL || pGid == NULL) {
+        errno = EINVAL;
+        return -1;
+    }
+    pGr = getgrnam(szName);
+    if (pGr == NULL) {
+        return -1;
+    }
+    *pGid = pGr->gr_gid;
+    return 0;
+}
+
+struct passwd *
+pw_dup(const struct passwd *pSrc)
+{
+    size_t cbName;
+    size_t cbPass;
+    size_t cbGecos;
+    size_t cbDir;
+    size_t cbShell;
+    size_t cb;
+    char *pBlk;
+    struct passwd *pDst;
+    char *pOff;
+
+    if (pSrc == NULL) {
+        errno = EINVAL;
+        return NULL;
+    }
+    cbName = (pSrc->pw_name != NULL) ? strlen(pSrc->pw_name) + 1 : 1;
+    cbPass = (pSrc->pw_passwd != NULL) ? strlen(pSrc->pw_passwd) + 1 : 1;
+    cbGecos = (pSrc->pw_gecos != NULL) ? strlen(pSrc->pw_gecos) + 1 : 1;
+    cbDir = (pSrc->pw_dir != NULL) ? strlen(pSrc->pw_dir) + 1 : 1;
+    cbShell = (pSrc->pw_shell != NULL) ? strlen(pSrc->pw_shell) + 1 : 1;
+    cb = sizeof(*pDst) + cbName + cbPass + cbGecos + cbDir + cbShell;
+    pBlk = malloc(cb);
+    if (pBlk == NULL) {
+        return NULL;
+    }
+    pDst = (struct passwd *)(void *)pBlk;
+    pOff = pBlk + sizeof(*pDst);
+    pDst->pw_uid = pSrc->pw_uid;
+    pDst->pw_gid = pSrc->pw_gid;
+    pDst->pw_name = pOff;
+    if (pSrc->pw_name != NULL) {
+        memcpy(pOff, pSrc->pw_name, cbName);
+    } else {
+        pOff[0] = '\0';
+    }
+    pOff += cbName;
+    pDst->pw_passwd = pOff;
+    if (pSrc->pw_passwd != NULL) {
+        memcpy(pOff, pSrc->pw_passwd, cbPass);
+    } else {
+        pOff[0] = '\0';
+    }
+    pOff += cbPass;
+    pDst->pw_gecos = pOff;
+    if (pSrc->pw_gecos != NULL) {
+        memcpy(pOff, pSrc->pw_gecos, cbGecos);
+    } else {
+        pOff[0] = '\0';
+    }
+    pOff += cbGecos;
+    pDst->pw_dir = pOff;
+    if (pSrc->pw_dir != NULL) {
+        memcpy(pOff, pSrc->pw_dir, cbDir);
+    } else {
+        pOff[0] = '\0';
+    }
+    pOff += cbDir;
+    pDst->pw_shell = pOff;
+    if (pSrc->pw_shell != NULL) {
+        memcpy(pOff, pSrc->pw_shell, cbShell);
+    } else {
+        pOff[0] = '\0';
+    }
+    return pDst;
 }

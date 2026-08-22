@@ -14,9 +14,9 @@ Specs: [Architecture](GREENJADE_KERNEL_SPEC.md) · [Design complete](DESIGN_SPEC
 |-------|----------------|
 | **Bar3 / Deck Top 50** | [STEAM_BAR3_STATUS.md](STEAM_BAR3_STATUS.md) only (**OPEN** / **NOT-TRIED × 50**) |
 | **ABI-first + G752 drivers** | [ABI_FIRST_PIVOT.md](ABI_FIRST_PIVOT.md) · [ABI_WAVE_STATUS.md](ABI_WAVE_STATUS.md) |
-| **Host Linux `.ko` path** | [LINUX_MODULE_PATH.md](LINUX_MODULE_PATH.md) · [LAPTOP_LINUX_DRIVER_HOST.md](LAPTOP_LINUX_DRIVER_HOST.md) |
-| **Soft `pci_dev` plan** | [PCI_DEV_SOFT_LAYOUT.md](PCI_DEV_SOFT_LAYOUT.md) |
-| **r8169 MMIO handoff** | [R8169_MMIO_HANDOFF.md](R8169_MMIO_HANDOFF.md) |
+| **Host Linux `.ko` path** | **Leftover** — [LINUX_MODULE_PATH.md](LINUX_MODULE_PATH.md) (abandoned, not linked). Product drivers = UDX+ABI. **G-AC-1.** |
+| **Soft `pci_dev` plan** | [PCI_DEV_SOFT_LAYOUT.md](PCI_DEV_SOFT_LAYOUT.md) — eng residual, not Dual DoD |
+| **r8169 MMIO handoff** | [R8169_MMIO_HANDOFF.md](R8169_MMIO_HANDOFF.md) — leftover; product NIC = `rtl8168_udx` |
 | **Soft DDI** | [DDI_SOFT.md](DDI_SOFT.md) |
 | **Assurance lite** | [ASSURANCE_LITE.md](ASSURANCE_LITE.md) — claim classes · DoD evidence · hazards (not DO-178C cert) |
 | **Pure-C concurrency / ops** | [PURE_C_CONCURRENCY_AND_OPS.md](PURE_C_CONCURRENCY_AND_OPS.md) — Pikus · HALL_OF_SHAME · Rosenbridge policy · Soft!=product |
@@ -24,29 +24,31 @@ Specs: [Architecture](GREENJADE_KERNEL_SPEC.md) · [Design complete](DESIGN_SPEC
 
 ---
 
-## Current track — 2026-08-14 · **Linux drivers via ABI/UDX only** · flash bar **v0.1.136**
+## Current track — 2026-08-21 · **microkernel + Linux ABI in userspace** · flash bar **v0.1.184**
 
-**Operator direction (2026-08-06):** **Stop freestanding rtl8168 rabbit hole.** Remove freestanding NIC from product the **same as freestanding USB**. **Focus only on getting Linux-shaped drivers to work** over **hot + cold ABI + DDI/UDX** (userspace). Soft ≠ product. Dual **MIT OR Apache-2.0**. **Bar3** only [STEAM_BAR3_STATUS.md](STEAM_BAR3_STATUS.md).  
+**Product goal:** pure C11 microkernel TCB · clean-room Linux ABI · Linux **apps and drivers in userspace** · then Steam/Proton. Design order: [DESIGN_SPEC_COMPLETE.md](DESIGN_SPEC_COMPLETE.md) §12–13. Ladder: [AGENTS.md](../AGENTS.md) Product path.  
+**Operator direction (2026-08-06):** **Stop freestanding rtl8168 rabbit hole.** Remove freestanding NIC from product the **same as freestanding USB**. Product drivers = **hot + cold ABI + DDI/UDX** (userspace). Soft ≠ product. Dual **MIT OR Apache-2.0**. **Bar3** only [STEAM_BAR3_STATUS.md](STEAM_BAR3_STATUS.md).  
 **Process:** [ASSURANCE_LITE.md](ASSURANCE_LITE.md) · [ABI_FIRST_PIVOT.md](ABI_FIRST_PIVOT.md).  
-**Check:** `make assurance-check` (L1 only).
+**Check:** `make assurance-check` (L1 only).  
+**Stop:** exclusive soft deepen · continuum `makefile_max` · leftover flybar docs as primary · re-link `abandoned/` · `.ko` as product.
 
-**Progress note (docs honesty · Soft≠product):** Dual DoD **B** laptop **L3 ARP + ping proven** (2026-08-14) on `rtl8168_udx` / lab **10.200.125.50**. Dual DoD **B still OPEN** until host **sshd :22**. Dual DoD **A still OPEN** (`xhci_udx` RS-off program; no BOT/MSC). Fly **v0.1.136** (VT-d multi-level identity + firmware TES disarm + UDX product path). Freestanding rtl/USB **SKIP**. **MEM_PLACE** Option A soft + **PURE_C_CONCURRENCY** house rules remain. Soft≠product; **G-AC-1**.
+**Progress note (docs honesty · Soft≠product):** Fly **v0.1.184** packed, not host-probed — **A** park RS-off · **B** exec TX drain after 183 `Sending command: true` **PASS** / exec 124. GOP isolate; login OPEN. Dual DoD **A/B OPEN**. Soft≠product; **G-AC-1**.
 
 ### DUT STATUS (fly this cut — test what you fly · **no invent next N**)
 
 | Item | DUT / fly status |
 |------|------------------|
-| **Flash bar / STATUS title** | **STATUS (static) v0.1.136** (`GJ_IMAGE_VERSION`) — serial `main: image version=…` |
+| **Flash bar / STATUS title** | **STATUS (static) v0.1.184** — A park RS-off · B exec TX drain after 183 Sending command. Packed, not host-probed. **login OPEN** |
 | **Soft ≠ product** | Soft lamps / soft bridges / soft ksym **≠** product close |
 | **G-AC-1** | No Linux `.ko` runs **in kernel** as product |
-| **Freestanding rtl** | **SKIP** default (`GJ_RTL8168_PROBE=0`) — not Dual DoD **B** |
-| **Freestanding USB** | **SKIP** default (`GJ_XHCI_MSC_PROBE=0`) — not Dual DoD **A** |
-| **Soft `.ko` init** | **SKIP exec** all staged `.ko` (`freestanding_no_exec`) — eng residual |
-| **Dual DoD A** | **UDX product OPEN** — `xhci_udx` + DDI (Linux-shaped USB userspace) |
-| **Dual DoD B** | **UDX product OPEN** until sshd **:22** — laptop **ARP + ping proven** (2026-08-14) |
+| **Freestanding rtl** | **SKIP** default (`GJ_RTL8168_PROBE=0`) — not Dual DoD **B** · tree in `./abandoned` |
+| **Freestanding USB** | **SKIP** default (`GJ_XHCI_MSC_PROBE=0`) — not Dual DoD **A** · tree in `./abandoned` |
+| **Soft `.ko` init** | Abandoned in-kernel linux_*_soft → `./abandoned` — **G-AC-1** |
+| **Dual DoD A** | **OPEN** — `xhci_udx` RS-off (177 host `PASS rs=0`); USB path OPEN |
+| **Dual DoD B** | **OPEN** for **interactive login** — PK_OK + SUCCESS **proven** on 0.1.178; **0.1.183** host `Sending command: true` **PASS**; exec 124; fly **0.1.184** packed, not host-probed; GOP dash isolate stays |
 | **T0 product net** | **virtio-net** on QEMU; laptop wire is **UDX** |
 | **Bar3** | [STEAM_BAR3_STATUS.md](STEAM_BAR3_STATUS.md) only (**OPEN**) |
-| **Next stamp** | **Do not invent next N** — bump only on real flashable cut |
+| **Next stamp** | **Do not invent next N** — bump only on real flashable cut · **0.2.0** reserved (not this cut) |
 
 ### Product driver model (normative — do not re-litigate)
 
@@ -64,28 +66,30 @@ Specs: [Architecture](GREENJADE_KERNEL_SPEC.md) · [Design complete](DESIGN_SPEC
 
 | # | DoD | Class | Status | Close when |
 |---|-----|-------|--------|------------|
-| **A** | **Linux-shaped USB** (laptop) | C1/C2 UDX | **OPEN** | Userspace UDX/DDI host path + soft ksym seed. **Not** freestanding MSC. **Not** `usb_storage.ko` init in kernel. |
-| **B** | **Linux-shaped NIC** (laptop) | C1/C2 UDX | **OPEN** (L3 ARP/ping **proven**) | Close when host **sshd :22** banner on lab **10.200.125.50**. Wire/ARP/ICMP already via `rtl8168_udx`. **Not** freestanding rtl. **Not** in-kernel `r8169.ko`. Soft lamps alone ≠ close. |
+| **A** | **Linux-shaped USB** (laptop) | C1/C2 UDX | **OPEN** (xhci **RS-off**; scratchpad SKIP ≠ close) | Close when host **USB path** on the DUT. Scratchpad / clamp / RS-off ≠ close. Never `USBCMD.RS=1` unless the operator named that experiment. **Not** freestanding MSC. **Not** `usb_storage.ko` init in kernel. |
+| **B** | **Linux-shaped NIC** (laptop) | C1/C2 UDX | **OPEN** (banner + PK_OK **proven** on 0.1.178; **0.1.183** `Sending command: true` **PASS** / exec 124; fly **0.1.184** exec TX drain **packed, not host-probed**; **login OPEN**) | Close when host **interactive SSH login** on lab **10.200.125.50**. Banner / KEX / NEWKEYS / ACCEPT / continue-list / PK_OK / SUCCESS / `true` exit 0 ≠ login. Wire/ARP/ICMP via `rtl8168_udx`. **Not** freestanding rtl. **Not** in-kernel `r8169.ko`. Soft lamps alone ≠ close. |
 
 **Defaults (honesty):**
 - `GJ_XHCI_MSC_PROBE=0` · **`GJ_RTL8168_PROBE=0`** — freestanding class SKIP.
-- Soft r8169 load/ksym may still run eng residual (`INIT=0`); **WIRE** is not freestanding product.
+- Abandoned in-kernel rtl/xhci_msc/linux_*_soft → `./abandoned` (not linked). **WIRE** is UDX.
 - STATUS title: `STATUS (static) v…` (test what you fly).
 
 **FAULT classes (assurance hazards):** H1–H4 still apply (no IRQ `net_eth_poll`; clone death order; stamp storms). Freestanding **R0 residual is not a product track.**
 
 | # | Work | Status | Note |
 |---|------|--------|------|
-| **1** | Freestanding rtl / freestanding USB | **SKIP default** | Residual opt-in only; **not** dual DoD close |
-| **2** | **Hot + cold Linux ABI** | **PRIMARY** | Host Linux-shaped apps + drivers in userspace |
-| **3** | **`rtl8168_udx` + DDI caps** | **PRIMARY · DoD B** | Product NIC path |
-| **4** | **`xhci_udx` + DDI caps** | **PRIMARY · DoD A** | Product USB path |
-| **5** | Soft ksym / module path | Eng residual | Soft≠product; G-AC-1 |
+| **1** | Freestanding rtl / freestanding USB | **SKIP default** | Residual opt-in only; **not** dual DoD close · `./abandoned` not linked |
+| **2** | **Hot + cold Linux ABI** | **PRIMARY** | Host Linux-shaped **apps** in userspace; personality still kthread (not product) |
+| **3** | **`rtl8168_udx` + DDI caps** | **PRIMARY · DoD B wire** | Product NIC path; L3 ARP/ping documented; **not** B close |
+| **4** | **`xhci_udx` + DDI caps** | **PRIMARY · DoD A** | Product USB path; **RS-off** until named |
+| **5** | Soft ksym / module path | **Leftover** | Soft≠product; **G-AC-1**; do not resume as product |
 | **6** | virtio-net T0 | Product default (QEMU) | Until UDX owns real HW |
+| **7** | **`openssl-gj` / `openssh-gj` glue** | **LANDED (DUT ELF)** | Product SSH = **OpenSSH-portable 10.5p1** + **OpenSSL 3.5.7 LTS libcrypto**. DUT `build/openssh-dut/sshd` **7967144 B** entry **0x4000000** (mtime 02:46). Compile / embed ≠ Dual DoD B close |
+| **8** | **Linux ABI for OpenSSH** | **BLOCKING · DoD B** | T0 QEMU51 (2026-08-22): listen + `271 ret=1` + accept 99 + USER fork 156; parent last-ref `close(99)`; **no `SSH-2.0`**. Next: keep those keys, then LCN inherit, then `execve` sshd-session. **Not** PTY/vfork/dash as current. `sshd_gj` **abandoned**. Dual DoD **A/B OPEN**. Playbook [OVERNIGHT.md](OVERNIGHT.md). |
 
-**Blocking now:** Linux-shaped **userspace** NIC + USB hosts over ABI/UDX. Soft ≠ product · **G-AC-1.**
+**Blocking now:** Product SSH is OpenSSH-portable LINUX @ **0x4000000**. `sshd_gj` is in [`abandoned/user/sshd/`](../abandoned/user/sshd/) (**not linked**). QEMU51 proved listen/accept/fork; Dual DoD **B** still needs host **interactive login**. Soft ≠ product · **G-AC-1**. No stamp invent.
 
-### Stamp **v2026.08.04.16** (prior soft-land cut; fly flash bar **v0.1.97**)
+### Stamp **v2026.08.04.16** (prior soft-land cut; **not** fly **v0.1.184**)
 
 | Item | Note |
 |------|------|
@@ -114,16 +118,16 @@ Specs: [Architecture](GREENJADE_KERNEL_SPEC.md) · [Design complete](DESIGN_SPEC
 | Item | Note |
 |------|------|
 | **DUT** | G752VT · `10ec:8168` · xHCI `8086:a12f` · lab **10.200.125.50** |
-| **Image stamp / flash bar** | Fly **STATUS (static) v0.1.136** (`GJ_IMAGE_VERSION`). Bump each flashable cut; serial `main: image version=…` |
+| **Image stamp / flash bar** | Fly **STATUS (static) v0.1.184** (`GJ_IMAGE_VERSION`). Packed, not host-probed. Prior **0.1.183** `Sending command: true` **PASS**; exec 124. **0.2.0** reserved (not this cut) |
 | **Lab ping** | **UDX product ARP + ping proven** 2026-08-14 on **10.200.125.50**. Earlier freestanding ICMP is historical and **≠** Dual DoD **B** close |
-| **sshd** | Soft listen **:22** ≠ host banner. Product **:22** on laptop wire still **OPEN** (closes Dual DoD **B**). Soft lamps alone ≠ close |
+| **sshd** | Product = OpenSSH 10.5 LINUX @ **0x4000000**. T0 QEMU51 (2026-08-22): listen + accept + USER fork; **no `SSH-2.0`**. Historical 177/178 PK_OK/SUCCESS were abandoned `sshd_gj` proven-class. Dual DoD **B OPEN** for **interactive login**. GOP isolate stays. Soft lamps / SUCCESS ≠ close |
 | **Hybrid 4a** | Eng residual: `HYBRID WIRE=FS SOFT=R8169` · freestanding may own wire at **gate0** when opt-in — **not** product AC; default freestanding **SKIP** |
 | **soft init** | **SKIP exec** all **`.ko`** (`freestanding_no_exec`) — **G-AC-1** |
 | **REAL probe** | Hostish REAL soft PASS when gated; gate0 skips REAL for 8168 |
 | **RX unblock** | VT-d identity **all buses** + 8168G CPlus/EarlyOffV2 (when RX live) |
 | **T0 product net** | virtio |
 | **Docs** | No test-panel photo IDs in public docs (lamps / serial only) |
-| **Holds 7–15** | ksym · mod · netdev · probe · pci · xHCI · L2 BR · HYBRID · hold6 force refresh · hold14 freestanding R mirror |
+| **Holds (182 panel)** | 1 isolate · 3 xhci RS-off · 4 inj/tx/lnk · 7 IP :22 · 8 DoD A=OPEN B=OPEN. GOP isolate stays. Historical holds 7–15 are leftover MAP |
 
 ---
 
@@ -700,7 +704,7 @@ Exclusive deepen shipped greppable soft product surfaces for the open list — *
 9. [ ] Full multi-server security / `confine` + drop ambient authority
 10. [x] `io_uring` min rings + SQE I/O + register depth/more opcodes soft PASS (game/title I/O still open)
 11. [x] `aarch64` product-shaped scaffold (shared C string/stdio/pmm/sched + PSCI; UEFI PE still open)
-12. [ ] **Dual DoD (G752 laptop)** — **A** Linux-shaped USB via **UDX/DDI** (`xhci_udx` …) **OPEN** · **B** Linux-shaped NIC via **UDX/DDI** (`rtl8168_udx` …) **OPEN** until sshd **:22** (laptop **ARP + ping proven** 2026-08-14). **Not** freestanding MSC/rtl close; freestanding default **SKIP**. Soft ≠ product · **G-AC-1.** See Current track. Flash bar **v0.1.136**.
+12. [ ] **Dual DoD (G752 laptop)** — **A** Linux-shaped USB via **UDX/DDI** (`xhci_udx` …) **OPEN** · **B** Linux-shaped NIC via **UDX/DDI** (`rtl8168_udx` …) **OPEN** until host **interactive SSH login** (SUCCESS **proven** on 0.1.178; **0.1.183** host `Sending command: true` **PASS**; exec 124; fly **0.1.184** packed, not host-probed). **Not** freestanding MSC/rtl close; freestanding default **SKIP**. Soft ≠ product · **G-AC-1.** See Current track. Flash bar **v0.1.184**.
 
 ---
 

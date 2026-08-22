@@ -5,6 +5,7 @@
 | **Status** | Living list — start here for real-hw install work |
 | **Policy** | Clean-room dual MIT OR Apache-2.0 only (no GPL drivers) |
 | **Tiers** | See [SOLARIS_STYLE_REMAINING.md](SOLARIS_STYLE_REMAINING.md) 13 |
+| **Fly bar** | **STATUS (static) v0.1.184** (`GJ_IMAGE_VERSION`) packed, not host-probed — Dual DoD **A/B OPEN**; GOP isolate; never `USBCMD.RS=1`; freestanding **SKIP** (`GJ_RTL8168_PROBE=0` · `GJ_XHCI_MSC_PROBE=0`); **G-AC-1**; **0.2.0** reserved; **v0.1.183** host FAIL (`Sending command: true` **PASS**; exec 124) historical; **v0.1.180** host **143315** **FAIL** / **130127** first `true` **exit 0** (historical; not login) |
 
 ## Tiers
 
@@ -40,7 +41,7 @@
 | Input | USB HID (kbd/mouse) | Host HC probe (`usb: probe`); HID parse later |
 | USB HC | UHCI/OHCI/EHCI/xHCI | PCI class 0C:03 probe; **in-kernel MSC = soft scaffold only** (see below) |
 | Input | PS/2 8042 | Soft status probe (`ps2: status=… PASS`) |
-| Net | **virtio-net (T0 product)**; real NIC later via userspace/DDI | In-kernel `rtl8168` = **lab soft only** |
+| Net | **virtio-net (T0 product)**; laptop wire is **`rtl8168_udx`** | In-kernel `rtl8168` = **SKIP** (abandoned) |
 | Firmware | UEFI + ACPI | `X86_64_INTEL_PLATFORM.md` |
 
 ### Product path vs freestanding soft drivers (2026-08 ABI-first)
@@ -51,7 +52,7 @@
 | **Userspace + DMA/IRQ caps (DDI) + UDX** | Real-HW class drivers: clean-room or **out-of-tree dual-license** hosts | **Yes** (when DDI grants ship) |
 | **Soft DDI / `devmgr_soft` + soft host path** | Types + init/scan/window-note; ddi_door / udx bind soft lamps | **No** — see [DDI_SOFT.md](DDI_SOFT.md) · [LAPTOP_LINUX_DRIVER_HOST.md](LAPTOP_LINUX_DRIVER_HOST.md) |
 | **In-kernel `xhci_msc` / `rtl8168`** | Bring-up scaffold on G752; panel stages | **No** — lab only; soft ≠ T1 close |
-| **G752VT soft UDX class notes** | `rtl8168_udx` (`10ec:8168`) / `xhci_udx` (`8086:a12f`) soft | **No** — soft host path ≠ product NIC/USB |
+| **G752VT UDX class hosts** | `rtl8168_udx` (`10ec:8168`) / `xhci_udx` (`8086:a12f`) | Dual DoD **A/B OPEN** on fly **v0.1.184** packed, not host-probed until host USB path / interactive SSH login. Never `USBCMD.RS=1`. Freestanding **SKIP** (`GJ_RTL8168_PROBE=0` · `GJ_XHCI_MSC_PROBE=0`). **G-AC-1** |
 | **`linux-hwtest` inventory** | Full Linux stack for DUT map | **No** — operator truth only |
 | **Linux `.ko` / GPL drivers in tree** | Forbidden ([DESIGN_SPEC_COMPLETE.md](DESIGN_SPEC_COMPLETE.md) **G-AC-1**) | **Never** |
 
@@ -109,7 +110,7 @@ Two **different** USB images — do not mix labels or claims:
 | 3. Layout | **p1** ESP FAT **`GREENJADE`** (UEFI) · **p2** **ext4** **`GJ-PERSIST`** (logs + ssh + **steam/**) |
 | 4. Boot DUT | UEFI → `BOOTX64.EFI` → serial/panel `GJ-EFI` / `M0 OK` |
 | 5. Collect logs | Lab host: `sudo mount -L GJ-PERSIST /mnt/gj-persist` → `logs/`; ESP: `EFI/GREENJADE/BOOT.LOG`, `KLOG.TXT` |
-| 6. Remote SSH | Product **sshd** default-on on virtio-net (`sshd.elf` **TCP :22**). Real laptop NIC **not** virtio. Lab: `sudo make hwtest-ssh-setup`. QEMU hostfwd `2222→22`. |
+| 6. Remote SSH | T0 QEMU **sshd** on virtio-net (`sshd.elf` **TCP :22**). Laptop Dual DoD B is **rtl8168_udx** on fly **v0.1.184** packed, not host-probed until host **interactive SSH login** (**v0.1.183** host FAIL: `Sending command: true` **PASS**; exec 124 historical; **v0.1.180** host **143315** **FAIL** / **130127** first `true` **exit 0** historical; not login). QEMU hostfwd `2222→22` ≠ Dual DoD B close. |
 | 7. Steam (options **2 + 3**) | **No dpkg.** Media only on `GJ-PERSIST/steam/STATUS`. See [STEAM_HWTEST.md](STEAM_HWTEST.md). **bar3 OPEN.** |
 
 ### B) Linux inventory USB (DUT map / xHCI evidence)
@@ -128,7 +129,7 @@ Also available:
 | Target | Output | Use |
 |--------|--------|-----|
 | `make live-iso` | `build/greenjade-live.iso` | QEMU `-cdrom` / optical Multiboot2+EFI hybrid |
-| `./scripts/run-live-iso.sh` | QEMU boot of live ISO | Serial on stdio; hostfwd `2222→22` for product sshd path |
+| `./scripts/run-live-iso.sh` | QEMU boot of live ISO | Serial on stdio; hostfwd `2222→22` is T0 virtio, not Dual DoD B close |
 | `make sshd-gj` / `make sshd` | `build/user/sshd.elf` / `build/sshd` | Freestanding product daemon + host POSIX smoke |
 
 QEMU ISO smoke:

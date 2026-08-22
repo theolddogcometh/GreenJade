@@ -1,0 +1,4 @@
+# Hardware-test packer — execute make + extract proof; never flash
+description = "GreenJade hwtest packer (make + image extract/hash; never dd/install-usb)"
+default_capability_mode = "execute"
+reasoning_effort = "high"

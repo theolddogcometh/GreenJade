@@ -48,7 +48,7 @@
  *   Eth poll ownership is run-loop only (scheduler_run, full thr stack).
  *   IRQ-path eth poll is the stack-smash / #PF I=1 wild RIP fault class (H1).
  *   Lean residual lamps document ownership; soft != product Dual DoD B close
- *   (host arping/ping / :22 still OPEN until L3). No version stamps.
+ *   (host interactive SSH login still OPEN). No version stamps.
  *   No stamp storms (inventory cap init+handoff; residual lean <= few lines).
  *
  * greppable: net_eth_poll=run_loop_only net_eth_irq=0 dual_dod_b

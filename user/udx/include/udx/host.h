@@ -72,8 +72,8 @@
  *
  * Product residual (C2; Dual DoD B OPEN; stamp-free bar v2026.08.04.75):
  *   product=UDX+sshd+stack — host bind residual for rtl8168_udx so
- *   netstackd + sshd can product-serve when Cap mint lands.
- *   Soft bind PASS != Dual DoD B wire close (agent!=close).
+ *   leftover netstackd + product sshd can product-serve (Dual DoD B hop is kernel net_tcp).
+ *   Soft bind PASS != Dual DoD B close (close = interactive SSH login).
  * greppable: udx: soft product residual product=UDX+sshd+stack
  *
  * Freestanding bind residual (not host-inject-only):
@@ -161,7 +161,7 @@
 /*
  * Soft residual Cap / Dual DoD honesty constants (eng only; Soft!=product).
  * Always-0 mint/server/confine flags match host soft residual lean emit.
- * Dual DoD A/B remain OPEN (1) until DUT proof closes them — lamps alone
+ * Dual DoD A/B remain OPEN (1) until USB path / interactive SSH login — lamps alone
  * never flip these to closed. No version stamp. No GPL. G-AC-1.
  * Grep: UDX_HOST_SOFT_CAP_MINT / UDX_HOST_SOFT_DOD_A_OPEN / DOD_B_OPEN
  * Grep: dual_dod_a=OPEN_UDX dual_dod_b=OPEN_UDX Soft!=product

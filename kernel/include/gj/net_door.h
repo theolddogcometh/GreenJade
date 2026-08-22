@@ -28,7 +28,7 @@
  *   interim. GJ_NET_OP_POLL advances freestanding eth via net_eth_poll
  *   (thr/door stack only - never IRQ/timer; H1). Soft always 0; never NODEV.
  *   ACCEPT empty soft EAGAIN (-11). dual_dod_b=OPEN_UDX product_sshd_tcp22=OPEN
- *   until DUT host banner + UDX owns wire. Residual: init + first-call once
+ *   until host interactive SSH login. Banner != login. Residual: init + first-call once
  *   only (no per-POLL/STATS/RING dumps). Soft!=product dual license.
  *   UDX/host residual deepen (Soft!=product): per-op ring-family tallies +
  *   sparse ring MAP notes (map_va, map_which, map_ok, map_reclaim, map_nodev,
@@ -69,7 +69,7 @@
  *   CLAIM/RELEASE + ring MAP/DMA/DESC/USER_AVAIL -> netstackd/UDX handoff
  *
  * Soft gaps (Soft!=product; not thrashing product ABI):
- *   shutdown / sockopt / getsockname - no net_tcp_* yet
+ *   shutdown / sockopt / getsockname live on net_tcp_* (Linux ABI); not door opcodes.
  *   rtl8168 freestanding - out of door scope; NOT product DoD B (do not thrash)
  *
  * Greppable product markers (main / netstackd; keep ABI stable):
@@ -205,7 +205,7 @@
 /**
  * ACCEPT: arg1=listen fd -> connected peer fd or -EAGAIN (-11 soft empty).
  * sshd interim park: empty accept is soft EAGAIN (Soft!=product; not hard-fail).
- * Product DoD B = UDX not freestanding rtl; :22 remains OPEN until DUT banner.
+ * Product DoD B = UDX not freestanding rtl; :22 remains OPEN until interactive SSH login.
  */
 #define GJ_NET_OP_ACCEPT 25u
 /**
@@ -251,6 +251,9 @@
  * Returns 0 if queued, -1 if not ready / full / inval. Soft!=product.
  */
 int net_door_udx_tx_soft(const void *pFrame, u32 cb);
+
+/** Live ETH_TX_PULL queue depth (0 = empty). Soft!=product. */
+u32 net_door_udx_tx_pending(void);
 
 /** Non-zero when ETH_UDX_READY armed (product UDX L2 soft). Soft!=product. */
 int net_door_udx_ready(void);

@@ -654,7 +654,7 @@ store_soft_residual_lean_once(void)
 
     /*
      * Arm 14: Dual DoD OPEN residual honesty (law).
-     * Soft residual never closes Dual DoD A (USB) or B (sshd :22).
+     * Soft residual never closes Dual DoD A (USB) or B (interactive SSH login).
      * Product store = userspace UDX / storaged (G-AC-1).
      */
     u32Checks++;

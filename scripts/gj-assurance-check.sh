@@ -5,7 +5,7 @@
 #
 # Verifies permanent hazard rules and claim-honesty greps against the tree.
 # This is L1 process evidence only — Soft≠product; not Dual DoD close; not
-# DO-178C certification. L3 DoD still needs stamped flash + host probes.
+# DO-178C certification. Dual DoD A until USB path; B until interactive SSH login.
 #
 # L1 surfaces (deepened):
 #   H1/H3 permanent hazards
@@ -133,7 +133,7 @@ fi
 
 # --- Image stamp + assurance docs ------------------------------------------
 # Flash bar honesty: stamp identity only — Soft!=product; not Dual DoD close.
-# Current lab bar example: v2026.08.04.72 (config.h; re-flash for L3).
+# Current lab bar example: v0.1.178 (config.h; re-flash for L3).
 log "assurance: lite config / docs"
 if [ -f kernel/include/gj/config.h ] \
 	&& grep -q 'GJ_IMAGE_VERSION' kernel/include/gj/config.h; then
@@ -144,8 +144,10 @@ if [ -f kernel/include/gj/config.h ] \
 	else
 		note_fail "GJ_IMAGE_VERSION define not parseable"
 	fi
-	# Stamp shape YYYY.MM.DD.N — greppable flash-bar form
-	if printf '%s' "$ver" | grep -qE '^[0-9]{4}\.[0-9]{2}\.[0-9]{2}\.[0-9]+$'; then
+	# Fly bar: 0.1.N (current) or historical YYYY.MM.DD.N
+	if printf '%s' "$ver" | grep -qE '^0\.[0-9]+\.[0-9]+$'; then
+		note_pass "GJ_IMAGE_VERSION stamp shape 0.N.N ($ver)"
+	elif printf '%s' "$ver" | grep -qE '^[0-9]{4}\.[0-9]{2}\.[0-9]{2}\.[0-9]+$'; then
 		note_pass "GJ_IMAGE_VERSION stamp shape YYYY.MM.DD.N ($ver)"
 	else
 		note_fail "GJ_IMAGE_VERSION stamp shape invalid: ${ver:-empty}"
@@ -209,9 +211,14 @@ else
 	note_fail "config.h missing (cannot verify freestanding SKIP defaults)"
 fi
 
-# Soft module path: RUN_INIT=0 / freestanding_no_exec (G-AC-1 eng residual)
+# Soft module path: RUN_INIT=0 / freestanding_no_exec (G-AC-1 eng residual).
+# Live TUs moved to ./abandoned — not linked (G-AC-1 product honesty).
 lmod=kernel/mm/linux_module.c
-if [ -f "$lmod" ]; then
+if [ ! -f "$lmod" ] && [ -f abandoned/kernel/mm/linux_module.c ]; then
+	note_pass "linux_module.c abandoned (not linked; G-AC-1)"
+	lmod=""
+fi
+if [ -n "$lmod" ] && [ -f "$lmod" ]; then
 	run_init=$(define_num "$lmod" GJ_SOFT_MODULE_RUN_INIT || true)
 	if [ "$run_init" = "0" ]; then
 		note_pass "GJ_SOFT_MODULE_RUN_INIT default=$run_init (freestanding_no_exec)"
@@ -238,8 +245,8 @@ if [ -f "$lmod" ]; then
 	else
 		note_warn "linux_module all_ko_skip_exec / stage_only denser markers thin"
 	fi
-else
-	note_fail "kernel/mm/linux_module.c missing"
+elif [ ! -f abandoned/kernel/mm/linux_module.c ]; then
+	note_fail "kernel/mm/linux_module.c missing (and not in abandoned/)"
 fi
 
 # Deepen: class-driver source must gate on SKIP defaults (not product wire)
@@ -252,8 +259,10 @@ if [ -f kernel/drv/rtl8168.c ]; then
 	else
 		note_fail "rtl8168.c missing freestanding SKIP gate / honesty"
 	fi
+elif [ -f abandoned/kernel/drv/rtl8168.c ]; then
+	note_pass "rtl8168.c abandoned (not linked; freestanding SKIP)"
 else
-	note_fail "kernel/drv/rtl8168.c missing"
+	note_fail "kernel/drv/rtl8168.c missing (and not in abandoned/)"
 fi
 if [ -f kernel/drv/xhci_msc.c ]; then
 	if grep -qE '#if[[:space:]]*!GJ_XHCI_MSC_PROBE|#if[[:space:]]*GJ_XHCI_MSC_PROBE' kernel/drv/xhci_msc.c \
@@ -262,8 +271,10 @@ if [ -f kernel/drv/xhci_msc.c ]; then
 	else
 		note_fail "xhci_msc.c missing freestanding MSC SKIP gate"
 	fi
+elif [ -f abandoned/kernel/drv/xhci_msc.c ]; then
+	note_pass "xhci_msc.c abandoned (not linked; freestanding SKIP)"
 else
-	note_fail "kernel/drv/xhci_msc.c missing"
+	note_fail "kernel/drv/xhci_msc.c missing (and not in abandoned/)"
 fi
 if [ -f kernel/drv/net_l2.c ]; then
 	if grep -qE 'freestanding rtl SKIP|GJ_RTL8168_PROBE=0' kernel/drv/net_l2.c \
@@ -449,12 +460,12 @@ if grep -qE '\| H5 \|' docs/ASSURANCE_LITE.md \
 else
 	note_warn "H5 Soft-claim hazard row not greppable"
 fi
-# Three layers + L3 close rule (no Dual DoD from L1 alone)
+# Three layers + Dual DoD B close = L3 interactive SSH login (no Dual DoD from L1 alone)
 if grep -qE 'Close Dual DoD B only with L3|L3 evidence|deliverable object code' docs/ASSURANCE_LITE.md \
 	&& grep -qE 'L1' docs/ASSURANCE_LITE.md; then
-	note_pass "three-layer V&V: Dual DoD close requires L3 (not L1 alone)"
+	note_pass "three-layer V&V: Dual DoD B close requires L3 interactive SSH login (not L1 alone)"
 else
-	note_fail "ASSURANCE_LITE missing L3-required Dual DoD close rule"
+	note_fail "ASSURANCE_LITE missing L3 interactive-login Dual DoD B close rule"
 fi
 # Dual MIT OR Apache-2.0 tree law
 if [ -f LICENSE ] && grep -qE 'MIT|Apache' LICENSE \
@@ -501,7 +512,7 @@ log ""
 log "gj-assurance-check: summary pass=$pass warn=$warn fail=$fail"
 log "  layer:        L1 process evidence only (docs/ASSURANCE_LITE.md)"
 log "  soft≠product: this PASS ≠ product AC ≠ bar3 ≠ G-AC-1 waiver"
-log "  Dual DoD:     A/B close needs L3 stamped flash + host probes — not L1 alone"
+log "  Dual DoD:     A until USB path; B until interactive SSH login — not L1 alone"
 log "  freestanding: SKIP defaults (rtl/USB) · source gates · freestanding_no_exec RUN_INIT=0"
 log "  product path: userspace UDX+ABI · headers/src/hosts · virtio T0 until UDX owns wire (G-AC-1)"
 log "  flash bar:    GJ_IMAGE_VERSION stamp identity only — test what you fly (not DoD close)"

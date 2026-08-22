@@ -70,6 +70,7 @@
 #include <gj/klog.h>
 #include <gj/linux_abi.h>
 #include <gj/linux_cold_net.h>
+#include <gj/net_eth.h>
 #include <gj/net_l2.h>
 #include <gj/net_lo.h>
 #include <gj/net_tcp.h>
@@ -117,6 +118,16 @@
 /* Soft TCP SO_REUSEADDR bits for FD 96..111 (matches net_tcp layout). */
 #define LCN_TCP_FD_BASE 96u
 #define LCN_TCP_MAX     16u
+
+/*
+ * User-fd alias table: maps 0..127 -> canonical tcp/lo fd + refcount.
+ * Canonical slots stay in net_tcp 96..111 / net_lo 64..79 (do not retarget
+ * fd_to_slot). OpenSSH dup2(accepted,0); dup2(0,1); close(accepted) needs
+ * aliases 0/1/2. dup() skips vfs 3..95 so it does not collide with vfs_ram.
+ */
+#define LCN_ALIAS_MAX     128u
+#define LCN_ALIAS_STDIO   3u
+#define LCN_ALIAS_VFS_LIM 96u
 
 /* Linux-shaped poll bits (match net_tcp_poll_mask / net_lo_poll_mask). */
 #define LCN_POLLIN  0x1u
@@ -248,6 +259,11 @@ static u8 g_lcnTcpShut[LCN_TCP_MAX];
  */
 static u8 g_lcnTcpListen[LCN_TCP_MAX];
 
+/* User fd -> canonical tcp/lo fd (-1 free). Refcount is indexed by canon fd. */
+static i64 g_ai64LcnCanon[LCN_ALIAS_MAX];
+static u16 g_au16LcnRef[LCN_ALIAS_MAX];
+static u8 g_u8LcnAliasInit;
+
 /* Soft once lamps so :22 path greps stay readable. Soft!=product. */
 static u8 g_u8LcnSocketTcpOnce;
 static u8 g_u8LcnBind22Once;
@@ -298,6 +314,7 @@ static u8 g_u8LcnListenRearmOnce;
 static u8 g_u8LcnRstIoOnce;
 static u8 g_u8LcnNodelayOnce;
 static u8 g_u8LcnPollListenShutOnce;
+static u8 g_u8LcnForkDupOnce;
 
 static void
 lcn_soft_bump(u64 *p)
@@ -1468,6 +1485,156 @@ lcn_msg_first_iov(u64 u64Msg, u64 *pBase, u64 *pLen)
 	return 0;
 }
 
+static void
+lcn_alias_init(void)
+{
+	u32 u32Fd;
+
+	if (g_u8LcnAliasInit != 0u) {
+		return;
+	}
+	g_u8LcnAliasInit = 1;
+	for (u32Fd = 0; u32Fd < LCN_ALIAS_MAX; u32Fd++) {
+		g_ai64LcnCanon[u32Fd] = -1;
+		g_au16LcnRef[u32Fd] = 0;
+	}
+}
+
+/** Canonical tcp/lo fd for a user fd (identity if not aliased). */
+static i64
+lcn_fd_resolve(i64 i64Fd)
+{
+	lcn_alias_init();
+	if (i64Fd >= 0 && i64Fd < (i64)LCN_ALIAS_MAX &&
+	    g_ai64LcnCanon[i64Fd] >= 0) {
+		return g_ai64LcnCanon[i64Fd];
+	}
+	return i64Fd;
+}
+
+/** Count this live canonical fd as one user name (socket/accept/dup2). */
+static void
+lcn_alias_seed(i64 i64Fd)
+{
+	lcn_alias_init();
+	if (i64Fd < 0 || i64Fd >= (i64)LCN_ALIAS_MAX) {
+		return;
+	}
+	if (g_ai64LcnCanon[i64Fd] >= 0) {
+		return;
+	}
+	g_ai64LcnCanon[i64Fd] = i64Fd;
+	g_au16LcnRef[i64Fd] = (u16)(g_au16LcnRef[i64Fd] + 1u);
+}
+
+/**
+ * Drop one user name. *pfLast is 1 when the canonical table slot must close.
+ * Unseeded identity tcp/lo fds count as last-ref.
+ */
+static i64
+lcn_alias_drop(i64 i64User, i64 *pCanon, int *pfLast)
+{
+	i64 i64Canon;
+	int fLast = 0;
+
+	lcn_alias_init();
+	if (pCanon != NULL) {
+		*pCanon = i64User;
+	}
+	if (pfLast != NULL) {
+		*pfLast = 0;
+	}
+
+	if (i64User >= 0 && i64User < (i64)LCN_ALIAS_MAX &&
+	    g_ai64LcnCanon[i64User] >= 0) {
+		i64Canon = g_ai64LcnCanon[i64User];
+		g_ai64LcnCanon[i64User] = -1;
+		if (i64Canon >= 0 && i64Canon < (i64)LCN_ALIAS_MAX) {
+			if (g_au16LcnRef[i64Canon] > 0u) {
+				g_au16LcnRef[i64Canon] =
+				    (u16)(g_au16LcnRef[i64Canon] - 1u);
+			}
+			if (g_au16LcnRef[i64Canon] == 0u) {
+				fLast = 1;
+			}
+		} else {
+			fLast = 1;
+		}
+		if (pCanon != NULL) {
+			*pCanon = i64Canon;
+		}
+		if (pfLast != NULL) {
+			*pfLast = fLast;
+		}
+		return 0;
+	}
+
+	if (net_tcp_fd_ok(i64User) || net_lo_fd_ok(i64User)) {
+		/*
+		 * Identity close after a sibling already dropped the alias
+		 * row (linux_fork inherit). Honor leftover g_au16LcnRef so
+		 * parent close(newsock) then child close/dup2 is not last-ref.
+		 */
+		fLast = 1;
+		if (i64User >= 0 && i64User < (i64)LCN_ALIAS_MAX &&
+		    g_au16LcnRef[i64User] > 0u) {
+			g_au16LcnRef[i64User] =
+			    (u16)(g_au16LcnRef[i64User] - 1u);
+			if (g_au16LcnRef[i64User] != 0u) {
+				fLast = 0;
+			}
+		}
+		if (pCanon != NULL) {
+			*pCanon = i64User;
+		}
+		if (pfLast != NULL) {
+			*pfLast = fLast;
+		}
+		return 0;
+	}
+	return -(i64)LINUX_EBADF;
+}
+
+/**
+ * Lowest free user fd for dup(). Skip live aliases, live tcp/lo, stdio 0/1/2
+ * (dup2 may still claim those), and vfs_ram 3..95.
+ */
+static i64
+lcn_alias_alloc(void)
+{
+	u32 u32Fd;
+
+	lcn_alias_init();
+	for (u32Fd = 0; u32Fd < LCN_ALIAS_MAX; u32Fd++) {
+		if (u32Fd < LCN_ALIAS_STDIO) {
+			continue;
+		}
+		if (u32Fd >= LCN_ALIAS_STDIO && u32Fd < LCN_ALIAS_VFS_LIM) {
+			continue;
+		}
+		if (g_ai64LcnCanon[u32Fd] >= 0) {
+			continue;
+		}
+		if (net_tcp_fd_ok((i64)u32Fd) || net_lo_fd_ok((i64)u32Fd)) {
+			continue;
+		}
+		return (i64)u32Fd;
+	}
+	return -(i64)LINUX_EMFILE;
+}
+
+int
+gj_linux_cold_fd_ok(i64 i64Fd)
+{
+	i64 i64Canon;
+
+	i64Canon = lcn_fd_resolve(i64Fd);
+	if (net_tcp_fd_ok(i64Canon) || net_lo_fd_ok(i64Canon)) {
+		return 1;
+	}
+	return 0;
+}
+
 /* ---- exported cold handlers ------------------------------------------- */
 
 i64
@@ -1522,6 +1689,7 @@ gj_linux_cold_socket(struct gj_linux_regs *pRegs)
 					(long long)i64Fd);
 			}
 		}
+		lcn_alias_seed(i64Fd);
 		return i64Fd;
 	}
 
@@ -1532,6 +1700,7 @@ gj_linux_cold_socket(struct gj_linux_regs *pRegs)
 		lcn_soft_bump(&g_lcnSoft.u64Fail);
 		return lcn_norm_err(i64Fd);
 	}
+	lcn_alias_seed(i64Fd);
 	return i64Fd;
 }
 
@@ -1549,7 +1718,7 @@ gj_linux_cold_bind(struct gj_linux_regs *pRegs)
 	lcn_soft_bump(&g_lcnSoft.u64Bind);
 	lcn_soft_op();
 
-	i64Fd = (i64)pRegs->u64Arg0;
+	i64Fd = lcn_fd_resolve((i64)pRegs->u64Arg0);
 	i64St = lcn_parse_sin_port(pRegs->u64Arg1, (u32)pRegs->u64Arg2,
 				   &u16Port);
 	if (i64St != 0) {
@@ -1626,7 +1795,7 @@ gj_linux_cold_listen(struct gj_linux_regs *pRegs)
 	lcn_soft_bump(&g_lcnSoft.u64Listen);
 	lcn_soft_op();
 
-	i64Fd = (i64)pRegs->u64Arg0;
+	i64Fd = lcn_fd_resolve((i64)pRegs->u64Arg0);
 	nBacklog = (int)pRegs->u64Arg1;
 
 	if (net_tcp_fd_ok(i64Fd)) {
@@ -1737,7 +1906,7 @@ gj_linux_cold_accept(struct gj_linux_regs *pRegs)
 	lcn_soft_bump(&g_lcnSoft.u64Accept);
 	lcn_soft_op();
 
-	i64Fd = (i64)pRegs->u64Arg0;
+	i64Fd = lcn_fd_resolve((i64)pRegs->u64Arg0);
 	/* arg1=addr arg2=addrlen* soft-optional; arg3 flags ignored. */
 
 	if (net_tcp_fd_ok(i64Fd)) {
@@ -1966,6 +2135,7 @@ gj_linux_cold_accept(struct gj_linux_regs *pRegs)
 			}
 		}
 	}
+	lcn_alias_seed(i64Peer);
 	return i64Peer;
 }
 
@@ -1983,7 +2153,7 @@ gj_linux_cold_connect(struct gj_linux_regs *pRegs)
 	lcn_soft_bump(&g_lcnSoft.u64Connect);
 	lcn_soft_op();
 
-	i64Fd = (i64)pRegs->u64Arg0;
+	i64Fd = lcn_fd_resolve((i64)pRegs->u64Arg0);
 	i64St = lcn_parse_sin_port(pRegs->u64Arg1, (u32)pRegs->u64Arg2,
 				   &u16Port);
 	if (i64St != 0) {
@@ -2077,7 +2247,7 @@ gj_linux_cold_sendto(struct gj_linux_regs *pRegs)
 	lcn_soft_bump(&g_lcnSoft.u64Sendto);
 	lcn_soft_op();
 
-	i64Fd = (i64)pRegs->u64Arg0;
+	i64Fd = lcn_fd_resolve((i64)pRegs->u64Arg0);
 	cb = (size_t)pRegs->u64Arg2;
 	/*
 	 * flags: MSG_NOSIGNAL soft no-op (no SIGPIPE path); MSG_DONTWAIT
@@ -2176,7 +2346,7 @@ gj_linux_cold_recvfrom(struct gj_linux_regs *pRegs)
 	lcn_soft_bump(&g_lcnSoft.u64Recvfrom);
 	lcn_soft_op();
 
-	i64Fd = (i64)pRegs->u64Arg0;
+	i64Fd = lcn_fd_resolve((i64)pRegs->u64Arg0);
 	cb = (size_t)pRegs->u64Arg2;
 	/*
 	 * flags: MSG_NOSIGNAL / MSG_DONTWAIT soft-accepted (EAGAIN path).
@@ -2327,7 +2497,7 @@ gj_linux_cold_sendmsg(struct gj_linux_regs *pRegs)
 	lcn_soft_op();
 	/* greppable: linux_cold_net: soft sendmsg single-iov */
 
-	i64Fd = (i64)pRegs->u64Arg0;
+	i64Fd = lcn_fd_resolve((i64)pRegs->u64Arg0);
 	/*
 	 * flags (arg2): MSG_NOSIGNAL soft no-op; MSG_DONTWAIT EAGAIN-shaped.
 	 * Soft!=product - match sendto flag honesty (v11 send* footgun fix).
@@ -2433,7 +2603,7 @@ gj_linux_cold_recvmsg(struct gj_linux_regs *pRegs)
 	lcn_soft_op();
 	/* greppable: linux_cold_net: soft recvmsg single-iov */
 
-	i64Fd = (i64)pRegs->u64Arg0;
+	i64Fd = lcn_fd_resolve((i64)pRegs->u64Arg0);
 	/* flags (arg2): MSG_NOSIGNAL/DONTWAIT soft-accepted. Soft!=product. */
 	(void)(pRegs->u64Arg2 & (u64)(LCN_MSG_NOSIGNAL | LCN_MSG_DONTWAIT));
 
@@ -2539,7 +2709,7 @@ gj_linux_cold_shutdown(struct gj_linux_regs *pRegs)
 	lcn_soft_bump(&g_lcnSoft.u64Shutdown);
 	lcn_soft_op();
 
-	i64Fd = (i64)pRegs->u64Arg0;
+	i64Fd = lcn_fd_resolve((i64)pRegs->u64Arg0);
 	nHow = (int)pRegs->u64Arg1;
 
 	if (net_lo_fd_ok(i64Fd)) {
@@ -2624,7 +2794,7 @@ gj_linux_cold_getsockname(struct gj_linux_regs *pRegs)
 	lcn_soft_bump(&g_lcnSoft.u64Getsockname);
 	lcn_soft_op();
 
-	i64Fd = (i64)pRegs->u64Arg0;
+	i64Fd = lcn_fd_resolve((i64)pRegs->u64Arg0);
 
 	if (pRegs->u64Arg2 != 0u) {
 		if (user_range_ok(pRegs->u64Arg2, 4u)) {
@@ -2759,7 +2929,7 @@ gj_linux_cold_getpeername(struct gj_linux_regs *pRegs)
 	lcn_soft_bump(&g_lcnSoft.u64Getpeername);
 	lcn_soft_op();
 
-	i64Fd = (i64)pRegs->u64Arg0;
+	i64Fd = lcn_fd_resolve((i64)pRegs->u64Arg0);
 
 	if (pRegs->u64Arg2 != 0u) {
 		if (user_range_ok(pRegs->u64Arg2, 4u)) {
@@ -2882,7 +3052,7 @@ gj_linux_cold_setsockopt(struct gj_linux_regs *pRegs)
 	lcn_soft_bump(&g_lcnSoft.u64Setsockopt);
 	lcn_soft_op();
 
-	i64Fd = (i64)pRegs->u64Arg0;
+	i64Fd = lcn_fd_resolve((i64)pRegs->u64Arg0);
 	nLevel = (int)pRegs->u64Arg1;
 	nOpt = (int)pRegs->u64Arg2;
 	u32Len = (u32)pRegs->u64Arg4;
@@ -3027,7 +3197,7 @@ gj_linux_cold_getsockopt(struct gj_linux_regs *pRegs)
 	lcn_soft_bump(&g_lcnSoft.u64Getsockopt);
 	lcn_soft_op();
 
-	i64Fd = (i64)pRegs->u64Arg0;
+	i64Fd = lcn_fd_resolve((i64)pRegs->u64Arg0);
 	nLevel = (int)pRegs->u64Arg1;
 	nOpt = (int)pRegs->u64Arg2;
 
@@ -3235,17 +3405,38 @@ gj_linux_cold_poll_mask(i64 i64Fd, u32 u32Want)
 	lcn_soft_bump(&g_lcnSoft.u64PollMask);
 	/* Poll path may run without soft_op - still light lean residual once. */
 	lcn_soft_residual_lean_once();
+	i64Fd = lcn_fd_resolve(i64Fd);
+
+	/*
+	 * T0 virtio RX on every poll_mask (TCP or lo). Calling thr kstack,
+	 * not IRQ. OpenSSH may ppoll an AF_INET6 lo fd plus the IPv4 listen
+	 * fd; TCP-only pump would miss if the lo fd is checked first.
+	 */
+	net_eth_poll();
 
 	if (net_tcp_fd_ok(i64Fd)) {
 		u16 u16SoErr;
+		static u8 s_u8AfterEthOnce;
 
 		/*
-		 * Soft pump before mask so accept POLLIN can surface after
-		 * SYN-ACK rtx / handshake. Soft!=product.
+		 * net_eth_poll already ran net_tcp_poll. QEMU56 hung in a
+		 * second net_tcp_poll / :22 re-pump after SYN batch n=3
+		 * (tcp_poll after_first printed; 271 never returned).
+		 * Query once, then force POLLIN if AcceptQ ESTAB :22.
+		 * Dual DoD B OPEN.
 		 */
-		net_tcp_poll();
+		if (s_u8AfterEthOnce == 0u) {
+			s_u8AfterEthOnce = 1u;
+			kprintf("linux_cold_net: soft poll after_eth fd=%lld\n",
+				(long long)i64Fd);
+		}
 		u32Got = net_tcp_poll_mask(i64Fd, u32Want);
 		u16Port = lcn_tcp_port_get(i64Fd);
+		if (u16Port == (u16)LCN_PORT_SSH &&
+		    (u32Got & LCN_POLLIN) == 0u &&
+		    net_tcp_acceptq_estab22() != 0) {
+			u32Got |= LCN_POLLIN;
+		}
 		/*
 		 * SO_ERROR honesty: sticky soft errno -> POLLERR (Linux-shaped;
 		 * POLLERR is reported in revents even when not in events).
@@ -3359,26 +3550,12 @@ gj_linux_cold_poll_mask(i64 i64Fd, u32 u32Want)
 }
 
 /**
- * Soft close for cold STREAM/DGRAM fds (v5 residual). Soft!=product.
- * Clears soft TCP port/reuse/peer; routes net_tcp_close / net_lo_close.
- * Free function for personality / coordinator wire-later.
- *
- * greppable: linux_cold_net: soft close ... Soft!=product
+ * Last-ref close of a canonical tcp/lo fd. Does not touch the alias table.
  */
-i64
-gj_linux_cold_close(struct gj_linux_regs *pRegs)
+static i64
+lcn_close_canon(i64 i64Fd)
 {
-	i64 i64Fd;
 	i64 i64St;
-
-	if (pRegs == NULL) {
-		lcn_soft_bump(&g_lcnSoft.u64Fail);
-		return -(i64)LINUX_EINVAL;
-	}
-	lcn_soft_bump(&g_lcnSoft.u64Close);
-	lcn_soft_op();
-
-	i64Fd = (i64)pRegs->u64Arg0;
 
 	if (net_tcp_fd_ok(i64Fd)) {
 		int fSsh22;
@@ -3426,6 +3603,142 @@ gj_linux_cold_close(struct gj_linux_regs *pRegs)
 		}
 		return i64St;
 	}
-	lcn_soft_bump(&g_lcnSoft.u64Fail);
 	return -(i64)LINUX_EBADF;
+}
+
+/** Drop one user name; last ref closes the canonical tcp/lo slot. */
+static i64
+lcn_close_user(i64 i64User)
+{
+	i64 i64Canon;
+	int fLast;
+	i64 i64St;
+
+	i64St = lcn_alias_drop(i64User, &i64Canon, &fLast);
+	if (i64St != 0) {
+		return i64St;
+	}
+	if (fLast == 0) {
+		return 0;
+	}
+	return lcn_close_canon(i64Canon);
+}
+
+/**
+ * Soft close for cold STREAM/DGRAM fds (v5 residual). Soft!=product.
+ * Alias names (including 0/1/2) drop a ref; last ref routes net_tcp_close /
+ * net_lo_close on the canonical fd only.
+ * greppable: linux_cold_net: soft close ... Soft!=product
+ */
+i64
+gj_linux_cold_close(struct gj_linux_regs *pRegs)
+{
+	i64 i64St;
+
+	if (pRegs == NULL) {
+		lcn_soft_bump(&g_lcnSoft.u64Fail);
+		return -(i64)LINUX_EINVAL;
+	}
+	lcn_soft_bump(&g_lcnSoft.u64Close);
+	lcn_soft_op();
+
+	i64St = lcn_close_user((i64)pRegs->u64Arg0);
+	if (i64St != 0) {
+		if (i64St == -(i64)LINUX_EBADF) {
+			lcn_soft_bump(&g_lcnSoft.u64Fail);
+		}
+		return i64St;
+	}
+	return 0;
+}
+
+i64
+gj_linux_cold_dup2(struct gj_linux_regs *pRegs)
+{
+	i64 i64Old;
+	i64 i64New;
+	i64 i64Canon;
+
+	if (pRegs == NULL) {
+		return -(i64)LINUX_EINVAL;
+	}
+
+	i64Old = (i64)pRegs->u64Arg0;
+	if (gj_linux_cold_fd_ok(i64Old) == 0) {
+		return -(i64)LINUX_EBADF;
+	}
+
+	if (pRegs->u64Nr == (u64)LINUX_NR_dup) {
+		i64New = lcn_alias_alloc();
+		if (i64New < 0) {
+			return i64New;
+		}
+	} else {
+		i64New = (i64)pRegs->u64Arg1;
+	}
+
+	if (i64New < 0 || i64New >= (i64)LCN_ALIAS_MAX) {
+		return -(i64)LINUX_EBADF;
+	}
+
+	i64Canon = lcn_fd_resolve(i64Old);
+	lcn_alias_seed(i64Canon);
+
+	if (i64New == i64Old) {
+		return i64New;
+	}
+
+	/*
+	 * Linux dup2 closes newfd first when it is already open. Serial
+	 * 0/1/2 that are not cold-net names are not in this table.
+	 */
+	if (g_ai64LcnCanon[i64New] >= 0 || gj_linux_cold_fd_ok(i64New) != 0) {
+		(void)lcn_close_user(i64New);
+	}
+
+	g_ai64LcnCanon[i64New] = i64Canon;
+	if (i64Canon >= 0 && i64Canon < (i64)LCN_ALIAS_MAX &&
+	    g_au16LcnRef[i64Canon] < 0xffffu) {
+		g_au16LcnRef[i64Canon] = (u16)(g_au16LcnRef[i64Canon] + 1u);
+	}
+	return i64New;
+}
+
+/**
+ * One extra holder per already-seeded LCN user name (socket/accept/dup2).
+ * process_linux_fork calls this for USER children so OpenSSH parent
+ * close(accepted) does not FIN the child's ESTAB.
+ * greppable: linux_cold_net: soft fork dup names
+ */
+void
+gj_linux_cold_fork_dup_names(void)
+{
+	u32 u32Fd;
+	i64 i64Canon;
+	u32 cBumped = 0;
+
+	lcn_alias_init();
+	/*
+	 * Only names seeded by socket/accept/dup2. Do not seed kernel
+	 * tcp_soft_ensure_listen22 mint (fd 96): extra refs there steal
+	 * :22 SYN from product listen fd 97 (QEMU52 hang after RX 58B).
+	 */
+	for (u32Fd = 0; u32Fd < LCN_ALIAS_MAX; u32Fd++) {
+		i64Canon = g_ai64LcnCanon[u32Fd];
+		if (i64Canon < 0 || i64Canon >= (i64)LCN_ALIAS_MAX) {
+			continue;
+		}
+		if (g_au16LcnRef[i64Canon] < 0xffffu) {
+			g_au16LcnRef[i64Canon] =
+			    (u16)(g_au16LcnRef[i64Canon] + 1u);
+			cBumped++;
+		}
+	}
+	if (cBumped != 0u && g_u8LcnForkDupOnce == 0u) {
+		g_u8LcnForkDupOnce = 1;
+		kprintf("linux_cold_net: soft fork dup names refs=%u "
+			"Soft!=product (inherit_ne_last_ref=1; "
+			"Dual_DoD_B_OPEN=1)\n",
+			(unsigned)cBumped);
+	}
 }

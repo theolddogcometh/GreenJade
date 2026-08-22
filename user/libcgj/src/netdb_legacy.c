@@ -17,6 +17,7 @@
 #include <netdb.h>
 #include <netinet/in.h>
 #include <stdint.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
@@ -47,6 +48,7 @@ static const struct {
 } g_aServ[] = {
     { "ftp", 21, "tcp" },
     { "ssh", 22, "tcp" },
+    { "sshd", 22, "tcp" },
     { "telnet", 23, "tcp" },
     { "smtp", 25, "tcp" },
     { "domain", 53, "udp" },
@@ -275,10 +277,108 @@ getservent(void)
     return p;
 }
 
+/* greppable: CGJ_NETDB_SOFT_ETC_SERVICES */
+static struct servent *
+services_file_lookup(const char *szName, int nPortHost, const char *szProto)
+{
+    FILE *pF;
+    char aLine[128];
+
+    pF = fopen("/etc/services", "r");
+    if (pF == NULL) {
+        return NULL;
+    }
+    while (fgets(aLine, (int)sizeof(aLine), pF) != NULL) {
+        char *p;
+        char *szTok;
+        char *pEnd;
+        unsigned long v;
+        char *szP;
+
+        p = aLine;
+        while (*p == ' ' || *p == '\t') {
+            p++;
+        }
+        if (*p == '\0' || *p == '#' || *p == '\n') {
+            continue;
+        }
+        szTok = p;
+        while (*p != '\0' && *p != ' ' && *p != '\t' && *p != '\n') {
+            p++;
+        }
+        if (*p != '\0') {
+            *p++ = '\0';
+        }
+        while (*p == ' ' || *p == '\t') {
+            p++;
+        }
+        v = strtoul(p, &pEnd, 10);
+        if (pEnd == p || v > 65535ul) {
+            continue;
+        }
+        szP = pEnd;
+        if (*szP == '/') {
+            szP++;
+        }
+        if (szName != NULL && !soft_eq_ci(szTok, szName)) {
+            continue;
+        }
+        if (szName == NULL && nPortHost >= 0 && (int)v != nPortHost) {
+            continue;
+        }
+        if (szProto != NULL) {
+            char aProto[16];
+            size_t nP = 0;
+
+            while (szP[nP] != '\0' && szP[nP] != '\n' && szP[nP] != '#' &&
+                   szP[nP] != ' ' && szP[nP] != '\t' && nP + 1 < sizeof(aProto)) {
+                aProto[nP] = szP[nP];
+                nP++;
+            }
+            aProto[nP] = '\0';
+            if (aProto[0] != '\0' && !soft_eq_ci(aProto, szProto)) {
+                continue;
+            }
+            if (aProto[0] != '\0') {
+                soft_copy_name(g_szSeProto, sizeof(g_szSeProto), aProto);
+            } else {
+                soft_copy_name(g_szSeProto, sizeof(g_szSeProto),
+                               szProto);
+            }
+        } else {
+            char aProto[16];
+            size_t nP = 0;
+
+            while (szP[nP] != '\0' && szP[nP] != '\n' && szP[nP] != '#' &&
+                   szP[nP] != ' ' && szP[nP] != '\t' && nP + 1 < sizeof(aProto)) {
+                aProto[nP] = szP[nP];
+                nP++;
+            }
+            aProto[nP] = '\0';
+            if (aProto[0] == '\0') {
+                soft_copy_name(g_szSeProto, sizeof(g_szSeProto), "tcp");
+            } else {
+                soft_copy_name(g_szSeProto, sizeof(g_szSeProto), aProto);
+            }
+        }
+        soft_copy_name(g_szSeName, sizeof(g_szSeName), szTok);
+        g_aSeAliases[0] = NULL;
+        g_se.s_name = g_szSeName;
+        g_se.s_aliases = g_aSeAliases;
+        g_se.s_port = (int)htons((uint16_t)v);
+        g_se.s_proto = g_szSeProto;
+        (void)fclose(pF);
+        return &g_se;
+    }
+    (void)fclose(pF);
+    return NULL;
+}
+
 struct servent *
 getservbyname(const char *szName, const char *szProto)
 {
     size_t i;
+    struct servent *pFile;
 
     if (szName == NULL) {
         errno = EINVAL;
@@ -294,6 +394,10 @@ getservbyname(const char *szName, const char *szProto)
         }
         return soft_fill_serv(i);
     }
+    pFile = services_file_lookup(szName, -1, szProto);
+    if (pFile != NULL) {
+        return pFile;
+    }
     return NULL;
 }
 
@@ -302,6 +406,7 @@ getservbyport(int nPort, const char *szProto)
 {
     size_t i;
     int nHost = (int)ntohs((uint16_t)nPort);
+    struct servent *pFile;
 
     for (i = 0; g_aServ[i].szName != NULL; i++) {
         if (g_aServ[i].nPort != nHost) {
@@ -311,6 +416,10 @@ getservbyport(int nPort, const char *szProto)
             continue;
         }
         return soft_fill_serv(i);
+    }
+    pFile = services_file_lookup(NULL, nHost, szProto);
+    if (pFile != NULL) {
+        return pFile;
     }
     return NULL;
 }

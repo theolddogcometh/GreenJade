@@ -102,7 +102,7 @@
 /*
  * Soft residual Cap / Dual DoD honesty constants (eng only; Soft!=product).
  * Always-0 mint/server/confine flags match host soft residual lean spirit.
- * Dual DoD A/B remain OPEN (1) until DUT proof closes them — header lamps
+ * Dual DoD A/B remain OPEN (1) until USB path / interactive SSH login — header lamps
  * and soft inventory never flip these to closed. No version stamp. No GPL.
  * G-AC-1 (no .ko product AC). agent_close=0.
  * greppable: udx: mmio soft residual mint
@@ -623,7 +623,7 @@ udx_mmio_soft_ne_product(void)
 }
 
 /**
- * Dual DoD A OPEN residual (xhci_udx). Always 1 until DUT proof close.
+ * Dual DoD A OPEN residual (xhci_udx). Always 1 until host USB path.
  * Lamps / shape_ok never close Dual DoD. Soft!=product; G-AC-1.
  * greppable residual: udx: mmio soft residual dual_dod
  * greppable residual: udx: mmio soft residual product_host
@@ -635,7 +635,7 @@ udx_mmio_dod_a_open(void)
 }
 
 /**
- * Dual DoD B OPEN residual (rtl8168_udx). Always 1 until DUT proof close.
+ * Dual DoD B OPEN residual (rtl8168_udx). Always 1 until interactive SSH login.
  * greppable residual: udx: mmio soft residual dual_dod
  * greppable residual: udx: mmio soft residual product_host
  */

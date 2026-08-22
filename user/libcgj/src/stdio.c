@@ -382,49 +382,258 @@ out_ch(FILE *pF, char **ppBuf, size_t *pLeft, size_t *pWrote, char c)
 }
 
 static void
-out_str(FILE *pF, char **ppBuf, size_t *pLeft, size_t *pWrote, const char *sz)
+out_nstr(FILE *pF, char **ppBuf, size_t *pLeft, size_t *pWrote,
+         const char *sz, int nLen)
 {
-    if (sz == NULL) {
-        sz = "(null)";
-    }
-    while (*sz != '\0') {
-        out_ch(pF, ppBuf, pLeft, pWrote, *sz++);
-    }
-}
+    int i;
 
-static void
-out_udec(FILE *pF, char **ppBuf, size_t *pLeft, size_t *pWrote,
-         unsigned long long u, int nBase, int fUpper)
-{
-    char aTmp[32];
-    const char *szDig = fUpper ? "0123456789ABCDEF" : "0123456789abcdef";
-    int i = 0;
-
-    if (u == 0) {
-        out_ch(pF, ppBuf, pLeft, pWrote, '0');
+    if (sz == NULL || nLen <= 0) {
         return;
     }
-    while (u > 0 && i < (int)sizeof(aTmp)) {
-        aTmp[i++] = szDig[u % (unsigned)nBase];
-        u /= (unsigned)nBase;
-    }
-    while (i > 0) {
-        out_ch(pF, ppBuf, pLeft, pWrote, aTmp[--i]);
+    for (i = 0; i < nLen; i++) {
+        out_ch(pF, ppBuf, pLeft, pWrote, sz[i]);
     }
 }
 
 static void
-out_dec(FILE *pF, char **ppBuf, size_t *pLeft, size_t *pWrote, long long v)
+out_fill(FILE *pF, char **ppBuf, size_t *pLeft, size_t *pWrote, char ch, int n)
 {
-    unsigned long long u;
+    int i;
 
-    if (v < 0) {
-        out_ch(pF, ppBuf, pLeft, pWrote, '-');
-        u = (unsigned long long)(-(v + 1)) + 1ull;
-    } else {
-        u = (unsigned long long)v;
+    for (i = 0; i < n; i++) {
+        out_ch(pF, ppBuf, pLeft, pWrote, ch);
     }
-    out_udec(pF, ppBuf, pLeft, pWrote, u, 10, 0);
+}
+
+static void
+fmt_ull(char *szDig, int *pN, unsigned long long u, int nBase, int fUpper)
+{
+    const char *szMap = fUpper ? "0123456789ABCDEF" : "0123456789abcdef";
+    char aTmp[72];
+    int n = 0;
+    int i;
+
+    if (nBase < 2 || nBase > 16) {
+        nBase = 10;
+    }
+    if (u == 0) {
+        szDig[0] = '0';
+        *pN = 1;
+        return;
+    }
+    while (u > 0 && n < (int)sizeof(aTmp)) {
+        aTmp[n++] = szMap[u % (unsigned)nBase];
+        u /= (unsigned)nBase;
+    }
+    for (i = 0; i < n; i++) {
+        szDig[i] = aTmp[n - 1 - i];
+    }
+    *pN = n;
+}
+
+static void
+out_field(FILE *pF, char **ppBuf, size_t *pLeft, size_t *pWrote,
+          const char *szPre, const char *szDig, int nDig, int nWidth,
+          int fLeft, int fZero)
+{
+    int nPre = 0;
+    int nPad;
+    int nBody;
+
+    if (szPre != NULL) {
+        while (szPre[nPre] != '\0') {
+            nPre++;
+        }
+    }
+    nBody = nPre + nDig;
+    nPad = (nWidth > nBody) ? nWidth - nBody : 0;
+    if (fLeft) {
+        out_nstr(pF, ppBuf, pLeft, pWrote, szPre, nPre);
+        out_nstr(pF, ppBuf, pLeft, pWrote, szDig, nDig);
+        out_fill(pF, ppBuf, pLeft, pWrote, ' ', nPad);
+    } else if (fZero) {
+        out_nstr(pF, ppBuf, pLeft, pWrote, szPre, nPre);
+        out_fill(pF, ppBuf, pLeft, pWrote, '0', nPad);
+        out_nstr(pF, ppBuf, pLeft, pWrote, szDig, nDig);
+    } else {
+        out_fill(pF, ppBuf, pLeft, pWrote, ' ', nPad);
+        out_nstr(pF, ppBuf, pLeft, pWrote, szPre, nPre);
+        out_nstr(pF, ppBuf, pLeft, pWrote, szDig, nDig);
+    }
+}
+
+/*
+ * Fixed-point / scientific double for OpenSSH %f %e %g (fingerprints use
+ * integers; servconf debug uses %f). Not a full dtoa.
+ */
+static int
+fmt_double(char *szOut, size_t cbOut, double dVal, int nPrec, int fUpper,
+           char chConv)
+{
+    union {
+        double d;
+        uint64_t u64;
+    } ub;
+    char aInt[32];
+    char aFrac[32];
+    int nInt = 0;
+    int nExp = 0;
+    int fNeg;
+    int nExpF = 0;
+    int i;
+    int nPrecUse;
+    int fSci = 0;
+    int fStrip = 0;
+    uint64_t uInt;
+    uint64_t uFrac = 0;
+    uint64_t uScale = 1;
+    double dAbs;
+    double dFrac;
+    size_t o = 0;
+
+    if (szOut == NULL || cbOut < 8) {
+        return -1;
+    }
+    nPrecUse = (nPrec < 0) ? 6 : nPrec;
+    if (nPrecUse > 18) {
+        nPrecUse = 18;
+    }
+    ub.d = dVal;
+    fNeg = (int)(ub.u64 >> 63);
+    if (((ub.u64 >> 52) & 0x7ffULL) == 0x7ffULL) {
+        const char *sz;
+        int n;
+
+        if ((ub.u64 & 0x000fffffffffffffULL) != 0ULL) {
+            sz = fUpper ? "NAN" : "nan";
+        } else {
+            sz = fUpper ? "INF" : "inf";
+        }
+        if (fNeg && o + 1 < cbOut) {
+            szOut[o++] = '-';
+        }
+        for (n = 0; sz[n] != '\0' && o + 1 < cbOut; n++) {
+            szOut[o++] = sz[n];
+        }
+        szOut[o] = '\0';
+        return (int)o;
+    }
+    dAbs = fNeg ? -dVal : dVal;
+    if (chConv == 'g' || chConv == 'G') {
+        fStrip = 1;
+        if (nPrec < 0) {
+            nPrecUse = 6;
+        }
+        if (nPrecUse < 1) {
+            nPrecUse = 1;
+        }
+        if (dAbs != 0.0) {
+            double dT = dAbs;
+
+            nExpF = 0;
+            while (dT >= 10.0 && nExpF < 400) {
+                dT *= 0.1;
+                nExpF++;
+            }
+            while (dT < 1.0 && dT > 0.0 && nExpF > -400) {
+                dT *= 10.0;
+                nExpF--;
+            }
+            if (nExpF < -4 || nExpF >= nPrecUse) {
+                fSci = 1;
+            }
+        }
+    } else if (chConv == 'e' || chConv == 'E') {
+        fSci = 1;
+    }
+    if (fSci && dAbs != 0.0) {
+        while (dAbs >= 10.0 && nExp < 400) {
+            dAbs *= 0.1;
+            nExp++;
+        }
+        while (dAbs < 1.0 && nExp > -400) {
+            dAbs *= 10.0;
+            nExp--;
+        }
+    }
+    if (dAbs >= 1.0e18) {
+        dAbs = 1.0e18;
+    }
+    uInt = (uint64_t)dAbs;
+    dFrac = dAbs - (double)uInt;
+    for (i = 0; i < nPrecUse; i++) {
+        uScale *= 10ULL;
+    }
+    if (nPrecUse > 0) {
+        uFrac = (uint64_t)(dFrac * (double)uScale + 0.5);
+        if (uFrac >= uScale) {
+            uInt += 1ULL;
+            uFrac -= uScale;
+        }
+    } else if (dFrac >= 0.5) {
+        uInt += 1ULL;
+    }
+    fmt_ull(aInt, &nInt, uInt, 10, 0);
+    if (nPrecUse > 0) {
+        char aTmp[24];
+        int nF = 0;
+        uint64_t uF = uFrac;
+
+        if (uF == 0) {
+            for (i = 0; i < nPrecUse; i++) {
+                aFrac[i] = '0';
+            }
+        } else {
+            while (uF > 0 && nF < 24) {
+                aTmp[nF++] = (char)('0' + (uF % 10ULL));
+                uF /= 10ULL;
+            }
+            while (nF < nPrecUse) {
+                aTmp[nF++] = '0';
+            }
+            for (i = 0; i < nPrecUse; i++) {
+                aFrac[i] = aTmp[nPrecUse - 1 - i];
+            }
+        }
+        if (fStrip) {
+            while (nPrecUse > 0 && aFrac[nPrecUse - 1] == '0') {
+                nPrecUse--;
+            }
+        }
+    }
+    if (fNeg && o + 1 < cbOut) {
+        szOut[o++] = '-';
+    }
+    for (i = 0; i < nInt && o + 1 < cbOut; i++) {
+        szOut[o++] = aInt[i];
+    }
+    if (nPrecUse > 0 && o + 1 < cbOut) {
+        szOut[o++] = '.';
+        for (i = 0; i < nPrecUse && o + 1 < cbOut; i++) {
+            szOut[o++] = aFrac[i];
+        }
+    }
+    if (fSci) {
+        char aE[8];
+        int nE = 0;
+        int nAe = (nExp < 0) ? -nExp : nExp;
+
+        if (o + 1 < cbOut) {
+            szOut[o++] = fUpper ? 'E' : 'e';
+        }
+        if (o + 1 < cbOut) {
+            szOut[o++] = (nExp < 0) ? '-' : '+';
+        }
+        if (nAe < 10 && o + 1 < cbOut) {
+            szOut[o++] = '0';
+        }
+        fmt_ull(aE, &nE, (unsigned long long)nAe, 10, 0);
+        for (i = 0; i < nE && o + 1 < cbOut; i++) {
+            szOut[o++] = aE[i];
+        }
+    }
+    szOut[o] = '\0';
+    return (int)o;
 }
 
 static size_t
@@ -433,90 +642,344 @@ vformat(FILE *pF, char *szBuf, size_t cb, const char *szFmt, va_list ap)
     size_t wrote = 0;
     size_t left = cb;
     char *pB = szBuf;
-    /* When formatting to buffer (or sizing), always pass &pB so out_ch counts */
     char **ppB = (pF == NULL) ? &pB : NULL;
     const char *p;
 
     if (szFmt == NULL) {
         return 0;
     }
-    for (p = szFmt; *p != '\0'; p++) {
+    /* Consume the conversion char; continue must not skip the next byte. */
+    for (p = szFmt; *p != '\0'; ) {
+        int fLeft = 0;
+        int fPlus = 0;
+        int fSpace = 0;
+        int fHash = 0;
+        int fZero = 0;
+        int nWidth = 0;
+        int nPrec = -1;
+        int nLenMod = 0;
+        char chConv;
+        char aDig[96];
+        char aPre[8];
+        int nDig = 0;
+        int nPre = 0;
+
         if (*p != '%') {
             out_ch(pF, ppB, &left, &wrote, *p);
+            p++;
             continue;
         }
         p++;
         if (*p == '\0') {
             break;
         }
-        if (*p == '%') {
+        /* flags */
+        for (;;) {
+            if (*p == '-') {
+                fLeft = 1;
+            } else if (*p == '+') {
+                fPlus = 1;
+            } else if (*p == ' ') {
+                fSpace = 1;
+            } else if (*p == '#') {
+                fHash = 1;
+            } else if (*p == '0') {
+                fZero = 1;
+            } else {
+                break;
+            }
+            p++;
+        }
+        if (*p == '*') {
+            nWidth = va_arg(ap, int);
+            p++;
+            if (nWidth < 0) {
+                fLeft = 1;
+                nWidth = -nWidth;
+            }
+        } else {
+            while (*p >= '0' && *p <= '9') {
+                nWidth = nWidth * 10 + (*p - '0');
+                p++;
+            }
+        }
+        if (*p == '.') {
+            p++;
+            nPrec = 0;
+            if (*p == '*') {
+                nPrec = va_arg(ap, int);
+                p++;
+                if (nPrec < 0) {
+                    nPrec = -1;
+                }
+            } else {
+                while (*p >= '0' && *p <= '9') {
+                    nPrec = nPrec * 10 + (*p - '0');
+                    p++;
+                }
+            }
+        }
+        if (*p == 'h') {
+            p++;
+            if (*p == 'h') {
+                nLenMod = -2;
+                p++;
+            } else {
+                nLenMod = -1;
+            }
+        } else if (*p == 'l') {
+            p++;
+            if (*p == 'l') {
+                nLenMod = 2;
+                p++;
+            } else {
+                nLenMod = 1;
+            }
+        } else if (*p == 'z' || *p == 't' || *p == 'j') {
+            nLenMod = 3;
+            p++;
+        }
+        if (*p == '\0') {
+            break;
+        }
+        chConv = *p;
+        p++;
+        if (fLeft) {
+            fZero = 0;
+        }
+        if (chConv == '%') {
             out_ch(pF, ppB, &left, &wrote, '%');
             continue;
         }
-        if (*p == 's') {
-            out_str(pF, ppB, &left, &wrote, va_arg(ap, const char *));
-            continue;
-        }
-        if (*p == 'c') {
-            out_ch(pF, ppB, &left, &wrote, (char)va_arg(ap, int));
-            continue;
-        }
-        if (*p == 'd' || *p == 'i') {
-            out_dec(pF, ppB, &left, &wrote, va_arg(ap, int));
-            continue;
-        }
-        if (*p == 'u') {
-            out_udec(pF, ppB, &left, &wrote,
-                     (unsigned long long)va_arg(ap, unsigned), 10, 0);
-            continue;
-        }
-        if (*p == 'x') {
-            out_udec(pF, ppB, &left, &wrote,
-                     (unsigned long long)va_arg(ap, unsigned), 16, 0);
-            continue;
-        }
-        if (*p == 'X') {
-            out_udec(pF, ppB, &left, &wrote,
-                     (unsigned long long)va_arg(ap, unsigned), 16, 1);
-            continue;
-        }
-        if (*p == 'p') {
-            out_str(pF, ppB, &left, &wrote, "0x");
-            out_udec(pF, ppB, &left, &wrote,
-                     (unsigned long long)(uintptr_t)va_arg(ap, void *), 16, 0);
-            continue;
-        }
-        if (*p == 'l') {
-            p++;
-            if (*p == 'd' || *p == 'i') {
-                out_dec(pF, ppB, &left, &wrote, va_arg(ap, long));
-            } else if (*p == 'u') {
-                out_udec(pF, ppB, &left, &wrote,
-                         (unsigned long long)va_arg(ap, unsigned long), 10, 0);
-            } else if (*p == 'x') {
-                out_udec(pF, ppB, &left, &wrote,
-                         (unsigned long long)va_arg(ap, unsigned long), 16, 0);
-            } else if (*p == 'l' && (p[1] == 'd' || p[1] == 'i')) {
-                p++;
-                out_dec(pF, ppB, &left, &wrote, va_arg(ap, long long));
-            } else if (*p == 'l' && p[1] == 'u') {
-                p++;
-                out_udec(pF, ppB, &left, &wrote,
-                         (unsigned long long)va_arg(ap, unsigned long long), 10,
-                         0);
+        if (chConv == 'n') {
+            if (nLenMod == 2) {
+                *va_arg(ap, long long *) = (long long)wrote;
+            } else if (nLenMod == 1) {
+                *va_arg(ap, long *) = (long)wrote;
+            } else {
+                *va_arg(ap, int *) = (int)wrote;
             }
             continue;
         }
-        if (*p == 'z') {
-            p++;
-            if (*p == 'u' || *p == 'd' || *p == 'i') {
-                out_udec(pF, ppB, &left, &wrote,
-                         (unsigned long long)va_arg(ap, size_t), 10, 0);
+        if (chConv == 's') {
+            const char *sz = va_arg(ap, const char *);
+            int nLen;
+            int nPad;
+            int i;
+
+            if (sz == NULL) {
+                sz = "(null)";
+            }
+            nLen = 0;
+            /* nPrec is a max; stop even without a NUL. */
+            if (nPrec >= 0) {
+                while (nLen < nPrec && sz[nLen] != '\0') {
+                    nLen++;
+                }
+            } else {
+                while (sz[nLen] != '\0') {
+                    nLen++;
+                }
+            }
+            nPad = (nWidth > nLen) ? nWidth - nLen : 0;
+            if (!fLeft) {
+                out_fill(pF, ppB, &left, &wrote, ' ', nPad);
+            }
+            for (i = 0; i < nLen; i++) {
+                out_ch(pF, ppB, &left, &wrote, sz[i]);
+            }
+            if (fLeft) {
+                out_fill(pF, ppB, &left, &wrote, ' ', nPad);
+            }
+            continue;
+        }
+        if (chConv == 'c') {
+            char ch = (char)va_arg(ap, int);
+            int nPad = (nWidth > 1) ? nWidth - 1 : 0;
+
+            if (!fLeft) {
+                out_fill(pF, ppB, &left, &wrote, ' ', nPad);
+            }
+            out_ch(pF, ppB, &left, &wrote, ch);
+            if (fLeft) {
+                out_fill(pF, ppB, &left, &wrote, ' ', nPad);
+            }
+            continue;
+        }
+        if (chConv == 'p') {
+            unsigned long long uP;
+
+            uP = (unsigned long long)(uintptr_t)va_arg(ap, void *);
+            aPre[0] = '0';
+            aPre[1] = 'x';
+            aPre[2] = '\0';
+            nPre = 2;
+            fmt_ull(aDig, &nDig, uP, 16, 0);
+            if (nPrec == 0 && uP == 0ULL) {
+                nDig = 0;
+            }
+            while (nPrec > nDig && nDig < (int)sizeof(aDig) - 1) {
+                int i;
+
+                for (i = nDig; i > 0; i--) {
+                    aDig[i] = aDig[i - 1];
+                }
+                aDig[0] = '0';
+                nDig++;
+            }
+            out_field(pF, ppB, &left, &wrote, aPre, aDig, nDig, nWidth, fLeft,
+                      fZero && nPrec < 0);
+            continue;
+        }
+        if (chConv == 'd' || chConv == 'i') {
+            long long nVal;
+            unsigned long long u;
+            int fNeg = 0;
+
+            if (nLenMod == 2) {
+                nVal = va_arg(ap, long long);
+            } else if (nLenMod == 1) {
+                nVal = va_arg(ap, long);
+            } else if (nLenMod == 3) {
+                nVal = (long long)va_arg(ap, ptrdiff_t);
+            } else {
+                nVal = va_arg(ap, int);
+            }
+            if (nVal < 0) {
+                fNeg = 1;
+                u = (unsigned long long)(-(nVal + 1)) + 1ull;
+            } else {
+                u = (unsigned long long)nVal;
+            }
+            fmt_ull(aDig, &nDig, u, 10, 0);
+            if (nPrec == 0 && u == 0ULL) {
+                nDig = 0;
+            }
+            while (nPrec > nDig && nDig < (int)sizeof(aDig) - 1) {
+                int i;
+
+                for (i = nDig; i > 0; i--) {
+                    aDig[i] = aDig[i - 1];
+                }
+                aDig[0] = '0';
+                nDig++;
+            }
+            if (fNeg) {
+                aPre[nPre++] = '-';
+            } else if (fPlus) {
+                aPre[nPre++] = '+';
+            } else if (fSpace) {
+                aPre[nPre++] = ' ';
+            }
+            aPre[nPre] = '\0';
+            out_field(pF, ppB, &left, &wrote, aPre, aDig, nDig, nWidth, fLeft,
+                      fZero && nPrec < 0);
+            continue;
+        }
+        if (chConv == 'u' || chConv == 'x' || chConv == 'X' || chConv == 'o') {
+            unsigned long long u;
+            int nBase = 10;
+            int fUpper = (chConv == 'X');
+
+            if (chConv == 'x' || chConv == 'X') {
+                nBase = 16;
+            } else if (chConv == 'o') {
+                nBase = 8;
+            }
+            if (nLenMod == 2) {
+                u = va_arg(ap, unsigned long long);
+            } else if (nLenMod == 1) {
+                u = va_arg(ap, unsigned long);
+            } else if (nLenMod == 3) {
+                u = va_arg(ap, size_t);
+            } else {
+                u = va_arg(ap, unsigned);
+            }
+            fmt_ull(aDig, &nDig, u, nBase, fUpper);
+            if (nPrec == 0 && u == 0ULL) {
+                nDig = 0;
+            }
+            while (nPrec > nDig && nDig < (int)sizeof(aDig) - 1) {
+                int i;
+
+                for (i = nDig; i > 0; i--) {
+                    aDig[i] = aDig[i - 1];
+                }
+                aDig[0] = '0';
+                nDig++;
+            }
+            if (fHash && u != 0ULL) {
+                if (nBase == 16) {
+                    aPre[nPre++] = '0';
+                    aPre[nPre++] = fUpper ? 'X' : 'x';
+                } else if (nBase == 8 && (nDig == 0 || aDig[0] != '0')) {
+                    aPre[nPre++] = '0';
+                }
+            }
+            aPre[nPre] = '\0';
+            out_field(pF, ppB, &left, &wrote, aPre, aDig, nDig, nWidth, fLeft,
+                      fZero && nPrec < 0);
+            continue;
+        }
+        if (chConv == 'f' || chConv == 'F' || chConv == 'e' || chConv == 'E' ||
+            chConv == 'g' || chConv == 'G') {
+            double dVal;
+            char aNum[128];
+            int nNum;
+            int fUpper = (chConv == 'F' || chConv == 'E' || chConv == 'G');
+            const char *szBody;
+            int nBody;
+            int nPad;
+            int fNegNum = 0;
+
+            if (nLenMod == 2) {
+                dVal = (double)va_arg(ap, long double);
+            } else {
+                dVal = va_arg(ap, double);
+            }
+            nNum = fmt_double(aNum, sizeof(aNum), dVal, nPrec, fUpper, chConv);
+            if (nNum < 0) {
+                continue;
+            }
+            szBody = aNum;
+            nBody = nNum;
+            if (nBody > 0 && aNum[0] == '-') {
+                fNegNum = 1;
+                szBody = aNum + 1;
+                nBody--;
+            }
+            if (fNegNum) {
+                aPre[nPre++] = '-';
+            } else if (fPlus) {
+                aPre[nPre++] = '+';
+            } else if (fSpace) {
+                aPre[nPre++] = ' ';
+            }
+            aPre[nPre] = '\0';
+            nPad = nWidth - (nPre + nBody);
+            if (nPad < 0) {
+                nPad = 0;
+            }
+            if (fLeft) {
+                out_nstr(pF, ppB, &left, &wrote, aPre, nPre);
+                out_nstr(pF, ppB, &left, &wrote, szBody, nBody);
+                out_fill(pF, ppB, &left, &wrote, ' ', nPad);
+            } else if (fZero && aNum[0] != 'n' && aNum[0] != 'N' &&
+                       aNum[0] != 'i' && aNum[0] != 'I' &&
+                       !(fNegNum && (aNum[1] == 'n' || aNum[1] == 'N' ||
+                                     aNum[1] == 'i' || aNum[1] == 'I'))) {
+                out_nstr(pF, ppB, &left, &wrote, aPre, nPre);
+                out_fill(pF, ppB, &left, &wrote, '0', nPad);
+                out_nstr(pF, ppB, &left, &wrote, szBody, nBody);
+            } else {
+                out_fill(pF, ppB, &left, &wrote, ' ', nPad);
+                out_nstr(pF, ppB, &left, &wrote, aPre, nPre);
+                out_nstr(pF, ppB, &left, &wrote, szBody, nBody);
             }
             continue;
         }
         out_ch(pF, ppB, &left, &wrote, '%');
-        out_ch(pF, ppB, &left, &wrote, *p);
+        out_ch(pF, ppB, &left, &wrote, chConv);
     }
     if (szBuf != NULL && cb > 0) {
         if (left == 0) {
@@ -1473,6 +1936,7 @@ struct scan_src {
     FILE       *pF;
     const char *pS;
     size_t      nPos;
+    size_t      nCount;
 };
 
 static int
@@ -1481,7 +1945,11 @@ scan_get(struct scan_src *pSrc)
     int c;
 
     if (pSrc->pF != NULL) {
-        return fgetc(pSrc->pF);
+        c = fgetc(pSrc->pF);
+        if (c != EOF) {
+            pSrc->nCount++;
+        }
+        return c;
     }
     if (pSrc->pS == NULL) {
         return EOF;
@@ -1491,6 +1959,7 @@ scan_get(struct scan_src *pSrc)
         return EOF;
     }
     pSrc->nPos++;
+    pSrc->nCount++;
     return c;
 }
 
@@ -1499,6 +1968,9 @@ scan_unget(struct scan_src *pSrc, int c)
 {
     if (c == EOF) {
         return;
+    }
+    if (pSrc->nCount > 0) {
+        pSrc->nCount--;
     }
     if (pSrc->pF != NULL) {
         (void)ungetc(c, pSrc->pF);
@@ -1534,38 +2006,77 @@ scan_skip_space(struct scan_src *pSrc)
 }
 
 static int
-scan_int(struct scan_src *pSrc, int nBase, long long *pOut)
+scan_int(struct scan_src *pSrc, int nBase, int nWidth, long long *pOut)
 {
     int c;
     int fNeg = 0;
     int fAny = 0;
+    int nUsed = 0;
+    int nMax = (nWidth > 0) ? nWidth : 1000000;
     unsigned long long u = 0;
 
     scan_skip_space(pSrc);
     c = scan_get(pSrc);
     if (c == '+' || c == '-') {
         fNeg = (c == '-');
+        nUsed++;
+        if (nUsed >= nMax) {
+            *pOut = 0;
+            return -1;
+        }
         c = scan_get(pSrc);
     }
     if (nBase == 0) {
         if (c == '0') {
-            int c2 = scan_get(pSrc);
+            int c2;
 
+            nUsed++;
+            fAny = 1;
+            if (nUsed >= nMax) {
+                *pOut = 0;
+                return 0;
+            }
+            c2 = scan_get(pSrc);
             if (c2 == 'x' || c2 == 'X') {
                 nBase = 16;
+                nUsed++;
+                if (nUsed >= nMax) {
+                    *pOut = 0;
+                    return 0;
+                }
                 c = scan_get(pSrc);
             } else {
                 nBase = 8;
                 scan_unget(pSrc, c2);
-                fAny = 1;
+                c = '0';
+                nUsed--;
             }
         } else {
             nBase = 10;
+        }
+    } else if (nBase == 16 && c == '0') {
+        int c2;
+
+        if (nUsed + 1 < nMax) {
+            c2 = scan_get(pSrc);
+            if (c2 == 'x' || c2 == 'X') {
+                nUsed += 2;
+                if (nUsed >= nMax) {
+                    *pOut = 0;
+                    return 0;
+                }
+                c = scan_get(pSrc);
+            } else {
+                scan_unget(pSrc, c2);
+            }
         }
     }
     for (;;) {
         int d = -1;
 
+        if (nUsed >= nMax) {
+            break;
+        }
         if (c >= '0' && c <= '9') {
             d = c - '0';
         } else if (c >= 'a' && c <= 'f') {
@@ -1578,6 +2089,7 @@ scan_int(struct scan_src *pSrc, int nBase, long long *pOut)
         }
         fAny = 1;
         u = u * (unsigned)nBase + (unsigned)d;
+        nUsed++;
         c = scan_get(pSrc);
     }
     if (c != EOF) {
@@ -1588,6 +2100,46 @@ scan_int(struct scan_src *pSrc, int nBase, long long *pOut)
     }
     *pOut = fNeg ? -(long long)u : (long long)u;
     return 0;
+}
+
+static void
+scan_store_int(va_list ap, int nLenMod, int fSigned, long long nVal)
+{
+    if (nLenMod == 2) {
+        if (fSigned) {
+            *va_arg(ap, long long *) = nVal;
+        } else {
+            *va_arg(ap, unsigned long long *) = (unsigned long long)nVal;
+        }
+    } else if (nLenMod == 1) {
+        if (fSigned) {
+            *va_arg(ap, long *) = (long)nVal;
+        } else {
+            *va_arg(ap, unsigned long *) = (unsigned long)nVal;
+        }
+    } else if (nLenMod == 3) {
+        if (fSigned) {
+            *va_arg(ap, ptrdiff_t *) = (ptrdiff_t)nVal;
+        } else {
+            *va_arg(ap, size_t *) = (size_t)nVal;
+        }
+    } else if (nLenMod == -1) {
+        if (fSigned) {
+            *va_arg(ap, short *) = (short)nVal;
+        } else {
+            *va_arg(ap, unsigned short *) = (unsigned short)nVal;
+        }
+    } else if (nLenMod == -2) {
+        if (fSigned) {
+            *va_arg(ap, signed char *) = (signed char)nVal;
+        } else {
+            *va_arg(ap, unsigned char *) = (unsigned char)nVal;
+        }
+    } else if (fSigned) {
+        *va_arg(ap, int *) = (int)nVal;
+    } else {
+        *va_arg(ap, unsigned *) = (unsigned)nVal;
+    }
 }
 
 static int
@@ -1638,6 +2190,11 @@ vscan(struct scan_src *pSrc, const char *szFmt, va_list ap)
         {
             int fSuppress = 0;
             int nWidth = 0;
+            int nLenMod = 0;
+            int nBase;
+            int fSigned;
+            long long v = 0;
+            char chConv;
 
             if (*p == '*') {
                 fSuppress = 1;
@@ -1647,83 +2204,68 @@ vscan(struct scan_src *pSrc, const char *szFmt, va_list ap)
                 nWidth = nWidth * 10 + (*p - '0');
                 p++;
             }
-            if (*p == 'l') {
+            if (*p == 'h') {
                 p++;
-                if (*p == 'd' || *p == 'i') {
-                    long long v = 0;
-
-                    if (scan_int(pSrc, 10, &v) != 0) {
-                        return (nAssigned > 0) ? nAssigned : EOF;
-                    }
-                    if (!fSuppress) {
-                        *va_arg(ap, long *) = (long)v;
-                        nAssigned++;
-                    }
-                    continue;
-                }
-                if (*p == 'u') {
-                    long long v = 0;
-
-                    if (scan_int(pSrc, 10, &v) != 0) {
-                        return (nAssigned > 0) ? nAssigned : EOF;
-                    }
-                    if (!fSuppress) {
-                        *va_arg(ap, unsigned long *) = (unsigned long)v;
-                        nAssigned++;
-                    }
-                    continue;
-                }
-                if (*p == 'l' && (p[1] == 'd' || p[1] == 'i')) {
-                    long long v = 0;
-
+                if (*p == 'h') {
+                    nLenMod = -2;
                     p++;
-                    if (scan_int(pSrc, 10, &v) != 0) {
-                        return (nAssigned > 0) ? nAssigned : EOF;
-                    }
-                    if (!fSuppress) {
-                        *va_arg(ap, long long *) = v;
-                        nAssigned++;
-                    }
-                    continue;
+                } else {
+                    nLenMod = -1;
                 }
+            } else if (*p == 'l') {
+                p++;
+                if (*p == 'l') {
+                    nLenMod = 2;
+                    p++;
+                } else {
+                    nLenMod = 1;
+                }
+            } else if (*p == 'z' || *p == 't' || *p == 'j') {
+                nLenMod = 3;
+                p++;
             }
-            if (*p == 'd' || *p == 'i') {
-                long long v = 0;
-
-                if (scan_int(pSrc, (*p == 'i') ? 0 : 10, &v) != 0) {
+            if (*p == '\0') {
+                break;
+            }
+            chConv = *p;
+            if (chConv == 'p') {
+                if (scan_int(pSrc, 16, nWidth, &v) != 0) {
                     return (nAssigned > 0) ? nAssigned : EOF;
                 }
                 if (!fSuppress) {
-                    *va_arg(ap, int *) = (int)v;
+                    *va_arg(ap, void **) = (void *)(uintptr_t)v;
                     nAssigned++;
                 }
                 continue;
             }
-            if (*p == 'u') {
-                long long v = 0;
-
-                if (scan_int(pSrc, 10, &v) != 0) {
+            if (chConv == 'd' || chConv == 'i' || chConv == 'u' ||
+                chConv == 'x' || chConv == 'X' || chConv == 'o') {
+                if (chConv == 'd') {
+                    nBase = 10;
+                    fSigned = 1;
+                } else if (chConv == 'i') {
+                    nBase = 0;
+                    fSigned = 1;
+                } else if (chConv == 'u') {
+                    nBase = 10;
+                    fSigned = 0;
+                } else if (chConv == 'o') {
+                    nBase = 8;
+                    fSigned = 0;
+                } else {
+                    nBase = 16;
+                    fSigned = 0;
+                }
+                if (scan_int(pSrc, nBase, nWidth, &v) != 0) {
                     return (nAssigned > 0) ? nAssigned : EOF;
                 }
                 if (!fSuppress) {
-                    *va_arg(ap, unsigned *) = (unsigned)v;
+                    scan_store_int(ap, nLenMod, fSigned, v);
                     nAssigned++;
                 }
                 continue;
             }
-            if (*p == 'x' || *p == 'X') {
-                long long v = 0;
-
-                if (scan_int(pSrc, 16, &v) != 0) {
-                    return (nAssigned > 0) ? nAssigned : EOF;
-                }
-                if (!fSuppress) {
-                    *va_arg(ap, unsigned *) = (unsigned)v;
-                    nAssigned++;
-                }
-                continue;
-            }
-            if (*p == 's') {
+            if (chConv == 's') {
                 char *pOut = fSuppress ? NULL : va_arg(ap, char *);
                 int n = 0;
                 int c;
@@ -1754,7 +2296,7 @@ vscan(struct scan_src *pSrc, const char *szFmt, va_list ap)
                 }
                 continue;
             }
-            if (*p == 'c') {
+            if (chConv == 'c') {
                 int c = scan_get(pSrc);
                 int nNeed = (nWidth > 0) ? nWidth : 1;
                 int i;
@@ -1783,9 +2325,131 @@ vscan(struct scan_src *pSrc, const char *szFmt, va_list ap)
                 }
                 continue;
             }
-            if (*p == 'n') {
+            if (chConv == '[') {
+                unsigned char aSet[256];
+                int fNegate = 0;
+                int n = 0;
+                int c;
+                int i;
+                char *pOut = fSuppress ? NULL : va_arg(ap, char *);
+
+                p++;
+                for (i = 0; i < 256; i++) {
+                    aSet[i] = 0;
+                }
+                if (*p == '^') {
+                    fNegate = 1;
+                    p++;
+                }
+                if (*p == ']') {
+                    aSet[(unsigned char)']'] = 1;
+                    p++;
+                }
+                while (*p != '\0' && *p != ']') {
+                    unsigned char chLo = (unsigned char)*p;
+
+                    p++;
+                    if (*p == '-' && p[1] != '\0' && p[1] != ']') {
+                        unsigned char chHi = (unsigned char)p[1];
+                        unsigned int uCh;
+
+                        p += 2;
+                        if (chLo > chHi) {
+                            unsigned char chT = chLo;
+
+                            chLo = chHi;
+                            chHi = chT;
+                        }
+                        for (uCh = chLo; uCh <= chHi; uCh++) {
+                            aSet[uCh] = 1;
+                        }
+                    } else {
+                        aSet[chLo] = 1;
+                    }
+                }
+                for (;;) {
+                    if (nWidth > 0 && n >= nWidth) {
+                        break;
+                    }
+                    c = scan_get(pSrc);
+                    if (c == EOF) {
+                        break;
+                    }
+                    {
+                        int fIn = aSet[(unsigned char)c];
+
+                        if (fNegate) {
+                            fIn = !fIn;
+                        }
+                        if (!fIn) {
+                            scan_unget(pSrc, c);
+                            break;
+                        }
+                    }
+                    if (pOut != NULL) {
+                        pOut[n] = (char)c;
+                    }
+                    n++;
+                }
+                if (n == 0) {
+                    return (nAssigned > 0) ? nAssigned : EOF;
+                }
+                if (pOut != NULL) {
+                    pOut[n] = '\0';
+                    nAssigned++;
+                }
+                continue;
+            }
+            if (chConv == 'n') {
                 if (!fSuppress) {
-                    *va_arg(ap, int *) = (int)pSrc->nPos;
+                    scan_store_int(ap, nLenMod, 1, (long long)pSrc->nCount);
+                }
+                continue;
+            }
+            if (chConv == 'f' || chConv == 'F' || chConv == 'e' ||
+                chConv == 'E' || chConv == 'g' || chConv == 'G') {
+                char aNum[64];
+                int n = 0;
+                int c;
+                double dV;
+                char *pEnd = NULL;
+
+                scan_skip_space(pSrc);
+                for (;;) {
+                    if (nWidth > 0 && n >= nWidth) {
+                        break;
+                    }
+                    c = scan_get(pSrc);
+                    if (c == EOF) {
+                        break;
+                    }
+                    if ((c >= '0' && c <= '9') || c == '.' || c == '+' ||
+                        c == '-' || c == 'e' || c == 'E' || c == 'x' ||
+                        c == 'X' || (c >= 'a' && c <= 'f') ||
+                        (c >= 'A' && c <= 'F')) {
+                        if (n + 1 < (int)sizeof(aNum)) {
+                            aNum[n++] = (char)c;
+                        }
+                    } else {
+                        scan_unget(pSrc, c);
+                        break;
+                    }
+                }
+                aNum[n] = '\0';
+                if (n == 0) {
+                    return (nAssigned > 0) ? nAssigned : EOF;
+                }
+                dV = strtod(aNum, &pEnd);
+                if (pEnd == aNum) {
+                    return (nAssigned > 0) ? nAssigned : EOF;
+                }
+                if (!fSuppress) {
+                    if (nLenMod == 1 || nLenMod == 2) {
+                        *va_arg(ap, double *) = dV;
+                    } else {
+                        *va_arg(ap, float *) = (float)dV;
+                    }
+                    nAssigned++;
                 }
                 continue;
             }
@@ -1808,6 +2472,7 @@ vfscanf(FILE *pF, const char *szFmt, va_list ap)
     src.pF = pF;
     src.pS = NULL;
     src.nPos = 0;
+    src.nCount = 0;
     return vscan(&src, szFmt, ap);
 }
 
@@ -1853,6 +2518,7 @@ vsscanf(const char *szBuf, const char *szFmt, va_list ap)
     src.pF = NULL;
     src.pS = szBuf;
     src.nPos = 0;
+    src.nCount = 0;
     return vscan(&src, szFmt, ap);
 }
 

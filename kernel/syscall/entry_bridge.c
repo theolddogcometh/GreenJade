@@ -315,7 +315,7 @@ entry_bridge_soft_nr_is_udx_surface(u64 u64Nr)
 
 /**
  * Soft sshd/netstackd NET door NR (Dual DoD B soft stack path after host launch).
- * Never routes; Soft!=product; residual != product :22 close.
+ * Never routes; Soft!=product; residual != interactive SSH login.
  */
 static u32
 entry_bridge_soft_nr_is_sshd_net(u64 u64Nr)

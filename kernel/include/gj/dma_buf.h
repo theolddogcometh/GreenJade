@@ -67,7 +67,7 @@
  *
  * Dual DoD B residual: stable DMA for freestanding NIC rings under arping.
  * USB residual: same force32 identity path for xHCI ring/TRB pages under TE.
- * soft PASS != DUT R-climb / :22 closed; soft PASS != product UDX DMA caps.
+ * soft PASS != DUT R-climb / interactive SSH login; soft PASS != product UDX DMA caps.
  * Fail/soft-warn logs hard-capped so continuous re-post does not flood serial.
  * No stamp storms. No version stamp. Lean residual only (G-AC-1).
  *
@@ -314,7 +314,7 @@ int dma_buf_sync_pa_for_device(gj_paddr_t pa, u64 cb, int nDir);
  * Never hard-gates. Lean one-shot (no stamp storms):
  *   dma_buf: soft note | dma_buf: soft residual | dma_buf: soft mint honesty
  *   | dma_buf: soft ddi residual | dma_buf: soft ddi deepen | dma_buf: soft PASS
- * Soft != product | Dual DoD B residual (soft PASS != DUT arping R-climb / :22)
+ * Soft != product | Dual DoD B residual (soft PASS != interactive SSH login)
  * | freestanding NIC/USB rings | UDX NIC/USB DMA caps eng residual
  * | DDI DMA_BUF residual deepen (soft PASS != product UDX DMA caps; G-AC-1).
  */

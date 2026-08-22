@@ -1802,7 +1802,7 @@ notify_soft_residual_lean_once(void)
 
     /*
      * Check dual_dod_open residual honesty (law) BEFORE mark_dead.
-     * Soft residual never closes Dual DoD A (USB) or B (NIC/sshd :22).
+     * Soft residual never closes Dual DoD A (USB) or B (interactive SSH login).
      * H1 thr-only locks hold; product = UDX thr notify not .ko.
      * W10: install_null. W11: poll_eq|partial_reap|abort_nobadge|inject_query.
      * W12: denser residual honesty (MSI-X inject product_hosts=UDX).

@@ -3,9 +3,9 @@
  * Copyright (c) 2026 Project GreenJade contributors
  *
  * Freestanding netstackd — claims net door + lo socket echo via GJ_SYS_NET.
- * C2 product daemon residual (Soft!=product; dual MIT OR Apache-2.0; G-AC-1):
- *   Product stack host (middle of Dual DoD B) over UDX-owned NIC wire:
- *     UDX NIC wire → netstackd (this unit) → sshd :22 / lab IP spirit.
+ * C2 leftover smoke (Soft!=product; dual MIT OR Apache-2.0; G-AC-1):
+ *   Not Dual DoD B mid-hop. Fly B hop is rtl8168_udx → kernel net_tcp → sshd.elf.
+ *   This unit listens :7777 then RELEASE. Dual DoD B until interactive SSH login.
  *   product=UDX/DDI+ABI (userspace Linux-shaped NIC + door ABI).
  *   Dual DoD A/B remain OPEN (soft residual != Dual DoD close).
  *   Prefer product UDX path honesty over freestanding soft residual.
@@ -1097,9 +1097,9 @@ soft_inventory_log(const struct soft_ctx *pSoft)
 
     /*
      * Grep: netstackd-gj: soft residual densify chain=
-     * Full Dual DoD B product chain densify: UDX→netstackd→sshd.
-     * densify_chain=1 when product_udx_nic + product_stack densify.
-     * Soft residual densify Soft!=product; dual_dod_b=OPEN; agent!=close.
+     * leftover densify chain UDX→netstackd→sshd is not Dual DoD B hop.
+     * Product Dual DoD B hop is rtl8168_udx → kernel net_tcp → sshd.elf.
+     * leftover :7777; Dual DoD B OPEN until interactive SSH login.
      */
     msg("netstackd-gj: soft residual densify chain=1 "
         "product_udx_nic=1 product_stack=1 denser=1 "

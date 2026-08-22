@@ -40,7 +40,8 @@
  *   Soft cold personality stubs only - never product multi-process UDX
  *   notify/DDI close. Product path = UDX/DDI + hot/cold ABI (userspace
  *   hosts over ABI; this unit is soft cold half residual only).
- *   Dual DoD A/B stay OPEN (agent != close). Freestanding class SKIP.
+ *   Dual DoD A OPEN until host USB path; Dual DoD B OPEN until
+ *   interactive SSH login (agent != close). Freestanding class SKIP.
  *   H1: no IRQ eth poll from this unit (soft stubs; no net_eth_poll).
  *   H2: once-inventory storm=0 (no stamp storms; no version stamp).
  *   H3: soft proc spawn stays host ENOSYS (not thr_exit product path).
@@ -65,7 +66,8 @@
  * greppable: Soft!=product
  * Pure observation; never hard-gates; wrap OK; soft.
  * Honesty: Soft!=product - soft cold personality is not product
- * multi-process UDX/notify/DDI close (Dual DoD A/B OPEN).
+ * multi-process UDX/notify/DDI close (Dual DoD A OPEN until host USB
+ * path; Dual DoD B OPEN until interactive SSH login).
  */
 #include <stdint.h>
 #include <gj/klog.h>
@@ -241,15 +243,16 @@
 
 /*
  * Soft socket residual flags (u8Flags on PR_KIND_SOCKET).
- * Dual DoD B residual: listen → accept path toward sshd cold ABI honesty.
- * Soft!=product; never product UDX wire / multi-server close.
+ * leftover listen → accept residual (sshd cold ABI honesty). Dual DoD B hop
+ * is rtl8168_udx → kernel net_tcp → sshd.elf. Soft!=product; never product
+ * UDX wire / Dual DoD B close (close = host interactive SSH login).
  * greppable: cold_linux: soft residual accept
  * greppable: cold_linux: soft residual sshd_path
  */
 #define PR_SOCK_F_BOUND    0x01u /* bind residual recorded */
 #define PR_SOCK_F_LISTEN   0x02u /* listen residual armed */
 #define PR_SOCK_F_CONN     0x04u /* connect / accepted residual */
-/* Soft default sshd port spirit when bind addr soft empty (Dual DoD B). */
+/* Soft default sshd port spirit when bind addr soft empty (leftover MAP). */
 #define PR_SOCK_SSHD_PORT  22u
 
 /* fcntl cmds (subset). */
@@ -2410,7 +2413,7 @@ protonrt_cold_linux(uint64_t u64Nr, uint64_t a0, uint64_t a1, uint64_t a2,
         if (!fd_ok(a0) || g_aFd[a0].u8Kind != PR_KIND_SOCKET) {
             return -(int64_t)E_NOTSOCK;
         }
-        /* Soft listen residual arms accept path (sshd :22 spirit OK). */
+        /* Soft listen residual arms accept path (leftover :22 spirit). */
         g_aFd[a0].u8Flags |= PR_SOCK_F_LISTEN;
         if ((g_aFd[a0].u8Flags & PR_SOCK_F_BOUND) == 0u) {
             g_aFd[a0].u8Flags |= PR_SOCK_F_BOUND;
@@ -2472,7 +2475,8 @@ protonrt_cold_linux(uint64_t u64Nr, uint64_t a0, uint64_t a1, uint64_t a2,
         }
         /*
          * Functional residual: accept requires listen residual.
-         * Dual DoD B cold path toward sshd accept; Soft!=product.
+         * leftover cold path toward sshd accept; Dual DoD B hop is
+         * kernel net_tcp → sshd.elf until interactive SSH login.
          * greppable: cold_linux: soft residual accept
          */
         if ((g_aFd[a0].u8Flags & PR_SOCK_F_LISTEN) == 0u) {

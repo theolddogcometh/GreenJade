@@ -86,7 +86,7 @@
 /*
  * Soft Cap / Dual DoD residual honesty (spine eng only; Soft!=product).
  * Always-0 mint/server/confine flags match sibling host residual lean.
- * Dual DoD A/B remain OPEN (1) until DUT proof — lamps alone never close.
+ * Dual DoD A/B remain OPEN (1) until USB path / interactive SSH login — lamps never close.
  * greppable: udx: soft residual cap_mint / udx: soft residual dual_dod
  * Grep: UDX_GJ_SOFT_CAP_MINT / UDX_GJ_SOFT_DOD_A_OPEN / DOD_B_OPEN
  */
@@ -98,8 +98,8 @@
 /*
  * Product path residual honesty (spine eng only; Soft!=product; G-AC-1).
  * product = userspace UDX/DDI + hot/cold Linux ABI (not freestanding .ko).
- * Dual DoD B residual direction names lab IP / netstack / sshd accept path
- * after product wire ownership — lamps alone never close Dual DoD.
+ * Dual DoD B residual direction names the rtl8168_udx hop; close is host
+ * interactive SSH login. Lamps / accept residual never close Dual DoD.
  * greppable: udx: soft residual product=UDX+ABI
  * greppable: udx: soft residual dual_dod
  * greppable: udx: soft residual sshd_path
@@ -107,7 +107,7 @@
 #define UDX_GJ_SOFT_PRODUCT_UDX_ABI 1u /* product path = UDX+ABI+DDI */
 #define UDX_GJ_SOFT_FS_CLASS_SKIP   1u /* freestanding class drivers SKIP */
 #define UDX_GJ_SOFT_G_AC_1          1u /* no Linux .ko product AC */
-#define UDX_GJ_SOFT_SSHD_PATH_OPEN  1u /* Dual DoD B sshd accept residual OPEN */
+#define UDX_GJ_SOFT_SSHD_PATH_OPEN  1u /* Dual DoD B sshd hop residual OPEN (login still OPEN) */
 #define UDX_GJ_SOFT_NETSTACK_OPEN   1u /* netstack / TCP residual OPEN */
 
 /*
@@ -169,11 +169,13 @@ u32 udx_core_should_run(void);
  * Soft!=product; identity cookie under VT-d [0,1GiB) identity.
  */
 /*
- * Small tier count: product rtl8168_udx Own handoff uses per-slot 4 KiB
- * RX pages (16) + ring (1) + TX bounce (1) + residual ≥ 18. DUT .84
- * inject=0 residual needs bus PA cookies; .85 per-slot path.
+ * Small tier count: Dual DoD B rtl8168_udx Own handoff uses per-slot 4 KiB
+ * RX pages (16) + ring (1) + TX bounce (1) + residual ≥ 18. Dual DoD A
+ * xhci_udx product scratchpad: DCBAA+ERST+array+need pages (clamp 64
+ * after 0.1.150 glass SPAD_CLAMP) + cmd/evt miss — 72 = 5+64+3.
+ * rtl8168_udx is a separate ELF. Soft!=product; Dual DoD A OPEN.
  */
-#define UDX_FS_DMA_SLOTS           24u
+#define UDX_FS_DMA_SLOTS           72u
 #define UDX_FS_DMA_SLOT_CB         4096u
 #define UDX_FS_DMA_LARGE_SLOTS     4u
 #define UDX_FS_DMA_LARGE_SLOT_CB   32768u

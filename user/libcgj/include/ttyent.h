@@ -25,7 +25,7 @@
  * Soft residual (C2 libcgj header; Soft!=product; G-AC-1; Dual DoD A/B OPEN):
  *   soft path  = getttyent/getttynam/setttyent soft fill (often empty table)
  *   product    = full /etc/ttys product registry (OPEN; not closed here)
- *   catalog    = struct ttyent + TTY_ON/TTY_SECURE + get*/set*/end*/ttyslot
+ *   catalog    = struct ttyent + TTY_ON/TTY_SECURE + get/set/end ttyent + ttyslot
  *   honesty    = Soft!=product; soft empty table != product multi-tty mint
  *   Bar honesty v2026.08.04.75. NEVER bump GJ_IMAGE_VERSION from this unit.
  * greppable: libcgj: soft residual ttyent

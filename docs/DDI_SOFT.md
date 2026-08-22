@@ -6,10 +6,10 @@
 | **Law** | Dual **MIT OR Apache-2.0** only; **no GPL source in tree**; **no Linux `.ko` product AC** (**G-AC-1**); **Soft ≠ product** |
 | **Product** | Hot + cold **Linux ABI** + **Linux-shaped UDX/DDI userspace** drivers |
 | **Freestanding** | Class drivers **SKIP** live (`GJ_RTL8168_PROBE=0` · `GJ_XHCI_MSC_PROBE=0`) — **not** product; **not** Dual DoD close; **stop freestanding rtl rabbit hole** |
-| **Dual DoD A/B** | **A** UDX USB **OPEN** · **B** UDX NIC **OPEN** (soft DDI ≠ close; Dual DoD = UDX path) |
+| **Dual DoD A/B** | **A** UDX USB **OPEN** until host USB path · **B** UDX NIC **OPEN** until host **interactive SSH login** (soft DDI ≠ close) |
 | **Code** | `kernel/include/gj/devmgr.h` · `kernel/drv/devmgr_soft.c` · `kernel/drv/ddi_door.c` |
 | **Companions** | [ABI_FIRST_PIVOT.md](ABI_FIRST_PIVOT.md) · [UDX_LINUX_PORTER.md](UDX_LINUX_PORTER.md) · [LAPTOP_LINUX_DRIVER_HOST.md](LAPTOP_LINUX_DRIVER_HOST.md) · [SECURITY_CORE_DESIGN.md](SECURITY_CORE_DESIGN.md) · [SOLARIS_STYLE_REMAINING.md](SOLARIS_STYLE_REMAINING.md) · [CAP_ADDRESSING.md](CAP_ADDRESSING.md) · [HCL.md](HCL.md) |
-| **Flash bar honesty** | Panel **`STATUS (static) v2026.08.04.72`** (`GJ_IMAGE_VERSION`) — DUT cut; freestanding **SKIP** live; Dual DoD A/B **OPEN**. Do **not** invent .73. No test-panel photo IDs. |
+| **Flash bar honesty** | Panel **`STATUS (static) v0.1.184`** (`GJ_IMAGE_VERSION`) packed, not host-probed — GOP isolate; Dual DoD A **OPEN** until host USB path; Dual DoD B **OPEN** until interactive SSH login. **0.1.183** host FAIL (`Sending command: true` **PASS**; exec 124) historical. **0.2.0** reserved. Do **not** invent next N. No test-panel photo IDs. |
 
 ## One-sentence goal
 
@@ -81,8 +81,8 @@ Law source: [ABI_FIRST_PIVOT.md](ABI_FIRST_PIVOT.md), project dual license (MIT 
 
 | Code | Default | Product bar? |
 |------|---------|--------------|
-| `kernel/drv/rtl8168.c` | **`GJ_RTL8168_PROBE=0` SKIP** | **No** — stop freestanding rtl rabbit hole; product NIC = **`rtl8168_udx`** userspace |
-| `kernel/drv/xhci_msc.c` | **`GJ_XHCI_MSC_PROBE=0` SKIP** | **No** — product USB = **`xhci_udx`** userspace |
+| `abandoned/kernel/drv/rtl8168.c` | **`GJ_RTL8168_PROBE=0` SKIP** | **No** — not linked; product NIC = **`rtl8168_udx`** |
+| `abandoned/kernel/drv/xhci_msc.c` | **`GJ_XHCI_MSC_PROBE=0` SKIP** | **No** — not linked; product USB = **`xhci_udx`** |
 | Soft module path / `RUN_INIT=0` / `freestanding_no_exec` | Eng residual: soft SKIP **exec** of staged `.ko` init in kernel | **No** — not “never use Linux-shaped drivers”; product stays **userspace UDX** |
 
 In-kernel freestanding class drivers remain **lab residual only** (opt-in). T0 product I/O stays **virtio** until UDX hosts ship real HW via userspace. **Freestanding is not Dual DoD close.**
@@ -194,7 +194,7 @@ Out-of-tree trees stay **separate**; GreenJade only consumes dual-license binari
 | **A** | **UDX USB** (laptop Linux-shaped USB host) | **OPEN** | Soft scan/bind for `8086:a12f` is inventory only — not BOT/MSC product |
 | **B** | **UDX NIC** (laptop Linux-shaped NIC host) | **OPEN** | Soft scan/bind for `10ec:8168` is inventory only — not TX/RX product |
 
-Close criteria live on **userspace UDX** paths (`xhci_udx` / `rtl8168_udx` + DDI caps), not freestanding stages and not soft door notes. Operator runbook: [LAPTOP_LINUX_DRIVER_HOST.md](LAPTOP_LINUX_DRIVER_HOST.md).
+Close criteria: Dual DoD **A** host USB path (RS-off ≠ close); Dual DoD **B** host **interactive SSH login**. Soft DDI / UDX bind lamps ≠ close. Operator runbook: [LAPTOP_LINUX_DRIVER_HOST.md](LAPTOP_LINUX_DRIVER_HOST.md).
 
 ---
 
@@ -206,10 +206,10 @@ Close criteria live on **userspace UDX** paths (`xhci_udx` / `rtl8168_udx` + DDI
 | Product multi-server `devmgr` | **Not claimed** |
 | Live cap mint of MMIO/IRQ/DMA to hosts | **Not claimed** |
 | Freestanding xHCI/rtl as T1 product | **No** — **SKIP** default; lab residual only; T0 = virtio |
-| Dual DoD **A** UDX USB / **B** UDX NIC | **OPEN** — soft ≠ close |
+| Dual DoD **A** USB path / **B** interactive SSH login | **OPEN** — soft ≠ close |
 | bar3 / Steam | **OPEN** — unrelated to this stub |
 | GPL / `.ko` product | **Forbidden** (**G-AC-1**) |
-| Flash bar | Honesty: **v2026.08.04.72** — freestanding SKIP live; Dual DoD OPEN; do not invent .73 |
+| Flash bar | Honesty: **v0.1.184** packed, not host-probed — GOP isolate; Dual DoD OPEN; **0.1.183** host FAIL (`Sending command: true` **PASS**; exec 124) historical; **0.2.0** reserved; do not invent next N |
 | Wave inventory cross-ref | [ABI_WAVE_STATUS.md](ABI_WAVE_STATUS.md) · [ABI_FIRST_PIVOT.md](ABI_FIRST_PIVOT.md) |
 
 | Soft status (2026-08 operator) | |
@@ -267,4 +267,4 @@ Freestanding bind still uses DDI SCAN/OPEN/MAP_BAR (`udx_host_bind_by_id` → `8
 *Soft confine ≠ product multi-server; soft window note ≠ VT-d enforce; soft ddi_door ≠ live grant; soft bot stub ≠ MSC; soft DDI ≠ Dual DoD A/B closed.*  
 *Dual MIT OR Apache-2.0 · **G-AC-1** · **Soft ≠ product** · freestanding **SKIP** · product = **ABI + UDX**.*  
 *Dual DoD **A** UDX USB **OPEN** · **B** UDX NIC **OPEN**. Stop freestanding rtl rabbit hole.*  
-*Flash bar honesty: **STATUS (static) v2026.08.04.72** — freestanding **SKIP** live · Dual DoD A/B **OPEN** · do not invent .73. No test-panel photo IDs.*
+*Flash bar honesty: **STATUS (static) v0.1.184** packed, not host-probed — freestanding **SKIP** live · GOP isolate · Dual DoD A **OPEN** until host USB path · Dual DoD B **OPEN** until interactive SSH login · **0.1.183** host FAIL (`Sending command: true` **PASS**; exec 124) historical · **0.2.0** reserved · do not invent next N. No test-panel photo IDs.*

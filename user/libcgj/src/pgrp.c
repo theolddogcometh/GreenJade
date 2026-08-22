@@ -6,6 +6,7 @@
  * Soft deepen: real setdomainname SYSCALL; fd/arg validation.
  */
 #include <errno.h>
+#include <signal.h>
 #include <stdint.h>
 #include <string.h>
 #include <sys/ioctl.h>
@@ -123,6 +124,28 @@ chroot(const char *szPath)
         return -1;
     }
     return (int)sys_ret(sys6(NR_chroot, (long)(uintptr_t)szPath, 0, 0, 0, 0, 0));
+}
+
+int
+killpg(int nPgrp, int nSig)
+{
+    if (nPgrp < 0) {
+        errno = EINVAL;
+        return -1;
+    }
+    return kill(-nPgrp, nSig);
+}
+
+int
+issetugid(void)
+{
+    if (geteuid() != getuid()) {
+        return 1;
+    }
+    if (getegid() != getgid()) {
+        return 1;
+    }
+    return 0;
 }
 
 pid_t

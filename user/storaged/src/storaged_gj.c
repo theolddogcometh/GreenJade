@@ -10,7 +10,7 @@
  *   soft inventory + lean product residual → live path PASS
  * Product surface = store-door ABI + UDX virtq ring hand-off (T0 virtio-blk).
  * Soft inventory / soft door / soft free / soft ring != product multi-server
- * confine and never close Dual DoD A/B (USB/NIC UDX remain OPEN).
+ * confine and never close Dual DoD A/B (A until host USB path; B until interactive SSH login).
  *
  * Live path order fixed for smoke greps (do not rename hard markers).
  *
@@ -623,7 +623,7 @@ soft_inventory_log(void)
      * Grep: storaged-gj: soft product residual
      * C2 product path = store-door ABI + UDX virtq EXPORT/MAP/KICK.
      * T0 block = virtio-blk; soft lamps != multi-server confine product.
-     * Dual DoD A/B remain OPEN (USB/NIC UDX hosts; agent!=close).
+     * Dual DoD A/B remain OPEN (A until USB path; B until interactive SSH login).
      */
     msg("storaged-gj: soft product residual claim_class=C2 "
         "product=UDX/DDI+ABI surface=store_door+udx_virtq "
@@ -647,7 +647,7 @@ soft_inventory_log(void)
 
     /*
      * Grep: storaged-gj: soft Dual DoD honesty
-     * A = Linux-shaped USB UDX OPEN; B = Linux-shaped NIC UDX OPEN.
+     * A OPEN until host USB path; B OPEN until interactive SSH login.
      * This block daemon does not close either; soft residual != close.
      */
     msg("storaged-gj: soft Dual DoD honesty A=OPEN B=OPEN "

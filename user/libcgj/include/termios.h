@@ -35,6 +35,13 @@
  */
 #pragma once
 
+#ifndef _TERMIOS_H
+#define _TERMIOS_H 1
+#endif
+#ifndef _GJ_OPENSSH_WINSIZE
+#define _GJ_OPENSSH_WINSIZE 1
+#endif
+
 #include <sys/types.h>
 
 #ifdef __cplusplus
@@ -46,6 +53,44 @@ typedef unsigned int   speed_t;
 typedef unsigned int   tcflag_t;
 
 #define NCCS 32
+
+#ifndef _GJ_WINSIZE_DEFINED
+#define _GJ_WINSIZE_DEFINED
+struct winsize {
+    unsigned short ws_row;
+    unsigned short ws_col;
+    unsigned short ws_xpixel;
+    unsigned short ws_ypixel;
+};
+#endif
+
+#ifndef TIOCGWINSZ
+#define TIOCGWINSZ 0x5413
+#endif
+#ifndef TIOCSWINSZ
+#define TIOCSWINSZ 0x5414
+#endif
+#ifndef TCGETS
+#define TCGETS  0x5401
+#endif
+#ifndef TCSETS
+#define TCSETS  0x5402
+#endif
+#ifndef TCSETSW
+#define TCSETSW 0x5403
+#endif
+#ifndef TCSETSF
+#define TCSETSF 0x5404
+#endif
+#ifndef TCSBRK
+#define TCSBRK  0x5409
+#endif
+#ifndef TCXONC
+#define TCXONC  0x540A
+#endif
+#ifndef TCFLSH
+#define TCFLSH  0x540B
+#endif
 
 struct termios {
     tcflag_t c_iflag;
@@ -76,6 +121,9 @@ struct termios {
 #define VWERASE  14
 #define VLNEXT   15
 #define VEOL2    16
+#ifndef VSWTCH
+#define VSWTCH   VSWTC /* OpenSSH ttymodes.h */
+#endif
 
 /* iflag */
 #define IGNBRK 0000001
@@ -91,6 +139,8 @@ struct termios {
 #define IXON   0002000
 #define IXANY  0004000
 #define IXOFF  0010000
+#define IMAXBEL 0020000
+#define IUTF8   0040000
 
 /* oflag (Linux soft residual catalog; Soft!=product) */
 #define OPOST  0000001
@@ -101,6 +151,29 @@ struct termios {
 #define ONLRET 0000040
 #define OFILL  0000100
 #define OFDEL  0000200
+#define NLDLY  0000400
+#define NL0    0000000
+#define NL1    0000400
+#define CRDLY  0003000
+#define CR0    0000000
+#define CR1    0001000
+#define CR2    0002000
+#define CR3    0003000
+#define TABDLY 0014000
+#define TAB0   0000000
+#define TAB1   0004000
+#define TAB2   0010000
+#define TAB3   0014000
+#define XTABS  0014000
+#define BSDLY  0020000
+#define BS0    0000000
+#define BS1    0020000
+#define VTDLY  0040000
+#define VT0    0000000
+#define VT1    0040000
+#define FFDLY  0100000
+#define FF0    0000000
+#define FF1    0100000
 
 /* cflag */
 #define CSIZE  0000060
@@ -145,6 +218,18 @@ struct termios {
 #define B3000000 0010015
 #define B3500000 0010016
 #define B4000000 0010017
+#ifndef CBAUD
+#define CBAUD    0010017
+#endif
+#ifndef CBAUDEX
+#define CBAUDEX  0010000
+#endif
+#ifndef EXTA
+#define EXTA     B19200
+#endif
+#ifndef EXTB
+#define EXTB     B38400
+#endif
 
 /* lflag (Linux soft residual catalog; Soft!=product) */
 #define ISIG   0000001

@@ -24,7 +24,7 @@
  *   IRQ stack smash -> #PF I=1 wild RIP. Eth poll ownership is run-loop only
  *   (scheduler_run on full thr stack). TIMER_H1_* compile-time locks + lean
  *   residual lamps document ownership; soft PASS != product Dual DoD close
- *   (host arping/ping / :22 still OPEN; agent!=close). Dual MIT|Apache-2.0.
+ *   (host interactive SSH login still OPEN; agent!=close). Dual MIT|Apache-2.0.
  *   No version stamps. No stamp storms (inventory cap init+handoff; residual
  *   lean <= few greppable lines - never tick path). No GPL.
  *

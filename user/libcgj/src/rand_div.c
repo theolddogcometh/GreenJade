@@ -57,16 +57,6 @@ random(void)
     return (long)((g_uRandom >> 16) & 0x7fffffffUL);
 }
 
-struct random_data {
-    int32_t *fptr;
-    int32_t *rptr;
-    int32_t *state;
-    int      rand_type;
-    int      rand_deg;
-    int      rand_sep;
-    int32_t *end_ptr;
-};
-
 static char *g_pStateBuf;
 
 int

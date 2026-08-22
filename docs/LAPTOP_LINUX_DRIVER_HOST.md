@@ -7,7 +7,7 @@
 | **Law** | Dual **MIT OR Apache-2.0** only; **no GPL source in tree**; **Soft ≠ product** |
 | **Hard AC** | **G-AC-1** — no Linux `.ko` **runs in kernel** as product; product = hot+cold **Linux ABI** + **Linux-SHAPED UDX/DDI userspace** drivers |
 | **Freestanding** | **SKIP** default — `GJ_RTL8168_PROBE=0` · `GJ_XHCI_MSC_PROBE=0`. **Stop freestanding rtl rabbit hole.** Not Dual DoD close. |
-| **Image stamp** | GOP **STATUS (static) v2026.08.04.73** from `GJ_IMAGE_VERSION` (`kernel/include/gj/config.h`); confirm cut after flash |
+| **Image stamp** | GOP **STATUS (static) v0.1.184** from `GJ_IMAGE_VERSION` (`kernel/include/gj/config.h`); packed, not host-probed; confirm cut after flash |
 | **Strategy** | [ABI_FIRST_PIVOT.md](ABI_FIRST_PIVOT.md) · inventory [ABI_WAVE_STATUS.md](ABI_WAVE_STATUS.md) · track [TODO.md](TODO.md) Current track (2026-08-06) |
 | **Companions** | [HCL.md](HCL.md) · [DDI_SOFT.md](DDI_SOFT.md) · [UDX_LINUX_PORTER.md](UDX_LINUX_PORTER.md) · [G752VT_LINUX_HWTEST.md](G752VT_LINUX_HWTEST.md) · [LINUX_MODULE_PATH.md](LINUX_MODULE_PATH.md) · [HWTEST_TOMORROW.md](HWTEST_TOMORROW.md) · [STEAM_BAR3_STATUS.md](STEAM_BAR3_STATUS.md) |
 
@@ -20,11 +20,11 @@
 | Rule | Meaning |
 |------|---------|
 | **Stop freestanding rtl rabbit hole** | In-kernel `rtl8168.c` is residual **SKIP**, same policy as freestanding USB. Product NIC = **`rtl8168_udx`** + ABI/DDI. |
-| **Dual DoD A/B** | **A** = **UDX USB** **OPEN**. **B** = **UDX NIC** **OPEN**. Freestanding sshd/:22 and freestanding R-climb are **not** Dual DoD close criteria. |
+| **Dual DoD A/B** | **A** OPEN until host USB path (never `USBCMD.RS=1`). **B** OPEN until **interactive SSH login**. Banner / :22 / PK_OK / SUCCESS ≠ close. SUCCESS on **0.1.178** historical. **0.1.183** host FAIL (`Sending command: true` **PASS**; exec 124) historical (not live bar). |
 | **Soft ≠ product** | Soft DDI bind, soft module lamps, soft REAL+SOFT1 ≠ product TX/RX/BOT. |
 | **G-AC-1** | No Linux `.ko` runs in kernel as product. |
 | **Product** | Hot + cold Linux ABI + Linux-shaped **UDX/DDI userspace**. |
-| **Flash bar** | Honesty: **v2026.08.04.73** — freestanding **SKIP** live · Dual DoD A/B **OPEN** · do not invent .73 |
+| **Flash bar** | Honesty: **v0.1.184** packed, not host-probed — Dual DoD **A** park RS-off · **B** exec TX drain after 183 Sending command · login OPEN · freestanding **SKIP** live · Dual DoD A **OPEN** until host USB path · Dual DoD B **OPEN** until interactive SSH login · SUCCESS on **0.1.178** historical · **0.1.183** host FAIL (`Sending command: true` **PASS**; exec 124) historical · do not invent next N · **0.2.0** reserved |
 | **Evidence** | Lamps / serial only — **no test-panel photo IDs**. |
 
 ### Operator / Grok media (2026-08)
@@ -54,7 +54,7 @@ Honesty: staged `.ko` are **host Linux** binaries (often GPL). GreenJade **sourc
 | 3 | Soft module loader + ksym | **IN PROGRESS** (eng residual) |
 | 4 | Soft load + id match + netdev | **SOFT eng** — soft ≠ product |
 | 5 | Hostish real probe | **SOFT eng** — soft ≠ product |
-| 6 | Datapath / product wire | **OPEN** — product close is **UDX Dual DoD B**, not freestanding / not in-kernel `.ko` |
+| 6 | Datapath / product wire | **OPEN** — Dual DoD **B** close is host **interactive SSH login**, not freestanding / not in-kernel `.ko` |
 | 7 | Iterative ksym / media `finit_module` | **OPEN** (eng) |
 | Dual DoD | UDX USB (**A**) / UDX NIC (**B**) | **OPEN** |
 
@@ -102,7 +102,7 @@ Module path does **not** rewrite Dual DoD and does **not** waive **G-AC-1**.
 | **`devmgr_soft`** | Soft policy inventory; **real type-0 PCI CF8/CFC scan** | **Live walk** + G752 ID lamps | Soft table; no product match graph |
 | **UDX** (`user/udx/`) | Userspace runtime: Linux-shaped `probe` / `remove` / `ioremap` / IRQ / `dma_*` | Bind via **SCAN→GET→OPEN→MAP_BAR** matching kernel ops | Soft host / inject on Linux host |
 | **`vmm_map_user_device`** | UC MMIO map into process user AS | Used by MAP_BAR when current process exists | Soft map path; not full MMIO_FRAME cap mint story |
-| **Driver `.c`** | Clean-room class hosts | `rtl8168_udx` + `xhci_udx` **skeletons** | Soft only today — Dual DoD A/B **OPEN** |
+| **Driver `.c`** | Clean-room class hosts | `rtl8168_udx` + `xhci_udx` **skeletons** | Soft only today — Dual DoD A **OPEN** until host USB path · Dual DoD B **OPEN** until interactive SSH login |
 | **In-kernel freestanding** | Residual scaffolds; **SKIP** default | `rtl8168.c`, `xhci_msc.c` | **No** — **SKIP**; product NIC/USB ≠ freestanding / ≠ in-kernel `.ko` |
 
 ```text
@@ -130,7 +130,7 @@ Porter contract: [UDX_LINUX_PORTER.md](UDX_LINUX_PORTER.md). Soft DDI surface: [
 | **Real PCI scan** | `kernel/drv/devmgr_soft.c` | CF8/CFC walk; `devmgr: soft pci scan PASS n=N`; `devmgr: soft found 10ec:8168` / `8086:a12f` when present |
 | **UDX bind** | `user/udx/src/host.c` | `udx_host_bind_by_id` / `bind_scan` → same SCAN/GET/OPEN/MAP_BAR opcodes as kernel |
 | **User MMIO** | `vmm_map_user_device` in `kernel/mm/vmm.c` | MAP_BAR prefers process user-AS UC map; falls back to kernel UC for same-AS smoke |
-| **rtl8168_udx** | `user/drivers/rtl8168_udx/` | Product residual host — laptop **ARP + ping proven** (2026-08-14); Dual DoD **B OPEN** until sshd **:22** |
+| **rtl8168_udx** | `user/drivers/rtl8168_udx/` | Product residual host — laptop **ARP + ping proven** (2026-08-14); Dual DoD **B OPEN** until host **interactive SSH login** |
 | **xhci_udx** | `user/drivers/xhci_udx/` | Clean-room skeleton — soft cap/params/PORTSC + **soft BOT progress stub**; **Dual DoD A OPEN** (no product BOT/MSC) |
 
 ### 2.2 Explicitly still **OPEN** (do not claim)
@@ -138,8 +138,8 @@ Porter contract: [UDX_LINUX_PORTER.md](UDX_LINUX_PORTER.md). Soft DDI surface: [
 | Bar | Status |
 |-----|--------|
 | Dual DoD **A** — **UDX USB** datapath / BOT / MSC on `8086:a12f` | **OPEN** |
-| Dual DoD **B** — **UDX NIC** stack + sshd **:22** on `10ec:8168` | **OPEN** (L3 ARP/ping **proven**) |
-| Product NIC **TX/RX** datapath / link / PHY (userspace UDX) | **L3 ARP/ping proven** (2026-08-14); sshd still OPEN |
+| Dual DoD **B** — **UDX NIC** + `sshd.elf` on `10ec:8168` | **OPEN** until host **interactive SSH login** (L3 ARP/ping **proven**; SUCCESS on **0.1.178** historical; **0.1.183** host FAIL (`Sending command: true` **PASS**; exec 124) historical; fly **0.1.184** packed, not host-probed) |
+| Product NIC **TX/RX** datapath / link / PHY (userspace UDX) | **L3 ARP/ping proven** (2026-08-14); login still OPEN |
 | Product xHCI **BOT / MSC / HID** (userspace UDX) | **OPEN** |
 | **Live IRQ** path (kernel notify → userspace host ISR product) | **OPEN** (host-sim / soft fire only) |
 | Live DDI **cap mint** (MMIO_FRAME / IRQ Notification / DMA window into host CNode) | **OPEN** |
@@ -160,7 +160,7 @@ Porter contract: [UDX_LINUX_PORTER.md](UDX_LINUX_PORTER.md). Soft DDI surface: [
 | **USB ports** | USB **3.0 only** on this chassis — prefer SS stick path for MSC media |
 | **Serial** | **No DB9** — use **panel** bars/text + remount stick logs |
 | **Secure Boot** | **Off** for GreenJade USB |
-| **Flash bar** | Expect **STATUS (static) v2026.08.04.73** after flash of this cut |
+| **Flash bar** | Expect **STATUS (static) v0.1.184** after flash of this cut (packed, not host-probed) |
 
 Linux inventory ground truth (topology oracle only): [G752VT_LINUX_HWTEST.md](G752VT_LINUX_HWTEST.md).
 
@@ -216,7 +216,7 @@ Module-path layout (eng residual): [LINUX_MODULE_PATH.md](LINUX_MODULE_PATH.md).
 2. Power on → spam **Esc** (or **F8**) → choose **UEFI: … USB**.  
 3. Secure Boot **Disabled**; prefer pure UEFI (not CSM-only).  
 4. Watch **panel** (no COM1 on this chassis): loader `GJ-EFI` / kernel progress / soft lamps.  
-5. Confirm flash identity: **STATUS (static) v2026.08.04.73**.  
+5. Confirm flash identity: **STATUS (static) v0.1.184**.  
 6. After run, power off and collect logs on the lab host (below).
 
 Firmware tips: [HWTEST_TOMORROW.md](HWTEST_TOMORROW.md).
@@ -257,10 +257,10 @@ Panel capture is valid evidence when serial is absent. **No test-panel photo IDs
 
 | Lamp | Meaning | Closes product / dual DoD? |
 |------|---------|----------------------------|
-| **STATUS (static) v2026.08.04.73** | Title bar uses `GJ_IMAGE_VERSION` from `config.h` | **No** — flash identity only |
-| **`main: image version=2026.08.04.73`** | Serial echo of the same stamp | **No** |
+| **STATUS (static) v0.1.184** | Title bar uses `GJ_IMAGE_VERSION` from `config.h`; packed, not host-probed | **No** — flash identity only |
+| **`main: image version=0.1.184`** | Serial echo of the same stamp | **No** |
 
-Honesty: this cut is **v2026.08.04.73**. **Stamp bump:** this cut is flashable; confirm STATUS title matches `GJ_IMAGE_VERSION` after flash.
+Honesty: this cut is **v0.1.184** packed, not host-probed. SUCCESS on **0.1.178** historical. **0.1.183** host FAIL (`Sending command: true` **PASS**; exec 124) historical (not the live bar). **Stamp bump:** do not invent next N; confirm STATUS title matches `GJ_IMAGE_VERSION` after flash. **0.2.0** reserved.
 
 ### 5.1 Kernel / door (expect on freestanding-SKIP laptop boot)
 
@@ -298,8 +298,8 @@ Honesty: this cut is **v2026.08.04.73**. **Stamp bump:** this cut is flashable; 
 In-tree greppable anchors (wave D):
 
 ```text
-STATUS (static) v2026.08.04.73
-main: image version=2026.08.04.73
+STATUS (static) v0.1.184
+main: image version=0.1.184
 devmgr: soft init PASS
 devmgr: soft pci scan PASS n=
 devmgr: soft found 10ec:8168
@@ -334,7 +334,7 @@ make -C user/drivers/xhci_udx && ./user/drivers/xhci_udx/build/xhci_udx
 ```
 
 **Operator reading of a good ABI-first laptop boot:**  
-1. Confirm **STATUS (static) v2026.08.04.73**.  
+1. Confirm **STATUS (static) v0.1.184**.  
 2. Ignore freestanding stage/net counters for product judgment (default **SKIP**).  
 3. Prefer **`main: soft freestanding lab only`** + **`main: soft ddi bind … PASS`** (when silicon present) + **`main: soft ddi laptop smoke PASS … abi_first=1`**.  
 4. Class host soft notes appear when UDX drivers are launched later — still **not** Dual DoD A/B closed, not product TX/RX/BOT, not a license to load GPL `.ko`.
@@ -346,9 +346,9 @@ make -C user/drivers/xhci_udx && ./user/drivers/xhci_udx/build/xhci_udx
 | Claim | Status |
 |-------|--------|
 | **T0 product net** | **virtio-net** (QEMU / CI). Laptop wire is **UDX** (`rtl8168_udx`). |
-| **Dual DoD B (UDX NIC)** | **OPEN** until sshd **:22**. Laptop **ARP + ping proven** (2026-08-14). Soft probe ≠ close. |
+| **Dual DoD B (UDX NIC)** | **OPEN** until host **interactive SSH login**. Laptop **ARP + ping proven** (2026-08-14). SUCCESS on **0.1.178** historical. **0.1.183** host FAIL (`Sending command: true` **PASS**; exec 124) historical (not live bar). Fly **0.1.184** packed, not host-probed. Soft probe ≠ close. |
 | **Dual DoD A (UDX USB)** | **OPEN** — `xhci_udx` userspace bind + USB datapath. Soft bot stub ≠ close. |
-| **G752 wired NIC** | Hardware **`10ec:8168`**. Product path = `rtl8168_udx`. **L3 ARP + ping proven.** sshd **:22 OPEN**. **Product NIC ≠ freestanding · ≠ in-kernel `r8169.ko`.** |
+| **G752 wired NIC** | Hardware **`10ec:8168`**. Product path = `rtl8168_udx`. **L3 ARP + ping proven.** Dual DoD **B OPEN** until host **interactive SSH login**. **Product NIC ≠ freestanding · ≠ in-kernel `r8169.ko`.** |
 | **G752 xHCI** | Hardware **`8086:a12f`**. Soft `xhci_udx` cap read / residual freestanding `xhci_msc` ≠ product USB. **Product BOT/MSC OPEN.** |
 | **Live IRQ to UDX host** | **OPEN** — host `fire_irq` / soft ISR only; kernel notify product not closed. |
 | **Freestanding `rtl8168` / `xhci_msc` kernel** | **SKIP default** — residual opt-in only. **Not** Dual DoD close. **Stop freestanding rtl rabbit hole.** |
@@ -364,12 +364,12 @@ GreenJade hwtest stick →  wave D soft host path + staged linux-drivers/ (eng)
 Module path (track B)  →  collect → stage → loader/ksym → eng only (not product AC)
 Product path           →  hot+cold Linux ABI + UDX/DDI userspace hosts
 Dual DoD A             →  UDX USB  OPEN
-Dual DoD B             →  UDX NIC  OPEN until :22 (ARP/ping proven)
+Dual DoD B             →  UDX NIC  OPEN until interactive SSH login (ARP/ping proven)
 Product T0             →  virtio apps on QEMU; laptop wire = UDX
 Product real-HW        →  DDI caps + dual-license UDX userspace
 Freestanding class     →  SKIP default (not Dual DoD)
 bar3                   →  OPEN until client + matrix evidence
-Flash bar              →  STATUS (static) v0.1.136 
+Flash bar              →  STATUS (static) v0.1.184 packed, not host-probed 
 ```
 
 ---
@@ -380,13 +380,13 @@ Flash bar              →  STATUS (static) v0.1.136
 
 | # | DoD | Class | Status | Close when |
 |---|-----|-------|--------|------------|
-| **A** | **Linux-shaped USB** (laptop) | C1/C2 **UDX** | **OPEN** | Userspace UDX/DDI host path (`xhci_udx` …) + soft ksym seed as needed. **Not** freestanding MSC. **Not** `usb_storage.ko` init in kernel. Soft lamps alone ≠ close. |
-| **B** | **Linux-shaped NIC** (laptop) | C1/C2 **UDX** | **OPEN** | Userspace UDX NIC (`rtl8168_udx` …) binds `10ec:8168` and owns wire for lab IP / stack / sshd. **Not** freestanding rtl R-climb. **Not** in-kernel `r8169.ko` wire. Soft lamps alone ≠ close. |
+| **A** | **Linux-shaped USB** (laptop) | C1/C2 **UDX** | **OPEN** | Host USB path. RS-off / scratchpad ≠ close. Never `USBCMD.RS=1` unless the operator named that experiment. **Not** freestanding MSC. **Not** `usb_storage.ko` init in kernel. Soft lamps alone ≠ close. |
+| **B** | **Linux-shaped NIC** (laptop) | C1/C2 **UDX** | **OPEN** | Host **interactive SSH login**. Banner / :22 / PK_OK / SUCCESS ≠ login. SUCCESS proven on **0.1.178** (historical). **0.1.183** host FAIL (`Sending command: true` **PASS**; exec 124) historical. Fly **0.1.184** packed, not host-probed. Wire hop is `rtl8168_udx`. **Not** freestanding rtl R-climb. **Not** in-kernel `r8169.ko` wire. Soft lamps alone ≠ close. |
 
 **Defaults (honesty):**
 - `GJ_XHCI_MSC_PROBE=0` · **`GJ_RTL8168_PROBE=0`** — freestanding class **SKIP**.
 - Soft r8169 load/ksym may still run eng residual (`INIT=0`); **WIRE product** is UDX Dual DoD **B**, not freestanding.
-- STATUS title: **`STATUS (static) v2026.08.04.73`** (test what you fly).
+- STATUS title: **`STATUS (static) v0.1.184`** packed, not host-probed (test what you fly). **0.2.0** reserved.
 
 | # | Work | Status | Note |
 |---|------|--------|------|
@@ -436,7 +436,7 @@ Normative table: [LINUX_MODULE_PATH.md](LINUX_MODULE_PATH.md). Collect/stage may
 | Lab freestanding rtl as product NIC | **Never** — **SKIP**; product NIC ≠ freestanding · ≠ in-kernel `r8169.ko` |
 | Linux `.ko` **runs in kernel** as product AC | **Forbidden** (**G-AC-1**) |
 | Soft `RUN_INIT=0` misread as “never Linux drivers” | **Wrong** — eng residual only; product = userspace UDX/DDI |
-| Flash bar **v2026.08.04.73** | **This cut** — confirm STATUS title after flash |
+| Flash bar **v0.1.184** | **This cut** packed, not host-probed — confirm STATUS title after flash; **0.1.178** SUCCESS historical; **0.1.183** host FAIL (`Sending command: true` **PASS**; exec 124) historical |
 
 ### 7.4 Short DoD vs remaining (one glance)
 
@@ -452,7 +452,7 @@ collect + stage linux-drivers/ eng   Full CNode MMIO/IRQ/DMA cap mint
 G-AC-1: no .ko runs in-kernel product Multi-server devmgr match graph
 hot+cold ABI + UDX/DDI userspace     Freestanding as Dual DoD (NEVER)
 freestanding SKIP default            bar3 (Steam client + matrix)
-STATUS (static) v2026.08.04.73       Claim stamp without matching flash media
+STATUS (static) v0.1.184             Claim stamp without matching flash media
 ```
 
 ---
@@ -473,7 +473,7 @@ Do not mix labels or claims. Details: [G752VT_LINUX_HWTEST.md](G752VT_LINUX_HWTE
 | Doc | Role |
 |-----|------|
 | [ABI_FIRST_PIVOT.md](ABI_FIRST_PIVOT.md) | Why ABI-first; freestanding SKIP disposition |
-| [TODO.md](TODO.md) | Current track 2026-08-06 — Dual DoD retarget + flash bar **v2026.08.04.73** |
+| [TODO.md](TODO.md) | Current track — Dual DoD retarget + flash bar **v0.1.184** packed, not host-probed |
 | [LINUX_MODULE_PATH.md](LINUX_MODULE_PATH.md) | Collect → stage → loader/ksym eng residual |
 | [ABI_WAVE_STATUS.md](ABI_WAVE_STATUS.md) | Soft inventory matrix |
 | [DDI_SOFT.md](DDI_SOFT.md) | Soft devmgr / door notes; Soft ≠ product |
@@ -488,6 +488,6 @@ Do not mix labels or claims. Details: [G752VT_LINUX_HWTEST.md](G752VT_LINUX_HWTE
 ***G-AC-1:** no Linux `.ko` **runs in kernel** as product — product = hot+cold Linux ABI + Linux-SHAPED UDX/DDI **userspace**.*  
 ***Soft ≠ product.** Soft DDI / soft module / soft probe ≠ Dual DoD close.*  
 *Freestanding class **SKIP** default (`GJ_RTL8168_PROBE=0` · `GJ_XHCI_MSC_PROBE=0`). **Stop freestanding rtl rabbit hole.***  
-*Dual DoD **A** UDX USB **OPEN** · **B** UDX NIC **OPEN** until UDX evidence. Freestanding is not Dual DoD close.*  
-*Flash bar honesty: **STATUS (static) v2026.08.04.73** — freestanding **SKIP** live · Dual DoD A/B **OPEN** · test what you fly · do not invent .73. No test-panel photo IDs.*  
+*Dual DoD **A** UDX USB **OPEN** · **B** UDX NIC **OPEN** until host **interactive SSH login**. Freestanding is not Dual DoD close.*  
+*Flash bar honesty: **STATUS (static) v0.1.184** packed, not host-probed — Dual DoD **A** park RS-off (never `USBCMD.RS=1`) · Dual DoD B **OPEN** until interactive SSH login · SUCCESS on **0.1.178** historical · **0.1.183** host FAIL (`Sending command: true` **PASS**; exec 124) historical · test what you fly · do not invent next N · **0.2.0** reserved. No test-panel photo IDs.*  
 *Wave D soft host path live ≠ Dual DoD closed ≠ product TX/RX ≠ BOT ≠ live IRQ ≠ bar3 closed.*

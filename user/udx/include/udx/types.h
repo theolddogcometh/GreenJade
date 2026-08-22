@@ -45,7 +45,8 @@
  *   soft path = scalar/address/status typedefs + observation helpers +
  *               product/DoD catalog macros (seed only)
  *   product   = Cap mint/revoke of MMIO_FRAME / IRQ Notification / DMA
- *               window + Dual DoD A/B close (OPEN; never claimed here)
+ *               window (OPEN; never claimed here). Dual DoD A/B close is
+ *               host USB path / interactive SSH login, not this header.
  *   freestanding class drivers (kernel rtl8168 / xhci_msc) = SKIP default
  *   product hosts = Linux-shaped userspace UDX (rtl8168_udx / xhci_udx)
  *   soft_ne_product=1; cap_mint_soft=0; Dual DoD A/B remain OPEN

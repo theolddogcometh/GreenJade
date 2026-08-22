@@ -98,8 +98,7 @@ int kill(pid_t nPid, int nSig);
 unsigned int sleep(unsigned int nSec);
 int usleep(unsigned int nUsec);
 int sched_yield(void);
-int prctl(int nOption, unsigned long a2, unsigned long a3, unsigned long a4,
-          unsigned long a5);
+int prctl(int nOption, ...);
 int uname(struct utsname *pBuf);
 long sysconf(int nName);
 int getopt(int argc, char *const argv[], const char *szOptstring);

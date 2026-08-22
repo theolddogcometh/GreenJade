@@ -35,8 +35,17 @@
 extern "C" {
 #endif
 
+/* glibc-shaped scratch for crypt_r; first 256 bytes are the output. */
+struct crypt_data {
+    int  initialized;
+    char output[256];
+    char reserved[768];
+};
+
 char *crypt(const char *szKey, const char *szSalt);
 char *crypt_r(const char *szKey, const char *szSalt, void *pData);
+char *DES_crypt(const char *szKey, const char *szSalt);
+char *des_crypt(const char *szKey, const char *szSalt);
 
 #ifdef __cplusplus
 }

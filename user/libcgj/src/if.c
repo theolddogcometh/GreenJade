@@ -19,7 +19,12 @@
 #include <stdlib.h>
 #include <string.h>
 
-#define GJ_IF_LO_INDEX 1u
+#define GJ_IF_LO_INDEX  1u
+#define GJ_IF_ETH_INDEX 2u
+/* Lab DUT wire (AGENTS.md): laptop 10.200.125.50. Soft ifaddrs bring-up. */
+#define GJ_IF_ETH_ADDR  0x0ac87d32u /* 10.200.125.50 host order */
+#define GJ_IF_ETH_MASK  0xffffff00u
+#define GJ_IF_ETH_BCAST 0x0ac87dffu
 
 unsigned int
 if_nametoindex(const char *szIfname)
@@ -30,6 +35,10 @@ if_nametoindex(const char *szIfname)
     }
     if (szIfname[0] == 'l' && szIfname[1] == 'o' && szIfname[2] == '\0') {
         return GJ_IF_LO_INDEX;
+    }
+    if (szIfname[0] == 'e' && szIfname[1] == 't' && szIfname[2] == 'h' &&
+        szIfname[3] == '0' && szIfname[4] == '\0') {
+        return GJ_IF_ETH_INDEX;
     }
     errno = ENODEV;
     return 0;
@@ -53,6 +62,18 @@ if_indextoname(unsigned int uIndex, char *szIfname)
         szIfname[2] = '\0';
         return szIfname;
     }
+    if (uIndex == GJ_IF_ETH_INDEX) {
+        if (IF_NAMESIZE < 5) {
+            errno = ENOSPC;
+            return NULL;
+        }
+        szIfname[0] = 'e';
+        szIfname[1] = 't';
+        szIfname[2] = 'h';
+        szIfname[3] = '0';
+        szIfname[4] = '\0';
+        return szIfname;
+    }
     errno = ENXIO;
     return NULL;
 }
@@ -63,7 +84,7 @@ if_nameindex(void)
     struct if_nameindex *p;
     char *sz;
 
-    p = (struct if_nameindex *)calloc(2, sizeof(*p));
+    p = (struct if_nameindex *)calloc(3, sizeof(*p));
     sz = (char *)malloc(3);
     if (p == NULL || sz == NULL) {
         free(p);
@@ -76,8 +97,21 @@ if_nameindex(void)
     sz[2] = '\0';
     p[0].if_index = GJ_IF_LO_INDEX;
     p[0].if_name = sz;
-    p[1].if_index = 0;
-    p[1].if_name = NULL;
+    sz = (char *)malloc(5);
+    if (sz == NULL) {
+        if_freenameindex(p);
+        errno = ENOMEM;
+        return NULL;
+    }
+    sz[0] = 'e';
+    sz[1] = 't';
+    sz[2] = 'h';
+    sz[3] = '0';
+    sz[4] = '\0';
+    p[1].if_index = GJ_IF_ETH_INDEX;
+    p[1].if_name = sz;
+    p[2].if_index = 0;
+    p[2].if_name = NULL;
     return p;
 }
 
@@ -168,11 +202,55 @@ soft_make_lo_v6(void)
     return p;
 }
 
+static struct ifaddrs *
+soft_make_eth0_v4(void)
+{
+    struct ifaddrs *p;
+    struct sockaddr_in *pAddr;
+    struct sockaddr_in *pMask;
+    struct sockaddr_in *pBcast;
+    char *szName;
+
+    p = (struct ifaddrs *)calloc(1, sizeof(*p));
+    pAddr = (struct sockaddr_in *)calloc(1, sizeof(*pAddr));
+    pMask = (struct sockaddr_in *)calloc(1, sizeof(*pMask));
+    pBcast = (struct sockaddr_in *)calloc(1, sizeof(*pBcast));
+    szName = (char *)malloc(5);
+    if (p == NULL || pAddr == NULL || pMask == NULL || pBcast == NULL ||
+        szName == NULL) {
+        free(p);
+        free(pAddr);
+        free(pMask);
+        free(pBcast);
+        free(szName);
+        return NULL;
+    }
+    szName[0] = 'e';
+    szName[1] = 't';
+    szName[2] = 'h';
+    szName[3] = '0';
+    szName[4] = '\0';
+    pAddr->sin_family = AF_INET;
+    pAddr->sin_addr.s_addr = htonl(GJ_IF_ETH_ADDR);
+    pMask->sin_family = AF_INET;
+    pMask->sin_addr.s_addr = htonl(GJ_IF_ETH_MASK);
+    pBcast->sin_family = AF_INET;
+    pBcast->sin_addr.s_addr = htonl(GJ_IF_ETH_BCAST);
+    p->ifa_name = szName;
+    p->ifa_flags = IFF_UP | IFF_BROADCAST | IFF_RUNNING | IFF_MULTICAST;
+    p->ifa_addr = (struct sockaddr *)pAddr;
+    p->ifa_netmask = (struct sockaddr *)pMask;
+    p->ifa_broadaddr = (struct sockaddr *)pBcast;
+    p->ifa_next = NULL;
+    return p;
+}
+
 int
 getifaddrs(struct ifaddrs **ppIfap)
 {
     struct ifaddrs *p4;
     struct ifaddrs *p6;
+    struct ifaddrs *pEth;
 
     if (ppIfap == NULL) {
         errno = EFAULT;
@@ -180,13 +258,16 @@ getifaddrs(struct ifaddrs **ppIfap)
     }
     p4 = soft_make_lo_v4();
     p6 = soft_make_lo_v6();
-    if (p4 == NULL || p6 == NULL) {
+    pEth = soft_make_eth0_v4();
+    if (p4 == NULL || p6 == NULL || pEth == NULL) {
         freeifaddrs(p4);
         freeifaddrs(p6);
+        freeifaddrs(pEth);
         errno = ENOMEM;
         return -1;
     }
     p4->ifa_next = p6;
+    p6->ifa_next = pEth;
     *ppIfap = p4;
     return 0;
 }

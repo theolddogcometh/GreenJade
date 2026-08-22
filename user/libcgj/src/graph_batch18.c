@@ -268,9 +268,10 @@ issetugid(void)
 }
 
 void
-strmode(mode_t mode, char *sz)
+strmode(int nMode, char *sz)
 {
     char a[11];
+    mode_t mode = (mode_t)nMode;
 
     if (sz == NULL) {
         return;
@@ -321,11 +322,11 @@ heap_sift(unsigned char *pBase, size_t nNel, size_t cbWidth, size_t iRoot,
     /* greppable: CGJ_GRAPH_BATCH18_SOFT_NULL */
     if (pBase == NULL) {
         errno = EFAULT;
-        return -1;
+        return;
     }
     if (pTmp == NULL) {
         errno = EFAULT;
-        return -1;
+        return;
     }
 
     size_t iChild;
@@ -467,18 +468,14 @@ __res_state(void)
 void
 errc(int nEval, int nErr, const char *szFmt, ...)
 {
-    /* greppable: CGJ_GRAPH_BATCH18_SOFT_NULL */
-    if (szFmt == NULL) {
-        errno = EFAULT;
-        return -1;
-    }
-
     va_list ap;
 
+    if (szFmt == NULL) {
+        szFmt = "";
+    }
     errno = nErr;
     va_start(ap, szFmt);
     verr(nEval, szFmt, ap);
-    va_end(ap);
 }
 
 void
@@ -487,7 +484,7 @@ warnc(int nErr, const char *szFmt, ...)
     /* greppable: CGJ_GRAPH_BATCH18_SOFT_NULL */
     if (szFmt == NULL) {
         errno = EFAULT;
-        return -1;
+        return;
     }
 
     va_list ap;
@@ -1121,7 +1118,7 @@ __openlog(const char *szIdent, int nOption, int nFacility)
     /* greppable: CGJ_GRAPH_BATCH18_SOFT_NULL */
     if (szIdent == NULL) {
         errno = EFAULT;
-        return -1;
+        return;
     }
 
     openlog(szIdent, nOption, nFacility);
@@ -1145,7 +1142,7 @@ __syslog(int nPri, const char *szFmt, ...)
     /* greppable: CGJ_GRAPH_BATCH18_SOFT_NULL */
     if (szFmt == NULL) {
         errno = EFAULT;
-        return -1;
+        return;
     }
 
     va_list ap;
@@ -1161,7 +1158,7 @@ __vsyslog(int nPri, const char *szFmt, va_list ap)
     /* greppable: CGJ_GRAPH_BATCH18_SOFT_NULL */
     if (szFmt == NULL) {
         errno = EFAULT;
-        return -1;
+        return;
     }
 
     vsyslog(nPri, szFmt, ap);

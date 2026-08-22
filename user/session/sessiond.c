@@ -585,7 +585,7 @@ main(void)
     /*
      * Grep: sessiond: soft deepen / soft honesty / soft path (C2 residual).
      * Host A1 soft inventory only — Soft!=product multi-server confine.
-     * Dual DoD product_kernel=OPEN; product lamps stay OPEN (not UDX close).
+     * Dual DoD A/B OPEN until USB path / interactive SSH login. Soft lamps ≠ close.
      */
     printf("sessiond: soft path claim=sim present=fb multi_frame=bit18 "
            "reclaim=bit19 free=unowned multi_server=0 confine=0\n");

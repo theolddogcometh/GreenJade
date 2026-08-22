@@ -104,7 +104,7 @@ GJ product direction: Linux ABI (Option C) + collect/stage needed host modules
 
 ## Operator: two sticks (do not confuse)
 
-### Stick A — GreenJade freestanding product path
+### Stick A — GreenJade hwtest (UDX Dual DoD; fly **v0.1.184** packed, not host-probed)
 
 ```sh
 # Lab host
@@ -117,7 +117,7 @@ sudo make install-hwtest-usb DEV=/dev/sdX   # wipes device; labels GREENJADE + G
 | Labels | ESP **`GREENJADE`** · persist **`GJ-PERSIST`** |
 | DUT | Secure Boot **off** → UEFI USB → `BOOTX64.EFI` |
 | Collect | Mount ESP: `EFI/GREENJADE/BOOT.LOG`, `KLOG.TXT`; mount **`GJ-PERSIST`**: `logs/`, `steam/STATUS` |
-| Expect | Panel / log progress; **stage 11 control** may still hang (known) |
+| Expect | Panel `STATUS (static) v0.1.184` packed, not host-probed; Dual DoD A **OPEN** until host USB path; Dual DoD B **OPEN** until interactive SSH login; GOP isolate ON; xhci RS-off (never `USBCMD.RS=1`); **0.1.183** host FAIL historical (`Sending command: true` **PASS**; exec 124) |
 | **bar3** | Media READY ≠ client — **OPEN** |
 
 ### Stick B — Linux inventory (this map’s source)

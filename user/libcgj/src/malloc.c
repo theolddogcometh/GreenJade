@@ -22,9 +22,10 @@ struct cgj_free {
     struct cgj_free *pNext;
 };
 
-#define HDR_SZ sizeof(struct cgj_hdr)
-#define ALIGN  16u
-#define MIN_CB (sizeof(struct cgj_free))
+#define HDR_SZ   sizeof(struct cgj_hdr)
+#define ALIGN    16u
+#define MIN_CB   (sizeof(struct cgj_free))
+#define SBRK_MIN 65536u
 
 static struct cgj_free *s_pFree;
 
@@ -152,8 +153,11 @@ void *
 malloc(size_t cb)
 {
     struct cgj_hdr *p;
+    struct cgj_hdr *pRem;
     size_t need;
     size_t cbUser;
+    size_t cbChunk;
+    size_t cbRem;
     void *pRaw;
 
     if (cb == 0) {
@@ -174,7 +178,12 @@ malloc(size_t cb)
         s_cbUord += p->cb - HDR_SZ;
         return (void *)(p + 1);
     }
-    pRaw = sbrk((intptr_t)need);
+    cbChunk = need;
+    if (cbChunk < (size_t)SBRK_MIN) {
+        cbChunk = (size_t)SBRK_MIN;
+    }
+    cbChunk = align_up(cbChunk);
+    pRaw = sbrk((intptr_t)cbChunk);
     if (pRaw == (void *)(intptr_t)-1) {
         errno = ENOMEM;
         return NULL;
@@ -182,8 +191,18 @@ malloc(size_t cb)
     p = (struct cgj_hdr *)pRaw;
     p->cb = need;
     p->fFree = 0;
-    s_cbArena += need;
+    s_cbArena += cbChunk;
     s_cbUord += need - HDR_SZ;
+    cbRem = cbChunk - need;
+    if (cbRem >= MIN_CB) {
+        pRem = (struct cgj_hdr *)(void *)((unsigned char *)pRaw + need);
+        pRem->cb = cbRem;
+        pRem->fFree = 1;
+        free_list_push(pRem);
+    } else if (cbRem != 0) {
+        p->cb = cbChunk;
+        s_cbUord += cbRem;
+    }
     return (void *)(p + 1);
 }
 

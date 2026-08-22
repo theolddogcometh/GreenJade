@@ -67,6 +67,18 @@ extern "C" {
 #define MADV_SEQUENTIAL 2
 #define MADV_WILLNEED   3
 #define MADV_DONTNEED   4
+#ifndef MADV_FREE
+#define MADV_FREE       8
+#endif
+#ifndef MADV_DONTFORK
+#define MADV_DONTFORK   10
+#endif
+#ifndef MADV_DONTDUMP
+#define MADV_DONTDUMP   16
+#endif
+#ifndef MADV_WIPEONFORK
+#define MADV_WIPEONFORK 18
+#endif
 
 /* ---- Core mapping ------------------------------------------------------ */
 

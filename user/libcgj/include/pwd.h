@@ -61,7 +61,17 @@ struct passwd *fgetpwent(FILE *pF);
 int            fgetpwent_r(FILE *pF, struct passwd *pPwd, char *szBuf,
                            size_t cb, struct passwd **ppResult);
 int            putpwent(const struct passwd *pPwd, FILE *pF);
+int            setpassent(int nStayopen); /* BSD: 1 keep file; soft setpwent */
+char          *user_from_uid(uid_t uid, int nNouser);
+int            uid_from_user(const char *szName, uid_t *pUid);
+struct passwd *pw_dup(const struct passwd *pPwd);
 
 #ifdef __cplusplus
 }
 #endif
+
+/*
+ * OpenSSH platform.c uses struct spwd under USE_SHADOW without
+ * including <shadow.h>. Pull it so DUT sshd compiles. Dual DoD B OPEN.
+ */
+#include <shadow.h>

@@ -582,7 +582,7 @@ __internal_endnetgrent(void *pState)
 /* ---- file change detection (glibc internal shape) ----------------------- */
 
 struct b26_file_change {
-    long aMtim[2]; /* matches struct stat st_mtim[2] on this ABI */
+    long aMtim[2]; /* st_mtim.tv_sec / tv_nsec (Linux timespec) */
     off_t cbSize;
     int fValid;
 };
@@ -599,8 +599,8 @@ __file_change_detection_for_stat(struct b26_file_change *pFc,
         return;
     }
     pFc->cbSize = pSt->st_size;
-    pFc->aMtim[0] = pSt->st_mtim[0];
-    pFc->aMtim[1] = pSt->st_mtim[1];
+    pFc->aMtim[0] = (long)pSt->st_mtim.tv_sec;
+    pFc->aMtim[1] = pSt->st_mtim.tv_nsec;
     pFc->fValid = 1;
 }
 
@@ -649,7 +649,8 @@ __file_is_unchanged(const struct b26_file_change *pFc, const struct stat *pSt)
     if (pFc->cbSize != pSt->st_size) {
         return 0;
     }
-    if (pFc->aMtim[0] != pSt->st_mtim[0] || pFc->aMtim[1] != pSt->st_mtim[1]) {
+    if (pFc->aMtim[0] != (long)pSt->st_mtim.tv_sec ||
+        pFc->aMtim[1] != pSt->st_mtim.tv_nsec) {
         return 0;
     }
     return 1;

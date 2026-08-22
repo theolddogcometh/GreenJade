@@ -790,8 +790,8 @@ soft_residual_lean_once(void)
 
     /*
      * Dual DoD A/B residual honesty (C2 libudx core).
-     * A = Linux-shaped USB userspace (xhci_udx + DDI) OPEN.
-     * B = Linux-shaped NIC userspace (rtl8168_udx + DDI) OPEN.
+     * A OPEN until host USB path (xhci_udx + DDI).
+     * B OPEN until interactive SSH login (rtl8168_udx hop).
      * Soft lamps never close DoD; agent!=close. Freestanding SKIP.
      * STRONGER densify: product_hosts=UDX install/life path honesty.
      * greppable: udx: soft residual dual_dod

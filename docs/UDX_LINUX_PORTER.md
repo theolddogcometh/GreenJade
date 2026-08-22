@@ -9,7 +9,7 @@
 | **Code** | `user/udx/` |
 | **Build** | `make udx` → `build/libudx.a` · `make udx-example` |
 | **Companion** | [DDI_SOFT.md](DDI_SOFT.md) · [LAPTOP_LINUX_DRIVER_HOST.md](LAPTOP_LINUX_DRIVER_HOST.md) · [ABI_FIRST_PIVOT.md](ABI_FIRST_PIVOT.md) · [CAP_ADDRESSING.md](CAP_ADDRESSING.md) · [X86_64_INTEL_PLATFORM.md](X86_64_INTEL_PLATFORM.md) · [SOLARIS_STYLE_REMAINING.md](SOLARIS_STYLE_REMAINING.md) · [PROTON_PERSONALITY.md](PROTON_PERSONALITY.md) (games ICD uses GPU host; drivers stay UDX) |
-| **Operator pivot (2026-08)** | **Stop freestanding rtl rabbit hole.** Freestanding class **SKIP** live. Dual DoD **A/B** = **UDX USB / UDX NIC** — both **OPEN**. Flash bar honesty: **v2026.08.04.73** (no invent .73). No test-panel photo IDs. |
+| **Operator pivot (2026-08)** | **Stop freestanding rtl rabbit hole.** Freestanding class **SKIP** live. Dual DoD **A/B** = **UDX USB / UDX NIC** — both **OPEN**. Fly bar honesty: **v0.1.184** packed, not host-probed (do not invent next N). Dual DoD **A** park RS-off (never `USBCMD.RS=1`). Dual DoD **B** until host **interactive SSH login**. **0.1.183** host FAIL (`Sending command: true` **PASS**; exec 124) historical. **0.2.0** reserved. No test-panel photo IDs. |
 | **Honesty** | Host soft path ≠ full GJ grants / multi-server / bar3; Soft ≠ product complete; product lamps **0** for UDX datapath until evidence |
 
 ---
@@ -234,10 +234,10 @@ make udx-example   # build/udx_skeleton
 
 | # | DoD | Status | Close when |
 |---|-----|--------|------------|
-| **A** | **Linux-shaped USB** (laptop) via **UDX/DDI** (`xhci_udx` …) | **OPEN** | Userspace UDX USB host path binds `8086:a12f` and owns USB datapath for lab. **Not** freestanding MSC. **Not** `usb_storage.ko` init in kernel. Soft lamps alone ≠ close. |
-| **B** | **Linux-shaped NIC** (laptop) via **UDX/DDI** (`rtl8168_udx` …) | **OPEN** | Userspace UDX NIC binds `10ec:8168` and owns wire for lab IP / stack / sshd. **Not** freestanding rtl R-climb. **Not** in-kernel `r8169.ko` wire. Soft lamps alone ≠ close. |
+| **A** | **Linux-shaped USB** (laptop) via **UDX/DDI** (`xhci_udx` …) | **OPEN** | Host USB path. RS-off / scratchpad ≠ close. Never `USBCMD.RS=1` unless the operator named that experiment. **Not** freestanding MSC. **Not** `usb_storage.ko` init in kernel. Soft lamps alone ≠ close. |
+| **B** | **Linux-shaped NIC** (laptop) via **UDX/DDI** (`rtl8168_udx` …) | **OPEN** | Host **interactive SSH login**. Banner / :22 / PK_OK / SUCCESS ≠ login. Wire hop is `rtl8168_udx`. **Not** freestanding rtl R-climb. **Not** in-kernel `r8169.ko` wire. Soft lamps alone ≠ close. |
 
-Flash bar honesty for operator media: panel **`STATUS (static) v2026.08.04.73`** from `GJ_IMAGE_VERSION` (`kernel/include/gj/config.h`). **Confirm stamp after flash** in docs. Confirm cut after flash. Public evidence = lamps / serial only — **no test-panel photo IDs**.
+Flash bar honesty for operator media: panel **`STATUS (static) v0.1.184`** packed, not host-probed from `GJ_IMAGE_VERSION` (`kernel/include/gj/config.h`). **Confirm stamp after flash** in docs. Confirm cut after flash. **0.1.183** host FAIL (`Sending command: true` **PASS**; exec 124) historical. Public evidence = lamps / serial only — **no test-panel photo IDs**.
 
 | Item | State |
 |------|--------|
@@ -245,7 +245,7 @@ Flash bar honesty for operator media: panel **`STATUS (static) v2026.08.04.73`**
 | **Full GJ grants (PCI/IRQ/DMA)** | **Open** — see 12 Host vs Full GJ |
 | **Product multi-server confine** | **Open** — UDX soft path does **not** close multi-server confine product |
 | **Dual DoD A (UDX USB)** | **OPEN** |
-| **Dual DoD B (UDX NIC)** | **OPEN** until sshd **:22** — laptop ARP/ping **proven** (2026-08-14) |
+| **Dual DoD B (UDX NIC)** | **OPEN** until host **interactive SSH login** — laptop ARP/ping **proven** (2026-08-14) |
 | **Freestanding rtl / freestanding USB** | **SKIP default** — residual opt-in only; **not** Dual DoD close |
 | **Product lamps (TX/RX · BOT · live IRQ)** | Remain **0** / **OPEN** by design until evidence |
 | **bar3 / Steam client** | **Out of scope** for this doc — no claim; **bar3 remains OPEN** |
@@ -270,12 +270,12 @@ Flash bar honesty for operator media: panel **`STATUS (static) v2026.08.04.73`**
 | “Freestanding rtl closes Dual DoD B / product NIC” | **No** — freestanding **SKIP**; product NIC = UDX |
 | “In-kernel `r8169.ko` / freestanding MSC is product” | **No** — **G-AC-1** / freestanding SKIP |
 | Any **bar3** closed claim from UDX alone | **No** |
-| Flash bar **v2026.08.04.73** without matching cut / invent **.73** | **No** — honesty: **v2026.08.04.73** only |
+| Flash bar **v0.1.184** without matching cut / invent next N | **No** — honesty: fly **v0.1.184** packed, not host-probed only · **0.1.183** host FAIL (`Sending command: true` **PASS**; exec 124) historical · **0.2.0** reserved |
 
 ---
 
 *UDX = Linux-shaped surface, DDI quiesce, GreenJade security underneath.*  
 *Dual MIT OR Apache-2.0 · **G-AC-1** · **Soft ≠ product** · freestanding **SKIP** · product = **ABI + UDX**.*  
-*Dual DoD **A** UDX USB **OPEN** · **B** UDX NIC **OPEN**. Stop freestanding rtl rabbit hole.*  
-*Flash bar honesty: **STATUS (static) v2026.08.04.73** — freestanding **SKIP** live · Dual DoD A/B **OPEN** · do not invent .73. No test-panel photo IDs.*  
+*Dual DoD **A** OPEN until host USB path · **B** OPEN until interactive SSH login. Stop freestanding rtl rabbit hole.*  
+*Flash bar honesty: **STATUS (static) v0.1.184** packed, not host-probed — Dual DoD **A** park RS-off (never `USBCMD.RS=1`) · Dual DoD B **OPEN** until interactive SSH login · **0.1.183** host FAIL (`Sending command: true` **PASS**; exec 124) historical · do not invent next N · **0.2.0** reserved. No test-panel photo IDs.*  
 *13 honesty (2026-08): host soft path ≠ full GJ grants / multi-server / Dual DoD close / bar3.*

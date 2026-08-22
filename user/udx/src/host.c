@@ -2241,7 +2241,7 @@ host_ddi_product_host_name(u16 u16Vend, u16 u16Dev)
 
 /**
  * Product-host Dual DoD tag residual (agent!=close; Soft!=product).
- * Dual DoD A = USB/xhci_udx; Dual DoD B = NIC/rtl8168_udx.
+ * Dual DoD A host = USB/xhci_udx (OPEN until USB path); B host = NIC/rtl8168_udx (OPEN until interactive SSH login).
  * Returns "A", "B", or "none".
  */
 static const char *

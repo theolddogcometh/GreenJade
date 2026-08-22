@@ -40,6 +40,21 @@ extern "C" {
 
 #define FD_SETSIZE 1024
 
+#ifndef _GJ_FD_MASK_DEFINED
+typedef unsigned long fd_mask;
+#define _GJ_FD_MASK_DEFINED
+#endif
+
+#ifndef NFDBITS
+#define NFDBITS ((int)(8 * (int)sizeof(unsigned long)))
+#endif
+#ifndef howmany
+#define howmany(x, y) (((x) + ((y) - 1)) / (y))
+#endif
+#ifndef HOWMANY
+#define HOWMANY howmany
+#endif
+
 typedef struct {
     unsigned long fds_bits[(FD_SETSIZE + 63) / 64];
 } fd_set;

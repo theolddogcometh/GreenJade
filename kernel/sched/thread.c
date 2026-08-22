@@ -75,6 +75,8 @@
 #include <gj/cpu.h>
 #include <gj/cpu_sys.h>
 #include <gj/door.h>
+#include <gj/error.h>
+#include <gj/futex.h>
 #include <gj/gdt.h>
 #include <gj/klog.h>
 #include <gj/memobj.h>
@@ -86,6 +88,7 @@
 #include <gj/string.h>
 #include <gj/thread.h>
 #include <gj/timer.h>
+#include <gj/user_access.h>
 #include <gj/vmm.h>
 
 extern void switch_context(u64 *pOldRsp, u64 u64NewRsp);
@@ -1759,8 +1762,8 @@ thread_create(struct gj_process *pProc, void (*pfn)(void *), void *pArg)
 /*
  * Classify entry VA into soft tag class string (Soft!=product).
  * pe32 smokes stage at 0x52000000 / 0x51000000 / 0x55xxxxxx.
- * Ring3 smoke / init-like at 0x1000000..0x10000000.
- * Note: init.elf and sshd live also land in 0x10xxxxxx - auto class is
+ * Ring3 smoke / init-like at 0x4000000..0x5000000.
+ * Note: init.elf and sshd live also land in 0x04xxxxxx - auto class is
  * ring3 until main explicitly thread_soft_tag_set("init"|"sshd").
  * greppable: thread: soft tag | pe32_wow | ring3
  */
@@ -1776,7 +1779,7 @@ thr_soft_tag_class_from_va(u64 u64Entry, int fUser32)
     if (u64Entry >= 0x55000000ull && u64Entry < 0x56000000ull) {
         return "pe32_u32";
     }
-    if (u64Entry >= 0x1000000ull && u64Entry < 0x2000000ull) {
+    if (u64Entry >= 0x4000000ull && u64Entry < 0x5000000ull) {
         return "ring3";
     }
     if (u64Entry >= 0x10000000ull && u64Entry < 0x12000000ull) {
@@ -1903,6 +1906,77 @@ thread_flags_get(u32 u32ThrId)
         return 0;
     }
     return pThr->u32Flags;
+}
+
+void
+thread_set_clear_child_tid(u32 u32ThrId, u64 u64Ctid)
+{
+    struct gj_thread *pThr = thr_find_by_id(u32ThrId);
+
+    if (pThr != NULL) {
+        pThr->u64ClearChildTid = u64Ctid;
+    }
+}
+
+void
+thread_clear_child_tid_wake(struct gj_thread *pThr)
+{
+    u64 u64Ctid;
+    struct gj_futex_key key;
+    int fOk;
+
+    if (pThr == NULL || pThr->u64ClearChildTid == 0) {
+        return;
+    }
+    u64Ctid = pThr->u64ClearChildTid;
+    pThr->u64ClearChildTid = 0;
+    fOk = 0;
+    if (user_range_ok(u64Ctid, sizeof(u32))) {
+        if (user_range_mapped(u64Ctid, sizeof(u32)) &&
+            user_store_u32(u64Ctid, 0) == GJ_OK) {
+            fOk = 1;
+        }
+    } else {
+        *(volatile u32 *)(gj_vaddr_t)u64Ctid = 0;
+        fOk = 1;
+    }
+    if (fOk != 0 && futex_key_from_uaddr(&key, u64Ctid, 1) == GJ_OK) {
+        (void)futex_wake(&key, 1);
+    }
+}
+
+u32
+thread_user_live_count(const struct gj_process *pProc)
+{
+    u32 iThr;
+    u32 cLive;
+
+    if (pProc == NULL) {
+        return 0;
+    }
+    cLive = 0;
+    for (iThr = 0; iThr < GJ_MAX_THREADS; iThr++) {
+        struct gj_thread *pT = &g_aThreads[iThr];
+
+        if (pT->pProc != pProc) {
+            continue;
+        }
+        if (pT->u32State == GJ_THR_UNUSED || pT->u32State == GJ_THR_EXITED) {
+            continue;
+        }
+        cLive++;
+    }
+    return cLive;
+}
+
+void
+thread_set_fs_base(u32 u32ThrId, u64 u64FsBase)
+{
+    struct gj_thread *pThr = thr_find_by_id(u32ThrId);
+
+    if (pThr != NULL) {
+        pThr->u64FsBase = u64FsBase;
+    }
 }
 
 u32
@@ -2077,6 +2151,7 @@ thread_exit_process(struct gj_process *pProc)
             g_u64SoftThrExitDriver++;
             cDriver++;
         }
+        thread_clear_child_tid_wake(pThr);
         /* STRONGER H3 tag sticky residual (before USER_RIP scrub). */
         thr_soft_tag_h3_sticky_on_exit(u32Idx, pThr->u64UserRip, u32Flags);
         pThr->u32Flags &= ~(GJ_THR_F_USER_ENTRY | GJ_THR_F_USER32_ENTRY);
@@ -2359,9 +2434,23 @@ pick_next(void)
         u8R = qos_rank_eff(u32Idx);
         /* Soft wait-age: gen delta since last pick (equal-rank fairness). */
         u32Wait = g_u32PickGen - g_aThrLastPick[u32Idx];
-        if (pBest == NULL || u8R > u8BestRank ||
-            (u8R == u8BestRank && u32Wait > u32BestWait)) {
-            if (pBest != NULL && u8R == u8BestRank && u32Wait > u32BestWait) {
+        /*
+         * Odd pick gen: longest wait, ignore QoS. Two GJ_QOS_DRIVER hosts
+         * (rtl8168_udx + xhci_udx) otherwise ping-pong on yield and starve
+         * sshd (NORMAL). 0.1.154: 3WHS Connected, 0-byte ident — Gap C had
+         * written the banner from the UDX syscall. Soft!=product.
+         */
+        if ((g_u32PickGen & 1u) != 0u) {
+            if (pBest == NULL || u32Wait > u32BestWait) {
+                pBest = pThr;
+                u32BestIdx = u32Idx;
+                u8BestRank = u8R;
+                u32BestWait = u32Wait;
+            }
+        } else if (pBest == NULL || u8R > u8BestRank ||
+                   (u8R == u8BestRank && u32Wait > u32BestWait)) {
+            if (pBest != NULL && u8R == u8BestRank &&
+                u32Wait > u32BestWait) {
                 g_soft.u64PickEqualFair++;
             }
             pBest = pThr;
@@ -2613,8 +2702,22 @@ schedule(void)
 
     g_u64SoftSchedEnter++;
     pCur = thread_current();
+    /*
+     * pick_next only considers GJ_THR_RUNNABLE, not RUNNING. If the
+     * yielder stays RUNNING, OpenSSH ppoll's thread_yield always
+     * selects idle and may never resume the listen walk after AcceptQ.
+     * Park the current RUNNING thread first so it can be re-picked
+     * (self-continue the ppoll loop). Dual DoD B OPEN.
+     */
+    if (pCur != NULL && pCur->u32State == GJ_THR_RUNNING) {
+        pCur->u32State = GJ_THR_RUNNABLE;
+        sched_soft_note_ready();
+    }
     pNext = pick_next();
     if (pNext == NULL) {
+        if (pCur != NULL && pCur->u32State == GJ_THR_RUNNABLE) {
+            pCur->u32State = GJ_THR_RUNNING;
+        }
         g_u64SoftSchedSelf++;
         return;
     }
@@ -2631,6 +2734,9 @@ schedule(void)
                 return;
             }
         } else {
+            if (pCur != NULL && pCur->u32State == GJ_THR_RUNNABLE) {
+                pCur->u32State = GJ_THR_RUNNING;
+            }
             g_u64SoftSchedSelf++;
             return;
         }
@@ -2687,6 +2793,7 @@ schedule(void)
         cpu_set_current_thread(pNow);
     }
     thread_check_kstack(pNow);
+    cpu_set_fs_base(pNow->u64FsBase);
     /*
      * H3 residual belt (Soft!=product; thr_exit / skip user if !alive):
      * Trampoline covers first USER*_ENTRY. Mid-syscall resume must also
@@ -2791,6 +2898,7 @@ thread_exit(void)
 
     g_u64SoftExitN++;
     if (pThr != NULL) {
+        thread_clear_child_tid_wake(pThr);
         pThr->u32State = GJ_THR_EXITED;
         pThr->pfnEntry = NULL;
         /* Defensive: do not restore stale USER_* if slot is reused later. */

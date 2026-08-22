@@ -152,7 +152,7 @@ fts64_open(char *const *ppPathv, int nOptions,
     /* greppable: CGJ_GRAPH_BATCH17_SOFT_NULL */
     if (ppPathv == NULL) {
         errno = EFAULT;
-        return -1;
+        return NULL;
     }
 
     return fts_open(ppPathv, nOptions, pfnCompar);
@@ -164,7 +164,7 @@ fts64_read(FTS *pFts)
     /* greppable: CGJ_GRAPH_BATCH17_SOFT_NULL */
     if (pFts == NULL) {
         errno = EFAULT;
-        return -1;
+        return NULL;
     }
 
     return fts_read(pFts);
@@ -204,7 +204,7 @@ fts64_children(FTS *pFts, int nOptions)
     /* greppable: CGJ_GRAPH_BATCH17_SOFT_NULL */
     if (pFts == NULL) {
         errno = EFAULT;
-        return -1;
+        return NULL;
     }
 
     return fts_children(pFts, nOptions);
@@ -598,10 +598,10 @@ _IO_fgets(char *sz, int n, FILE *pF)
 {
     /* greppable: CGJ_GRAPH_BATCH17_SOFT_NULL */
     if (sz == NULL) {
-        return EOF;
+        return NULL;
     }
     if (pF == NULL) {
-        return EOF;
+        return NULL;
     }
 
     return fgets(sz, n, pF);
@@ -613,7 +613,7 @@ _IO_flockfile(FILE *pF)
     /* greppable: CGJ_GRAPH_BATCH17_SOFT_NULL */
     if (pF == NULL) {
         errno = EINVAL;
-        return -1;
+        return;
     }
 
     flockfile(pF);
@@ -625,7 +625,7 @@ _IO_funlockfile(FILE *pF)
     /* greppable: CGJ_GRAPH_BATCH17_SOFT_NULL */
     if (pF == NULL) {
         errno = EINVAL;
-        return -1;
+        return;
     }
 
     funlockfile(pF);
@@ -686,11 +686,11 @@ fgetws_unlocked(wchar_t *sz, int n, FILE *pF)
     /* greppable: CGJ_GRAPH_BATCH17_SOFT_NULL */
     if (sz == NULL) {
         errno = EFAULT;
-        return -1;
+        return NULL;
     }
     if (pF == NULL) {
         errno = EINVAL;
-        return -1;
+        return NULL;
     }
 
     return fgetws(sz, n, pF);
@@ -848,10 +848,10 @@ __fgets_unlocked_chk(char *sz, size_t cbDst, int n, FILE *pF)
 {
     /* greppable: CGJ_GRAPH_BATCH17_SOFT_NULL */
     if (sz == NULL) {
-        return EOF;
+        return NULL;
     }
     if (pF == NULL) {
-        return EOF;
+        return NULL;
     }
 
     if (n > 0 && cbDst != (size_t)-1 && (size_t)n > cbDst) {
@@ -1397,11 +1397,11 @@ __wmemcpy_chk(wchar_t *pDst, const wchar_t *pSrc, size_t n, size_t nDst)
     /* greppable: CGJ_GRAPH_BATCH17_SOFT_NULL */
     if (pDst == NULL) {
         errno = EFAULT;
-        return -1;
+        return NULL;
     }
     if (pSrc == NULL) {
         errno = EFAULT;
-        return -1;
+        return NULL;
     }
 
     if (nDst != (size_t)-1 && n > nDst) {
@@ -1416,11 +1416,11 @@ __wmemmove_chk(wchar_t *pDst, const wchar_t *pSrc, size_t n, size_t nDst)
     /* greppable: CGJ_GRAPH_BATCH17_SOFT_NULL */
     if (pDst == NULL) {
         errno = EFAULT;
-        return -1;
+        return NULL;
     }
     if (pSrc == NULL) {
         errno = EFAULT;
-        return -1;
+        return NULL;
     }
 
     if (nDst != (size_t)-1 && n > nDst) {
@@ -1435,7 +1435,7 @@ __wmemset_chk(wchar_t *pDst, wchar_t wc, size_t n, size_t nDst)
     /* greppable: CGJ_GRAPH_BATCH17_SOFT_NULL */
     if (pDst == NULL) {
         errno = EFAULT;
-        return -1;
+        return NULL;
     }
 
     if (nDst != (size_t)-1 && n > nDst) {
@@ -1695,7 +1695,7 @@ __newlocale(int nMask, const char *szLocale, locale_t base)
     /* greppable: CGJ_GRAPH_BATCH17_SOFT_NULL */
     if (szLocale == NULL) {
         errno = EFAULT;
-        return -1;
+        return NULL;
     }
 
     return newlocale(nMask, szLocale, base);
@@ -2086,30 +2086,71 @@ __toupper_l(int c, locale_t loc)
 #include <arpa/inet.h>
 #include <netinet/in.h>
 
-int
+__attribute__((weak)) int
 getspent_r(struct spwd *pSp, char *szBuf, size_t cb, struct spwd **ppResult)
 {
-    (void)pSp;
-    (void)szBuf;
-    (void)cb;
+    struct spwd *p;
+    size_t n1;
+    size_t n2;
+
     if (ppResult != NULL) {
         *ppResult = NULL;
     }
-    return ENOSYS;
+    if (pSp == NULL || szBuf == NULL || cb < 2) {
+        return ERANGE;
+    }
+    p = getspent();
+    if (p == NULL) {
+        return 0;
+    }
+    n1 = strlen(p->sp_namp) + 1;
+    n2 = strlen(p->sp_pwdp) + 1;
+    if (n1 + n2 > cb) {
+        return ERANGE;
+    }
+    memcpy(szBuf, p->sp_namp, n1);
+    memcpy(szBuf + n1, p->sp_pwdp, n2);
+    *pSp = *p;
+    pSp->sp_namp = szBuf;
+    pSp->sp_pwdp = szBuf + n1;
+    if (ppResult != NULL) {
+        *ppResult = pSp;
+    }
+    return 0;
 }
 
-int
+__attribute__((weak)) int
 fgetspent_r(FILE *pF, struct spwd *pSp, char *szBuf, size_t cb,
             struct spwd **ppResult)
 {
-    (void)pF;
-    (void)pSp;
-    (void)szBuf;
-    (void)cb;
+    struct spwd *p;
+    size_t n1;
+    size_t n2;
+
     if (ppResult != NULL) {
         *ppResult = NULL;
     }
-    return ENOSYS;
+    if (pF == NULL || pSp == NULL || szBuf == NULL || cb < 2) {
+        return ERANGE;
+    }
+    p = fgetspent(pF);
+    if (p == NULL) {
+        return 0;
+    }
+    n1 = strlen(p->sp_namp) + 1;
+    n2 = strlen(p->sp_pwdp) + 1;
+    if (n1 + n2 > cb) {
+        return ERANGE;
+    }
+    memcpy(szBuf, p->sp_namp, n1);
+    memcpy(szBuf + n1, p->sp_pwdp, n2);
+    *pSp = *p;
+    pSp->sp_namp = szBuf;
+    pSp->sp_pwdp = szBuf + n1;
+    if (ppResult != NULL) {
+        *ppResult = pSp;
+    }
+    return 0;
 }
 
 typedef unsigned long reg_syntax_t;
@@ -2312,28 +2353,17 @@ int
 innetgr(const char *szNetgroup, const char *szHost, const char *szUser,
         const char *szDomain)
 {
-    /* greppable: CGJ_GRAPH_BATCH17_SOFT_NULL */
-    if (szNetgroup == NULL) {
-        errno = EFAULT;
-        return -1;
-    }
-    if (szHost == NULL) {
-        errno = EFAULT;
-        return -1;
-    }
-    if (szUser == NULL) {
-        errno = EFAULT;
-        return -1;
-    }
-    if (szDomain == NULL) {
-        errno = EFAULT;
-        return -1;
-    }
-
-    (void)szNetgroup;
+    /*
+     * OpenSSH auth-rhosts passes NULL host/user/domain as wildcards.
+     * No /etc/netgroup on DUT bring-up: not a member (0), never -1
+     * (OpenSSH `if (!innetgr())` treats -1 as a match).
+     */
     (void)szHost;
     (void)szUser;
     (void)szDomain;
+    if (szNetgroup == NULL || szNetgroup[0] == '\0') {
+        return 0;
+    }
     return 0;
 }
 
@@ -2931,7 +2961,7 @@ getsgnam(const char *szName)
     /* greppable: CGJ_GRAPH_BATCH17_SOFT_NULL */
     if (szName == NULL) {
         errno = EFAULT;
-        return -1;
+        return NULL;
     }
 
     (void)szName;
@@ -2943,7 +2973,7 @@ fgetsgent(FILE *pF)
 {
     /* greppable: CGJ_GRAPH_BATCH17_SOFT_NULL */
     if (pF == NULL) {
-        return EOF;
+        return NULL;
     }
 
     (void)pF;
@@ -2998,7 +3028,7 @@ getaliasbyname(const char *szName)
     /* greppable: CGJ_GRAPH_BATCH17_SOFT_NULL */
     if (szName == NULL) {
         errno = EFAULT;
-        return -1;
+        return NULL;
     }
 
     (void)szName;

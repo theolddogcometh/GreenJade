@@ -10,15 +10,12 @@
  *
  * Assurance lite (docs/ASSURANCE_LITE.md - process honesty, not DO-178C):
  *   GJ_IMAGE_VERSION is the deliverable object-code identity (test what you fly).
- *   Soft!=product · G-AC-1 · Dual DoD open until host L3 proof on stamped media.
+ *   Soft!=product · G-AC-1 · Dual DoD open until host USB path (A) and
+ *   interactive SSH login (B) on stamped media. L3 ARP/ping/banner != B close.
  * greppable: assurance: lite | test what you fly | Soft!=product | G-AC-1
  *
- * Soft stamp (Wave 14 exclusive - header comment only):
- *   Compile-time geometry / SMP / klog knobs. Not a soft inventory helper
- *   (no runtime tallies). Does not light product lamps, close multi-server
- *   product. Continuum high-water toward 15600 is
- *   documented in companion scripts/docs (CREATE-ONLY soft graph only).
- * greppable: GJ_CONFIG_SOFT_STAMP_WAVE14
+ * Geometry / SMP / klog knobs live here. Continuum / wave deepen is leftover
+ * (not product). Soft!=product. G-AC-1.
  */
 #pragma once
 
@@ -32,16 +29,16 @@
  *
  * Semver product series (not date stamps):
  *   0.1.N  — foundation + Dual DoD eng (M0 OK; NIC/USB digs). N = fly cut.
- *   0.2.0  — reserved: laptop networking works (arping/ping path proven).
- * Panel shows v${GJ_IMAGE_VERSION} e.g. STATUS (static) v0.1.97
+ *   0.2.0  — reserved. Do not ship.
+ * Panel shows v${GJ_IMAGE_VERSION} e.g. STATUS (static) v0.1.184
  *
  * Assurance (C1 Dual DoD): host probes must target this stamp after flash
  * (L3 object code). Tree residual after pack is not media until re-image.
  * greppable: GJ_IMAGE_VERSION | test what you fly | v0.1. | 0.2.0
  */
 #ifndef GJ_IMAGE_VERSION
-/* Fly cut: hold14 Own/ROK/FOVW + hold3 ccs= + TE hold2. */
-#define GJ_IMAGE_VERSION  "0.1.136"
+/* Fly cut: A park RS-off; B exec TX drain after 183 Sending command (login OPEN). */
+#define GJ_IMAGE_VERSION  "0.1.184"
 #endif
 
 /*
@@ -171,13 +168,13 @@
 
 /*
  * Soft boot load of embedded/media r8169.ko (lab/eng only).
- * Default 1: soft load + ksym residual (RUN_INIT=0 / freestanding_no_exec).
- * Not product wire owner (G-AC-1). Product NIC = userspace UDX + ABI.
+ * Default 0: abandoned path not linked (G-AC-1). Soft load residual only if set.
+ * Not product wire owner. Product NIC = userspace UDX + ABI.
  * Soft!=product. greppable: GJ_SOFT_R8169_LOAD
  * See docs/R8169_MMIO_HANDOFF.md · docs/LINUX_MODULE_PATH.md · docs/ABI_FIRST_PIVOT.md.
  */
 #ifndef GJ_SOFT_R8169_LOAD
-#define GJ_SOFT_R8169_LOAD  1
+#define GJ_SOFT_R8169_LOAD  0
 #endif
 
 /*

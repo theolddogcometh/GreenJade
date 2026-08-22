@@ -204,8 +204,8 @@ u32 gj_linux_cold_poll_mask(i64 i64Fd, u32 u32Want);
 
 /**
  * close(fd) - soft ownership route for personality/coordinator wire-later:
- *   net_tcp_fd_ok -> clear soft port/reuse/peer/so_error + net_tcp_close
- *   net_lo_fd_ok  -> net_lo_close
+ *   alias table first (user fd may be 0/1/2); last ref only
+ *   net_tcp_close / net_lo_close the canonical tcp/lo fd
  *   else -EBADF
  * Soft!=product - not product fd-table / multi-server close.
  * G-AC-1: UDX+ABI path (userspace Linux-shaped); no .ko product AC.
@@ -213,3 +213,28 @@ u32 gj_linux_cold_poll_mask(i64 i64Fd, u32 u32Want);
  * greppable: linux_cold_net: soft close ... Soft!=product
  */
 i64 gj_linux_cold_close(struct gj_linux_regs *pRegs);
+
+/**
+ * Non-zero if fd is a live cold STREAM/DGRAM socket or an alias of one.
+ * Canonical fds stay in net_tcp 96..111 / net_lo 64..79; aliases may be 0/1/2.
+ */
+int gj_linux_cold_fd_ok(i64 i64Fd);
+
+/**
+ * dup / dup2 / dup3 of a cold net fd (canonical or alias).
+ * LINUX_NR_dup allocates a free user fd; dup2/dup3 use arg1 (0/1/2 allowed).
+ * Last close of a name calls net_tcp_close / net_lo_close on the canonical
+ * fd only. Returns -EBADF when oldfd is not a cold net fd (vfs_ram fallback).
+ */
+i64 gj_linux_cold_dup2(struct gj_linux_regs *pRegs);
+
+/**
+ * linux_fork inherit: one extra LCN holder per live user name so the
+ * parent close(newsock) is not last-ref on the accepted ESTAB. Global
+ * alias table is not a per-process fd table; leftover refs keep the
+ * canonical tcp/lo slot until the child dup2/close path drops them.
+ * Soft!=product. Dual DoD B stays OPEN until host interactive SSH login.
+ *
+ * greppable: linux_cold_net: soft fork dup names
+ */
+void gj_linux_cold_fork_dup_names(void);

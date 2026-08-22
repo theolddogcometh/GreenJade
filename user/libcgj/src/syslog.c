@@ -10,6 +10,7 @@
 #include <stdarg.h>
 #include <stdio.h>
 #include <string.h>
+#include <sys/socket.h>
 #include <syslog.h>
 #include <unistd.h>
 
@@ -22,6 +23,8 @@ static char g_aIdent[64];
 static const char *const s_aPri[] = {
     "emerg", "alert", "crit", "err", "warning", "notice", "info", "debug"
 };
+
+static int open_dev_log(void);
 
 void
 openlog(const char *szIdent, int nOption, int nFacility)
@@ -45,10 +48,7 @@ openlog(const char *szIdent, int nOption, int nFacility)
         g_nLogFd = -1;
     }
     if ((nOption & LOG_NDELAY) != 0) {
-        g_nLogFd = open("/dev/log", O_WRONLY | O_CLOEXEC | O_NONBLOCK);
-        if (g_nLogFd < 0) {
-            g_nLogFd = open("/dev/log", O_WRONLY | O_CLOEXEC);
-        }
+        g_nLogFd = open_dev_log();
     }
 }
 
@@ -76,15 +76,48 @@ setlogmask(int nMask)
 }
 
 static int
+open_dev_log(void)
+{
+    int nFd;
+    struct {
+        sa_family_t sun_family;
+        char        sun_path[108];
+    } aUn;
+    const char *szPath = "/dev/log";
+    size_t iPath;
+
+    nFd = socket(AF_UNIX, SOCK_DGRAM | SOCK_CLOEXEC | SOCK_NONBLOCK, 0);
+    if (nFd < 0) {
+        nFd = socket(AF_UNIX, SOCK_DGRAM, 0);
+    }
+    if (nFd >= 0) {
+        memset(&aUn, 0, sizeof(aUn));
+        aUn.sun_family = AF_UNIX;
+        for (iPath = 0; szPath[iPath] != '\0' &&
+                        iPath + 1 < sizeof(aUn.sun_path);
+             iPath++) {
+            aUn.sun_path[iPath] = szPath[iPath];
+        }
+        aUn.sun_path[iPath] = '\0';
+        if (connect(nFd, (const struct sockaddr *)&aUn, sizeof(aUn)) == 0) {
+            return nFd;
+        }
+        (void)close(nFd);
+    }
+    nFd = open(szPath, O_WRONLY | O_CLOEXEC | O_NONBLOCK);
+    if (nFd < 0) {
+        nFd = open(szPath, O_WRONLY | O_CLOEXEC);
+    }
+    return nFd;
+}
+
+static int
 ensure_log_fd(void)
 {
     if (g_nLogFd >= 0) {
         return g_nLogFd;
     }
-    g_nLogFd = open("/dev/log", O_WRONLY | O_CLOEXEC | O_NONBLOCK);
-    if (g_nLogFd < 0) {
-        g_nLogFd = open("/dev/log", O_WRONLY | O_CLOEXEC);
-    }
+    g_nLogFd = open_dev_log();
     return g_nLogFd;
 }
 

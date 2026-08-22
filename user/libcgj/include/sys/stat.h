@@ -32,6 +32,7 @@
 
 #include <stdint.h>
 #include <sys/types.h>
+#include <time.h> /* struct timespec for st_atim/st_mtim/st_ctim */
 
 #ifdef __cplusplus
 extern "C" {
@@ -50,11 +51,22 @@ struct stat {
     off_t     st_size;
     blksize_t st_blksize;
     blkcnt_t  st_blocks;
-    long      st_atim[2];
-    long      st_mtim[2];
-    long      st_ctim[2];
-    long      __unused[3];
+    struct timespec st_atim;
+    struct timespec st_mtim;
+    struct timespec st_ctim;
+    long      __gj_unused[3];
 };
+
+/* POSIX historic names: timespec seconds. OpenSSH sftp uses st_mtim.tv_nsec. */
+#ifndef st_atime
+#define st_atime st_atim.tv_sec
+#endif
+#ifndef st_mtime
+#define st_mtime st_mtim.tv_sec
+#endif
+#ifndef st_ctime
+#define st_ctime st_ctim.tv_sec
+#endif
 
 #define S_IFMT   0170000
 #define S_IFSOCK 0140000
@@ -87,6 +99,14 @@ struct stat {
 #define S_ISBLK(m)  (((m) & S_IFMT) == S_IFBLK)
 #define S_ISFIFO(m) (((m) & S_IFMT) == S_IFIFO)
 #define S_ISSOCK(m) (((m) & S_IFMT) == S_IFSOCK)
+
+/* utimensat(2) special nsec values (Linux). OpenSSH HAVE_UTIMENSAT. */
+#ifndef UTIME_NOW
+#define UTIME_NOW  ((1l << 30) - 1l)
+#endif
+#ifndef UTIME_OMIT
+#define UTIME_OMIT ((1l << 30) - 2l)
+#endif
 
 /* Linux statx (subset shape for mask/mode/size) */
 struct statx_timestamp {

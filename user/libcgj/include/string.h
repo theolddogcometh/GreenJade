@@ -110,6 +110,7 @@ void   *rawmemchr(const void *p, int c);  /* unbounded; UB if c absent */
 void   *__rawmemchr(const void *p, int c);
 void    explicit_bzero(void *p, size_t cb); /* not elided by optimizer */
 void    __bzero(void *p, size_t cb);
+int     timingsafe_bcmp(const void *pA, const void *pB, size_t cb);
 
 /* ---- GNU / internal aliases + light extras ------------------------------ */
 

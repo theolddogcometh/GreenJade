@@ -2,15 +2,15 @@
 
 | Field | Value |
 |-------|--------|
-| **Status** | Hybrid **SOFT gate0** default (Phase **0** live; Phases **1–3** stubs; **4b** OPEN). **Earlier lab:** 4a eng + freestanding **ICMP proven** (`HYBRID WIRE=FS SOFT=R8169` · L2 RX live). **Recent boots:** freestanding RX may regress to **R0/R1** — re-verify after flash; not continuous-pass claim. Dual laptop DoD **B** (sshd **:22**) remains **OPEN** until DUT proof ([TODO.md](TODO.md)). |
+| **Status** | **Abandoned leftover** (not linked). Hybrid SOFT / freestanding rtl live under `./abandoned`. Product NIC is `rtl8168_udx`. Dual DoD **B OPEN** until host **interactive SSH login**. |
 | **Gate** | `GJ_SOFT_R8169_MMIO_HANDOFF` — **default 0** (hybrid SOFT gate0 is the default lab path) |
-| **Soft load gate** | `GJ_SOFT_R8169_LOAD` — **default 1** (boot load/init of embed/media `r8169.ko`; set **0** for freestanding-only net prove) |
+| **Soft load gate** | `GJ_SOFT_R8169_LOAD` — **default 0** (abandoned path not linked) |
 | **Option B gate** | `GJ_SOFT_R8169_KO_NDO_OPEN` — **default 0** (needs handoff gate 1 + layout confidence) |
 | **Law** | Dual **MIT OR Apache-2.0**; Soft ≠ product; **G-AC-1** (no `.ko` as product AC) |
 | **Companion** | [LINUX_MODULE_PATH.md](LINUX_MODULE_PATH.md) **D7**; [TODO.md](TODO.md) Current track |
-| **Image stamp** | **STATUS (static) vYYYY.MM.DD.N** via `GJ_IMAGE_VERSION` — confirm cut before net claims |
+| **Image stamp** | **STATUS (static) v0.1.184** via `GJ_IMAGE_VERSION` — packed, not host-probed; Dual DoD **A/B OPEN**; never `USBCMD.RS=1`; **0.2.0** reserved; confirm cut before net claims |
 
-**Honesty:** Soft-loaded host `.ko` is an engineering path on lab media. It is **not** product AC and **not** bar3. Enabling the handoff gate on a laptop can drop freestanding net until soft open is proven. **Phase-4a hybrid** (**SOFT gate0**) is the pragmatic eng path: Linux driver **hosted**, freestanding **datapath** — still Soft ≠ product / **G-AC-1**. Earlier ICMP proof does **not** close dual DoD **B** (:22). No test-panel photo IDs.
+**Honesty:** Soft-loaded host `.ko` is an engineering path on lab media. It is **not** product AC and **not** bar3. Enabling the handoff gate on a laptop can drop freestanding net until soft open is proven. **Phase-4a hybrid** (**SOFT gate0**) is the pragmatic eng path: Linux driver **hosted**, freestanding **datapath** — still Soft ≠ product / **G-AC-1**. Earlier ICMP proof does **not** close dual DoD **B** (interactive SSH login). No test-panel photo IDs.
 
 ### Product bar: in-kernel Linux r8169 owns the wire — **DEFERRED / G-AC-1**
 
@@ -19,7 +19,7 @@
 | **Linux `.ko` binary runs in kernel** (REAL `init` / product datapath) and owns BAR/TX/RX | **Forbidden as product** (**G-AC-1**). Not “never use Linux drivers.” |
 | **Product NIC path** | **Userspace** Linux-shaped driver over **hot + cold** ABI / DDI·UDX (MMIO/IRQ/DMA caps) |
 | T0 product net (interim) | **virtio-net** |
-| Lab dual DoD **B** (now) | Freestanding **`rtl8168` + stack** until UDX net is ready |
+| Lab dual DoD **B** (now) | **`rtl8168_udx` + `net_tcp` + `sshd.elf`** — **OPEN** until host **interactive SSH login** |
 | Soft kernel r8169 work | Optional eng residual (ksym, gate0 hybrid, hostish diagnostics) — Soft ≠ product; **do not** treat as “load and run `.ko` in kernel” product |
 
 Operator note (2026-08-05): dual-DoD lab **does not** require proving “r8169.ko runs in-kernel and owns the wire.” Product goal remains **Linux drivers in userspace** with matching hot/cold calls — not freestanding-only forever, and not in-kernel GPL `.ko` exec.
@@ -62,7 +62,7 @@ If soft `r8169` (or a future soft-open) also programs the same BAR while freesta
 
 | Piece | Where | Notes |
 |-------|--------|--------|
-| BAR map | `kernel/drv/rtl8168.c` — `vmm_map_device_uc`, `g_pMmio` | Prefer larger MEM BAR; soft-reset + MAC check |
+| BAR map | `abandoned/kernel/drv/rtl8168.c` — `vmm_map_device_uc`, `g_pMmio` | Not linked. Prefer larger MEM BAR; soft-reset + MAC check |
 | TE/RE start | `rtl_program_hw()` — `RTL_CHIPCMD` RE\|TE | Poll mode; `INTRMASK=0` |
 | Keepalive | `rtl8168_poll_hw()` | Re-asserts TE\|RE only if `g_fReady` **and** not handoff-prepared |
 | TX/RX | `rtl8168_tx` / `rtl8168_rx` | Gate on `g_fReady` **and** not `g_fSoftHandoffPrepared` |
@@ -374,7 +374,7 @@ Boot G752 with default build (no handoff flags). After r8169 REAL+SOFT1:
 5. Firmware real load (still ENOENT — module-path; not this file’s sole owner)  
 6. Lab panel/serial: hold14 live + (elsewhere) `source=media`
 
-Leave gate **0** on all default images — **hybrid SOFT gate0** is the default lab path. Enable handoff only for deliberate 4b lab. After flash, check **STATUS (static) v…** (`GJ_IMAGE_VERSION`) and re-verify freestanding RX (recent boots may show **R0/R1** even when ICMP was proven earlier). Dual DoD **B** sshd **:22** stays **OPEN** until DUT proof — not a product AC.
+Leave gate **0** on all default images — **hybrid SOFT gate0** is the default lab path. Enable handoff only for deliberate 4b lab. After flash, check **STATUS (static) v…** (`GJ_IMAGE_VERSION`) and re-verify freestanding RX (recent boots may show **R0/R1** even when ICMP was proven earlier). Dual DoD **B** stays **OPEN** until host **interactive SSH login** — not a product AC.
 
 ---
 

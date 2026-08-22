@@ -58,6 +58,12 @@ struct group *fgetgrent(FILE *pF);
 int           fgetgrent_r(FILE *pF, struct group *pGrp, char *szBuf, size_t cb,
                           struct group **ppResult);
 int           putgrent(const struct group *pGrp, FILE *pF);
+int           setgroupent(int nStayopen); /* BSD: 1 keep file; soft setgrent */
+char         *group_from_gid(gid_t gid, int nNogroup);
+int           gid_from_group(const char *szName, gid_t *pGid);
+int           getgrouplist(const char *szUser, gid_t gid, gid_t *pGroups,
+                           int *pNgids);
+int           initgroups(const char *szUser, gid_t gid);
 
 #ifdef __cplusplus
 }

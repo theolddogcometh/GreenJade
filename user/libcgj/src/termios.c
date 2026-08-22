@@ -35,11 +35,42 @@
 #define TCFLSH 0x540B
 #endif
 
+int __gj_pts_known(int nFd);
+
 /* Known B* baud values from termios.h (soft validation table). */
 static const speed_t s_aValidSpeeds[] = {
     B0, B50, B75, B110, B134, B150, B200, B300, B600, B1200, B1800, B2400,
-    B4800, B9600, B19200, B38400, B57600, B115200
+    B4800, B9600, B19200, B38400, B57600, B115200, B230400, B460800, B500000,
+    B576000, B921600, B1000000, B1152000, B1500000, B2000000, B2500000,
+    B3000000, B3500000, B4000000
 };
+
+/* Sane cooked 9600 8N1 when ioctl TCGETS fails on a registered pts. */
+static void
+pts_sane(struct termios *pT)
+{
+    memset(pT, 0, sizeof(*pT));
+    pT->c_iflag = ICRNL | IXON;
+    pT->c_oflag = OPOST | ONLCR;
+    pT->c_cflag = CS8 | CREAD | CLOCAL | B9600;
+    pT->c_lflag = ISIG | ICANON | ECHO | ECHOE | ECHOK | IEXTEN;
+    pT->c_cc[VINTR] = 3;
+    pT->c_cc[VQUIT] = 28;
+    pT->c_cc[VERASE] = 127;
+    pT->c_cc[VKILL] = 21;
+    pT->c_cc[VEOF] = 4;
+    pT->c_cc[VTIME] = 0;
+    pT->c_cc[VMIN] = 1;
+    pT->c_cc[VSTART] = 17;
+    pT->c_cc[VSTOP] = 19;
+    pT->c_cc[VSUSP] = 26;
+    pT->c_cc[VREPRINT] = 18;
+    pT->c_cc[VDISCARD] = 15;
+    pT->c_cc[VWERASE] = 23;
+    pT->c_cc[VLNEXT] = 22;
+    pT->c_ispeed = B9600;
+    pT->c_ospeed = B9600;
+}
 
 static int
 speed_ok(speed_t speed)
@@ -61,6 +92,9 @@ speed_ok(speed_t speed)
 int
 tcgetattr(int nFd, struct termios *pT)
 {
+    int n;
+    int nSaved;
+
     if (pT == NULL) {
         errno = EINVAL;
         return -1;
@@ -69,7 +103,18 @@ tcgetattr(int nFd, struct termios *pT)
         errno = EBADF;
         return -1;
     }
-    return ioctl(nFd, TCGETS, pT);
+    nSaved = errno;
+    n = ioctl(nFd, TCGETS, pT);
+    if (n == 0) {
+        errno = nSaved;
+        return 0;
+    }
+    if (__gj_pts_known(nFd)) {
+        pts_sane(pT);
+        errno = nSaved;
+        return 0;
+    }
+    return -1;
 }
 
 int
@@ -99,7 +144,21 @@ tcsetattr(int nFd, int nOptionalActions, const struct termios *pT)
         errno = EINVAL;
         return -1;
     }
-    return ioctl(nFd, req, (void *)(uintptr_t)pT);
+    {
+        int n;
+        int nSaved = errno;
+
+        n = ioctl(nFd, req, (void *)(uintptr_t)pT);
+        if (n == 0) {
+            errno = nSaved;
+            return 0;
+        }
+        if (__gj_pts_known(nFd)) {
+            errno = nSaved;
+            return 0;
+        }
+        return -1;
+    }
 }
 
 int

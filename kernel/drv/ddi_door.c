@@ -165,8 +165,10 @@
  * cap mint. Pair DMA_NOTE / DMA_BUF_MAP window note for BDF inventory only.
  * Product DMA window cap mint remains OPEN.
  *
- * CFG_WRITE honesty: careful soft only - soft-note path; does not perform
- * live config writes of identity / BARs (fail closed on unsafe offsets).
+ * CFG_WRITE honesty: reject identity (0x00) and BAR (0x10..0x24). Command
+ * 0x04 is live CF8 RMW for inventory 10ec:8168 (OR Memory Space bit1 and
+ * Bus Master bit2; Status RW1C high half written 0). Other devices and
+ * offsets stay soft-note (no surprise xHCI BME).
  */
 #include <gj/cap.h>
 #include <gj/ddi_door.h>
@@ -205,6 +207,8 @@
 #define DDI_SOFT_XHCI_PREF_BAR0 0u
 #define DDI_SOFT_CFG_OFF_IDENT  0x00u
 #define DDI_SOFT_CFG_OFF_CMDST  0x04u
+#define DDI_PCI_CMD_MEM         0x0002u /* Command bit1 Memory Space */
+#define DDI_PCI_CMD_MASTER      0x0004u /* Command bit2 Bus Master */
 
 /*
  * denser residual bar honesty (Dual DoD A/B; Soft!=product; stamp-free).
@@ -589,6 +593,16 @@ ddi_pci_cfg_read32(u8 u8Bus, u8 u8Slot, u8 u8Func, u8 u8Off)
 
     ddi_outl(DDI_PCI_CFG_ADDR, u32Addr);
     return ddi_inl(DDI_PCI_CFG_DATA);
+}
+
+static void
+ddi_pci_cfg_write32(u8 u8Bus, u8 u8Slot, u8 u8Func, u8 u8Off, u32 u32Val)
+{
+    u32 u32Addr = 0x80000000u | ((u32)u8Bus << 16) | ((u32)u8Slot << 11) |
+                  ((u32)u8Func << 8) | ((u32)u8Off & 0xfcu);
+
+    ddi_outl(DDI_PCI_CFG_ADDR, u32Addr);
+    ddi_outl(DDI_PCI_CFG_DATA, u32Val);
 }
 
 /*
@@ -5336,11 +5350,7 @@ ddi_door_syscall(u32 u32Op, u64 u64Arg1, u64 u64Arg2, u64 u64Arg3)
         }
 
         /*
-         * Careful soft only if safe:
-         *   - Refuse identity (0x00) and BAR window (0x10..0x24) live writes.
-         *   - Soft-note remaining header offsets without live CF8 poke
-         *     (Soft!=product; avoids bus-master / decode surprises from
-         *     untrusted host until real grant policy exists).
+         * Refuse identity (0x00) and BAR window (0x10..0x24) live writes.
          */
         if (u32Off == 0x00u || (u32Off >= 0x10u && u32Off <= 0x24u)) {
             g_u32SoftCfgWriteReject++;
@@ -5353,6 +5363,71 @@ ddi_door_syscall(u32 u32Op, u64 u64Arg1, u64 u64Arg2, u64 u64Arg3)
                         (unsigned)u32Val);
             }
             return GJ_ERR_PERM;
+        }
+
+        /*
+         * Command/Status 0x04: live CF8 RMW for inventory 10ec:8168.
+         * OR Memory Space (bit1) and Bus Master (bit2) from val; if val
+         * includes either, OR both. Status 16-31 is RW1C - write 0.
+         * Known non-RTL (incl. 8086:a12f) stays soft-note.
+         * Unknown vend:dev: live only when val includes MEM|MASTER.
+         */
+        if (u32Off == DDI_SOFT_CFG_OFF_CMDST &&
+            u32Idx < GJ_DDI_SOFT_DEV_MAX) {
+            u16 u16Vend = g_aDev[u32Idx].u16Vend;
+            u16 u16Dev = g_aDev[u32Idx].u16Dev;
+            int fInvRtl = (u16Vend == DDI_SOFT_RTL_VEND &&
+                           u16Dev == DDI_SOFT_RTL_DEV);
+            int fInvKnown = (u16Vend != 0u && u16Vend != 0xffffu);
+            int fLive = 0;
+
+            if (fInvRtl != 0) {
+                fLive = 1;
+            } else if (fInvKnown == 0) {
+                u32 u32Id;
+
+                u32Id = ddi_pci_cfg_read32(g_aDev[u32Idx].u8Bus,
+                                           g_aDev[u32Idx].u8Slot,
+                                           g_aDev[u32Idx].u8Func,
+                                           (u8)DDI_SOFT_CFG_OFF_IDENT);
+                if ((u32Id & 0xffffu) == DDI_SOFT_RTL_VEND &&
+                    ((u32Id >> 16) & 0xffffu) == DDI_SOFT_RTL_DEV) {
+                    fLive = 1;
+                } else if (u32Id == 0xffffffffu ||
+                           (u32Id & 0xffffu) == 0xffffu ||
+                           (u32Id & 0xffffu) == 0u) {
+                    if ((u32Val & (DDI_PCI_CMD_MEM | DDI_PCI_CMD_MASTER)) ==
+                        (DDI_PCI_CMD_MEM | DDI_PCI_CMD_MASTER)) {
+                        fLive = 1;
+                    }
+                }
+            }
+
+            if (fLive != 0) {
+                u32 u32Cur;
+                u32 u32Or;
+                u32 u32Cmd;
+
+                u32Cur = ddi_pci_cfg_read32(g_aDev[u32Idx].u8Bus,
+                                            g_aDev[u32Idx].u8Slot,
+                                            g_aDev[u32Idx].u8Func,
+                                            (u8)DDI_SOFT_CFG_OFF_CMDST);
+                if (u32Cur != 0xffffffffu) {
+                    /* 10ec:8168: always OR MSE|BME. val=0 from ddi_host
+                     * is a soft-note and must not leave master off. */
+                    u32Or = u32Val & (DDI_PCI_CMD_MEM | DDI_PCI_CMD_MASTER);
+                    if (u32Or != 0u || fInvRtl != 0) {
+                        u32Or = DDI_PCI_CMD_MEM | DDI_PCI_CMD_MASTER;
+                    }
+                    u32Cmd = (u32Cur & 0x0000ffffu) | u32Or;
+                    ddi_pci_cfg_write32(g_aDev[u32Idx].u8Bus,
+                                        g_aDev[u32Idx].u8Slot,
+                                        g_aDev[u32Idx].u8Func,
+                                        (u8)DDI_SOFT_CFG_OFF_CMDST,
+                                        u32Cmd);
+                    return 0;
+                }
+            }
         }
 
         g_u32SoftCfgWriteNotes++;

@@ -30,15 +30,15 @@
  * Semver product series (not date stamps):
  *   0.1.N  — foundation + Dual DoD eng (M0 OK; NIC/USB digs). N = fly cut.
  *   0.2.0  — reserved. Do not ship.
- * Panel shows v${GJ_IMAGE_VERSION} e.g. STATUS (static) v0.1.184
+ * Panel shows v${GJ_IMAGE_VERSION} e.g. STATUS (static) v0.1.185
  *
  * Assurance (C1 Dual DoD): host probes must target this stamp after flash
  * (L3 object code). Tree residual after pack is not media until re-image.
  * greppable: GJ_IMAGE_VERSION | test what you fly | v0.1. | 0.2.0
  */
 #ifndef GJ_IMAGE_VERSION
-/* Fly cut: A park RS-off; B exec TX drain after 183 Sending command (login OPEN). */
-#define GJ_IMAGE_VERSION  "0.1.184"
+/* Fly cut: 8168 live PCI Command MSE|BME (CF8). Dual DoD A/B OPEN. */
+#define GJ_IMAGE_VERSION  "0.1.185"
 #endif
 
 /*

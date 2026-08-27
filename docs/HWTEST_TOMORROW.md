@@ -1,8 +1,51 @@
 # Hardware test — operator pack
 
-## Fly this cut — **v0.1.184** · exec TX drain after 183 Sending command (login OPEN)
+## Fly this cut — **v0.1.185** · 8168 live PCI Command MSE|BME (login OPEN)
 
-**0.1.184 packed, not host-probed.** Dual DoD **A/B OPEN**. GOP isolate stays. Never `USBCMD.RS=1`. `true` exit 0 ≠ login. **0.2.0** reserved.
+**0.1.185 pack of BME CF8 poke** (`ddi_door` live Command 0x04 for `10ec:8168`; UDX host `CFG_WRITE` 0x0006). Dual DoD **A/B OPEN**. Never `USBCMD.RS=1`. Hold7 IP ≠ L3. Banner / `true` ≠ login. **0.2.0** reserved.
+
+**0.1.184 host (glass 132433 · lab `10.200.125.103`):** title **v0.1.184**; hold7 IP pin; host ping/arping **FAIL** (neigh FAILED). Overnight T0 PTY was same stamp string. **login OPEN**.
+
+GOP dash isolate stays. Dual DoD **A/B OPEN**. Skip `nc` (hog `:22`).
+
+| Hold | Expect after flash (185 untried) |
+|------|--------|
+| title | `STATUS (static) v0.1.185` |
+| 1 | `M0 OK dash SKIP isolate` |
+| 2 | `TE mode=hw tes=1 tt=ML slpt=1 rdy bus3 id1g` (lamp; ≠ L3) |
+| 3 | `UDX xhci PASS rs=0` (Dual DoD A **OPEN**) |
+| 4 | `UDX inj=<N> tx=<M> lnk=<0|1>` (photograph this) |
+| 5 | `UDX te_disarm … own= rok= fovw=` |
+| 6 | `UDX mac_rclm rds= te_re=` |
+| 7 | `IP 10.200.125.50 :22` (static pin; ≠ ARP) |
+| 8 | `DoD A=OPEN B=OPEN` |
+
+Soft≠product. Dual DoD A **OPEN** (`need=usbcmd_rs`, never RS=1). Dual DoD B **OPEN** until host **interactive SSH login**.
+
+**Pack:** `make hwtest-img` → `build/greenjade-hwtest.img` (ESP GPT p1 @ 1 MiB extract MATCH vs `build/`).  
+KERNEL `101d024e62015dd4b824371a2858c92b44d0e85670b88d0513894432b2449336`  
+sshd `471ad8a11aad7541343f1f0af71c70f0b0341543396366ba9698d1b7c777bcbb`  
+rtl `89b5d3939beea3cb817ecbf7f3dfe7c76bd05b07b6a419a46641e78ad07b259f`  
+xhci `665959290ade24a511fc63557df008dfca02fab646d573f6ed9b58a626428b78`  
+sh `6725f1c3100271f36b4a12cf8c5c81e9bf768fa1049d6be9c638a6fda7f680b9`  
+img `2f05f5e2043a4d0bcf68414074a3025d9513ab4a817ab154e65310823692442b`.
+
+**Flash (destroys the stick):** `sudo ./scripts/install-hwtest-usb.sh /dev/sdX`  
+**DUT:** G752VT · Secure Boot **off** · UEFI USB · lab **10.200.125.50**.
+
+| Check | What to look for | Close? |
+|-------|------------------|--------|
+| Flash identity | GOP **STATUS (static) v0.1.185** | Confirm cut |
+| Isolate | hold1 **`M0 OK dash SKIP isolate`** · no `USER KILL` / `FAULT PINNED` | Wiring. Do **not** un-isolate |
+| Lab IP | hold7 **`IP 10.200.125.50 :22`** | Wiring; not L3 |
+| xhci **A** | hold3 **`UDX xhci PASS rs=0`**; **RS off** | Dual DoD A **OPEN** |
+| UDX L2 | hold4 **`UDX inj= tx= lnk=`** | Diagnose PHY/RX/TX |
+| L3 | `ping` / `arping 10.200.125.50` | Want **PASS**. **login OPEN** |
+| Interactive `ssh -t` | prompt + typed command | Dual DoD B close only then |
+
+## Prior fly — **v0.1.184** · exec TX drain after 183 Sending command (login OPEN)
+
+**0.1.184 packed.** Dual DoD **A/B OPEN**. GOP isolate stays. Never `USBCMD.RS=1`. `true` exit 0 ≠ login. **0.2.0** reserved.
 
 **This cut (vs 183 glass 100643 FAIL):** `Sending command: true` **PASS**; exec CHANNEL_SUCCESS / exit-status dropped (124). Drain after each exec reply (`ssh_send_drain` == n + `ssh_tx_drain`). Stay-open **return 2**. GOP isolate stays.
 

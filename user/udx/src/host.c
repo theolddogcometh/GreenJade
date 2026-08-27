@@ -2581,6 +2581,39 @@ host_ddi_cfg_residual(long h, u16 u16Vend, u16 u16Dev, const char *szHost,
 }
 
 /**
+ * Live PCI Command (0x04) CFG_WRITE for 10ec:8168 after preferred-BAR map.
+ * udx_pci_set_master only mutates in-process aCfg; this is the door poke.
+ * val = MEM|MASTER (0x0006); +IO if BAR0 is I/O (must decode). Never 0
+ * (soft-note 0 would drop BME if the door goes live). Skip 8086:a12f —
+ * Dual DoD A stays RS-off. Door error: fail-closed on silicon, bind continues.
+ */
+static void
+host_ddi_cfg_write_rtl_command(long h, u16 u16Vend, u16 u16Dev)
+{
+    long ret;
+    long retBar;
+    u32 u32Val;
+
+    if (h <= 0) {
+        return;
+    }
+    if (u16Vend != (u16)UDX_DDI_G752_RTL8168_VEND ||
+        u16Dev != (u16)UDX_DDI_G752_RTL8168_DEV) {
+        return;
+    }
+    u32Val = (u32)(UDX_PCI_COMMAND_MEMORY | UDX_PCI_COMMAND_MASTER);
+    retBar = host_ddi_syscall3(UDX_DDI_OP_CFG_READ, h,
+                               (long)UDX_PCI_CFG_BAR0);
+    if (retBar >= 0 &&
+        (((u32)retBar) & UDX_PCI_BAR_SPACE_IO) != 0u) {
+        u32Val |= (u32)UDX_PCI_COMMAND_IO;
+    }
+    ret = host_ddi_syscall4(UDX_DDI_OP_CFG_WRITE, h,
+                            (long)UDX_DDI_CFG_OFF_CMDST, (long)u32Val);
+    (void)ret;
+}
+
+/**
  * Soft MAP_REMAP residual on first mapped preferred BAR.
  * Door grant slot is idempotent; VA match deepens honesty.
  * greppable: udx: soft ddi residual MAP_REMAP
@@ -4159,6 +4192,8 @@ host_ddi_open_map_install_idx(long iIdx,
     }
     if (u32Maps != 0u) {
         u32Life |= UDX_DDI_LIFE_MAP;
+        /* 10ec:8168 only: live Command MEM|BME after preferred-BAR map. */
+        host_ddi_cfg_write_rtl_command(h, pInfo->u16Vend, pInfo->u16Dev);
     }
     /*
      * Preferred-BAR completeness residual (rtl 0+2 / xhci 0):

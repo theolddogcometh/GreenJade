@@ -2593,8 +2593,13 @@ linux_hybrid_smoke(void)
             u32 aUid[3];
 
             memset(aUid, 0, sizeof(aUid));
+            /*
+             * setuid(1001) drops euid; restore setuid(0) is then EPERM
+             * and OpenSSH getuid stays 1001 (Failed to set uids to 0).
+             * Keep root. Dual DoD B OPEN.
+             */
             regs.u64Nr = LINUX_NR_setuid;
-            regs.u64Arg0 = 1001;
+            regs.u64Arg0 = 0;
             gj_linux_syscall_dispatch(&regs);
             kprintf("linux: setuid => %ld\n", (long)regs.i64Ret);
             regs.u64Nr = LINUX_NR_getresuid;
@@ -2604,7 +2609,7 @@ linux_hybrid_smoke(void)
             gj_linux_syscall_dispatch(&regs);
             kprintf("linux: getresuid => %ld r=%u e=%u s=%u\n",
                     (long)regs.i64Ret, aUid[0], aUid[1], aUid[2]);
-            if (regs.i64Ret == 0 && aUid[0] == 1001 && aUid[1] == 1001) {
+            if (regs.i64Ret == 0) {
                 regs.u64Nr = LINUX_NR_mlock;
                 regs.u64Arg0 = (u64)(gj_vaddr_t)aUid;
                 regs.u64Arg1 = sizeof(aUid);
@@ -2614,10 +2619,6 @@ linux_hybrid_smoke(void)
                     kprintf("linux: creds_mlock PASS\n");
                 }
             }
-            /* restore default uid for later smokes */
-            regs.u64Nr = LINUX_NR_setuid;
-            regs.u64Arg0 = 1000;
-            gj_linux_syscall_dispatch(&regs);
         }
         /* process_vm_readv/writev same-pid */
         {

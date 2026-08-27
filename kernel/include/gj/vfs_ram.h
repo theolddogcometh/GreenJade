@@ -11,9 +11,10 @@
  * Independent of the vfs_door LBA mini-FS (different FD namespace).
  *
  * Capacity (vfs_ram.c - soft product limits, not ABI):
- *   VFS_MAX_FILES 64, VFS_MAX_FDS 96, path ≤128, file data ≤32 KiB
- *   (room for packaged ld-gj.so.1 ~30 KiB + small ELFs)
- *   pipes 16x2 KiB; Unix98 pty 4 (pipe rings); eventfd/epoll/timerfd/signalfd/inotify fixed tables
+ *   VFS_MAX_FILES 128, VFS_MAX_FDS 96, path ≤128, file data ≤32 KiB
+ *   (seeded nodes + virtual dirs + Unix98 /dev/pts/N; ld-gj.so.1 ~30 KiB)
+ *   pipes 16x2 KiB; Unix98 pty 4 (pipe rings); SCM_RIGHTS FIFO 4/pipe
+ *   eventfd/epoll/timerfd/signalfd/inotify fixed tables
  *
  * Block mounts (optional, after device probe):
  *   vfs_ram_mount_blk  -> /dev/vda over virtio-blk (sector R/W)
@@ -163,6 +164,18 @@ i64 vfs_ram_fd_fl_set(i64 i64Fd, u8 u8Fl);
  * type low 8 bits SOCK_STREAM (1) or SOCK_DGRAM (2); SOCK_NONBLOCK/CLOEXEC ok.
  */
 i64 vfs_ram_socketpair(int nDomain, int nType, int nProtocol, i32 *pFds);
+
+/**
+ * SCM_RIGHTS-shaped fd pass over a live pipe/unix pair in the calling tab.
+ * FIFO depth 4 per pair (OpenSSH mm_send_fd x2).
+ * protonrt owns msghdr parsing; this queues metadata only.
+ * send: sock + i32Fd are vfs fds; enqueue kind/file/end/flags; bump pipe/pty
+ *   refs like fork_dup. 0 or -ENOTSOCK/-EBADF/-ENOSPC (FIFO full).
+ * recv: dequeue oldest; new fd >= 3 in the calling tab, or -EAGAIN/-EBADF.
+ * Dual DoD B OPEN.
+ */
+i64 vfs_ram_scm_send_fd(i64 i64Sock, i32 i32Fd);
+i64 vfs_ram_scm_recv_fd(i64 i64Sock);
 
 /** Infinite poll/select: park until a pipe/eventfd kick. Soft!=product. */
 void vfs_ram_poll_park(void);

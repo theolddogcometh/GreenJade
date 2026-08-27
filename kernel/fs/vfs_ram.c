@@ -34,6 +34,7 @@
 #include <gj/klog.h>
 #include <gj/net_lo.h>
 #include <gj/thread.h>
+#include <gj/process.h>
 #include <gj/net_tcp.h>
 #include <gj/scsi_mid.h>
 #include <gj/string.h>
@@ -44,13 +45,14 @@
 
 /* Net poll readiness - declared in net_tcp.h / net_lo.h (included above). */
 
-#define VFS_MAX_FILES  64
+#define VFS_MAX_FILES  128 /* seeded + virtual dirs + Unix98 /dev/pts/N */
 #define VFS_MAX_FDS    96
 #define VFS_MAX_PATH   128
 /* 32 KiB: room for packaged ld-gj.so.1 (~30 KiB) + small ELFs */
 #define VFS_MAX_DATA   32768
 #define VFS_MAX_PIPES  16
 #define VFS_PIPE_BUF   2048
+#define VFS_PIPE_SCM_DEPTH 4u /* OpenSSH mm_send_fd x2; mux can send 3 */
 #define VFS_MAX_PTY    4
 #define VFS_PTY_TIOS   60u /* glibc termios: flags + c_cc[32] + speeds */
 #define VFS_PTY_CANON  255u /* ICANON line (MAX_CANON-shaped) */
@@ -163,6 +165,23 @@ struct vfs_pipe_pair {
     u8  aRing[2][VFS_PIPE_BUF];
 };
 
+/* One SCM_RIGHTS pending fd (kind/file/end/flags). */
+struct vfs_pipe_scm {
+    u8  u8Used;
+    u8  u8Kind;
+    u8  u8End;
+    u8  u8Fl;
+    u32 u32File;
+};
+
+/* FIFO depth 4 per pair (OpenSSH mm_send_fd x2). Parallel to g_aPipes. */
+struct vfs_pipe_scm_q {
+    u8  u8Head; /* oldest */
+    u8  u8N;
+    u8  u8Pad[2];
+    struct vfs_pipe_scm aSlot[VFS_PIPE_SCM_DEPTH];
+};
+
 /*
  * Unix98 PTY metadata. Rings live in g_aPipes[u32Pipe].
  * Master fd is pipe end 0; slave is end 1 once /dev/pts/N is opened.
@@ -221,8 +240,24 @@ struct vfs_epoll {
 };
 
 static struct vfs_file g_aFiles[VFS_MAX_FILES];
-static struct vfs_fd   g_aFds[VFS_MAX_FDS];
+/* Per-process fd tables. Tab 0 is kernel + first USER; fork children
+ * inherit a snapshot so parent close(config_s[1]) is not last-ref.
+ * OpenSSH dup2(config_s[1], 4) and privsep dup2(monitor, 3). Dual DoD B OPEN.
+ * thread_exec_replace keeps the same PCB: that tab must survive exec so
+ * unix-pair fd 3 (PRIVSEP_MONITOR_FD, CLOEXEC cleared by dup2) stays.
+ * 16 tabs: listener + sshd-session + sshd-auth + leftovers after reap. */
+#define VFS_FD_TABS 16u
+static struct vfs_fd g_aFdStore[VFS_FD_TABS][VFS_MAX_FDS];
+static struct gj_process *g_apFdProc[VFS_FD_TABS];
+static u32 g_au32FdPid[VFS_FD_TABS];
+static u8 g_u8FdTab;
+static u8 g_u8FdTabLastUser;
+static struct vfs_fd g_aFdInh[VFS_MAX_FDS];
+static u8 g_u8FdInhLive;
+static struct gj_process *g_pFdInhFrom;
+#define g_aFds (g_aFdStore[g_u8FdTab])
 static struct vfs_pipe_pair g_aPipes[VFS_MAX_PIPES];
+static struct vfs_pipe_scm_q g_aPipeScm[VFS_MAX_PIPES];
 static struct vfs_pty  g_aPty[VFS_MAX_PTY];
 static i32             g_i32CttyPty = -1; /* TIOCSCTTY; /dev/tty slave */
 static struct vfs_symlink g_aSym[VFS_MAX_SYMLINKS];
@@ -422,6 +457,13 @@ static i64 soft_out_bytes(u32 *pOk, u32 *pFail, u64 *pBytes, i64 i64Ret);
 static void soft_inventory_log(void);
 static void soft_inventory_maybe_once(void);
 static void soft_residual_lean_once(void);
+static void fd_select_tab(void);
+static struct gj_process *fd_calling_proc(void);
+static u8 fd_tab_pick_free(void);
+static void fd_inh_snap(void);
+static void pipe_open_sync(u32 u32Pair);
+static void pipe_open_sync_all(void);
+static void pipe_scm_drop(u32 u32Pair);
 
 /**
  * Live slot counts for soft inventory (tables only; no alloc).
@@ -734,6 +776,28 @@ soft_out_bytes(u32 *pOk, u32 *pFail, u64 *pBytes, i64 i64Ret)
         soft_add64(pBytes, (u64)i64Ret);
     }
     return soft_out(pOk, pFail, i64Ret);
+}
+
+/* Linux ABI edge: negatives are -LINUX_E* in 1..132, never GJ_ERR_*. */
+static i64
+vfs_abi_err(i64 i64Ret)
+{
+    i64 i64N;
+
+    if (i64Ret >= 0) {
+        return i64Ret;
+    }
+    i64N = -i64Ret;
+    if (i64N < 1 || i64N > 132) {
+        return -(i64)LINUX_EBADF;
+    }
+    return i64Ret;
+}
+
+static i64
+vfs_rw_out(u32 *pOk, u32 *pFail, u64 *pBytes, i64 i64Ret)
+{
+    return soft_out_bytes(pOk, pFail, pBytes, vfs_abi_err(i64Ret));
 }
 
 /**
@@ -1183,7 +1247,7 @@ soft_residual_lean_once(void)
      * Keeps header/capacity comments honest under residual deepen.
      */
     u32Checks++;
-    if (VFS_MAX_FILES == 64u && VFS_MAX_FDS == 96u &&
+    if (VFS_MAX_FILES == 128u && VFS_MAX_FDS == 96u &&
         VFS_MAX_PATH == 128u && VFS_MAX_DATA == 32768u &&
         VFS_MAX_PIPES == 16u && VFS_PIPE_BUF == 2048u &&
         VFS_MAX_EVENTFD == 8u && VFS_MAX_EPOLL == 4u &&
@@ -1236,7 +1300,7 @@ soft_residual_lean_once(void)
     if (VFS_KIND_RAM == 0u && VFS_KIND_IOURING == 10u &&
         VFS_MAX_DATA >= 30720u /* room for packaged ld-gj.so.1 ~30 KiB */ &&
         VFS_SCSI_SEC == 512u &&
-        VFS_MAX_PATH == 128u && VFS_MAX_FILES == 64u) {
+        VFS_MAX_PATH == 128u && VFS_MAX_FILES == 128u) {
         u32Honesty = 1;
         u32Ok++;
     }
@@ -1501,8 +1565,16 @@ vfs_ram_init(void)
     u32 cSeed = 0;
 
     memset(g_aFiles, 0, sizeof(g_aFiles));
-    memset(g_aFds, 0, sizeof(g_aFds));
+    memset(g_aFdStore, 0, sizeof(g_aFdStore));
+    memset(g_apFdProc, 0, sizeof(g_apFdProc));
+    memset(g_au32FdPid, 0, sizeof(g_au32FdPid));
+    memset(g_aFdInh, 0, sizeof(g_aFdInh));
+    g_u8FdTab = 0;
+    g_u8FdTabLastUser = 0;
+    g_u8FdInhLive = 0;
+    g_pFdInhFrom = NULL;
     memset(g_aPipes, 0, sizeof(g_aPipes));
+    memset(g_aPipeScm, 0, sizeof(g_aPipeScm));
     memset(g_aPty, 0, sizeof(g_aPty));
     g_i32CttyPty = -1;
     memset(g_aSym, 0, sizeof(g_aSym));
@@ -1702,9 +1774,11 @@ vfs_ram_init(void)
     seed_file("/usr/libexec/sshd-session", "\n");
     seed_file("/usr/libexec/sshd-auth", "\n");
     seed_file("/usr/sbin/nologin", "\n");
+    seed_file("/bin/sh", "\n");
     seed_set_mode("/usr/libexec/sshd-session", 0100755u);
     seed_set_mode("/usr/libexec/sshd-auth", 0100755u);
     seed_set_mode("/usr/sbin/nologin", 0100755u);
+    seed_set_mode("/bin/sh", 0100755u);
     /* Lab homes for OpenSSH pubkey; packed rootfs not mounted. Dual DoD B OPEN. */
     seed_dir("/home", 0755u);
     seed_dir("/home/jay", 0755u);
@@ -1724,8 +1798,7 @@ vfs_ram_init(void)
     seed_file("/proc/cpuinfo", "processor\t: 0\nvendor_id\t: GreenJade\n");
     seed_file("/proc/meminfo", "MemTotal:        1048576 kB\n");
     seed_file("/bin/greenjade", "#!/bin/sh\necho GreenJade\n");
-    /* /bin/sh is vendored dash (embedded blob + rootfs). Do not seed a
-     * text placeholder — execve("/bin/sh") uses gj_shell_elf_blob. */
+    /* execve("/bin/sh") still uses gj_shell_elf_blob (protonrt embed wins). */
     seed_file("/lib/ld-gj.so.1", "# ld-gj scaffold placeholder (ELF staged by smoke)\n");
     /* DT_NEEDED resolve targets for dynlinker bring-up */
     seed_file("/lib/libc.so.6", "# GreenJade libc placeholder (not glibc)\n");
@@ -2708,6 +2781,7 @@ pty_close_end(u32 u32Pipe, u8 u8End)
             g_i32CttyPty = -1;
         }
         pty_unpublish((u32)iPty);
+        pipe_scm_drop(u32Pipe);
         g_aPipes[u32Pipe].u8Used = 0;
         memset(pPty, 0, sizeof(*pPty));
     }
@@ -2776,6 +2850,7 @@ pty_open_master(void)
     }
 
     memset(&g_aPipes[iPipe], 0, sizeof(g_aPipes[iPipe]));
+    memset(&g_aPipeScm[iPipe], 0, sizeof(g_aPipeScm[iPipe]));
     g_aPipes[iPipe].u8Used = 1;
     g_aPipes[iPipe].u8Open[0] = 1;
     g_aPipes[iPipe].u8Open[1] = 1; /* hold so master writes buffer pre-slave */
@@ -2909,6 +2984,7 @@ vfs_ram_open(const char *szPath, int fCreate)
     char szResolved[VFS_MAX_PATH];
     i64 st;
 
+    fd_select_tab();
     if (szPath == NULL || szPath[0] == '\0') {
         return soft_out(&g_u32SoftOpenOk, &g_u32SoftOpenFail, -14); /* EFAULT */
     }
@@ -2999,11 +3075,481 @@ vfs_ram_open(const char *szPath, int fCreate)
     return soft_out(&g_u32SoftOpenOk, &g_u32SoftOpenFail, -24); /* EMFILE */
 }
 
+static struct gj_process *
+fd_calling_proc(void)
+{
+    struct gj_thread *pThr;
+
+    pThr = thread_current();
+    if (pThr != NULL) {
+        return pThr->pProc;
+    }
+    return NULL;
+}
+
+static u8
+fd_tab_pick_free(void)
+{
+    u8 u8T;
+
+    for (u8T = 0; u8T < VFS_FD_TABS; u8T++) {
+        if (g_apFdProc[u8T] == NULL) {
+            return u8T;
+        }
+    }
+    for (u8T = 1; u8T < VFS_FD_TABS; u8T++) {
+        struct gj_process *pProc = g_apFdProc[u8T];
+
+        if (pProc == NULL) {
+            return u8T;
+        }
+        if (pProc->u32Alive == 0u &&
+            thread_user_live_count(pProc) == 0u) {
+            g_apFdProc[u8T] = NULL;
+            g_au32FdPid[u8T] = 0;
+            return u8T;
+        }
+    }
+    return 0xFFu;
+}
+
+static void
+fd_tab_reap(void)
+{
+    struct gj_process *pCur;
+    u8 u8T;
+
+    pCur = fd_calling_proc();
+    for (u8T = 0; u8T < VFS_FD_TABS; u8T++) {
+        struct gj_process *pProc = g_apFdProc[u8T];
+
+        if (pProc == NULL) {
+            continue;
+        }
+        /* Same PCB execve: never unbind the execing USER tab. */
+        if (pProc == pCur) {
+            continue;
+        }
+        if (pProc->u32Alive != 0u) {
+            continue;
+        }
+        if (thread_user_live_count(pProc) != 0u) {
+            continue;
+        }
+        g_apFdProc[u8T] = NULL;
+        g_au32FdPid[u8T] = 0;
+    }
+}
+
+static u8
+fd_tab_by_pid(u32 u32Pid)
+{
+    u8 u8T;
+
+    if (u32Pid == 0u) {
+        return 0xFFu;
+    }
+    for (u8T = 0; u8T < VFS_FD_TABS; u8T++) {
+        if (g_au32FdPid[u8T] == u32Pid) {
+            return u8T;
+        }
+    }
+    return 0xFFu;
+}
+
+static u8
+fd_tab_of(const struct gj_process *pProc)
+{
+    u8 u8T;
+
+    if (pProc == NULL) {
+        return 0;
+    }
+    for (u8T = 0; u8T < VFS_FD_TABS; u8T++) {
+        if (g_apFdProc[u8T] == pProc) {
+            return u8T;
+        }
+    }
+    return 0xFFu;
+}
+
+static u8
+fd_tab_src(const struct gj_process *pProc)
+{
+    u8 u8T;
+
+    if (pProc != NULL && pProc->pParent != NULL) {
+        u8T = fd_tab_of(pProc->pParent);
+        if (u8T < VFS_FD_TABS) {
+            return u8T;
+        }
+    }
+    /* Kernel pProc==NULL selects tab 0; do not inherit that. */
+    if (g_u8FdTabLastUser < VFS_FD_TABS &&
+        g_apFdProc[g_u8FdTabLastUser] != NULL) {
+        return g_u8FdTabLastUser;
+    }
+    for (u8T = VFS_FD_TABS; u8T > 0u; ) {
+        u8T--;
+        if (g_apFdProc[u8T] != NULL) {
+            return u8T;
+        }
+    }
+    return 0;
+}
+
+static void
+pipe_open_sync_all(void)
+{
+    u32 iPair;
+
+    for (iPair = 0; iPair < VFS_MAX_PIPES; iPair++) {
+        if (g_aPipes[iPair].u8Used != 0u) {
+            pipe_open_sync(iPair);
+        }
+    }
+}
+
+static void
+fd_select_tab(void)
+{
+    struct gj_process *pProc;
+    u8 u8T;
+    u8 u8Free;
+    u8 u8Src;
+    u32 u32Pid;
+
+    pProc = fd_calling_proc();
+    if (pProc == NULL) {
+        u8 u8L = g_u8FdTabLastUser;
+
+        /*
+         * Kthread after execve sshd-auth: PRIVSEP fd 3 is a pipe on the
+         * USER child's tab. Prefer that over the session /dev/null on 3.
+         */
+        if (u8L < VFS_FD_TABS && g_apFdProc[u8L] != NULL &&
+            thread_user_live_count(g_apFdProc[u8L]) != 0u &&
+            g_aFdStore[u8L][3].u8Used != 0u &&
+            g_aFdStore[u8L][3].u8Kind == VFS_KIND_PIPE) {
+            g_u8FdTab = u8L;
+            goto done;
+        }
+        g_u8FdTab = 0;
+        goto done;
+    }
+    u32Pid = process_wait_pid_of(pProc);
+    u8T = fd_tab_of(pProc);
+    /*
+     * Same PCB execve keeps this tab (unix-pair fd 3). Do not memcpy
+     * from the parent and do not close the parent's peer.
+     */
+    if (u8T < VFS_FD_TABS) {
+        if (u32Pid != 0u) {
+            g_au32FdPid[u8T] = u32Pid;
+        }
+        g_u8FdTab = u8T;
+        g_u8FdTabLastUser = u8T;
+        goto done;
+    }
+    if (u32Pid != 0u) {
+        u8T = fd_tab_by_pid(u32Pid);
+        if (u8T < VFS_FD_TABS) {
+            g_apFdProc[u8T] = pProc;
+            g_u8FdTab = u8T;
+            g_u8FdTabLastUser = u8T;
+            goto done;
+        }
+    }
+    fd_tab_reap();
+    if (u32Pid != 0u) {
+        u8T = fd_tab_by_pid(u32Pid);
+        if (u8T < VFS_FD_TABS) {
+            g_apFdProc[u8T] = pProc;
+            g_u8FdTab = u8T;
+            g_u8FdTabLastUser = u8T;
+            goto done;
+        }
+    }
+    u8Free = fd_tab_pick_free();
+    if (u8Free >= VFS_FD_TABS) {
+        g_u8FdTab = fd_tab_src(pProc);
+        g_u8FdTabLastUser = g_u8FdTab;
+        goto done;
+    }
+    u8Src = fd_tab_src(pProc);
+    if (g_u8FdInhLive != 0u &&
+        (g_pFdInhFrom == NULL || g_pFdInhFrom == pProc->pParent ||
+         g_pFdInhFrom == g_apFdProc[u8Src])) {
+        memcpy(g_aFdStore[u8Free], g_aFdInh, sizeof(g_aFdInh));
+        g_u8FdInhLive = 0;
+        g_pFdInhFrom = NULL;
+    } else if (u8Src != u8Free) {
+        memcpy(g_aFdStore[u8Free], g_aFdStore[u8Src],
+               sizeof(g_aFdStore[0]));
+    }
+    g_apFdProc[u8Free] = pProc;
+    g_au32FdPid[u8Free] = u32Pid;
+    g_u8FdTab = u8Free;
+    g_u8FdTabLastUser = u8Free;
+    pipe_open_sync_all();
+done:
+    return;
+}
+
+static u32
+pipe_end_count(u32 u32Pair, u8 u8End)
+{
+    u32 u32N = 0;
+    u32 u32T;
+    u32 u32I;
+
+    if (u32Pair >= VFS_MAX_PIPES || u8End > 1u) {
+        return 0;
+    }
+    for (u32T = 0; u32T < VFS_FD_TABS; u32T++) {
+        if (u32T != 0u && g_apFdProc[u32T] == NULL) {
+            continue;
+        }
+        for (u32I = 0; u32I < VFS_MAX_FDS; u32I++) {
+            if (g_aFdStore[u32T][u32I].u8Used != 0u &&
+                g_aFdStore[u32T][u32I].u8Kind == VFS_KIND_PIPE &&
+                g_aFdStore[u32T][u32I].u32File == u32Pair &&
+                g_aFdStore[u32T][u32I].u8End == u8End) {
+                u32N++;
+            }
+        }
+    }
+    if (g_u8FdInhLive != 0u) {
+        for (u32I = 0; u32I < VFS_MAX_FDS; u32I++) {
+            if (g_aFdInh[u32I].u8Used != 0u &&
+                g_aFdInh[u32I].u8Kind == VFS_KIND_PIPE &&
+                g_aFdInh[u32I].u32File == u32Pair &&
+                g_aFdInh[u32I].u8End == u8End) {
+                u32N++;
+            }
+        }
+    }
+    for (u32I = 0; u32I < VFS_MAX_PIPES; u32I++) {
+        u32 u32S;
+
+        for (u32S = 0; u32S < VFS_PIPE_SCM_DEPTH; u32S++) {
+            if (g_aPipeScm[u32I].aSlot[u32S].u8Used != 0u &&
+                g_aPipeScm[u32I].aSlot[u32S].u8Kind == VFS_KIND_PIPE &&
+                g_aPipeScm[u32I].aSlot[u32S].u32File == u32Pair &&
+                g_aPipeScm[u32I].aSlot[u32S].u8End == u8End) {
+                u32N++;
+            }
+        }
+    }
+    return u32N;
+}
+
+static void
+pipe_scm_drop(u32 u32Pair)
+{
+    struct vfs_pipe_scm aScm[VFS_PIPE_SCM_DEPTH];
+    u8 u8N;
+    u8 u8Head;
+    u8 u8I;
+    i32 iPty;
+
+    if (u32Pair >= VFS_MAX_PIPES) {
+        return;
+    }
+    u8N = g_aPipeScm[u32Pair].u8N;
+    if (u8N == 0u) {
+        return;
+    }
+    if (u8N > VFS_PIPE_SCM_DEPTH) {
+        u8N = (u8)VFS_PIPE_SCM_DEPTH;
+    }
+    u8Head = g_aPipeScm[u32Pair].u8Head;
+    for (u8I = 0; u8I < u8N; u8I++) {
+        aScm[u8I] = g_aPipeScm[u32Pair].aSlot[(u8Head + u8I) %
+                                             VFS_PIPE_SCM_DEPTH];
+    }
+    memset(&g_aPipeScm[u32Pair], 0, sizeof(g_aPipeScm[u32Pair]));
+    for (u8I = 0; u8I < u8N; u8I++) {
+        if (aScm[u8I].u8Kind != VFS_KIND_PIPE ||
+            aScm[u8I].u32File >= VFS_MAX_PIPES ||
+            aScm[u8I].u32File == u32Pair) {
+            continue;
+        }
+        iPty = pty_find_by_pipe(aScm[u8I].u32File);
+        if (iPty >= 0) {
+            pty_close_end(aScm[u8I].u32File, aScm[u8I].u8End);
+        } else {
+            pipe_open_sync(aScm[u8I].u32File);
+        }
+    }
+}
+
+static void
+pipe_open_sync(u32 u32Pair)
+{
+    u32 u32C0;
+    u32 u32C1;
+
+    if (u32Pair >= VFS_MAX_PIPES || g_aPipes[u32Pair].u8Used == 0u) {
+        return;
+    }
+    u32C0 = pipe_end_count(u32Pair, 0u);
+    u32C1 = pipe_end_count(u32Pair, 1u);
+    g_aPipes[u32Pair].u8Open[0] = (u32C0 > 255u) ? 255u : (u8)u32C0;
+    g_aPipes[u32Pair].u8Open[1] = (u32C1 > 255u) ? 255u : (u8)u32C1;
+    if (u32C0 == 0u && u32C1 == 0u) {
+        pipe_scm_drop(u32Pair);
+        g_aPipes[u32Pair].u8Used = 0;
+    }
+}
+
+static int
+fd_has_bound_child(const struct gj_process *pProc)
+{
+    u8 u8T;
+
+    if (pProc == NULL) {
+        return 0;
+    }
+    for (u8T = 0; u8T < VFS_FD_TABS; u8T++) {
+        if (g_apFdProc[u8T] != NULL &&
+            g_apFdProc[u8T]->pParent == pProc) {
+            return 1;
+        }
+    }
+    return 0;
+}
+
+static void
+fd_inh_snap(void)
+{
+    struct gj_process *pProc;
+    u32 u32Pid;
+    u32 u32Live;
+
+    pProc = fd_calling_proc();
+    if (pProc == NULL) {
+        return;
+    }
+    if (fd_has_bound_child(pProc) != 0) {
+        return;
+    }
+    u32Pid = process_wait_pid_of(pProc);
+    u32Live = process_wait_live_count(u32Pid);
+    if (u32Live == 0u) {
+        return;
+    }
+    memcpy(g_aFdInh, g_aFdStore[g_u8FdTab], sizeof(g_aFdInh));
+    g_u8FdInhLive = 1;
+    g_pFdInhFrom = pProc;
+}
+
+/*
+ * Linux copies the fd table at fork. Bind pChild now so parent
+ * close(m_recvfd) is not last-ref for the child's copy of that pipe.
+ */
+void
+vfs_ram_fork_dup_fds(struct gj_process *pChild)
+{
+    struct gj_process *pParent;
+    u8 u8Src;
+    u8 u8Free;
+    u32 u32I;
+    u32 u32Pid;
+
+    if (pChild == NULL) {
+        return;
+    }
+    if (fd_tab_of(pChild) < VFS_FD_TABS) {
+        return;
+    }
+    pParent = pChild->pParent;
+    u8Src = 0xFFu;
+    if (pParent != NULL) {
+        u8Src = fd_tab_of(pParent);
+    }
+    if (u8Src >= VFS_FD_TABS) {
+        u8Src = g_u8FdTab;
+    }
+    if (u8Src >= VFS_FD_TABS) {
+        u8Src = fd_tab_src(pChild);
+    }
+    if (u8Src >= VFS_FD_TABS) {
+        u8Src = 0;
+    }
+    if (pParent != NULL && fd_tab_of(pParent) >= VFS_FD_TABS) {
+        g_apFdProc[u8Src] = pParent;
+        g_au32FdPid[u8Src] = process_wait_pid_of(pParent);
+    }
+    fd_tab_reap();
+    u8Free = fd_tab_pick_free();
+    if (u8Free >= VFS_FD_TABS || u8Free == u8Src) {
+        return;
+    }
+    memcpy(g_aFdStore[u8Free], g_aFdStore[u8Src], sizeof(g_aFdStore[0]));
+    g_apFdProc[u8Free] = pChild;
+    u32Pid = process_wait_pid_of(pChild);
+    g_au32FdPid[u8Free] = u32Pid;
+    for (u32I = 0; u32I < VFS_MAX_FDS; u32I++) {
+        if (g_aFdStore[u8Free][u32I].u8Used != 0u) {
+            pty_ref_dup(&g_aFdStore[u8Free][u32I]);
+        }
+    }
+    pipe_open_sync_all();
+}
+
+/*
+ * Death-path twin of vfs_ram_fork_dup_fds. process_death runs on a kernel
+ * worker, so do not vfs_ram_close / fd_select_tab (those use the caller
+ * tab). Drop this PCB's PIPE fds in-place, resync open counts, wake the
+ * peer so an empty log-pipe read returns EOF, then unbind the tab. Leave
+ * the parent's tab and TCP/LCN alone.
+ */
+void
+vfs_ram_exit_fds(struct gj_process *pProc)
+{
+    u8 u8Tab;
+    u32 u32I;
+    u32 u32Pair;
+    u32 u32Hit = 0;
+
+    if (pProc == NULL) {
+        return;
+    }
+    u8Tab = fd_tab_of(pProc);
+    if (u8Tab >= VFS_FD_TABS) {
+        return;
+    }
+    for (u32I = 0; u32I < VFS_MAX_FDS; u32I++) {
+        if (g_aFdStore[u8Tab][u32I].u8Used != 0u &&
+            g_aFdStore[u8Tab][u32I].u8Kind == VFS_KIND_PIPE) {
+            u32Pair = g_aFdStore[u8Tab][u32I].u32File;
+            g_aFdStore[u8Tab][u32I].u8Used = 0;
+            g_aFdStore[u8Tab][u32I].u8Fl = 0;
+            if (u32Pair < VFS_MAX_PIPES) {
+                u32Hit |= (1u << u32Pair);
+            }
+        }
+    }
+    for (u32Pair = 0; u32Pair < VFS_MAX_PIPES; u32Pair++) {
+        if ((u32Hit & (1u << u32Pair)) == 0u) {
+            continue;
+        }
+        pipe_open_sync(u32Pair);
+        (void)thread_wake(&g_aPipes[u32Pair], VFS_PIPE_TAG_RD, 8u);
+        (void)thread_wake(&g_aPipes[u32Pair], VFS_PIPE_TAG_WR, 8u);
+        vfs_ram_poll_kick();
+    }
+    g_apFdProc[u8Tab] = NULL;
+    g_au32FdPid[u8Tab] = 0;
+}
+
 int
 vfs_ram_fd_ok(i64 i64Fd)
 {
     u8 u8Kind;
 
+    fd_select_tab();
     if (i64Fd < 0 || i64Fd >= VFS_MAX_FDS || !g_aFds[i64Fd].u8Used) {
         return 0;
     }
@@ -3078,7 +3624,7 @@ vfs_ram_dup(i64 i64Fd)
     u32 iFd;
 
     if (!vfs_ram_fd_ok(i64Fd)) {
-        return soft_out(&g_u32SoftDupOk, &g_u32SoftDupFail, -9); /* EBADF */
+        return soft_out(&g_u32SoftDupOk, &g_u32SoftDupFail, -LINUX_EBADF);
     }
     for (iFd = 3; iFd < VFS_MAX_FDS; iFd++) {
         if (!g_aFds[iFd].u8Used) {
@@ -3086,32 +3632,90 @@ vfs_ram_dup(i64 i64Fd)
             g_aFds[iFd].u8Used = 1;
             g_aFds[iFd].u8Fl &= (u8)~VFS_FD_FL_CLOEXEC;
             pty_ref_dup(&g_aFds[iFd]);
+            if (g_aFds[iFd].u8Kind == VFS_KIND_PIPE) {
+                pipe_open_sync(g_aFds[iFd].u32File);
+            }
             return soft_out(&g_u32SoftDupOk, &g_u32SoftDupFail, (i64)iFd);
         }
     }
-    return soft_out(&g_u32SoftDupOk, &g_u32SoftDupFail, -24); /* EMFILE */
+    return soft_out(&g_u32SoftDupOk, &g_u32SoftDupFail, -LINUX_EMFILE);
 }
 
 i64
 vfs_ram_dup2(i64 i64Old, i64 i64New)
 {
-    if (!vfs_ram_fd_ok(i64Old)) {
-        return soft_out(&g_u32SoftDupOk, &g_u32SoftDupFail, -9);
+    struct vfs_fd fdOld;
+    u8 u8Src;
+    u8 u8Kind;
+
+    /* Linux dup2: return newfd. OpenSSH PRIVSEP_MONITOR_FD=3 / config=4. */
+    fd_select_tab();
+    if (i64New < 0 || i64New >= (i64)VFS_MAX_FDS) {
+        return soft_out(&g_u32SoftDupOk, &g_u32SoftDupFail, -LINUX_EBADF);
     }
-    /* OpenSSH PTY/pipe onto stdio; Dual DoD B OPEN. */
-    if (i64New < 0 || i64New >= VFS_MAX_FDS) {
-        return soft_out(&g_u32SoftDupOk, &g_u32SoftDupFail, -9);
+    if (i64Old < 0 || i64Old >= (i64)VFS_MAX_FDS) {
+        return soft_out(&g_u32SoftDupOk, &g_u32SoftDupFail, -LINUX_EBADF);
+    }
+    if (g_aFds[i64Old].u8Used == 0u) {
+        struct gj_process *pProc = fd_calling_proc();
+        u8 u8T;
+        u8 u8Hit = 0;
+
+        u8Src = fd_tab_src(pProc);
+        if (u8Src < VFS_FD_TABS &&
+            g_aFdStore[u8Src][(u32)i64Old].u8Used != 0u) {
+            fdOld = g_aFdStore[u8Src][(u32)i64Old];
+            u8Hit = 1;
+        } else {
+            for (u8T = 0; u8T < VFS_FD_TABS; u8T++) {
+                if (g_aFdStore[u8T][(u32)i64Old].u8Used != 0u) {
+                    fdOld = g_aFdStore[u8T][(u32)i64Old];
+                    u8Hit = 1;
+                    break;
+                }
+            }
+        }
+        if (u8Hit == 0u) {
+            return soft_out(&g_u32SoftDupOk, &g_u32SoftDupFail,
+                            -LINUX_EBADF);
+        }
+    } else {
+        fdOld = g_aFds[i64Old];
+    }
+    u8Kind = fdOld.u8Kind;
+    if (i64Old < 3 && u8Kind != VFS_KIND_PIPE && u8Kind != VFS_KIND_RAM) {
+        return soft_out(&g_u32SoftDupOk, &g_u32SoftDupFail, -LINUX_EBADF);
     }
     if (i64Old == i64New) {
+        g_aFds[i64New] = fdOld;
+        g_aFds[i64New].u8Used = 1;
+        g_aFds[i64New].u8Fl &= (u8)~VFS_FD_FL_CLOEXEC;
         return soft_out(&g_u32SoftDupOk, &g_u32SoftDupFail, i64New);
     }
-    if (g_aFds[i64New].u8Used) {
-        (void)vfs_ram_close(i64New);
+    if (g_aFds[i64New].u8Used != 0u) {
+        u8 u8NewK = g_aFds[i64New].u8Kind;
+
+        if (u8NewK == VFS_KIND_PIPE || u8NewK == VFS_KIND_RAM) {
+            u32 u32NewP = g_aFds[i64New].u32File;
+
+            epoll_detach_fd(i64New);
+            g_aFds[i64New].u8Used = 0;
+            g_aFds[i64New].u8Fl = 0;
+            if (u8NewK == VFS_KIND_PIPE) {
+                pipe_open_sync(u32NewP);
+            }
+        } else {
+            (void)vfs_ram_close(i64New);
+            fd_select_tab();
+        }
     }
-    g_aFds[i64New] = g_aFds[i64Old];
+    g_aFds[i64New] = fdOld;
     g_aFds[i64New].u8Used = 1;
     g_aFds[i64New].u8Fl &= (u8)~VFS_FD_FL_CLOEXEC;
     pty_ref_dup(&g_aFds[i64New]);
+    if (g_aFds[i64New].u8Kind == VFS_KIND_PIPE) {
+        pipe_open_sync(g_aFds[i64New].u32File);
+    }
     return soft_out(&g_u32SoftDupOk, &g_u32SoftDupFail, i64New);
 }
 
@@ -3122,13 +3726,13 @@ vfs_ram_dup_from(i64 i64Fd, i64 i64Min)
     u32 u32Start;
 
     if (!vfs_ram_fd_ok(i64Fd)) {
-        return soft_out(&g_u32SoftDupOk, &g_u32SoftDupFail, -9);
+        return soft_out(&g_u32SoftDupOk, &g_u32SoftDupFail, -LINUX_EBADF);
     }
     if (i64Min < 3) {
         i64Min = 3;
     }
     if (i64Min >= VFS_MAX_FDS) {
-        return soft_out(&g_u32SoftDupOk, &g_u32SoftDupFail, -9);
+        return soft_out(&g_u32SoftDupOk, &g_u32SoftDupFail, -LINUX_EBADF);
     }
     u32Start = (u32)i64Min;
     for (iFd = u32Start; iFd < VFS_MAX_FDS; iFd++) {
@@ -3137,10 +3741,13 @@ vfs_ram_dup_from(i64 i64Fd, i64 i64Min)
             g_aFds[iFd].u8Used = 1;
             g_aFds[iFd].u8Fl &= (u8)~VFS_FD_FL_CLOEXEC;
             pty_ref_dup(&g_aFds[iFd]);
+            if (g_aFds[iFd].u8Kind == VFS_KIND_PIPE) {
+                pipe_open_sync(g_aFds[iFd].u32File);
+            }
             return soft_out(&g_u32SoftDupOk, &g_u32SoftDupFail, (i64)iFd);
         }
     }
-    return soft_out(&g_u32SoftDupOk, &g_u32SoftDupFail, -24);
+    return soft_out(&g_u32SoftDupOk, &g_u32SoftDupFail, -LINUX_EMFILE);
 }
 
 i64
@@ -4211,6 +4818,20 @@ vfs_ram_stat(const char *szPath, void *pStat, size_t cbStat)
         return soft_out(&g_u32SoftStatOk, &g_u32SoftStatFail, 0);
     }
     iFile = find_file(szResolved);
+    if (iFile < 0 && pty_path_n(szResolved, &u32PtsN) != 0) {
+        i32 iPtyLive = pty_find_by_n(u32PtsN);
+
+        if (iPtyLive >= 0) {
+            (void)pty_publish((u32)iPtyLive);
+            iFile = find_file(szResolved);
+        }
+        if (iFile < 0 && iPtyLive >= 0) {
+            fill_stat(&st, 200u + (u64)u32PtsN, 0020620u, 0);
+            st.st_rdev = pty_slave_rdev(u32PtsN);
+            memcpy(pStat, &st, sizeof(st));
+            return soft_out(&g_u32SoftStatOk, &g_u32SoftStatFail, 0);
+        }
+    }
     if (iFile < 0) {
         return soft_out(&g_u32SoftStatOk, &g_u32SoftStatFail, -2);
     }
@@ -4279,6 +4900,20 @@ vfs_ram_lstat(const char *szPath, void *pStat, size_t cbStat)
     }
     /* Non-link: same as stat without follow (already resolved-ish) */
     iFile = find_file(szNorm);
+    if (iFile < 0 && pty_path_n(szNorm, &u32PtsN) != 0) {
+        i32 iPtyLive = pty_find_by_n(u32PtsN);
+
+        if (iPtyLive >= 0) {
+            (void)pty_publish((u32)iPtyLive);
+            iFile = find_file(szNorm);
+        }
+        if (iFile < 0 && iPtyLive >= 0) {
+            fill_stat(&st, 200u + (u64)u32PtsN, 0020620u, 0);
+            st.st_rdev = pty_slave_rdev(u32PtsN);
+            memcpy(pStat, &st, sizeof(st));
+            return soft_out(&g_u32SoftLstatOk, &g_u32SoftLstatFail, 0);
+        }
+    }
     if (iFile < 0) {
         /* Virtual dirs */
         if (path_eq(szNorm, "/") || path_eq(szNorm, "/tmp") ||
@@ -4332,7 +4967,7 @@ vfs_ram_read(i64 i64Fd, void *pBuf, size_t cb)
     i64 i64Ret;
 
     if (!vfs_ram_fd_ok(i64Fd) || pBuf == NULL) {
-        return soft_out_bytes(&g_u32SoftReadOk, &g_u32SoftReadFail, &g_u64SoftBytesRead, -9);
+        return vfs_rw_out(&g_u32SoftReadOk, &g_u32SoftReadFail, &g_u64SoftBytesRead, -9);
     }
     pFd = &g_aFds[i64Fd];
     pFile = &g_aFiles[pFd->u32File];
@@ -4342,12 +4977,12 @@ vfs_ram_read(i64 i64Fd, void *pBuf, size_t cb)
         for (i = 0; i < u32N; i++) {
             ((u8 *)pBuf)[i] = chr_rand_byte();
         }
-        return soft_out_bytes(&g_u32SoftReadOk, &g_u32SoftReadFail,
+        return vfs_rw_out(&g_u32SoftReadOk, &g_u32SoftReadFail,
                               &g_u64SoftBytesRead, (i64)u32N);
     }
 
     if (pFd->u8Kind == VFS_KIND_RAM && file_is_chr_discard(pFile)) {
-        return soft_out_bytes(&g_u32SoftReadOk, &g_u32SoftReadFail,
+        return vfs_rw_out(&g_u32SoftReadOk, &g_u32SoftReadFail,
                               &g_u64SoftBytesRead, 0);
     }
 
@@ -4356,25 +4991,25 @@ vfs_ram_read(i64 i64Fd, void *pBuf, size_t cb)
         u32 iEv = pFd->u32File;
 
         if (iEv >= VFS_MAX_EVENTFD || !g_aEventUsed[iEv] || cb < 8) {
-            return soft_out_bytes(&g_u32SoftReadOk, &g_u32SoftReadFail, &g_u64SoftBytesRead, -22);
+            return vfs_rw_out(&g_u32SoftReadOk, &g_u32SoftReadFail, &g_u64SoftBytesRead, -22);
         }
         while (g_aEventCnt[iEv] == 0) {
             if ((pFd->u8Fl & VFS_FD_FL_NONBLOCK) != 0u ||
                 thread_current() == NULL || g_fVfsParkOk == 0u) {
-                return soft_out_bytes(&g_u32SoftReadOk, &g_u32SoftReadFail,
+                return vfs_rw_out(&g_u32SoftReadOk, &g_u32SoftReadFail,
                                       &g_u64SoftBytesRead, -11);
             }
             thread_block(&g_aEventCnt[iEv], 1u);
             schedule();
             if (!g_aEventUsed[iEv]) {
-                return soft_out_bytes(&g_u32SoftReadOk, &g_u32SoftReadFail,
+                return vfs_rw_out(&g_u32SoftReadOk, &g_u32SoftReadFail,
                                       &g_u64SoftBytesRead, -9);
             }
         }
         u64V = g_aEventCnt[iEv];
         g_aEventCnt[iEv] = 0;
         memcpy(pBuf, &u64V, 8);
-        return soft_out_bytes(&g_u32SoftReadOk, &g_u32SoftReadFail, &g_u64SoftBytesRead, 8);
+        return vfs_rw_out(&g_u32SoftReadOk, &g_u32SoftReadFail, &g_u64SoftBytesRead, 8);
     }
 
     if (pFd->u8Kind == VFS_KIND_TIMERFD) {
@@ -4382,15 +5017,15 @@ vfs_ram_read(i64 i64Fd, void *pBuf, size_t cb)
         u32 iT = pFd->u32File;
 
         if (iT >= VFS_MAX_TIMERFD || !g_aTimerUsed[iT] || cb < 8) {
-            return soft_out_bytes(&g_u32SoftReadOk, &g_u32SoftReadFail, &g_u64SoftBytesRead, -22);
+            return vfs_rw_out(&g_u32SoftReadOk, &g_u32SoftReadFail, &g_u64SoftBytesRead, -22);
         }
         if (g_aTimerTicks[iT] == 0) {
-            return soft_out_bytes(&g_u32SoftReadOk, &g_u32SoftReadFail, &g_u64SoftBytesRead, -11);
+            return vfs_rw_out(&g_u32SoftReadOk, &g_u32SoftReadFail, &g_u64SoftBytesRead, -11);
         }
         u64V = g_aTimerTicks[iT];
         g_aTimerTicks[iT] = 0;
         memcpy(pBuf, &u64V, 8);
-        return soft_out_bytes(&g_u32SoftReadOk, &g_u32SoftReadFail, &g_u64SoftBytesRead, 8);
+        return vfs_rw_out(&g_u32SoftReadOk, &g_u32SoftReadFail, &g_u64SoftBytesRead, 8);
     }
 
     if (pFd->u8Kind == VFS_KIND_SIGNALFD) {
@@ -4400,18 +5035,18 @@ vfs_ram_read(i64 i64Fd, void *pBuf, size_t cb)
         u32 sig;
 
         if (iS >= VFS_MAX_SIGNALFD || !g_aSigUsed[iS] || cb < 128) {
-            return soft_out_bytes(&g_u32SoftReadOk, &g_u32SoftReadFail, &g_u64SoftBytesRead, -22);
+            return vfs_rw_out(&g_u32SoftReadOk, &g_u32SoftReadFail, &g_u64SoftBytesRead, -22);
         }
         while (g_aSigPending[iS] == 0) {
             if ((pFd->u8Fl & VFS_FD_FL_NONBLOCK) != 0u ||
                 thread_current() == NULL || g_fVfsParkOk == 0u) {
-                return soft_out_bytes(&g_u32SoftReadOk, &g_u32SoftReadFail,
+                return vfs_rw_out(&g_u32SoftReadOk, &g_u32SoftReadFail,
                                       &g_u64SoftBytesRead, -11);
             }
             thread_block(&g_aSigPending[iS], 1u);
             schedule();
             if (!g_aSigUsed[iS]) {
-                return soft_out_bytes(&g_u32SoftReadOk, &g_u32SoftReadFail,
+                return vfs_rw_out(&g_u32SoftReadOk, &g_u32SoftReadFail,
                                       &g_u64SoftBytesRead, -9);
             }
         }
@@ -4430,7 +5065,7 @@ vfs_ram_read(i64 i64Fd, void *pBuf, size_t cb)
             cb = sizeof(aInfo);
         }
         memcpy(pBuf, aInfo, cb);
-        return soft_out_bytes(&g_u32SoftReadOk, &g_u32SoftReadFail, &g_u64SoftBytesRead, (i64)cb);
+        return vfs_rw_out(&g_u32SoftReadOk, &g_u32SoftReadFail, &g_u64SoftBytesRead, (i64)cb);
     }
 
     if (pFd->u8Kind == VFS_KIND_INOTIFY) {
@@ -4443,10 +5078,10 @@ vfs_ram_read(i64 i64Fd, void *pBuf, size_t cb)
         u8 *pOut = (u8 *)pBuf;
 
         if (iIn >= VFS_MAX_INOTIFY || !g_aInotify[iIn].u8Used) {
-            return soft_out_bytes(&g_u32SoftReadOk, &g_u32SoftReadFail, &g_u64SoftBytesRead, -9);
+            return vfs_rw_out(&g_u32SoftReadOk, &g_u32SoftReadFail, &g_u64SoftBytesRead, -9);
         }
         if (cb < 16) {
-            return soft_out_bytes(&g_u32SoftReadOk, &g_u32SoftReadFail, &g_u64SoftBytesRead, -22);
+            return vfs_rw_out(&g_u32SoftReadOk, &g_u32SoftReadFail, &g_u64SoftBytesRead, -22);
         }
         while (g_aInotify[iIn].u8Nq > 0 && nOut + 16 <= (u32)cb) {
             struct vfs_inotify *pIn = &g_aInotify[iIn];
@@ -4468,9 +5103,9 @@ vfs_ram_read(i64 i64Fd, void *pBuf, size_t cb)
             }
         }
         if (nOut == 0) {
-            return soft_out_bytes(&g_u32SoftReadOk, &g_u32SoftReadFail, &g_u64SoftBytesRead, -11);
+            return vfs_rw_out(&g_u32SoftReadOk, &g_u32SoftReadFail, &g_u64SoftBytesRead, -11);
         }
-        return soft_out_bytes(&g_u32SoftReadOk, &g_u32SoftReadFail, &g_u64SoftBytesRead, (i64)nOut);
+        return vfs_rw_out(&g_u32SoftReadOk, &g_u32SoftReadFail, &g_u64SoftBytesRead, (i64)nOut);
     }
 
     if (pFd->u8Kind == VFS_KIND_PIPE) {
@@ -4491,7 +5126,7 @@ vfs_ram_read(i64 i64Fd, void *pBuf, size_t cb)
 
             if (pFd->u32File >= VFS_MAX_PIPES ||
                 !g_aPipes[pFd->u32File].u8Used) {
-                return soft_out_bytes(&g_u32SoftReadOk, &g_u32SoftReadFail,
+                return vfs_rw_out(&g_u32SoftReadOk, &g_u32SoftReadFail,
                                       &g_u64SoftBytesRead, -9);
             }
             pPair = &g_aPipes[pFd->u32File];
@@ -4520,7 +5155,7 @@ vfs_ram_read(i64 i64Fd, void *pBuf, size_t cb)
                 }
                 if ((pFd->u8Fl & VFS_FD_FL_NONBLOCK) != 0u ||
                     thread_current() == NULL || g_fVfsParkOk == 0u) {
-                    return soft_out_bytes(&g_u32SoftReadOk, &g_u32SoftReadFail,
+                    return vfs_rw_out(&g_u32SoftReadOk, &g_u32SoftReadFail,
                                           &g_u64SoftBytesRead, -11);
                 }
                 thread_block(pPair, VFS_PIPE_TAG_RD);
@@ -4532,29 +5167,29 @@ vfs_ram_read(i64 i64Fd, void *pBuf, size_t cb)
                 break;
             }
             if (pPair->u8Open[u8From] == 0u) {
-                return soft_out_bytes(&g_u32SoftReadOk, &g_u32SoftReadFail,
+                return vfs_rw_out(&g_u32SoftReadOk, &g_u32SoftReadFail,
                                       &g_u64SoftBytesRead, 0);
             }
             if (iPtyR >= 0 && g_aPty[iPtyR].u8Hung != 0) {
-                return soft_out_bytes(&g_u32SoftReadOk, &g_u32SoftReadFail,
+                return vfs_rw_out(&g_u32SoftReadOk, &g_u32SoftReadFail,
                                       &g_u64SoftBytesRead, 0);
             }
             if (iPtyR >= 0 && pFd->u8End == 1) {
                 if (g_aPty[iPtyR].u8SlaveEof != 0) {
                     g_aPty[iPtyR].u8SlaveEof = 0;
-                    return soft_out_bytes(&g_u32SoftReadOk, &g_u32SoftReadFail,
+                    return vfs_rw_out(&g_u32SoftReadOk, &g_u32SoftReadFail,
                                           &g_u64SoftBytesRead, 0);
                 }
                 if ((pty_tios_word(&g_aPty[iPtyR], 12) & VFS_TIOS_ICANON) ==
                         0u &&
                     pty_cc(&g_aPty[iPtyR], VFS_VMIN) == 0) {
-                    return soft_out_bytes(&g_u32SoftReadOk, &g_u32SoftReadFail,
+                    return vfs_rw_out(&g_u32SoftReadOk, &g_u32SoftReadFail,
                                           &g_u64SoftBytesRead, 0);
                 }
             }
             if ((pFd->u8Fl & VFS_FD_FL_NONBLOCK) != 0u ||
                 thread_current() == NULL || g_fVfsParkOk == 0u) {
-                return soft_out_bytes(&g_u32SoftReadOk, &g_u32SoftReadFail,
+                return vfs_rw_out(&g_u32SoftReadOk, &g_u32SoftReadFail,
                                       &g_u64SoftBytesRead, -11);
             }
             thread_block(pPair, VFS_PIPE_TAG_RD);
@@ -4564,13 +5199,13 @@ vfs_ram_read(i64 i64Fd, void *pBuf, size_t cb)
             u8 u8Stat = g_aPty[iPtyR].u8PktStat;
 
             if (cb == 0) {
-                return soft_out_bytes(&g_u32SoftReadOk, &g_u32SoftReadFail,
+                return vfs_rw_out(&g_u32SoftReadOk, &g_u32SoftReadFail,
                                       &g_u64SoftBytesRead, 0);
             }
             g_aPty[iPtyR].u8PktStat = 0;
             pOut[0] = u8Stat; /* 0 = TIOCPKT_DATA */
             if (u8Stat != 0 || cb == 1) {
-                return soft_out_bytes(&g_u32SoftReadOk, &g_u32SoftReadFail,
+                return vfs_rw_out(&g_u32SoftReadOk, &g_u32SoftReadFail,
                                       &g_u64SoftBytesRead, 1);
             }
             pOut = pOut + 1;
@@ -4588,7 +5223,7 @@ vfs_ram_read(i64 i64Fd, void *pBuf, size_t cb)
         }
         (void)thread_wake(pPair, VFS_PIPE_TAG_WR, 8u);
         vfs_ram_poll_kick();
-        return soft_out_bytes(&g_u32SoftReadOk, &g_u32SoftReadFail,
+        return vfs_rw_out(&g_u32SoftReadOk, &g_u32SoftReadFail,
                               &g_u64SoftBytesRead,
                               (i64)u32Done + (i64)u32PktLead);
     }
@@ -4606,18 +5241,18 @@ vfs_ram_read(i64 i64Fd, void *pBuf, size_t cb)
 
         if (pFd->u8Kind == VFS_KIND_BLK) {
             if (!virtio_blk_ready()) {
-                return soft_out_bytes(&g_u32SoftReadOk, &g_u32SoftReadFail, &g_u64SoftBytesRead, -5);
+                return vfs_rw_out(&g_u32SoftReadOk, &g_u32SoftReadFail, &g_u64SoftBytesRead, -5);
             }
             u64CapBytes =
                 virtio_blk_capacity_sectors() * (u64)GJ_VIRTIO_BLK_SECTOR;
         } else {
             if (!virtio_scsi_ready()) {
-                return soft_out_bytes(&g_u32SoftReadOk, &g_u32SoftReadFail, &g_u64SoftBytesRead, -5);
+                return vfs_rw_out(&g_u32SoftReadOk, &g_u32SoftReadFail, &g_u64SoftBytesRead, -5);
             }
             u64CapBytes = g_u64ScsiCapBytes;
         }
         if (pFd->u64Off >= u64CapBytes) {
-            return soft_out_bytes(&g_u32SoftReadOk, &g_u32SoftReadFail, &g_u64SoftBytesRead, 0);
+            return vfs_rw_out(&g_u32SoftReadOk, &g_u32SoftReadFail, &g_u64SoftBytesRead, 0);
         }
         if ((u64)u32Want > u64CapBytes - pFd->u64Off) {
             u32Want = (u32)(u64CapBytes - pFd->u64Off);
@@ -4628,7 +5263,7 @@ vfs_ram_read(i64 i64Fd, void *pBuf, size_t cb)
             if (pFd->u8Kind == VFS_KIND_BLK) {
                 if (virtio_blk_read(u64Sector, aSec, u32SecSz) != 0) {
                     i64Ret = u32Done > 0 ? (i64)u32Done : -5;
-                    return soft_out_bytes(&g_u32SoftReadOk, &g_u32SoftReadFail, &g_u64SoftBytesRead,
+                    return vfs_rw_out(&g_u32SoftReadOk, &g_u32SoftReadFail, &g_u64SoftBytesRead,
                                     i64Ret);
                 }
             } else {
@@ -4641,7 +5276,7 @@ vfs_ram_read(i64 i64Fd, void *pBuf, size_t cb)
                 req.fDataIn = 1;
                 if (scsi_mid_submit(&req) != 0) {
                     i64Ret = u32Done > 0 ? (i64)u32Done : -5;
-                    return soft_out_bytes(&g_u32SoftReadOk, &g_u32SoftReadFail, &g_u64SoftBytesRead,
+                    return vfs_rw_out(&g_u32SoftReadOk, &g_u32SoftReadFail, &g_u64SoftBytesRead,
                                     i64Ret);
                 }
             }
@@ -4655,11 +5290,11 @@ vfs_ram_read(i64 i64Fd, void *pBuf, size_t cb)
             pFd->u64Off += u32Copy;
             u32Done += u32Copy;
         }
-        return soft_out_bytes(&g_u32SoftReadOk, &g_u32SoftReadFail, &g_u64SoftBytesRead, (i64)u32Done);
+        return vfs_rw_out(&g_u32SoftReadOk, &g_u32SoftReadFail, &g_u64SoftBytesRead, (i64)u32Done);
     }
 
     if (pFd->u64Off >= pFile->cbData) {
-        return soft_out_bytes(&g_u32SoftReadOk, &g_u32SoftReadFail, &g_u64SoftBytesRead, 0);
+        return vfs_rw_out(&g_u32SoftReadOk, &g_u32SoftReadFail, &g_u64SoftBytesRead, 0);
     }
     u32Avail = pFile->cbData - (u32)pFd->u64Off;
     u32N = (u32)cb;
@@ -4670,7 +5305,7 @@ vfs_ram_read(i64 i64Fd, void *pBuf, size_t cb)
         ((u8 *)pBuf)[i] = pFile->aData[(u32)pFd->u64Off + i];
     }
     pFd->u64Off += u32N;
-    return soft_out_bytes(&g_u32SoftReadOk, &g_u32SoftReadFail, &g_u64SoftBytesRead, (i64)u32N);
+    return vfs_rw_out(&g_u32SoftReadOk, &g_u32SoftReadFail, &g_u64SoftBytesRead, (i64)u32N);
 }
 
 i64
@@ -4683,14 +5318,14 @@ vfs_ram_write(i64 i64Fd, const void *pBuf, size_t cb)
     i64 i64Ret;
 
     if (!vfs_ram_fd_ok(i64Fd) || pBuf == NULL) {
-        return soft_out_bytes(&g_u32SoftWriteOk, &g_u32SoftWriteFail, &g_u64SoftBytesWrite, -9);
+        return vfs_rw_out(&g_u32SoftWriteOk, &g_u32SoftWriteFail, &g_u64SoftBytesWrite, -9);
     }
     pFd = &g_aFds[i64Fd];
     pFile = &g_aFiles[pFd->u32File];
 
     if (pFd->u8Kind == VFS_KIND_RAM &&
         (file_is_chr_discard(pFile) || file_is_chr_rand(pFile))) {
-        return soft_out_bytes(&g_u32SoftWriteOk, &g_u32SoftWriteFail,
+        return vfs_rw_out(&g_u32SoftWriteOk, &g_u32SoftWriteFail,
                               &g_u64SoftBytesWrite, (i64)cb);
     }
 
@@ -4699,13 +5334,13 @@ vfs_ram_write(i64 i64Fd, const void *pBuf, size_t cb)
         u32 iEv = pFd->u32File;
 
         if (iEv >= VFS_MAX_EVENTFD || !g_aEventUsed[iEv] || cb < 8) {
-            return soft_out_bytes(&g_u32SoftWriteOk, &g_u32SoftWriteFail, &g_u64SoftBytesWrite, -22);
+            return vfs_rw_out(&g_u32SoftWriteOk, &g_u32SoftWriteFail, &g_u64SoftBytesWrite, -22);
         }
         memcpy(&u64Add, pBuf, 8);
         g_aEventCnt[iEv] += u64Add;
         (void)thread_wake(&g_aEventCnt[iEv], 1u, 8u);
         vfs_ram_poll_kick();
-        return soft_out_bytes(&g_u32SoftWriteOk, &g_u32SoftWriteFail, &g_u64SoftBytesWrite, 8);
+        return vfs_rw_out(&g_u32SoftWriteOk, &g_u32SoftWriteFail, &g_u64SoftBytesWrite, 8);
     }
 
     if (pFd->u8Kind == VFS_KIND_PIPE) {
@@ -4716,23 +5351,23 @@ vfs_ram_write(i64 i64Fd, const void *pBuf, size_t cb)
         u32 u32Space;
 
         if (pFd->u32File >= VFS_MAX_PIPES || !g_aPipes[pFd->u32File].u8Used) {
-            return soft_out_bytes(&g_u32SoftWriteOk, &g_u32SoftWriteFail, &g_u64SoftBytesWrite, -9);
+            return vfs_rw_out(&g_u32SoftWriteOk, &g_u32SoftWriteFail, &g_u64SoftBytesWrite, -9);
         }
         if (pty_find_by_pipe(pFd->u32File) >= 0) {
             i64 i64PtyW;
 
             i64PtyW = pty_write(pFd, pBuf, u32Want);
-            return soft_out_bytes(&g_u32SoftWriteOk, &g_u32SoftWriteFail,
+            return vfs_rw_out(&g_u32SoftWriteOk, &g_u32SoftWriteFail,
                                   &g_u64SoftBytesWrite, i64PtyW);
         }
         pPair = &g_aPipes[pFd->u32File];
         for (;;) {
             if (!pPair->u8Used) {
-                return soft_out_bytes(&g_u32SoftWriteOk, &g_u32SoftWriteFail,
+                return vfs_rw_out(&g_u32SoftWriteOk, &g_u32SoftWriteFail,
                                       &g_u64SoftBytesWrite, -9);
             }
             if (!pPair->u8Open[1u - u8To]) {
-                return soft_out_bytes(&g_u32SoftWriteOk, &g_u32SoftWriteFail,
+                return vfs_rw_out(&g_u32SoftWriteOk, &g_u32SoftWriteFail,
                                       &g_u64SoftBytesWrite, -32);
             }
             u32Space = VFS_PIPE_BUF - pPair->u32Len[u8To];
@@ -4741,13 +5376,13 @@ vfs_ram_write(i64 i64Fd, const void *pBuf, size_t cb)
             }
             if ((pFd->u8Fl & VFS_FD_FL_NONBLOCK) != 0u ||
                 thread_current() == NULL || g_fVfsParkOk == 0u) {
-                return soft_out_bytes(&g_u32SoftWriteOk, &g_u32SoftWriteFail,
+                return vfs_rw_out(&g_u32SoftWriteOk, &g_u32SoftWriteFail,
                                       &g_u64SoftBytesWrite, -11);
             }
             thread_block(pPair, VFS_PIPE_TAG_WR);
             schedule();
             if (pFd->u32File >= VFS_MAX_PIPES) {
-                return soft_out_bytes(&g_u32SoftWriteOk, &g_u32SoftWriteFail,
+                return vfs_rw_out(&g_u32SoftWriteOk, &g_u32SoftWriteFail,
                                       &g_u64SoftBytesWrite, -9);
             }
             pPair = &g_aPipes[pFd->u32File];
@@ -4764,7 +5399,7 @@ vfs_ram_write(i64 i64Fd, const void *pBuf, size_t cb)
         }
         (void)thread_wake(pPair, VFS_PIPE_TAG_RD, 8u);
         vfs_ram_poll_kick();
-        return soft_out_bytes(&g_u32SoftWriteOk, &g_u32SoftWriteFail, &g_u64SoftBytesWrite, (i64)u32Done);
+        return vfs_rw_out(&g_u32SoftWriteOk, &g_u32SoftWriteFail, &g_u64SoftBytesWrite, (i64)u32Done);
     }
 
     if (pFd->u8Kind == VFS_KIND_BLK) {
@@ -4777,11 +5412,11 @@ vfs_ram_write(i64 i64Fd, const void *pBuf, size_t cb)
         u32 u32Want = (u32)cb;
 
         if (!virtio_blk_ready()) {
-            return soft_out_bytes(&g_u32SoftWriteOk, &g_u32SoftWriteFail, &g_u64SoftBytesWrite, -5);
+            return vfs_rw_out(&g_u32SoftWriteOk, &g_u32SoftWriteFail, &g_u64SoftBytesWrite, -5);
         }
         u64CapBytes = virtio_blk_capacity_sectors() * (u64)GJ_VIRTIO_BLK_SECTOR;
         if (pFd->u64Off >= u64CapBytes) {
-            return soft_out_bytes(&g_u32SoftWriteOk, &g_u32SoftWriteFail, &g_u64SoftBytesWrite, -28);
+            return vfs_rw_out(&g_u32SoftWriteOk, &g_u32SoftWriteFail, &g_u64SoftBytesWrite, -28);
         }
         if ((u64)u32Want > u64CapBytes - pFd->u64Off) {
             u32Want = (u32)(u64CapBytes - pFd->u64Off);
@@ -4793,7 +5428,7 @@ vfs_ram_write(i64 i64Fd, const void *pBuf, size_t cb)
             if (u32SecOff != 0 || (u32Want - u32Done) < GJ_VIRTIO_BLK_SECTOR) {
                 if (virtio_blk_read(u64Sector, aSec, GJ_VIRTIO_BLK_SECTOR) != 0) {
                     i64Ret = u32Done > 0 ? (i64)u32Done : -5;
-                    return soft_out_bytes(&g_u32SoftWriteOk, &g_u32SoftWriteFail, &g_u64SoftBytesWrite,
+                    return vfs_rw_out(&g_u32SoftWriteOk, &g_u32SoftWriteFail, &g_u64SoftBytesWrite,
                                     i64Ret);
                 }
             } else {
@@ -4808,18 +5443,18 @@ vfs_ram_write(i64 i64Fd, const void *pBuf, size_t cb)
             }
             if (virtio_blk_write(u64Sector, aSec, GJ_VIRTIO_BLK_SECTOR) != 0) {
                 i64Ret = u32Done > 0 ? (i64)u32Done : -5;
-                return soft_out_bytes(&g_u32SoftWriteOk, &g_u32SoftWriteFail, &g_u64SoftBytesWrite, i64Ret);
+                return vfs_rw_out(&g_u32SoftWriteOk, &g_u32SoftWriteFail, &g_u64SoftBytesWrite, i64Ret);
             }
             pFd->u64Off += u32Copy;
             u32Done += u32Copy;
         }
-        return soft_out_bytes(&g_u32SoftWriteOk, &g_u32SoftWriteFail, &g_u64SoftBytesWrite, (i64)u32Done);
+        return vfs_rw_out(&g_u32SoftWriteOk, &g_u32SoftWriteFail, &g_u64SoftBytesWrite, (i64)u32Done);
     }
 
     u32N = (u32)cb;
     if ((u32)pFd->u64Off + u32N > VFS_MAX_DATA) {
         if ((u32)pFd->u64Off >= VFS_MAX_DATA) {
-            return soft_out_bytes(&g_u32SoftWriteOk, &g_u32SoftWriteFail, &g_u64SoftBytesWrite, -28);
+            return vfs_rw_out(&g_u32SoftWriteOk, &g_u32SoftWriteFail, &g_u64SoftBytesWrite, -28);
         }
         u32N = VFS_MAX_DATA - (u32)pFd->u64Off;
     }
@@ -4830,31 +5465,34 @@ vfs_ram_write(i64 i64Fd, const void *pBuf, size_t cb)
     if ((u32)pFd->u64Off > pFile->cbData) {
         pFile->cbData = (u32)pFd->u64Off;
     }
-    return soft_out_bytes(&g_u32SoftWriteOk, &g_u32SoftWriteFail, &g_u64SoftBytesWrite, (i64)u32N);
+    return vfs_rw_out(&g_u32SoftWriteOk, &g_u32SoftWriteFail, &g_u64SoftBytesWrite, (i64)u32N);
 }
 
 i64
 vfs_ram_close(i64 i64Fd)
 {
+    u8 u8Kind;
+    u32 u32Pair = 0;
+    u8 u8End = 0;
+    i32 iPty = -1;
+
     if (!vfs_ram_fd_ok(i64Fd)) {
-        return soft_out(&g_u32SoftCloseOk, &g_u32SoftCloseFail, -9);
+        return soft_out(&g_u32SoftCloseOk, &g_u32SoftCloseFail, -LINUX_EBADF);
     }
     /* Drop this fd from every epoll interest list before releasing */
     epoll_detach_fd(i64Fd);
-    if (g_aFds[i64Fd].u8Kind == VFS_KIND_PIPE) {
-        u32 u32Pair = g_aFds[i64Fd].u32File;
-        u8 u8End = g_aFds[i64Fd].u8End;
-
-        if (pty_find_by_pipe(u32Pair) >= 0) {
+    u8Kind = g_aFds[i64Fd].u8Kind;
+    if (u8Kind == VFS_KIND_PIPE) {
+        u32Pair = g_aFds[i64Fd].u32File;
+        u8End = g_aFds[i64Fd].u8End;
+        iPty = pty_find_by_pipe(u32Pair);
+        if (iPty < 0) {
+            fd_inh_snap();
+        }
+    }
+    if (u8Kind == VFS_KIND_PIPE) {
+        if (iPty >= 0) {
             pty_close_end(u32Pair, u8End);
-        } else if (u32Pair < VFS_MAX_PIPES && g_aPipes[u32Pair].u8Used) {
-            g_aPipes[u32Pair].u8Open[u8End] = 0;
-            (void)thread_wake(&g_aPipes[u32Pair], VFS_PIPE_TAG_RD, 8u);
-            (void)thread_wake(&g_aPipes[u32Pair], VFS_PIPE_TAG_WR, 8u);
-            vfs_ram_poll_kick();
-            if (!g_aPipes[u32Pair].u8Open[0] && !g_aPipes[u32Pair].u8Open[1]) {
-                g_aPipes[u32Pair].u8Used = 0;
-            }
         }
     } else if (g_aFds[i64Fd].u8Kind == VFS_KIND_EVENTFD) {
         u32 iEv = g_aFds[i64Fd].u32File;
@@ -4896,6 +5534,14 @@ vfs_ram_close(i64 i64Fd)
     }
     g_aFds[i64Fd].u8Used = 0;
     g_aFds[i64Fd].u8Fl = 0;
+    if (u8Kind == VFS_KIND_PIPE && iPty < 0) {
+        pipe_open_sync(u32Pair);
+        if (u32Pair < VFS_MAX_PIPES) {
+            (void)thread_wake(&g_aPipes[u32Pair], VFS_PIPE_TAG_RD, 8u);
+            (void)thread_wake(&g_aPipes[u32Pair], VFS_PIPE_TAG_WR, 8u);
+            vfs_ram_poll_kick();
+        }
+    }
     return soft_out(&g_u32SoftCloseOk, &g_u32SoftCloseFail, 0);
 }
 
@@ -5473,8 +6119,9 @@ pipe_alloc_pair(i32 *pFds)
     i32 iFd1 = -1;
     u32 i;
 
+    fd_select_tab();
     if (pFds == NULL) {
-        return -22;
+        return -LINUX_EFAULT;
     }
     for (iPair = 0; iPair < VFS_MAX_PIPES; iPair++) {
         if (!g_aPipes[iPair].u8Used) {
@@ -5498,6 +6145,7 @@ pipe_alloc_pair(i32 *pFds)
         return -24;
     }
     memset(&g_aPipes[iPair], 0, sizeof(g_aPipes[iPair]));
+    memset(&g_aPipeScm[iPair], 0, sizeof(g_aPipeScm[iPair]));
     g_aPipes[iPair].u8Used = 1;
     g_aPipes[iPair].u8Open[0] = 1;
     g_aPipes[iPair].u8Open[1] = 1;
@@ -5580,6 +6228,102 @@ vfs_ram_socketpair(int nDomain, int nType, int nProtocol, i32 *pFds)
         }
         return soft_out(&g_u32SoftSocketpairOk, &g_u32SoftSocketpairFail, 0);
     }
+}
+
+i64
+vfs_ram_scm_send_fd(i64 i64Sock, i32 i32Fd)
+{
+    struct vfs_fd fdPay;
+    struct vfs_pipe_scm *pSlot;
+    u32 u32Pipe;
+    u8 u8Tail;
+    i32 iPty;
+
+    fd_select_tab();
+    if (!vfs_ram_fd_ok(i64Sock) || !vfs_ram_fd_ok((i64)i32Fd)) {
+        return -LINUX_EBADF;
+    }
+    if (g_aFds[i64Sock].u8Kind != VFS_KIND_PIPE) {
+        return -LINUX_ENOTSOCK;
+    }
+    u32Pipe = g_aFds[i64Sock].u32File;
+    if (u32Pipe >= VFS_MAX_PIPES || g_aPipes[u32Pipe].u8Used == 0u) {
+        return -LINUX_ENOTSOCK;
+    }
+    if (g_aPipeScm[u32Pipe].u8N >= VFS_PIPE_SCM_DEPTH) {
+        return -LINUX_ENOSPC;
+    }
+    fdPay = g_aFds[i32Fd];
+    u8Tail = (u8)((g_aPipeScm[u32Pipe].u8Head + g_aPipeScm[u32Pipe].u8N) %
+                  VFS_PIPE_SCM_DEPTH);
+    pSlot = &g_aPipeScm[u32Pipe].aSlot[u8Tail];
+    pSlot->u8Used = 1;
+    pSlot->u8Kind = fdPay.u8Kind;
+    pSlot->u8End = fdPay.u8End;
+    pSlot->u8Fl = fdPay.u8Fl;
+    pSlot->u32File = fdPay.u32File;
+    g_aPipeScm[u32Pipe].u8N++;
+    pty_ref_dup(&fdPay);
+    if (fdPay.u8Kind == VFS_KIND_PIPE && fdPay.u32File < VFS_MAX_PIPES) {
+        iPty = pty_find_by_pipe(fdPay.u32File);
+        if (iPty < 0) {
+            pipe_open_sync(fdPay.u32File);
+        }
+    }
+    return 0;
+}
+
+i64
+vfs_ram_scm_recv_fd(i64 i64Sock)
+{
+    struct vfs_pipe_scm scm;
+    u32 u32Pipe;
+    u32 iFd;
+    u8 u8Head;
+    i32 iPty;
+
+    fd_select_tab();
+    if (!vfs_ram_fd_ok(i64Sock)) {
+        return -LINUX_EBADF;
+    }
+    if (g_aFds[i64Sock].u8Kind != VFS_KIND_PIPE) {
+        return -LINUX_ENOTSOCK;
+    }
+    u32Pipe = g_aFds[i64Sock].u32File;
+    if (u32Pipe >= VFS_MAX_PIPES || g_aPipes[u32Pipe].u8Used == 0u) {
+        return -LINUX_ENOTSOCK;
+    }
+    if (g_aPipeScm[u32Pipe].u8N == 0u) {
+        return -LINUX_EAGAIN;
+    }
+    for (iFd = 3; iFd < VFS_MAX_FDS; iFd++) {
+        if (g_aFds[iFd].u8Used == 0) {
+            break;
+        }
+    }
+    if (iFd >= VFS_MAX_FDS) {
+        return -LINUX_EMFILE;
+    }
+    u8Head = (u8)(g_aPipeScm[u32Pipe].u8Head % VFS_PIPE_SCM_DEPTH);
+    scm = g_aPipeScm[u32Pipe].aSlot[u8Head];
+    memset(&g_aPipeScm[u32Pipe].aSlot[u8Head], 0,
+           sizeof(g_aPipeScm[u32Pipe].aSlot[u8Head]));
+    g_aPipeScm[u32Pipe].u8Head = (u8)((u8Head + 1u) % VFS_PIPE_SCM_DEPTH);
+    g_aPipeScm[u32Pipe].u8N--;
+    g_aFds[iFd].u8Used = 1;
+    g_aFds[iFd].u8Kind = scm.u8Kind;
+    g_aFds[iFd].u8End = scm.u8End;
+    g_aFds[iFd].u8Fl = scm.u8Fl;
+    g_aFds[iFd].u32File = scm.u32File;
+    g_aFds[iFd].u64Off = 0;
+    /* send already bumped pty/pipe refs; pending becomes this fd. */
+    if (scm.u8Kind == VFS_KIND_PIPE && scm.u32File < VFS_MAX_PIPES) {
+        iPty = pty_find_by_pipe(scm.u32File);
+        if (iPty < 0) {
+            pipe_open_sync(scm.u32File);
+        }
+    }
+    return (i64)iFd;
 }
 
 i64

@@ -28,6 +28,12 @@
  *   +24 u64UserRflags  user RFLAGS snapshot
  *   +32 pCurrent       scheduler current thread (struct gj_thread *)
  *   +40 u64Cr3         active address-space CR3 shadow
+ *   +48 u64UserRbx     SYSCALL-entry user rbx (Linux fork callee-saves)
+ *   +56 u64UserRbp
+ *   +64 u64UserR12
+ *   +72 u64UserR13
+ *   +80 u64UserR14
+ *   +88 u64UserR15
  * Remaining fields (u32CpuId, u32Online, aSyscallStack[]) may grow only
  * after this prefix; never insert between +0 and +40.
  *
@@ -94,7 +100,8 @@ struct gj_cpu_soft {
 /**
  * Per-CPU control block. One published instance per online logical CPU.
  *
- * Leading six fields are an asm/SYSCALL contract - see file banner.
+ * Leading prefix (+0..+40) plus user callee-saves (+48..+88) are an
+ * asm/SYSCALL contract - see file banner.
  * aSyscallStack is the early/fallback stack body; after a thread is current,
  * u64KernelRsp is typically retargeted to that thread's kernel stack top.
  */
@@ -106,11 +113,30 @@ struct gj_cpu {
     u64                 u64UserRflags;  /* +24 */
     struct gj_thread   *pCurrent;       /* +32 */
     u64                 u64Cr3;         /* +40 current CR3 */
+    u64                 u64UserRbx;     /* +48 user callee-saves at SYSCALL */
+    u64                 u64UserRbp;     /* +56 */
+    u64                 u64UserR12;     /* +64 */
+    u64                 u64UserR13;     /* +72 */
+    u64                 u64UserR14;     /* +80 */
+    u64                 u64UserR15;     /* +88 */
     u32                 u32CpuId;
     u32                 u32Online;      /* 1 once GS published for this slot */
     u8                  aSyscallStack[GJ_SYSCALL_STACK_SIZE]
         __attribute__((aligned(16)));
 };
+
+_Static_assert(offsetof(struct gj_cpu, u64KernelRsp) == 0, "gs+0 KernelRsp");
+_Static_assert(offsetof(struct gj_cpu, u64UserRsp) == 8, "gs+8 UserRsp");
+_Static_assert(offsetof(struct gj_cpu, u64UserRip) == 16, "gs+16 UserRip");
+_Static_assert(offsetof(struct gj_cpu, u64UserRflags) == 24, "gs+24 UserRflags");
+_Static_assert(offsetof(struct gj_cpu, pCurrent) == 32, "gs+32 pCurrent");
+_Static_assert(offsetof(struct gj_cpu, u64Cr3) == 40, "gs+40 Cr3");
+_Static_assert(offsetof(struct gj_cpu, u64UserRbx) == 48, "gs+48 UserRbx");
+_Static_assert(offsetof(struct gj_cpu, u64UserRbp) == 56, "gs+56 UserRbp");
+_Static_assert(offsetof(struct gj_cpu, u64UserR12) == 64, "gs+64 UserR12");
+_Static_assert(offsetof(struct gj_cpu, u64UserR13) == 72, "gs+72 UserR13");
+_Static_assert(offsetof(struct gj_cpu, u64UserR14) == 80, "gs+80 UserR14");
+_Static_assert(offsetof(struct gj_cpu, u64UserR15) == 88, "gs+88 UserR15");
 
 /**
  * Publish BSP slot 0: zero/fill g_aCpus[0], set u64KernelRsp to stack top,
@@ -219,3 +245,10 @@ u64  cpu_read_cr3(void);
  * Required before cpu_current() / SYSCALL entry can use gs: offsets.
  */
 void cpu_gs_init(struct gj_cpu *pCpu);
+
+/**
+ * Snapshot GS user callee-saves for LINUX fork child u32Thr.
+ * Parent is still in this SYSCALL; live GS rbx/rbp/r12-r15 are the user's.
+ * cpu_enter_user copies this onto the child TCB before sysretq.
+ */
+void cpu_fork_capture_user_gprs(u32 u32Thr);

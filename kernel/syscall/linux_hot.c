@@ -128,6 +128,7 @@
 /* STRONGER W10 functional residual self-check arm count (Soft!=product). */
 #define HOT_W10_LEAN_CHECKS 10u
 #include <gj/cpu.h>
+#include <gj/door.h>
 #include <gj/error.h>
 #include <gj/futex.h>
 #include <gj/io_uring.h>
@@ -153,31 +154,99 @@ struct gj_process *g_pLinuxProc;
 static u32 g_u32LinuxPid = 1;
 static u32 g_u32LinuxTid = 1;
 static u32 g_u32LinuxPpid = 0;
-static u32 g_u32LinuxUid = 1000;
-static u32 g_u32LinuxGid = 1000;
-static u32 g_u32LinuxEuid = 1000;
-static u32 g_u32LinuxEgid = 1000;
-static u32 g_u32LinuxSuid = 1000;
-static u32 g_u32LinuxSgid = 1000;
+static u32 g_u32LinuxUid = 0;
+static u32 g_u32LinuxGid = 0;
+static u32 g_u32LinuxEuid = 0;
+static u32 g_u32LinuxEgid = 0;
+static u32 g_u32LinuxSuid = 0;
+static u32 g_u32LinuxSgid = 0;
 static u32 g_u32LinuxPgid = 1;
 static u32 g_u32LinuxSid = 1;
 static u32 g_u32LinuxUmask = 0022u; /* POSIX shell default; umask(2) old-mask */
 static u64 g_u64BrkBase = 0x04600000ull; /* 70 MiB: above user.ld + OpenSSH PT_LOAD */
 static u64 g_u64BrkCur = 0x04600000ull;
 
+/* Per-wait-pid r/e/s uid/gid. kmain smoke (wait pid 0) keeps the globals. */
+#define GJ_LINUX_HOT_CRED_SLOTS 64u
+
+struct linux_hot_cred {
+    u32 u32Pid;
+    u32 u32Ruid;
+    u32 u32Euid;
+    u32 u32Suid;
+    u32 u32Rgid;
+    u32 u32Egid;
+    u32 u32Sgid;
+};
+
+static struct linux_hot_cred g_aLinuxCred[GJ_LINUX_HOT_CRED_SLOTS];
+
+/**
+ * USER TCB: USER*_ENTRY, mid-SYSCALL sysuser, or ring-3 entry with no kfn.
+ * Trampoline clears USER_ENTRY; exec_replace still has u64UserRip.
+ */
+static int
+hot_thr_is_user(const struct gj_thread *pThr)
+{
+    u32 u32UserFl = GJ_THR_F_USER_ENTRY | GJ_THR_F_USER32_ENTRY;
+
+    if (pThr == NULL || pThr->pProc == NULL) {
+        return 0;
+    }
+    if ((pThr->u32Flags & u32UserFl) != 0) {
+        return 1;
+    }
+    if (pThr->u32SysUserValid != 0) {
+        return 1;
+    }
+    if (pThr->pfnEntry == NULL && pThr->u64UserRip != 0) {
+        return 1;
+    }
+    return 0;
+}
+
 /**
  * Calling USER PCB, else g_pLinuxProc (kernel smoke).
  * mmap/brk/wait-adjacent hot paths bind here so a fork child is not pid-1 AS.
+ * After exec_replace, doors kthread pProc is parent/default — use pClient or
+ * the unique wait-registered USER child (sshd-auth), not g_pLinuxProc.
  */
 static struct gj_process *
 hot_calling_proc(void)
 {
     struct gj_thread *pCur = thread_current();
-    u32 u32UserFl = GJ_THR_F_USER_ENTRY | GJ_THR_F_USER32_ENTRY;
+    struct gj_thread *pCli;
+    struct gj_door *pDoor;
+    struct gj_cpu *pCpu;
+    struct gj_process *pProc;
+    u64 u64Rip = 0;
+    u64 u64Rsp = 0;
 
-    (void)u32UserFl;
-    if (pCur != NULL && pCur->pProc != NULL) {
+    if (hot_thr_is_user(pCur) != 0) {
         return pCur->pProc;
+    }
+    pDoor = door_cold_personality();
+    if (pDoor != NULL) {
+        pCli = pDoor->pClient;
+        if (hot_thr_is_user(pCli) != 0) {
+            return pCli->pProc;
+        }
+    }
+    pCpu = cpu_current();
+    if (pCpu != NULL) {
+        u64Rip = pCpu->u64UserRip;
+        u64Rsp = pCpu->u64UserRsp;
+    }
+    pProc = process_linux_live_user_child(u64Rip, u64Rsp);
+    if (pProc != NULL && pProc->u32Alive != 0) {
+        return pProc;
+    }
+    if (pCur != NULL && pCur->pProc != NULL) {
+        pProc = pCur->pProc;
+        if (pProc != g_pLinuxProc && pProc->u32Alive != 0 &&
+            pProc->u32Personality == 1u && process_wait_pid_of(pProc) != 0) {
+            return pProc;
+        }
     }
     return g_pLinuxProc;
 }
@@ -1028,8 +1097,14 @@ gj_linux_hot_write(struct gj_linux_regs *pRegs)
     fVfs = 0;
     fSock = 0;
 
-    /* After dup2(accepted, 0/1): fd 0/1 are cold-net aliases, not serial. */
-    if (gj_linux_cold_fd_ok((i64)u64Fd) != 0) {
+    /*
+     * OpenSSH login-shell child dup2(pout[1], 1) leaves a leftover LCN
+     * alias on 1. Prefer vfs pipe/PTY or dash stdout is raw TCP
+     * (QEMU95 Bad packet length 0x50495045 = "PIPE"). Dual DoD B OPEN.
+     */
+    if (vfs_ram_fd_poll_parkable((i64)u64Fd) != 0) {
+        fVfs = 1;
+    } else if (gj_linux_cold_fd_ok((i64)u64Fd) != 0) {
         return gj_linux_cold_send(pRegs);
     }
 
@@ -2771,16 +2846,18 @@ gj_linux_hot_shutdown(struct gj_linux_regs *pRegs)
 
 /* Signal/timer stubs for glibc/wine bring-up (no delivery yet). */
 static u8 g_aSigMask[8];
+static u32 g_u32HotSigchldActLog;
 
 i64
 gj_linux_hot_rt_sigaction(struct gj_linux_regs *pRegs)
 {
-    /* Store sa_handler on the calling PCB. Delivery remains OPEN. */
+    /* Store sa_handler on the calling USER PCB (wait-pid child, not pid 1). */
     u8 aOld[32];
     u8 aAct[32];
     u32 i;
     u32 u32Sig;
     struct gj_process *pProc;
+    struct gj_thread *pCur;
     u64 u64Old = 0;
 
     hot_soft_enter(HOT_SOFT_GRP_SIG, pRegs);
@@ -2791,7 +2868,14 @@ gj_linux_hot_rt_sigaction(struct gj_linux_regs *pRegs)
     if (u32Sig == 0 || u32Sig >= GJ_PROC_NSIG) {
         return -LINUX_EINVAL;
     }
-    pProc = hot_calling_proc();
+    pCur = thread_current();
+    pProc = NULL;
+    if (hot_thr_is_user(pCur) != 0) {
+        pProc = pCur->pProc;
+    }
+    if (pProc == NULL) {
+        pProc = hot_calling_proc();
+    }
     if (pProc != NULL) {
         u64Old = pProc->aSigHandler[u32Sig];
     }
@@ -2832,6 +2916,12 @@ gj_linux_hot_rt_sigaction(struct gj_linux_regs *pRegs)
                 u64H |= ((u64)aAct[iB]) << (iB * 8);
             }
             pProc->aSigHandler[u32Sig] = u64H;
+            if (u32Sig == GJ_SIGCHLD && g_u32HotSigchldActLog < 8u) {
+                g_u32HotSigchldActLog++;
+                kprintf("linux: rt_sigaction SIGCHLD pid=%u h=0x%lx "
+                        "Dual DoD B OPEN\n",
+                        process_wait_pid_of(pProc), (unsigned long)u64H);
+            }
         }
     }
     return 0;
@@ -2840,28 +2930,83 @@ gj_linux_hot_rt_sigaction(struct gj_linux_regs *pRegs)
 i64
 gj_linux_hot_rt_sigprocmask(struct gj_linux_regs *pRegs)
 {
-    /* how, *set, *oldset, sigsetsize */
+    /* how, *set, *oldset, sigsetsize — per-PCB, honor BLOCK/UNBLOCK/SETMASK.
+     * Global g_aSigMask leaked listener SIGCHLD into OpenSSH osigset so
+     * ppoll ran with SIGCHLD blocked (QEMU93 mask=1, handler never entered).
+     * Dual DoD B OPEN. */
     u32 cb = 8;
+    u32 u32How;
+    u64 u64Old;
+    u64 u64New;
+    u8 aOld[8];
+    u8 aNew[8];
+    u32 iB;
+    struct gj_process *pProc;
+    struct gj_thread *pCur;
+    u64 *pMask;
 
     hot_soft_enter(HOT_SOFT_GRP_SIG, pRegs);
     if (pRegs == NULL) {
         return -LINUX_EINVAL;
     }
+    u32How = (u32)pRegs->u64Arg0;
+    if (u32How > 2u) {
+        return -LINUX_EINVAL;
+    }
     if (pRegs->u64Arg3 != 0 && pRegs->u64Arg3 < 8) {
         cb = (u32)pRegs->u64Arg3;
     }
+    pCur = thread_current();
+    pProc = NULL;
+    if (hot_thr_is_user(pCur) != 0) {
+        pProc = pCur->pProc;
+    }
+    if (pProc == NULL) {
+        pProc = hot_calling_proc();
+    }
+    pMask = (pProc != NULL) ? &pProc->u64SigBlocked : NULL;
+    u64Old = (pMask != NULL) ? *pMask : 0;
+    if (pMask == NULL) {
+        for (iB = 0; iB < 8; iB++) {
+            u64Old |= ((u64)g_aSigMask[iB]) << (iB * 8);
+        }
+    }
+    for (iB = 0; iB < 8; iB++) {
+        aOld[iB] = (u8)((u64Old >> (iB * 8)) & 0xffu);
+    }
     if (pRegs->u64Arg2 != 0) {
         if (user_range_ok(pRegs->u64Arg2, cb)) {
-            (void)copy_to_user(pRegs->u64Arg2, g_aSigMask, cb);
+            (void)copy_to_user(pRegs->u64Arg2, aOld, cb);
         } else {
-            memcpy((void *)(gj_vaddr_t)pRegs->u64Arg2, g_aSigMask, cb);
+            memcpy((void *)(gj_vaddr_t)pRegs->u64Arg2, aOld, cb);
         }
     }
     if (pRegs->u64Arg1 != 0) {
+        for (iB = 0; iB < 8; iB++) {
+            aNew[iB] = 0;
+        }
         if (user_range_ok(pRegs->u64Arg1, cb)) {
-            (void)copy_from_user(g_aSigMask, pRegs->u64Arg1, cb);
+            (void)copy_from_user(aNew, pRegs->u64Arg1, cb);
         } else {
-            memcpy(g_aSigMask, (const void *)(gj_vaddr_t)pRegs->u64Arg1, cb);
+            memcpy(aNew, (const void *)(gj_vaddr_t)pRegs->u64Arg1, cb);
+        }
+        u64New = 0;
+        for (iB = 0; iB < 8; iB++) {
+            u64New |= ((u64)aNew[iB]) << (iB * 8);
+        }
+        if (u32How == 0u) {
+            u64Old |= u64New; /* SIG_BLOCK */
+        } else if (u32How == 1u) {
+            u64Old &= ~u64New; /* SIG_UNBLOCK */
+        } else {
+            u64Old = u64New; /* SIG_SETMASK */
+        }
+        if (pMask != NULL) {
+            *pMask = u64Old;
+        } else {
+            for (iB = 0; iB < 8; iB++) {
+                g_aSigMask[iB] = (u8)((u64Old >> (iB * 8)) & 0xffu);
+            }
         }
     }
     return 0;
@@ -3317,42 +3462,200 @@ gj_linux_hot_gettid(struct gj_linux_regs *pRegs)
     return (i64)g_u32LinuxTid;
 }
 
-i64
-gj_linux_hot_getuid(struct gj_linux_regs *pRegs)
-{
-    hot_soft_enter(HOT_SOFT_GRP_ID, pRegs);
-    (void)pRegs;
-    return (i64)g_u32LinuxUid;
-}
-
-i64
-gj_linux_hot_getgid(struct gj_linux_regs *pRegs)
-{
-    hot_soft_enter(HOT_SOFT_GRP_ID, pRegs);
-    (void)pRegs;
-    return (i64)g_u32LinuxGid;
-}
-
-i64
-gj_linux_hot_geteuid(struct gj_linux_regs *pRegs)
-{
-    hot_soft_enter(HOT_SOFT_GRP_ID, pRegs);
-    (void)pRegs;
-    return (i64)g_u32LinuxEuid;
-}
-
-i64
-gj_linux_hot_getegid(struct gj_linux_regs *pRegs)
-{
-    hot_soft_enter(HOT_SOFT_GRP_ID, pRegs);
-    (void)pRegs;
-    return (i64)g_u32LinuxEgid;
-}
-
 /*
- * Process-global creds, not a per-PCB jail (Soft!=product).
+ * Per-wait-pid creds (slot table). kmain smoke (no wait pid) keeps globals.
  * After a root drop, restore of an id not in {r,e,s} is EPERM.
  */
+struct linux_hot_cred_ptr {
+    u32 *pRuid;
+    u32 *pEuid;
+    u32 *pSuid;
+    u32 *pRgid;
+    u32 *pEgid;
+    u32 *pSgid;
+};
+
+static void
+linux_cred_bind_globals(struct linux_hot_cred_ptr *pCred)
+{
+    pCred->pRuid = &g_u32LinuxUid;
+    pCred->pEuid = &g_u32LinuxEuid;
+    pCred->pSuid = &g_u32LinuxSuid;
+    pCred->pRgid = &g_u32LinuxGid;
+    pCred->pEgid = &g_u32LinuxEgid;
+    pCred->pSgid = &g_u32LinuxSgid;
+}
+
+static void
+linux_cred_bind_slot(struct linux_hot_cred_ptr *pCred,
+                    struct linux_hot_cred *pSlot)
+{
+    pCred->pRuid = &pSlot->u32Ruid;
+    pCred->pEuid = &pSlot->u32Euid;
+    pCred->pSuid = &pSlot->u32Suid;
+    pCred->pRgid = &pSlot->u32Rgid;
+    pCred->pEgid = &pSlot->u32Egid;
+    pCred->pSgid = &pSlot->u32Sgid;
+}
+
+static struct linux_hot_cred *
+linux_cred_find_pid(u32 u32Pid)
+{
+    u32 iSlot;
+
+    if (u32Pid == 0) {
+        return NULL;
+    }
+    for (iSlot = 0; iSlot < GJ_LINUX_HOT_CRED_SLOTS; iSlot++) {
+        if (g_aLinuxCred[iSlot].u32Pid == u32Pid) {
+            return &g_aLinuxCred[iSlot];
+        }
+    }
+    return NULL;
+}
+
+static struct linux_hot_cred *
+linux_cred_alloc_pid(u32 u32Pid)
+{
+    u32 iSlot;
+    struct linux_hot_cred *pSlot;
+
+    pSlot = linux_cred_find_pid(u32Pid);
+    if (pSlot != NULL) {
+        return pSlot;
+    }
+    if (u32Pid == 0) {
+        return NULL;
+    }
+    for (iSlot = 0; iSlot < GJ_LINUX_HOT_CRED_SLOTS; iSlot++) {
+        if (g_aLinuxCred[iSlot].u32Pid == 0) {
+            pSlot = &g_aLinuxCred[iSlot];
+            pSlot->u32Pid = u32Pid;
+            pSlot->u32Ruid = g_u32LinuxUid;
+            pSlot->u32Euid = g_u32LinuxEuid;
+            pSlot->u32Suid = g_u32LinuxSuid;
+            pSlot->u32Rgid = g_u32LinuxGid;
+            pSlot->u32Egid = g_u32LinuxEgid;
+            pSlot->u32Sgid = g_u32LinuxSgid;
+            return pSlot;
+        }
+    }
+    return NULL;
+}
+
+static u32
+linux_cred_calling_pid(void)
+{
+    struct gj_thread *pCur;
+    struct gj_cpu *pCpu;
+    struct gj_process *pProc;
+    u32 u32Pid;
+    u64 u64Rip = 0;
+    u64 u64Rsp = 0;
+
+    pCur = thread_current();
+    pProc = (pCur != NULL) ? pCur->pProc : NULL;
+    u32Pid = process_wait_pid_of(pProc);
+    if (u32Pid != 0) {
+        return u32Pid;
+    }
+    pCpu = cpu_current();
+    if (pCpu != NULL) {
+        u64Rip = pCpu->u64UserRip;
+        u64Rsp = pCpu->u64UserRsp;
+    }
+    pProc = process_linux_live_user_child(u64Rip, u64Rsp);
+    u32Pid = process_wait_pid_of(pProc);
+    if (u32Pid != 0) {
+        return u32Pid;
+    }
+    pProc = hot_calling_proc();
+    return process_wait_pid_of(pProc);
+}
+
+static int
+linux_cred_bind(struct linux_hot_cred_ptr *pCred, int fAlloc)
+{
+    u32 u32Pid;
+    struct linux_hot_cred *pSlot;
+
+    linux_cred_bind_globals(pCred);
+    u32Pid = linux_cred_calling_pid();
+    if (u32Pid == 0) {
+        return 0;
+    }
+    pSlot = linux_cred_find_pid(u32Pid);
+    if (pSlot == NULL && fAlloc != 0) {
+        pSlot = linux_cred_alloc_pid(u32Pid);
+        if (pSlot == NULL) {
+            return -1;
+        }
+    }
+    if (pSlot != NULL) {
+        linux_cred_bind_slot(pCred, pSlot);
+    }
+    return 0;
+}
+
+void
+gj_linux_hot_cred_fork(const struct gj_process *pParent,
+                      struct gj_process *pChild)
+{
+    u32 u32ParentPid;
+    u32 u32ChildPid;
+    struct linux_hot_cred *pSrc;
+    struct linux_hot_cred *pDst;
+
+    if (pChild == NULL) {
+        return;
+    }
+    u32ChildPid = process_wait_pid_of(pChild);
+    if (u32ChildPid == 0) {
+        return;
+    }
+    pSrc = NULL;
+    if (pParent != NULL && pParent != g_pLinuxProc) {
+        u32ParentPid = process_wait_pid_of((struct gj_process *)pParent);
+        pSrc = linux_cred_find_pid(u32ParentPid);
+    }
+    pDst = linux_cred_alloc_pid(u32ChildPid);
+    if (pDst == NULL) {
+        return;
+    }
+    if (pSrc == NULL) {
+        return;
+    }
+    pDst->u32Ruid = pSrc->u32Ruid;
+    pDst->u32Euid = pSrc->u32Euid;
+    pDst->u32Suid = pSrc->u32Suid;
+    pDst->u32Rgid = pSrc->u32Rgid;
+    pDst->u32Egid = pSrc->u32Egid;
+    pDst->u32Sgid = pSrc->u32Sgid;
+}
+
+void
+gj_linux_hot_cred_exit(struct gj_process *pProc)
+{
+    u32 u32Pid;
+    struct linux_hot_cred *pSlot;
+
+    if (pProc == NULL || pProc == g_pLinuxProc) {
+        return;
+    }
+    u32Pid = process_wait_pid_of(pProc);
+    pSlot = linux_cred_find_pid(u32Pid);
+    if (pSlot == NULL) {
+        return;
+    }
+    pSlot->u32Pid = 0;
+    pSlot->u32Ruid = 0;
+    pSlot->u32Euid = 0;
+    pSlot->u32Suid = 0;
+    pSlot->u32Rgid = 0;
+    pSlot->u32Egid = 0;
+    pSlot->u32Sgid = 0;
+}
+
 static int
 linux_cred_in_set(u32 u32Want, u32 u32R, u32 u32E, u32 u32S)
 {
@@ -3363,12 +3666,12 @@ linux_cred_in_set(u32 u32Want, u32 u32R, u32 u32E, u32 u32S)
 }
 
 static i64
-linux_cred_res_check(i64 i64Want, u32 u32R, u32 u32E, u32 u32S)
+linux_cred_res_check(i64 i64Want, u32 u32R, u32 u32E, u32 u32S, u32 u32Euid)
 {
     if (i64Want == -1) {
         return 0;
     }
-    if (g_u32LinuxEuid == 0) {
+    if (u32Euid == 0) {
         return 0;
     }
     if (linux_cred_in_set((u32)i64Want, u32R, u32E, u32S) != 0) {
@@ -3378,26 +3681,74 @@ linux_cred_res_check(i64 i64Want, u32 u32R, u32 u32E, u32 u32S)
 }
 
 i64
+gj_linux_hot_getuid(struct gj_linux_regs *pRegs)
+{
+    struct linux_hot_cred_ptr stCred;
+
+    hot_soft_enter(HOT_SOFT_GRP_ID, pRegs);
+    (void)pRegs;
+    (void)linux_cred_bind(&stCred, 1);
+    return (i64)*stCred.pRuid;
+}
+
+i64
+gj_linux_hot_getgid(struct gj_linux_regs *pRegs)
+{
+    struct linux_hot_cred_ptr stCred;
+
+    hot_soft_enter(HOT_SOFT_GRP_ID, pRegs);
+    (void)pRegs;
+    (void)linux_cred_bind(&stCred, 1);
+    return (i64)*stCred.pRgid;
+}
+
+i64
+gj_linux_hot_geteuid(struct gj_linux_regs *pRegs)
+{
+    struct linux_hot_cred_ptr stCred;
+
+    hot_soft_enter(HOT_SOFT_GRP_ID, pRegs);
+    (void)pRegs;
+    (void)linux_cred_bind(&stCred, 1);
+    return (i64)*stCred.pEuid;
+}
+
+i64
+gj_linux_hot_getegid(struct gj_linux_regs *pRegs)
+{
+    struct linux_hot_cred_ptr stCred;
+
+    hot_soft_enter(HOT_SOFT_GRP_ID, pRegs);
+    (void)pRegs;
+    (void)linux_cred_bind(&stCred, 1);
+    return (i64)*stCred.pEgid;
+}
+
+i64
 gj_linux_hot_setuid(struct gj_linux_regs *pRegs)
 {
     u32 u32Uid;
+    struct linux_hot_cred_ptr stCred;
 
     hot_soft_enter(HOT_SOFT_GRP_ID, pRegs);
     if (pRegs == NULL) {
         return -LINUX_EINVAL;
     }
+    if (linux_cred_bind(&stCred, 1) != 0) {
+        return -LINUX_ENOMEM;
+    }
     u32Uid = (u32)pRegs->u64Arg0;
-    if (g_u32LinuxEuid == 0) {
-        g_u32LinuxUid = u32Uid;
-        g_u32LinuxEuid = u32Uid;
-        g_u32LinuxSuid = u32Uid;
+    if (*stCred.pEuid == 0) {
+        *stCred.pRuid = u32Uid;
+        *stCred.pEuid = u32Uid;
+        *stCred.pSuid = u32Uid;
         return 0;
     }
-    if (linux_cred_in_set(u32Uid, g_u32LinuxUid, g_u32LinuxEuid,
-                          g_u32LinuxSuid) == 0) {
+    if (linux_cred_in_set(u32Uid, *stCred.pRuid, *stCred.pEuid,
+                          *stCred.pSuid) == 0) {
         return -LINUX_EPERM;
     }
-    g_u32LinuxEuid = u32Uid;
+    *stCred.pEuid = u32Uid;
     return 0;
 }
 
@@ -3405,23 +3756,27 @@ i64
 gj_linux_hot_setgid(struct gj_linux_regs *pRegs)
 {
     u32 u32Gid;
+    struct linux_hot_cred_ptr stCred;
 
     hot_soft_enter(HOT_SOFT_GRP_ID, pRegs);
     if (pRegs == NULL) {
         return -LINUX_EINVAL;
     }
+    if (linux_cred_bind(&stCred, 1) != 0) {
+        return -LINUX_ENOMEM;
+    }
     u32Gid = (u32)pRegs->u64Arg0;
-    if (g_u32LinuxEuid == 0) {
-        g_u32LinuxGid = u32Gid;
-        g_u32LinuxEgid = u32Gid;
-        g_u32LinuxSgid = u32Gid;
+    if (*stCred.pEuid == 0) {
+        *stCred.pRgid = u32Gid;
+        *stCred.pEgid = u32Gid;
+        *stCred.pSgid = u32Gid;
         return 0;
     }
-    if (linux_cred_in_set(u32Gid, g_u32LinuxGid, g_u32LinuxEgid,
-                          g_u32LinuxSgid) == 0) {
+    if (linux_cred_in_set(u32Gid, *stCred.pRgid, *stCred.pEgid,
+                          *stCred.pSgid) == 0) {
         return -LINUX_EPERM;
     }
-    g_u32LinuxEgid = u32Gid;
+    *stCred.pEgid = u32Gid;
     return 0;
 }
 
@@ -3430,24 +3785,28 @@ gj_linux_hot_setreuid(struct gj_linux_regs *pRegs)
 {
     i64 i64R;
     i64 i64E;
+    struct linux_hot_cred_ptr stCred;
 
     hot_soft_enter(HOT_SOFT_GRP_ID, pRegs);
     if (pRegs == NULL) {
         return -LINUX_EINVAL;
     }
+    if (linux_cred_bind(&stCred, 1) != 0) {
+        return -LINUX_ENOMEM;
+    }
     i64R = (i64)pRegs->u64Arg0;
     i64E = (i64)pRegs->u64Arg1;
-    if (linux_cred_res_check(i64R, g_u32LinuxUid, g_u32LinuxEuid,
-                             g_u32LinuxSuid) != 0 ||
-        linux_cred_res_check(i64E, g_u32LinuxUid, g_u32LinuxEuid,
-                             g_u32LinuxSuid) != 0) {
+    if (linux_cred_res_check(i64R, *stCred.pRuid, *stCred.pEuid, *stCred.pSuid,
+                             *stCred.pEuid) != 0 ||
+        linux_cred_res_check(i64E, *stCred.pRuid, *stCred.pEuid, *stCred.pSuid,
+                             *stCred.pEuid) != 0) {
         return -LINUX_EPERM;
     }
     if (i64R != -1) {
-        g_u32LinuxUid = (u32)i64R;
+        *stCred.pRuid = (u32)i64R;
     }
     if (i64E != -1) {
-        g_u32LinuxEuid = (u32)i64E;
+        *stCred.pEuid = (u32)i64E;
     }
     return 0;
 }
@@ -3457,24 +3816,28 @@ gj_linux_hot_setregid(struct gj_linux_regs *pRegs)
 {
     i64 i64R;
     i64 i64E;
+    struct linux_hot_cred_ptr stCred;
 
     hot_soft_enter(HOT_SOFT_GRP_ID, pRegs);
     if (pRegs == NULL) {
         return -LINUX_EINVAL;
     }
+    if (linux_cred_bind(&stCred, 1) != 0) {
+        return -LINUX_ENOMEM;
+    }
     i64R = (i64)pRegs->u64Arg0;
     i64E = (i64)pRegs->u64Arg1;
-    if (linux_cred_res_check(i64R, g_u32LinuxGid, g_u32LinuxEgid,
-                             g_u32LinuxSgid) != 0 ||
-        linux_cred_res_check(i64E, g_u32LinuxGid, g_u32LinuxEgid,
-                             g_u32LinuxSgid) != 0) {
+    if (linux_cred_res_check(i64R, *stCred.pRgid, *stCred.pEgid, *stCred.pSgid,
+                             *stCred.pEuid) != 0 ||
+        linux_cred_res_check(i64E, *stCred.pRgid, *stCred.pEgid, *stCred.pSgid,
+                             *stCred.pEuid) != 0) {
         return -LINUX_EPERM;
     }
     if (i64R != -1) {
-        g_u32LinuxGid = (u32)i64R;
+        *stCred.pRgid = (u32)i64R;
     }
     if (i64E != -1) {
-        g_u32LinuxEgid = (u32)i64E;
+        *stCred.pEgid = (u32)i64E;
     }
     return 0;
 }
@@ -3485,30 +3848,34 @@ gj_linux_hot_setresuid(struct gj_linux_regs *pRegs)
     i64 i64R;
     i64 i64E;
     i64 i64S;
+    struct linux_hot_cred_ptr stCred;
 
     hot_soft_enter(HOT_SOFT_GRP_ID, pRegs);
     if (pRegs == NULL) {
         return -LINUX_EINVAL;
     }
+    if (linux_cred_bind(&stCred, 1) != 0) {
+        return -LINUX_ENOMEM;
+    }
     i64R = (i64)pRegs->u64Arg0;
     i64E = (i64)pRegs->u64Arg1;
     i64S = (i64)pRegs->u64Arg2;
-    if (linux_cred_res_check(i64R, g_u32LinuxUid, g_u32LinuxEuid,
-                             g_u32LinuxSuid) != 0 ||
-        linux_cred_res_check(i64E, g_u32LinuxUid, g_u32LinuxEuid,
-                             g_u32LinuxSuid) != 0 ||
-        linux_cred_res_check(i64S, g_u32LinuxUid, g_u32LinuxEuid,
-                             g_u32LinuxSuid) != 0) {
+    if (linux_cred_res_check(i64R, *stCred.pRuid, *stCred.pEuid, *stCred.pSuid,
+                             *stCred.pEuid) != 0 ||
+        linux_cred_res_check(i64E, *stCred.pRuid, *stCred.pEuid, *stCred.pSuid,
+                             *stCred.pEuid) != 0 ||
+        linux_cred_res_check(i64S, *stCred.pRuid, *stCred.pEuid, *stCred.pSuid,
+                             *stCred.pEuid) != 0) {
         return -LINUX_EPERM;
     }
     if (i64R != -1) {
-        g_u32LinuxUid = (u32)i64R;
+        *stCred.pRuid = (u32)i64R;
     }
     if (i64E != -1) {
-        g_u32LinuxEuid = (u32)i64E;
+        *stCred.pEuid = (u32)i64E;
     }
     if (i64S != -1) {
-        g_u32LinuxSuid = (u32)i64S;
+        *stCred.pSuid = (u32)i64S;
     }
     return 0;
 }
@@ -3519,30 +3886,34 @@ gj_linux_hot_setresgid(struct gj_linux_regs *pRegs)
     i64 i64R;
     i64 i64E;
     i64 i64S;
+    struct linux_hot_cred_ptr stCred;
 
     hot_soft_enter(HOT_SOFT_GRP_ID, pRegs);
     if (pRegs == NULL) {
         return -LINUX_EINVAL;
     }
+    if (linux_cred_bind(&stCred, 1) != 0) {
+        return -LINUX_ENOMEM;
+    }
     i64R = (i64)pRegs->u64Arg0;
     i64E = (i64)pRegs->u64Arg1;
     i64S = (i64)pRegs->u64Arg2;
-    if (linux_cred_res_check(i64R, g_u32LinuxGid, g_u32LinuxEgid,
-                             g_u32LinuxSgid) != 0 ||
-        linux_cred_res_check(i64E, g_u32LinuxGid, g_u32LinuxEgid,
-                             g_u32LinuxSgid) != 0 ||
-        linux_cred_res_check(i64S, g_u32LinuxGid, g_u32LinuxEgid,
-                             g_u32LinuxSgid) != 0) {
+    if (linux_cred_res_check(i64R, *stCred.pRgid, *stCred.pEgid, *stCred.pSgid,
+                             *stCred.pEuid) != 0 ||
+        linux_cred_res_check(i64E, *stCred.pRgid, *stCred.pEgid, *stCred.pSgid,
+                             *stCred.pEuid) != 0 ||
+        linux_cred_res_check(i64S, *stCred.pRgid, *stCred.pEgid, *stCred.pSgid,
+                             *stCred.pEuid) != 0) {
         return -LINUX_EPERM;
     }
     if (i64R != -1) {
-        g_u32LinuxGid = (u32)i64R;
+        *stCred.pRgid = (u32)i64R;
     }
     if (i64E != -1) {
-        g_u32LinuxEgid = (u32)i64E;
+        *stCred.pEgid = (u32)i64E;
     }
     if (i64S != -1) {
-        g_u32LinuxSgid = (u32)i64S;
+        *stCred.pSgid = (u32)i64S;
     }
     return 0;
 }
@@ -3550,12 +3921,15 @@ gj_linux_hot_setresgid(struct gj_linux_regs *pRegs)
 i64
 gj_linux_hot_getresuid(struct gj_linux_regs *pRegs)
 {
+    struct linux_hot_cred_ptr stCred;
+
     hot_soft_enter(HOT_SOFT_GRP_ID, pRegs);
     if (pRegs == NULL) {
         return -LINUX_EINVAL;
     }
+    (void)linux_cred_bind(&stCred, 0);
     if (pRegs->u64Arg0 != 0) {
-        u32 u = g_u32LinuxUid;
+        u32 u = *stCred.pRuid;
 
         if (user_range_ok(pRegs->u64Arg0, 4)) {
             (void)copy_to_user(pRegs->u64Arg0, &u, 4);
@@ -3564,7 +3938,7 @@ gj_linux_hot_getresuid(struct gj_linux_regs *pRegs)
         }
     }
     if (pRegs->u64Arg1 != 0) {
-        u32 u = g_u32LinuxEuid;
+        u32 u = *stCred.pEuid;
 
         if (user_range_ok(pRegs->u64Arg1, 4)) {
             (void)copy_to_user(pRegs->u64Arg1, &u, 4);
@@ -3573,7 +3947,7 @@ gj_linux_hot_getresuid(struct gj_linux_regs *pRegs)
         }
     }
     if (pRegs->u64Arg2 != 0) {
-        u32 u = g_u32LinuxSuid;
+        u32 u = *stCred.pSuid;
 
         if (user_range_ok(pRegs->u64Arg2, 4)) {
             (void)copy_to_user(pRegs->u64Arg2, &u, 4);
@@ -3587,12 +3961,15 @@ gj_linux_hot_getresuid(struct gj_linux_regs *pRegs)
 i64
 gj_linux_hot_getresgid(struct gj_linux_regs *pRegs)
 {
+    struct linux_hot_cred_ptr stCred;
+
     hot_soft_enter(HOT_SOFT_GRP_ID, pRegs);
     if (pRegs == NULL) {
         return -LINUX_EINVAL;
     }
+    (void)linux_cred_bind(&stCred, 0);
     if (pRegs->u64Arg0 != 0) {
-        u32 u = g_u32LinuxGid;
+        u32 u = *stCred.pRgid;
 
         if (user_range_ok(pRegs->u64Arg0, 4)) {
             (void)copy_to_user(pRegs->u64Arg0, &u, 4);
@@ -3601,7 +3978,7 @@ gj_linux_hot_getresgid(struct gj_linux_regs *pRegs)
         }
     }
     if (pRegs->u64Arg1 != 0) {
-        u32 u = g_u32LinuxEgid;
+        u32 u = *stCred.pEgid;
 
         if (user_range_ok(pRegs->u64Arg1, 4)) {
             (void)copy_to_user(pRegs->u64Arg1, &u, 4);
@@ -3610,7 +3987,7 @@ gj_linux_hot_getresgid(struct gj_linux_regs *pRegs)
         }
     }
     if (pRegs->u64Arg2 != 0) {
-        u32 u = g_u32LinuxSgid;
+        u32 u = *stCred.pSgid;
 
         if (user_range_ok(pRegs->u64Arg2, 4)) {
             (void)copy_to_user(pRegs->u64Arg2, &u, 4);
@@ -4728,6 +5105,89 @@ hot_map_brk_pages(struct gj_process *pProc, u64 u64Va, size_t cbLen)
     return (gj_vaddr_t)u64Va;
 }
 
+/*
+ * MAP_ANON on the calling USER PCB. memobj first; if pool/region/vmm miss,
+ * map zeroed frames in that AS (same belt as brk grow). addr=0 uses the
+ * per-PCB anon cursor (0x40000000), not g_pLinuxProc's table.
+ */
+static gj_vaddr_t
+hot_map_anon_user(struct gj_process *pProc, u64 u64Hint, size_t cbLen,
+                  u32 u32Prot, int fFixed)
+{
+    gj_vaddr_t vaMap;
+    u64 u64Va;
+    u64 u64Off;
+    u64 u64SavedCr3 = 0;
+    size_t cbAligned;
+
+    if (cbLen == 0) {
+        return 0;
+    }
+    cbAligned = (cbLen + 0xfffull) & ~0xfffull;
+    if (pProc != NULL) {
+        vaMap = memobj_map_anon(pProc, u64Hint, cbLen, u32Prot, fFixed);
+        if (vaMap != 0) {
+            return vaMap;
+        }
+        if (process_as_ensure(pProc) != GJ_OK) {
+            return 0;
+        }
+        u64SavedCr3 = cpu_read_cr3();
+        process_as_activate(pProc);
+        if (fFixed != 0) {
+            u64Va = u64Hint;
+        } else if (u64Hint >= GJ_USER_VA_BASE &&
+                   (u64Hint + (u64)cbAligned) <= GJ_USER_VA_END &&
+                   (u64Hint & 0xfffull) == 0) {
+            u64Va = u64Hint;
+        } else {
+            u64Va = pProc->u64AnonNext;
+            if (u64Va < GJ_USER_VA_BASE ||
+                (u64Va + (u64)cbAligned) > GJ_USER_VA_END) {
+                u64Va = 0x0000000040000000ull;
+            }
+        }
+    } else {
+        return vmm_mmap_anon(u64Hint, cbLen, u32Prot, fFixed);
+    }
+    if ((u64Va & 0xfffull) != 0 || u64Va < GJ_USER_VA_BASE ||
+        (u64Va + (u64)cbAligned) > GJ_USER_VA_END) {
+        if (u64SavedCr3 != 0) {
+            cpu_load_cr3(u64SavedCr3);
+        }
+        return 0;
+    }
+    for (u64Off = 0; u64Off < (u64)cbAligned; u64Off += 4096ull) {
+        gj_paddr_t pa;
+        void *pK;
+
+        pa = pmm_alloc();
+        if (pa == 0) {
+            if (u64SavedCr3 != 0) {
+                cpu_load_cr3(u64SavedCr3);
+            }
+            return 0;
+        }
+        pK = (void *)hhdm_to_virt(pa);
+        memset(pK, 0, 4096);
+        if (vmm_map_page((gj_vaddr_t)(u64Va + u64Off), pa, u32Prot) != GJ_OK) {
+            pmm_free(pa);
+            if (u64SavedCr3 != 0) {
+                cpu_load_cr3(u64SavedCr3);
+            }
+            return 0;
+        }
+    }
+    if (fFixed == 0) {
+        pProc->u64AnonNext = u64Va + (u64)cbAligned;
+    }
+    if (u64SavedCr3 != 0 &&
+        (u64SavedCr3 & ~0xfffull) != (pProc->u64Cr3 & ~0xfffull)) {
+        cpu_load_cr3(u64SavedCr3);
+    }
+    return (gj_vaddr_t)u64Va;
+}
+
 i64
 gj_linux_hot_brk(struct gj_linux_regs *pRegs)
 {
@@ -4840,6 +5300,7 @@ gj_linux_hot_mmap(struct gj_linux_regs *pRegs)
     int fFixed;
     int fAnon;
     int fNoreplace;
+    struct gj_process *pProc;
 
     hot_soft_enter(HOT_SOFT_GRP_MEM, pRegs);
     if (pRegs == NULL) {
@@ -4850,6 +5311,7 @@ gj_linux_hot_mmap(struct gj_linux_regs *pRegs)
     u64Prot = pRegs->u64Arg2;
     u64Flags = pRegs->u64Arg3;
     fAnon = ((u64Flags & LINUX_MAP_ANONYMOUS) != 0) ? 1 : 0;
+    pProc = hot_calling_proc();
 
     if (u64Len == 0) {
         return -LINUX_EINVAL;
@@ -4887,7 +5349,7 @@ gj_linux_hot_mmap(struct gj_linux_regs *pRegs)
         }
         /* W^X gate also applies to soft file maps. */
         if ((u64Prot & LINUX_PROT_WRITE) && (u64Prot & LINUX_PROT_EXEC)) {
-            if (!gj_process_has_jit(hot_calling_proc())) {
+            if (!gj_process_has_jit(pProc)) {
                 return -LINUX_EACCES; /* W^X without CapJit */
             }
         }
@@ -4915,12 +5377,12 @@ gj_linux_hot_mmap(struct gj_linux_regs *pRegs)
          * Success returns mapped VA. MAP_ANONYMOUS path is separate below.
          * Non-ram / unsupported fd types stay ENOSYS (product vfs door OPEN).
          */
-        if (hot_calling_proc() != NULL && vfs_ram_fd_ok(i64Fd)) {
+        if (pProc != NULL && vfs_ram_fd_ok(i64Fd)) {
             /* Linux mmap: offset must be page-aligned (4 KiB). */
             if ((u64Off & 0xfffull) != 0) {
                 return -LINUX_EINVAL;
             }
-            va = memobj_map_file_fd(hot_calling_proc(), i64Fd, u64Addr,
+            va = memobj_map_file_fd(pProc, i64Fd, u64Addr,
                                     (size_t)u64Len, u32VmmProt, fFixed,
                                     u64Off);
             if (va != 0) {
@@ -4971,7 +5433,7 @@ gj_linux_hot_mmap(struct gj_linux_regs *pRegs)
             kprintf("linux_hot: mmap file soft ENOSYS fd=%ld len=%lu off=0x%lx "
                     "proc=%p\n",
                     (long)i64Fd, (unsigned long)u64Len, (unsigned long)u64Off,
-                    (void *)hot_calling_proc());
+                    (void *)pProc);
             kprintf("linux_hot: residual mmap lean via=file_enosys "
                     "fd=%ld len=%lu pass=%lu enosys=%lu "
                     "Soft!=product G-AC-1\n",
@@ -4983,7 +5445,7 @@ gj_linux_hot_mmap(struct gj_linux_regs *pRegs)
         return -LINUX_ENOSYS;
     }
     if ((u64Prot & LINUX_PROT_WRITE) && (u64Prot & LINUX_PROT_EXEC)) {
-        if (!gj_process_has_jit(hot_calling_proc())) {
+        if (!gj_process_has_jit(pProc)) {
             return -LINUX_EACCES; /* W^X without CapJit */
         }
     }
@@ -5007,13 +5469,8 @@ gj_linux_hot_mmap(struct gj_linux_regs *pRegs)
      * second mmap(0) overlap the first (sshd / OpenSSL).
      * FIXED maps keep the caller VA. GJ_VMM_PROT_USER stays on every PTE.
      */
-    /* G-MO-1: anon mmap via memory object when process is known */
-    if (hot_calling_proc() != NULL) {
-        va = memobj_map_anon(hot_calling_proc(), u64Addr, (size_t)u64Len,
-                             u32VmmProt, fFixed);
-    } else {
-        va = vmm_mmap_anon(u64Addr, (size_t)u64Len, u32VmmProt, fFixed);
-    }
+    /* G-MO-1: anon mmap on calling USER PCB (sshd-auth after exec_replace). */
+    va = hot_map_anon_user(pProc, u64Addr, (size_t)u64Len, u32VmmProt, fFixed);
     if (va == 0) {
         return -LINUX_ENOMEM;
     }

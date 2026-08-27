@@ -166,6 +166,8 @@
  */
 #define TCP_RTX_POST22_DIV 16u
 #define TCP_RTX_MID_ENSURE_EVERY 4u
+/* Must match net_door.c NET_DOOR_UDX_TX_SLOTS. Soft!=product. */
+#define TCP_UDX_TX_SLOTS 32u
 #define TCP_TW_MS       1000 /* soft TIME_WAIT reclaim */
 #define TCP_BACKLOG_MAX 8
 /* Freestanding Dual DoD B: soft ensure listen :22 after net_l2 ready. Soft!=product. */
@@ -343,6 +345,19 @@ static int
 tcp_udx_l2_live(void)
 {
 	return (net_l2_backend() == GJ_NET_L2_NONE && net_l2_ready() != 0)
+		   ? 1
+		   : 0;
+}
+
+/*
+ * 1 = UDX ETH_TX_PULL cannot take another frame. pending!=0 is ARP/ICMP
+ * occupying a slot, not this TCP arm. Soft!=product Dual DoD B.
+ */
+static int
+tcp_udx_tx_full(void)
+{
+	return (tcp_udx_l2_live() != 0 &&
+		net_door_udx_tx_pending() >= TCP_UDX_TX_SLOTS)
 		   ? 1
 		   : 0;
 }
@@ -1599,8 +1614,7 @@ tcp_tx(u32 s, u8 flags, const u8 *pPay, u32 cbPay)
 				int nCo = -1;
 				u32 u32Shot;
 
-				if (tcp_udx_l2_live() != 0 &&
-				    net_door_udx_tx_pending() != 0u) {
+				if (tcp_udx_tx_full() != 0) {
 					return -1;
 				}
 
@@ -2172,7 +2186,7 @@ net_tcp_fd_ok(i64 fd)
 /**
  * Linux-shaped readiness for poll/epoll cold path (userspace/ABI residual).
  *
- * POLLIN:  RX data, accept pending, EOF (peer FIN / terminal / SHUT_RD empty).
+ * POLLIN:  RX data, accept pending, EOF (peer FIN / RST / terminal).
  * POLLOUT: ESTABLISHED|CLOSE_WAIT, FIN not sent, SHUT_WR clear.
  * POLLHUP: both sides shut soft, terminal, or SHUT_RD+SHUT_WR.
  * POLLERR: sticky peer RST (u8RstSeen) until close. Soft!=product.
@@ -2299,17 +2313,16 @@ net_tcp_poll_mask(i64 i64Fd, u32 u32Want)
 	} else {
 		/*
 		 * Connected / half-closed: data or EOF readable.
-		 * ST_CLOSED on a live slot is "just socket()'d" - not EOF
-		 * unless sticky RST or SHUT_RD empty (userspace/ABI residual).
+		 * Empty ESTABLISHED is not POLLIN. Leftover SHUT_RD is not FIN.
+		 * ST_CLOSED on a live slot is "just socket()'d" - not EOF.
 		 */
 		if (pSock->u32RxLen > 0) {
 			u32Got |= TCP_POLLIN;
-		} else if (pSock->u8ShutRd != 0u ||
+		} else if (pSock->u8RstSeen != 0u ||
 			   pSock->u8State == ST_CLOSE_WAIT ||
 			   pSock->u8State == ST_TIME_WAIT ||
-			   pSock->u8State == ST_LAST_ACK ||
-			   pSock->u8RstSeen != 0u) {
-			/* Empty ring + peer FIN / SHUT_RD / RST -> EOF POLLIN. */
+			   pSock->u8State == ST_LAST_ACK) {
+			/* Empty ring + peer FIN / RST / terminal -> EOF POLLIN. */
 			u32Got |= TCP_POLLIN;
 		}
 
@@ -2864,6 +2877,9 @@ net_tcp_accept(i64 fd)
 	if (g_aT[peer].u16Lport == 0u) {
 		g_aT[peer].u16Lport = g_aT[s].u16Lport;
 	}
+	/* Recycled ESTABLISHED child: leftover SHUT_* is not a peer FIN. */
+	g_aT[peer].u8ShutRd = 0;
+	g_aT[peer].u8ShutWr = 0;
 	/* Accepted child is product-owned (not soft-mint listener). Soft!=product. */
 	g_aT[peer].u8SoftMint = 0;
 	tcp_soft_bump(&g_soft.u64AcceptOk);
@@ -3082,15 +3098,14 @@ net_tcp_recv(i64 fd, void *pBuf, size_t cb)
 	}
 	if (g_aT[s].u32RxLen == 0) {
 		/*
-		 * Soft EOF after peer FIN, SHUT_RD, sticky RST, or terminal.
-		 * Userspace/ABI residual: SHUT_RD empty -> 0 (not EAGAIN).
-		 * Soft!=product.
+		 * Empty ESTABLISHED is EAGAIN. Recv 0 only on peer FIN
+		 * (CLOSE_WAIT), sticky RST, or TIME_WAIT/LAST_ACK.
+		 * Leftover SHUT_RD / ST_CLOSED is not a real FIN.
 		 */
-		if (g_aT[s].u8ShutRd != 0u || g_aT[s].u8RstSeen != 0u ||
+		if (g_aT[s].u8RstSeen != 0u ||
 		    g_aT[s].u8State == ST_CLOSE_WAIT ||
 		    g_aT[s].u8State == ST_TIME_WAIT ||
-		    g_aT[s].u8State == ST_LAST_ACK ||
-		    g_aT[s].u8State == ST_CLOSED) {
+		    g_aT[s].u8State == ST_LAST_ACK) {
 			tcp_soft_bump(&g_soft.u64RecvEof);
 			tcp_soft_maybe_log(0);
 			return 0;
@@ -4822,12 +4837,12 @@ net_tcp_poll(void)
 					continue;
 				}
 				/*
-				 * A copy already waits for ETH_TX_PULL.
-				 * Re-enqueue would fill the door and starve
-				 * ICMP (glass 0.1.163 ping death after :22).
+				 * Skip rtx only when the UDX door is full.
+				 * pending!=0 is ARP/ICMP (or another arm),
+				 * not "this SYN-ACK already queued".
+				 * Soft!=product Dual DoD B.
 				 */
-				if (tcp_udx_l2_live() != 0 &&
-				    net_door_udx_tx_pending() != 0u) {
+				if (tcp_udx_tx_full() != 0) {
 					continue;
 				}
 				if (g_aT[u32Slot].u8RtxSyn) {

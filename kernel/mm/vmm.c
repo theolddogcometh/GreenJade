@@ -996,28 +996,29 @@ cow_ref_share(gj_paddr_t pa)
         }
     }
     g_cCowShareFull++;
-    return -1; /* table full - caller may still share (leak risk) */
+    return -1; /* table full: caller must private-copy, not share untracked */
 }
 
 /*
  * Drop one COW reference. Returns remaining count after drop:
- *   0 -> caller may pmm_free (last ref or untracked private/orphan)
- *  >0 -> still shared; do not free
- * fWasCow: if untracked, COW leaves still free (orphan); private always free.
+ *   0 -> caller may pmm_free (last tracked ref or untracked private)
+ *  >0 -> still shared, or untracked COW (another AS may still map)
+ * fWasCow: untracked COW must not pmm_free.
  */
 static u32
 cow_ref_drop(gj_paddr_t pa, int fWasCow)
 {
     int iSlot;
 
-    (void)fWasCow;
     pa &= PTE_ADDR_MASK;
     if (pa == 0) {
         return 1; /* no free */
     }
     iSlot = cow_ref_find(pa);
     if (iSlot < 0) {
-        /* Not in table: private data or orphan COW -> free */
+        if (fWasCow) {
+            return 1u;
+        }
         return 0;
     }
     if (g_aCowRef[iSlot].cRef > 1u) {
@@ -3157,8 +3158,9 @@ vmm_cow_break_page(gj_vaddr_t va)
 
 /*
  * Clone private user 4K pages from src AS into dst AS (fork).
- * Writable pages: share frame RO+COW in both AS (true COW); read-only pages
- * still get a private copy so exec/RO mappings stay isolated from demotion.
+ * Writable pages: share frame RO+COW in both AS when the ref table has a
+ * slot; table-full pages get a private writable copy (never untracked share).
+ * Read-only / non-W: private copy so exec/RO mappings stay undemoted.
  * Skips fully-shared kernel subtrees and identity (PA == page VA) frames.
  */
 gj_status_t
@@ -3285,8 +3287,8 @@ vmm_as_clone_user_pages(u64 u64SrcCr3, u64 u64DstCr3, u32 u32Max, u32 *pCopied)
                     }
 
                     /*
-                     * Writable user page -> true COW: demote parent to RO+COW,
-                     * map same PA RO+COW into child (no eager copy).
+                     * Writable / already-COW: share RO+COW only if tracked.
+                     * Table full -> private writable copy (parent stays as-is).
                      * Read-only / non-W: private copy (keep parent RO alone).
                      * Never demote kernel identity/BSS (belt + product floor).
                      */
@@ -3295,65 +3297,66 @@ vmm_as_clone_user_pages(u64 u64SrcCr3, u64 u64DstCr3, u32 u32Max, u32 *pCopied)
                         continue;
                     }
                     if ((u64Pte & PTE_W) != 0 || (u64Pte & PTE_COW) != 0) {
-                        u64 *pSrcPte;
-                        u64 u64New;
+                        if (cow_ref_share(paSrc) == 0) {
+                            u64 *pSrcPte;
+                            u64 u64New;
 
-                        /* Demote parent leaf under src CR3 */
-                        __asm__ volatile("mov %0, %%cr3"
-                                         :
-                                         : "r"(u64SrcCr3)
-                                         : "memory");
-                        pSrcPte = walk_pte(va, 0);
-                        if (pSrcPte != NULL && (*pSrcPte & PTE_P) != 0 &&
-                            (*pSrcPte & PTE_U) != 0 &&
-                            !va_in_kernel_identity(va)) {
-                            u64New = (*pSrcPte | PTE_COW | PTE_P | PTE_U) &
-                                     ~PTE_W;
-                            *pSrcPte = u64New;
-                            vmm_tlb_flush_page(va);
-                        }
-                        /* Track shared frame (parent + child) */
-                        (void)cow_ref_share(paSrc);
-                        /* Child: same frame, RO+COW */
-                        __asm__ volatile("mov %0, %%cr3"
-                                         :
-                                         : "r"(u64DstCr3)
-                                         : "memory");
-                        u32Prot = GJ_VMM_PROT_READ | GJ_VMM_PROT_USER;
-                        if ((u64Pte & PTE_NX) == 0) {
-                            u32Prot |= GJ_VMM_PROT_EXEC;
-                        }
-                        if (vmm_map_page(va, paSrc, u32Prot) != GJ_OK) {
-                            /* Undo child share only; never free (parent holds) */
-                            (void)cow_ref_drop(paSrc, 1);
+                            /* Demote parent leaf under src CR3 */
                             __asm__ volatile("mov %0, %%cr3"
                                              :
-                                             : "r"(u64Saved)
+                                             : "r"(u64SrcCr3)
                                              : "memory");
-                            if (pCopied != NULL) {
-                                *pCopied = cCopy;
-                            }
-                            vmm_soft_inc(&g_cSoftCloneNomem);
-                            return GJ_ERR_NOMEM;
-                        }
-                        {
-                            u64 *pDstPte = walk_pte(va, 0);
-
-                            if (pDstPte != NULL) {
-                                *pDstPte =
-                                    (*pDstPte | PTE_COW | PTE_P | PTE_U) &
-                                    ~PTE_W;
+                            pSrcPte = walk_pte(va, 0);
+                            if (pSrcPte != NULL && (*pSrcPte & PTE_P) != 0 &&
+                                (*pSrcPte & PTE_U) != 0 &&
+                                !va_in_kernel_identity(va)) {
+                                u64New = (*pSrcPte | PTE_COW | PTE_P | PTE_U) &
+                                         ~PTE_W;
+                                *pSrcPte = u64New;
                                 vmm_tlb_flush_page(va);
                             }
+                            /* Child: same frame, RO+COW */
+                            __asm__ volatile("mov %0, %%cr3"
+                                             :
+                                             : "r"(u64DstCr3)
+                                             : "memory");
+                            u32Prot = GJ_VMM_PROT_READ | GJ_VMM_PROT_USER;
+                            if ((u64Pte & PTE_NX) == 0) {
+                                u32Prot |= GJ_VMM_PROT_EXEC;
+                            }
+                            if (vmm_map_page(va, paSrc, u32Prot) != GJ_OK) {
+                                /* Undo child share only; never free (parent holds) */
+                                (void)cow_ref_drop(paSrc, 1);
+                                __asm__ volatile("mov %0, %%cr3"
+                                                 :
+                                                 : "r"(u64Saved)
+                                                 : "memory");
+                                if (pCopied != NULL) {
+                                    *pCopied = cCopy;
+                                }
+                                vmm_soft_inc(&g_cSoftCloneNomem);
+                                return GJ_ERR_NOMEM;
+                            }
+                            {
+                                u64 *pDstPte = walk_pte(va, 0);
+
+                                if (pDstPte != NULL) {
+                                    *pDstPte =
+                                        (*pDstPte | PTE_COW | PTE_P | PTE_U) &
+                                        ~PTE_W;
+                                    vmm_tlb_flush_page(va);
+                                }
+                            }
+                            cCopy++;
+                            cCow++;
+                            /* Back to src walk CR3 for next PTE via phys tables */
+                            __asm__ volatile("mov %0, %%cr3"
+                                             :
+                                             : "r"(u64SrcCr3)
+                                             : "memory");
+                            continue;
                         }
-                        cCopy++;
-                        cCow++;
-                        /* Back to src walk CR3 for next PTE via phys tables */
-                        __asm__ volatile("mov %0, %%cr3"
-                                         :
-                                         : "r"(u64SrcCr3)
-                                         : "memory");
-                        continue;
+                        /* share_full: fall through to private writable copy */
                     }
 
                     paDst = pmm_alloc();
@@ -3383,6 +3386,9 @@ vmm_as_clone_user_pages(u64 u64SrcCr3, u64 u64DstCr3, u32 u32Max, u32 *pCopied)
                     u32Prot = GJ_VMM_PROT_READ | GJ_VMM_PROT_USER;
                     if ((u64Pte & PTE_NX) == 0) {
                         u32Prot |= GJ_VMM_PROT_EXEC;
+                    }
+                    if ((u64Pte & PTE_W) != 0 || (u64Pte & PTE_COW) != 0) {
+                        u32Prot |= GJ_VMM_PROT_WRITE;
                     }
 
                     __asm__ volatile("mov %0, %%cr3"

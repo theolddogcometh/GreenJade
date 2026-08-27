@@ -143,6 +143,12 @@
 #include <gj/user_access.h>
 #include <gj/vmm.h>
 
+void vfs_ram_fork_dup_fds(struct gj_process *pChild);
+void vfs_ram_exit_fds(struct gj_process *pProc);
+void gj_linux_hot_cred_fork(const struct gj_process *pParent,
+                           struct gj_process *pChild);
+void gj_linux_hot_cred_exit(struct gj_process *pProc);
+
 /* ---- Wave 19 exclusive soft inventory (this unit only) ------------------ */
 #define GJ_PROCESS_SOFT_WAVE 116u
 /* +live lifecycle + denser keep_live thr_live product_host_live Dual DoD residual */
@@ -763,6 +769,7 @@ gj_process_init(struct gj_process *pProc, struct gj_cnode *pCnode,
     pProc->u32Sid = 0;
     memset(pProc->aSigHandler, 0, sizeof(pProc->aSigHandler));
     pProc->u64SigPending = 0;
+    pProc->u64SigBlocked = 0;
     pProc->u64UserSysRip = 0;
     pProc->u64UserSysRsp = 0;
     pProc->u32UserSysThr = 0;
@@ -1793,22 +1800,17 @@ process_wait_register(struct gj_process *pChild, u32 u32Ppid)
 }
 
 /*
- * Soft: OR SIGCHLD into parent pending if sa_handler is a user VA.
- * SIG_DFL(0) / SIG_IGN(1) leave pending unchanged. No sigframe this cut.
+ * Soft: OR SIGCHLD into parent pending on wait-registered zombie.
+ * SIG_IGN(1) skips (Linux SA_NOCLDWAIT-ish). SIG_DFL(0) still pends
+ * so waitpid/ppoll can reap. No user-VA requirement. No sigframe.
  */
 static void
 process_wait_pend_sigchld(struct gj_process *pParent)
 {
-    u64 u64H;
-
     if (pParent == NULL) {
         return;
     }
-    u64H = pParent->aSigHandler[GJ_SIGCHLD];
-    if (u64H <= 1ull) {
-        return;
-    }
-    if (u64H < GJ_USER_VA_BASE || u64H >= GJ_USER_VA_END) {
+    if (pParent->aSigHandler[GJ_SIGCHLD] == 1ull) {
         return;
     }
     pParent->u64SigPending |= (1ull << GJ_SIGCHLD);
@@ -2276,6 +2278,8 @@ process_death(struct gj_process *pProc, u32 u32ExitCode)
     cThrEx = process_death_thr_exit_siblings(pProc);
     g_u64DeathThrExit += (u64)cThrEx;
     g_u64DeathThrExitEarly += (u64)cThrEx;
+    vfs_ram_exit_fds(pProc);
+    gj_linux_hot_cred_exit(pProc);
     /*
      * Greppable order probe vs death as_destroy (n=0 still soft-ok).
      * Grep: process: death thr_exit | process: death thr_exit early
@@ -2903,7 +2907,7 @@ process_fork_bind_child_user(struct gj_process *pChild, u32 u32Thr, u64 u64Rip,
 /* Child FS: calling USER first, else parent last-field TCB (doors kthread). */
 static void
 process_fork_child_fs(u32 u32Thr, const struct gj_process *pSrc,
-                      const struct gj_thread *pCur)
+                      const struct gj_thread *pCur, struct gj_process *pChild)
 {
     u64 u64Fs = 0;
 
@@ -2921,6 +2925,21 @@ process_fork_child_fs(u32 u32Thr, const struct gj_process *pSrc,
     }
     /* Inherit LCN names: parent close(newsock) must not last-ref ESTAB. */
     gj_linux_cold_fork_dup_names();
+    /* Inherit vfs fds: parent close(m_recvfd) must not last-ref the pipe. */
+    vfs_ram_fork_dup_fds(pChild);
+    gj_linux_hot_cred_fork(pSrc, pChild);
+}
+
+/*
+ * LINUX fork child must resume with the parent's user rbx/rbp/r12-r15.
+ * GS was filled in syscall_entry.S before C (parent still in this SYSCALL).
+ * Capture now; cpu_enter_user writes the child TCB then sysretq.
+ */
+static void
+process_fork_copy_user_gprs(struct gj_process *pChild, u32 u32Thr)
+{
+    (void)pChild;
+    cpu_fork_capture_user_gprs(u32Thr);
 }
 
 static int
@@ -3279,6 +3298,7 @@ process_linux_fork(u32 u32Ppid, int fExitNow)
             g_aForkStub[i].pUserThr = NULL;
             memcpy(g_aForkStub[i].aSigHandler, pSrc->aSigHandler,
                    sizeof(g_aForkStub[i].aSigHandler));
+            g_aForkStub[i].u64SigBlocked = pSrc->u64SigBlocked;
             {
                 size_t iPath;
 
@@ -3443,9 +3463,10 @@ process_linux_fork(u32 u32Ppid, int fExitNow)
             }
             thr = thread_create_user(&g_aForkStub[i], u64Rip, u64Rsp);
             if (thr != 0) {
+                process_fork_copy_user_gprs(&g_aForkStub[i], thr);
                 process_fork_bind_child_user(&g_aForkStub[i], thr, u64Rip,
                                              u64Rsp);
-                process_fork_child_fs(thr, pSrc, pCur);
+                process_fork_child_fs(thr, pSrc, pCur, &g_aForkStub[i]);
                 process_soft_inc(&g_u32SoftForkDeferred);
                 process_soft_inc(&g_u32SoftForkOk);
                 process_soft_maybe_once();
@@ -3477,9 +3498,10 @@ process_linux_fork(u32 u32Ppid, int fExitNow)
         if (fUserChild != 0) {
             thr = thread_create_user(&g_aForkStub[i], u64Rip, u64Rsp);
             if (thr != 0) {
+                process_fork_copy_user_gprs(&g_aForkStub[i], thr);
                 process_fork_bind_child_user(&g_aForkStub[i], thr, u64Rip,
                                              u64Rsp);
-                process_fork_child_fs(thr, pSrc, pCur);
+                process_fork_child_fs(thr, pSrc, pCur, &g_aForkStub[i]);
                 process_soft_inc(&g_u32SoftForkDeferred);
                 process_soft_inc(&g_u32SoftForkOk);
                 process_soft_maybe_once();

@@ -1459,6 +1459,8 @@ thread_trampoline(void)
         process_as_activate(pThr->pProc);
         /* First ring-3 entry: SYSCALL kstack ready; RSP0 stays IRQ stack. */
         thread_install_kstack(pThr);
+        /* USER*_ENTRY never returns to schedule()'s cpu_set_fs_base. */
+        cpu_set_fs_base(pThr->u64FsBase);
         kprintf("sched: thr %u enter user%s rip=0x%lx rsp=0x%lx\n",
                 pThr->u32Id, fUser32 ? "32" : "",
                 (unsigned long)pThr->u64UserRip,

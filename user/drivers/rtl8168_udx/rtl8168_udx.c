@@ -6645,7 +6645,6 @@ fail_rx:
  * greppable: rtl8168_udx: product l2 poll fovw_rer
  * greppable: rtl8168_udx: product l2 poll fovw_reappear
  * greppable: rtl8168_udx: product l2 poll inject_fail
- * greppable: rtl8168_udx: product l2 poll tx_own_stuck
  * greppable: rtl8168_udx: product l2 poll rekick
  * greppable: tok= ter= tok_product_tx= tok_residual=
  */
@@ -6754,6 +6753,43 @@ rtl8168_product_tx_sync_for_cpu(struct rtl8168_soft *pSoft)
     rtl8168_product_clflush_va(
         pSoft->pTxDesc,
         (size_t)(u32N * (u32)sizeof(struct rtl8168_soft_desc)));
+    __asm__ volatile("mfence" ::: "memory");
+}
+
+static u32
+rtl8168_product_tx_desc_own(struct rtl8168_soft *pSoft, u32 iSlot)
+{
+    if (pSoft == NULL || pSoft->pTxDesc == NULL) {
+        return 0u;
+    }
+    return (*(volatile u32 *)(void *)&pSoft->pTxDesc[iSlot].u32Opts1) &
+           (u32)RTL_DESC_OWN;
+}
+
+/* TOK/TER: NIC finished TX; drop stale CPU OWN so ETH_TX_PULL can run. */
+static void
+rtl8168_product_tx_reclaim_tok(struct rtl8168_soft *pSoft, u32 u32Ntx)
+{
+    u32 iTx;
+    u32 u32Opts;
+
+    if (pSoft == NULL || pSoft->pTxDesc == NULL || u32Ntx == 0u) {
+        return;
+    }
+    for (iTx = 0u; iTx < u32Ntx; iTx++) {
+        u32Opts = *(volatile u32 *)(void *)&pSoft->pTxDesc[iTx].u32Opts1;
+        if ((u32Opts & RTL_DESC_OWN) == 0u) {
+            continue;
+        }
+        u32Opts &= ~(u32)RTL_DESC_OWN;
+        if (iTx + 1u == u32Ntx) {
+            u32Opts |= RTL_DESC_EOR;
+        }
+        pSoft->pTxDesc[iTx].u32Opts1 = u32Opts;
+    }
+    rtl8168_product_clflush_va(
+        pSoft->pTxDesc,
+        (size_t)(u32Ntx * (u32)sizeof(struct rtl8168_soft_desc)));
     __asm__ volatile("mfence" ::: "memory");
 }
 
@@ -7368,6 +7404,7 @@ rtl8168_product_l2_poll(struct rtl8168_soft *pSoft)
     u32 iSlot;
     u32 u32N;
     u32 u32OwnStill;
+    u32 u32InjAt;
     u16 u16St;
     u16 u16StBeforeClear;
     long n;
@@ -7375,7 +7412,6 @@ rtl8168_product_l2_poll(struct rtl8168_soft *pSoft)
     static u8 s_fOwnStuckLamp;
     static u8 s_fInjectFailLamp;
     static u8 s_fTxLamp;
-    static u8 s_fTxOwnStuckLamp;
     static u8 s_fFovwRerDigLamp;
     static u8 s_fFovwReappearLamp;
     /*
@@ -7396,6 +7432,7 @@ rtl8168_product_l2_poll(struct rtl8168_soft *pSoft)
         pSoft->pRxDesc == NULL || pSoft->apRxSlot[0] == NULL) {
         return;
     }
+    u32InjAt = pSoft->u32Inject;
 
     /*
      * Product PHY link re-observe only (no thr MDIO thrash — agent review).
@@ -8620,57 +8657,93 @@ rtl8168_product_l2_poll(struct rtl8168_soft *pSoft)
     }
 
     /*
-     * TX pull: demux ARP/ICMP/TCP → Own=1 + TPPoll.
-     * One bounce buffer: any TX OWN means DMA still holds that payload —
-     * do not dequeue (0.1.152/153 pull-then-drop ate the SSH ident) and
-     * do not program a second desc (would overwrite the in-flight frame).
-     * Clflush TX OWN first (stale OWN=1 skips forever; glass 0.1.163 tx=0).
-     * Soft!=product Dual DoD B OPEN.
+     * TX pull after RX inject. Bounce is one frame: last programmed OWN
+     * is in-flight; leftover OWN on other slots is not bounce-busy.
+     * Do not dequeue unless the needed slot is free (0.1.152/153 drop).
      */
     n = 0;
     {
-        u32 fTxBusy = 0u;
+        u32 fTxBusy;
+        u32 fInjThis;
         u32 u32Ntx;
+        u32 u32Last;
+        u32 u32Tx;
+        u32 u32Opts;
+        u32 u32CTx;
+        u32 u32MaxTx;
         u32 iTx;
+        u32 iWait;
+        u16 u16TxSt;
+        udx_dma_addr_t dmaTxb;
 
+        u32Last = 0u;
+
+        fInjThis = (pSoft->u32Inject != u32InjAt) ? 1u : 0u;
+        u32MaxTx = (fInjThis != 0u) ? 2u : 1u;
         u32Ntx = pSoft->u32TxSlots;
         if (u32Ntx > RTL_SOFT_TX_SLOTS) {
             u32Ntx = RTL_SOFT_TX_SLOTS;
         }
-        if (pSoft->pTxDesc != NULL && u32Ntx != 0u) {
+        u32CTx = 0u;
+        while (pSoft->pTxDesc != NULL && pSoft->pTxBounce != NULL &&
+               u32Ntx != 0u && u32CTx < u32MaxTx) {
+            fTxBusy = 0u;
             rtl8168_product_tx_sync_for_cpu(pSoft);
-            /*
-             * In-flight only after a programmed pull. Leftover OWN after
-             * CR RST is not DMA (glass 0.1.166 tx=0: zero-then-recheck
-             * dropped the first ETH_TX_PULL). First frame overwrites slot 0.
-             */
+            u16TxSt = 0u;
+            if (pSoft->pRegs != NULL) {
+                u16TxSt = udx_readw(pSoft->pRegs, RTL_REG_INTR_STATUS);
+                u16TxSt = (u16)(u16TxSt & (u16)(RTL_ISR_TOK | RTL_ISR_TER));
+                if (u16TxSt != 0u) {
+                    udx_writew(pSoft->pRegs, RTL_REG_INTR_STATUS, u16TxSt);
+                }
+            }
+            if (u32CTx == 0u) {
+                u16TxSt = (u16)(u16TxSt | (u16StBeforeClear &
+                                           (u16)(RTL_ISR_TOK | RTL_ISR_TER)));
+            }
+            if (u16TxSt != 0u && pSoft->u32TxPull != 0u) {
+                rtl8168_product_tx_reclaim_tok(pSoft, u32Ntx);
+            }
             if (pSoft->u32TxPull != 0u) {
-                for (iTx = 0u; iTx < u32Ntx; iTx++) {
-                    if ((pSoft->pTxDesc[iTx].u32Opts1 & RTL_DESC_OWN) != 0u) {
-                        fTxBusy = 1u;
+                u32Last = (pSoft->u32SoftTxIdx + u32Ntx - 1u) % u32Ntx;
+                if (rtl8168_product_tx_desc_own(pSoft, u32Last) != 0u) {
+                    fTxBusy = 1u;
+                }
+            }
+            if (fTxBusy != 0u && fInjThis != 0u) {
+                if (pSoft->pRegs != NULL) {
+                    udx_writeb(pSoft->pRegs, RTL_REG_TPPOLL,
+                               (u8)RTL_TPPOLL_NPQ);
+                    udx_mmio_flush(pSoft->pRegs);
+                }
+                for (iWait = 0u; iWait < 8u; iWait++) {
+                    __asm__ volatile("pause" ::: "memory");
+                    rtl8168_product_tx_sync_for_cpu(pSoft);
+                    if (pSoft->pRegs != NULL) {
+                        u16TxSt = udx_readw(pSoft->pRegs, RTL_REG_INTR_STATUS);
+                        u16TxSt = (u16)(u16TxSt &
+                                        (u16)(RTL_ISR_TOK | RTL_ISR_TER));
+                        if (u16TxSt != 0u) {
+                            udx_writew(pSoft->pRegs, RTL_REG_INTR_STATUS,
+                                       u16TxSt);
+                            rtl8168_product_tx_reclaim_tok(pSoft, u32Ntx);
+                        }
+                    }
+                    u32Last = (pSoft->u32SoftTxIdx + u32Ntx - 1u) % u32Ntx;
+                    if (rtl8168_product_tx_desc_own(pSoft, u32Last) == 0u) {
+                        fTxBusy = 0u;
                         break;
                     }
                 }
             }
-        }
-        if (fTxBusy != 0u) {
-            /* leave kernel ETH_TX queue; remind NIC */
-            if (pSoft->pRegs != NULL) {
-                udx_writeb(pSoft->pRegs, RTL_REG_TPPOLL, (u8)RTL_TPPOLL_NPQ);
-                udx_mmio_flush(pSoft->pRegs);
+            if (fTxBusy != 0u) {
+                if (pSoft->pRegs != NULL) {
+                    udx_writeb(pSoft->pRegs, RTL_REG_TPPOLL,
+                               (u8)RTL_TPPOLL_NPQ);
+                    udx_mmio_flush(pSoft->pRegs);
+                }
+                break;
             }
-        } else if (pSoft->pTxDesc != NULL && pSoft->pTxBounce != NULL &&
-                   u32Ntx != 0u) {
-            n = gj_net_eth_tx_pull(aTxFrame, sizeof(aTxFrame));
-        }
-        if (n >= 14 && (u32)n <= RTL_SOFT_TX_BOUNCE_BYTES &&
-            pSoft->pTxDesc != NULL && pSoft->pTxBounce != NULL &&
-            u32Ntx != 0u) {
-            u32 u32Tx;
-            u32 u32Opts;
-            udx_dma_addr_t dmaTxb;
-            u32 fProgOk;
-
             if (pSoft->u32TxPull == 0u) {
                 for (iTx = 0u; iTx < u32Ntx; iTx++) {
                     pSoft->pTxDesc[iTx].u32Opts1 = 0u;
@@ -8680,74 +8753,63 @@ rtl8168_product_l2_poll(struct rtl8168_soft *pSoft)
                 }
                 pSoft->pTxDesc[u32Ntx - 1u].u32Opts1 = RTL_DESC_EOR;
                 pSoft->u32SoftTxIdx = 0u;
+                rtl8168_product_clflush_va(
+                    pSoft->pTxDesc,
+                    (size_t)(u32Ntx * (u32)sizeof(struct rtl8168_soft_desc)));
             }
             u32Tx = pSoft->u32SoftTxIdx % u32Ntx;
-            fProgOk = ((pSoft->pTxDesc[u32Tx].u32Opts1 & RTL_DESC_OWN) == 0u)
-                          ? 1u
-                          : 0u;
-            if (pSoft->u32TxPull == 0u) {
-                fProgOk = 1u;
+            if (pSoft->u32TxPull != 0u &&
+                rtl8168_product_tx_desc_own(pSoft, u32Tx) != 0u) {
+                if (pSoft->pRegs != NULL) {
+                    udx_writeb(pSoft->pRegs, RTL_REG_TPPOLL,
+                               (u8)RTL_TPPOLL_NPQ);
+                    udx_mmio_flush(pSoft->pRegs);
+                }
+                break;
             }
-            if (fProgOk != 0u) {
-                (void)gj_memcpy(pSoft->pTxBounce, aTxFrame, (size_t)n);
-                dmaTxb = pSoft->dmaTxBounce;
-                pSoft->pTxDesc[u32Tx].u32AddrLo =
-                    (u32)((u64)dmaTxb & 0xffffffffull);
-                pSoft->pTxDesc[u32Tx].u32AddrHi =
-                    (u32)(((u64)dmaTxb >> 32) & 0xffffffffull);
-                u32Opts = RTL_DESC_OWN | RTL_DESC_FS | RTL_DESC_LS |
-                          ((u32)n & RTL_DESC_TX_LEN_MASK);
-                if (u32Tx + 1u == u32Ntx) {
-                    u32Opts |= RTL_DESC_EOR;
-                }
-                pSoft->pTxDesc[u32Tx].u32Opts1 = u32Opts;
-                pSoft->pTxDesc[u32Tx].u32Opts2 = 0u;
-                pSoft->u32SoftTxIdx = u32Tx + 1u;
-                pSoft->u32TxPull++;
-                if (pSoft->pPdev != NULL && pSoft->pPdev->pDev != NULL) {
-                    udx_dma_sync_single_for_device(
-                        pSoft->pPdev->pDev, pSoft->dmaTxBounce,
-                        (size_t)RTL_SOFT_TX_BOUNCE_BYTES, UDX_DMA_TO_DEVICE);
-                    udx_dma_sync_single_for_device(
-                        pSoft->pPdev->pDev, pSoft->dmaRing,
-                        (size_t)RTL_SOFT_RING_BYTES, UDX_DMA_BIDIRECTIONAL);
-                }
-                rtl8168_product_clflush_va(
-                    &pSoft->pTxDesc[u32Tx],
-                    sizeof(struct rtl8168_soft_desc));
-                /* Public TPPoll NPQ kick (product thr-poll; Soft!=product). */
-                udx_writeb(pSoft->pRegs, RTL_REG_TPPOLL, (u8)RTL_TPPOLL_NPQ);
-                udx_mmio_flush(pSoft->pRegs);
-                if (s_fPollLamp == 0u) {
-                    s_fPollLamp = 1u;
-                }
-                if (s_fTxLamp == 0u) {
-                    s_fTxLamp = 1u;
-                    udx_printk("rtl8168_udx: product l2 poll TX "
-                               "len=%u tppoll=1 path=rtl8168_udx "
-                               "dual_dod_b=OPEN Soft!=product G-AC-1\n",
-                               (unsigned)n);
-                }
-            } else {
-                /*
-                 * Frame available from demux but TX desc Own stuck (device
-                 * never reclaimed). Once-lamp dig; Soft!=product.
-                 * greppable: rtl8168_udx: product l2 poll tx_own_stuck
-                 */
-                pSoft->u32TxPullSkip++;
-                if (s_fTxOwnStuckLamp == 0u) {
-                    s_fTxOwnStuckLamp = 1u;
-                    udx_printk("rtl8168_udx: product l2 poll tx_own_stuck "
-                               "tx_idx=%u opts=0x%x len=%u "
-                               "tx_pull=%u tx_pull_skip=%u "
-                               "Soft!=product dual_dod_b=OPEN\n",
-                               (unsigned)u32Tx,
-                               (unsigned)pSoft->pTxDesc[u32Tx].u32Opts1,
-                               (unsigned)n,
-                               (unsigned)pSoft->u32TxPull,
-                               (unsigned)pSoft->u32TxPullSkip);
-                }
+            n = gj_net_eth_tx_pull(aTxFrame, sizeof(aTxFrame));
+            if (n < 14 || (u32)n > RTL_SOFT_TX_BOUNCE_BYTES) {
+                break;
             }
+            (void)gj_memcpy(pSoft->pTxBounce, aTxFrame, (size_t)n);
+            dmaTxb = pSoft->dmaTxBounce;
+            pSoft->pTxDesc[u32Tx].u32AddrLo =
+                (u32)((u64)dmaTxb & 0xffffffffull);
+            pSoft->pTxDesc[u32Tx].u32AddrHi =
+                (u32)(((u64)dmaTxb >> 32) & 0xffffffffull);
+            u32Opts = RTL_DESC_OWN | RTL_DESC_FS | RTL_DESC_LS |
+                      ((u32)n & RTL_DESC_TX_LEN_MASK);
+            if (u32Tx + 1u == u32Ntx) {
+                u32Opts |= RTL_DESC_EOR;
+            }
+            pSoft->pTxDesc[u32Tx].u32Opts1 = u32Opts;
+            pSoft->pTxDesc[u32Tx].u32Opts2 = 0u;
+            pSoft->u32SoftTxIdx = u32Tx + 1u;
+            pSoft->u32TxPull++;
+            if (pSoft->pPdev != NULL && pSoft->pPdev->pDev != NULL) {
+                udx_dma_sync_single_for_device(
+                    pSoft->pPdev->pDev, pSoft->dmaTxBounce,
+                    (size_t)RTL_SOFT_TX_BOUNCE_BYTES, UDX_DMA_TO_DEVICE);
+                udx_dma_sync_single_for_device(
+                    pSoft->pPdev->pDev, pSoft->dmaRing,
+                    (size_t)RTL_SOFT_RING_BYTES, UDX_DMA_BIDIRECTIONAL);
+            }
+            rtl8168_product_clflush_va(
+                &pSoft->pTxDesc[u32Tx],
+                sizeof(struct rtl8168_soft_desc));
+            udx_writeb(pSoft->pRegs, RTL_REG_TPPOLL, (u8)RTL_TPPOLL_NPQ);
+            udx_mmio_flush(pSoft->pRegs);
+            if (s_fPollLamp == 0u) {
+                s_fPollLamp = 1u;
+            }
+            if (s_fTxLamp == 0u) {
+                s_fTxLamp = 1u;
+                udx_printk("rtl8168_udx: product l2 poll TX "
+                           "len=%u tppoll=1 path=rtl8168_udx "
+                           "dual_dod_b=OPEN Soft!=product G-AC-1\n",
+                           (unsigned)n);
+            }
+            u32CTx++;
         }
     }
 

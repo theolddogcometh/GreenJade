@@ -230,6 +230,8 @@ struct gj_process {
      * (not 0/SIG_DFL, not 1/SIG_IGN). No sigframe / no deliver this cut.
      */
     u64                  u64SigPending;
+    /* Linux rt_sigprocmask per-PCB (bit N-1). Not a global. Dual DoD B OPEN. */
+    u64                  u64SigBlocked;
     /*
      * Last USER SYSCALL resume (fork child rax=0 at this RIP/RSP).
      * Last-field only: doors cold path may run on a kthread; protonrt

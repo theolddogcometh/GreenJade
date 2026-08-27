@@ -78,15 +78,16 @@
  *   socket/bind/listen/accept/connect/send_star/recv_star/shutdown/sockopt/name
  *     -> gj_linux_cold_* (linux_cold_net bridge)
  *   close / close_range -> gj_linux_cold_close then vfs_ram
- *   poll/ppoll -> gj_linux_cold_poll_mask then vfs_ram_poll_mask
+ *   poll/ppoll -> vfs pipe/socketpair mask, else cold_net then vfs_ram
  *   select/pselect6 -> cold_net/vfs poll_mask residual lean (fd bitsets)
  *   epoll_wait family -> vfs_ram_epoll_wait + soft-spin residual lean
- *   read/write on net fds -> gj_linux_cold_recv / gj_linux_cold_send
+ *   read/write: vfs pipe/socketpair before cold_net recv/send (monitor fd 3)
  *   ioctl FIONREAD/FIONBIO on ram+lo+tcp -> soft readiness / nonblock accept
  *   ioctl TTY (TCGETS family / winsz) on fd 0/1/2 or vfs_ram PTY/pipe
  *     -> soft fill; TCP -ENOTTY (not silent 0)
  *   ioctl TIOCSCTTY/TIOCNOTTY USER*_ENTRY + stdio|ram -> 0; else -EPERM/-ENOTTY
- *   ioctl TIOCGPTN/TIOCSPTLCK -> vfs_ram_ioctl (Unix98 PTY mux; not TIOCSCTTY)
+ *   ioctl TIOCGPTN/TIOCSPTLCK USER bind -> vfs_ram_ioctl (Unix98 PTY mux)
+ *   sendmsg/recvmsg vfs ipc: first iov + one SCM_RIGHTS fd (USER bind)
  *   ppoll arg3 wait sigmask: -EINTR if SIGCHLD pending and unblocked
  *   fcntl F_GETFL/F_SETFL on ram+lo+tcp -> soft O_NONBLOCK table residual
  *   sendfile/splice/tee/copy_file_range ram-in + net-out -> bounce + cold send
@@ -123,6 +124,9 @@
 #include <gj/vfs_ram.h>
 #include <gj/vmm.h>
 
+i64 vfs_ram_scm_send_fd(i64 i64Sock, i32 i32Fd);
+i64 vfs_ram_scm_recv_fd(i64 i64Sock);
+
 /* From user/libprotonrt/src/cold_linux.c (compiled into kernel for smoke). */
 int64_t protonrt_cold_linux(uint64_t u64Nr, uint64_t a0, uint64_t a1,
                             uint64_t a2, uint64_t a3, uint64_t a4,
@@ -137,6 +141,7 @@ static char g_szCwd[96] = "/";
 #define GJ_LINUX_O_WRONLY  0x1u
 #define GJ_LINUX_O_RDWR    0x2u
 #define GJ_LINUX_O_CREAT   0x40u
+#define PRT_SCM_RIGHTS     1 /* Linux SCM_RIGHTS */
 
 /*
  * Soft multi-server confine deepen (cold personality only).
@@ -269,6 +274,7 @@ struct prt_soft_fdfl_ent {
 };
 
 static struct prt_soft_fdfl_ent g_aPrtSoftFdFl[PRT_SOFT_FDFL_MAX];
+static u32 g_u32PrtSigchldEnterLog;
 
 static void protonrt_soft_inc(u64 *pCtr);
 static void protonrt_soft_note_enter(u64 u64Nr);
@@ -281,6 +287,19 @@ static u32 protonrt_soft_fd_ready_mask(i64 i64Fd, u32 u32Want);
 static u32 protonrt_soft_fdfl_get(i64 i64Fd, u32 u32Default);
 static void protonrt_soft_fdfl_set(i64 i64Fd, u32 u32Flags);
 static void protonrt_soft_fdfl_clear(i64 i64Fd);
+static struct gj_process *protonrt_calling_user_proc(void);
+static int protonrt_sigchld_enter_handler(struct gj_process *pProc);
+static struct gj_process *protonrt_bind_calling_user(void);
+static void protonrt_unbind_calling_user(struct gj_process *pSave);
+static int protonrt_vfs_ipc_fd(i64 i64Fd);
+static i64 protonrt_vfs_read(struct gj_linux_regs *pRegs, u8 *pBuf,
+                             size_t cbMax);
+static i64 protonrt_vfs_write(struct gj_linux_regs *pRegs, u8 *pBuf,
+                              size_t cbMax);
+static i64 protonrt_msg_first_iov(u64 u64Msg, u64 *pBase, u64 *pLen);
+static i64 protonrt_msg_control(u64 u64Msg, u64 *pCtl, u64 *pCtlLen);
+static i64 protonrt_vfs_scm_send(i64 i64Sock, u64 u64Msg);
+static void protonrt_vfs_scm_recv(i64 i64Sock, u64 u64Msg);
 
 /** Soft: saturating-ish bump (u64 wrap is fine for telemetry). */
 static void
@@ -366,20 +385,36 @@ protonrt_soft_fdfl_clear(i64 i64Fd)
 
 /**
  * Residual lean readiness for one fd (Soft!=product).
- * cold_net poll_mask first (SO_ERROR / half-close honesty), then vfs_ram.
+ * VFS pipe/socketpair before leftover LCN aliases (sshd-auth monitor fd).
+ * Else cold_net poll_mask (SO_ERROR / half-close), then vfs_ram.
  * Never always-ready. G-AC-1 userspace host reach - not .ko product AC.
  */
 static u32
 protonrt_soft_fd_ready_mask(i64 i64Fd, u32 u32Want)
 {
+    struct gj_process *pSave;
     u32 u32Got;
 
     if (i64Fd < 0) {
         return 0;
     }
-    u32Got = gj_linux_cold_poll_mask(i64Fd, u32Want);
-    if (u32Got == 0) {
+    pSave = protonrt_bind_calling_user();
+    if (vfs_ram_fd_poll_parkable(i64Fd) != 0) {
         u32Got = vfs_ram_poll_mask(i64Fd, u32Want);
+        protonrt_unbind_calling_user(pSave);
+        return u32Got;
+    }
+    protonrt_unbind_calling_user(pSave);
+    u32Got = gj_linux_cold_poll_mask(i64Fd, u32Want);
+    /*
+     * LCN aliases (sshd dup2 of accept fd 96 onto 6) are cold_net,
+     * not vfs. Empty ESTAB must stay 0 so ppoll parks. vfs unknown-fd
+     * ERR|HUP would wake OpenSSH packet_read into read()==0.
+     */
+    if (u32Got == 0 && gj_linux_cold_fd_ok(i64Fd) == 0) {
+        pSave = protonrt_bind_calling_user();
+        u32Got = vfs_ram_poll_mask(i64Fd, u32Want);
+        protonrt_unbind_calling_user(pSave);
     }
     return u32Got;
 }
@@ -450,6 +485,454 @@ protonrt_calling_user_proc(void)
         return pCli->pProc;
     }
     return NULL;
+}
+
+/*
+ * poll/ppoll SIGCHLD: if sa_handler is a user VA, push SYSCALL RIP and
+ * aim sysretq at the handler. Returns 1 only when RIP was switched.
+ * Caller must not -EINTR on 0 (QEMU90: DFL/push-fail left pending set
+ * and EINTR-spun until timeout; OpenSSH waitpid only if the handler
+ * set child_terminated). No rdi (OpenSSH ignores signo). Dual DoD B OPEN.
+ */
+static int
+protonrt_sigchld_enter_handler(struct gj_process *pProc)
+{
+    struct gj_cpu *pCpu;
+    struct gj_thread *pCur;
+    struct gj_thread *pUser;
+    u64 u64H;
+    u64 u64Rip;
+    u64 u64Rsp;
+    u64 u64Slot;
+    gj_vaddr_t vaPage;
+    int fCurUser;
+    u32 u32Pid;
+
+    if (pProc == NULL) {
+        return 0;
+    }
+    u64H = pProc->aSigHandler[GJ_SIGCHLD];
+    if (u64H < GJ_USER_VA_BASE || u64H >= GJ_USER_VA_END) {
+        if (g_u32PrtSigchldEnterLog < 4u) {
+            g_u32PrtSigchldEnterLog++;
+            u32Pid = process_wait_pid_of(pProc);
+            kprintf("protonrt: sigchld enter pid=%u h=0x%lx skip_dfl "
+                    "pending Dual DoD B OPEN\n",
+                    u32Pid, (unsigned long)u64H);
+        }
+        return 0;
+    }
+    pCpu = cpu_current();
+    pCur = thread_current();
+    pUser = NULL;
+    u64Rip = 0;
+    u64Rsp = 0;
+    fCurUser = 0;
+    if (protonrt_thr_is_user(pCur) != 0 && pCur->pProc == pProc) {
+        pUser = pCur;
+        fCurUser = 1;
+        if (pCpu != NULL) {
+            u64Rip = pCpu->u64UserRip;
+            u64Rsp = pCpu->u64UserRsp;
+        }
+    } else {
+        pUser = protonrt_door_client_user();
+        if (pUser == NULL || pUser->pProc != pProc) {
+            pUser = pProc->pUserThr;
+        }
+    }
+    if (u64Rip == 0 && pUser != NULL && pUser->u32SysUserValid != 0) {
+        u64Rip = pUser->u64SysUserRip;
+        u64Rsp = pUser->u64SysUserRsp;
+    }
+    if (u64Rip == 0 && pUser != NULL) {
+        u64Rip = pUser->u64UserRip;
+        u64Rsp = pUser->u64UserRsp;
+    }
+    if (u64Rip == 0) {
+        u64Rip = pProc->u64UserSysRip;
+        u64Rsp = pProc->u64UserSysRsp;
+    }
+    if (u64Rip == 0 || u64Rsp < 8ull) {
+        if (g_u32PrtSigchldEnterLog < 4u) {
+            g_u32PrtSigchldEnterLog++;
+            u32Pid = process_wait_pid_of(pProc);
+            kprintf("protonrt: sigchld enter pid=%u h=0x%lx rip=0x%lx "
+                    "rsp=0x%lx skip_rip Dual DoD B OPEN\n",
+                    u32Pid, (unsigned long)u64H, (unsigned long)u64Rip,
+                    (unsigned long)u64Rsp);
+        }
+        return 0;
+    }
+    u64Slot = u64Rsp - 8ull;
+    if (user_range_ok(u64Slot, 8) == 0) {
+        return 0;
+    }
+    if (copy_to_user(u64Slot, &u64Rip, sizeof(u64Rip)) != GJ_OK) {
+        vaPage = (gj_vaddr_t)(u64Slot & ~(u64)(GJ_PAGE_SIZE - 1ull));
+        (void)vmm_cow_break_page(vaPage);
+        if (copy_to_user(u64Slot, &u64Rip, sizeof(u64Rip)) != GJ_OK) {
+            if (g_u32PrtSigchldEnterLog < 4u) {
+                g_u32PrtSigchldEnterLog++;
+                u32Pid = process_wait_pid_of(pProc);
+                kprintf("protonrt: sigchld enter pid=%u h=0x%lx "
+                        "rip=0x%lx rsp=0x%lx skip_copy Dual DoD B OPEN\n",
+                        u32Pid, (unsigned long)u64H,
+                        (unsigned long)u64Rip, (unsigned long)u64Rsp);
+            }
+            return 0;
+        }
+    }
+    if (fCurUser != 0 && pCpu != NULL) {
+        pCpu->u64UserRsp = u64Slot;
+        pCpu->u64UserRip = u64H;
+    }
+    if (pUser != NULL) {
+        pUser->u64SysUserRip = u64H;
+        pUser->u64SysUserRsp = u64Slot;
+        pUser->u32SysUserValid = 1;
+        pUser->u64UserRip = u64H;
+        pUser->u64UserRsp = u64Slot;
+    }
+    pProc->u64UserSysRip = u64H;
+    pProc->u64UserSysRsp = u64Slot;
+    pProc->u64SigPending &= ~(1ull << GJ_SIGCHLD);
+    if (g_u32PrtSigchldEnterLog < 4u) {
+        g_u32PrtSigchldEnterLog++;
+        u32Pid = process_wait_pid_of(pProc);
+        kprintf("protonrt: sigchld enter pid=%u h=0x%lx rip=0x%lx "
+                "rsp=0x%lx ok=1 Dual DoD B OPEN\n",
+                u32Pid, (unsigned long)u64H, (unsigned long)u64Rip,
+                (unsigned long)u64Rsp);
+    }
+    return 1;
+}
+
+/*
+ * Blocking poll/ppoll: another USER thread is RUNNABLE (fork child
+ * waiting to enter), or this PCB has a live wait-registered child.
+ */
+static int
+protonrt_peer_user_runnable(void)
+{
+    struct gj_thread *pCur = thread_current();
+    struct gj_process *pProc;
+    u32 u32Pid;
+    u32 u32CurId;
+    u32 u32UserFl = GJ_THR_F_USER_ENTRY | GJ_THR_F_USER32_ENTRY;
+    u32 u32Hi;
+    u32 iId;
+
+    pProc = protonrt_calling_user_proc();
+    u32Pid = process_wait_pid_of(pProc);
+    if (u32Pid != 0 && process_wait_live_count(u32Pid) != 0) {
+        return 1;
+    }
+    u32CurId = (pCur != NULL) ? pCur->u32Id : 0u;
+    u32Hi = u32CurId + (u32)GJ_MAX_THREADS;
+    if (u32Hi < 256u) {
+        u32Hi = 256u;
+    }
+    for (iId = 1u; iId <= u32Hi; iId++) {
+        if (iId == u32CurId) {
+            continue;
+        }
+        if (thread_get_state(iId) != GJ_THR_RUNNABLE) {
+            continue;
+        }
+        if ((thread_flags_get(iId) & u32UserFl) != 0) {
+            return 1;
+        }
+    }
+    return 0;
+}
+
+/*
+ * Bind current pProc to the calling USER PCB so vfs_ram fd_select_tab
+ * walks the session/sshd-auth tab (not kthread tab0).
+ */
+static struct gj_process *
+protonrt_bind_calling_user(void)
+{
+    struct gj_thread *pCur = thread_current();
+    struct gj_process *pUser;
+    struct gj_process *pSave;
+
+    if (pCur == NULL) {
+        return NULL;
+    }
+    pSave = pCur->pProc;
+    pUser = protonrt_calling_user_proc();
+    if (pUser != NULL) {
+        pCur->pProc = pUser;
+    }
+    return pSave;
+}
+
+static void
+protonrt_unbind_calling_user(struct gj_process *pSave)
+{
+    struct gj_thread *pCur = thread_current();
+
+    if (pCur != NULL) {
+        pCur->pProc = pSave;
+    }
+}
+
+/** Non-zero if fd is a vfs pipe/socketpair (parkable), USER tab. */
+static int
+protonrt_vfs_ipc_fd(i64 i64Fd)
+{
+    struct gj_process *pSave;
+    int fIpc;
+
+    pSave = protonrt_bind_calling_user();
+    fIpc = vfs_ram_fd_poll_parkable(i64Fd);
+    protonrt_unbind_calling_user(pSave);
+    return fIpc;
+}
+
+static i64
+protonrt_vfs_read(struct gj_linux_regs *pRegs, u8 *pBuf, size_t cbMax)
+{
+    struct gj_process *pSave;
+    size_t cb;
+    i64 i64R;
+    gj_status_t st;
+
+    if (pRegs == NULL || pBuf == NULL) {
+        return -LINUX_EFAULT;
+    }
+    cb = (size_t)pRegs->u64Arg2;
+    if (cb > cbMax) {
+        cb = cbMax;
+    }
+    if (cb > 0 && pRegs->u64Arg1 == 0) {
+        return -LINUX_EFAULT;
+    }
+    pSave = protonrt_bind_calling_user();
+    i64R = vfs_ram_read((i64)pRegs->u64Arg0, pBuf, cb);
+    protonrt_unbind_calling_user(pSave);
+    if (i64R <= 0) {
+        return i64R;
+    }
+    if (user_range_ok(pRegs->u64Arg1, (u64)i64R)) {
+        st = copy_to_user(pRegs->u64Arg1, pBuf, (size_t)i64R);
+        if (st != GJ_OK) {
+            return -LINUX_EFAULT;
+        }
+    } else {
+        memcpy((void *)(gj_vaddr_t)pRegs->u64Arg1, pBuf, (size_t)i64R);
+    }
+    return i64R;
+}
+
+static i64
+protonrt_vfs_write(struct gj_linux_regs *pRegs, u8 *pBuf, size_t cbMax)
+{
+    struct gj_process *pSave;
+    size_t cb;
+    i64 i64R;
+    gj_status_t st;
+
+    if (pRegs == NULL || pBuf == NULL) {
+        return -LINUX_EFAULT;
+    }
+    cb = (size_t)pRegs->u64Arg2;
+    if (cb > cbMax) {
+        cb = cbMax;
+    }
+    if (cb > 0 && pRegs->u64Arg1 == 0) {
+        return -LINUX_EFAULT;
+    }
+    if (user_range_ok(pRegs->u64Arg1, cb)) {
+        st = copy_from_user(pBuf, pRegs->u64Arg1, cb);
+        if (st != GJ_OK) {
+            return -LINUX_EFAULT;
+        }
+    } else {
+        memcpy(pBuf, (const void *)(gj_vaddr_t)pRegs->u64Arg1, cb);
+    }
+    pSave = protonrt_bind_calling_user();
+    i64R = vfs_ram_write((i64)pRegs->u64Arg0, pBuf, cb);
+    protonrt_unbind_calling_user(pSave);
+    return i64R;
+}
+
+static i64
+protonrt_msg_first_iov(u64 u64Msg, u64 *pBase, u64 *pLen)
+{
+    u64 u64Iov = 0;
+    u64 u64N = 0;
+    u64 aIov[2];
+
+    if (pBase == NULL || pLen == NULL) {
+        return -LINUX_EFAULT;
+    }
+    *pBase = 0;
+    *pLen = 0;
+    if (u64Msg == 0) {
+        return -LINUX_EFAULT;
+    }
+    if (user_range_ok(u64Msg, 32)) {
+        if (copy_from_user(&u64Iov, u64Msg + 16, 8) != GJ_OK) {
+            return -LINUX_EFAULT;
+        }
+        if (copy_from_user(&u64N, u64Msg + 24, 8) != GJ_OK) {
+            return -LINUX_EFAULT;
+        }
+    } else {
+        u64Iov = *(const u64 *)(gj_vaddr_t)(u64Msg + 16);
+        u64N = *(const u64 *)(gj_vaddr_t)(u64Msg + 24);
+    }
+    if (u64N == 0 || u64Iov == 0) {
+        return 0;
+    }
+    if (user_range_ok(u64Iov, 16)) {
+        if (copy_from_user(aIov, u64Iov, 16) != GJ_OK) {
+            return -LINUX_EFAULT;
+        }
+    } else {
+        memcpy(aIov, (const void *)(gj_vaddr_t)u64Iov, 16);
+    }
+    *pBase = aIov[0];
+    *pLen = aIov[1];
+    return 0;
+}
+
+/* Linux x86_64 msghdr: control+32, controllen+40. */
+static i64
+protonrt_msg_control(u64 u64Msg, u64 *pCtl, u64 *pCtlLen)
+{
+    u64 u64Ctl = 0;
+    u64 u64Len = 0;
+
+    if (pCtl == NULL || pCtlLen == NULL) {
+        return -LINUX_EFAULT;
+    }
+    *pCtl = 0;
+    *pCtlLen = 0;
+    if (u64Msg == 0) {
+        return -LINUX_EFAULT;
+    }
+    if (user_range_ok(u64Msg, 48)) {
+        if (copy_from_user(&u64Ctl, u64Msg + 32, 8) != GJ_OK) {
+            return -LINUX_EFAULT;
+        }
+        if (copy_from_user(&u64Len, u64Msg + 40, 8) != GJ_OK) {
+            return -LINUX_EFAULT;
+        }
+    } else {
+        u64Ctl = *(const u64 *)(gj_vaddr_t)(u64Msg + 32);
+        u64Len = *(const u64 *)(gj_vaddr_t)(u64Msg + 40);
+    }
+    *pCtl = u64Ctl;
+    *pCtlLen = u64Len;
+    return 0;
+}
+
+/*
+ * One SCM_RIGHTS int on vfs ipc. 0 if no cmsg / not rights (plain sendmsg
+ * still writes data). Negative if a rights cmsg could not be queued;
+ * caller skips the data byte so sendmsg stays aligned with recv.
+ * cmsghdr: cmsg_len u64 +0, level i32 +8, type i32 +12, fd int +16.
+ */
+static i64
+protonrt_vfs_scm_send(i64 i64Sock, u64 u64Msg)
+{
+    u64 u64Ctl = 0;
+    u64 u64CtlLen = 0;
+    u64 u64CmsgLen = 0;
+    i32 i32Level = 0;
+    i32 i32Type = 0;
+    i32 i32Fd = 0;
+    i64 i64St;
+    struct gj_process *pSave;
+
+    i64St = protonrt_msg_control(u64Msg, &u64Ctl, &u64CtlLen);
+    if (i64St != 0) {
+        return i64St;
+    }
+    if (u64Ctl == 0 || u64CtlLen < 20u) {
+        return 0;
+    }
+    if (user_range_ok(u64Ctl, 20)) {
+        if (copy_from_user(&u64CmsgLen, u64Ctl, 8) != GJ_OK) {
+            return -LINUX_EFAULT;
+        }
+        if (copy_from_user(&i32Level, u64Ctl + 8, 4) != GJ_OK) {
+            return -LINUX_EFAULT;
+        }
+        if (copy_from_user(&i32Type, u64Ctl + 12, 4) != GJ_OK) {
+            return -LINUX_EFAULT;
+        }
+        if (copy_from_user(&i32Fd, u64Ctl + 16, 4) != GJ_OK) {
+            return -LINUX_EFAULT;
+        }
+    } else {
+        u64CmsgLen = *(const u64 *)(gj_vaddr_t)u64Ctl;
+        i32Level = *(const i32 *)(gj_vaddr_t)(u64Ctl + 8);
+        i32Type = *(const i32 *)(gj_vaddr_t)(u64Ctl + 12);
+        i32Fd = *(const i32 *)(gj_vaddr_t)(u64Ctl + 16);
+    }
+    if (u64CmsgLen < 20u || i32Level != (i32)LINUX_SOL_SOCKET ||
+        i32Type != PRT_SCM_RIGHTS || i32Fd < 0) {
+        return 0;
+    }
+    pSave = protonrt_bind_calling_user();
+    i64St = vfs_ram_scm_send_fd(i64Sock, i32Fd);
+    protonrt_unbind_calling_user(pSave);
+    return i64St;
+}
+
+static void
+protonrt_vfs_scm_recv(i64 i64Sock, u64 u64Msg)
+{
+    u64 u64Ctl = 0;
+    u64 u64CtlLen = 0;
+    u64 u64CmsgLen;
+    u64 u64OutLen;
+    i64 i64Fd;
+    i32 i32Level;
+    i32 i32Type;
+    i32 i32Fd;
+    struct gj_process *pSave;
+    u8 aCmsg[24];
+
+    pSave = protonrt_bind_calling_user();
+    i64Fd = vfs_ram_scm_recv_fd(i64Sock);
+    protonrt_unbind_calling_user(pSave);
+    if (i64Fd < 0) {
+        return;
+    }
+    if (protonrt_msg_control(u64Msg, &u64Ctl, &u64CtlLen) != 0) {
+        return;
+    }
+    if (u64Ctl == 0 || u64CtlLen < 20u) {
+        return;
+    }
+    i32Fd = (i32)i64Fd;
+    u64CmsgLen = 20u; /* CMSG_LEN(sizeof(int)) */
+    i32Level = (i32)LINUX_SOL_SOCKET;
+    i32Type = PRT_SCM_RIGHTS;
+    memset(aCmsg, 0, sizeof(aCmsg));
+    memcpy(aCmsg, &u64CmsgLen, 8);
+    memcpy(aCmsg + 8, &i32Level, 4);
+    memcpy(aCmsg + 12, &i32Type, 4);
+    memcpy(aCmsg + 16, &i32Fd, 4);
+    u64OutLen = (u64CtlLen >= 24u) ? 24u : 20u;
+    if (user_range_ok(u64Ctl, u64OutLen)) {
+        if (copy_to_user(u64Ctl, aCmsg, (size_t)u64OutLen) != GJ_OK) {
+            return;
+        }
+    } else {
+        memcpy((void *)(gj_vaddr_t)u64Ctl, aCmsg, (size_t)u64OutLen);
+    }
+    if (user_range_ok(u64Msg + 40, 8)) {
+        (void)copy_to_user(u64Msg + 40, &u64OutLen, 8);
+    } else {
+        *(u64 *)(gj_vaddr_t)(u64Msg + 40) = u64OutLen;
+    }
 }
 
 /* Last USER SYSCALL PCB (SERVICE_FIRST). Doors kthread fork uses this. */
@@ -2202,9 +2685,6 @@ protonrt_service(struct gj_linux_regs *pRegs, void *pCtx)
 {
     char szPath[96];
     u8 aBuf[256];
-    i64 i64R;
-    size_t cb;
-    gj_status_t st;
 
     (void)pCtx;
     if (pRegs == NULL) {
@@ -2287,10 +2767,12 @@ protonrt_service(struct gj_linux_regs *pRegs, void *pCtx)
 
     case LINUX_NR_read:
         /*
-         * Cold net (canonical tcp/lo or dup2 alias, including 0/1/2)
-         * before vfs and before stdio serial. OpenSSH dup2(accepted,0)
-         * must not hit COM1.
+         * VFS pipe/socketpair before leftover LCN aliases (monitor fd 3).
+         * Else cold net (tcp/lo or dup2 0/1/2) before ram and COM1.
          */
+        if (protonrt_vfs_ipc_fd((i64)pRegs->u64Arg0)) {
+            return protonrt_vfs_read(pRegs, aBuf, sizeof(aBuf));
+        }
         if (gj_linux_cold_fd_ok((i64)pRegs->u64Arg0)) {
             struct gj_linux_regs sub;
 
@@ -2304,26 +2786,7 @@ protonrt_service(struct gj_linux_regs *pRegs, void *pCtx)
             return gj_linux_cold_recv(&sub);
         }
         if (vfs_ram_fd_ok((i64)pRegs->u64Arg0)) {
-            cb = (size_t)pRegs->u64Arg2;
-            if (cb > sizeof(aBuf)) {
-                cb = sizeof(aBuf);
-            }
-            if (cb > 0 && pRegs->u64Arg1 == 0) {
-                return -LINUX_EFAULT;
-            }
-            i64R = vfs_ram_read((i64)pRegs->u64Arg0, aBuf, cb);
-            if (i64R <= 0) {
-                return i64R;
-            }
-            if (user_range_ok(pRegs->u64Arg1, (u64)i64R)) {
-                st = copy_to_user(pRegs->u64Arg1, aBuf, (size_t)i64R);
-                if (st != GJ_OK) {
-                    return -LINUX_EFAULT;
-                }
-            } else {
-                memcpy((void *)(gj_vaddr_t)pRegs->u64Arg1, aBuf, (size_t)i64R);
-            }
-            return i64R;
+            return protonrt_vfs_read(pRegs, aBuf, sizeof(aBuf));
         }
         /*
          * Stdio 0/1/2: serial stdin for dash cmdloop. Kernel smoke must
@@ -2378,6 +2841,9 @@ protonrt_service(struct gj_linux_regs *pRegs, void *pCtx)
         break; /* fall through to stub */
 
     case LINUX_NR_write:
+        if (protonrt_vfs_ipc_fd((i64)pRegs->u64Arg0)) {
+            return protonrt_vfs_write(pRegs, aBuf, sizeof(aBuf));
+        }
         if (gj_linux_cold_fd_ok((i64)pRegs->u64Arg0)) {
             struct gj_linux_regs sub;
 
@@ -2391,22 +2857,7 @@ protonrt_service(struct gj_linux_regs *pRegs, void *pCtx)
             return gj_linux_cold_send(&sub);
         }
         if (vfs_ram_fd_ok((i64)pRegs->u64Arg0)) {
-            cb = (size_t)pRegs->u64Arg2;
-            if (cb > sizeof(aBuf)) {
-                cb = sizeof(aBuf);
-            }
-            if (cb > 0 && pRegs->u64Arg1 == 0) {
-                return -LINUX_EFAULT;
-            }
-            if (user_range_ok(pRegs->u64Arg1, cb)) {
-                st = copy_from_user(aBuf, pRegs->u64Arg1, cb);
-                if (st != GJ_OK) {
-                    return -LINUX_EFAULT;
-                }
-            } else {
-                memcpy(aBuf, (const void *)(gj_vaddr_t)pRegs->u64Arg1, cb);
-            }
-            return vfs_ram_write((i64)pRegs->u64Arg0, aBuf, cb);
+            return protonrt_vfs_write(pRegs, aBuf, sizeof(aBuf));
         }
         break;
 
@@ -2570,6 +3021,7 @@ protonrt_service(struct gj_linux_regs *pRegs, void *pCtx)
          *   timeout==0  -> single readiness pass
          *   timeout>0   -> soft-spin with thread_yield + timer_jiffies budget
          *   timeout<0 / ppoll NULL -> yield until a fd is ready
+         *   blocking + USER peer RUNNABLE -> yield before ready return
          * Mixed set: vfs pipe/eventfd/signalfd park does not wake on
          * net_tcp AcceptQ. If any fd is net_tcp / cold net, yield so
          * the next pass runs gj_linux_cold_poll_mask (net_eth_poll).
@@ -2587,6 +3039,7 @@ protonrt_service(struct gj_linux_regs *pRegs, void *pCtx)
         int fPark;
         int fColdNet;
         struct gj_process *pProc;
+        struct gj_process *pSave;
 
         protonrt_soft_inc(&g_u64PrtLeanPoll);
         if (nfds == 0) {
@@ -2685,6 +3138,7 @@ protonrt_service(struct gj_linux_regs *pRegs, void *pCtx)
              * poll_mask can drain SYN after the listen fd already stored 0.
              */
             net_eth_poll();
+            pSave = protonrt_bind_calling_user();
             for (i = 0; i < nfds; i++) {
                 /* pollfd: int fd; short events; short revents - 8B x86_64 */
                 i32 fd = 0;
@@ -2696,9 +3150,11 @@ protonrt_service(struct gj_linux_regs *pRegs, void *pCtx)
 
                 if (user_range_ok(base, 8)) {
                     if (copy_from_user(&fd, base, 4) != GJ_OK) {
+                        protonrt_unbind_calling_user(pSave);
                         return -LINUX_EFAULT;
                     }
                     if (copy_from_user(&events, base + 4, 2) != GJ_OK) {
+                        protonrt_unbind_calling_user(pSave);
                         return -LINUX_EFAULT;
                     }
                 } else {
@@ -2717,16 +3173,11 @@ protonrt_service(struct gj_linux_regs *pRegs, void *pCtx)
                 } else {
                     if (vfs_ram_fd_poll_parkable((i64)fd) != 0) {
                         fPark = 1;
-                    }
-                    if (net_tcp_fd_ok((i64)fd) != 0 ||
-                        gj_linux_cold_fd_ok((i64)fd) != 0) {
+                    } else if (net_tcp_fd_ok((i64)fd) != 0 ||
+                               gj_linux_cold_fd_ok((i64)fd) != 0) {
                         fColdNet = 1;
                     }
-                    /*
-                     * Residual lean: cold_net poll_mask first (SO_ERROR /
-                     * half-close honesty), then vfs_ram (ram + net route).
-                     * Soft!=product; no always-ready. Userspace driver host.
-                     */
+                    /* Pipe/socketpair vfs mask, else cold_net then vfs_ram. */
                     got = protonrt_soft_fd_ready_mask((i64)fd, want);
                     if (got == 0 && fd >= 0 && fd <= 2 &&
                         gj_linux_cold_fd_ok((i64)fd) == 0) {
@@ -2758,6 +3209,7 @@ protonrt_service(struct gj_linux_regs *pRegs, void *pCtx)
             prt_poll_store:
                 if (user_range_ok(base, 8)) {
                     if (copy_to_user(base + 6, &revents, 2) != GJ_OK) {
+                        protonrt_unbind_calling_user(pSave);
                         return -LINUX_EFAULT;
                     }
                 } else {
@@ -2767,18 +3219,56 @@ protonrt_service(struct gj_linux_regs *pRegs, void *pCtx)
                     ready++;
                 }
             }
+            protonrt_unbind_calling_user(pSave);
 
+            /*
+             * SIGCHLD before ready. Trigger on wait-table zombies as well
+             * as u64SigPending (QEMU91: pending was not visible on the
+             * ppoll PCB so enter never ran). Timeout 0 still delivers.
+             * Only -EINTR after RIP actually switched. Dual DoD B OPEN.
+             */
+            pProc = protonrt_calling_user_proc();
+            if (pProc != NULL) {
+                u32 u32PidW = process_wait_pid_of(pProc);
+                u32 u32Z = 0;
+                int fPend = ((pProc->u64SigPending &
+                              (1ull << GJ_SIGCHLD)) != 0) ? 1 : 0;
+                int fMask = ((u64WaitMask &
+                              (1ull << (GJ_SIGCHLD - 1u))) != 0) ? 1 : 0;
+
+                /*
+                 * zombie_count(0) means "any parent" and counted kernel
+                 * smoke zombies (QEMU92 banner timeout). Only a real
+                 * wait-table pid (OpenSSH session >=100). Dual DoD B OPEN.
+                 */
+                if (u32PidW != 0u) {
+                    u32Z = process_wait_zombie_count(u32PidW);
+                }
+                if (u32PidW != 0u && (u32Z != 0u || fPend != 0) &&
+                    g_u32PrtSigchldEnterLog < 8u) {
+                    g_u32PrtSigchldEnterLog++;
+                    kprintf("protonrt: sigchld poll pid=%u z=%u pend=%d "
+                            "h=0x%lx mask=%d tmo=%ld ready=%u Dual DoD B OPEN\n",
+                            u32PidW, u32Z, fPend,
+                            (unsigned long)pProc->aSigHandler[GJ_SIGCHLD],
+                            fMask, (long)i64TimeoutMs, ready);
+                }
+                if (u32PidW != 0u && (u32Z != 0u || fPend != 0) &&
+                    fMask == 0) {
+                    if (protonrt_sigchld_enter_handler(pProc) != 0) {
+                        return -LINUX_EINTR;
+                    }
+                }
+            }
             if (ready != 0) {
+                if (i64TimeoutMs != 0 &&
+                    protonrt_peer_user_runnable() != 0) {
+                    thread_yield();
+                }
                 break;
             }
             if (i64TimeoutMs == 0) {
                 break;
-            }
-            pProc = protonrt_calling_user_proc();
-            if (pProc != NULL &&
-                (pProc->u64SigPending & (1ull << GJ_SIGCHLD)) != 0 &&
-                (u64WaitMask & (1ull << (GJ_SIGCHLD - 1u))) == 0) {
-                return -LINUX_EINTR;
             }
             if (i64TimeoutMs < 0) {
                 /*
@@ -2791,6 +3281,10 @@ protonrt_service(struct gj_linux_regs *pRegs, void *pCtx)
                  * yield often never resumed sshd so poll_mask never
                  * saw AcceptQ. Dual DoD B OPEN.
                  */
+                if (protonrt_peer_user_runnable() != 0) {
+                    thread_yield();
+                    continue;
+                }
                 if (fPark != 0 && fColdNet == 0) {
                     vfs_ram_poll_park();
                 } else {
@@ -2849,8 +3343,8 @@ protonrt_service(struct gj_linux_regs *pRegs, void *pCtx)
          * tty-class for TCGETS/TCSETS family/TIOCGWINSZ/TIOCSWINSZ
          * (OpenSSH ioctl(pty_fd>=3, TIOCSWINSZ); same soft 24x80 /
          * TCGETS fill). TCP -ENOTTY for TTY cmds, not silent 0. Unknown
-         * fds -EBADF (not -EBADF on stdin). TIOCGPTN/TIOCSPTLCK dispatch
-         * to vfs_ram_ioctl (kernel arg buffer); do not fold into TIOCSCTTY.
+         * fds -EBADF (not -EBADF on stdin). TIOCGPTN/TIOCSPTLCK bind USER
+         * then vfs_ram_ioctl (kernel arg buffer); do not fold into TIOCSCTTY.
          * TIOCSCTTY/TIOCNOTTY: USER*_ENTRY
          * + stdio|ram only (OpenSSH PTY slave); net -ENOTTY. Does not
          * spawn dash. Unknown non-TTY cmds keep ram|net residual.
@@ -2869,6 +3363,7 @@ protonrt_service(struct gj_linux_regs *pRegs, void *pCtx)
             u32 u32Word = 0;
             void *pKarg = NULL;
             i64 i64R;
+            struct gj_process *pSave;
 
             if (pRegs->u64Arg2 != 0) {
                 if (cmd == (u32)LINUX_TIOCSPTLCK) {
@@ -2883,7 +3378,10 @@ protonrt_service(struct gj_linux_regs *pRegs, void *pCtx)
                 }
                 pKarg = &u32Word;
             }
+            /* Door kthread else sees -EBADF; posix_openpt skips TIOCGPTN. */
+            pSave = protonrt_bind_calling_user();
             i64R = vfs_ram_ioctl(i64Fd, cmd, pKarg);
+            protonrt_unbind_calling_user(pSave);
             if (i64R == 0 && pKarg != NULL &&
                 (cmd == (u32)LINUX_TIOCGPTN ||
                  cmd == (u32)LINUX_TIOCGPTLCK)) {
@@ -2940,12 +3438,23 @@ protonrt_service(struct gj_linux_regs *pRegs, void *pCtx)
             pUser = pThr->pProc;
             if (cmd == (u32)LINUX_TIOCSCTTY) {
                 u32 u32Pid = process_wait_pid_of(pUser);
+                struct gj_process *pSave;
+                i64 i64Pty;
 
                 if (pUser->u32Sid == 0) {
                     pUser->u32Sid = (u32Pid != 0) ? u32Pid : 1u;
                 }
                 if (pUser->u32Pgid == 0) {
                     pUser->u32Pgid = pUser->u32Sid;
+                }
+                /* Forward to vfs so /dev/tty ctty slot matches the slave. */
+                if (fRam != 0) {
+                    pSave = protonrt_bind_calling_user();
+                    i64Pty = vfs_ram_ioctl(i64Fd, cmd, NULL);
+                    protonrt_unbind_calling_user(pSave);
+                    if (i64Pty < 0) {
+                        return i64Pty;
+                    }
                 }
             }
             return 0;
@@ -3654,6 +4163,9 @@ protonrt_service(struct gj_linux_regs *pRegs, void *pCtx)
     case LINUX_NR_sendto: {
         i64 i64Gate;
 
+        if (protonrt_vfs_ipc_fd((i64)pRegs->u64Arg0)) {
+            return protonrt_vfs_write(pRegs, aBuf, sizeof(aBuf));
+        }
         i64Gate = confine_soft_promise_require(GJ_PROMISE_INET);
         if (i64Gate != 0) {
             return i64Gate;
@@ -3664,7 +4176,29 @@ protonrt_service(struct gj_linux_regs *pRegs, void *pCtx)
 
     case LINUX_NR_sendmsg: {
         i64 i64Gate;
+        i64 i64N;
+        struct gj_linux_regs sub;
+        u64 u64Base = 0;
+        u64 u64Len = 0;
 
+        if (protonrt_vfs_ipc_fd((i64)pRegs->u64Arg0)) {
+            i64Gate = protonrt_msg_first_iov(pRegs->u64Arg1, &u64Base,
+                                             &u64Len);
+            if (i64Gate != 0) {
+                return i64Gate;
+            }
+            i64Gate = protonrt_vfs_scm_send((i64)pRegs->u64Arg0,
+                                            pRegs->u64Arg1);
+            if (i64Gate < 0) {
+                return i64Gate;
+            }
+            memset(&sub, 0, sizeof(sub));
+            sub.u64Arg0 = pRegs->u64Arg0;
+            sub.u64Arg1 = u64Base;
+            sub.u64Arg2 = u64Len;
+            i64N = protonrt_vfs_write(&sub, aBuf, sizeof(aBuf));
+            return i64N;
+        }
         /* ABI-first: single-iov soft via linux_cold_net (tcp + lo). */
         i64Gate = confine_soft_promise_require(GJ_PROMISE_INET);
         if (i64Gate != 0) {
@@ -3677,6 +4211,9 @@ protonrt_service(struct gj_linux_regs *pRegs, void *pCtx)
     case LINUX_NR_recvfrom: {
         i64 i64Gate;
 
+        if (protonrt_vfs_ipc_fd((i64)pRegs->u64Arg0)) {
+            return protonrt_vfs_read(pRegs, aBuf, sizeof(aBuf));
+        }
         i64Gate = confine_soft_promise_require(GJ_PROMISE_INET);
         if (i64Gate != 0) {
             return i64Gate;
@@ -3687,7 +4224,27 @@ protonrt_service(struct gj_linux_regs *pRegs, void *pCtx)
 
     case LINUX_NR_recvmsg: {
         i64 i64Gate;
+        i64 i64N;
+        struct gj_linux_regs sub;
+        u64 u64Base = 0;
+        u64 u64Len = 0;
 
+        if (protonrt_vfs_ipc_fd((i64)pRegs->u64Arg0)) {
+            i64Gate = protonrt_msg_first_iov(pRegs->u64Arg1, &u64Base,
+                                             &u64Len);
+            if (i64Gate != 0) {
+                return i64Gate;
+            }
+            memset(&sub, 0, sizeof(sub));
+            sub.u64Arg0 = pRegs->u64Arg0;
+            sub.u64Arg1 = u64Base;
+            sub.u64Arg2 = u64Len;
+            i64N = protonrt_vfs_read(&sub, aBuf, sizeof(aBuf));
+            if (i64N >= 0) {
+                protonrt_vfs_scm_recv((i64)pRegs->u64Arg0, pRegs->u64Arg1);
+            }
+            return i64N;
+        }
         /* ABI-first: single-iov soft via linux_cold_net (tcp + lo). */
         i64Gate = confine_soft_promise_require(GJ_PROMISE_INET);
         if (i64Gate != 0) {
@@ -4514,9 +5071,20 @@ protonrt_service(struct gj_linux_regs *pRegs, void *pCtx)
         u64 u64Size = pRegs->u64Arg1;
         size_t n = 0;
         char *szCwd = protonrt_cwd_buf();
+        char aRoot[2];
 
         if (u64Buf == 0 || u64Size < 2) {
             return -LINUX_EINVAL;
+        }
+        /*
+         * Linux getcwd(2) returns the byte count including NUL.
+         * Empty / non-absolute cwd: dash treats buf[0]!='/' as failure
+         * with errno left 0 ("getcwd() failed: Success"). Dual DoD B OPEN.
+         */
+        aRoot[0] = '/';
+        aRoot[1] = '\0';
+        if (szCwd == NULL || szCwd[0] != '/') {
+            szCwd = aRoot;
         }
         while (szCwd[n] != '\0' && n + 1 < 96) {
             n++;
@@ -4532,25 +5100,29 @@ protonrt_service(struct gj_linux_regs *pRegs, void *pCtx)
         } else {
             memcpy((void *)(gj_vaddr_t)u64Buf, szCwd, n);
         }
-        /* Linux returns pointer on success for getcwd syscall */
-        return (i64)u64Buf;
+        return (i64)n;
     }
 
     case LINUX_NR_dup:
     case LINUX_NR_dup2:
     case LINUX_NR_dup3: {
         i64 i64St;
+        struct gj_process *pSave;
 
-        /* Cold net first so dup2(accepted, 0/1/2) is not vfs EBADF. */
+        /* Cold net first so dup2(accepted, 0/1/2) is not vfs EBADF.
+         * QEMU96 vfs-first skipped LCN aliases and lost the banner. */
         i64St = gj_linux_cold_dup2(pRegs);
         if (i64St != -(i64)LINUX_EBADF) {
             return i64St;
         }
+        pSave = protonrt_bind_calling_user();
         if (pRegs->u64Nr == LINUX_NR_dup) {
-            return vfs_ram_dup((i64)pRegs->u64Arg0);
+            i64St = vfs_ram_dup((i64)pRegs->u64Arg0);
+        } else {
+            i64St = vfs_ram_dup2((i64)pRegs->u64Arg0, (i64)pRegs->u64Arg1);
         }
-        /* dup3 flags (CLOEXEC) ignored for bring-up */
-        return vfs_ram_dup2((i64)pRegs->u64Arg0, (i64)pRegs->u64Arg1);
+        protonrt_unbind_calling_user(pSave);
+        return i64St;
     }
 
     case LINUX_NR_readlinkat: {

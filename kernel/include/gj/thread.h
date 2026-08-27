@@ -179,6 +179,13 @@ struct gj_thread {
     u32                 u32SysUserValid;
     u64                 u64ClearChildTid; /* set_tid_address; 0 = none */
     u64                 u64FsBase;        /* IA32_FS_BASE (SETTLS / SET_FS) */
+    /* User callee-saves at SYSCALL (Linux fork child sysret). 0 if unset. */
+    u64                 u64UserRbx;
+    u64                 u64UserRbp;
+    u64                 u64UserR12;
+    u64                 u64UserR13;
+    u64                 u64UserR14;
+    u64                 u64UserR15;
     u8                  aStack[GJ_THR_STACK_SIZE] __attribute__((aligned(16)));
     u8                  aKstack[GJ_THR_KSTACK_SIZE] __attribute__((aligned(16)));
 };

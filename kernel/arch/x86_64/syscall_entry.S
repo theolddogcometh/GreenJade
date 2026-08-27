@@ -11,6 +11,14 @@
  *     +8  u64UserRsp       gs:CPU_USER_RSP
  *     +16 u64UserRip       gs:CPU_USER_RIP
  *     +24 u64UserRflags    gs:CPU_USER_RFLAGS
+ *     +32 pCurrent         (C only)
+ *     +40 u64Cr3           (C only)
+ *     +48 u64UserRbx       gs:CPU_USER_RBX  (SYSCALL-entry; before C)
+ *     +56 u64UserRbp       gs:CPU_USER_RBP
+ *     +64 u64UserR12       gs:CPU_USER_R12
+ *     +72 u64UserR13       gs:CPU_USER_R13
+ *     +80 u64UserR14       gs:CPU_USER_R14
+ *     +88 u64UserR15       gs:CPU_USER_R15
  *
  *   Hardware SYSCALL state on entry:
  *     RCX = user RIP, R11 = user RFLAGS, RSP = user stack
@@ -28,9 +36,11 @@
  *     +0x30  u64Arg5   (r9)
  *     +0x38  i64Ret    (placeholder; C writes return value here)
  *
- *   Exit: load i64Ret -> RAX, restore RCX/R11/RSP from GS shadows, swapgs,
- *   sysretq. Bridge may yield; schedule() save/restores GS USER_* so mid-
- *   syscall block returns to the correct user context (see thread.h).
+ *   Exit: load i64Ret -> RAX, reload RDI/RSI/RDX/R10/R8/R9 from the frame
+ *   (Linux x86_64 SYSCALL preserves those; C clobbers them), restore
+ *   RCX/R11/RSP from GS shadows, swapgs, sysretq. Bridge may yield;
+ *   schedule() save/restores GS USER_* so mid-syscall block returns to
+ *   the correct user context (see thread.h).
  *
  * Soft residual (C3 arch LSTAR entry; Soft!=product; Dual DoD A/B OPEN):
  *   Product path only: swapgs, per-CPU KERNEL_RSP, build gj_syscall_regs,
@@ -55,9 +65,21 @@
 .set CPU_USER_RSP,   8
 .set CPU_USER_RIP,   16
 .set CPU_USER_RFLAGS,24
+.set CPU_USER_RBX,   48
+.set CPU_USER_RBP,   56
+.set CPU_USER_R12,   64
+.set CPU_USER_R13,   72
+.set CPU_USER_R14,   80
+.set CPU_USER_R15,   88
 
-/* struct gj_syscall_regs size and i64Ret offset (8 × u64). */
+/* struct gj_syscall_regs size and field offsets (8 × u64). */
 .set SYSCALL_REGS_SIZE, 64
+.set SYSCALL_REGS_ARG0, 8
+.set SYSCALL_REGS_ARG1, 16
+.set SYSCALL_REGS_ARG2, 24
+.set SYSCALL_REGS_ARG3, 32
+.set SYSCALL_REGS_ARG4, 40
+.set SYSCALL_REGS_ARG5, 48
 .set SYSCALL_REGS_RET,  56
 
 .section .text
@@ -71,6 +93,13 @@ gj_syscall_entry:
     mov %gs:CPU_KERNEL_RSP, %rsp
     mov %rcx, %gs:CPU_USER_RIP
     mov %r11, %gs:CPU_USER_RFLAGS
+    /* User callee-saves before C (fork child; C rbp is a kernel frame). */
+    mov %rbx, %gs:CPU_USER_RBX
+    mov %rbp, %gs:CPU_USER_RBP
+    mov %r12, %gs:CPU_USER_R12
+    mov %r13, %gs:CPU_USER_R13
+    mov %r14, %gs:CPU_USER_R14
+    mov %r15, %gs:CPU_USER_R15
 
     /* Build gj_syscall_regs on the per-CPU syscall stack (top-down pushes). */
     push %rax                 /* i64Ret placeholder (filled by dispatch) */
@@ -85,6 +114,13 @@ gj_syscall_entry:
     cld                       /* SysV: DF clear before C */
     call gj_syscall_entry_asm_bridge
     mov SYSCALL_REGS_RET(%rsp), %rax
+    /* Linux x86_64 SYSCALL preserves arg regs; C clobbers them. */
+    mov SYSCALL_REGS_ARG0(%rsp), %rdi
+    mov SYSCALL_REGS_ARG1(%rsp), %rsi
+    mov SYSCALL_REGS_ARG2(%rsp), %rdx
+    mov SYSCALL_REGS_ARG3(%rsp), %r10
+    mov SYSCALL_REGS_ARG4(%rsp), %r8
+    mov SYSCALL_REGS_ARG5(%rsp), %r9
     add $SYSCALL_REGS_SIZE, %rsp
 
     mov %gs:CPU_USER_RIP, %rcx

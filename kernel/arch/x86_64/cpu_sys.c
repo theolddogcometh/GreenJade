@@ -897,10 +897,107 @@ cpu_syscall_ready(void)
     return g_fSyscallReady;
 }
 
+#define GJ_FORK_GPR_MAX 4u
+
+static u32 g_aForkGprThr[GJ_FORK_GPR_MAX];
+static u64 g_aForkGprRbx[GJ_FORK_GPR_MAX];
+static u64 g_aForkGprRbp[GJ_FORK_GPR_MAX];
+static u64 g_aForkGprR12[GJ_FORK_GPR_MAX];
+static u64 g_aForkGprR13[GJ_FORK_GPR_MAX];
+static u64 g_aForkGprR14[GJ_FORK_GPR_MAX];
+static u64 g_aForkGprR15[GJ_FORK_GPR_MAX];
+
 void
-cpu_enter_user(u64 u64Entry, u64 u64Stack)
+cpu_fork_capture_user_gprs(u32 u32Thr)
+{
+    struct gj_cpu *pCpu;
+    u32 i;
+    u32 iSlot;
+
+    if (u32Thr == 0) {
+        return;
+    }
+    pCpu = cpu_current();
+    if (pCpu == NULL) {
+        return;
+    }
+    iSlot = GJ_FORK_GPR_MAX;
+    for (i = 0; i < GJ_FORK_GPR_MAX; i++) {
+        if (g_aForkGprThr[i] == 0 || g_aForkGprThr[i] == u32Thr) {
+            iSlot = i;
+            break;
+        }
+    }
+    if (iSlot >= GJ_FORK_GPR_MAX) {
+        iSlot = 0;
+    }
+    g_aForkGprThr[iSlot] = u32Thr;
+    g_aForkGprRbx[iSlot] = pCpu->u64UserRbx;
+    g_aForkGprRbp[iSlot] = pCpu->u64UserRbp;
+    g_aForkGprR12[iSlot] = pCpu->u64UserR12;
+    g_aForkGprR13[iSlot] = pCpu->u64UserR13;
+    g_aForkGprR14[iSlot] = pCpu->u64UserR14;
+    g_aForkGprR15[iSlot] = pCpu->u64UserR15;
+}
+
+static void
+cpu_fork_apply_user_gprs(struct gj_thread *pThr)
+{
+    u32 i;
+
+    if (pThr == NULL) {
+        return;
+    }
+    for (i = 0; i < GJ_FORK_GPR_MAX; i++) {
+        if (g_aForkGprThr[i] != pThr->u32Id) {
+            continue;
+        }
+        pThr->u64UserRbx = g_aForkGprRbx[i];
+        pThr->u64UserRbp = g_aForkGprRbp[i];
+        pThr->u64UserR12 = g_aForkGprR12[i];
+        pThr->u64UserR13 = g_aForkGprR13[i];
+        pThr->u64UserR14 = g_aForkGprR14[i];
+        pThr->u64UserR15 = g_aForkGprR15[i];
+        g_aForkGprThr[i] = 0;
+        return;
+    }
+}
+
+static void
+cpu_enter_gs_user_gprs(struct gj_cpu *pCpu, const struct gj_thread *pThr)
+{
+    if (pCpu == NULL) {
+        return;
+    }
+    if (pThr == NULL) {
+        pCpu->u64UserRbx = 0;
+        pCpu->u64UserRbp = 0;
+        pCpu->u64UserR12 = 0;
+        pCpu->u64UserR13 = 0;
+        pCpu->u64UserR14 = 0;
+        pCpu->u64UserR15 = 0;
+        return;
+    }
+    pCpu->u64UserRbx = pThr->u64UserRbx;
+    pCpu->u64UserRbp = pThr->u64UserRbp;
+    pCpu->u64UserR12 = pThr->u64UserR12;
+    pCpu->u64UserR13 = pThr->u64UserR13;
+    pCpu->u64UserR14 = pThr->u64UserR14;
+    pCpu->u64UserR15 = pThr->u64UserR15;
+}
+
+/*
+ * C prep for cpu_enter_user. Returns to the sysret stub (never itself
+ * sysretq). Called with rdi=entry rsi=stack; may clobber caller-saves.
+ */
+static void cpu_enter_user_prepare(u64 u64Entry, u64 u64Stack)
+    __attribute__((used, noinline));
+
+static void
+cpu_enter_user_prepare(u64 u64Entry, u64 u64Stack)
 {
     struct gj_thread *pThr;
+    struct gj_cpu *pCpu;
     u32 u32ThrKstack;
 
     /*
@@ -923,8 +1020,10 @@ cpu_enter_user(u64 u64Entry, u64 u64Stack)
     }
     cpu_syscall_soft_inc(&g_u32SoftEnter64);
     pThr = thread_current();
+    pCpu = cpu_current();
     u32ThrKstack = 0u;
     if (pThr != NULL) {
+        cpu_fork_apply_user_gprs(pThr);
         thread_install_kstack(pThr);
         cpu_syscall_soft_inc(&g_u32SoftEnter64Thr);
         u32ThrKstack = 1u;
@@ -932,6 +1031,7 @@ cpu_enter_user(u64 u64Entry, u64 u64Stack)
         tss_use_irq_rsp0();
         cpu_syscall_soft_inc(&g_u32SoftEnter64Irq);
     }
+    cpu_enter_gs_user_gprs(pCpu, pThr);
     /*
      * Grep: cpu: syscall soft residual lean enter64
      * First successful UDX host / user land (once only; storm=0).
@@ -963,30 +1063,44 @@ cpu_enter_user(u64 u64Entry, u64 u64Stack)
                 u32IntegrityEnter,
                 cpu_syscall_soft_res_verdict(u32IntegrityEnter));
     }
-    /*
-     * Kernel GSBASE holds per-CPU state. swapgs -> GS=user(0), KERNEL_GS=percpu.
-     * sysretq: rcx=rip, r11=rflags, rsp=user stack.
-     * Soft residual: RFLAGS IF via GJ_CPU_SOFT_RFLAGS_IF (value-stable).
-     */
-    /*
-     * rax=0 on first ring-3 land: ELF _start ignores rax; fork/vfork
-     * children must see 0. sysretq does not load rax from GS.
-     */
-    __asm__ volatile (
-        "xor %%eax, %%eax\n\t"
-        "swapgs\n\t"
-        "mov %0, %%rsp\n\t"
-        "mov %2, %%r11\n\t" /* IF (soft residual constant) */
-        "mov %1, %%rcx\n\t"
-        "sysretq\n\t"
-        :
-        : "r"(u64Stack), "r"(u64Entry), "i"(GJ_CPU_SOFT_RFLAGS_IF)
-        : "rcx", "r11", "rax", "memory"
-    );
-    for (;;) {
-        __asm__ volatile ("hlt");
-    }
 }
+
+#if GJ_CPU_SOFT_RFLAGS_IF != 0x200ull
+#error "cpu_enter_user sysret r11 IF immediate must match GJ_CPU_SOFT_RFLAGS_IF"
+#endif
+
+/*
+ * cpu_enter_user: rdi=entry, rsi=stack.
+ * sysretq rcx=rip r11=rflags rax=0 (fork child). swapgs after prepare
+ * (prepare still uses kernel GS). Entry in rcx, stack in rdx - not rbx/rbp.
+ * rbx/rbp/r12-r15 come from the child TCB (via GS, filled in prepare).
+ */
+__asm__(
+    ".text\n"
+    ".balign 16\n"
+    ".global cpu_enter_user\n"
+    ".type cpu_enter_user, @function\n"
+    "cpu_enter_user:\n"
+    "    push %rsi\n"
+    "    push %rdi\n"
+    "    sub $8, %rsp\n"
+    "    call cpu_enter_user_prepare\n"
+    "    add $8, %rsp\n"
+    "    pop %rcx\n"
+    "    pop %rdx\n"
+    "    mov %gs:48, %rbx\n"
+    "    mov %gs:56, %rbp\n"
+    "    mov %gs:64, %r12\n"
+    "    mov %gs:72, %r13\n"
+    "    mov %gs:80, %r14\n"
+    "    mov %gs:88, %r15\n"
+    "    swapgs\n"
+    "    mov %rdx, %rsp\n"
+    "    xor %eax, %eax\n"
+    "    mov $0x200, %r11\n"
+    "    sysretq\n"
+    ".size cpu_enter_user, .-cpu_enter_user\n"
+);
 
 void
 cpu_enter_user32(u64 u64Entry, u64 u64Stack)

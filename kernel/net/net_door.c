@@ -1867,6 +1867,21 @@ net_door_soft_done(i64 i64Ret)
     return i64Ret;
 }
 
+/* ETH_TX_PULL head: any completed attempt that will not retry this slot. */
+static void
+net_door_udx_tx_drop_head(void)
+{
+    u32 iSlot;
+
+    if (g_u32UdxTxN == 0u) {
+        return;
+    }
+    iSlot = g_u32UdxTxTail % NET_DOOR_UDX_TX_SLOTS;
+    g_aUdxTxLen[iSlot] = 0u;
+    g_u32UdxTxTail++;
+    g_u32UdxTxN--;
+}
+
 i64
 net_door_call(u32 u32Op, u64 u64Arg1, u64 u64Arg2, u64 u64Arg3)
 {
@@ -2835,29 +2850,26 @@ net_door_call(u32 u32Op, u64 u64Arg1, u64 u64Arg2, u64 u64Arg3)
         iSlot = g_u32UdxTxTail % NET_DOOR_UDX_TX_SLOTS;
         cb = (u32)g_aUdxTxLen[iSlot];
         if (cb < 14u || cb > NET_DOOR_UDX_TX_MAX) {
-            g_aUdxTxLen[iSlot] = 0u;
-            g_u32UdxTxTail++;
-            if (g_u32UdxTxN > 0u) {
-                g_u32UdxTxN--;
-            }
+            net_door_udx_tx_drop_head();
             return net_door_soft_done(0);
         }
-        /* Caller max would truncate: keep the full Ethernet frame queued. */
+        /*
+         * Truncating max / copy FAULT: drop. Same slot is not retried.
+         * TCP rtx holds SYN-ACK; FIFO is not the only copy.
+         */
         if (cb > u32Max) {
+            net_door_udx_tx_drop_head();
             return net_door_soft_done(GJ_ERR_INVAL);
         }
         if (user_range_ok(u64Arg1, cb)) {
             if (copy_to_user(u64Arg1, g_aUdxTx[iSlot], cb) != GJ_OK) {
+                net_door_udx_tx_drop_head();
                 return net_door_soft_done(GJ_ERR_FAULT);
             }
         } else {
             memcpy((void *)(gj_vaddr_t)u64Arg1, g_aUdxTx[iSlot], cb);
         }
-        g_aUdxTxLen[iSlot] = 0u;
-        g_u32UdxTxTail++;
-        if (g_u32UdxTxN > 0u) {
-            g_u32UdxTxN--;
-        }
+        net_door_udx_tx_drop_head();
         if (g_u32UdxTxPull < 0xfffffffeu) {
             g_u32UdxTxPull++;
         }

@@ -3353,6 +3353,11 @@ elf_load_image_bias(struct gj_process *pProc, const void *pImage, u64 cb,
         for (u64Page = u64Va; u64Page < u64End; u64Page += GJ_PAGE_SIZE) {
             u8 aTmp[GJ_PAGE_SIZE];
 
+            /* Keep a prior SysV argv page (publish-then-load embed path). */
+            if (pProc->u64ExecStack != 0ull &&
+                u64Page == (pProc->u64ExecStack & ~0xfffull)) {
+                continue;
+            }
             memset(aTmp, 0, sizeof(aTmp));
             if (u64Page + GJ_PAGE_SIZE > u64SegVa &&
                 u64Page < u64SegVa + pPh->u64Filesz) {
@@ -4013,6 +4018,32 @@ elf_handoff_fill(struct gj_ld_handoff *pHo, const char *szPath,
     }
 }
 
+#define GJ_ELF_ARG_MAX 16u
+#define GJ_ELF_ENV_MAX 8u
+#define GJ_ELF_ARG_STR 128u
+
+static u32
+elf_copy_kstr(char *pDst, u32 cbDst, const char *szSrc)
+{
+    u32 n;
+
+    if (pDst == NULL || cbDst == 0) {
+        return 0;
+    }
+    n = 0;
+    if (szSrc == NULL) {
+        pDst[0] = '\0';
+        return 1;
+    }
+    while (szSrc[n] != '\0' && n + 1u < cbDst) {
+        pDst[n] = szSrc[n];
+        n++;
+    }
+    pDst[n] = '\0';
+    return n + 1u;
+}
+
+/* copy_from_user only. Current CR3 must be the caller's USER AS. */
 static u32
 elf_copy_user_cstr(char *pDst, u32 cbDst, u64 u64Src)
 {
@@ -4029,12 +4060,8 @@ elf_copy_user_cstr(char *pDst, u32 cbDst, u64 u64Src)
     while (n + 1u < cbDst) {
         char ch = 0;
 
-        if (user_range_ok(u64Src + n, 1)) {
-            if (copy_from_user(&ch, u64Src + n, 1) != GJ_OK) {
-                break;
-            }
-        } else {
-            ch = *(const char *)(gj_vaddr_t)(u64Src + n);
+        if (copy_from_user(&ch, u64Src + n, 1) != GJ_OK) {
+            break;
         }
         pDst[n] = ch;
         if (ch == '\0') {
@@ -4056,14 +4083,196 @@ elf_read_user_u64(u64 u64Addr, u64 *pOut)
     if (u64Addr == 0) {
         return 0;
     }
-    if (user_range_ok(u64Addr, 8)) {
-        if (copy_from_user(pOut, u64Addr, 8) != GJ_OK) {
-            return 0;
+    if (copy_from_user(pOut, u64Addr, 8) != GJ_OK) {
+        *pOut = 0;
+        return 0;
+    }
+    return 1;
+}
+
+static void
+elf_snap_user_vec(u64 u64Vec, char aStr[][GJ_ELF_ARG_STR], u32 cMax, u32 *pcOut)
+{
+    u32 i;
+
+    if (pcOut == NULL) {
+        return;
+    }
+    *pcOut = 0;
+    if (u64Vec == 0 || aStr == NULL || cMax == 0) {
+        return;
+    }
+    for (i = 0; i < cMax; i++) {
+        u64 u64P = 0;
+
+        if (elf_read_user_u64(u64Vec + (u64)i * 8ull, &u64P) == 0 ||
+            u64P == 0) {
+            break;
         }
+        (void)elf_copy_user_cstr(aStr[i], GJ_ELF_ARG_STR, u64P);
+        (*pcOut)++;
+    }
+}
+
+static int
+elf_path_is_sshd_rexec(const char *szPath)
+{
+    if (szPath == NULL) {
+        return 0;
+    }
+    if (elf_soft_str_has(szPath, "sshd-session") != 0 ||
+        elf_soft_str_has(szPath, "sshd-auth") != 0) {
         return 1;
     }
-    *pOut = *(const u64 *)(gj_vaddr_t)u64Addr;
+    return 0;
+}
+
+static int
+elf_path_needs_openssl_env(const char *szPath)
+{
+    if (szPath == NULL) {
+        return 0;
+    }
+    if (strcmp(szPath, "/usr/sbin/sshd") == 0) {
+        return 1;
+    }
+    return elf_path_is_sshd_rexec(szPath);
+}
+
+static int
+elf_env_key_match(const char *szEnt, const char *szPair)
+{
+    u32 i;
+
+    if (szEnt == NULL || szPair == NULL) {
+        return 0;
+    }
+    for (i = 0; szPair[i] != '\0' && szPair[i] != '='; i++) {
+        if (szEnt[i] != szPair[i]) {
+            return 0;
+        }
+    }
+    if (szPair[i] != '=' || szEnt[i] != '=') {
+        return 0;
+    }
     return 1;
+}
+
+/* sshd-session/sshd-auth fatal without -R (rexeced_flag). */
+static void
+elf_snap_ensure_rexec_r(char aStr[][GJ_ELF_ARG_STR], u32 *pcArg,
+                        const char *szPath)
+{
+    u32 i;
+    u32 fHasR;
+
+    if (aStr == NULL || pcArg == NULL || szPath == NULL) {
+        return;
+    }
+    if (elf_path_is_sshd_rexec(szPath) == 0) {
+        return;
+    }
+    fHasR = 0;
+    for (i = 0; i < *pcArg && i < GJ_ELF_ARG_MAX; i++) {
+        if (aStr[i][0] == '-' && aStr[i][1] == 'R' && aStr[i][2] == '\0') {
+            fHasR = 1;
+            break;
+        }
+    }
+    if (fHasR != 0) {
+        return;
+    }
+    if (*pcArg == 0) {
+        (void)elf_copy_kstr(aStr[0], GJ_ELF_ARG_STR, szPath);
+        *pcArg = 1;
+    }
+    if (*pcArg < GJ_ELF_ARG_MAX) {
+        (void)elf_copy_kstr(aStr[*pcArg], GJ_ELF_ARG_STR, "-R");
+        (*pcArg)++;
+    }
+}
+
+/*
+ * sshd-auth getopt usage() on leftover parent -E / junk. Keep path,-R.
+ * -D/-e are ignored by sshd-auth but discarded so snap garbage cannot
+ * become optarg-missing usage/exit(1). Dual DoD B OPEN.
+ */
+static void
+elf_snap_sshd_auth_argv(char aStr[][GJ_ELF_ARG_STR], u32 *pcArg,
+                        const char *szPath)
+{
+    u32 i;
+    u32 fJunk;
+
+    if (aStr == NULL || pcArg == NULL || szPath == NULL) {
+        return;
+    }
+    if (elf_soft_str_has(szPath, "sshd-auth") == 0) {
+        return;
+    }
+    fJunk = 0;
+    if (*pcArg < 2u) {
+        fJunk = 1;
+    }
+    for (i = 1; i < *pcArg && i < GJ_ELF_ARG_MAX; i++) {
+        if (aStr[i][0] == '\0') {
+            fJunk = 1;
+            break;
+        }
+        if (aStr[i][0] != '-' || aStr[i][1] != 'R' || aStr[i][2] != '\0') {
+            fJunk = 1;
+            break;
+        }
+    }
+    if (fJunk == 0) {
+        return;
+    }
+    (void)elf_copy_kstr(aStr[0], GJ_ELF_ARG_STR, szPath);
+    (void)elf_copy_kstr(aStr[1], GJ_ELF_ARG_STR, "-R");
+    *pcArg = 2;
+}
+
+/* Merge OPENSSL_ia32cap=0 / OPENSSL_CONF=/dev/null; do not drop user envp. */
+static void
+elf_snap_ensure_openssl_env(char aStr[][GJ_ELF_ARG_STR], u32 *pcEnv,
+                            const char *szPath)
+{
+    static const char *const aKenv[] = {
+        "OPENSSL_ia32cap=0",
+        "OPENSSL_CONF=/dev/null",
+    };
+    u32 iK;
+    u32 cK;
+
+    if (aStr == NULL || pcEnv == NULL) {
+        return;
+    }
+    if (elf_path_needs_openssl_env(szPath) == 0) {
+        return;
+    }
+    cK = (u32)(sizeof(aKenv) / sizeof(aKenv[0]));
+    for (iK = 0; iK < cK; iK++) {
+        u32 iE;
+        u32 fHas = 0;
+
+        for (iE = 0; iE < *pcEnv && iE < GJ_ELF_ENV_MAX; iE++) {
+            if (elf_env_key_match(aStr[iE], aKenv[iK]) != 0) {
+                (void)elf_copy_kstr(aStr[iE], GJ_ELF_ARG_STR, aKenv[iK]);
+                fHas = 1;
+                break;
+            }
+        }
+        if (fHas != 0) {
+            continue;
+        }
+        if (*pcEnv < GJ_ELF_ENV_MAX) {
+            (void)elf_copy_kstr(aStr[*pcEnv], GJ_ELF_ARG_STR, aKenv[iK]);
+            (*pcEnv)++;
+        } else if (GJ_ELF_ENV_MAX > iK) {
+            (void)elf_copy_kstr(aStr[GJ_ELF_ENV_MAX - 1u - iK],
+                                GJ_ELF_ARG_STR, aKenv[iK]);
+        }
+    }
 }
 
 gj_status_t
@@ -4141,6 +4350,10 @@ elf_publish_handoff_argv(struct gj_process *pProc, const char *szPath,
         u32 iBody;
         u64 u64StackTop;
         u32 u32Prot;
+        char aArgStr[GJ_ELF_ARG_MAX][GJ_ELF_ARG_STR];
+        char aEnvStr[GJ_ELF_ENV_MAX][GJ_ELF_ARG_STR];
+        u32 cArgSnap = 0;
+        u32 cEnvSnap = 0;
 
         for (iBody = 0; iBody < (GJ_LD_STACK_PAGES - 1u); iBody++) {
             aBodyPa[iBody] = pmm_alloc();
@@ -4162,7 +4375,29 @@ elf_publish_handoff_argv(struct gj_process *pProc, const char *szPath,
         ho.u64Stack = u64StackTop;
         pProc->u64ExecStack = u64StackTop;
 
+        /*
+         * Snapshot USER argv/envp under pProc CR3 before kernel identity
+         * fill and before remapping this stack VA (old -D/-e live here;
+         * -R lives in the pre-exec image). Do not keep old-AS pointers.
+         */
+        memset(aArgStr, 0, sizeof(aArgStr));
+        memset(aEnvStr, 0, sizeof(aEnvStr));
         u64Saved = cpu_read_cr3();
+        if (u64UserArgv != 0 || u64UserEnvp != 0) {
+            process_as_activate(pProc);
+            if (u64UserArgv != 0) {
+                elf_snap_user_vec(u64UserArgv, aArgStr, GJ_ELF_ARG_MAX,
+                                  &cArgSnap);
+            }
+            if (u64UserEnvp != 0) {
+                elf_snap_user_vec(u64UserEnvp, aEnvStr, GJ_ELF_ENV_MAX,
+                                  &cEnvSnap);
+            }
+        }
+        /* Always -R for session/auth, even when user argv/envp were 0. */
+        elf_snap_ensure_rexec_r(aArgStr, &cArgSnap, szUsePath);
+        elf_snap_sshd_auth_argv(aArgStr, &cArgSnap, szUsePath);
+        elf_snap_ensure_openssl_env(aEnvStr, &cEnvSnap, szUsePath);
         cpu_load_cr3(vmm_kernel_cr3());
         memset((void *)(gj_vaddr_t)pa, 0, GJ_PAGE_SIZE);
         memcpy((void *)(gj_vaddr_t)pa, &ho, sizeof(ho));
@@ -4184,9 +4419,8 @@ elf_publish_handoff_argv(struct gj_process *pProc, const char *szPath,
          * SysV: [argc][argv…][0][envp…][0][auxv pairs][AT_NULL,0]
          * Strings at +0x200. User argv/envp when provided; else argc=1 path
          * (OpenSSH DUT: kernel argv sshd -D -e so crt0 does not daemonize;
-         * kernel env OPENSSL_ia32cap=0 so libcrypto init uses portable C;
-         * OPENSSL_CONF=/dev/null so OpenSSL 3 does not autoload host
-         * --openssldir config. Dual DoD B OPEN).
+         * session/auth always path,-R when snap empty. OPENSSL_ia32cap=0 +
+         * OPENSSL_CONF=/dev/null merged for sshd/session/auth. Dual DoD B OPEN).
          */
         {
             char *pStr = (char *)(gj_vaddr_t)paStack + 0x200;
@@ -4194,8 +4428,6 @@ elf_publish_handoff_argv(struct gj_process *pProc, const char *szPath,
             u32 cbUsed = 0;
             u32 cArg = 0;
             u32 cEnv = 0;
-            u64 aArg[16];
-            u64 aEnv[8];
             u32 iArg;
             const char *const *pszKargv = NULL;
             u32 cKargv = 0;
@@ -4206,113 +4438,43 @@ elf_publish_handoff_argv(struct gj_process *pProc, const char *szPath,
                 "-D",
                 "-e",
             };
-            static const char *const aKenvSshd[] = {
-                "OPENSSL_ia32cap=0",
-                "OPENSSL_CONF=/dev/null",
-            };
 
-            if (u64UserArgv != 0) {
-                for (iArg = 0; iArg < 16u; iArg++) {
-                    u64 u64P = 0;
-
-                    if (elf_read_user_u64(u64UserArgv + (u64)iArg * 8ull,
-                                          &u64P) == 0 ||
-                        u64P == 0) {
-                        break;
-                    }
-                    aArg[cArg++] = u64P;
-                }
-            }
-            if (cArg == 0 && szUsePath != NULL &&
-                strcmp(szUsePath, "/usr/sbin/sshd") == 0) {
+            if (cArgSnap != 0) {
+                cArg = cArgSnap;
+            } else if (szUsePath != NULL &&
+                       strcmp(szUsePath, "/usr/sbin/sshd") == 0) {
                 pszKargv = aKargvSshd;
                 cKargv = (u32)(sizeof(aKargvSshd) / sizeof(aKargvSshd[0]));
                 cArg = cKargv;
-            }
-            if (cArg == 0) {
-                aArg[0] = 0;
+            } else {
                 cArg = 1;
             }
-            if (u64UserEnvp != 0) {
-                for (iArg = 0; iArg < 8u; iArg++) {
-                    u64 u64P = 0;
-
-                    if (elf_read_user_u64(u64UserEnvp + (u64)iArg * 8ull,
-                                          &u64P) == 0 ||
-                        u64P == 0) {
-                        break;
-                    }
-                    aEnv[cEnv++] = u64P;
-                }
-            }
+            cEnv = cEnvSnap;
             pStack[0] = (u64)cArg;
             o = 1;
-            for (iArg = 0; iArg < cArg && o < 48u; iArg++) {
+            for (iArg = 0; iArg < cArg && o < 48u && cbUsed + 2u < cbStr;
+                 iArg++) {
                 u32 n;
+                const char *szA;
 
                 if (pszKargv != NULL && iArg < cKargv) {
-                    const char *szK = pszKargv[iArg];
-
-                    n = 0;
-                    if (szK == NULL) {
-                        szK = "";
-                    }
-                    while (szK[n] != '\0' && cbUsed + n + 1u < cbStr) {
-                        pStr[cbUsed + n] = szK[n];
-                        n++;
-                    }
-                    pStr[cbUsed + n] = '\0';
-                    n++;
-                } else if (aArg[iArg] == 0) {
-                    n = 0;
-                    while (ho.szPath[n] != '\0' && cbUsed + n + 1u < cbStr) {
-                        pStr[cbUsed + n] = ho.szPath[n];
-                        n++;
-                    }
-                    pStr[cbUsed + n] = '\0';
-                    n++;
+                    szA = pszKargv[iArg];
+                } else if (cArgSnap != 0) {
+                    szA = aArgStr[iArg];
                 } else {
-                    n = elf_copy_user_cstr(pStr + cbUsed, cbStr - cbUsed,
-                                           aArg[iArg]);
+                    szA = ho.szPath;
                 }
+                n = elf_copy_kstr(pStr + cbUsed, cbStr - cbUsed, szA);
                 pStack[o++] = u64StackTop + 0x200ull + (u64)cbUsed;
                 cbUsed += n;
             }
             pStack[o++] = 0;
-            /*
-             * sshd kargv + no user envp: kernel env strings after argv NULL.
-             * OPENSSL_ia32cap=0 clears asm cap bits (DUT libcrypto is
-             * linux-x86_64 with asm). OPENSSL_CONF=/dev/null skips OpenSSL 3
-             * autoload from a host-baked --openssldir. Dual DoD B OPEN.
-             */
-            if (pszKargv != NULL && u64UserEnvp == 0) {
-                u32 iEnv;
-                u32 cKenv = (u32)(sizeof(aKenvSshd) / sizeof(aKenvSshd[0]));
-
-                for (iEnv = 0; iEnv < cKenv && o < 56u &&
-                     cbUsed + 2u < cbStr; iEnv++) {
-                    const char *szK = aKenvSshd[iEnv];
-                    u32 n = 0;
-
-                    if (szK == NULL) {
-                        szK = "";
-                    }
-                    while (szK[n] != '\0' && cbUsed + n + 1u < cbStr) {
-                        pStr[cbUsed + n] = szK[n];
-                        n++;
-                    }
-                    pStr[cbUsed + n] = '\0';
-                    n++;
-                    pStack[o++] = u64StackTop + 0x200ull + (u64)cbUsed;
-                    cbUsed += n;
-                }
-            }
             for (iArg = 0; iArg < cEnv && o < 56u && cbUsed + 2u < cbStr;
                  iArg++) {
                 u32 n;
 
-                n = elf_copy_user_cstr(pStr + cbUsed, cbStr - cbUsed,
-                                       aEnv[iArg]);
+                n = elf_copy_kstr(pStr + cbUsed, cbStr - cbUsed,
+                                  aEnvStr[iArg]);
                 pStack[o++] = u64StackTop + 0x200ull + (u64)cbUsed;
                 cbUsed += n;
             }

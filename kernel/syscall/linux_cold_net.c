@@ -75,6 +75,7 @@
 #include <gj/net_lo.h>
 #include <gj/net_tcp.h>
 #include <gj/string.h>
+#include <gj/thread.h>
 #include <gj/types.h>
 #include <gj/user_access.h>
 
@@ -1136,20 +1137,6 @@ lcn_tcp_product_name_sync(i64 i64Fd)
 }
 
 /**
- * Soft recv after SHUT_RD -> 0 EOF (Linux half-close honesty). Soft!=product.
- * greppable: linux_cold_net: soft recv eof shut Soft!=product
- */
-static int
-lcn_tcp_recv_shut_eof(i64 i64Fd)
-{
-	if ((lcn_tcp_shut_get(i64Fd) & LCN_SHUT_BIT_RD) != 0u) {
-		lcn_soft_bump(&g_lcnSoft.u64RecvEofShut);
-		return 1;
-	}
-	return 0;
-}
-
-/**
  * Functional residual: sticky RST SO_ERROR on soft half-close.
  * Next send/recv returns -ECONNRESET (not soft EOF / bare EPIPE) so
  * sshd/stack teardown probes match Linux after peer RST. Soft!=product.
@@ -1325,6 +1312,26 @@ lcn_norm_err(i64 i64Ret)
 	}
 	if (lcn_is_again(i64Ret)) {
 		return -(i64)LINUX_EAGAIN;
+	}
+	return i64Ret;
+}
+
+/**
+ * Map a negative table/GJ code onto -LINUX_E* in 1..133 so libc strerror
+ * is not "Unknown error". Out-of-range -> -EBADF (not a silent 0).
+ */
+static i64
+lcn_abi_err(i64 i64Ret)
+{
+	i64 i64N;
+
+	i64Ret = lcn_norm_err(i64Ret);
+	if (i64Ret >= 0) {
+		return i64Ret;
+	}
+	i64N = -i64Ret;
+	if (i64N <= 0 || i64N > 133) {
+		return -(i64)LINUX_EBADF;
 	}
 	return i64Ret;
 }
@@ -1595,16 +1602,74 @@ lcn_alias_drop(i64 i64User, i64 *pCanon, int *pfLast)
 	return -(i64)LINUX_EBADF;
 }
 
+/** Live user names still pointing at a canonical tcp/lo fd. */
+static u32
+lcn_alias_count(i64 i64Canon)
+{
+	u32 u32Fd;
+	u32 cLive = 0;
+
+	if (i64Canon < 0 || i64Canon >= (i64)LCN_ALIAS_MAX) {
+		return 0;
+	}
+	for (u32Fd = 0; u32Fd < LCN_ALIAS_MAX; u32Fd++) {
+		if (g_ai64LcnCanon[u32Fd] == i64Canon) {
+			cLive++;
+		}
+	}
+	return cLive;
+}
+
 /**
- * Lowest free user fd for dup(). Skip live aliases, live tcp/lo, stdio 0/1/2
- * (dup2 may still claim those), and vfs_ram 3..95.
+ * Drop the identity user name when another name already holds the
+ * canonical tcp/lo fd. close_range skips net_tcp 96..111 so identity
+ * would otherwise block dup() from reclaiming the HOT getsockname fd.
+ * Does not last-ref close the ESTAB.
+ */
+static void
+lcn_alias_vacate_canon(i64 i64Canon)
+{
+	u32 cLive;
+
+	if (i64Canon < 0 || i64Canon >= (i64)LCN_ALIAS_MAX) {
+		return;
+	}
+	if (g_ai64LcnCanon[i64Canon] != i64Canon) {
+		return;
+	}
+	if (net_tcp_fd_ok(i64Canon) == 0 && net_lo_fd_ok(i64Canon) == 0) {
+		return;
+	}
+	cLive = lcn_alias_count(i64Canon);
+	if (cLive <= 1u) {
+		return;
+	}
+	g_ai64LcnCanon[i64Canon] = -1;
+	if (g_au16LcnRef[i64Canon] > 0u) {
+		g_au16LcnRef[i64Canon] =
+		    (u16)(g_au16LcnRef[i64Canon] - 1u);
+	}
+}
+
+/**
+ * Lowest free user fd for dup(). Prefer the canonical tcp/lo fd when that
+ * user name is free: HOT getsockname/setsockopt gate on net_tcp 96..111,
+ * not LCN aliases. sshd-auth dup(stdin) after exec must re-claim the
+ * accepted ESTAB. Else skip stdio 0/1/2, vfs 3..95, live aliases, and
+ * other live tcp/lo slots.
  */
 static i64
-lcn_alias_alloc(void)
+lcn_alias_alloc(i64 i64Canon)
 {
 	u32 u32Fd;
 
 	lcn_alias_init();
+	lcn_alias_vacate_canon(i64Canon);
+	if (i64Canon >= 0 && i64Canon < (i64)LCN_ALIAS_MAX &&
+	    g_ai64LcnCanon[i64Canon] < 0 &&
+	    (net_tcp_fd_ok(i64Canon) || net_lo_fd_ok(i64Canon))) {
+		return i64Canon;
+	}
 	for (u32Fd = 0; u32Fd < LCN_ALIAS_MAX; u32Fd++) {
 		if (u32Fd < LCN_ALIAS_STDIO) {
 			continue;
@@ -2330,6 +2395,47 @@ gj_linux_cold_sendto(struct gj_linux_regs *pRegs)
 	return i64N;
 }
 
+/**
+ * TCP recv: empty ESTAB is -EAGAIN only with MSG_DONTWAIT. Blocking
+ * recvs park (eth + net_tcp_poll + yield) until bytes, RST, or a
+ * table EOF (peer FIN / CLOSE_WAIT). net_tcp_recv 0 is real EOF;
+ * LCN SHUT_RD alone is not. H1 thr-only. Dual DoD B OPEN.
+ */
+static i64
+lcn_tcp_recv_block(i64 i64Fd, void *pBuf, size_t cb, int fDontWait)
+{
+	i64 i64N;
+
+	for (;;) {
+		i64N = net_tcp_recv(i64Fd, pBuf, cb);
+		if (lcn_is_again(i64N) == 0) {
+			return i64N;
+		}
+		if (fDontWait != 0) {
+			lcn_soft_bump(&g_lcnSoft.u64RecvAgain);
+			return -(i64)LINUX_EAGAIN;
+		}
+		/*
+		 * Park only on live ESTABLISHED (POLLOUT). ST_CLOSED /
+		 * listen / unpaired smokes must stay EAGAIN so kernel
+		 * recvfrom does not hang the boot. Dual DoD B OPEN.
+		 */
+		if ((net_tcp_poll_mask(i64Fd, LCN_POLLOUT) &
+		     LCN_POLLOUT) == 0u) {
+			lcn_soft_bump(&g_lcnSoft.u64RecvAgain);
+			return -(i64)LINUX_EAGAIN;
+		}
+		lcn_soft_bump(&g_lcnSoft.u64RecvAgain);
+		net_tcp_poll();
+		i64N = net_tcp_recv(i64Fd, pBuf, cb);
+		if (lcn_is_again(i64N) == 0) {
+			return i64N;
+		}
+		net_eth_poll();
+		thread_yield();
+	}
+}
+
 i64
 gj_linux_cold_recvfrom(struct gj_linux_regs *pRegs)
 {
@@ -2338,6 +2444,7 @@ gj_linux_cold_recvfrom(struct gj_linux_regs *pRegs)
 	size_t cb;
 	i64 i64N;
 	i64 i64St;
+	int fDontWait;
 
 	if (pRegs == NULL) {
 		lcn_soft_bump(&g_lcnSoft.u64Fail);
@@ -2348,11 +2455,8 @@ gj_linux_cold_recvfrom(struct gj_linux_regs *pRegs)
 
 	i64Fd = lcn_fd_resolve((i64)pRegs->u64Arg0);
 	cb = (size_t)pRegs->u64Arg2;
-	/*
-	 * flags: MSG_NOSIGNAL / MSG_DONTWAIT soft-accepted (EAGAIN path).
-	 * src / srclen soft-optional (src left untouched). Soft!=product.
-	 */
-	(void)(pRegs->u64Arg3 & (u64)(LCN_MSG_NOSIGNAL | LCN_MSG_DONTWAIT));
+	fDontWait = ((pRegs->u64Arg3 & (u64)LCN_MSG_DONTWAIT) != 0u) ? 1 : 0;
+	(void)(pRegs->u64Arg3 & (u64)LCN_MSG_NOSIGNAL);
 
 	if (!net_tcp_fd_ok(i64Fd) && !net_lo_fd_ok(i64Fd)) {
 		lcn_soft_bump(&g_lcnSoft.u64Fail);
@@ -2370,8 +2474,8 @@ gj_linux_cold_recvfrom(struct gj_linux_regs *pRegs)
 	}
 
 	/*
-	 * Functional residual: sticky RST -> -ECONNRESET (not soft EOF).
-	 * Soft half-close SHUT_RD -> 0 EOF for orderly FIN. Soft!=product.
+	 * Sticky RST -> -ECONNRESET (not soft EOF). Empty ESTAB does
+	 * not take the LCN SHUT_RD short-circuit (false eof_m).
 	 * greppable: linux_cold_net: soft rst io Soft!=product
 	 */
 	if (net_tcp_fd_ok(i64Fd)) {
@@ -2379,25 +2483,11 @@ gj_linux_cold_recvfrom(struct gj_linux_regs *pRegs)
 		if (i64St != 0) {
 			return i64St;
 		}
-		if (lcn_tcp_recv_shut_eof(i64Fd) != 0) {
-			return 0;
-		}
 	}
 
 	if (net_tcp_fd_ok(i64Fd)) {
-		i64N = net_tcp_recv(i64Fd, aBuf, cb);
 		/* greppable: linux_cold_net: soft recvfrom tcp */
-		/*
-		 * Soft: empty RX is -EAGAIN; pump once then retry so
-		 * userspace-shaped :22 cold RECV is not starved.
-		 * H1 thr-only: thr stack net_tcp_poll (never IRQ).
-		 * Soft!=product; product DoD B = UDX+ABI.
-		 */
-		if (lcn_is_again(i64N)) {
-			lcn_soft_bump(&g_lcnSoft.u64RecvAgain);
-			net_tcp_poll();
-			i64N = net_tcp_recv(i64Fd, aBuf, cb);
-		}
+		i64N = lcn_tcp_recv_block(i64Fd, aBuf, cb, fDontWait);
 	} else {
 		i64N = net_lo_recv(i64Fd, aBuf, cb);
 		/* greppable: linux_cold_net: soft recvfrom lo */
@@ -2594,6 +2684,7 @@ gj_linux_cold_recvmsg(struct gj_linux_regs *pRegs)
 	size_t cb;
 	i64 i64St;
 	i64 i64N;
+	int fDontWait;
 
 	if (pRegs == NULL) {
 		lcn_soft_bump(&g_lcnSoft.u64Fail);
@@ -2604,8 +2695,8 @@ gj_linux_cold_recvmsg(struct gj_linux_regs *pRegs)
 	/* greppable: linux_cold_net: soft recvmsg single-iov */
 
 	i64Fd = lcn_fd_resolve((i64)pRegs->u64Arg0);
-	/* flags (arg2): MSG_NOSIGNAL/DONTWAIT soft-accepted. Soft!=product. */
-	(void)(pRegs->u64Arg2 & (u64)(LCN_MSG_NOSIGNAL | LCN_MSG_DONTWAIT));
+	fDontWait = ((pRegs->u64Arg2 & (u64)LCN_MSG_DONTWAIT) != 0u) ? 1 : 0;
+	(void)(pRegs->u64Arg2 & (u64)LCN_MSG_NOSIGNAL);
 
 	if (!net_tcp_fd_ok(i64Fd) && !net_lo_fd_ok(i64Fd)) {
 		lcn_soft_bump(&g_lcnSoft.u64Fail);
@@ -2613,18 +2704,14 @@ gj_linux_cold_recvmsg(struct gj_linux_regs *pRegs)
 	}
 
 	/*
-	 * Functional residual: sticky RST -> -ECONNRESET before EOF soft.
-	 * Soft half-close SHUT_RD -> 0 EOF before iov parse. Soft!=product.
-	 * Matches recvfrom order (recv* footgun consistency).
+	 * Sticky RST -> -ECONNRESET. Empty ESTAB does not take LCN
+	 * SHUT_RD as EOF (table recv is the FIN/RST source).
 	 * greppable: linux_cold_net: soft rst io Soft!=product
 	 */
 	if (net_tcp_fd_ok(i64Fd)) {
 		i64St = lcn_tcp_rst_sticky_io(i64Fd);
 		if (i64St != 0) {
 			return i64St;
-		}
-		if (lcn_tcp_recv_shut_eof(i64Fd) != 0) {
-			return 0;
 		}
 	}
 
@@ -2643,13 +2730,8 @@ gj_linux_cold_recvmsg(struct gj_linux_regs *pRegs)
 	}
 
 	if (net_tcp_fd_ok(i64Fd)) {
-		i64N = net_tcp_recv(i64Fd, aBuf, cb);
 		/* greppable: linux_cold_net: soft recvmsg tcp */
-		if (lcn_is_again(i64N)) {
-			lcn_soft_bump(&g_lcnSoft.u64RecvAgain);
-			net_tcp_poll();
-			i64N = net_tcp_recv(i64Fd, aBuf, cb);
-		}
+		i64N = lcn_tcp_recv_block(i64Fd, aBuf, cb, fDontWait);
 	} else {
 		i64N = net_lo_recv(i64Fd, aBuf, cb);
 		/* greppable: linux_cold_net: soft recvmsg lo */
@@ -2809,7 +2891,7 @@ gj_linux_cold_getsockname(struct gj_linux_regs *pRegs)
 		/* greppable: linux_cold_net: soft getsockname lo */
 		if (i64St != 0) {
 			lcn_soft_bump(&g_lcnSoft.u64Fail);
-			return i64St;
+			return lcn_abi_err(i64St);
 		}
 	} else if (net_tcp_fd_ok(i64Fd)) {
 		/*
@@ -2890,14 +2972,14 @@ gj_linux_cold_getsockname(struct gj_linux_regs *pRegs)
 		}
 	} else {
 		lcn_soft_bump(&g_lcnSoft.u64Fail);
-		return -(i64)LINUX_EBADF;
+		return lcn_abi_err(-(i64)LINUX_EBADF);
 	}
 
 	if (pRegs->u64Arg1 != 0u) {
 		i64St = lcn_copy_out(pRegs->u64Arg1, aSa, (size_t)u32Len);
 		if (i64St != 0) {
 			lcn_soft_bump(&g_lcnSoft.u64Fail);
-			return i64St;
+			return lcn_abi_err(i64St);
 		}
 	}
 	if (pRegs->u64Arg2 != 0u) {
@@ -3009,14 +3091,14 @@ gj_linux_cold_getpeername(struct gj_linux_regs *pRegs)
 		}
 	} else {
 		lcn_soft_bump(&g_lcnSoft.u64Fail);
-		return -(i64)LINUX_EBADF;
+		return lcn_abi_err(-(i64)LINUX_EBADF);
 	}
 
 	if (pRegs->u64Arg1 != 0u) {
 		i64St = lcn_copy_out(pRegs->u64Arg1, aSa, (size_t)u32Len);
 		if (i64St != 0) {
 			lcn_soft_bump(&g_lcnSoft.u64Fail);
-			return i64St;
+			return lcn_abi_err(i64St);
 		}
 	}
 	if (pRegs->u64Arg2 != 0u) {
@@ -3068,7 +3150,7 @@ gj_linux_cold_setsockopt(struct gj_linux_regs *pRegs)
 		i64St = lcn_copy_in(aVal, pRegs->u64Arg3, (size_t)u32Copy);
 		if (i64St != 0) {
 			lcn_soft_bump(&g_lcnSoft.u64Fail);
-			return i64St;
+			return lcn_abi_err(i64St);
 		}
 	}
 
@@ -3077,6 +3159,7 @@ gj_linux_cold_setsockopt(struct gj_linux_regs *pRegs)
 		/* greppable: linux_cold_net: soft setsockopt lo */
 		if (i64St != 0) {
 			lcn_soft_bump(&g_lcnSoft.u64Fail);
+			return lcn_abi_err(i64St);
 		}
 		return i64St;
 	}
@@ -3174,7 +3257,7 @@ gj_linux_cold_setsockopt(struct gj_linux_regs *pRegs)
 		return 0;
 	}
 	lcn_soft_bump(&g_lcnSoft.u64Fail);
-	return -(i64)LINUX_EBADF;
+	return lcn_abi_err(-(i64)LINUX_EBADF);
 }
 
 i64
@@ -3490,10 +3573,9 @@ gj_linux_cold_poll_mask(i64 i64Fd, u32 u32Want)
 							"functional=1)\n",
 							(long long)i64Fd);
 					}
-				} else {
-					/* Connected STREAM: EOF ready. */
-					u32Got |= LCN_POLLIN;
 				}
+				/* Connected leftover SHUT_RD is not FIN.
+				 * net_tcp_poll_mask sets POLLIN on CLOSE_WAIT. */
 			}
 			if ((u8Shut & LCN_SHUT_BIT_WR) != 0u) {
 				/* Write half-closed: not writable soft. */
@@ -3613,10 +3695,36 @@ lcn_close_user(i64 i64User)
 	i64 i64Canon;
 	int fLast;
 	i64 i64St;
+	u32 cLeft;
 
 	i64St = lcn_alias_drop(i64User, &i64Canon, &fLast);
 	if (i64St != 0) {
 		return i64St;
+	}
+	/*
+	 * Heal ref vs remaining aliases (0/1 after close(newsock)). Never
+	 * last-ref FIN the accepted ESTAB while a user name still points at it.
+	 */
+	cLeft = lcn_alias_count(i64Canon);
+	if (cLeft != 0u) {
+		fLast = 0;
+		if (i64Canon >= 0 && i64Canon < (i64)LCN_ALIAS_MAX) {
+			g_au16LcnRef[i64Canon] = (u16)cLeft;
+		}
+	}
+	/*
+	 * stdin/out/err aliases after execve: do not FIN the accepted
+	 * ESTAB. sshd-auth dup(0) / getsockname still need the slot.
+	 */
+	if (fLast != 0 && i64Canon >= 0 && i64Canon < (i64)LCN_ALIAS_MAX) {
+		u32 u32Std;
+
+		for (u32Std = 0; u32Std < LCN_ALIAS_STDIO; u32Std++) {
+			if (g_ai64LcnCanon[u32Std] == i64Canon) {
+				fLast = 0;
+				break;
+			}
+		}
 	}
 	if (fLast == 0) {
 		return 0;
@@ -3668,8 +3776,10 @@ gj_linux_cold_dup2(struct gj_linux_regs *pRegs)
 		return -(i64)LINUX_EBADF;
 	}
 
+	i64Canon = lcn_fd_resolve(i64Old);
+
 	if (pRegs->u64Nr == (u64)LINUX_NR_dup) {
-		i64New = lcn_alias_alloc();
+		i64New = lcn_alias_alloc(i64Canon);
 		if (i64New < 0) {
 			return i64New;
 		}
@@ -3681,25 +3791,36 @@ gj_linux_cold_dup2(struct gj_linux_regs *pRegs)
 		return -(i64)LINUX_EBADF;
 	}
 
-	i64Canon = lcn_fd_resolve(i64Old);
-	lcn_alias_seed(i64Canon);
-
 	if (i64New == i64Old) {
+		lcn_alias_seed(i64Canon);
 		return i64New;
 	}
 
+	lcn_alias_seed(i64Canon);
+
 	/*
 	 * Linux dup2 closes newfd first when it is already open. Serial
-	 * 0/1/2 that are not cold-net names are not in this table.
+	 * 0/1/2 that are not cold-net names are not in this table. Do not
+	 * close the identity row just seeded for dup()->canon.
 	 */
-	if (g_ai64LcnCanon[i64New] >= 0 || gj_linux_cold_fd_ok(i64New) != 0) {
-		(void)lcn_close_user(i64New);
+	if (i64New != i64Canon || g_ai64LcnCanon[i64New] != i64Canon) {
+		if (g_ai64LcnCanon[i64New] >= 0 ||
+		    gj_linux_cold_fd_ok(i64New) != 0) {
+			(void)lcn_close_user(i64New);
+		}
 	}
 
-	g_ai64LcnCanon[i64New] = i64Canon;
-	if (i64Canon >= 0 && i64Canon < (i64)LCN_ALIAS_MAX &&
-	    g_au16LcnRef[i64Canon] < 0xffffu) {
-		g_au16LcnRef[i64Canon] = (u16)(g_au16LcnRef[i64Canon] + 1u);
+	if (g_ai64LcnCanon[i64New] != i64Canon) {
+		g_ai64LcnCanon[i64New] = i64Canon;
+		if (i64Canon >= 0 && i64Canon < (i64)LCN_ALIAS_MAX &&
+		    g_au16LcnRef[i64Canon] < 0xffffu) {
+			g_au16LcnRef[i64Canon] =
+			    (u16)(g_au16LcnRef[i64Canon] + 1u);
+		}
+	}
+	/* dup2(accepted, 0/1/2): vacate identity so later dup(0) is HOT. */
+	if (i64New < (i64)LCN_ALIAS_STDIO && i64New != i64Canon) {
+		lcn_alias_vacate_canon(i64Canon);
 	}
 	return i64New;
 }

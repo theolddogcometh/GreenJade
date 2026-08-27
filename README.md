@@ -168,19 +168,19 @@ Abandoned in-kernel rtl/xhci_msc/linux_*_soft live in `./abandoned` (not linked)
 | [Deck Top 50 matrix](matrix/deck-top50-TEMPLATE.md) | Adoption tracking |
 | [STYLE](STYLE.md) · [LICENSE](LICENSE) | Style · dual MIT/Apache (product) |
 | [**Third-party provenance**](third_party/PROVENANCE.md) | Vendor licenses, hashes, omitted GPL, what is linked |
-| [**Legal disclaimer**](docs/LEGAL_DISCLAIMER.md) | Lawful use · U.S. Constitution / speech notice · author fee schedule claim |
+| [**Legal notice**](docs/LEGAL_DISCLAIMER.md) | Lawful use · U.S. Constitution / speech notice · author demand position |
 
 Driver hosts use **UDX** (`user/udx/`) and soft DDI (`user/drivers/`) — Linux-shaped `probe` / `irq` / `dma` / `mmio` with caps hidden; see the UDX guide.
 
 ---
 
-## Legal disclaimer (lawful use · speech · rights)
+## Legal notice (lawful use · speech · rights)
 
 **Users:** You are solely responsible for ensuring that obtaining, building, running, redistributing, or productizing GreenJade is **legal** where you operate. **Do not use** this software where that use is illegal or prohibited. Age/ID and platform rules (including **California** and other governments) are **your** compliance problem if you ship a product—not a warranty from this tree.
 
-**Principal author (rights notice):** The lead author is a **U.S. citizen**, governed under the **U.S. Constitution**, and asserts that this **code and project writing are protected speech**. Dual open-source licensing is a **copyright license**, not a waiver of constitutional rights against government actors. The author asserts a **claimed liability schedule** (see full doc) against **oath-sworn officers / government bodies** for **color-of-law** violations of those rights related to this Software—including **4×** financial penalties attempted, **USD $1,000,000 per hour** of incarceration, and **USD $1,000,000 per infraction** for unconstitutional search, seizure, or compelled production. That schedule is the author’s **public claim/notice**, not a court award.
+**Principal author (rights notice):** The lead author is a **U.S. citizen**, governed under the **U.S. Constitution**, and asserts that this **code and project writing are protected speech**. Dual open-source licensing is a **copyright license**, not a waiver of constitutional rights against government actors. The author asserts a **claimed liability schedule** (see full doc) against **oath-sworn officers / government bodies** for **color-of-law** violations of those rights related to this Software—including **4×** financial penalties attempted, **USD $1,000,000 per hour** of incarceration, and **USD $1,000,000 per act** for unconstitutional search, seizure, or compelled production. That schedule is the author’s **public claim/notice**, not a court award.
 
-Full text: **[docs/LEGAL_DISCLAIMER.md](docs/LEGAL_DISCLAIMER.md)** (§0 rights · §1+ user duties) · **[LICENSE](LICENSE)** (MIT OR Apache-2.0, AS IS). **Not legal advice.**
+Full text: **[docs/LEGAL_DISCLAIMER.md](docs/LEGAL_DISCLAIMER.md)** (§I–II author position · §III+ user duties) · **[LICENSE](LICENSE)** (MIT OR Apache-2.0, AS IS). **Not legal advice.**
 
 ---
 

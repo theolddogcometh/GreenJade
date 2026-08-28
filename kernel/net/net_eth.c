@@ -86,17 +86,18 @@
 #include <gj/virtio_net.h>
 
 /*
- * Guest identity. Product UDX/lab (backend=none, Dual DoD B OPEN) pins the
- * G752 DUT station MAC 2C:56:DC:0B:6A:13 and 10.200.125.50 so ARP SHA is
- * not stale QEMU before net_l2 ready / SET_MAC. Virtio T0 overwrites from
- * net_l2 after probe (52:54:00:12:34:56 / 10.0.2.15). Soft!=product.
+ * Guest identity. Product UDX/lab (backend=none) pins 10.200.125.50 and
+ * LAB_MAC_UDX=02:00:00:47:4a:50 (rtl8168_udx IDR lab_fallback) so ARP SHA
+ * is not stale QEMU before SET_MAC. SET_MAC / IDR keep=1 overrides this
+ * with the on-wire station the host will accept. Virtio T0 overwrites
+ * from net_l2 after probe (52:54:00:12:34:56 / 10.0.2.15). Soft!=product.
  */
-static u8 g_aOurMac[6] = { 0x2c, 0x56, 0xdc, 0x0b, 0x6a, 0x13 };
+static u8 g_aOurMac[6] = { 0x02, 0x00, 0x00, 0x47, 0x4a, 0x50 };
 static u8 g_aOurIp[4] = { 10, 200, 125, 50 };
 /* Lab static IPv4 pin (G752 DUT). Soft!=product Dual DoD B OPEN. */
 static const u8 g_aLabIp[4] = { 10, 200, 125, 50 };
-/* Lab station MAC (host arping SHA on 10.200.125.50). Soft!=product. */
-static const u8 g_aLabMac[6] = { 0x2c, 0x56, 0xdc, 0x0b, 0x6a, 0x13 };
+/* LAB_MAC_UDX — same 6 bytes as net_l2 / rtl8168_udx lab_fallback. */
+static const u8 g_aLabMac[6] = { 0x02, 0x00, 0x00, 0x47, 0x4a, 0x50 };
 /* Stale QEMU SLIRP station; never ARP SHA on UDX/lab. Soft!=product. */
 static const u8 g_aQemuMac[6] = { 0x52, 0x54, 0x00, 0x12, 0x34, 0x56 };
 static u32 g_u32IdSyncChg;
@@ -346,7 +347,7 @@ net_eth_force_lab_ip(void)
     }
 }
 
-/** Force guest MAC to lab DUT station (ARP SHA). Soft!=product. */
+/** Force guest MAC to LAB_MAC_UDX (ARP SHA when IDR unset). Soft!=product. */
 static void
 net_eth_force_lab_mac(void)
 {
@@ -487,6 +488,25 @@ net_eth_sync_l2(void)
                     g_u32IdSyncChg, (u32)fForcedLab, g_aOurIp[0], g_aOurIp[1],
                     g_aOurIp[2], g_aOurIp[3]);
         }
+    }
+}
+
+/**
+ * UDX/lab identity for ARP/ICMP TX: lab IPv4 + station MAC the host will
+ * accept (SET_MAC/IDR, else LAB_MAC_UDX). Never QEMU/zero SHA. Soft!=product.
+ */
+static void
+net_eth_pin_udx_identity(void)
+{
+    net_eth_sync_l2();
+    /* T0 virtio keeps SLIRP; laptop UDX/rtl pins lab static + station. */
+    if (net_eth_want_lab_pin() == 0) {
+        return;
+    }
+    net_eth_force_lab_ip();
+    if (net_eth_mac_is_zero(g_aOurMac) != 0 ||
+        net_eth_mac_is_stale_qemu(g_aOurMac) != 0) {
+        net_eth_force_lab_mac();
     }
 }
 
@@ -1824,6 +1844,7 @@ handle_icmp(const u8 *pFrame, u32 cb)
     u32 i;
 
     net_eth_soft_inc(&g_u32IcmpSeen);
+    net_eth_pin_udx_identity();
 
     if (cb < 42) {
         net_eth_soft_inc(&g_u32IcmpShort);
@@ -1839,7 +1860,6 @@ handle_icmp(const u8 *pFrame, u32 cb)
         net_eth_soft_inc(&g_u32IcmpShort);
         return;
     }
-    net_eth_sync_l2();
     if (memcmp(pIp + 16, g_aOurIp, 4) != 0) {
         net_eth_sync_l2();
         if (memcmp(pIp + 16, g_aOurIp, 4) == 0) {
@@ -2024,7 +2044,7 @@ handle_arp(const u8 *pFrame, u32 cb)
     const u8 *pArp;
 
     net_eth_soft_inc(&g_u32ArpSeen);
-    net_eth_sync_l2();
+    net_eth_pin_udx_identity();
 
     if (cb < 42) {
         net_eth_soft_inc(&g_u32ArpBadOp);
@@ -2039,6 +2059,10 @@ handle_arp(const u8 *pFrame, u32 cb)
     if (pArp[6] != 0 || pArp[7] != 1) {
         net_eth_soft_inc(&g_u32ArpBadOp);
         return;
+    }
+    /* who-has 10.200.125.50 always replies on UDX/lab (host arping). */
+    if (net_eth_want_lab_pin() != 0 && net_eth_ip_is_lab(pArp + 24) != 0) {
+        net_eth_force_lab_ip();
     }
     if (memcmp(pArp + 24, g_aOurIp, 4) != 0) {
         net_eth_sync_l2();
@@ -2438,12 +2462,7 @@ net_eth_input_frame(const void *pFrame, u32 cb)
     if (net_l2_backend() == GJ_NET_L2_NONE) {
         net_l2_udx_ready_identity();
     }
-    net_eth_force_lab_ip();
-    net_eth_sync_l2();
-    if (net_eth_mac_is_zero(g_aOurMac) != 0 ||
-        net_eth_mac_is_stale_qemu(g_aOurMac) != 0) {
-        net_eth_force_lab_mac();
-    }
+    net_eth_pin_udx_identity();
     if (s_fUdxInjLamp == 0u) {
         s_fUdxInjLamp = 1u;
         kprintf("net_eth: soft udx inject first len=%u "

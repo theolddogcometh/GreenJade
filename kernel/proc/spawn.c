@@ -671,6 +671,11 @@ static void soft_inventory_log(const char *szVia);
 static void soft_inventory_maybe_once(void);
 static void soft_note_live_peak(void);
 static struct spawn_slot *spawn_slot_of(struct gj_process *pProc);
+static void spawn_host_keep_live_bind(struct gj_process *pChild,
+                                      const struct spawn_host_class *pHost,
+                                      u32 u32ElfThr);
+static int  spawn_host_keep_live_p(const struct spawn_slot *pSlot,
+                                   const struct gj_process *pProc);
 /*
  * Residual catalog->spawn hooks (defined below; Soft!=product).
  * File-local prototypes for -Wmissing-prototypes; linkable export for a
@@ -902,6 +907,58 @@ spawn_host_catalog_from_arg(void *pArg)
     return NULL;
 }
 
+/**
+ * Pin catalog UDX host identity on the live PCB.
+ * gj_process_init defaults LINUX; GJ_SYS_NET (96) is gettimeofday then.
+ * process_keep_live_refuse_kill matches szExecPath / u32StartThr / native.
+ */
+static void
+spawn_host_keep_live_bind(struct gj_process *pChild,
+                          const struct spawn_host_class *pHost,
+                          u32 u32ElfThr)
+{
+    u32 i;
+    const char *sz;
+
+    if (pChild == NULL) {
+        return;
+    }
+    pChild->u32Personality = GJ_SPAWN_HOST_PERSONA_NATIVE;
+    if (pHost != NULL) {
+        sz = pHost->szName;
+        if (pHost->szElfPath != NULL && pHost->szElfPath[0] != '\0') {
+            sz = pHost->szElfPath;
+        }
+        if (sz != NULL) {
+            for (i = 0; i + 1u < (u32)sizeof(pChild->szExecPath) &&
+                 sz[i] != '\0'; i++) {
+                pChild->szExecPath[i] = sz[i];
+            }
+            pChild->szExecPath[i] = '\0';
+        }
+    }
+    if (u32ElfThr != 0u) {
+        pChild->u32StartThr = u32ElfThr;
+    }
+}
+
+/** Product ELF host on a catalog slot — do not kill/wait-reap. */
+static int
+spawn_host_keep_live_p(const struct spawn_slot *pSlot,
+                       const struct gj_process *pProc)
+{
+    if (pSlot == NULL || pProc == NULL || pSlot->u8HostClass == 0u) {
+        return 0;
+    }
+    if (pSlot->u8HostElfPrefer != 0u || pSlot->u32ElfThrId != 0u) {
+        return 1;
+    }
+    if (pProc->u32StartThr != 0u) {
+        return 1;
+    }
+    return 0;
+}
+
 /** Tag fixed spawn slot from catalog entry (post process_spawn success). */
 static void
 spawn_host_slot_tag(struct spawn_slot *pSlot,
@@ -915,6 +972,7 @@ spawn_host_slot_tag(struct spawn_slot *pSlot,
     pSlot->u8HostDualDod = pHost->u8DualDod;
     pSlot->u16HostVend = pHost->u16Vend;
     pSlot->u16HostDev = pHost->u16Dev;
+    spawn_host_keep_live_bind(&pSlot->proc, pHost, pSlot->u32ElfThrId);
 }
 
 /**
@@ -1260,6 +1318,7 @@ spawn_host_elf_try_run(struct gj_process *pChild,
         return 0u;
     }
     spawn_soft_inc(&g_u32SoftHostElfLoadOk);
+    spawn_host_keep_live_bind(pChild, pHost, 0u);
     /* Grep: spawn: soft host_launch elf load (embed present densify) */
     kprintf("spawn: soft host_launch elf load host=%s path=%s "
             "host_blob=1 probe=1 load=1 stack=0 thr=0 "
@@ -1322,6 +1381,9 @@ spawn_host_elf_try_run(struct gj_process *pChild,
     if (szTag != NULL && szTag[0] != '\0') {
         thread_soft_tag_set(u32Thr, szTag);
     }
+    pChild->u64ExecEntry = info.u64Entry;
+    pChild->u64StartEntry = info.u64Entry;
+    spawn_host_keep_live_bind(pChild, pHost, u32Thr);
     spawn_soft_inc(&g_u32SoftHostElfRunOk);
     if (u32ClassIdx < GJ_SPAWN_HOST_CLASS_N) {
         spawn_soft_inc(&g_u32SoftHostElfByClass[u32ClassIdx]);
@@ -1483,7 +1545,8 @@ process_spawn_host_launch(struct gj_process *pParent, u32 u32ClassIdx,
      * passes NULL so process_spawn can tag without a second channel.
      */
     args.pArg = (pArg != NULL) ? pArg : (void *)pHost;
-    args.u32Personality = (u32)pHost->u8PersonaPref;
+    /* Catalog UDX hosts are native GJ_SYS_* (not Linux NR 96 gettimeofday). */
+    args.u32Personality = GJ_SPAWN_HOST_PERSONA_NATIVE;
     args.u32Jit = 0;
 
     pChild = NULL;
@@ -1506,6 +1569,7 @@ process_spawn_host_launch(struct gj_process *pParent, u32 u32ClassIdx,
     }
     spawn_soft_inc(&g_u32SoftHostLaunchClass);
 
+    spawn_host_keep_live_bind(pChild, pHost, 0u);
     u32ElfThr = 0u;
     if (fTryElf != 0 && pChild != NULL) {
         u32ElfThr = spawn_host_elf_try_run(pChild, pHost, u32ClassIdx);
@@ -1514,6 +1578,7 @@ process_spawn_host_launch(struct gj_process *pParent, u32 u32ClassIdx,
     if (u32ElfThr != 0u) {
         fPreferElf = 1;
     }
+    spawn_host_keep_live_bind(pChild, pHost, u32ElfThr);
 
     /* Grep: spawn: soft host_launch class */
     /* Grep: host_blob / Soft!=product / dual_dod OPEN / product_hosts=UDX */
@@ -5619,6 +5684,17 @@ process_kill(struct gj_process *pParent, const struct gj_cap_ref *pRef,
         soft_inventory_maybe_once();
         return GJ_ERR_NOENT;
     }
+    {
+        struct spawn_slot *pLiveSlot;
+
+        pLiveSlot = spawn_slot_of(pChild);
+        if (spawn_host_keep_live_p(pLiveSlot, pChild) != 0) {
+            pChild->u32Alive = 1;
+            pChild->u32Personality = GJ_SPAWN_HOST_PERSONA_NATIVE;
+            soft_inventory_maybe_once();
+            return GJ_OK;
+        }
+    }
     g_cKill++;
     if (!pChild->u32Alive) {
         /* Already dead - idempotent kill */
@@ -5713,6 +5789,15 @@ process_wait(struct gj_process *pParent, const struct gj_cap_ref *pRef,
         spawn_soft_inc(&g_u32SoftWaitDenyNoent);
         soft_inventory_maybe_once();
         return GJ_ERR_NOENT;
+    }
+    pSlot = spawn_slot_of(pChild);
+    if (spawn_host_keep_live_p(pSlot, pChild) != 0) {
+        pChild->u32Alive = 1;
+        pChild->u32Personality = GJ_SPAWN_HOST_PERSONA_NATIVE;
+        spawn_soft_inc(&g_u32SoftWaitAgain);
+        soft_inventory_maybe_once();
+        thread_yield();
+        return GJ_ERR_AGAIN;
     }
     if (pChild->u32Alive) {
         /*
@@ -5835,9 +5920,10 @@ process_spawn(struct gj_process *pParent, const struct gj_spawn_args *pArgs,
     gj_process_init(pChild, &pSlot->cnode, pSlot->aSlots, GJ_SPAWN_CNODE_SLOTS);
     pChild->pParent = pParent;
     pChild->u32Alive = 1;
+    /* gj_process_init plants LINUX. Catalog UDX must stay native on the PCB. */
     u32Persona = pArgs->u32Personality;
     if (pHostArg != NULL) {
-        u32Persona = (u32)pHostArg->u8PersonaPref;
+        u32Persona = GJ_SPAWN_HOST_PERSONA_NATIVE;
     }
     pChild->u32Personality = u32Persona;
     if (u32Persona == 0u) {
@@ -5875,6 +5961,9 @@ process_spawn(struct gj_process *pParent, const struct gj_spawn_args *pArgs,
         return st;
     }
 
+    if (pHostArg != NULL) {
+        pChild->u32Personality = GJ_SPAWN_HOST_PERSONA_NATIVE;
+    }
     u32Thr = thread_create(pChild, pArgs->pfnEntry, pArgs->pArg);
     if (u32Thr == 0) {
         spawn_fail_cleanup(pSlot, pParent, &ref);
@@ -5908,6 +5997,7 @@ process_spawn(struct gj_process *pParent, const struct gj_spawn_args *pArgs,
      */
     if (pHostArg != NULL && u32HostIdx != (u32)-1 && pSlot != NULL) {
         spawn_host_slot_tag(pSlot, pHostArg, u32HostIdx);
+        spawn_host_keep_live_bind(pChild, pHostArg, 0u);
         spawn_soft_inc(&g_u32SoftHostTagAuto);
         if (u32HostIdx < GJ_SPAWN_HOST_CLASS_N) {
             spawn_soft_inc(&g_u32SoftHostLaunchByClass[u32HostIdx]);

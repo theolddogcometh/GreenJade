@@ -445,6 +445,17 @@ struct rtl8168_soft {
 /* File-static soft block — freestanding hosts need no heap. */
 static struct rtl8168_soft g_rtlSoft;
 
+/*
+ * G752 station SHA (host arping 10.200.125.50). Leftover LAA is not the
+ * wire identity — IDR + SET_MAC must match or ARP SHA/SA desync.
+ */
+static const u8 g_aLabShaMac[6] = {
+    0x2cu, 0x56u, 0xdcu, 0x0bu, 0x6au, 0x13u
+};
+static const u8 g_aLeftoverLaa[6] = {
+    0x02u, 0x00u, 0x00u, 0x47u, 0x4au, 0x50u
+};
+
 /* Forward: work residual re-walks reclaim catalog (defined later). */
 static void rtl8168_soft_ring_reclaim_residual(const struct rtl8168_soft *pSoft);
 /* Forward: denser residual bar .75 VERDICT (H2 once; never_program held). */
@@ -6063,6 +6074,100 @@ main(int argc, char **argv)
  * greppable: wire_owner=udx product_handoff=1 dual_dod_b=OPEN
  */
 
+static u32
+rtl8168_mac6_eq(const u8 *pA, const u8 *pB)
+{
+    u32 iMac;
+
+    if (pA == NULL || pB == NULL) {
+        return 0u;
+    }
+    for (iMac = 0u; iMac < 6u; iMac++) {
+        if (pA[iMac] != pB[iMac]) {
+            return 0u;
+        }
+    }
+    return 1u;
+}
+
+/**
+ * IDR station: keep EEPROM unicast; replace zero / leftover LAA with
+ * 2C:56:DC:0B:6A:13; publish SET_MAC. Leaves 9346CR cfgwrite open.
+ * greppable: rtl8168_udx: product idr
+ */
+static void
+rtl8168_product_idr_station(struct rtl8168_soft *pSoft)
+{
+    u8  aMac[6];
+    u32 u32Idr0;
+    u32 u32Idr4;
+    u32 fKeep;
+    u32 fLaa;
+    u32 fZero;
+    u32 iMac;
+
+    if (pSoft == NULL || pSoft->pRegs == NULL) {
+        return;
+    }
+    udx_writeb(pSoft->pRegs, RTL_REG_9346CR, (u8)RTL_9346_EEM_CFGWRITE);
+    udx_mmio_flush(pSoft->pRegs);
+    u32Idr0 = udx_readl(pSoft->pRegs, RTL_REG_IDR0);
+    u32Idr4 = udx_readl(pSoft->pRegs, RTL_REG_IDR4);
+    aMac[0] = (u8)(u32Idr0 & 0xffu);
+    aMac[1] = (u8)((u32Idr0 >> 8) & 0xffu);
+    aMac[2] = (u8)((u32Idr0 >> 16) & 0xffu);
+    aMac[3] = (u8)((u32Idr0 >> 24) & 0xffu);
+    aMac[4] = (u8)(u32Idr4 & 0xffu);
+    aMac[5] = (u8)((u32Idr4 >> 8) & 0xffu);
+    fZero = 1u;
+    for (iMac = 0u; iMac < 6u; iMac++) {
+        if (aMac[iMac] != 0u) {
+            fZero = 0u;
+            break;
+        }
+    }
+    fLaa = rtl8168_mac6_eq(aMac, g_aLeftoverLaa);
+    fKeep = (fZero == 0u && fLaa == 0u) ? 1u : 0u;
+    if (fKeep == 0u) {
+        for (iMac = 0u; iMac < 6u; iMac++) {
+            aMac[iMac] = g_aLabShaMac[iMac];
+        }
+        u32Idr0 = (u32)aMac[0] | ((u32)aMac[1] << 8) |
+                  ((u32)aMac[2] << 16) | ((u32)aMac[3] << 24);
+        u32Idr4 = (u32)aMac[4] | ((u32)aMac[5] << 8);
+        udx_writel(pSoft->pRegs, RTL_REG_IDR0, u32Idr0);
+        udx_writel(pSoft->pRegs, RTL_REG_IDR4, u32Idr4);
+        udx_mmio_flush(pSoft->pRegs);
+        u32Idr0 = udx_readl(pSoft->pRegs, RTL_REG_IDR0);
+        u32Idr4 = udx_readl(pSoft->pRegs, RTL_REG_IDR4);
+        aMac[0] = (u8)(u32Idr0 & 0xffu);
+        aMac[1] = (u8)((u32Idr0 >> 8) & 0xffu);
+        aMac[2] = (u8)((u32Idr0 >> 16) & 0xffu);
+        aMac[3] = (u8)((u32Idr0 >> 24) & 0xffu);
+        aMac[4] = (u8)(u32Idr4 & 0xffu);
+        aMac[5] = (u8)((u32Idr4 >> 8) & 0xffu);
+    }
+    pSoft->u32Idr0 = u32Idr0;
+    pSoft->u32Idr4 = u32Idr4;
+    udx_printk("rtl8168_udx: product idr mac=%02x:%02x:%02x:%02x:%02x:%02x "
+               "keep=%u lab_fallback=%u laa=%u idr0=0x%08x idr4=0x%08x "
+               "cfgwrite=1 Soft!=product dual_dod_b=OPEN\n",
+               (unsigned)aMac[0], (unsigned)aMac[1], (unsigned)aMac[2],
+               (unsigned)aMac[3], (unsigned)aMac[4], (unsigned)aMac[5],
+               (unsigned)fKeep,
+               (fKeep == 0u) ? 1u : 0u, (unsigned)fLaa,
+               (unsigned)u32Idr0, (unsigned)u32Idr4);
+#if !defined(UDX_HOST_LIBC)
+    {
+        long nMac = gj_net_eth_set_mac(aMac);
+
+        udx_printk("rtl8168_udx: product idr set_mac st=%ld "
+                   "keep=%u Soft!=product dual_dod_b=OPEN\n",
+                   (long)nMac, (unsigned)fKeep);
+    }
+#endif
+}
+
 /**
  * Product Own handoff after TNPDS/RDSAR/TE|RE: RX buffers + Own=1 + RCR.
  * Enables DMA RX for thr-poll reclaim → ETH_INJECT demux. Soft!=product.
@@ -6367,91 +6472,9 @@ rtl8168_product_own_handoff(struct rtl8168_soft *pSoft)
     {
         u16 u16Rms;
         u32 u32Mar;
-        u32 u32Idr0;
-        u32 u32Idr4;
-        u8  aMac[6];
-        u32 fIdrKeep;
-        u32 iMac;
 
-        /* Config write enable (public EEM1:EEM0 = 11). */
-        udx_writeb(pSoft->pRegs, RTL_REG_9346CR, (u8)RTL_9346_EEM_CFGWRITE);
-        udx_mmio_flush(pSoft->pRegs);
-
-        /*
-         * IDR MAC residual (public IDR0–5; 4-byte access).
-         * Prefer non-zero EEPROM/station after RST autoload; else lab LAA
-         * LAB_MAC_UDX=02:00:00:47:4a:50 (clean-room; matches lab .50 spirit).
-         * Same 6 bytes as kernel net_l2 soft demux under ETH_UDX_READY
-         * (kernel/drv/net_l2.c g_aLabMacUdx) so ARP SHA residual matches.
-         * Soft demux MAC aligns with product idr lab_fallback Soft!=product.
-         * OPEN: keep=1 (EEPROM) still leaves soft demux on lab LAA until a
-         * path publishes station MAC to net_l2 (no door API yet).
-         * Leave 9346CR cfgwrite open — program_try locks after TE|RE.
-         * greppable: rtl8168_udx: product idr
-         * greppable: LAB_MAC_UDX=02:00:00:47:4a:50
-         */
-        u32Idr0 = udx_readl(pSoft->pRegs, RTL_REG_IDR0);
-        u32Idr4 = udx_readl(pSoft->pRegs, RTL_REG_IDR4);
-        aMac[0] = (u8)(u32Idr0 & 0xffu);
-        aMac[1] = (u8)((u32Idr0 >> 8) & 0xffu);
-        aMac[2] = (u8)((u32Idr0 >> 16) & 0xffu);
-        aMac[3] = (u8)((u32Idr0 >> 24) & 0xffu);
-        aMac[4] = (u8)(u32Idr4 & 0xffu);
-        aMac[5] = (u8)((u32Idr4 >> 8) & 0xffu);
-        fIdrKeep = 0u;
-        for (iMac = 0u; iMac < 6u; iMac++) {
-            if (aMac[iMac] != 0u) {
-                fIdrKeep = 1u;
-                break;
-            }
-        }
-        if (fIdrKeep == 0u) {
-            /* LAB_MAC_UDX=02:00:00:47:4a:50 — lab LAA; matches net_l2. */
-            aMac[0] = 0x02u;
-            aMac[1] = 0x00u;
-            aMac[2] = 0x00u;
-            aMac[3] = 0x47u;
-            aMac[4] = 0x4au;
-            aMac[5] = 0x50u;
-            u32Idr0 = (u32)aMac[0] | ((u32)aMac[1] << 8) |
-                      ((u32)aMac[2] << 16) | ((u32)aMac[3] << 24);
-            u32Idr4 = (u32)aMac[4] | ((u32)aMac[5] << 8);
-            udx_writel(pSoft->pRegs, RTL_REG_IDR0, u32Idr0);
-            udx_writel(pSoft->pRegs, RTL_REG_IDR4, u32Idr4);
-            udx_mmio_flush(pSoft->pRegs);
-            u32Idr0 = udx_readl(pSoft->pRegs, RTL_REG_IDR0);
-            u32Idr4 = udx_readl(pSoft->pRegs, RTL_REG_IDR4);
-            aMac[0] = (u8)(u32Idr0 & 0xffu);
-            aMac[1] = (u8)((u32Idr0 >> 8) & 0xffu);
-            aMac[2] = (u8)((u32Idr0 >> 16) & 0xffu);
-            aMac[3] = (u8)((u32Idr0 >> 24) & 0xffu);
-            aMac[4] = (u8)(u32Idr4 & 0xffu);
-            aMac[5] = (u8)((u32Idr4 >> 8) & 0xffu);
-        }
-        pSoft->u32Idr0 = u32Idr0;
-        pSoft->u32Idr4 = u32Idr4;
-        udx_printk("rtl8168_udx: product idr mac=%02x:%02x:%02x:%02x:%02x:%02x "
-                   "keep=%u lab_fallback=%u idr0=0x%08x idr4=0x%08x "
-                   "cfgwrite=1 Soft!=product dual_dod_b=OPEN\n",
-                   (unsigned)aMac[0], (unsigned)aMac[1], (unsigned)aMac[2],
-                   (unsigned)aMac[3], (unsigned)aMac[4], (unsigned)aMac[5],
-                   (unsigned)fIdrKeep,
-                   (fIdrKeep == 0u) ? 1u : 0u,
-                   (unsigned)u32Idr0, (unsigned)u32Idr4);
-#if !defined(UDX_HOST_LIBC)
-        /*
-         * Publish station MAC into net_l2 soft demux (glass .94 keep=1
-         * EEPROM D5:69:… vs lab LAA desync). Soft!=product Dual DoD B.
-         * greppable: ETH_SET_MAC | net_l2: soft station mac
-         */
-        {
-            long nMac = gj_net_eth_set_mac(aMac);
-
-            udx_printk("rtl8168_udx: product idr set_mac st=%ld "
-                       "keep=%u Soft!=product dual_dod_b=OPEN\n",
-                       (long)nMac, (unsigned)fIdrKeep);
-        }
-#endif
+        /* IDR + SET_MAC; 9346CR cfgwrite stays open until TE|RE lock. */
+        rtl8168_product_idr_station(pSoft);
 
         /* RMS: max Rx size; cover 2 KiB slots (bits 13:0, public mask). */
         u16Rms = (u16)0x1ff8u; /* max multiple-of-8 per public note */
@@ -7317,6 +7340,7 @@ rtl8168_product_mac_reclaim_once(struct rtl8168_soft *pSoft)
                      (u16)~(RTL_CPLUS_RXVLAN | RTL_CPLUS_RXCHKSUM));
     u16Cplus = (u16)(u16Cplus | (u16)RTL_CPLUS_PCIMULRW);
     udx_writew(pSoft->pRegs, RTL_REG_CPLUSCMD, u16Cplus);
+    rtl8168_product_idr_station(pSoft);
     {
         u32 u32Rcr;
         u32 u32Mar;
@@ -7348,6 +7372,8 @@ rtl8168_product_mac_reclaim_once(struct rtl8168_soft *pSoft)
     udx_mmio_flush(pSoft->pRegs);
     pSoft->u16IntrMask = (u16)RTL_PRODUCT_IRQ_BITS;
     udx_writew(pSoft->pRegs, RTL_REG_INTR_MASK, pSoft->u16IntrMask);
+    udx_writeb(pSoft->pRegs, RTL_REG_9346CR, (u8)RTL_9346_EEM_NORMAL);
+    udx_mmio_flush(pSoft->pRegs);
     u32RdsRb = udx_readl(pSoft->pRegs, RTL_REG_RDSAR);
     u32RdsMatch = (u32RdsRb == u32RxLo) ? 1u : 0u;
     u8Cmd = udx_readb(pSoft->pRegs, RTL_REG_CHIPCMD);
@@ -7474,6 +7500,18 @@ rtl8168_product_l2_poll(struct rtl8168_soft *pSoft)
                                           0u, pSoft->u32BarIndex);
             }
             /* Observe-only: never phy_link_bringup from thr (Flag thrash). */
+        }
+    }
+
+    /* TE|RE can drop after RST reclaim; ARP TX needs both. */
+    if (pSoft->u32FProductProg != 0u) {
+        u8 u8CmdLive;
+
+        u8CmdLive = udx_readb(pSoft->pRegs, RTL_REG_CHIPCMD);
+        if ((u8CmdLive & RTL_CMD_TE_RE) != RTL_CMD_TE_RE) {
+            udx_writeb(pSoft->pRegs, RTL_REG_CHIPCMD, (u8)RTL_CMD_TE_RE);
+            udx_mmio_flush(pSoft->pRegs);
+            pSoft->u8ChipCmd = udx_readb(pSoft->pRegs, RTL_REG_CHIPCMD);
         }
     }
 
@@ -8679,7 +8717,8 @@ rtl8168_product_l2_poll(struct rtl8168_soft *pSoft)
         u32Last = 0u;
 
         fInjThis = (pSoft->u32Inject != u32InjAt) ? 1u : 0u;
-        u32MaxTx = (fInjThis != 0u) ? 2u : 1u;
+        /* One bounce buffer: never two OWN frames on the same PA. */
+        u32MaxTx = 1u;
         u32Ntx = pSoft->u32TxSlots;
         if (u32Ntx > RTL_SOFT_TX_SLOTS) {
             u32Ntx = RTL_SOFT_TX_SLOTS;
@@ -8716,8 +8755,11 @@ rtl8168_product_l2_poll(struct rtl8168_soft *pSoft)
                                (u8)RTL_TPPOLL_NPQ);
                     udx_mmio_flush(pSoft->pRegs);
                 }
-                for (iWait = 0u; iWait < 8u; iWait++) {
+                for (iWait = 0u; iWait < 4096u; iWait++) {
                     __asm__ volatile("pause" ::: "memory");
+                    if ((iWait & 63u) != 0u) {
+                        continue;
+                    }
                     rtl8168_product_tx_sync_for_cpu(pSoft);
                     if (pSoft->pRegs != NULL) {
                         u16TxSt = udx_readw(pSoft->pRegs, RTL_REG_INTR_STATUS);
@@ -8733,6 +8775,11 @@ rtl8168_product_l2_poll(struct rtl8168_soft *pSoft)
                     if (rtl8168_product_tx_desc_own(pSoft, u32Last) == 0u) {
                         fTxBusy = 0u;
                         break;
+                    }
+                    if (pSoft->pRegs != NULL) {
+                        udx_writeb(pSoft->pRegs, RTL_REG_TPPOLL,
+                                   (u8)RTL_TPPOLL_NPQ);
+                        udx_mmio_flush(pSoft->pRegs);
                     }
                 }
             }
@@ -9032,7 +9079,6 @@ rtl8168_product_phy_link_bringup(struct rtl8168_soft *pSoft, u32 fHardRst)
     u32 u32PhyarLast;
     u32 iWait;
     u8  u8Phy;
-    u8  u8Cmd;
     int nSt;
     u32 fLink;
     u32 fBmsrLink;
@@ -9071,39 +9117,18 @@ rtl8168_product_phy_link_bringup(struct rtl8168_soft *pSoft, u32 fHardRst)
      */
     (void)fHardRst;
 
-    /* Probe MDIO once (PHYID1); densify if dead. */
-    {
-        u32 u32Id1 = 0u;
-        static u8 s_fMdioProbeLamp;
-
-        if (rtl8168_product_phyar_read(pSoft, RTL_MDIO_PHYAD1, &u32Id1) == 0) {
-            if (s_fMdioProbeLamp == 0u) {
-                s_fMdioProbeLamp = 1u;
-                udx_printk("rtl8168_udx: product phy mdio probe PASS "
-                           "phyid1=0x%04x Soft!=product dual_dod_b=OPEN\n",
-                           (unsigned)u32Id1);
-            }
-        } else {
-            u32PhyarLast = udx_readl(pSoft->pRegs, RTL_REG_PHYAR);
-            u8Cmd = udx_readb(pSoft->pRegs, RTL_REG_CHIPCMD);
-            if (s_fMdioProbeLamp == 0u) {
-                s_fMdioProbeLamp = 1u;
-                udx_printk("rtl8168_udx: product phy mdio probe FAIL "
-                           "phyar=0x%08x chipcmd=0x%02x physt=0x%02x "
-                           "Soft!=product dual_dod_b=OPEN "
-                           "(rely on PHYSTATUS self-AN; no BMCR.Reset)\n",
-                           (unsigned)u32PhyarLast, (unsigned)u8Cmd,
-                           (unsigned)u8Phy);
-            }
-        }
+    nSt = -1;
+    if (pSoft->u32FMdioOk == 0u) {
+        /* program_try already failed PHYID; do not Flag-timeout again. */
+        nSt = -1;
+    } else {
+        /* Clear PWD/ISOLATE; enable ANE (never BMCR.Reset). */
+        u32Bmcr = (u32)RTL_BMCR_ANE; /* PWD=0 ISOLATE=0 LOOPBACK=0 */
+        nSt = rtl8168_product_phyar_write(pSoft, RTL_MDIO_BMCR, u32Bmcr);
     }
-
-    /* Clear PWD/ISOLATE; enable ANE (never BMCR.Reset). */
-    u32Bmcr = (u32)RTL_BMCR_ANE; /* PWD=0 ISOLATE=0 LOOPBACK=0 */
-    nSt = rtl8168_product_phyar_write(pSoft, RTL_MDIO_BMCR, u32Bmcr);
     if (nSt != 0) {
         u32PhyarLast = udx_readl(pSoft->pRegs, RTL_REG_PHYAR);
-        if (s_fPhyarFailLamp == 0u) {
+        if (s_fPhyarFailLamp == 0u && pSoft->u32FMdioOk != 0u) {
             s_fPhyarFailLamp = 1u;
             udx_printk("rtl8168_udx: product phy bringup FAIL phyar_write_ane "
                        "phyar=0x%08x hard_rst=%u Soft!=product dual_dod_b=OPEN\n",
@@ -9139,68 +9164,15 @@ rtl8168_product_phy_link_bringup(struct rtl8168_soft *pSoft, u32 fHardRst)
     fLink = 0u;
     fBmsrLink = 0u;
     fAnegDone = 0u;
-    /* Bounded link wait (program path only; thr observes PHYStatus). */
-    for (iWait = 0u; iWait < 2000000u; iWait++) {
+    /* PHYStatus only — MDIO-in-wait times out Flag and blocks TE|RE. */
+    for (iWait = 0u; iWait < 200000u; iWait++) {
         u8Phy = udx_readb(pSoft->pRegs, RTL_REG_PHYSTATUS);
         pSoft->u8PhySt = u8Phy;
         if ((u8Phy & RTL_PHYST_LINKOK) != 0u) {
             fLink = 1u;
             break;
         }
-        if ((iWait & 0x7fffu) == 0u) {
-            if (rtl8168_product_phyar_read(pSoft, RTL_MDIO_BMSR, &u32Bmsr) ==
-                0) {
-                (void)rtl8168_product_phyar_read(pSoft, RTL_MDIO_BMSR,
-                                                 &u32Bmsr);
-                if ((u32Bmsr & RTL_BMSR_LINK) != 0u) {
-                    fBmsrLink = 1u;
-                    fLink = 1u;
-                    break;
-                }
-                if ((u32Bmsr & RTL_BMSR_ANEG_COMPLETE) != 0u) {
-                    fAnegDone = 1u;
-                }
-            }
-        }
-    }
-
-    /*
-     * One force-100 dig if ANE stall (program path; thr never calls us).
-     * Soft!=product Dual DoD B OPEN.
-     * greppable: rtl8168_udx: product phy force100
-     */
-    if (fLink == 0u) {
-        static u8 s_fForce100Lamp;
-        u32 u32Force;
-        u32 iForce;
-
-        u32Force = (u32)(RTL_BMCR_DUPLEX | 0x2000u);
-        if (rtl8168_product_phyar_write(pSoft, RTL_MDIO_BMCR, u32Force) == 0) {
-            for (iForce = 0u; iForce < 1000000u; iForce++) {
-                __asm__ volatile("pause" ::: "memory");
-                u8Phy = udx_readb(pSoft->pRegs, RTL_REG_PHYSTATUS);
-                if ((u8Phy & RTL_PHYST_LINKOK) != 0u) {
-                    fLink = 1u;
-                    pSoft->u8PhySt = u8Phy;
-                    break;
-                }
-            }
-            if (s_fForce100Lamp == 0u) {
-                s_fForce100Lamp = 1u;
-                (void)rtl8168_product_phyar_read(pSoft, RTL_MDIO_BMCR,
-                                                 &u32Bmcr);
-                (void)rtl8168_product_phyar_read(pSoft, RTL_MDIO_BMSR,
-                                                 &u32Bmsr);
-                u8Phy = udx_readb(pSoft->pRegs, RTL_REG_PHYSTATUS);
-                pSoft->u8PhySt = u8Phy;
-                udx_printk("rtl8168_udx: product phy force100 "
-                           "linkok=%u physt=0x%02x bmcr=0x%04x bmsr=0x%04x "
-                           "Soft!=product dual_dod_b=OPEN\n",
-                           ((u8Phy & RTL_PHYST_LINKOK) != 0u) ? 1u : 0u,
-                           (unsigned)u8Phy, (unsigned)u32Bmcr,
-                           (unsigned)u32Bmsr);
-            }
-        }
+        __asm__ volatile("pause" ::: "memory");
     }
 
     u8Phy = udx_readb(pSoft->pRegs, RTL_REG_PHYSTATUS);
@@ -9208,20 +9180,16 @@ rtl8168_product_phy_link_bringup(struct rtl8168_soft *pSoft, u32 fHardRst)
     if (fLink == 0u && (u8Phy & RTL_PHYST_LINKOK) != 0u) {
         fLink = 1u;
     }
-    (void)rtl8168_product_phyar_read(pSoft, RTL_MDIO_BMCR, &u32Bmcr);
-    (void)rtl8168_product_phyar_read(pSoft, RTL_MDIO_BMSR, &u32Bmsr);
-    (void)rtl8168_product_phyar_read(pSoft, RTL_MDIO_GBCR, &u32Gbcr);
+    if (pSoft->u32FMdioOk != 0u) {
+        (void)rtl8168_product_phyar_read(pSoft, RTL_MDIO_BMCR, &u32Bmcr);
+        (void)rtl8168_product_phyar_read(pSoft, RTL_MDIO_BMSR, &u32Bmsr);
+        (void)rtl8168_product_phyar_read(pSoft, RTL_MDIO_GBCR, &u32Gbcr);
+    }
 
     /* Always once-lamp bringup result (glass LNK densify). Soft!=product. */
     {
         static u8 s_fBringupLamp;
-        u32 fMdioOk = 0u;
-        u32 u32Id1 = 0u;
-
-        if (rtl8168_product_phyar_read(pSoft, RTL_MDIO_PHYAD1, &u32Id1) == 0) {
-            fMdioOk = 1u;
-        }
-        (void)u32Id1;
+        u32 fMdioOk = (pSoft->u32FMdioOk != 0u) ? 1u : 0u;
         if (s_fBringupLamp == 0u || fLink != 0u) {
             if (s_fBringupLamp == 0u) {
                 s_fBringupLamp = 1u;
@@ -9690,36 +9658,16 @@ rtl8168_product_program_try(struct rtl8168_soft *pSoft)
 
                 fLnkSelf =
                     ((pSoft->u8PhySt & RTL_PHYST_LINKOK) != 0u) ? 1u : 0u;
-                if (fLnkSelf == 0u) {
-                    udx_printk("rtl8168_udx: product program FAIL mdio "
-                               "bar=%u phyar=0x%08x chipcmd=0x%02x "
-                               "physt=0x%02x linkok=0 "
-                               "(no TE|RE without PHYID or self-AN link) "
-                               "Soft!=product dual_dod_b=OPEN\n",
-                               (unsigned)pSoft->u32BarIndex,
-                               (unsigned)udx_readl(pSoft->pRegs,
-                                                   RTL_REG_PHYAR),
-                               (unsigned)pSoft->u8ChipCmd,
-                               (unsigned)pSoft->u8PhySt);
-                    rtl8168_product_fault_pin(1u, 0u, 0u,
-                                              pSoft->u32BarIndex);
-                    pSoft->u32FProductProg = 0u;
-                    pSoft->u32FProductMint = 0u;
-                    rtl8168_product_irq_bind_open(pSoft, "mdio");
-                    return 0;
-                }
+                /* After RST, LinkSts is often 0 until AN. Still arm TE|RE. */
                 udx_printk("rtl8168_udx: product mdio SKIP self_an=1 "
-                           "physt=0x%02x linkok=1 bar=%u "
-                           "(PHYID fail; copper LinkSts; arm TE|RE) "
+                           "physt=0x%02x linkok=%u bar=%u "
+                           "(PHYID fail; arm TE|RE; poll observes link) "
                            "Soft!=product dual_dod_b=OPEN\n",
-                           (unsigned)pSoft->u8PhySt,
+                           (unsigned)pSoft->u8PhySt, (unsigned)fLnkSelf,
                            (unsigned)pSoft->u32BarIndex);
             }
-            if (fMdioProbe != 0u) {
-                (void)rtl8168_product_phy_link_bringup(pSoft, 0u);
-                pSoft->u8PhySt =
-                    udx_readb(pSoft->pRegs, RTL_REG_PHYSTATUS);
-            }
+            (void)rtl8168_product_phy_link_bringup(pSoft, 0u);
+            pSoft->u8PhySt = udx_readb(pSoft->pRegs, RTL_REG_PHYSTATUS);
             rtl8168_product_fault_pin(
                 1u, pSoft->u32FMdioOk ? 1u : 0u,
                 ((pSoft->u8PhySt & RTL_PHYST_LINKOK) != 0u) ? 1u : 0u,
@@ -9865,12 +9813,9 @@ rtl8168_product_program_try(struct rtl8168_soft *pSoft)
         }
 
         /*
-         * Second PHY kick after TE|RE (MAC clocks live). Windows control
-         * proves cable/switch; post-arm AN recovers flap to LINKOK=0.
-         * Soft!=product Dual DoD B OPEN.
+         * ANE already kicked before TE|RE. Poll observes PHYStatus.
+         * A second Restart_AN here delays copper link.
          */
-        /* Soft ANE after TE|RE once (program path only). Soft!=product. */
-        (void)rtl8168_product_phy_link_bringup(pSoft, 0u);
 
         /* Lock config (9346CR back to normal after IDR/RCR/cfg writes). */
         udx_writeb(pSoft->pRegs, RTL_REG_9346CR, (u8)RTL_9346_EEM_NORMAL);
@@ -10161,7 +10106,9 @@ rtl8168_udx_freestanding_start(void)
          * above keep never_program=1 as soft residual class law.
          * Dual DoD B remains OPEN until interactive SSH login (agent!=close).
          */
+        rtl8168_live_status_pin(pSoft);
         (void)rtl8168_product_program_try(pSoft);
+        rtl8168_live_status_pin(pSoft);
         udx_printk("rtl8168_udx: soft probe PASS stage=%u freestanding=1 "
                    "bind_path=ddi prefer_ddi=1 "
                    "prefer_real_ddi=1 real_ddi=1 host_inject=0 "
@@ -10283,6 +10230,7 @@ main(int argc, char **argv)
     udx_printk("rtl8168_udx: freestanding main option3=1 "
                "prefer_real_ddi=1 product=UDX+sshd+stack "
                "lab_ip=10.200.125.50 dual_dod_b=OPEN Soft!=product\n");
+    rtl8168_live_status_pin(&g_rtlSoft);
     st = rtl8168_udx_freestanding_start();
     udx_printk("rtl8168_udx: freestanding main done st=%d "
                "product_prog_path=1 dual_dod_b=OPEN Soft!=product\n",
@@ -10316,8 +10264,14 @@ main(int argc, char **argv)
         /* Thr-poll RX reclaim → ETH_INJECT; demux TX → Own + TPPoll. */
         if (g_rtlSoft.u32FOwnHandoff != 0u) {
             rtl8168_product_l2_poll(&g_rtlSoft);
+        } else if (g_rtlSoft.pRegs != NULL) {
+            g_rtlSoft.u8PhySt =
+                udx_readb(g_rtlSoft.pRegs, RTL_REG_PHYSTATUS);
         }
         (void)gj_net_poll(); /* advance eth/tcp residual when frames inject */
+        if (g_rtlSoft.u32FOwnHandoff != 0u) {
+            rtl8168_product_l2_poll(&g_rtlSoft);
+        }
         rtl8168_live_status_pin(&g_rtlSoft);
         gj_yield();
     }

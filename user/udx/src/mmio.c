@@ -1526,6 +1526,45 @@ mmio_soft_maybe_once(void)
     mmio_soft_inventory_log();
 }
 
+/*
+ * PCI BAR decode bits may sit in grant PA or ioremap phys (MEM 3:0,
+ * I/O 1:0). Frozen host lookup is containment on the registered base,
+ * so a 1..15 difference misses BAR2 MMIO and the host falls back to
+ * BAR0 I/O. Retry decode-normalized bases; accept only offset 0 so a
+ * larger window is not entered 1..15 bytes in.
+ */
+#define MMIO_BAR_DECODE_MASK  0xfull
+
+static void *
+mmio_window_lookup(u64 u64Phys, u64 u64Len)
+{
+    void *pVa;
+    u64 u64Base;
+    u32 u32Dec;
+
+    pVa = udx_host_window_lookup(u64Phys, u64Len, NULL);
+    if (pVa != NULL) {
+        return pVa;
+    }
+
+    u64Base = u64Phys & ~MMIO_BAR_DECODE_MASK;
+    for (u32Dec = 0; u32Dec < 16u; u32Dec++) {
+        u64 u64Try;
+        u64 u64Off;
+
+        u64Try = u64Base | (u64)u32Dec;
+        if (u64Try == 0 || u64Try == u64Phys) {
+            continue;
+        }
+        u64Off = 0;
+        pVa = udx_host_window_lookup(u64Try, u64Len, &u64Off);
+        if (pVa != NULL && u64Off == 0) {
+            return pVa;
+        }
+    }
+    return NULL;
+}
+
 #if !defined(UDX_HOST_LIBC)
 /** Soft: raise peak if u32Val is higher (diagnostics only; freestanding pool). */
 static void
@@ -1626,7 +1665,7 @@ udx_ioremap(u64 u64Phys, u64 u64Len)
      * greppable: udx: mmio soft residual ioremap densify
      * greppable: Soft!=product dual_dod OPEN product_hosts=UDX
      */
-    pVa = udx_host_window_lookup(u64Phys, u64Len, NULL);
+    pVa = mmio_window_lookup(u64Phys, u64Len);
     if (pVa == NULL) {
         mmio_soft_inc(&g_u32MmioMapLookup);
         udx_printk("udx: ioremap fail phys=%llx len=%llx\n",

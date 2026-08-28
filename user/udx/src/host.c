@@ -2581,7 +2581,8 @@ host_ddi_cfg_residual(long h, u16 u16Vend, u16 u16Dev, const char *szHost,
 }
 
 /**
- * Live PCI Command (0x04) CFG_WRITE for 10ec:8168 after preferred-BAR map.
+ * Live PCI Command (0x04) CFG_WRITE for 10ec:8168 after OPEN.
+ * Preferred BAR0 I/O may report size 0 so MAP count can be 0; still poke.
  * udx_pci_set_master only mutates in-process aCfg; this is the door poke.
  * val = MEM|MASTER (0x0006); +IO if BAR0 is I/O (must decode). Never 0
  * (soft-note 0 would drop BME if the door goes live). Skip 8086:a12f —
@@ -2607,6 +2608,9 @@ host_ddi_cfg_write_rtl_command(long h, u16 u16Vend, u16 u16Dev)
     if (retBar >= 0 &&
         (((u32)retBar) & UDX_PCI_BAR_SPACE_IO) != 0u) {
         u32Val |= (u32)UDX_PCI_COMMAND_IO;
+    }
+    if (u32Val == 0u) {
+        return;
     }
     ret = host_ddi_syscall4(UDX_DDI_OP_CFG_WRITE, h,
                             (long)UDX_DDI_CFG_OFF_CMDST, (long)u32Val);
@@ -4127,6 +4131,11 @@ host_ddi_open_map_install_idx(long iIdx,
                               &u32CfgIdMatch) != 0) {
         u32Life |= UDX_DDI_LIFE_CFG_R;
     }
+    /*
+     * 10ec:8168: Command MEM|MASTER after OPEN even if MAP count is 0
+     * (preferred BAR0 I/O can report size 0). Skip 8086:a12f. Never val=0.
+     */
+    host_ddi_cfg_write_rtl_command(h, pInfo->u16Vend, pInfo->u16Dev);
 
     for (iBar = 0; iBar < 6u; iBar++) {
         host_ddi_bar_pa_cb(pInfo, iBar, &aBarPhys[iBar], &aBarLen[iBar]);
@@ -4192,8 +4201,6 @@ host_ddi_open_map_install_idx(long iIdx,
     }
     if (u32Maps != 0u) {
         u32Life |= UDX_DDI_LIFE_MAP;
-        /* 10ec:8168 only: live Command MEM|BME after preferred-BAR map. */
-        host_ddi_cfg_write_rtl_command(h, pInfo->u16Vend, pInfo->u16Dev);
     }
     /*
      * Preferred-BAR completeness residual (rtl 0+2 / xhci 0):

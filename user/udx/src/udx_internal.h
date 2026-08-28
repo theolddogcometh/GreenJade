@@ -146,6 +146,33 @@ void *udx_host_window_lookup(u64 u64Phys, u64 u64Len, u64 *pu64OffOut);
 u32 udx_core_should_run(void);
 
 /*
+ * DDI OPEN handle retained for bind_by_id / probe MAP, DMA, Command.
+ * Inject-only has no handle (program_gate SKIP). Core never CLOSEs it
+ * on init/run/exit. h>0 is the live door id from DDI_OP_OPEN.
+ */
+#ifndef UDX_GJ_SYS_DDI
+#ifdef GJ_SYS_DDI
+#define UDX_GJ_SYS_DDI GJ_SYS_DDI
+#else
+#define UDX_GJ_SYS_DDI 103
+#endif
+#endif
+#define UDX_CORE_DDI_OP_OPEN       3
+#define UDX_CORE_DDI_OP_MAP_BAR    4
+#define UDX_CORE_DDI_OP_CFG_READ   5
+#define UDX_CORE_DDI_OP_DMA_NOTE   6
+#define UDX_CORE_DDI_OP_CLOSE      8
+#define UDX_CORE_DDI_OP_IRQ_BIND   9
+#define UDX_CORE_DDI_OP_DMA_ALLOC  10
+#define UDX_CORE_DDI_OP_DMA_FREE   11
+#define UDX_CORE_DDI_OP_DMA_MAP    12
+#define UDX_CORE_DDI_OP_CFG_WRITE  16
+extern long g_i64UdxCoreDdiH;
+void udx_core_ddi_handle_retain(long i64H);
+long udx_core_ddi_handle(void);
+int  udx_core_ddi_prep(long nNr, long a0, long *pa1);
+
+/*
  * Freestanding static pools (no libc heap).
  * Host builds use malloc/calloc instead.
  *
@@ -288,32 +315,26 @@ struct udx_fs_dma_large_slot {
 #define UDX_GJ_NOTIFY_BADGE_BITS         64u
 
 /*
- * SYSCALL clobber set (thr=82 DUT .78-.80 class):
+ * SYSCALL clobber (thr=82 DUT .78-.80 class):
  *   Hardware: RCX=return RIP, R11=RFLAGS (always destroyed).
- *   Kernel C on the LSTAR path uses full SysV caller-saved scratch
- *   (rax,rdi,rsi,rdx,rcx,r8,r9,r10,r11) — must all appear here or the
- *   compiler will keep live values across the door (e.g. zero-loop end
- *   pointer in r8). After GET, bind_by_id looped back to the stack zero
- *   with stale r8 → runaway store to map high-water (CR2 slid with stack
- *   guard: top → top+4k → top+2MiB). Soft!=product; Dual DoD OPEN.
+ *   LSTAR C also scratches r8/r9 (GET stack-zero used stale r8).
+ *   rax is "+a"(ret) — not a clobber, or OPEN h is dropped and
+ *   MAP/DMA/Command see handle 0 (inject-only / never_program).
+ * Soft!=product; Dual DoD OPEN.
  */
-#define UDX_GJ_SYSCALL_CLOBBER                                             \
-    "rax", "rdi", "rsi", "rdx", "rcx", "r8", "r9", "r10", "r11", "memory", \
-        "cc"
+#define UDX_GJ_SYSCALL_CLOBBER  "rcx", "r8", "r9", "r11", "memory", "cc"
 
 static inline long
 udx_gj_syscall1(long nNr, long a0)
 {
     long ret;
 
+    ret = nNr;
     __asm__ volatile(
-        "mov %1, %%rax\n\t"
-        "mov %2, %%rdi\n\t"
-        "syscall\n\t"
-        "mov %%rax, %0"
-        : "=r"(ret)
-        : "r"(nNr), "r"(a0)
-        : UDX_GJ_SYSCALL_CLOBBER);
+        "syscall"
+        : "+a"(ret)
+        : "D"(a0)
+        : "rsi", "rdx", "r10", UDX_GJ_SYSCALL_CLOBBER);
     return ret;
 }
 
@@ -322,15 +343,12 @@ udx_gj_syscall2(long nNr, long a0, long a1)
 {
     long ret;
 
+    ret = nNr;
     __asm__ volatile(
-        "mov %1, %%rax\n\t"
-        "mov %2, %%rdi\n\t"
-        "mov %3, %%rsi\n\t"
-        "syscall\n\t"
-        "mov %%rax, %0"
-        : "=r"(ret)
-        : "r"(nNr), "r"(a0), "r"(a1)
-        : UDX_GJ_SYSCALL_CLOBBER);
+        "syscall"
+        : "+a"(ret)
+        : "D"(a0), "S"(a1)
+        : "rdx", "r10", UDX_GJ_SYSCALL_CLOBBER);
     return ret;
 }
 
@@ -338,17 +356,24 @@ static inline long
 udx_gj_syscall3(long nNr, long a0, long a1, long a2)
 {
     long ret;
+    long nSys;
+    long nOp;
 
+    nSys = nNr;
+    nOp = a0;
+    if (udx_core_ddi_prep(nSys, nOp, &a1) != 0) {
+        return 0;
+    }
+    ret = nSys;
     __asm__ volatile(
-        "mov %1, %%rax\n\t"
-        "mov %2, %%rdi\n\t"
-        "mov %3, %%rsi\n\t"
-        "mov %4, %%rdx\n\t"
-        "syscall\n\t"
-        "mov %%rax, %0"
-        : "=r"(ret)
-        : "r"(nNr), "r"(a0), "r"(a1), "r"(a2)
-        : UDX_GJ_SYSCALL_CLOBBER);
+        "syscall"
+        : "+a"(ret)
+        : "D"(nOp), "S"(a1), "d"(a2)
+        : "r10", UDX_GJ_SYSCALL_CLOBBER);
+    if (nSys == UDX_GJ_SYS_DDI && nOp == (long)UDX_CORE_DDI_OP_OPEN &&
+        ret > 0) {
+        udx_core_ddi_handle_retain(ret);
+    }
     return ret;
 }
 
@@ -356,18 +381,25 @@ static inline long
 udx_gj_syscall4(long nNr, long a0, long a1, long a2, long a3)
 {
     long ret;
+    long nSys;
+    long nOp;
+    register long r10 __asm__("r10") = a3;
 
+    nSys = nNr;
+    nOp = a0;
+    if (udx_core_ddi_prep(nSys, nOp, &a1) != 0) {
+        return 0;
+    }
+    ret = nSys;
     __asm__ volatile(
-        "mov %1, %%rax\n\t"
-        "mov %2, %%rdi\n\t"
-        "mov %3, %%rsi\n\t"
-        "mov %4, %%rdx\n\t"
-        "mov %5, %%r10\n\t"
-        "syscall\n\t"
-        "mov %%rax, %0"
-        : "=r"(ret)
-        : "r"(nNr), "r"(a0), "r"(a1), "r"(a2), "r"(a3)
+        "syscall"
+        : "+a"(ret)
+        : "D"(nOp), "S"(a1), "d"(a2), "r"(r10)
         : UDX_GJ_SYSCALL_CLOBBER);
+    if (nSys == UDX_GJ_SYS_DDI && nOp == (long)UDX_CORE_DDI_OP_OPEN &&
+        ret > 0) {
+        udx_core_ddi_handle_retain(ret);
+    }
     return ret;
 }
 

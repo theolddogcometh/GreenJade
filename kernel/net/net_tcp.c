@@ -313,6 +313,9 @@ typedef char tcp_wire22_lean_n[(TCP_LEAN_CHECKS == 11u) ? 1 : -1];
 /* Synced from net_l2 (virtio QEMU, rtl8168 lab static, or UDX lab pin). */
 static u8 g_aOurMac[6] = { 0x52, 0x54, 0x00, 0x12, 0x34, 0x56 };
 static u8 g_aOurIp[4] = { 10, 0, 2, 15 };
+/* LAB_MAC_UDX — rtl8168_udx IDR lab_fallback; never SYN-ACK SHA=QEMU. */
+static const u8 g_aUdxLabMac[6] = { 0x02, 0x00, 0x00, 0x47, 0x4a, 0x50 };
+static const u8 g_aQemuMac[6] = { 0x52, 0x54, 0x00, 0x12, 0x34, 0x56 };
 
 /* True if dest IPv4 is lab 10.200.125.50 (Dual DoD B). Soft!=product. */
 static int
@@ -373,12 +376,34 @@ tcp_udx_tx_full(void)
 static void
 tcp_sync_l2_identity(void)
 {
+	u32 i;
+	int fZero;
+	int fQemu;
+
 	if (net_l2_backend() != GJ_NET_L2_NONE) {
 		net_l2_mac(g_aOurMac);
 		net_l2_ip(g_aOurIp);
-	} else if (net_l2_ready() != 0) {
+	} else {
+		/* UDX: SET_MAC/IDR even before ETH_UDX_READY. Soft!=product. */
 		net_l2_mac(g_aOurMac);
 		net_l2_ip(g_aOurIp);
+		tcp_force_lab_ip();
+		fZero = 1;
+		fQemu = 1;
+		for (i = 0; i < 6u; i++) {
+			if (g_aOurMac[i] != 0u) {
+				fZero = 0;
+			}
+			if (g_aOurMac[i] != g_aQemuMac[i]) {
+				fQemu = 0;
+			}
+		}
+		if (fZero != 0 || fQemu != 0) {
+			for (i = 0; i < 6u; i++) {
+				g_aOurMac[i] = g_aUdxLabMac[i];
+			}
+		}
+		return;
 	}
 	/* Lab pin: rtl residual, UDX L2, or already-lab identity. Soft!=product. */
 	if (net_l2_backend() == GJ_NET_L2_RTL8168 || tcp_udx_l2_live() != 0 ||
@@ -421,7 +446,8 @@ tcp_dest_is_ours(const u8 *pDip)
 	 * ETH_INJECT frames still demux when dest is the lab static.
 	 * Soft!=product.
 	 */
-	if (net_l2_backend() == GJ_NET_L2_RTL8168 || tcp_udx_l2_live() != 0 ||
+	if (net_l2_backend() == GJ_NET_L2_RTL8168 ||
+	    net_l2_backend() == GJ_NET_L2_NONE || tcp_udx_l2_live() != 0 ||
 	    tcp_ip_is_lab(g_aOurIp) != 0) {
 		tcp_force_lab_ip();
 		if (memcmp(pDip, g_aOurIp, 4) == 0 ||

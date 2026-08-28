@@ -101,6 +101,7 @@
 
 #include <udx/dma.h>
 #include <udx/device.h>
+#include <udx/host.h>
 
 #include <stdarg.h>
 
@@ -329,6 +330,7 @@ struct udx_dma_soft_map_slot {
     u8             u8Pad[3];
     u32            cbSize;
     udx_dma_addr_t dma;
+    void          *pCpu; /* stream CPU VA for clflush (not identity cast) */
 };
 
 static struct udx_dma_soft_map_slot g_aMapSlot[UDX_DMA_SOFT_MAP_SLOT_MAX];
@@ -381,8 +383,12 @@ static void dma_soft_log_map_idem_residual_once(void);
 static void dma_soft_log_map_recb_residual_once(void);
 static void dma_soft_log_map_note_residual_once(void);
 static void dma_soft_log_denser_residual_once(void);
-static void dma_soft_map_slot_add(udx_dma_addr_t dma, size_t cbSize);
+static void dma_soft_map_slot_add(udx_dma_addr_t dma, size_t cbSize,
+                                  void *pCpu);
 static int  dma_soft_map_slot_drop(udx_dma_addr_t dma);
+#if !defined(UDX_HOST_LIBC)
+static void *dma_soft_map_cpu_from_cookie(udx_dma_addr_t dma);
+#endif
 
 static void
 dma_soft_inc(u32 *pu32)
@@ -430,7 +436,7 @@ dma_soft_emit(const char *szFmt, ...)
  * spirit for stream); table-full still identity-maps (tally only).
  */
 static void
-dma_soft_map_slot_add(udx_dma_addr_t dma, size_t cbSize)
+dma_soft_map_slot_add(udx_dma_addr_t dma, size_t cbSize, void *pCpu)
 {
     u32 iSlot;
     u32 cbSoft;
@@ -444,6 +450,7 @@ dma_soft_map_slot_add(udx_dma_addr_t dma, size_t cbSize)
     for (iSlot = 0; iSlot < UDX_DMA_SOFT_MAP_SLOT_MAX; iSlot++) {
         if (g_aMapSlot[iSlot].u8Live != 0u && g_aMapSlot[iSlot].dma == dma) {
             g_aMapSlot[iSlot].cbSize = cbSoft;
+            g_aMapSlot[iSlot].pCpu = pCpu;
             dma_soft_inc(&g_u32DmaMapRemap);
             dma_soft_log_map_idem_residual_once();
             return;
@@ -455,6 +462,7 @@ dma_soft_map_slot_add(udx_dma_addr_t dma, size_t cbSize)
             g_aMapSlot[iSlot].u8Live = 1u;
             g_aMapSlot[iSlot].dma = dma;
             g_aMapSlot[iSlot].cbSize = cbSoft;
+            g_aMapSlot[iSlot].pCpu = pCpu;
             dma_soft_inc(&g_u32DmaMapLive);
             dma_soft_note_peak(&g_u32DmaMapLivePeak, g_u32DmaMapLive);
             return;
@@ -478,6 +486,7 @@ dma_soft_map_slot_drop(udx_dma_addr_t dma)
             g_aMapSlot[iSlot].u8Live = 0u;
             g_aMapSlot[iSlot].dma = 0;
             g_aMapSlot[iSlot].cbSize = 0u;
+            g_aMapSlot[iSlot].pCpu = NULL;
             if (g_u32DmaMapLive > 0u) {
                 g_u32DmaMapLive--;
             }
@@ -486,6 +495,25 @@ dma_soft_map_slot_drop(udx_dma_addr_t dma)
     }
     return 0;
 }
+
+#if !defined(UDX_HOST_LIBC)
+/** Stream-map CPU VA for a bus cookie (clflush). Soft!=product. */
+static void *
+dma_soft_map_cpu_from_cookie(udx_dma_addr_t dma)
+{
+    u32 iSlot;
+
+    if (dma == 0) {
+        return NULL;
+    }
+    for (iSlot = 0; iSlot < UDX_DMA_SOFT_MAP_SLOT_MAX; iSlot++) {
+        if (g_aMapSlot[iSlot].u8Live != 0u && g_aMapSlot[iSlot].dma == dma) {
+            return g_aMapSlot[iSlot].pCpu;
+        }
+    }
+    return NULL;
+}
+#endif
 
 #if defined(UDX_HOST_LIBC) && !defined(GJ_FREESTANDING)
 /** Host soft DDI slot find by handle + cookie. */
@@ -1804,22 +1832,42 @@ static void *
 fs_dma_va_from_cookie(udx_dma_addr_t dma, size_t cbSize)
 {
     u32 iSlot;
+    udx_dma_addr_t dmaBase;
+    size_t cbAlloc;
+    size_t off;
 
     if (dma == 0) {
         return NULL;
     }
+    (void)cbSize;
     for (iSlot = 0; iSlot < UDX_FS_DMA_SLOTS; iSlot++) {
-        if (g_aFsDma[iSlot].u8Used &&
-            g_aFsDma[iSlot].dmaCookie == dma) {
-            (void)cbSize;
-            return g_aFsDma[iSlot].aBytes;
+        if (g_aFsDma[iSlot].u8Used == 0u) {
+            continue;
+        }
+        dmaBase = g_aFsDma[iSlot].dmaCookie;
+        cbAlloc = g_aFsDma[iSlot].cbAlloc;
+        if (dmaBase == 0 || cbAlloc == 0) {
+            continue;
+        }
+        if (dma >= dmaBase &&
+            (dma - dmaBase) < (udx_dma_addr_t)cbAlloc) {
+            off = (size_t)(dma - dmaBase);
+            return g_aFsDma[iSlot].aBytes + off;
         }
     }
     for (iSlot = 0; iSlot < UDX_FS_DMA_LARGE_SLOTS; iSlot++) {
-        if (g_aFsDmaLarge[iSlot].u8Used &&
-            g_aFsDmaLarge[iSlot].dmaCookie == dma) {
-            (void)cbSize;
-            return g_aFsDmaLarge[iSlot].aBytes;
+        if (g_aFsDmaLarge[iSlot].u8Used == 0u) {
+            continue;
+        }
+        dmaBase = g_aFsDmaLarge[iSlot].dmaCookie;
+        cbAlloc = g_aFsDmaLarge[iSlot].cbAlloc;
+        if (dmaBase == 0 || cbAlloc == 0) {
+            continue;
+        }
+        if (dma >= dmaBase &&
+            (dma - dmaBase) < (udx_dma_addr_t)cbAlloc) {
+            off = (size_t)(dma - dmaBase);
+            return g_aFsDmaLarge[iSlot].aBytes + off;
         }
     }
     return NULL;
@@ -2624,6 +2672,19 @@ udx_dma_iommu_grant(u32 u32Bdf, udx_dma_addr_t dma, size_t cbSize)
          * kernel op5 honesty. Soft!=product.
          */
         (void)udx_dma_window_ok(dma, cbSize, 1);
+        /*
+         * DDI DMA_BUF_MAP on the retained OPEN handle (identity bus=PA
+         * + door iommu_window_grant). BSS coherent pages are not door
+         * ALLOC slots; MAP of a noted PA is allowed. Then PLATFORM_INFO
+         * op5 cover honesty. Soft!=product; not CNode mint.
+         */
+        {
+            long i64H = udx_host_ddi_handle();
+
+            if (i64H > 0) {
+                (void)udx_dma_ddi_buf_map((u32)i64H, dma, cbSize);
+            }
+        }
         ret = udx_gj_iommu_grant(u32Bdf, dma, cbSize);
         if (ret < 0) {
             dma_soft_inc(&g_u32DmaIommuFail);
@@ -2692,9 +2753,44 @@ udx_dma_map_single(struct udx_device *pDev, void *pCpu, size_t cbSize,
         dma_soft_inc(&g_u32DmaMapOversize);
         return 0;
     }
-    /* Soft identity cookie helper; Soft!=product DMA window cap mint. */
+    /*
+     * Host: identity cookie = CPU VA.
+     * Freestanding: bus PA via PLATFORM_INFO op6 (VA != PA after elf_load).
+     * Soft!=product DMA window cap mint.
+     */
+#if defined(UDX_HOST_LIBC)
     dma = udx_dma_cookie_from_cpu(pCpu);
-    dma_soft_map_slot_add(dma, cbSize);
+#else
+    {
+        long i64Pa0;
+        size_t off;
+        size_t cbFirst;
+
+        i64Pa0 = udx_gj_virt_to_phys(pCpu);
+        if (i64Pa0 <= 0) {
+            dma_soft_inc(&g_u32DmaMapNull);
+            return 0;
+        }
+        dma = (udx_dma_addr_t)i64Pa0;
+        cbFirst = 4096u - ((size_t)((uintptr_t)pCpu) & 0xfffu);
+        off = cbFirst;
+        while (off < cbSize) {
+            long i64Pa;
+
+            i64Pa = udx_gj_virt_to_phys((const u8 *)pCpu + off);
+            if (i64Pa <= 0 ||
+                (udx_dma_addr_t)i64Pa != dma + (udx_dma_addr_t)off) {
+                dma_soft_inc(&g_u32DmaMapNull);
+                return 0;
+            }
+            off += 4096u;
+        }
+        if (eDir == UDX_DMA_TO_DEVICE || eDir == UDX_DMA_BIDIRECTIONAL) {
+            fs_dma_clflush_range(pCpu, cbSize);
+        }
+    }
+#endif
+    dma_soft_map_slot_add(dma, cbSize, pCpu);
     dma_soft_inc(&g_u32DmaMapOk);
     /*
      * STRONGER map/note residual for product UDX hosts (rtl/xhci).
@@ -2743,6 +2839,9 @@ udx_dma_sync_single_for_cpu(struct udx_device *pDev, udx_dma_addr_t dma,
          * (DUT .85 own_stuck with mfence-only). Soft!=product full IOTLB.
          * greppable: udx: dma soft residual sync clflush
          */
+        if (pVa == NULL) {
+            pVa = dma_soft_map_cpu_from_cookie(dma);
+        }
         if (pVa != NULL) {
             fs_dma_clflush_range(pVa, cbSize);
         } else {
@@ -2773,6 +2872,9 @@ udx_dma_sync_single_for_device(struct udx_device *pDev, udx_dma_addr_t dma,
          * before NIC DMA (pair kernel dma_buf_sync_for_device clflush).
          * Soft!=product; Dual DoD B OPEN.
          */
+        if (pVa == NULL) {
+            pVa = dma_soft_map_cpu_from_cookie(dma);
+        }
         if (pVa != NULL) {
             fs_dma_clflush_range(pVa, cbSize);
         } else {

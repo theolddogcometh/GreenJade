@@ -67,6 +67,18 @@
 #define IOMMU_DMAR_RHSA  3u
 /* ANDD=4, SATC=5, SIDP=6 treated as "other" for soft inventory */
 
+/* DRHD: Flags bit 0 INCLUDE_PCI_ALL; header 16 bytes; Device Scope follows. */
+#define IOMMU_DRHD_FLAG_INCLUDE_PCI_ALL 0x01u
+#define IOMMU_DRHD_HDR_CB               16u
+#define IOMMU_DRHD_CAND_MAX             16u
+#define IOMMU_DSCOPE_HDR_CB             6u
+#define IOMMU_DSCOPE_TYPE_PCI_EP        1u
+#define IOMMU_DSCOPE_TYPE_PCI_SUB       2u
+/* Commit rank: NIC 03:00.0 scope, then INCLUDE_PCI_ALL, then GFX/other. */
+#define IOMMU_DRHD_RANK_OTHER           0u
+#define IOMMU_DRHD_RANK_INCLUDE_ALL     1u
+#define IOMMU_DRHD_RANK_NIC_SCOPE       2u
+
 static struct gj_iommu_info g_Info;
 static int g_fProbed;
 static int g_fEnforce;
@@ -752,23 +764,114 @@ iommu_scan_sdt_entries(u8 *pSdt, u32 u32Len, u32 u32EntryCb)
 }
 
 /**
+ * Non-zero if a DRHD Device Scope names G752 NIC 03:00.0 (start-bus + first
+ * path pair). Length can lie; stop on a short/overrun scope.
+ */
+static int
+iommu_drhd_scope_names_nic(const u8 *pDrhd, u16 u16Slen)
+{
+    u32 u32Off;
+
+    if (pDrhd == NULL || u16Slen < IOMMU_DRHD_HDR_CB) {
+        return 0;
+    }
+    u32Off = IOMMU_DRHD_HDR_CB;
+    while (u32Off + IOMMU_DSCOPE_HDR_CB <= (u32)u16Slen) {
+        u8 u8Type = pDrhd[u32Off];
+        u8 u8Len = pDrhd[u32Off + 1];
+        u8 u8StartBus;
+        u8 u8Dev;
+        u8 u8Fn;
+
+        if (u8Len < IOMMU_DSCOPE_HDR_CB ||
+            u32Off + (u32)u8Len > (u32)u16Slen) {
+            break;
+        }
+        if ((u8Type == IOMMU_DSCOPE_TYPE_PCI_EP ||
+             u8Type == IOMMU_DSCOPE_TYPE_PCI_SUB) &&
+            u8Len >= IOMMU_DSCOPE_HDR_CB + 2u) {
+            u8StartBus = pDrhd[u32Off + 5];
+            u8Dev = pDrhd[u32Off + 6] & 0x1fu;
+            u8Fn = pDrhd[u32Off + 7] & 0x07u;
+            if (u8StartBus == GJ_IOMMU_G752_NIC_BUS &&
+                u8Dev == GJ_IOMMU_G752_NIC_SLOT &&
+                u8Fn == GJ_IOMMU_G752_NIC_FUNC) {
+                return 1;
+            }
+        }
+        u32Off += (u32)u8Len;
+    }
+    return 0;
+}
+
+/**
+ * Rank for first-wins commit: explicit NIC scope, else INCLUDE_PCI_ALL.
+ */
+static u8
+iommu_drhd_commit_rank(const u8 *pDrhd, u16 u16Slen, u8 u8Flags)
+{
+    if (iommu_drhd_scope_names_nic(pDrhd, u16Slen) != 0) {
+        return IOMMU_DRHD_RANK_NIC_SCOPE;
+    }
+    if ((u8Flags & IOMMU_DRHD_FLAG_INCLUDE_PCI_ALL) != 0) {
+        return IOMMU_DRHD_RANK_INCLUDE_ALL;
+    }
+    return IOMMU_DRHD_RANK_OTHER;
+}
+
+/**
+ * Commit deferred DRHD bases. iommu_vtd_set_drhd is first-wins, so the NIC
+ * unit (INCLUDE_PCI_ALL or 03:00.0 scope) must be first; GFX after.
+ */
+static void
+iommu_drhd_commit_cands(const u64 *pBase, const u8 *pRank, u32 cCand)
+{
+    u32 iCand;
+
+    if (pBase == NULL || pRank == NULL || cCand == 0) {
+        return;
+    }
+    for (iCand = 0; iCand < cCand; iCand++) {
+        if (pRank[iCand] == IOMMU_DRHD_RANK_NIC_SCOPE) {
+            iommu_vtd_set_drhd(pBase[iCand]);
+        }
+    }
+    for (iCand = 0; iCand < cCand; iCand++) {
+        if (pRank[iCand] == IOMMU_DRHD_RANK_INCLUDE_ALL) {
+            iommu_vtd_set_drhd(pBase[iCand]);
+        }
+    }
+    for (iCand = 0; iCand < cCand; iCand++) {
+        if (pRank[iCand] == IOMMU_DRHD_RANK_OTHER) {
+            iommu_vtd_set_drhd(pBase[iCand]);
+        }
+    }
+}
+
+/**
  * Walk DMAR remapping structures for soft inventory + DRHD register base.
  * DMAR header is 48 bytes; structures follow with type/length headers.
  * u32MapMax is the validated DMAR length (already clamped).
  *
  * Types (public ACPI DMAR): 0 DRHD, 1 RMRR, 2 ATSR, 3 RHSA, ...
+ * DRHD bases are deferred, then committed INCLUDE_PCI_ALL / NIC 03:00.0
+ * scope first so first-wins arms the NIC's unit (G752 lists GFX first).
  */
 static void
 iommu_dmar_parse(u8 *pDmar, u32 u32MapMax)
 {
     u32 u32Off;
     u32 cStruct;
+    u32 cCand;
+    u64 aDrhdBase[IOMMU_DRHD_CAND_MAX];
+    u8 aDrhdRank[IOMMU_DRHD_CAND_MAX];
 
     if (pDmar == NULL || u32MapMax < IOMMU_DMAR_HDR_MIN) {
         return;
     }
     u32Off = IOMMU_DMAR_HDR_MIN;
     cStruct = 0;
+    cCand = 0;
     while (u32Off + 4u <= u32MapMax && cStruct < 256u) {
         u16 u16Type = *(u16 *)(void *)(pDmar + u32Off);
         u16 u16Slen = *(u16 *)(void *)(pDmar + u32Off + 2);
@@ -784,7 +887,7 @@ iommu_dmar_parse(u8 *pDmar, u32 u32MapMax)
         }
         if (u16Type == IOMMU_DMAR_DRHD) {
             g_cDrhd++;
-            if (u16Slen >= 16u) {
+            if (u16Slen >= IOMMU_DRHD_HDR_CB) {
                 /* DRHD: flags@4, size@5, segment@6, register_base@8 */
                 u8 u8Flags = pDmar[u32Off + 4];
                 u16 u16Seg = *(u16 *)(void *)(pDmar + u32Off + 6);
@@ -793,9 +896,14 @@ iommu_dmar_parse(u8 *pDmar, u32 u32MapMax)
                 kprintf("iommu: DRHD soft seg=%u flags=0x%x base=0x%lx\n",
                         (u32)u16Seg, (u32)u8Flags, (unsigned long)u64Base);
                 if (u64Base != 0 && (u64Base & 0xfffull) == 0) {
-                    /* page-aligned MMIO base only; first wins in set_drhd */
-                    iommu_vtd_set_drhd(u64Base);
-                    g_cDrhdAccepted++;
+                    /* page-aligned MMIO; defer set_drhd for NIC-first commit */
+                    if (cCand < IOMMU_DRHD_CAND_MAX) {
+                        aDrhdBase[cCand] = u64Base;
+                        aDrhdRank[cCand] = iommu_drhd_commit_rank(
+                            pDmar + u32Off, u16Slen, u8Flags);
+                        cCand++;
+                        g_cDrhdAccepted++;
+                    }
                 } else if (u64Base != 0) {
                     kprintf("iommu: DRHD base unaligned skip=0x%lx\n",
                             (unsigned long)u64Base);
@@ -839,6 +947,7 @@ iommu_dmar_parse(u8 *pDmar, u32 u32MapMax)
         }
         u32Off += u16Slen;
     }
+    iommu_drhd_commit_cands(aDrhdBase, aDrhdRank, cCand);
 }
 
 int

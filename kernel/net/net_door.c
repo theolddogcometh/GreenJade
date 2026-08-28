@@ -1882,6 +1882,19 @@ net_door_udx_tx_drop_head(void)
     g_u32UdxTxN--;
 }
 
+/*
+ * Product UDX L2: arm ready so ETH_INJECT demux + ETH_TX_PULL enqueue work.
+ * Driver may inject before GJ_NET_OP_ETH_UDX_READY; missing arm was NODEV
+ * and ARP never demuxed (0.1.185 L3 FAIL). No new lamp. Soft!=product.
+ */
+static void
+net_door_udx_arm_soft(void)
+{
+    g_fUdxReady = 1u;
+    net_l2_udx_ready_identity();
+    net_tcp_ensure_listen22();
+}
+
 i64
 net_door_call(u32 u32Op, u64 u64Arg1, u64 u64Arg2, u64 u64Arg3)
 {
@@ -2744,15 +2757,7 @@ net_door_call(u32 u32Op, u64 u64Arg1, u64 u64Arg2, u64 u64Arg3)
          * greppable: ETH_UDX_READY | path=rtl8168_udx | net_l2: soft udx ready
          */
         if (u64Arg1 != 0ull) {
-            g_fUdxReady = 1u;
-            net_l2_udx_ready_identity();
-            /*
-             * Wire :22 listen onto product UDX L2 (backend=none).
-             * Product sshd BIND/LISTEN may already hold :22; this mints
-             * if not, so ETH_INJECT SYN is accepted and SYN-ACK can
-             * ETH_TX_PULL. Soft!=product. != host banner.
-             */
-            net_tcp_ensure_listen22();
+            net_door_udx_arm_soft();
             if (g_fUdxReadyLamp == 0u) {
                 g_fUdxReadyLamp = 1u;
                 kprintf("net_door: soft ETH_UDX_READY arm=1 "
@@ -2787,6 +2792,8 @@ net_door_call(u32 u32Op, u64 u64Arg1, u64 u64Arg2, u64 u64Arg3)
             memcpy(aMac, (const void *)(gj_vaddr_t)u64Arg1, 6u);
         }
         net_l2_set_station_mac(aMac);
+        /* IDR published: arm UDX L2 so ARP SHA TX can ETH_TX_PULL. */
+        net_door_udx_arm_soft();
         return net_door_soft_done(0);
     }
     case GJ_NET_OP_ETH_INJECT: {
@@ -2794,7 +2801,8 @@ net_door_call(u32 u32Op, u64 u64Arg1, u64 u64Arg2, u64 u64Arg3)
          * UDX thr-poll RX residual → demux (ARP/ICMP/TCP:22).
          * TCP SYN is not virtio-only: net_eth_input_frame ->
          * net_tcp_input / ensure :22; SYN-ACK net_l2_tx -> ETH_TX_PULL.
-         * Require ETH_UDX_READY so SYN/ARP is not half-applied with no TX.
+         * Missing ETH_UDX_READY used to NODEV (ARP never demuxed). Arm
+         * on first valid inject so handle_arp / ICMP / :22 SYN can TX.
          * Soft!=product Dual DoD B.
          * greppable: ETH_INJECT | net_eth: soft udx inject
          */
@@ -2802,12 +2810,12 @@ net_door_call(u32 u32Op, u64 u64Arg1, u64 u64Arg2, u64 u64Arg3)
         u32 cb;
         int nOk;
 
-        if (g_fUdxReady == 0u) {
-            return net_door_soft_done(GJ_ERR_NODEV);
-        }
         cb = (u32)u64Arg2;
         if (u64Arg1 == 0ull || cb < 14u || cb > NET_DOOR_UDX_TX_MAX) {
             return net_door_soft_done(GJ_ERR_INVAL);
+        }
+        if (g_fUdxReady == 0u) {
+            net_door_udx_arm_soft();
         }
         if (user_range_ok(u64Arg1, cb)) {
             if (copy_from_user(aFrame, u64Arg1, cb) != GJ_OK) {
@@ -2903,17 +2911,35 @@ int
 net_door_udx_tx_soft(const void *pFrame, u32 cb)
 {
     u32 iSlot;
+    u32 cbOut;
 
-    if (g_fUdxReady == 0u || pFrame == NULL || cb < 14u ||
-        cb > NET_DOOR_UDX_TX_MAX) {
+    if (pFrame == NULL || cb < 14u || cb > NET_DOOR_UDX_TX_MAX) {
         return -1;
+    }
+    if (g_fUdxReady == 0u) {
+        net_door_udx_arm_soft();
+    }
+    if (g_fUdxReady == 0u) {
+        return -1;
+    }
+    /* Ethernet min 60 excl. FCS; runt ARP/SYN-ACK would miss the host. */
+    cbOut = cb;
+    if (cbOut < 60u) {
+        cbOut = 60u;
+    }
+    if (g_u32UdxTxN >= NET_DOOR_UDX_TX_SLOTS) {
+        /* Newest ARP/ICMP/SYN-ACK wins; oldest unsent slot is dropped. */
+        net_door_udx_tx_drop_head();
     }
     if (g_u32UdxTxN >= NET_DOOR_UDX_TX_SLOTS) {
         return -1;
     }
     iSlot = g_u32UdxTxHead % NET_DOOR_UDX_TX_SLOTS;
     memcpy(g_aUdxTx[iSlot], pFrame, cb);
-    g_aUdxTxLen[iSlot] = (u16)cb;
+    if (cbOut > cb) {
+        memset(g_aUdxTx[iSlot] + cb, 0, cbOut - cb);
+    }
+    g_aUdxTxLen[iSlot] = (u16)cbOut;
     g_u32UdxTxHead++;
     g_u32UdxTxN++;
     if (g_u32UdxTxEnq < 0xfffffffeu) {

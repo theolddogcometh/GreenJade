@@ -29,7 +29,7 @@
  *   DMA_BUF_MAP: re-MAP same pa/cb returns prior bus cookie (door dma_idem);
  *     re-MAP different cb unmaps prior cookie first (door dma_recb residual).
  *   DMA_BUF force32: optional bit0 residual after FREE (VT-d identity prefer).
- *   CFG_WRITE: soft-note safe off; reject identity + BAR (PERM residual).
+ *   CFG_WRITE: 8168 Command MEM|MASTER (0x0006); never val=0; never xHCI.
  *   IRQ_REBIND: second IRQ_BIND same handle (door rebind; multi-slot safe);
  *     notify_poll uses rebind badge when rebind soft-ok (badge residual).
  *   Multi-host: concurrent OPEN/CFG/MAP/REMAP/IRQ/DMA on rtl+xhci;
@@ -194,15 +194,18 @@
 #define DDI_HOST_PRODUCT_CHAIN         "UDX+ABI+DDI"
 
 /*
- * Soft CFG_WRITE residual offsets (kernel ddi_door careful soft):
- *   - 0x04 command/status: soft-note allowed (no live CF8 poke until product)
- *   - 0x10 BAR0: reject PERM (identity/BAR live write refuse)
- *   - 0x00 identity: reject PERM (door careful soft; never PASS write)
- * Never poke identity (0x00) or BAR window (0x10..0x24) as "PASS write".
+ * CFG_WRITE offsets (kernel ddi_door):
+ *   - 0x04 Command: 10ec:8168 requests MEM|MASTER (0x0006). Never val=0.
+ *     Never 8086:a12f Command (Dual DoD A; USBCMD.RS stays off).
+ *   - 0x10 BAR0 / 0x00 identity: reject PERM (never PASS write).
  */
-#define DDI_HOST_CFG_OFF_CMDST    0x04u
-#define DDI_HOST_CFG_OFF_BAR0     0x10u
-#define DDI_HOST_CFG_OFF_IDENT    0x00u
+#define DDI_HOST_CFG_OFF_CMDST     0x04u
+#define DDI_HOST_CFG_OFF_BAR0      0x10u
+#define DDI_HOST_CFG_OFF_IDENT     0x00u
+#define DDI_HOST_PCI_CMD_MEM       0x0002u
+#define DDI_HOST_PCI_CMD_MASTER    0x0004u
+#define DDI_HOST_PCI_CMD_MEM_BME \
+    (DDI_HOST_PCI_CMD_MEM | DDI_HOST_PCI_CMD_MASTER) /* 0x0006; never 0 */
 
 /*
  * Soft lifecycle phase mask (functional residual vs door life=).
@@ -792,19 +795,44 @@ log_soft_cfg(const char *szId, unsigned long h)
 }
 
 /**
- * Soft CFG_WRITE residual -- careful soft path matching kernel ddi_door.
- * Functional residual preferred over lamp spam:
- *   1) Soft-note write at cmd/status (0x04) -- door soft-notes, no live poke.
+ * 10ec:8168 PCI Command (0x04): request MEM|MASTER (0x0006). Never val=0.
+ * Never 8086:a12f Command (Dual DoD A; USBCMD.RS stays off).
+ * Returns CFG_WRITE ret on 8168; 0 and no poke otherwise.
+ */
+static long
+soft_cfg_write_8168_command(unsigned long h, unsigned short u16Vend,
+                            unsigned short u16Dev)
+{
+    unsigned uVal;
+
+    if (u16Vend != (unsigned short)DDI_HOST_RTL_VEND ||
+        u16Dev != (unsigned short)DDI_HOST_RTL_DEV) {
+        return 0;
+    }
+    if (h == 0ul) {
+        return -1;
+    }
+    uVal = (unsigned)DDI_HOST_PCI_CMD_MEM_BME;
+    if (uVal == 0u) {
+        return -1;
+    }
+    return gj_ddi_cfg_write(h, DDI_HOST_CFG_OFF_CMDST, uVal);
+}
+
+/**
+ * Soft CFG_WRITE residual -- careful path matching kernel ddi_door.
+ *   1) 10ec:8168 Command (0x04) = MEM|MASTER (0x0006). Never val=0.
+ *      Never 8086:a12f Command.
  *   2) Reject residual at BAR0 (0x10) -- expect PERM (unsafe BAR).
  *   3) Reject residual at identity (0x00) -- expect PERM (unsafe identity).
- * Cap honesty: never claims live bus-master enable or BAR reprogram.
  * greppable: ddi_host: soft CFG_WRITE
  * greppable: ddi_host: soft CFG_WRITE reject
  * Fills *puNote / *puRej / *puIdent with 0/1 when non-NULL.
- * Returns 1 if soft-note PASS (safe off), 0 otherwise.
+ * Returns 1 if 8168 Command MEM|MASTER write ok, 0 otherwise.
  */
 static int
 log_soft_cfg_write(const char *szId, unsigned long h,
+                   unsigned short u16Vend, unsigned short u16Dev,
                    unsigned *puNote, unsigned *puRej, unsigned *puIdent)
 {
     long retNote;
@@ -815,6 +843,7 @@ log_soft_cfg_write(const char *szId, unsigned long h,
     int fNote = 0;
     int fRej = 0;
     int fIdent = 0;
+    int fRtl;
 
     if (puNote != 0) {
         *puNote = 0;
@@ -826,30 +855,36 @@ log_soft_cfg_write(const char *szId, unsigned long h,
         *puIdent = 0;
     }
 
-    soft_inc(&g_uSoftCfgWrite);
-    /* Prefer wrapped helper when present; same opcode 16. */
-    retNote = gj_ddi_cfg_write(h, DDI_HOST_CFG_OFF_CMDST, 0u);
-
-    memzero(aLine, sizeof(aLine));
-    append_s(aLine, sizeof(aLine), &o, "ddi_host: soft CFG_WRITE ");
-    append_s(aLine, sizeof(aLine), &o, szId != 0 ? szId : "????:????");
-    append_s(aLine, sizeof(aLine), &o, " off=0x");
-    append_hex_ull(aLine, sizeof(aLine), &o,
-                   (unsigned long long)DDI_HOST_CFG_OFF_CMDST);
-    append_s(aLine, sizeof(aLine), &o, " handle=");
-    append_u(aLine, sizeof(aLine), &o, h);
-    if (retNote >= 0) {
-        soft_inc(&g_uSoftCfgWriteOk);
-        fNote = 1;
-        append_s(aLine, sizeof(aLine), &o,
-                 " PASS soft_note=1 live_poke=0 mint=0 Soft!=product\n");
-    } else {
-        append_s(aLine, sizeof(aLine), &o, " SKIP why=cfg_write_fail");
-        append_err(aLine, sizeof(aLine), &o, retNote);
-        append_s(aLine, sizeof(aLine), &o, " mint=0 Soft!=product\n");
+    fRtl = (u16Vend == (unsigned short)DDI_HOST_RTL_VEND &&
+            u16Dev == (unsigned short)DDI_HOST_RTL_DEV) ? 1 : 0;
+    /* 8168 Command MEM|MASTER only. Never val=0. Never xHCI Command. */
+    if (fRtl != 0) {
+        soft_inc(&g_uSoftCfgWrite);
+        retNote = soft_cfg_write_8168_command(h, u16Vend, u16Dev);
+        memzero(aLine, sizeof(aLine));
+        append_s(aLine, sizeof(aLine), &o, "ddi_host: soft CFG_WRITE ");
+        append_s(aLine, sizeof(aLine), &o, szId != 0 ? szId : "????:????");
+        append_s(aLine, sizeof(aLine), &o, " off=0x");
+        append_hex_ull(aLine, sizeof(aLine), &o,
+                       (unsigned long long)DDI_HOST_CFG_OFF_CMDST);
+        append_s(aLine, sizeof(aLine), &o, " val=0x");
+        append_hex4(aLine, sizeof(aLine), &o,
+                    (unsigned)DDI_HOST_PCI_CMD_MEM_BME);
+        append_s(aLine, sizeof(aLine), &o, " handle=");
+        append_u(aLine, sizeof(aLine), &o, h);
+        if (retNote >= 0) {
+            soft_inc(&g_uSoftCfgWriteOk);
+            fNote = 1;
+            append_s(aLine, sizeof(aLine), &o,
+                     " PASS mse=1 bme=1 mint=0 Soft!=product\n");
+        } else {
+            append_s(aLine, sizeof(aLine), &o, " SKIP why=cfg_write_fail");
+            append_err(aLine, sizeof(aLine), &o, retNote);
+            append_s(aLine, sizeof(aLine), &o, " mint=0 Soft!=product\n");
+        }
+        aLine[o < sizeof(aLine) ? o : (sizeof(aLine) - 1u)] = '\0';
+        msg(aLine);
     }
-    aLine[o < sizeof(aLine) ? o : (sizeof(aLine) - 1u)] = '\0';
-    msg(aLine);
 
     /*
      * Functional residual: BAR0 write must soft-reject (PERM). Observes
@@ -2158,8 +2193,8 @@ soft_map_one_bar(unsigned long h, unsigned uBar,
  * Soft OPEN + MAP preferred BARs for one inventory index.
  * aBars[] lists bar indices to try (e.g. {0,2} for RTL, {0} for xHCI).
  * PASS when open handle > 0 and >=1 BAR soft-maps.
- * Path (vs kernel ddi_door life=): OPEN -> CFG_READ -> CFG_WRITE careful
- *   (BAR+ident reject) -> MAP_BAR* -> MAP_REMAP(idem+sticky) -> DMA_NOTE ->
+ * Path (vs kernel ddi_door life=): OPEN -> CFG_READ -> CFG_WRITE
+ *   (8168 Command 0x0006; BAR+ident reject) -> MAP_BAR* -> MAP_REMAP -> DMA_NOTE ->
  *   IRQ_BIND -> IRQ_REBIND -> notify poll (rebind badge when rebind ok) ->
  *   DMA_BUF ALLOC/MAP/MAP_REMAP(idem)/MAP_RECB(diff cb)/FREE/force32 ->
  *   grant surface -> QUIESCE -> CLOSE -> post_close forget
@@ -2262,10 +2297,11 @@ soft_open_map_bars(unsigned idx, const struct ddi_host_dev_info *pInfo,
     }
 
     /*
-     * Soft CFG_WRITE careful residual (door opcode 16): soft-note + BAR +
-     * identity reject. Functional policy check; never product bus-master.
+     * CFG_WRITE: 8168 Command MEM|MASTER (0x0006); never val=0; never xHCI
+     * Command. BAR + identity reject residuals follow.
      */
-    fCfgWOk = log_soft_cfg_write(szId, (unsigned long)h, &uCfgNote, &uCfgRej,
+    fCfgWOk = log_soft_cfg_write(szId, (unsigned long)h, pInfo->u16Vend,
+                                 pInfo->u16Dev, &uCfgNote, &uCfgRej,
                                  &uCfgIdent);
     if (fCfgWOk != 0) {
         uLife |= DDI_HOST_LIFE_CFG_W;
@@ -2897,6 +2933,12 @@ soft_multi_host_rtl_xhci(long nDev)
     if (uRtlCfg != 0u && uXhciCfg != 0u) {
         fBothCfg = 1;
         soft_inc(&g_uSoftMultiHostCfgBoth);
+    }
+
+    /* 10ec:8168 Command MEM|MASTER before MAP. Never xHCI Command. */
+    if (hRtl > 0) {
+        (void)soft_cfg_write_8168_command((unsigned long)hRtl,
+                                          infoRtl.u16Vend, infoRtl.u16Dev);
     }
 
     /*

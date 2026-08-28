@@ -90,6 +90,7 @@
  */
 #include "udx_internal.h"
 
+#include <udx/ddi.h>
 #include <udx/device.h>
 #include <udx/host.h>
 #include <udx/pci.h>
@@ -2501,6 +2502,68 @@ pci_fs_bound_clear(struct udx_pci_bound *pBound)
 }
 #endif
 
+#if !defined(UDX_HOST_LIBC) || defined(GJ_FREESTANDING)
+/**
+ * Window-register remaining BAR VAs before probe.
+ * Bind MAP_BAR's preferred bars (rtl 0+2) but only passes BAR0 VA into
+ * install; probe ioremaps BAR2 first and misses if that window is late.
+ */
+static void
+pci_grant_window_other_bars(struct udx_pci_bound *pBound)
+{
+    struct udx_pci_dev *pPdev;
+    long i64H;
+    int iBar;
+
+    if (pBound == NULL || pBound->pPdev == NULL) {
+        return;
+    }
+    pPdev = pBound->pPdev;
+    i64H = udx_host_ddi_handle();
+    if (i64H <= 0) {
+        return;
+    }
+    for (iBar = 0; iBar < 6; iBar++) {
+        struct udx_ddi_map_note note;
+        u8 *pByte;
+        u32 iByte;
+        long ret;
+        void *pVa;
+
+        if (pPdev->aBarPhys[iBar] == 0 || pPdev->aBarLen[iBar] == 0) {
+            continue;
+        }
+        if (pBound->apBarHost[iBar] != NULL) {
+            continue;
+        }
+        pByte = (u8 *)(void *)&note;
+        for (iByte = 0; iByte < (u32)sizeof(note); iByte++) {
+            pByte[iByte] = 0;
+        }
+        ret = udx_gj_ddi_syscall4((long)UDX_DDI_OP_MAP_BAR, i64H, (long)iBar,
+                                  (long)(uintptr_t)&note);
+        pVa = NULL;
+        if (ret >= 0 && note.u8Ok != 0 && note.u64Va != 0) {
+            pVa = (void *)(uintptr_t)note.u64Va;
+            if (note.u64Pa != 0) {
+                pPdev->aBarPhys[iBar] = note.u64Pa;
+            }
+            if (note.u64Cb != 0) {
+                pPdev->aBarLen[iBar] = note.u64Cb;
+            }
+        } else if (ret > 0) {
+            pVa = (void *)(uintptr_t)(u64)ret;
+        }
+        if (pVa == NULL) {
+            continue;
+        }
+        udx_host_window_register(pPdev->aBarPhys[iBar], pVa,
+                                 pPdev->aBarLen[iBar]);
+        pBound->apBarHost[iBar] = pVa;
+    }
+}
+#endif
+
 /**
  * Install a DDI-granted (or soft-granted) PCI function.
  * BAR phys/len come from the grant; optional BAR0 VA is window-registered
@@ -2616,6 +2679,10 @@ udx_host_install_granted_pci(u16 u16Vendor, u16 u16Device,
         pBound->apBarHost[0] = pBar0Va; /* bookkeeping; not free'd on FS */
         pci_soft_inc(&g_u32PciGrantBar0Map);
     }
+#if !defined(UDX_HOST_LIBC) || defined(GJ_FREESTANDING)
+    /* rtl BAR2 (and any other mapped BAR) must exist before probe ioremap. */
+    pci_grant_window_other_bars(pBound);
+#endif
 
     pci_cfg_init(pBound);
 

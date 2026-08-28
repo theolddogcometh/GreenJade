@@ -1755,9 +1755,13 @@ vfs_ram_init(void)
               "PubkeyAuthentication yes\n"
               "PasswordAuthentication no\n"
               "KbdInteractiveAuthentication no\n"
+              "UsePAM no\n"
+              "UsePrivilegeSeparation yes\n"
+              "PermitTTY yes\n"
               "PrintMotd no\n"
               "PrintLastLog no\n"
-              "UseDNS no\n");
+              "UseDNS no\n"
+              "AcceptEnv LANG LC_*\n");
     seed_file("/etc/ssh/ssh_host_ed25519_key",
               "-----BEGIN OPENSSH PRIVATE KEY-----\n"
               "b3BlbnNzaC1rZXktdjEAAAAABG5vbmUAAAAEbm9uZQAAAAAAAAABAAAAMwAAAAtzc2gtZW\n"

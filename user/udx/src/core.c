@@ -259,6 +259,11 @@ static u32 g_u32UdxStop;
 static u32 g_u32UdxInited;
 /* Lean residual once-lamp gate (no stamp storms on inventory re-dump). */
 static u8  g_fSoftResidualOnce;
+/*
+ * Live DDI OPEN handle (bind_by_id / probe). MAP/DMA/Command need h>0.
+ * Never cleared on udx_init / udx_run / udx_exit (CLOSE would drop maps).
+ */
+long g_i64UdxCoreDdiH;
 
 /*
  * Soft product inventory (Wave 126 exclusive deepen). Cumulative for this
@@ -1363,6 +1368,47 @@ soft_inventory_log(void)
      * greppable: Soft!=product soft residual dual_dod OPEN product_hosts=UDX
      */
     soft_residual_lean_once();
+}
+
+void
+udx_core_ddi_handle_retain(long i64H)
+{
+    if (i64H > 0) {
+        g_i64UdxCoreDdiH = i64H;
+    }
+}
+
+long
+udx_core_ddi_handle(void)
+{
+    return g_i64UdxCoreDdiH;
+}
+
+int
+udx_core_ddi_prep(long nNr, long a0, long *pa1)
+{
+    long i64H;
+
+    if (nNr != UDX_GJ_SYS_DDI || pa1 == NULL) {
+        return 0;
+    }
+    i64H = g_i64UdxCoreDdiH;
+    /* Product bind keeps OPEN; CLOSE of that h would unmap BAR/DMA. */
+    if (a0 == (long)UDX_CORE_DDI_OP_CLOSE && i64H > 0 && *pa1 == i64H) {
+        return 1;
+    }
+    if (*pa1 <= 0 && i64H > 0 &&
+        (a0 == (long)UDX_CORE_DDI_OP_MAP_BAR ||
+         a0 == (long)UDX_CORE_DDI_OP_CFG_READ ||
+         a0 == (long)UDX_CORE_DDI_OP_DMA_NOTE ||
+         a0 == (long)UDX_CORE_DDI_OP_IRQ_BIND ||
+         a0 == (long)UDX_CORE_DDI_OP_DMA_ALLOC ||
+         a0 == (long)UDX_CORE_DDI_OP_DMA_FREE ||
+         a0 == (long)UDX_CORE_DDI_OP_DMA_MAP ||
+         a0 == (long)UDX_CORE_DDI_OP_CFG_WRITE)) {
+        *pa1 = i64H;
+    }
+    return 0;
 }
 
 u32

@@ -19,8 +19,8 @@ If you just cloned the repo: a normal host toolchain and QEMU are enough to buil
 | **What it is** | Freestanding pure-C microkernel + hybrid Linux personality |
 | **What it is not** | A Linux distro, SteamOS port, or GPL-derived kernel |
 | **Priorities** | **1. Security → 2. Performance → 3. Portability → 4. Readability** |
-| **License** | Product: **MIT OR Apache-2.0**. Vendor (OpenSSH, OpenSSL, dash, …) lives only under [`third_party/<license>/`](third_party/PROVENANCE.md). **No GPL** in the product core. |
-| **Lawful use** | **You** are responsible for not using this project where illegal — [docs/LEGAL_DISCLAIMER.md](docs/LEGAL_DISCLAIMER.md) |
+| **License** | Product: **MIT OR Apache-2.0**. Vendor (OpenSSH, OpenSSL, dash, …) lives only under [`third_party/<license>/`](third_party/PROVENANCE.md). **No GPL** in the product core. The license controls the software (grant, warranty disclaimer, limitation of liability). |
+| **Legal notice** | (A) **You** bear compliance where you build, run, or ship. (B) The principal author reserves constitutional rights the license does not waive. Full text: [docs/LEGAL_DISCLAIMER.md](docs/LEGAL_DISCLAIMER.md) |
 | **Language** | Pure C only in-tree (no C++, Rust, …) |
 | **Firmware** | **UEFI** product path; Multiboot2 bring-up for QEMU |
 | **Adoption bar** | **Steam Deck Top 50** via Proton on real hardware — **target**, not claimed done |
@@ -168,19 +168,21 @@ Abandoned in-kernel rtl/xhci_msc/linux_*_soft live in `./abandoned` (not linked)
 | [Deck Top 50 matrix](matrix/deck-top50-TEMPLATE.md) | Adoption tracking |
 | [STYLE](STYLE.md) · [LICENSE](LICENSE) | Style · dual MIT/Apache (product) |
 | [**Third-party provenance**](third_party/PROVENANCE.md) | Vendor licenses, hashes, omitted GPL, what is linked |
-| [**Legal notice**](docs/LEGAL_DISCLAIMER.md) | Lawful use · U.S. Constitution / speech notice · author demand position |
+| [**Legal notice**](docs/LEGAL_DISCLAIMER.md) | License controls the software · user/operator compliance · author reserves constitutional rights |
 
 Driver hosts use **UDX** (`user/udx/`) and soft DDI (`user/drivers/`) — Linux-shaped `probe` / `irq` / `dma` / `mmio` with caps hidden; see the UDX guide.
 
 ---
 
-## Legal notice (lawful use · speech · rights)
+## Legal notice
 
-**Users:** You are solely responsible for ensuring that obtaining, building, running, redistributing, or productizing GreenJade is **legal** where you operate. **Do not use** this software where that use is illegal or prohibited. Age/ID and platform rules (including **California** and other governments) are **your** compliance problem if you ship a product—not a warranty from this tree.
+**The license controls the software.** Copyright and patent grants, the warranty disclaimer, and the limitation of liability are in **[LICENSE](LICENSE)** (MIT OR Apache-2.0, at the licensee’s option). The legal notice adds only: **(A)** users and operators bear their own compliance; **(B)** the principal author reserves constitutional rights the license does not waive. Full text: **[docs/LEGAL_DISCLAIMER.md](docs/LEGAL_DISCLAIMER.md)**. **Not legal advice.**
 
-**Principal author (rights notice):** The lead author is a **U.S. citizen**, governed under the **U.S. Constitution**, and asserts that this **code and project writing are protected speech**. Dual open-source licensing is a **copyright license**, not a waiver of constitutional rights against government actors. The author asserts a **claimed liability schedule** (see full doc) against **oath-sworn officers / government bodies** for **color-of-law** violations of those rights related to this Software—including **4×** financial penalties attempted, **USD $1,000,000 per hour** of incarceration, and **USD $1,000,000 per act** for unconstitutional search, seizure, or compelled production. That schedule is the author’s **public claim/notice**, not a court award.
+**(A) Users, redistributors, and operators.** A person who obtains, builds, runs, modifies, ships, or offers GreenJade is responsible for whether that conduct is lawful where that person acts. Do not use the Software where it is illegal or requires an authorization you do not have. If you productize a copy (appliance, image, OEM firmware, application marketplace, or service), age/identity, KYC, parental-consent, app-store, and operating-system signal statutes that apply to *your* facts are *your* duties — including California A.B. 1043, Illinois P.A. 104-0664, Colorado S.B. 26-051, Texas S.B. 2420, and counterparts. Publication of this source is not performance of those duties for a third party’s deployment. This tree does not ship an identity or age-gate system.
 
-Full text: **[docs/LEGAL_DISCLAIMER.md](docs/LEGAL_DISCLAIMER.md)** (§I–II author position · §III+ user duties) · **[LICENSE](LICENSE)** (MIT OR Apache-2.0, AS IS). **Not legal advice.**
+**(B) Principal author’s reserved rights.** The principal copyright holder is a U.S. citizen. Dual open-source licensing is a private copyright license, not consent to an unconstitutional search or seizure, not a waiver of the First, Fourth, or Fifth Amendments, and not a government contract. Source, documentation, and project writings are speech. Licensing this repository does not invite officers into the author’s devices, keys, accounts, or working copy. Forcing the author to write, ship, and maintain a state-prescribed age-collection interface or age-bracket signal is compelled speech; the author objects to any construction of those statutes that treats publication of this source as an order to build that apparatus.
+
+**Claimed damages (author vs government, not licensees).** If the author sues for a color-of-law violation tied to this project or its speech, the author will ask the trier of fact for: **4×** a fine, fee, bond, assessment, or other money demand; **USD $1,000,000 per hour** (or fraction) of detention or imprisonment; **USD $1,000,000 per act** of unconstitutional search, seizure, or compelled production of the author, papers, devices, data, code, keys, or accounts. Those figures are the author’s publicly stated demand. They are not a court award, lien, or debt. They do not apply to private licensees who use the software in good faith under MIT or Apache-2.0.
 
 ---
 

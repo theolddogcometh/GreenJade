@@ -217,8 +217,9 @@ u32 elf_resolve_needed_vfs(const struct gj_elf_info *pInfo);
 u32 elf_load_needed_sos(struct gj_process *pProc, const struct gj_elf_info *pInfo);
 
 /**
- * Live user RSP must be a published grow-down TOP above GJ_LD_STACK_VA.
- * Band-base / 0 is 0.1.140 #PF I=1 class (handoff smash). Returns 1 if ok.
+ * Live user RSP: published grow-down TOP, not band-base / 0 (0.1.140 #PF).
+ * Accepts ld-gj handoff stack (page-aligned in GJ_LD_STACK_VA band) or
+ * product UDX host stack (16B-aligned in the 0x7F000000 grow-down body).
  */
 int elf_stack_rsp_live_ok(u64 u64Rsp);
 

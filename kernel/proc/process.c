@@ -34,8 +34,11 @@
  *     + blocking yield) -> force-exit/exit_pid OR wait-heal -> G-PROC-5 H3
  *     death -> wait reap. Covers long-lived multi-thr UDX hosts
  *     (rtl8168_udx / xhci_udx / ddi_host_gj) and sshd session children.
- *   keep_live product host honesty (STRONGER denser residual; Soft!=product):
- *     process_spawn_host_launch class hosts may stay keep_live when host
+ *   keep_live / refuse-kill (product UDX hosts; Soft!=product):
+ *     process_death refuses external kill/reap of native wait-registered
+ *     catalog hosts while a product embed is present (rtl8168_udx hold4
+ *     park). Self-exit of the host still deaths. never_kill_embed.
+ *     process_spawn_host_launch class hosts stay keep_live when host
  *     ELF embed is present (main: soft residual host_launch live). This
  *     unit must NEVER thrash as_destroy while product host thr are live
  *     (H3 thr_exit dual belt + cur_scrub + cr3_pub BEFORE as_destroy).
@@ -148,6 +151,17 @@ void vfs_ram_exit_fds(struct gj_process *pProc);
 void gj_linux_hot_cred_fork(const struct gj_process *pParent,
                            struct gj_process *pChild);
 void gj_linux_hot_cred_exit(struct gj_process *pProc);
+
+/*
+ * Weak product UDX host embeds (same symbols as spawn/main). Present on
+ * DUT pack; 0 on cuts that omit the blob. never_kill_embed uses this.
+ */
+extern char gj_ddi_host_elf_blob[] __attribute__((weak));
+extern char gj_ddi_host_elf_blob_end[] __attribute__((weak));
+extern char gj_rtl8168_udx_elf_blob[] __attribute__((weak));
+extern char gj_rtl8168_udx_elf_blob_end[] __attribute__((weak));
+extern char gj_xhci_udx_elf_blob[] __attribute__((weak));
+extern char gj_xhci_udx_elf_blob_end[] __attribute__((weak));
 
 /* ---- Wave 19 exclusive soft inventory (this unit only) ------------------ */
 #define GJ_PROCESS_SOFT_WAVE 116u
@@ -269,6 +283,8 @@ static u8  g_fLifecycleResLeanOnce;
  * stamp storm (H2). denser residual != Dual DoD close.
  */
 static u8  g_fKeepLiveResLeanOnce;
+/* External process_kill/exit_pid refused for product UDX keep_live hosts. */
+static u64 g_u64KeepLiveRefuse;
 /*
  * process_linux_exit_pid full process_death path (H3 thr_exit before as_destroy).
  * note_exit-only path would race deferred fork exit worker into AS leak.
@@ -1918,6 +1934,133 @@ process_is_wait_child(struct gj_process *pProc)
     return 0;
 }
 
+static int
+process_udx_embed_present(void)
+{
+    if ((uintptr_t)gj_rtl8168_udx_elf_blob != 0ull &&
+        (uintptr_t)gj_rtl8168_udx_elf_blob_end >
+            (uintptr_t)gj_rtl8168_udx_elf_blob) {
+        return 1;
+    }
+    if ((uintptr_t)gj_xhci_udx_elf_blob != 0ull &&
+        (uintptr_t)gj_xhci_udx_elf_blob_end >
+            (uintptr_t)gj_xhci_udx_elf_blob) {
+        return 1;
+    }
+    if ((uintptr_t)gj_ddi_host_elf_blob != 0ull &&
+        (uintptr_t)gj_ddi_host_elf_blob_end >
+            (uintptr_t)gj_ddi_host_elf_blob) {
+        return 1;
+    }
+    return 0;
+}
+
+static int
+process_name_is_product_udx(const char *sz)
+{
+    if (sz == NULL || sz[0] == '\0') {
+        return 0;
+    }
+    if (strstr(sz, "rtl8168_udx") != NULL) {
+        return 1;
+    }
+    if (strstr(sz, "xhci_udx") != NULL) {
+        return 1;
+    }
+    if (strstr(sz, "ddi_host") != NULL) {
+        return 1;
+    }
+    return 0;
+}
+
+/*
+ * Product UDX catalog host (native wait-child). Name/tag, DRIVER start
+ * thr, live USER + embed, or never_kill_embed (native wait + embed).
+ */
+static int
+process_is_product_udx_host(struct gj_process *pProc)
+{
+    const char *szTag;
+    u32 u32Thr;
+    int fWait;
+    int fNative;
+    int fEmbed;
+
+    if (pProc == NULL) {
+        return 0;
+    }
+    if (process_name_is_product_udx(pProc->szExecPath) != 0) {
+        return 1;
+    }
+    u32Thr = pProc->u32StartThr;
+    if (u32Thr != 0u) {
+        szTag = thread_soft_tag_get(u32Thr);
+        if (process_name_is_product_udx(szTag) != 0) {
+            return 1;
+        }
+    }
+    if (pProc->pUserThr != NULL && pProc->pUserThr->pProc == pProc) {
+        szTag = thread_soft_tag_get(pProc->pUserThr->u32Id);
+        if (process_name_is_product_udx(szTag) != 0) {
+            return 1;
+        }
+    }
+    fWait = process_is_wait_child(pProc);
+    fNative = (pProc->u32Personality == 0u) ? 1 : 0;
+    fEmbed = process_udx_embed_present();
+    if (fWait == 0 || fNative == 0) {
+        return 0;
+    }
+    if (u32Thr != 0u && thread_get_qos(u32Thr) == GJ_QOS_DRIVER) {
+        return 1;
+    }
+    if (fEmbed != 0) {
+        return 1;
+    }
+    if (thread_user_live_count(pProc) != 0u) {
+        return 1;
+    }
+    return 0;
+}
+
+/*
+ * Refuse external death of a product UDX host (rtl8168_udx park / hold4).
+ * Self-exit (current thr bound to this PCB) still deaths. Fully torn
+ * (alive=0, cr3=0, no USER thr) still deaths. Restores u32Alive=1.
+ */
+static int
+process_keep_live_refuse_kill(struct gj_process *pProc)
+{
+    struct gj_thread *pCur;
+    u32 u32UserLive;
+
+    if (pProc == NULL) {
+        return 0;
+    }
+    if (process_is_product_udx_host(pProc) == 0) {
+        return 0;
+    }
+    pCur = thread_current();
+    if (pCur != NULL && pCur->pProc == pProc) {
+        return 0;
+    }
+    u32UserLive = thread_user_live_count(pProc);
+    if (pProc->u32Alive == 0u && pProc->u64Cr3 == 0ull &&
+        u32UserLive == 0u) {
+        return 0;
+    }
+    pProc->u32Alive = 1;
+    g_u64KeepLiveRefuse++;
+    kprintf("process: keep_live refuse_kill pid=%u keep_live=1 "
+            "never_kill_embed=1 kill=0 product_host_live=1 "
+            "user_live=%u cr3=0x%lx refuse_n=%llu "
+            "product_hosts=UDX dual_dod=OPEN\n",
+            process_wait_pid_of(pProc), u32UserLive,
+            (unsigned long)pProc->u64Cr3,
+            (unsigned long long)g_u64KeepLiveRefuse);
+    return 1;
+}
+
 /*
  * Soft: whether wait-registered PCB still needs full G-PROC-5 process_death
  * (H3 thr_exit dual belt + as_destroy) vs note_exit-only.
@@ -2223,6 +2366,9 @@ process_death(struct gj_process *pProc, u32 u32ExitCode)
     int fWaitChild;
 
     if (pProc == NULL) {
+        return;
+    }
+    if (process_keep_live_refuse_kill(pProc) != 0) {
         return;
     }
     process_soft_inc(&g_u32SoftDeathEnter);
@@ -3755,6 +3901,9 @@ process_linux_exit_pid(u32 u32Pid, u32 u32Code)
             pProc = g_aWait[i].pProc;
             if (pProc == NULL) {
                 return -3; /* ESRCH */
+            }
+            if (process_keep_live_refuse_kill(pProc) != 0) {
+                return 0;
             }
             if (process_lifecycle_need_death(pProc) != 0) {
                 g_u64SoftExitPidDeath++;

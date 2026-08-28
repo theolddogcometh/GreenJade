@@ -4,11 +4,13 @@
 
 **0.1.185 pack of BME CF8 poke** (`ddi_door` live Command 0x04 for `10ec:8168`; UDX host `CFG_WRITE` 0x0006). Dual DoD **A/B OPEN**. Never `USBCMD.RS=1`. Hold7 IP ≠ L3. Banner / `true` ≠ login. **0.2.0** reserved.
 
+**0.1.185 host (glass 151408 / 151415 · lab `10.200.125.103`):** title **v0.1.185**; hold1 `M0 OK`; hold2 `TE MODE=HW TES=1 TT=ML SLPT=1 RDY BUS3 ID16`; holds 3–6 **not on glass**; hold7 IP pin; hold8 `DoD A=OPEN B=OPEN`. Host ping **0/5** unreachable; arping **0/4**; ssh `true` **No route to host** 255; neigh FAILED. Same L3 FAIL as 184 132433. **login OPEN**.
+
 **0.1.184 host (glass 132433 · lab `10.200.125.103`):** title **v0.1.184**; hold7 IP pin; host ping/arping **FAIL** (neigh FAILED). Overnight T0 PTY was same stamp string. **login OPEN**.
 
 GOP dash isolate stays. Dual DoD **A/B OPEN**. Skip `nc` (hog `:22`).
 
-| Hold | Expect after flash (185 untried) |
+| Hold | Expect after flash (185 glass 151408) |
 |------|--------|
 | title | `STATUS (static) v0.1.185` |
 | 1 | `M0 OK dash SKIP isolate` |

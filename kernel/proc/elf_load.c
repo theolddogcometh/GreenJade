@@ -139,6 +139,9 @@
  * Soft residual + geometry arms; never hard-gates product load alone.
  */
 #define GJ_ELF_HOST_EXEC_BASE 0x0000000004000000ull
+/* Product UDX host stack (spawn GJ_SPAWN_HOST_STACK_*; not ld-gj band). */
+#define GJ_ELF_HOST_STACK_TOP   0x000000007F000000ull
+#define GJ_ELF_HOST_STACK_PAGES 64u
 /* Soft host path class residual (classify only; Soft!=product). */
 #define GJ_ELF_HOST_CLASS_NONE 0u
 #define GJ_ELF_HOST_CLASS_UDX  1u
@@ -536,19 +539,29 @@ int
 elf_stack_rsp_live_ok(u64 u64Rsp)
 {
     u64 u64Max;
+    u64 u64HostBot;
 
-    if (u64Rsp <= GJ_LD_STACK_VA) {
-        return 0;
+    /* ld-gj SysV top: page-aligned, above unmapped guard, in handoff band. */
+    if (u64Rsp > GJ_LD_STACK_VA &&
+        (u64Rsp & ((u64)GJ_PAGE_SIZE - 1ull)) == 0ull) {
+        u64Max = GJ_LD_STACK_VA +
+                 (u64)(GJ_LD_STACK_PAGES + 1u) * (u64)GJ_PAGE_SIZE;
+        if (u64Rsp <= u64Max) {
+            return 1;
+        }
     }
-    if ((u64Rsp & ((u64)GJ_PAGE_SIZE - 1ull)) != 0ull) {
-        return 0;
+    /*
+     * Product UDX host thr (rtl8168_udx / xhci_udx / ddi_host): spawn maps
+     * 64 grow-down pages under GJ_ELF_HOST_STACK_TOP and enters at top-0x100
+     * (16B aligned). Not the ld-gj band; 0.1.140 smash does not apply here.
+     */
+    u64HostBot = GJ_ELF_HOST_STACK_TOP -
+                 (u64)GJ_ELF_HOST_STACK_PAGES * (u64)GJ_PAGE_SIZE;
+    if (u64Rsp > u64HostBot && u64Rsp <= GJ_ELF_HOST_STACK_TOP &&
+        (u64Rsp & 0xfull) == 0ull) {
+        return 1;
     }
-    u64Max = GJ_LD_STACK_VA +
-             (u64)(GJ_LD_STACK_PAGES + 1u) * (u64)GJ_PAGE_SIZE;
-    if (u64Rsp > u64Max) {
-        return 0;
-    }
-    return 1;
+    return 0;
 }
 
 /**
@@ -2464,12 +2477,22 @@ elf_probe_image(const void *pImage, u64 cb, struct gj_elf_info *pInfo)
     return st;
 }
 
+static void *
+elf_kva_from_pa(gj_paddr_t pa)
+{
+    if (hhdm_ready() != 0) {
+        return (void *)(gj_vaddr_t)(GJ_HHDM_BASE + (u64)pa);
+    }
+    return (void *)(gj_vaddr_t)pa;
+}
+
 static gj_status_t
 map_page_copy(gj_vaddr_t va, const void *pSrc, size_t cbSrc, u32 u32Prot)
 {
     gj_paddr_t pa;
     u64 u64Saved;
     gj_status_t st;
+    void *pK;
 
     pa = pmm_alloc();
     if (pa == 0) {
@@ -2477,12 +2500,13 @@ map_page_copy(gj_vaddr_t va, const void *pSrc, size_t cbSrc, u32 u32Prot)
     }
     u64Saved = cpu_read_cr3();
     cpu_load_cr3(vmm_kernel_cr3());
-    memset((void *)(gj_vaddr_t)pa, 0, GJ_PAGE_SIZE);
+    pK = elf_kva_from_pa(pa);
+    memset(pK, 0, GJ_PAGE_SIZE);
     if (pSrc != NULL && cbSrc > 0) {
         if (cbSrc > GJ_PAGE_SIZE) {
             cbSrc = GJ_PAGE_SIZE;
         }
-        memcpy((void *)(gj_vaddr_t)pa, pSrc, cbSrc);
+        memcpy(pK, pSrc, cbSrc);
     }
     cpu_load_cr3(u64Saved);
 
@@ -2492,6 +2516,31 @@ map_page_copy(gj_vaddr_t va, const void *pSrc, size_t cbSrc, u32 u32Prot)
         return st;
     }
     return GJ_OK;
+}
+
+/* Overlay PT_LOAD bytes onto an already-mapped page (do not replace/zero). */
+static int
+elf_page_merge(gj_vaddr_t va, const u8 *pTmp, u32 u32Prot)
+{
+    gj_paddr_t pa;
+    u64 u64Saved;
+    void *pK;
+    u32 u32Merge;
+
+    pa = vmm_virt_to_phys(va);
+    if (pa == 0) {
+        return 0;
+    }
+    u64Saved = cpu_read_cr3();
+    cpu_load_cr3(vmm_kernel_cr3());
+    pK = elf_kva_from_pa(pa);
+    memcpy(pK, pTmp, GJ_PAGE_SIZE);
+    cpu_load_cr3(u64Saved);
+    /* Overlap page of a split R+E / RW PT_LOAD needs both W and X. */
+    u32Merge = u32Prot | GJ_VMM_PROT_READ | GJ_VMM_PROT_WRITE |
+               GJ_VMM_PROT_EXEC | GJ_VMM_PROT_USER;
+    (void)vmm_protect_page(va, u32Merge);
+    return 1;
 }
 
 /* Built-in exports for undefined symbols (clean-room ld-gj bring-up). */
@@ -3332,6 +3381,11 @@ elf_load_image_bias(struct gj_process *pProc, const void *pImage, u64 cb,
             elf_soft_maybe_once();
             return GJ_ERR_INVAL;
         }
+        /* user.ld may pack .text+.data in one RW PT_LOAD (no PF_X). */
+        if (info.u64Entry >= u64SegVa &&
+            info.u64Entry < u64SegVa + pPh->u64Memsz) {
+            u32Prot |= GJ_VMM_PROT_EXEC;
+        }
         /*
          * Never map PT_LOAD over ld-gj handoff/stack band. Protects embed
          * UDX host + INTERP-first paths from clobbering GJ_LD_HANDOFF_VA.
@@ -3352,13 +3406,55 @@ elf_load_image_bias(struct gj_process *pProc, const void *pImage, u64 cb,
 
         for (u64Page = u64Va; u64Page < u64End; u64Page += GJ_PAGE_SIZE) {
             u8 aTmp[GJ_PAGE_SIZE];
+            gj_paddr_t paHave;
+            u64 u64Bss0;
+            u64 u64Bss1;
+            int fHave;
 
             /* Keep a prior SysV argv page (publish-then-load embed path). */
             if (pProc->u64ExecStack != 0ull &&
                 u64Page == (pProc->u64ExecStack & ~0xfffull)) {
                 continue;
             }
-            memset(aTmp, 0, sizeof(aTmp));
+            /*
+             * Merge only a USER PT_LOAD already installed this load.
+             * Child AS still shares identity (U=0); do not write PA==VA.
+             */
+            fHave = user_range_mapped(u64Page, (u64)GJ_PAGE_SIZE);
+            paHave = 0;
+            if (fHave != 0) {
+                paHave = vmm_virt_to_phys((gj_vaddr_t)u64Page);
+                if (paHave == 0) {
+                    fHave = 0;
+                }
+            }
+            if (fHave != 0) {
+                u64 u64Saved;
+                void *pK;
+
+                /* Seed from the live page; do not zero a sibling PT_LOAD. */
+                u64Saved = cpu_read_cr3();
+                cpu_load_cr3(vmm_kernel_cr3());
+                pK = elf_kva_from_pa(paHave);
+                memcpy(aTmp, pK, GJ_PAGE_SIZE);
+                cpu_load_cr3(u64Saved);
+            } else {
+                memset(aTmp, 0, sizeof(aTmp));
+            }
+            /* BSS of this segment only (filesz..memsz) inside this page. */
+            u64Bss0 = u64SegVa + pPh->u64Filesz;
+            u64Bss1 = u64SegVa + pPh->u64Memsz;
+            if (u64Bss0 < u64Bss1 && u64Page + GJ_PAGE_SIZE > u64Bss0 &&
+                u64Page < u64Bss1) {
+                u64 u64Z0 = u64Bss0 > u64Page ? u64Bss0 : u64Page;
+                u64 u64Z1 = u64Bss1 < u64Page + GJ_PAGE_SIZE
+                                ? u64Bss1
+                                : u64Page + GJ_PAGE_SIZE;
+
+                if (u64Z0 < u64Z1) {
+                    memset(aTmp + (u64Z0 - u64Page), 0, (size_t)(u64Z1 - u64Z0));
+                }
+            }
             if (u64Page + GJ_PAGE_SIZE > u64SegVa &&
                 u64Page < u64SegVa + pPh->u64Filesz) {
                 u64 u64From = u64SegVa > u64Page ? u64SegVa : u64Page;
@@ -3372,10 +3468,24 @@ elf_load_image_bias(struct gj_process *pProc, const void *pImage, u64 cb,
                 }
                 u64SegOff = (u64From - u64SegVa) + pPh->u64Offset;
                 cbCopy = (size_t)(u64To - u64From);
-                memcpy(aTmp + (u64From - u64Page),
-                       (const u8 *)pImage + u64SegOff, cbCopy);
+                if (u64SegOff < cb) {
+                    if (u64SegOff + (u64)cbCopy > cb) {
+                        cbCopy = (size_t)(cb - u64SegOff);
+                    }
+                    if (cbCopy > 0) {
+                        memcpy(aTmp + (u64From - u64Page),
+                               (const u8 *)pImage + u64SegOff, cbCopy);
+                    }
+                }
             }
-            if (map_page_copy(u64Page, aTmp, GJ_PAGE_SIZE, u32Prot) != GJ_OK) {
+            if (fHave != 0) {
+                if (elf_page_merge((gj_vaddr_t)u64Page, aTmp, u32Prot) == 0) {
+                    elf_soft_inc(&g_u32SoftLoadFail);
+                    elf_soft_maybe_once();
+                    return GJ_ERR_NOMEM;
+                }
+            } else if (map_page_copy(u64Page, aTmp, GJ_PAGE_SIZE, u32Prot) !=
+                       GJ_OK) {
                 elf_soft_inc(&g_u32SoftLoadFail);
                 elf_soft_maybe_once();
                 return GJ_ERR_NOMEM;
@@ -3387,6 +3497,15 @@ elf_load_image_bias(struct gj_process *pProc, const void *pImage, u64 cb,
 
     if (u32Loaded == 0) {
         elf_soft_inc(&g_u32SoftLoadFail);
+        elf_soft_maybe_once();
+        return GJ_ERR_INVAL;
+    }
+    /* Entry page must be a live USER mapping (small UDX host miss class). */
+    if (info.u64Entry != 0ull &&
+        user_range_mapped(info.u64Entry & ~((u64)GJ_PAGE_SIZE - 1ull),
+                          (u64)GJ_PAGE_SIZE) == 0) {
+        elf_soft_inc(&g_u32SoftLoadFail);
+        elf_soft_inc(&g_u32SoftEntryOor);
         elf_soft_maybe_once();
         return GJ_ERR_INVAL;
     }

@@ -253,68 +253,9 @@ Drop serial captures here, e.g.:
   picocom -b 115200 /dev/ttyUSB0 | tee logs/serial-$(date -u +%Y%m%dT%H%MZ).txt
 EOF
 
-# SSH materials on persist so plugging the stick into the lab host is enough
-if [ -f build/hwtest-keys/id_ed25519.pub ]; then
-	cp -f build/hwtest-keys/id_ed25519.pub "$persist_dir/ssh/authorized_keys"
-	cp -f build/hwtest-keys/id_ed25519.pub "$persist_dir/ssh/id_ed25519.pub"
-fi
-cat >"$persist_dir/ssh/sshd_config.snippet" <<'EOF'
-# Append or include on lab host (/etc/ssh/sshd_config.d/99-greenjade-hwtest.conf)
-Port 22
-PermitRootLogin prohibit-password
-PasswordAuthentication no
-PubkeyAuthentication yes
-EOF
-
-cat >"$persist_dir/ssh/enable-lab-ssh.sh" <<'EOF'
-#!/bin/sh
-# Run on the *lab host* Linux (not inside freestanding GreenJade).
-# Enables sshd and installs GJ-PERSIST authorized_keys for root.
-set -eu
-HERE="$(CDPATH= cd -- "$(dirname "$0")" && pwd)"
-AUTH="$HERE/authorized_keys"
-if [ ! -f "$AUTH" ]; then
-	echo "missing $AUTH" >&2
-	exit 1
-fi
-if [ "$(id -u)" -ne 0 ]; then
-	echo "run as root: sudo $0" >&2
-	exit 1
-fi
-mkdir -p /root/.ssh
-chmod 700 /root/.ssh
-# Merge key if not already present
-if [ -f /root/.ssh/authorized_keys ]; then
-	while IFS= read -r line; do
-		[ -z "$line" ] && continue
-		grep -qxF "$line" /root/.ssh/authorized_keys 2>/dev/null || \
-			echo "$line" >>/root/.ssh/authorized_keys
-	done <"$AUTH"
-else
-	cp -f "$AUTH" /root/.ssh/authorized_keys
-fi
-chmod 600 /root/.ssh/authorized_keys
-if [ -d /etc/ssh/sshd_config.d ]; then
-	cp -f "$HERE/sshd_config.snippet" \
-		/etc/ssh/sshd_config.d/99-greenjade-hwtest.conf
-fi
-if command -v systemctl >/dev/null 2>&1; then
-	systemctl enable --now sshd 2>/dev/null || systemctl enable --now ssh 2>/dev/null || true
-	systemctl reload sshd 2>/dev/null || systemctl reload ssh 2>/dev/null || true
-elif command -v service >/dev/null 2>&1; then
-	service sshd start 2>/dev/null || service ssh start 2>/dev/null || true
-fi
-# Ensure sshd is listening
-if command -v ss >/dev/null 2>&1; then
-	ss -ltn | grep -E ':22\s' || echo "warn: nothing listening on :22 yet" >&2
-fi
-HOST="$(hostname -f 2>/dev/null || hostname || echo lab-host)"
-IP="$(hostname -I 2>/dev/null | awk '{print $1}')"
-echo "enable-lab-ssh: PASS"
-echo "  ssh -i build/hwtest-keys/id_ed25519 root@${IP:-$HOST}"
-echo "  Then attach DUT serial (picocom /dev/ttyUSB0) for GreenJade console"
-EOF
-chmod +x "$persist_dir/ssh/enable-lab-ssh.sh"
+# SSH materials: DUT sshd_config + jay keys + lab-host enable (persist helper).
+chmod +x scripts/hwtest-sshd-enable.sh
+./scripts/hwtest-sshd-enable.sh "$persist_dir" build/rootfs
 
 cat >"$persist_dir/bin/collect-serial-log.sh" <<'EOF'
 #!/bin/sh
@@ -930,6 +871,15 @@ else
 	mcopy -o -i "$out@@$PERSIST_OFF" "$persist_dir/ssh/enable-lab-ssh.sh" ::/ssh/enable-lab-ssh.sh
 	mcopy -o -i "$out@@$PERSIST_OFF" "$persist_dir/ssh/sshd_config.snippet" ::/ssh/sshd_config.snippet
 	mcopy -o -i "$out@@$PERSIST_OFF" "$persist_dir/bin/collect-serial-log.sh" ::/bin/collect-serial-log.sh
+	if [ -f "$persist_dir/ssh/sshd_config" ]; then
+		mcopy -o -i "$out@@$PERSIST_OFF" "$persist_dir/ssh/sshd_config" ::/ssh/sshd_config
+	fi
+	if [ -f "$persist_dir/ssh/passwd" ]; then
+		mcopy -o -i "$out@@$PERSIST_OFF" "$persist_dir/ssh/passwd" ::/ssh/passwd
+	fi
+	if [ -f "$persist_dir/ssh/group" ]; then
+		mcopy -o -i "$out@@$PERSIST_OFF" "$persist_dir/ssh/group" ::/ssh/group
+	fi
 	if [ -f "$persist_dir/ssh/authorized_keys" ]; then
 		mcopy -o -i "$out@@$PERSIST_OFF" "$persist_dir/ssh/authorized_keys" ::/ssh/authorized_keys
 		mcopy -o -i "$out@@$PERSIST_OFF" "$persist_dir/ssh/id_ed25519.pub" ::/ssh/id_ed25519.pub
